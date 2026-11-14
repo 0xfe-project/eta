@@ -524,7 +524,7 @@ export class Engine {
      */
     blocks?: readonly (readonly [number, number])[] | undefined;
     /**
-     * Host-only marks merged into the row's `data`, for renderers (e.g. `captainGroupOutcome`). The
+     * Host-only marks merged into the row's `data`, for renderers (e.g. `captainOutcome`). The
      * public conversations.send action never sets it, and it never reaches the prompt.
      */
     data?: Readonly<Record<string, unknown>> | undefined;

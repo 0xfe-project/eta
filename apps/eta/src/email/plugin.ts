@@ -4,6 +4,7 @@ import type { Engine } from "../conversations/engine";
 import type { ConversationStore } from "../conversations/store";
 import type { ProjectStore } from "../projects/store";
 import type { EmailService } from "./service";
+import { openDirect } from "../conversations/direct";
 import { Args, productPlugin, publish } from "../wire";
 import { renderAgentPayload } from "./payload";
 
@@ -177,20 +178,12 @@ export function emailPlugin(deps: EmailPluginDeps, applied: () => void) {
               "assigning to an existing session is not supported; choose a project",
             );
           }
-          let conversation = conversations.directOf(project.id, agentId);
-          if (!conversation) {
-            conversation = conversations.create({
-              projectId: project.id,
-              kind: "direct",
-              name: agent.name,
-              agentIds: [agentId],
-            });
-            deps.createdConversation(conversation.id);
-          } else if (conversation.archived) {
-            conversation = conversations.update(conversation.id, {
-              archived: false,
-            })!;
-          }
+          // Not told `changed`: the briefing sent next publishes the conversation, as it always did.
+          const conversation = openDirect(
+            { conversations, created: deps.createdConversation },
+            project,
+            agent,
+          );
           const startedAt = Date.now();
           await engine.send({
             conversationId: conversation.id,

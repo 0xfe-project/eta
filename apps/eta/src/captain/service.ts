@@ -1,16 +1,7 @@
 import type {
-  AgentRuntime,
   BoardTaskDetail,
   BoardTaskView,
-  CaptainAgentOutcomeData,
-  CaptainAgentProposal,
-  CaptainAgentProposalRowData,
-  CaptainAgentResult,
   CaptainAssignmentView,
-  CaptainGroupOutcomeData,
-  CaptainGroupProposal,
-  CaptainGroupProposalRowData,
-  CaptainGroupResult,
   CaptainIdentityView,
   CaptainMemoryPauseView,
   CaptainOperationView,
@@ -20,8 +11,8 @@ import type {
   CaptainSettingView,
   InteractionView,
 } from "@eta/client-contracts";
-import type { PersonaCard } from "@eta/core";
 import type { SessionMeta } from "@eta/server";
+import type { Database } from "bun:sqlite";
 import type { AgentRecord, AgentStore } from "../agents/store";
 import type { AttachmentStore } from "../conversations/attachments";
 import type { Engine } from "../conversations/engine";
@@ -30,24 +21,26 @@ import type { Timeline } from "../conversations/timeline";
 import type { Inbox } from "../inbox/inbox";
 import type { MachineRecord, MachineStore } from "../machines/store";
 import type { Plugins } from "../plugins/service";
-import type { ProjectRecord, ProjectStore } from "../projects/store";
+import type { ProjectStore } from "../projects/store";
 import type { TaskBoard } from "../tasks/board";
 import type { TaskRunner } from "../tasks/runner";
 import type { TaskRunStore } from "../tasks/runs";
 import type { TaskStore } from "../tasks/store";
 import type { CaptainAudit } from "./audit";
 import type { CaptainMemory } from "./memory";
+import type { AgentProposalDeps } from "./propose-agent";
 import type { CaptainReviewRecord, CaptainStore } from "./store";
-import { mkdir, rm } from "node:fs/promises";
-import { basename, isAbsolute, resolve } from "node:path";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/harness";
-import { describeCard, discoverPersonas } from "@eta/server";
-import { checkModel, requireModel } from "../agents/model";
-import { checkMachine, checkPlugins } from "../agents/plugin";
+import { writeAgent } from "../agents/create";
+import { ensureHome, homeOf } from "../agents/home";
+import { checkModel } from "../agents/model";
 import { agentHome } from "../agents/store";
-import { createGroup, groupNamed } from "../conversations/groups";
+import { openDirect } from "../conversations/direct";
 import { effectiveSteward } from "../conversations/views";
 import { isTaskSession, taskOfKey } from "../tasks/session-key";
+import { CaptainProposals } from "./proposals";
+import { agentProposals, listPersonaCards } from "./propose-agent";
+import { groupProposals } from "./propose-group";
 import { redactJson, redactText } from "./redact";
 import { MAX_CAPTAIN_REVIEW_ATTEMPTS } from "./store";
 
@@ -70,6 +63,8 @@ const CAPTAIN_INSTRUCTIONS = [
 
 export interface CaptainServiceDeps {
   dataDir: string;
+  /** For what is written together: an agent Captain proposed, and its home project. */
+  db: Database;
   /**
    * The user's home, where the persona cards they wrote live. A new agent's own workspace is an
    * empty directory, so this is the only place a card can come from besides the built-in ones.
@@ -100,70 +95,6 @@ export interface CaptainServiceDeps {
   checkDirectory: (machine: MachineRecord, path: string) => Promise<void>;
 }
 
-/** What Captain asks for when it proposes a group (`propose_group`). */
-export interface GroupProposalInput {
-  name: string;
-  projectId?: string | undefined;
-  path?: string | undefined;
-  machineId?: string | undefined;
-  memberIds: readonly string[];
-  stewardId: string;
-  goal?: string | undefined;
-}
-
-/** A group of that name is already in the project: the proposal would make a second one. */
-export class GroupConflictError extends Error {
-  readonly conversationId: string;
-
-  constructor(name: string, conversationId: string) {
-    super(
-      `a group named "${name}" already exists in this project (conversationId ${conversationId})`,
-    );
-    this.conversationId = conversationId;
-  }
-}
-
-/** A proposal checked against what exists now: where it goes, and who is in it. */
-interface ResolvedGroup {
-  /** Undefined: the directory is not a project yet, and confirming adds it. */
-  project: ProjectRecord | undefined;
-  machine: MachineRecord;
-  path: string;
-  name: string;
-  memberIds: string[];
-  stewardId: string;
-  goal: string | null;
-}
-
-/** What Captain asks for when it proposes an agent (`propose_agent`). */
-export interface AgentProposalInput {
-  name: string;
-  purpose: string;
-  instructions: string;
-  /** The id of an existing card; its body becomes the agent's persona. Never a new card. */
-  persona: string;
-  /** Chosen by the user: there is no default. */
-  model: string;
-  runtime?: AgentRuntime | undefined;
-  machineId?: string | undefined;
-  plugins?: readonly string[] | undefined;
-}
-
-/** A proposal checked against what exists now: who the agent is, and what it wears. */
-interface ResolvedAgent {
-  name: string;
-  purpose: string;
-  instructions: string;
-  /** The card's id, as the proposal names it. */
-  persona: string;
-  /** That card's body: what the agent's `persona` field becomes when it is made. */
-  personaContent: string;
-  model: string;
-  runtime: AgentRuntime;
-  machineId: string | null;
-  plugins: string[];
-}
-
 export interface CaptainOperationRequest {
   kind: string;
   payload?: Record<string, unknown>;
@@ -183,10 +114,44 @@ export interface CaptainReviewSnapshot {
 export class CaptainService {
   readonly #deps: CaptainServiceDeps;
   #deliveringReviews = false;
+  /** What Captain proposes and the user confirms: the mechanism, and the kinds it knows. */
+  readonly proposals: CaptainProposals;
+  readonly propose: {
+    group: ReturnType<typeof groupProposals>;
+    agent: ReturnType<typeof agentProposals>;
+  };
 
   constructor(deps: CaptainServiceDeps) {
     this.#deps = deps;
+    const captainId = () => this.identity()?.agentId;
+    this.propose = {
+      group: groupProposals({ ...deps, captainId }),
+      agent: agentProposals(this.#agentDeps()),
+    };
+    this.proposals = new CaptainProposals(
+      {
+        ...deps,
+        identity: () => this.identity(),
+        direct: async () => await this.direct(),
+        createOperation: (input) => this.createOperation(input),
+      },
+      Object.values(this.propose),
+    );
     this.recoverExhaustedReviews();
+  }
+
+  /** What making an agent needs; its first prompt versions go to Captain's own history. */
+  #agentDeps(): AgentProposalDeps {
+    return {
+      ...this.#deps,
+      capturePrompt: (input) =>
+        this.#deps.store.appendPromptVersion({
+          subjectId: input.agentId,
+          kind: input.kind,
+          content: input.content,
+          actorAgentId: input.actorAgentId,
+        }),
+    };
   }
 
   get store(): CaptainStore {
@@ -221,15 +186,18 @@ export class CaptainService {
     };
   }
 
-  /** The Captain agent, its workspace project and its first prompt versions. */
+  /**
+   * The Captain agent, its workspace project and its first prompt versions, written the way every
+   * agent is (`writeAgent`): one transaction, the directory taken back on failure.
+   *
+   * Not `createAgent`: its rules are for the agents users and Captain add, and Captain's identity
+   * breaks every one of them on purpose. It has no model until the user picks one (`setModel`), it
+   * carries the captain system role, and it is always called "Captain" — a user agent of that name
+   * must not stop the host from starting, so the name is not checked against the others.
+   */
   async #create(): Promise<{ agent: AgentRecord; first: boolean }> {
-    const primary = this.#deps.machines.primary();
-    if (primary === undefined)
-      throw new Error("this host has no primary machine");
-    const id = crypto.randomUUID();
-    const home = agentHome(this.#deps.dataDir, id);
-    await mkdir(home, { recursive: true });
-    const created = this.#deps.agents.create(
+    const { agent } = await writeAgent(
+      this.#agentDeps(),
       {
         name: "Captain",
         instructions: CAPTAIN_INSTRUCTIONS,
@@ -237,40 +205,29 @@ export class CaptainService {
         systemRole: "captain",
         machineId: null,
       },
-      id,
+      {
+        actorAgentId: null,
+        // The base prompt every session starts from is Captain's to manage, so it begins here.
+        within: () =>
+          this.#deps.store.appendPromptVersion({
+            subjectId: GLOBAL_PROMPT_ID,
+            kind: "base",
+            content: DEFAULT_SYSTEM_PROMPT,
+            actorAgentId: null,
+          }),
+      },
     );
-    this.#deps.projects.create({
-      machineId: primary.id,
-      path: home,
-      name: created.name,
-      kind: "agent_home",
-      stewardId: created.id,
-    });
-    const instructions = this.#deps.store.appendPromptVersion({
-      subjectId: id,
-      kind: "instructions",
-      content: created.instructions,
-      actorAgentId: null,
-    });
-    this.#deps.store.appendPromptVersion({
-      subjectId: id,
-      kind: "persona",
-      content: created.persona,
-      actorAgentId: null,
-    });
-    this.#deps.store.appendPromptVersion({
-      subjectId: GLOBAL_PROMPT_ID,
-      kind: "base",
-      content: DEFAULT_SYSTEM_PROMPT,
-      actorAgentId: null,
-    });
     await this.#deps.audit.record({
       action: "captain.ensure",
       actorAgentId: null,
-      data: { agentId: id, createdAt: created.createdAt },
+      data: { agentId: agent.id, createdAt: agent.createdAt },
     });
     this.#deps.changed();
-    return { agent: created, first: instructions.version === 1 };
+    const instructions = this.#deps.store.latestPrompt(
+      agent.id,
+      "instructions",
+    );
+    return { agent, first: instructions?.version === 1 };
   }
 
   /**
@@ -279,36 +236,7 @@ export class CaptainService {
    * made by an older build without one gets it here, the next time it starts.
    */
   #conversation(agent: AgentRecord): string {
-    const primary = this.#deps.machines.primary();
-    if (primary === undefined)
-      throw new Error("this host has no primary machine");
-    const path = agentHome(this.#deps.dataDir, agent.id);
-    const home =
-      this.#deps.projects.byPath(primary.id, path) ??
-      this.#deps.projects.create({
-        machineId: primary.id,
-        path,
-        name: agent.name,
-        kind: "agent_home",
-        stewardId: agent.id,
-      });
-    const found = this.#deps.conversations.directOf(home.id, agent.id);
-    if (found === undefined) {
-      const made = this.#deps.conversations.create({
-        projectId: home.id,
-        kind: "direct",
-        name: agent.name,
-        agentIds: [agent.id],
-      });
-      this.#deps.created?.(made.id);
-      this.#deps.changed([made.id]);
-      return made.id;
-    }
-    if (found.archived) {
-      this.#deps.conversations.update(found.id, { archived: false });
-      this.#deps.changed([found.id]);
-    }
-    return found.id;
+    return openDirect(this.#deps, ensureHome(this.#deps, agent), agent).id;
   }
 
   async direct(): Promise<CaptainIdentityView & { conversationId: string }> {
@@ -714,7 +642,7 @@ export class CaptainService {
         data: { operationId },
       });
       this.#deps.changed();
-      await this.#settled(rejected);
+      await this.proposals.settled(rejected);
       return rejected;
     }
     // Taken before anything is awaited: a second approval while this one is applying finds it no
@@ -735,7 +663,7 @@ export class CaptainService {
         data: { operationId, kind: operation.kind, result },
       });
       this.#deps.changed();
-      await this.#settled(applied);
+      await this.proposals.settled(applied);
       return applied;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -751,7 +679,7 @@ export class CaptainService {
         data: { operationId, kind: operation.kind, error: message },
       });
       this.#deps.changed();
-      await this.#settled(failed);
+      await this.proposals.settled(failed);
       return failed;
     }
   }
@@ -759,6 +687,11 @@ export class CaptainService {
   async #applyOperation(
     operation: CaptainOperationView,
   ): Promise<Record<string, unknown>> {
+    // Whatever Captain proposed is the registry's: checked again and made the way its kind makes
+    // it. A new kind of proposal is registered there (`this.propose`), never added here.
+    if (this.proposals.handles(operation))
+      return await this.proposals.apply(operation);
+    // The operations that are not proposals: Captain's own changes the user has to approve.
     switch (operation.kind) {
       case "set_prompt": {
         const subjectId = String(operation.payload.subjectId ?? "");
@@ -783,14 +716,7 @@ export class CaptainService {
           throw new Error("the Captain cannot delete itself");
         this.#deps.engine.stopAgent(agentId);
         this.#deps.conversations.archiveDirectOf(agentId);
-        const primary = this.#deps.machines.primary();
-        const home =
-          primary === undefined
-            ? undefined
-            : this.#deps.projects.byPath(
-                primary.id,
-                agentHome(this.#deps.dataDir, agentId),
-              );
+        const home = homeOf(this.#deps, agent);
         if (home !== undefined)
           this.#deps.projects.update(home.id, { archived: true });
         this.#deps.agents.remove(agentId);
@@ -818,466 +744,14 @@ export class CaptainService {
         );
         return { agentId, memoryId, deleted: true };
       }
-      case "create_group":
-        return { ...(await this.#createProposedGroup(operation)) };
-      case "create_agent":
-        return { ...(await this.#createProposedAgent(operation)) };
       default:
         throw new Error(`unsupported Captain operation: ${operation.kind}`);
     }
   }
 
-  /**
-   * Propose a group. Nothing is made: the proposal is a pending `create_group` operation, drawn as a
-   * card in the conversation Captain proposed it from, and the user's confirmation is what makes the
-   * group (`decideOperation`). Everything that would make it fail is checked now, and again then.
-   */
-  async proposeGroup(
-    input: GroupProposalInput & {
-      originConversationId: string;
-      captainAgentId: string;
-    },
-  ): Promise<{ operation: CaptainOperationView; messageId: string }> {
-    const origin = this.#deps.conversations.get(input.originConversationId);
-    if (origin === undefined) throw new Error("no such conversation");
-    const resolved = await this.#resolveGroup(input);
-    const messageId = crypto.randomUUID();
-    const proposal: CaptainGroupProposal = {
-      originConversationId: origin.id,
-      messageId,
-      name: resolved.name,
-      goal: resolved.goal,
-      memberIds: resolved.memberIds,
-      stewardId: resolved.stewardId,
-      projectId: resolved.project?.id ?? null,
-      machineId: resolved.machine.id,
-      path: resolved.path,
-      projectName: resolved.project?.name ?? projectNameOf(resolved.path),
-    };
-    const operation = this.createOperation({
-      kind: "create_group",
-      requiresApproval: true,
-      actorAgentId: input.captainAgentId,
-      payload: { ...proposal },
-    });
-    const data: CaptainGroupProposalRowData = {
-      event: "captain_group_proposal",
-      operationId: operation.id,
-      proposal,
-    };
-    this.#deps.timeline.append({
-      id: messageId,
-      conversationId: origin.id,
-      kind: "system",
-      author: "system",
-      text: `Captain proposed the group "${resolved.name}". It is made when the user confirms it.`,
-      data: { ...data },
-    });
-    this.#deps.changed([origin.id]);
-    return { operation, messageId };
-  }
-
-  /**
-   * Propose an agent. Nothing is made: the proposal is a pending `create_agent` operation, drawn as a
-   * card in the conversation Captain proposed it from, and the user's confirmation is what makes the
-   * agent (`decideOperation`). Everything that would make it fail is checked now, and again then.
-   */
-  async proposeAgent(
-    input: AgentProposalInput & {
-      originConversationId: string;
-      captainAgentId: string;
-    },
-  ): Promise<{ operation: CaptainOperationView; messageId: string }> {
-    // Who may make an agent is not a caller's argument: the identity recorded on the operation is
-    // the one this service has, so a `create_agent` can only ever be proposed by the Captain.
-    const captain = this.identity();
-    if (captain === undefined) throw new Error("Captain is not initialized");
-    if (input.captainAgentId !== captain.agentId)
-      throw new Error("only the Captain can propose an agent");
-    const origin = this.#deps.conversations.get(input.originConversationId);
-    if (origin === undefined) throw new Error("no such conversation");
-    const resolved = await this.#resolveAgent(input);
-    const messageId = crypto.randomUUID();
-    const proposal: CaptainAgentProposal = {
-      originConversationId: origin.id,
-      messageId,
-      name: resolved.name,
-      purpose: resolved.purpose,
-      instructions: resolved.instructions,
-      persona: resolved.persona,
-      model: resolved.model,
-      runtime: resolved.runtime,
-      machineId: resolved.machineId,
-      plugins: resolved.plugins,
-    };
-    const operation = this.createOperation({
-      kind: "create_agent",
-      requiresApproval: true,
-      actorAgentId: input.captainAgentId,
-      payload: { ...proposal },
-    });
-    const data: CaptainAgentProposalRowData = {
-      event: "captain_agent_proposal",
-      operationId: operation.id,
-      proposal,
-    };
-    this.#deps.timeline.append({
-      id: messageId,
-      conversationId: origin.id,
-      kind: "system",
-      author: "system",
-      text: `Captain proposed the agent "${resolved.name}". It is made when the user confirms it.`,
-      data: { ...data },
-    });
-    this.#deps.changed([origin.id]);
-    return { operation, messageId };
-  }
-
   /** The cards a new agent could wear, as the one line each that a chooser reads. */
   async listPersonaCards(): Promise<{ id: string; summary: string }[]> {
-    const cards = await this.#personaCards();
-    return [...cards.values()].map((card) => ({
-      id: card.id,
-      summary: describeCard(card),
-    }));
-  }
-
-  /**
-   * The cards that apply to an agent made here. Its workspace is an empty directory, so the cards are
-   * the built-in ones and the user's own: `cwd` is the home for the same reason, and the two identical
-   * directories cost one read because the result is keyed by id.
-   */
-  async #personaCards(): Promise<Map<string, PersonaCard>> {
-    const { home, warn } = this.#deps;
-    return await discoverPersonas({ cwd: home, home, warn });
-  }
-
-  /**
-   * Who a proposed agent would be, as things are now. Throws, saying why, for what the user could not
-   * confirm: a name another agent already answers to (`agents.create` does not check), an empty
-   * instruction, a card that is not there, no model or one that is not `provider:modelId`, a machine
-   * other than the primary, a plugin that cannot be enabled.
-   */
-  async #resolveAgent(input: AgentProposalInput): Promise<ResolvedAgent> {
-    const name = input.name.trim();
-    if (name === "") throw new Error("an agent needs a name");
-    if (
-      this.#deps.agents
-        .list()
-        .some((agent) => agent.name.trim().toLowerCase() === name.toLowerCase())
-    )
-      throw new Error(`an agent named "${name}" already exists`);
-    const purpose = input.purpose.trim();
-    if (purpose === "") throw new Error("an agent needs a purpose");
-    const instructions = input.instructions.trim();
-    if (instructions === "") throw new Error("instructions must not be empty");
-    const card = (await this.#personaCards()).get(input.persona);
-    if (card === undefined)
-      throw new Error(`no such persona card: ${input.persona}`);
-    const model = input.model.trim();
-    if (model === "") throw new Error("an agent needs a model");
-    const runtime = input.runtime ?? "eta";
-    requireModel(runtime, model);
-    const primary = this.#deps.machines.primary();
-    if (primary === undefined)
-      throw new Error("this host has no primary machine");
-    if (input.machineId !== undefined && input.machineId !== primary.id)
-      throw new Error("agents can only be created on the primary machine");
-    checkMachine(this.#deps.machines, primary.id);
-    checkPlugins(this.#deps.plugins, undefined, input.plugins);
-    return {
-      name,
-      purpose,
-      instructions,
-      persona: card.id,
-      personaContent: card.content,
-      model,
-      runtime,
-      machineId: input.machineId === undefined ? null : primary.id,
-      plugins: [...new Set(input.plugins ?? [])],
-    };
-  }
-
-  /**
-   * Where a proposed group goes and who is in it, as things are now. Throws, saying why, for what
-   * the user could not confirm: a directory that is missing, a file, an agent's own workspace or an
-   * archived project; a member that is gone or is Captain; a steward who is not a member; a group of
-   * the same name in the same project.
-   */
-  async #resolveGroup(input: GroupProposalInput): Promise<ResolvedGroup> {
-    const captainId = this.identity()?.agentId;
-    const name = input.name.trim();
-    if (name === "") throw new Error("a group needs a name");
-    const memberIds = [...new Set(input.memberIds)];
-    if (memberIds.length === 0)
-      throw new Error("a group needs at least one member");
-    for (const agentId of memberIds) {
-      if (agentId === captainId)
-        throw new Error("Captain cannot be a member of a group it proposes");
-      if (this.#deps.agents.get(agentId) === undefined)
-        throw new Error(`member ${agentId} does not exist`);
-    }
-    if (!memberIds.includes(input.stewardId))
-      throw new Error("the steward has to be a member");
-    const goal = input.goal?.trim() || null;
-
-    const byId = input.projectId !== undefined && input.projectId !== "";
-    const byPath = input.path !== undefined && input.path !== "";
-    if (byId === byPath)
-      throw new Error("give either projectId or path, not both or neither");
-    let project: ProjectRecord | undefined;
-    let machine: MachineRecord | undefined;
-    let path: string;
-    if (byId) {
-      project = this.#deps.projects.get(input.projectId!);
-      if (project === undefined)
-        throw new Error(`no such project: ${input.projectId}`);
-      machine = this.#deps.machines.get(project.machineId);
-      if (machine === undefined) throw new Error("no such machine");
-      path = project.path;
-    } else {
-      const machineId = input.machineId || this.#deps.machines.primary()?.id;
-      machine =
-        machineId === undefined
-          ? undefined
-          : this.#deps.machines.get(machineId);
-      if (machine === undefined) throw new Error("no such machine");
-      if (!isAbsolute(input.path!))
-        throw new Error(`the path must be absolute: ${input.path}`);
-      path = resolve(input.path!);
-      // A directory that is a project already is that project, the way adding it again is.
-      project = this.#deps.projects.byPath(machine.id, path);
-      if (project === undefined) {
-        if (
-          machine.kind === "primary" &&
-          this.#deps.agents
-            .list()
-            .some((agent) => agentHome(this.#deps.dataDir, agent.id) === path)
-        )
-          throw new Error(`${path} is an agent's own workspace`);
-        await this.#deps.checkDirectory(machine, path);
-      }
-    }
-    if (project !== undefined) {
-      if (project.kind === "agent_home")
-        throw new Error(`${project.path} is an agent's own workspace`);
-      if (project.archived)
-        throw new Error(`the project ${project.name} is archived`);
-      const clash = groupNamed(this.#deps.conversations, project.id, name);
-      if (clash !== undefined) throw new GroupConflictError(name, clash.id);
-    }
-    return {
-      project,
-      machine,
-      path,
-      name,
-      memberIds,
-      stewardId: input.stewardId,
-      goal,
-    };
-  }
-
-  /**
-   * The confirmed proposal, made: everything checked again (a group of that name may have appeared,
-   * a member may be gone), the directory added as a project if it is not one, stewarded by the
-   * group's steward as the dialog does it, then the group, its goal and the line that says who made it.
-   */
-  async #createProposedGroup(
-    operation: CaptainOperationView,
-  ): Promise<CaptainGroupResult> {
-    const proposal = operation.payload as unknown as CaptainGroupProposal;
-    const resolved = await this.#resolveGroup({
-      name: proposal.name,
-      ...(proposal.projectId === null
-        ? { path: proposal.path, machineId: proposal.machineId }
-        : { projectId: proposal.projectId }),
-      memberIds: proposal.memberIds,
-      stewardId: proposal.stewardId,
-      goal: proposal.goal ?? undefined,
-    });
-    const project =
-      resolved.project ??
-      this.#deps.projects.create({
-        machineId: resolved.machine.id,
-        path: resolved.path,
-        name: projectNameOf(resolved.path),
-        stewardId: resolved.stewardId,
-      });
-    const group = createGroup(this.#deps, {
-      projectId: project.id,
-      agentIds: resolved.memberIds,
-      stewardId: resolved.stewardId,
-      name: resolved.name,
-      goal: resolved.goal ?? undefined,
-    });
-    this.#deps.timeline.system(group.id, "Created by Captain.", {
-      event: "captain_created",
-      operationId: operation.id,
-      agentId: operation.actorAgentId,
-    });
-    this.#deps.created?.(group.id);
-    this.#deps.changed([group.id]);
-    return {
-      conversationId: group.id,
-      projectId: project.id,
-      projectCreated: resolved.project === undefined,
-    };
-  }
-
-  /**
-   * The confirmed proposal, made: everything checked again (another agent may have taken the name, a
-   * card may be gone), then the workspace directory, the agent, its home project and its first
-   * instructions and persona versions. The persona is the card's body — the card itself is not
-   * touched, and no new one is written.
-   */
-  async #createProposedAgent(
-    operation: CaptainOperationView,
-  ): Promise<CaptainAgentResult> {
-    // The payload is JSON; the Captain's own role is not one a proposal may make.
-    if ("systemRole" in operation.payload)
-      throw new Error("a proposed agent cannot carry a system role");
-    const proposal = operation.payload as unknown as CaptainAgentProposal;
-    const resolved = await this.#resolveAgent({
-      name: proposal.name,
-      purpose: proposal.purpose,
-      instructions: proposal.instructions,
-      persona: proposal.persona,
-      model: proposal.model,
-      runtime: proposal.runtime,
-      ...(proposal.machineId === null ? {} : { machineId: proposal.machineId }),
-      plugins: proposal.plugins,
-    });
-    const primary = this.#deps.machines.primary();
-    if (primary === undefined)
-      throw new Error("this host has no primary machine");
-    const id = crypto.randomUUID();
-    const { agent, project } = await this.#makeAgent(resolved, id, primary);
-    this.#deps.store.appendPromptVersion({
-      subjectId: agent.id,
-      kind: "instructions",
-      content: agent.instructions,
-      actorAgentId: operation.actorAgentId,
-    });
-    this.#deps.store.appendPromptVersion({
-      subjectId: agent.id,
-      kind: "persona",
-      content: agent.persona,
-      actorAgentId: operation.actorAgentId,
-    });
-    this.#deps.changed();
-    return { agentId: agent.id, projectId: project.id, name: agent.name };
-  }
-
-  /** The agent and its home project, made together or not at all; the directory goes with a failure. */
-  async #makeAgent(
-    resolved: ResolvedAgent,
-    id: string,
-    primary: MachineRecord,
-  ): Promise<{ agent: AgentRecord; project: ProjectRecord }> {
-    const home = agentHome(this.#deps.dataDir, id);
-    await mkdir(home, { recursive: true });
-    try {
-      const agent = this.#deps.agents.create(
-        {
-          name: resolved.name,
-          instructions: resolved.instructions,
-          persona: resolved.personaContent,
-          runtime: resolved.runtime,
-          model: resolved.model,
-          machineId: resolved.machineId,
-        },
-        id,
-      );
-      const project = this.#deps.projects.create({
-        machineId: primary.id,
-        path: home,
-        name: agent.name,
-        kind: "agent_home",
-        stewardId: agent.id,
-      });
-      if (resolved.plugins.length > 0)
-        this.#deps.plugins.rows.setEnabled(agent.id, resolved.plugins);
-      return { agent, project };
-    } catch (error) {
-      await rm(home, { recursive: true, force: true });
-      throw error;
-    }
-  }
-
-  /**
-   * A decided proposal that Captain is waiting on: Captain hears the outcome in the conversation it
-   * proposed from, as a message that starts its next turn.
-   *
-   * Only a proposal reaches this: a `create_group` or `create_agent` operation Captain recorded
-   * itself. An agent the user makes in the agent dialog goes straight to `agents.create` and is no
-   * operation at all, so nothing is reported to Captain about it.
-   */
-  async #settled(operation: CaptainOperationView): Promise<void> {
-    const group = operation.kind === "create_group";
-    if (!group && operation.kind !== "create_agent") return;
-    const captain = this.identity();
-    if (captain === undefined) return;
-    const originConversationId = String(
-      operation.payload.originConversationId ?? "",
-    );
-    try {
-      const conversationId = await this.#outcomeConversation(
-        originConversationId,
-        captain.agentId,
-      );
-      await this.#deps.engine.send({
-        conversationId,
-        text: group
-          ? groupOutcome(
-              operation,
-              operation.payload as unknown as CaptainGroupProposal,
-            )
-          : agentOutcome(
-              operation,
-              operation.payload as unknown as CaptainAgentProposal,
-            ),
-        author: "system",
-        // Captain's context, not the user's: the card already shows how it ended.
-        data: group
-          ? {
-              captainGroupOutcome: {
-                operationId: operation.id,
-                status: operation.status,
-              } satisfies CaptainGroupOutcomeData,
-            }
-          : {
-              captainAgentOutcome: {
-                operationId: operation.id,
-                status: operation.status,
-              } satisfies CaptainAgentOutcomeData,
-            },
-        mentions: [captain.agentId],
-        mode: "queue",
-      });
-      this.#deps.changed([conversationId]);
-    } catch (error) {
-      this.#deps.warn(
-        `[eta] Captain was not told how its ${group ? "group" : "agent"} proposal ended: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
-  /**
-   * Where Captain hears how a proposal ended: the conversation it proposed from, or its direct
-   * chat when it can no longer speak there (archived, or it is not a member any more).
-   */
-  async #outcomeConversation(
-    originConversationId: string,
-    captainAgentId: string,
-  ): Promise<string> {
-    const origin = this.#deps.conversations.get(originConversationId);
-    const reachable =
-      origin !== undefined &&
-      !origin.archived &&
-      this.#deps.conversations
-        .participants(origin.id)
-        .some((member) => member.agentId === captainAgentId);
-    return reachable ? origin.id : (await this.direct()).conversationId;
+    return await listPersonaCards(this.#agentDeps());
   }
 
   async taskControl(input: {
@@ -1692,12 +1166,8 @@ export class CaptainService {
   }
 
   #viewOf(agent: AgentRecord): CaptainIdentityView {
-    const primary = this.#deps.machines.primary();
     const home = agentHome(this.#deps.dataDir, agent.id);
-    const project =
-      primary === undefined
-        ? undefined
-        : this.#deps.projects.byPath(primary.id, home);
+    const project = homeOf(this.#deps, agent);
     const direct =
       project === undefined
         ? undefined
@@ -1711,51 +1181,6 @@ export class CaptainService {
       createdAt: agent.createdAt,
     };
   }
-}
-
-/** A new project's name: its directory's, as adding a directory names it. */
-function projectNameOf(path: string): string {
-  return basename(path) || path;
-}
-
-/** What Captain is told when the user decided on a group it proposed. */
-function groupOutcome(
-  operation: CaptainOperationView,
-  proposal: CaptainGroupProposal,
-): string {
-  const head = `Your proposed group "${proposal.name}" (operation ${operation.id})`;
-  if (operation.status === "applied") {
-    const result = operation.result as unknown as CaptainGroupResult;
-    return [
-      `${head} was confirmed by the user and created.`,
-      `conversationId: ${result.conversationId}`,
-      `projectId: ${result.projectId}${result.projectCreated ? ` (${proposal.path} was added as a new project)` : ""}`,
-      "Assign work there with assign_in_group.",
-    ].join("\n");
-  }
-  if (operation.status === "rejected")
-    return `${head} was rejected by the user. Nothing was created. If a group is still needed, ask what to change before proposing again.`;
-  return `${head} was confirmed by the user, but creating it failed: ${operation.error ?? "unknown error"}. Nothing was created.`;
-}
-
-/** What Captain is told when the user decided on an agent it proposed. */
-function agentOutcome(
-  operation: CaptainOperationView,
-  proposal: CaptainAgentProposal,
-): string {
-  const head = `Your proposed agent "${proposal.name}" (operation ${operation.id})`;
-  if (operation.status === "applied") {
-    const result = operation.result as unknown as CaptainAgentResult;
-    return [
-      `${head} was confirmed by the user and created.`,
-      `agentId: ${result.agentId}`,
-      `projectId: ${result.projectId}`,
-      "It is in no group yet: propose_group with its id as a member, then assign work there with assign_in_group.",
-    ].join("\n");
-  }
-  if (operation.status === "rejected")
-    return `${head} was rejected by the user. Nothing was created. If an agent is still needed, ask what to change before proposing again.`;
-  return `${head} was confirmed by the user, but creating it failed: ${operation.error ?? "unknown error"}. Nothing was created.`;
 }
 
 function reviewPrompt(reviews: readonly CaptainReviewRecord[]): string {

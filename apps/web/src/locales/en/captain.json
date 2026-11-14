@@ -58,19 +58,8 @@
     "persona": "Persona",
     "model": "Model",
     "runtime": "Runtime",
-    "machine": "Machine",
     "plugins": "Plugins",
-    "create": "Create",
-    "reject": "Reject",
-    "created": "{{name}} is ready; it is in the sidebar.",
-    "status": {
-      "pending": "Awaiting confirmation",
-      "approved": "Creating…",
-      "applied": "Created",
-      "rejected": "Rejected",
-      "failed": "Failed",
-      "expired": "Expired"
-    }
+    "created": "{{name}} is ready; it is in the sidebar."
   },
   "review": {
     "title": "Captain review",

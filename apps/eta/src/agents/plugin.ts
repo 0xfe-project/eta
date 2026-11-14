@@ -25,12 +25,20 @@ import type { Timeline } from "../conversations/timeline";
 import type { MachineStore } from "../machines/store";
 import type { Plugins } from "../plugins/service";
 import type { ProjectStore } from "../projects/store";
+import type { AgentCreateDeps } from "./create";
 import type { AgentRecord, AgentStore } from "./store";
-import { mkdir, rm } from "node:fs/promises";
 import { AGENT_RUNTIMES } from "@eta/client-contracts";
 import { THINKING_LEVELS } from "@eta/core";
+import { openDirect } from "../conversations/direct";
 import { summaryOf } from "../conversations/views";
 import { Args, productPlugin, publish } from "../wire";
+import {
+  checkAgentName,
+  checkMachine,
+  checkPlugins,
+  createAgent,
+} from "./create";
+import { homeOf } from "./home";
 import { checkModel, requireModel } from "./model";
 import { agentHome } from "./store";
 
@@ -54,14 +62,7 @@ export interface AgentsDeps {
     | ((machineId: string, fresh: boolean) => Promise<AgentRuntimeInfo[]>)
     | undefined;
   /** Append prompt history for user edits as well as Captain edits. */
-  capturePrompt?:
-    | ((input: {
-        agentId: string;
-        kind: "instructions" | "persona";
-        content: string;
-        actorAgentId: string | null;
-      }) => void)
-    | undefined;
+  capturePrompt?: AgentCreateDeps["capturePrompt"];
 }
 
 export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
@@ -72,9 +73,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
     statuses = timeline.agentStatuses(),
   ): AgentView => {
     const home = agentHome(deps.dataDir, agent.id);
-    const primary = machines.primary();
-    const project =
-      primary === undefined ? undefined : projects.byPath(primary.id, home);
+    const project = homeOf(deps, agent);
     return {
       id: agent.id,
       name: agent.name,
@@ -120,48 +119,13 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
 
         wire.handle("agents", "create", async (call) => {
           const fields = fieldsOf(call, true);
-          requireModel(fields.runtime ?? "eta", fields.model ?? null);
-          checkMachine(machines, fields.machineId);
-          checkPlugins(plugins, undefined, fields.plugins);
-          const primary = machines.primary();
-          if (primary === undefined)
-            throw new Error("this host has no machine");
-          const id = crypto.randomUUID();
-          const home = agentHome(deps.dataDir, id);
-          await mkdir(home, { recursive: true });
-          try {
-            // The agent and its workspace appear together or not at all.
-            deps.db.transaction(() => {
-              agents.create({ ...fields, name: fields.name! }, id);
-              projects.create({
-                machineId: primary.id,
-                path: home,
-                name: fields.name!,
-                kind: "agent_home",
-                stewardId: id,
-              });
-              if (fields.plugins !== undefined)
-                plugins.rows.setEnabled(id, fields.plugins);
-            })();
-          } catch (error) {
-            await rm(home, { recursive: true, force: true });
-            throw error;
-          }
-          const made = existing(id);
-          deps.capturePrompt?.({
-            agentId: id,
-            kind: "instructions",
-            content: made.instructions,
-            actorAgentId: null,
-          });
-          deps.capturePrompt?.({
-            agentId: id,
-            kind: "persona",
-            content: made.persona,
-            actorAgentId: null,
-          });
+          const { agent } = await createAgent(
+            deps,
+            { ...fields, name: fields.name! },
+            null,
+          );
           deps.changed();
-          return { result: { agent: viewOf(existing(id)) } };
+          return { result: { agent: viewOf(existing(agent.id)) } };
         }),
 
         wire.handle("agents", "update", async (call) => {
@@ -183,6 +147,8 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             fields.runtime ?? before.runtime,
             fields.model === undefined ? before.model : fields.model,
           );
+          if (fields.name !== undefined)
+            checkAgentName(agents, fields.name, id);
           checkMachine(machines, fields.machineId);
           checkPlugins(plugins, id, fields.plugins);
           const agent = agents.update(id, fields)!;
@@ -229,11 +195,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             );
           // Running replies first: they would otherwise outlive the agent that is writing them.
           deps.engine.stopAgent(id);
-          const primary = machines.primary();
-          const home =
-            primary === undefined
-              ? undefined
-              : projects.byPath(primary.id, agentHome(deps.dataDir, id));
+          const home = homeOf(deps, agent);
           deps.db.transaction(() => {
             conversations.archiveDirectOf(id);
             if (home !== undefined)
@@ -269,28 +231,16 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
 
         wire.handle("agents", "direct", (call) => {
           const agent = existing(new Args(call).string("agentId"));
-          const primary = machines.primary();
-          const home =
-            primary === undefined
-              ? undefined
-              : projects.byPath(primary.id, agentHome(deps.dataDir, agent.id));
+          const home = homeOf(deps, agent);
           if (home === undefined)
             throw new Error(`${agent.name} has no workspace`);
           // Asking for the chat is asking to talk: a private chat that was put away comes back.
-          let conversation = conversations.directOf(home.id, agent.id);
-          if (conversation === undefined) {
-            conversation = conversations.create({
-              projectId: home.id,
-              kind: "direct",
-              name: agent.name,
-              agentIds: [agent.id],
-            });
-            deps.created(conversation.id);
-          } else if (conversation.archived) {
-            conversation = conversations.update(conversation.id, {
-              archived: false,
-            })!;
-          }
+          // Published below whether it was made, brought back or found, so not by openDirect.
+          const conversation = openDirect(
+            { conversations, created: deps.created },
+            home,
+            agent,
+          );
           deps.changed([conversation.id]);
           return {
             result: {
@@ -311,46 +261,11 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
 
   /** The home project and the private chats carry the agent's name; a rename follows them. */
   function renameHome(agent: AgentRecord): void {
-    const primary = machines.primary();
-    const home =
-      primary === undefined
-        ? undefined
-        : projects.byPath(primary.id, agentHome(deps.dataDir, agent.id));
+    const home = homeOf(deps, agent);
     if (home === undefined) return;
     projects.update(home.id, { name: agent.name });
     conversations.renameDirect(home.id, agent.name);
   }
-}
-
-/** A machine an agent can be pinned to: the primary or a daemon that was let in. */
-export function checkMachine(
-  machines: MachineStore,
-  machineId: string | null | undefined,
-): void {
-  if (machineId === undefined || machineId === null) return;
-  const machine = machines.get(machineId);
-  if (
-    machine === undefined ||
-    (machine.kind !== "primary" && machine.kind !== "daemon")
-  )
-    throw new Error(`no such machine: ${machineId}`);
-  if (machine.status === "revoked" || machine.status === "pending")
-    throw new Error(
-      `${machine.name} is ${machine.status}: an agent cannot run there`,
-    );
-}
-
-/** What an agent can be set to use: what it has already, and what can be enabled. */
-export function checkPlugins(
-  plugins: Plugins,
-  agentId: string | undefined,
-  wanted: readonly string[] | undefined,
-): void {
-  if (wanted === undefined) return;
-  const has = agentId === undefined ? [] : plugins.rows.enabled(agentId);
-  for (const name of wanted)
-    if (!has.includes(name) && !plugins.canEnable(name))
-      throw new Error(`plugin ${name} cannot be enabled: it needs configuring`);
 }
 
 /** The fields of an agent a call carries; `create` needs a name, `update` takes what is sent. */

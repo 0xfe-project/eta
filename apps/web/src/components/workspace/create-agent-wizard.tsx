@@ -17,7 +17,7 @@ import {
   RuntimeField,
   ThinkingField,
 } from "./agent-fields";
-import { agentDraft, agentFormSchema } from "./agent-form";
+import { agentDraft, agentFormSchema, agentNameTaken } from "./agent-form";
 import { MachinePicker } from "./machine-picker";
 import { Stepper } from "./stepper";
 import { useAgents } from "./use-agents";
@@ -46,7 +46,7 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
     "machines",
     "validation",
   ] as const);
-  const { select } = useAgents();
+  const { agents, select } = useAgents();
   const lastModel = useWorkspaceStore((s) => s.workspace.lastModel);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
@@ -144,6 +144,14 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
   const valid = async (at: number) => {
     if (!(await form.trigger([...stepFields[at]]))) return false;
     if (at === 0 && checkingRuntime) return false;
+    // Names tell agents apart (a mention, a group's members): the host refuses a second one.
+    const name = form.getValues("name");
+    if (at === 0 && agentNameTaken(agents, name)) {
+      form.setError("name", {
+        message: translateText("validation:nameTaken", { name: name.trim() }),
+      });
+      return false;
+    }
     // It was online when it was chosen; a new agent is not pinned to one that is out of reach.
     if (at === 0 && machine && machine.status !== "online") {
       form.setError("machineId", {

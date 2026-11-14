@@ -58,3 +58,19 @@ export function agentDraft({
     plugins,
   };
 }
+
+/**
+ * Another agent that already answers to `name`, compared without case, as the host compares it: a
+ * second agent of a name is refused, so the form says so before it is sent.
+ */
+export function agentNameTaken(
+  agents: readonly { id: string; name: string }[],
+  name: string,
+  except?: string,
+): boolean {
+  const wanted = name.trim().toLowerCase();
+  return agents.some(
+    (agent) =>
+      agent.id !== except && agent.name.trim().toLowerCase() === wanted,
+  );
+}

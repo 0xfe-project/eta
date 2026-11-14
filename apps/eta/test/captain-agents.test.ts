@@ -6,22 +6,21 @@
  * instructions, the persona card it would wear and the model the user picked. Confirming makes the
  * agent, its workspace and its home project, and starts its instructions and persona histories;
  * rejecting makes nothing. A name another agent answers to stops it at both points, and a proposal
- * may not make a card of its own: the card's body is copied in, the card is left alone.
+ * may not make a card of its own: the agent keeps the card's id, the card is left alone.
  *
  * Once the user decides, Captain is told in the conversation it proposed from. That message is for a
  * proposal only: an agent the user makes in the agent dialog is no operation, so nothing is said
  * about it.
  */
 import type {
-  CaptainAgentProposalRowData,
+  CaptainAgentProposal,
   CaptainOperationView,
 } from "@eta/client-contracts";
-import type { AgentProposalInput } from "../src/captain/service";
+import type { AgentProposalInput } from "../src/captain/propose-agent";
 import type { World } from "./support/world";
 import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { isCaptainAgentOutcome } from "@eta/client-contracts";
-import { builtinPersonas } from "@eta/harness";
+import { captainProposalOf, isCaptainOutcome } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
 import { agentHome } from "../src/agents/store";
 import { until } from "./support/client";
@@ -29,7 +28,6 @@ import { say, scriptedModels } from "./support/models";
 import { world } from "./support/world";
 
 const options = { captain: true, tasks: { runs: false } } as const;
-const EXECUTOR = builtinPersonas().Executor;
 
 function counts(w: World): {
   agents: number;
@@ -95,14 +93,12 @@ const decide = async (w: World, operationId: string, decision: string) =>
 const cardOf = (w: World, conversationId: string) =>
   w
     .rows(conversationId)
-    .find(
-      (row) =>
-        (row.data as { event?: string }).event === "captain_agent_proposal",
-    )?.data as unknown as CaptainAgentProposalRowData | undefined;
+    .map(captainProposalOf<CaptainAgentProposal>)
+    .find((card) => card?.kind === "create_agent");
 
 /** The message that told Captain how its agent proposal ended, as the conversation shows it. */
 const outcomeOf = (w: World, conversationId: string) =>
-  w.rows(conversationId).find(isCaptainAgentOutcome);
+  w.rows(conversationId).find(isCaptainOutcome);
 
 /** A host with Captain and Ada, and Captain's agent proposals made through the service. */
 async function setup(models?: ReturnType<typeof scriptedModels>["models"]) {
@@ -112,17 +108,19 @@ async function setup(models?: ReturnType<typeof scriptedModels>["models"]) {
   await w.watch(captain);
   const captainId = w.host.product.captain.identity()!.agentId;
   const propose = (fields: Partial<AgentProposalInput> = {}) =>
-    w.host.product.captain.proposeAgent({
-      name: "Scout",
-      purpose: "Watch the repository and say what changed.",
-      instructions:
-        "Watch the repository and report what changed each morning.",
-      persona: "Executor",
-      model: "openai:gpt-5",
-      ...fields,
-      originConversationId: captain,
-      captainAgentId: captainId,
-    });
+    w.host.product.captain.proposals.propose(
+      w.host.product.captain.propose.agent,
+      {
+        name: "Scout",
+        purpose: "Watch the repository and say what changed.",
+        instructions:
+          "Watch the repository and report what changed each morning.",
+        persona: "Executor",
+        model: "openai:gpt-5",
+        ...fields,
+      },
+      captain,
+    );
   return { w, ada, captain, captainId, propose };
 }
 
@@ -145,29 +143,16 @@ describe("propose_agent is Captain's", () => {
     expect(tools("Ada")).not.toContain("list_persona_cards");
   });
 
-  it("cannot be proposed in another agent's name", async () => {
-    const { w, ada, captain } = await setup();
-    const start = counts(w);
-    // The identity on the operation is not a caller's argument to choose.
-    await expect(
-      w.host.product.captain.proposeAgent({
-        name: "Scout",
-        purpose: "Watch the repository and say what changed.",
-        instructions:
-          "Watch the repository and report what changed each morning.",
-        persona: "Executor",
-        model: "openai:gpt-5",
-        originConversationId: captain,
-        captainAgentId: ada.id,
-      }),
-    ).rejects.toThrow(/only the Captain can propose an agent/);
-    expect(w.host.product.captain.store.operations()).toEqual([]);
-    expect(counts(w)).toEqual(start);
+  it("is always recorded in Captain's name", async () => {
+    const { captainId, propose } = await setup();
+    // Who proposed is not a caller's argument: the mechanism records the Captain this host has.
+    const { operation } = await propose();
+    expect(operation.actorAgentId).toBe(captainId);
   });
 });
 
 describe("the cards a proposal may wear", () => {
-  it("are the built-in ones and the user's own, and one is copied in, not written", async () => {
+  it("are the built-in ones and the user's own, and one is worn by its id, not written", async () => {
     const { w, captain, propose } = await setup();
     const dir = join(w.host.dataDir, ".eta", "persona");
     await mkdir(dir, { recursive: true });
@@ -199,7 +184,8 @@ describe("the cards a proposal may wear", () => {
     const decided = await decide(w, operation.id, "approve");
     expect(decided.status).toBe("applied");
     const { agentId } = decided.result as { agentId: string };
-    expect(agentRow(w, agentId)?.persona).toBe(body);
+    // The id, not the body: a session finds the card by it.
+    expect(agentRow(w, agentId)?.persona).toBe("reviewer");
     // The card itself is untouched, and no card was written for the agent.
     expect(await readdir(dir)).toEqual(before);
   });
@@ -228,7 +214,6 @@ describe("an agent Captain proposes", () => {
       persona: "Executor",
       model: "openai:gpt-5",
       runtime: "eta",
-      machineId: null,
       plugins: [],
       originConversationId: captain,
     });
@@ -250,7 +235,7 @@ describe("an agent Captain proposes", () => {
       name: "Scout",
       instructions:
         "Watch the repository and report what changed each morning.",
-      persona: EXECUTOR,
+      persona: "Executor",
       runtime: "eta",
       model: "openai:gpt-5",
       machineId: null,
@@ -288,7 +273,7 @@ describe("an agent Captain proposes", () => {
     expect(
       w.host.product.captain.store.latestPrompt(result.agentId, "persona")
         ?.content,
-    ).toBe(EXECUTOR);
+    ).toBe("Executor");
   });
 
   it("makes nothing when rejected", async () => {
@@ -349,7 +334,11 @@ describe("how a decided proposal reaches Captain", () => {
     expect(told).toMatchObject({
       author: "system",
       data: {
-        captainAgentOutcome: { operationId: operation.id, status: "applied" },
+        captainOutcome: {
+          operationId: operation.id,
+          kind: "create_agent",
+          status: "applied",
+        },
       },
     });
     expect(told.text).toContain(`agentId: ${agentId}`);
@@ -364,7 +353,11 @@ describe("how a decided proposal reaches Captain", () => {
     await until(() => outcomeOf(w, captain) !== undefined);
     const told = outcomeOf(w, captain)!;
     expect(told.data).toMatchObject({
-      captainAgentOutcome: { operationId: operation.id, status: "rejected" },
+      captainOutcome: {
+        operationId: operation.id,
+        kind: "create_agent",
+        status: "rejected",
+      },
     });
     expect(told.text).toContain("rejected");
     expect(told.text).toContain("Nothing was created");
@@ -381,7 +374,11 @@ describe("how a decided proposal reaches Captain", () => {
     await until(() => outcomeOf(w, captain) !== undefined);
     const told = outcomeOf(w, captain)!;
     expect(told.data).toMatchObject({
-      captainAgentOutcome: { operationId: operation.id, status: "failed" },
+      captainOutcome: {
+        operationId: operation.id,
+        kind: "create_agent",
+        status: "failed",
+      },
     });
     expect(told.text).toContain("already exists");
   });
@@ -411,7 +408,6 @@ describe("what a proposal is refused for", () => {
       [{ model: "" }, /needs a model/],
       [{ model: "gpt-5" }, /provider:modelId/],
       [{ runtime: "claude", model: "openai:gpt-5" }, /a claude agent runs/],
-      [{ machineId: "not-the-primary" }, /primary machine/],
       [{ plugins: ["nope"] }, /cannot be enabled/],
     ];
     // Every case gets a name of its own, so only the name cases are about the name.
@@ -422,5 +418,42 @@ describe("what a proposal is refused for", () => {
       ).rejects.toThrow(reason);
     expect(counts(w)).toEqual(start);
     expect(w.host.product.captain.store.operations()).toEqual([]);
+  });
+});
+
+describe("the persona of an agent Captain proposed", () => {
+  it("is the card it was proposed with, in a real session of it", async () => {
+    const { models, requests } = scriptedModels((request) =>
+      say(`${request.agent} here`),
+    );
+    const { w, propose } = await setup(models);
+    const dir = join(w.host.dataDir, ".eta", "persona");
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, "reviewer.persona.md"),
+      "# Reviewer\n\nReads a change and says what it breaks, in one line.\n",
+    );
+    const { operation } = await propose({ name: "Rita", persona: "reviewer" });
+    const decided = await decide(w, operation.id, "approve");
+    const { agentId } = decided.result as { agentId: string };
+
+    const project = await w.project({ stewardId: agentId });
+    const group = await w.group(project.id, [agentId]);
+    await w.watch(group.id);
+    const sent = await w.send(group.id, "Look at this change.");
+    await w.settled(group.id, sent.replies[0]!.id);
+
+    const open = w.host.server.sessions
+      .openSessions()
+      .find((entry) => entry.meta.agentId === agentId)!;
+    expect(open.meta.persona).toBe("reviewer");
+    // Found by its id, not fallen back to the default card.
+    expect(open.session.kernel.inspect().activePersonaNames).toEqual([
+      "reviewer",
+    ]);
+    const asked = requests.find((request) => request.agent === "Rita")!;
+    expect(asked.system).toContain(
+      "Reads a change and says what it breaks, in one line.",
+    );
   });
 });

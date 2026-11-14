@@ -568,6 +568,7 @@ export function createProduct(options: {
   later.taskRunner = taskRunner;
   const captain = new CaptainService({
     dataDir,
+    db,
     home: options.home ?? homedir(),
     store: captainStore,
     audit: captainAudit,

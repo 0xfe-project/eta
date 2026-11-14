@@ -27,7 +27,6 @@ const proposal: CaptainAgentProposal = {
   persona: "Executor",
   model: "openai:gpt-5",
   runtime: "eta",
-  machineId: null,
   plugins: ["github"],
 };
 
@@ -59,7 +58,8 @@ const row = (data: Record<string, unknown>): MessageView =>
 
 const proposed = (fields: Partial<CaptainAgentProposal> = {}) =>
   row({
-    event: "captain_agent_proposal",
+    event: "captain_proposal",
+    kind: "create_agent",
     operationId: "op1",
     proposal: { ...proposal, ...fields },
   });
@@ -116,7 +116,6 @@ describe("an agent Captain proposes", () => {
       "Executor",
       "openai:gpt-5",
       "eta",
-      "这台机器",
       "github",
       "待确认",
     ])
@@ -132,16 +131,6 @@ describe("an agent Captain proposes", () => {
       { operationId: "op1", decision: "reject" },
       { operationId: "op1", decision: "approve" },
     ]);
-  });
-
-  it("names the machine the proposal pinned, and the primary when it pinned none", async () => {
-    const pinned = await show(proposed({ machineId: "m2" }), [operation({})]);
-    expect(pinned.container.textContent).toContain("另一台");
-    await cleanup();
-    setWire(undefined);
-    // A proposal made without a machine is made on the primary one, so that is what it says.
-    const primary = await show(proposed(), [operation({})]);
-    expect(primary.container.textContent).toContain("这台机器");
   });
 
   it("leaves out the plugins line when there are none", async () => {
