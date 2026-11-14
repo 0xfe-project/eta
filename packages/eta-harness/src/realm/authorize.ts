@@ -89,34 +89,6 @@ export class FileApprovalStore implements ApprovalStore {
   }
 }
 
-/**
- * In-memory approval store (for testing).
- */
-export class MemoryApprovalStore implements ApprovalStore {
-  readonly #records = new Map<string, ApprovalRecord>();
-
-  isApproved(layer: Layer, capability: string): boolean {
-    const key = `${layer}:${capability}`;
-    const record = this.#records.get(key);
-    return record !== undefined && record.approved;
-  }
-
-  record(layer: Layer, capability: string, approved: boolean): void {
-    const key = `${layer}:${capability}`;
-    const record: ApprovalRecord = {
-      layer,
-      capability,
-      approved,
-      timestamp: Date.now(),
-    };
-    this.#records.set(key, record);
-  }
-
-  all(): ApprovalRecord[] {
-    return Array.from(this.#records.values());
-  }
-}
-
 export type AskHuman = (request: AuthorizeRequest) => Promise<boolean>;
 
 /**

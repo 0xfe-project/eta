@@ -60,7 +60,6 @@ async function start(providers: unknown[]): Promise<{
     configPath: path,
     port: 0,
     network: false,
-    pluginWatchIntervalMs: 0,
   });
   servers.push(server);
   // The plugin reads the file before it can answer anything, and `providers.reload` only calls

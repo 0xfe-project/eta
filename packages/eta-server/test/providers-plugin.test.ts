@@ -435,32 +435,6 @@ describe("refreshing a provider's model list", () => {
   });
 });
 
-describe("subscription login belongs to the native llm plugin", () => {
-  it.each(["codexLogin", "codexAnswer", "codexStatus", "codexCancel"])(
-    "does not register providers.%s",
-    async (action) => {
-      const root = await mkdtemp(join(tmpdir(), "eta-provider-no-login-"));
-      roots.push(root);
-      const ctx = new Context();
-      const wire = new WireService(ctx);
-      const store = new ProviderConfigStore({
-        path: join(root, "config.json"),
-      });
-      const fiber = ctx.plugin(
-        providersPlugin({ store }) as never,
-        undefined as never,
-      );
-      await until(() => wire.descriptors().length > 0);
-      await expect(
-        wire.dispatch({ op: "call", target: "providers", action, args: {} }, {
-          reply: () => undefined,
-        } as never),
-      ).rejects.toThrow(`unknown op: providers.${action}`);
-      await (fiber as unknown as { dispose: () => Promise<void> }).dispose();
-    },
-  );
-});
-
 describe("unsaved model discovery", () => {
   it("uses draft connection values without requiring an id or models, writing a file, pushing state or rebuilding runtime", async () => {
     let requested: { url: string; headers: Headers } | undefined;

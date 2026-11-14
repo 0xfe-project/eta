@@ -21,7 +21,6 @@ import {
   findCutPoint,
   findTurnStartIndex,
   fitCompactionSettings,
-  getLastAssistantUsage,
   shouldCompact,
 } from "../src/index";
 
@@ -122,29 +121,14 @@ describe("token arithmetic", () => {
   });
 
   it("ignores usage from errored or aborted turns", () => {
-    const entries = [
-      {
-        id: "e",
-        parentId: null,
-        seq: 1,
-        timestamp: 0,
-        type: "message",
-        message: userMsg("x"),
-      },
-      {
-        id: "a",
-        parentId: "e",
-        seq: 2,
-        timestamp: 0,
-        type: "message",
-        message: assistantMessage({
-          stopReason: "error",
-          errorMessage: "boom",
-          usage: usageOf(10, 10),
-        }),
-      },
-    ] as Entry[];
-    expect(getLastAssistantUsage(entries)).toBeUndefined();
+    for (const stopReason of ["error", "aborted"] as const) {
+      const estimate = estimateContextTokens([
+        userMsg("x"),
+        assistantMessage({ stopReason, usage: usageOf(10, 10) }),
+      ]);
+      expect(estimate.lastUsageIndex, stopReason).toBeNull();
+      expect(estimate.usageTokens, stopReason).toBe(0);
+    }
   });
 });
 

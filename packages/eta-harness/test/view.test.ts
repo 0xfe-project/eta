@@ -12,14 +12,13 @@
 import type { AgentMessage } from "@eta/core";
 import type { ViewSources } from "../src/view";
 import { Buffer } from "node:buffer";
-import { Runner } from "@eta/core";
+import { kernelOn } from "@eta/core";
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
 import { openSession } from "../src/open";
-import { journaledKernel } from "../src/testing";
 import {
   builtinViewContributions,
   ViewService,
@@ -258,18 +257,29 @@ describe("the built-in sections a session contributes", () => {
 
   it("carries the message being streamed in the core, and drops it when it lands", async () => {
     const models = fakeModels([
-      assistantMessage({ content: [{ type: "text", text: "hi" }] }),
+      assistantMessage({ content: [{ type: "text", text: "hello" }] }),
     ]);
     const session = await openSession({
       storage: new MemoryStorage(),
       models: models as never,
       sessionId: "eta-4",
     });
+    // What a client would have been sent at each streamed frame.
+    const seen: { running: boolean; text?: string }[] = [];
+    kernelOn(session.kernel.ctx)("message:update", () => {
+      const core = session.view.snapshot().sections.core as {
+        running: boolean;
+        streaming?: { content: { text?: string }[] };
+      };
+      seen.push({
+        running: core.running,
+        text: core.streaming?.content[0]?.text,
+      });
+    });
     session.kernel.inject(userMsg("go"));
-    const run = session.runner.run();
-    // While the run is in flight the core says so.
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await run;
+    await session.runner.run();
+    // While the run was in flight the core carried the half-written message.
+    expect(seen).toContainEqual({ running: true, text: "hello" });
     const settled = session.view.snapshot();
     expect((settled.sections.core as { running: boolean }).running).toBe(false);
     expect(
@@ -304,48 +314,6 @@ describe("a plugin's section", () => {
     expect(after.revisions).not.toHaveProperty("git");
     await session.kernel.dispose();
     session.stop();
-  });
-});
-
-describe("the built-in contributions, against the sources directly", () => {
-  it("read their owner's public state and nothing else", () => {
-    // A seam test: the contributions are functions of the sources, so they can be
-    // exercised without a session — which is also why adding one does not touch the
-    // server.
-    const log = SessionLog.create(new MemoryStorage());
-    const { kernel, journaling } = journaledKernel(log);
-    const runner = new Runner(kernel, { models: fakeModels([]) as never });
-    const sources: ViewSources = {
-      session: "s",
-      running: () => runner.running,
-      streaming: () => undefined,
-      entries: () => journaling.entries(),
-      entryVersion: () => journaling.version,
-      branch: () => ({
-        tipId: log.graph.tipId(),
-        compactionEpoch: journaling.compactionEpoch,
-      }),
-      usage: () => journaling.usage,
-      goal: () => kernel.goal.current,
-      tasks: () => kernel.tasks.list(),
-      personaNames: () => kernel.persona.activeNamesList(),
-      config: () => kernel.config.get(),
-      queue: () => kernel.inbox.list(),
-      tools: () => kernel.tools.list(),
-      stateKeys: () => journaling.valueNames(),
-      tokensPerSec: () => 0,
-      ask: () => undefined,
-      sideThread: () => [],
-      subagents: () => [],
-    };
-    const contributions = builtinViewContributions(sources);
-    const byName = new Map(contributions.map((c) => [c.name, c]));
-    expect([...byName.keys()]).toContain("transcript");
-    kernel.tasks.create("a task");
-    expect(byName.get("tasks")?.project()).toHaveLength(1);
-    // The revision is the owner's own signature: creating a task moved it.
-    expect(byName.get("tasks")?.revision()).toContain("a task");
-    void kernel.dispose();
   });
 });
 

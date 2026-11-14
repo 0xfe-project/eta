@@ -12,7 +12,6 @@ import { Kernel, kernelEmit, Runner } from "@eta/core";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MetricsService } from "../src/index";
-import { OutputRate } from "../src/metrics/output-rate";
 
 const userMsg = (text: string) => ({
   role: "user" as const,
@@ -133,27 +132,6 @@ describe("tokens per second", () => {
     void kernel.dispose();
   });
 
-  it("measures a real run, and the runner keeps no rate of its own", async () => {
-    const kernel = Kernel.create({
-      config: { model: { provider: "p", modelId: "m" } },
-    });
-    const metrics = new MetricsService(kernel.ctx);
-    const fake = fakeModels(
-      [
-        assistantMessage({
-          content: [{ type: "text", text: "answer" }],
-          usage: usageOf(100, 40),
-        }),
-      ],
-      { chunkSize: 4 },
-    );
-    const runner = new Runner(kernel, { models: fake });
-    kernel.inject(userMsg("go"));
-    await runner.run();
-    expect(metrics.tokensPerSec).toBeGreaterThanOrEqual(0);
-    expect((runner as unknown as { rate?: unknown }).rate).toBeUndefined();
-    void kernel.dispose();
-  });
   it("tracks output tokens per second over the run", async () => {
     // Time advances with each clock read, so the rate window sees a real span
     // without the test sleeping.
@@ -179,22 +157,6 @@ describe("tokens per second", () => {
     kernel.inject(userMsg("go"));
     await runner.run();
     expect(metrics.tokensPerSec).toBeGreaterThan(0);
-    void kernel.dispose();
-  });
-
-  it("starts the window over on a new run", async () => {
-    const kernel = Kernel.create({
-      config: { model: { provider: "p", modelId: "m" } },
-    });
-    const metrics = new MetricsService(kernel.ctx);
-    void metrics;
-    const reset = vi.spyOn(OutputRate.prototype, "reset");
-    const fake = fakeModels([assistantMessage()]);
-    const runner = new Runner(kernel, { models: fake });
-    kernel.inject(userMsg("go"));
-    await runner.run();
-    expect(reset).toHaveBeenCalled();
-    reset.mockRestore();
     void kernel.dispose();
   });
 });

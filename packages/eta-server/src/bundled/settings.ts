@@ -10,9 +10,6 @@
 import type { Settings, SettingsStore } from "../settings";
 import type { WireService } from "../wire-service";
 
-/** The actions this target has. One list, so the wire and the plugin cannot disagree. */
-export const SETTINGS_ACTIONS = ["save", "reload"] as const;
-
 export interface SettingsPluginOptions {
   store: SettingsStore;
   /** Diagnostics. */

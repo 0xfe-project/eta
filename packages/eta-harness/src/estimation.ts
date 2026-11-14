@@ -46,17 +46,6 @@ function getAssistantUsage(message: AgentMessage): Usage | undefined {
     : undefined;
 }
 
-/** Usage from the last valid assistant message in session entries. */
-export function getLastAssistantUsage(entries: Entry[]): Usage | undefined {
-  for (let index = entries.length - 1; index >= 0; index -= 1) {
-    const entry = entries[index]!;
-    if (entry.type !== "message") continue;
-    const usage = getAssistantUsage((entry as MessageEntry).message);
-    if (usage !== undefined) return usage;
-  }
-  return undefined;
-}
-
 /** Estimated context-token usage for a message list. */
 export interface ContextUsageEstimate {
   /** Estimated total context tokens. */

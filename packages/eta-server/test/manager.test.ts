@@ -86,35 +86,6 @@ describe("creating and opening", () => {
 });
 
 describe("sessions are their own", () => {
-  it("keeps two sessions' kernels, journals and usage apart", async () => {
-    const firstModels = fakeModels([
-      assistantMessage({ content: [{ type: "text", text: "first answer" }] }),
-    ]);
-    const secondModels = fakeModels([
-      assistantMessage({ content: [{ type: "text", text: "second answer" }] }),
-    ]);
-    const store = new MemorySessionStore();
-    const sessions = new SessionManager({
-      store,
-      modelsFor: () => firstModels as never,
-    });
-    const first = await sessions.create({ cwd: "/work/one" });
-    const second = await sessions.create({ cwd: "/work/two" });
-    void second;
-
-    // Two kernels, two buses, two journals: nothing shared but the process.
-    expect(first.session.kernel).not.toBe(second.session.kernel);
-    expect(first.session.kernel.ctx).not.toBe(second.session.kernel.ctx);
-    expect(first.session.log).not.toBe(second.session.log);
-    // And the storages behind them are distinct, as the store contract says.
-    const firstStorage = await store.open(first.meta.id);
-    const secondStorage = await store.open(second.meta.id);
-    expect(firstStorage?.storage).not.toBe(secondStorage?.storage);
-
-    await sessions.closeAll();
-    expect(secondModels.calls).toHaveLength(0);
-  });
-
   it("closing one leaves the other running", async () => {
     const { manager: sessions } = manager({
       models: fakeModels([

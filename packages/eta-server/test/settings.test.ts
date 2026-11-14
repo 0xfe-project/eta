@@ -6,7 +6,14 @@
  * already running — the user has an explicit op for that (`sessions.modelSet`), and a second
  * invisible way for a session's model to change under them is not a feature.
  */
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
@@ -96,10 +103,15 @@ describe("the settings file", () => {
     const path = join(root, "settings.json");
     const store = new SettingsStore({ path });
     await store.save({ cwd: "/a" });
-    // The temp file is not left behind, and what is there parses.
-    const raw = await readFile(path, "utf8");
-    expect(() => JSON.parse(raw) as unknown).not.toThrow();
-    const { readdir } = await import("node:fs/promises");
+    const before = (await stat(path)).ino;
+    await store.save({ cwd: "/b" });
+    // A new file is renamed over the old one: a write in place would keep the inode, and a
+    // reader in between could see it half-written.
+    expect((await stat(path)).ino).not.toBe(before);
+    expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({
+      cwd: "/b",
+    });
+    // The temp file is not left behind.
     expect(
       (await readdir(root)).filter((name) => name.endsWith(".tmp")),
     ).toEqual([]);

@@ -27,14 +27,6 @@ import { STEP_UPDATE_SUCCESS } from "../prompts/tasks";
 
 export type { TaskStatus };
 
-/** The names the step tools are registered under. */
-export const STEP_TOOL_NAMES: ReadonlySet<string> = new Set([
-  "create_step",
-  "list_steps",
-  "get_step",
-  "update_step",
-]);
-
 const prioritySchema = Type.Optional(
   Type.Union([
     Type.Literal("high"),

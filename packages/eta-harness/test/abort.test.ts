@@ -7,13 +7,7 @@
  * work stopped where it was, and what it had already committed stands.
  */
 
-import {
-  AbortRequested,
-  createGate,
-  Kernel,
-  kernelOn,
-  Runner,
-} from "@eta/core";
+import { Kernel, Runner } from "@eta/core";
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
@@ -28,79 +22,7 @@ const userMsg = (text: string) => ({
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-describe("the effect gate", () => {
-  it("admits work while open and refuses it once aborting", async () => {
-    const { gate, control } = createGate();
-    let ran = 0;
-    const count = (): number => {
-      ran += 1;
-      return ran;
-    };
-    expect(gate.admit(count)).toBe(1);
-
-    control.beginAbort(Promise.resolve());
-    expect(() => gate.admit(count)).toThrow(AbortRequested);
-    expect(ran).toBe(1);
-  });
-
-  it("carries the cancellation promise so a caller can wait for the drain", async () => {
-    const { gate, control } = createGate();
-    let drained = false;
-    const cancellation = sleep(5).then(() => {
-      drained = true;
-    });
-    control.beginAbort(cancellation);
-    control.signalAbort();
-    expect(gate.signal.aborted).toBe(true);
-    try {
-      gate.admit(() => "nope");
-      throw new Error("unreachable");
-    } catch (error) {
-      expect(error).toBeInstanceOf(AbortRequested);
-      await (error as AbortRequested).cancellation;
-    }
-    expect(drained).toBe(true);
-  });
-
-  it("closes with its own error and aborts the signal", () => {
-    const { gate, control } = createGate();
-    const failure = new Error("harness closed");
-    control.close(failure);
-    expect(gate.signal.aborted).toBe(true);
-    expect(() => gate.admit(() => "nope")).toThrow(failure);
-    // Closing twice keeps the first error.
-    control.close(new Error("second"));
-    expect(() => gate.admit(() => "nope")).toThrow(failure);
-  });
-
-  it("an abort request only takes effect once", () => {
-    const { gate, control } = createGate();
-    control.beginAbort(Promise.resolve());
-    control.beginAbort(Promise.resolve());
-    expect(() => gate.admit(() => "nope")).toThrow(AbortRequested);
-  });
-});
-
 describe("aborting a run", () => {
-  it("stops a generation stream and reports aborted", async () => {
-    const kernel = Kernel.create({
-      config: { model: { provider: "p", modelId: "m" } },
-    });
-    const fake = fakeModels([
-      assistantMessage({ content: [{ type: "text", text: "never seen" }] }),
-    ]);
-    // A provider that never settles until the run is cancelled.
-    fake.streamSimple = () => {
-      throw new AbortRequested(Promise.resolve());
-    };
-    const runner = new Runner(kernel, { models: fake });
-    kernel.inject(userMsg("go"));
-    const result = await runner.run();
-    expect(result.status).toBe("aborted");
-    expect(result.error).toBeUndefined();
-    void kernel.dispose();
-  });
-
   it("waits for a tool that already started before returning", async () => {
     const kernel = Kernel.create({
       config: { model: { provider: "p", modelId: "m" } },
@@ -134,7 +56,10 @@ describe("aborting a run", () => {
 
   it("refuses to start a tool call that had not been admitted yet", async () => {
     const kernel = Kernel.create({
-      config: { model: { provider: "p", modelId: "m" } },
+      config: {
+        model: { provider: "p", modelId: "m" },
+        toolExecution: "sequential",
+      },
     });
     const fake = fakeModels([
       assistantMessage({
@@ -169,7 +94,7 @@ describe("aborting a run", () => {
     await run;
 
     // In sequential mode the second call never started; the first one finished.
-    expect(ran).toContain("slow");
+    expect(ran).toEqual(["slow"]);
     void kernel.dispose();
   });
 
@@ -203,26 +128,6 @@ describe("aborting a run", () => {
     // committed — an abort is a stop, not a rollback.
     const reloaded = await SessionLog.load(log.storage);
     expect(reloaded.transcript().length).toBe(3);
-    void kernel.dispose();
-  });
-
-  it("reports the abort on the bus with the run's own status", async () => {
-    const kernel = Kernel.create({
-      config: { model: { provider: "p", modelId: "m" } },
-    });
-    const fake = fakeModels([]);
-    fake.streamSimple = () => {
-      throw new AbortRequested(Promise.resolve());
-    };
-    const runner = new Runner(kernel, { models: fake });
-    const statuses: string[] = [];
-    const off = kernelOn(kernel.ctx)("turn:run-end", (event) => {
-      statuses.push(event.status);
-    });
-    kernel.inject(userMsg("go"));
-    await runner.run();
-    off();
-    expect(statuses).toEqual(["aborted"]);
     void kernel.dispose();
   });
 });

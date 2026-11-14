@@ -72,7 +72,7 @@ describe("convertToLlm", () => {
     ]);
   });
 
-  it("keeps the summary in place: what came before is gone, what came after is kept", () => {
+  it("keeps the summary in place, with what came after it in order", () => {
     const converted = convertToLlm([
       {
         role: "compactionSummary",
