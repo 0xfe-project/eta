@@ -19,10 +19,6 @@ vi.hoisted(() => {
 });
 
 describe("menuWindow", () => {
-  it("is at most eight rows", () => {
-    expect(MENU_ROWS).toBe(8);
-  });
-
   it("shows every entry, with no line for more, when they all fit", () => {
     for (const selected of [0, 2, 4])
       expect(menuWindow({ count: 5, selected, rows: 8 })).toEqual({

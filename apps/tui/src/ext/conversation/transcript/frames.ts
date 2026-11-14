@@ -6,7 +6,7 @@ import type { TranscriptItem } from "../contract";
 import { rowOfKey } from "../model/items";
 
 /** Below this many columns no reply is framed. */
-export const FRAME_MIN_WIDTH = 40;
+const FRAME_MIN_WIDTH = 40;
 /** Columns a frame takes from its items: a bar and a space on either side. */
 export const FRAME_INSET = 4;
 

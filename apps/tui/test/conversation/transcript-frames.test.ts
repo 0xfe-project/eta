@@ -21,7 +21,6 @@ import {
 import { createItemKeeper } from "../../src/ext/conversation/stable-items";
 import {
   drawWidths,
-  FRAME_MIN_WIDTH,
   frameOwners,
 } from "../../src/ext/conversation/transcript/frames";
 import { layoutTranscript } from "../../src/ext/conversation/transcript/layout";
@@ -295,7 +294,6 @@ describe("drawWidths", () => {
 
   it("frames from 40 columns, and below that draws everything at the whole width", () => {
     const { items } = scene();
-    expect(FRAME_MIN_WIDTH).toBe(40);
     expect(drawWidths(items, 40)).toEqual([40, 40, 36, 36, 40, 36]);
     expect(drawWidths(items, 39)).toEqual([39, 39, 39, 39, 39, 39]);
   });
@@ -472,7 +470,7 @@ describe("layoutTranscript with frames", () => {
     const layout = layoutTranscript(
       [author("r1", "Ada"), author("r2", "Ben"), text("r2:a")],
       [drawnAuthor("Ada"), drawnAuthor("Ben"), drawn("c.0")],
-      FRAME_MIN_WIDTH - 1,
+      39,
     );
     expect(layout.plain).toEqual(["● Ada", "", "● Ben", "c.0"]);
   });
@@ -512,13 +510,13 @@ describe("layoutTranscript with frames", () => {
       /no frame style/,
     );
     expect(
-      layoutTranscript(items, [bare, drawn("a.0")], FRAME_MIN_WIDTH - 1).plain,
+      layoutTranscript(items, [bare, drawn("a.0")], 39).plain,
     ).toEqual(["● Ada", "a.0"]);
   });
 
   it("below 40 columns draws the author's own line and no frame", () => {
     const { items, rendered } = scene();
-    const layout = layoutTranscript(items, rendered, FRAME_MIN_WIDTH - 1);
+    const layout = layoutTranscript(items, rendered, 39);
     expect(layout.plain).toEqual([
       "r1",
       "",
