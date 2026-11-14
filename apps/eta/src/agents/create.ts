@@ -66,8 +66,8 @@ export function checkNewAgent(
 }
 
 /**
- * Make the agent, its workspace and its home project, after `checkNewAgent`. `actorAgentId` is who
- * the first prompt versions are recorded as: null for the user, Captain's id for its proposal.
+ * Make an ordinary agent: `checkNewAgent`, then `writeAgent`. `actorAgentId` is who the first prompt
+ * versions are recorded as: null for the user, Captain's id for its proposal.
  */
 export async function createAgent(
   deps: AgentCreateDeps,
@@ -75,16 +75,37 @@ export async function createAgent(
   actorAgentId: string | null,
 ): Promise<{ agent: AgentRecord; project: ProjectRecord }> {
   checkNewAgent(deps, input);
+  return await writeAgent(deps, input, { actorAgentId });
+}
+
+/**
+ * Write an agent, with no rules about what it may be: the only place an agent row is made. Callers
+ * check first — `createAgent` for an ordinary agent; Captain's own identity, which has no model, a
+ * system role and a fixed name, skips those rules on purpose (`CaptainService.ensure`).
+ *
+ * The workspace directory comes first; then, in one transaction, the agent, its home project on the
+ * primary machine, its plugins, its first instructions and persona versions, and whatever `within`
+ * adds. A failure anywhere takes all of it back, the directory included.
+ */
+export async function writeAgent(
+  deps: AgentCreateDeps,
+  input: NewAgent & { systemRole?: "captain" | null | undefined },
+  options: {
+    actorAgentId: string | null;
+    /** More rows that belong to the agent's creation, written in the same transaction. */
+    within?: ((agent: AgentRecord) => void) | undefined;
+  },
+): Promise<{ agent: AgentRecord; project: ProjectRecord }> {
   const { agents, projects, plugins } = deps;
-  const primary = deps.machines.primary()!;
+  const primary = deps.machines.primary();
+  if (primary === undefined) throw new Error("this host has no machine");
   const name = input.name.trim();
   const id = crypto.randomUUID();
   const home = agentHome(deps.dataDir, id);
   await mkdir(home, { recursive: true });
-  let made: { agent: AgentRecord; project: ProjectRecord };
   try {
     // The agent and its workspace appear together or not at all.
-    made = deps.db.transaction(() => {
+    return deps.db.transaction(() => {
       const { plugins: wanted, ...fields } = input;
       const agent = agents.create({ ...fields, name }, id);
       const project = projects.create({
@@ -95,20 +116,20 @@ export async function createAgent(
         stewardId: id,
       });
       if (wanted !== undefined) plugins.rows.setEnabled(id, [...wanted]);
+      for (const kind of ["instructions", "persona"] as const)
+        deps.capturePrompt?.({
+          agentId: id,
+          kind,
+          content: agent[kind],
+          actorAgentId: options.actorAgentId,
+        });
+      options.within?.(agent);
       return { agent, project };
     })();
   } catch (error) {
     await rm(home, { recursive: true, force: true });
     throw error;
   }
-  for (const kind of ["instructions", "persona"] as const)
-    deps.capturePrompt?.({
-      agentId: id,
-      kind,
-      content: made.agent[kind],
-      actorAgentId,
-    });
-  return made;
 }
 
 /** An agent other than `except` that already answers to `name`, compared without case. */

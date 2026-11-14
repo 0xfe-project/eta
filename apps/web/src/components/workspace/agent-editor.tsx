@@ -198,7 +198,9 @@ function AgentEditorForm({
     if (target) setTab(target.value);
     setFocus({ field });
   };
-  const { errors } = useFormState({ control: form.control });
+  // From useFormState, not form.formState: the React Compiler memoises on `form`, which never
+  // changes, so a read off it would stay what it was at the first render.
+  const { errors, isDirty } = useFormState({ control: form.control });
   const runtime = useWatch({ control: form.control, name: "runtime" });
   const machineId = useWatch({ control: form.control, name: "machineId" });
   const { runtimes, models } = useAgentRuntimeChoices(runtime, machineId);
@@ -297,10 +299,7 @@ function AgentEditorForm({
           <Button type="button" variant="outline" onClick={onDone}>
             {translateText("common:actions.cancel")}
           </Button>
-          <Button
-            type="submit"
-            disabled={updateAgent.isPending || !form.formState.isDirty}
-          >
+          <Button type="submit" disabled={updateAgent.isPending || !isDirty}>
             {translateText("common:actions.save")}
           </Button>
         </div>

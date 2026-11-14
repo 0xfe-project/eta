@@ -9,7 +9,7 @@ import type { Plugins } from "../src/plugins/service";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { checkNewAgent, createAgent } from "../src/agents/create";
+import { checkNewAgent, createAgent, writeAgent } from "../src/agents/create";
 import { AgentStore } from "../src/agents/store";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { MachineStore } from "../src/machines/store";
@@ -108,6 +108,32 @@ describe("createAgent", () => {
     expect(count(d.db, "project")).toBe(0);
     expect(await readdir(join(d.dataDir, "agents"))).toEqual([]);
     expect(d.captured).toEqual([]);
+  });
+
+  it("writes with no rules in writeAgent, and takes back what `within` was part of", async () => {
+    const d = await deps();
+    // No model and a system role: what only Captain's own identity is written with.
+    await expect(
+      writeAgent(
+        d,
+        { name: "Captain", systemRole: "captain" },
+        {
+          actorAgentId: null,
+          within: () => {
+            throw new Error("base prompt broke");
+          },
+        },
+      ),
+    ).rejects.toThrow(/base prompt broke/);
+    expect(count(d.db, "agent")).toBe(0);
+    expect(count(d.db, "project")).toBe(0);
+    expect(await readdir(join(d.dataDir, "agents"))).toEqual([]);
+    const { agent } = await writeAgent(
+      d,
+      { name: "Captain", systemRole: "captain" },
+      { actorAgentId: null },
+    );
+    expect(agent).toMatchObject({ model: null, systemRole: "captain" });
   });
 
   it("refuses a name another agent answers to, in any case", async () => {

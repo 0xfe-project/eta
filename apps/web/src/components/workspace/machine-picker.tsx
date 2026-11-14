@@ -104,9 +104,12 @@ export function MachinePicker({
   const { machines } = useMachines();
   const { agents } = useAgentList();
   const value = useWatch({ control: form.control, name: "machineId" });
-  const saved = form.formState.defaultValues?.machineId ?? "";
-  const error = useFormState({ control: form.control, name: "machineId" })
-    .errors.machineId;
+  const { defaultValues, errors } = useFormState({
+    control: form.control,
+    name: "machineId",
+  });
+  const saved = defaultValues?.machineId ?? "";
+  const error = errors.machineId;
   const listed = machines.filter(
     (machine) =>
       machine.id === saved ||

@@ -30,8 +30,8 @@ import type { CaptainAudit } from "./audit";
 import type { CaptainMemory } from "./memory";
 import type { AgentProposalDeps } from "./propose-agent";
 import type { CaptainReviewRecord, CaptainStore } from "./store";
-import { mkdir } from "node:fs/promises";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/harness";
+import { writeAgent } from "../agents/create";
 import { checkModel } from "../agents/model";
 import { agentHome } from "../agents/store";
 import { effectiveSteward } from "../conversations/views";
@@ -184,15 +184,18 @@ export class CaptainService {
     };
   }
 
-  /** The Captain agent, its workspace project and its first prompt versions. */
+  /**
+   * The Captain agent, its workspace project and its first prompt versions, written the way every
+   * agent is (`writeAgent`): one transaction, the directory taken back on failure.
+   *
+   * Not `createAgent`: its rules are for the agents users and Captain add, and Captain's identity
+   * breaks every one of them on purpose. It has no model until the user picks one (`setModel`), it
+   * carries the captain system role, and it is always called "Captain" — a user agent of that name
+   * must not stop the host from starting, so the name is not checked against the others.
+   */
   async #create(): Promise<{ agent: AgentRecord; first: boolean }> {
-    const primary = this.#deps.machines.primary();
-    if (primary === undefined)
-      throw new Error("this host has no primary machine");
-    const id = crypto.randomUUID();
-    const home = agentHome(this.#deps.dataDir, id);
-    await mkdir(home, { recursive: true });
-    const created = this.#deps.agents.create(
+    const { agent } = await writeAgent(
+      this.#agentDeps(),
       {
         name: "Captain",
         instructions: CAPTAIN_INSTRUCTIONS,
@@ -200,40 +203,29 @@ export class CaptainService {
         systemRole: "captain",
         machineId: null,
       },
-      id,
+      {
+        actorAgentId: null,
+        // The base prompt every session starts from is Captain's to manage, so it begins here.
+        within: () =>
+          this.#deps.store.appendPromptVersion({
+            subjectId: GLOBAL_PROMPT_ID,
+            kind: "base",
+            content: DEFAULT_SYSTEM_PROMPT,
+            actorAgentId: null,
+          }),
+      },
     );
-    this.#deps.projects.create({
-      machineId: primary.id,
-      path: home,
-      name: created.name,
-      kind: "agent_home",
-      stewardId: created.id,
-    });
-    const instructions = this.#deps.store.appendPromptVersion({
-      subjectId: id,
-      kind: "instructions",
-      content: created.instructions,
-      actorAgentId: null,
-    });
-    this.#deps.store.appendPromptVersion({
-      subjectId: id,
-      kind: "persona",
-      content: created.persona,
-      actorAgentId: null,
-    });
-    this.#deps.store.appendPromptVersion({
-      subjectId: GLOBAL_PROMPT_ID,
-      kind: "base",
-      content: DEFAULT_SYSTEM_PROMPT,
-      actorAgentId: null,
-    });
     await this.#deps.audit.record({
       action: "captain.ensure",
       actorAgentId: null,
-      data: { agentId: id, createdAt: created.createdAt },
+      data: { agentId: agent.id, createdAt: agent.createdAt },
     });
     this.#deps.changed();
-    return { agent: created, first: instructions.version === 1 };
+    const instructions = this.#deps.store.latestPrompt(
+      agent.id,
+      "instructions",
+    );
+    return { agent, first: instructions?.version === 1 };
   }
 
   /**
@@ -722,6 +714,11 @@ export class CaptainService {
   async #applyOperation(
     operation: CaptainOperationView,
   ): Promise<Record<string, unknown>> {
+    // Whatever Captain proposed is the registry's: checked again and made the way its kind makes
+    // it. A new kind of proposal is registered there (`this.propose`), never added here.
+    if (this.proposals.handles(operation))
+      return await this.proposals.apply(operation);
+    // The operations that are not proposals: Captain's own changes the user has to approve.
     switch (operation.kind) {
       case "set_prompt": {
         const subjectId = String(operation.payload.subjectId ?? "");
@@ -782,8 +779,7 @@ export class CaptainService {
         return { agentId, memoryId, deleted: true };
       }
       default:
-        // Whatever Captain proposed, checked again and made the way its kind makes it.
-        return await this.proposals.apply(operation);
+        throw new Error(`unsupported Captain operation: ${operation.kind}`);
     }
   }
 
