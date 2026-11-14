@@ -789,9 +789,32 @@ function ProcessStepView({
 }
 
 /**
+ * How long text written after a step goes on with no step after it before it is taken for the
+ * answer. A model says a sentence before a call; the call follows within a second, and folding the
+ * box under that sentence would open it again a moment later, at every step.
+ */
+const ANSWER_SETTLE_MS = 1500;
+
+/** `key` has stayed the same for `ANSWER_SETTLE_MS`. */
+function useSettled(key: string | undefined): boolean {
+  const [settled, setSettled] = useState<string>();
+  useEffect(() => {
+    if (key === undefined) return;
+    const timer = setTimeout(setSettled, ANSWER_SETTLE_MS, key);
+    return () => clearTimeout(timer);
+  }, [key]);
+  return key !== undefined && settled === key;
+}
+
+/**
  * A reply that is writing now: what its session has said and done in this run. Its process goes in
- * the process box, which folds once the text at the end is being written (`splitReply`); a
- * finished reply is drawn by the same rule from its row, so the end of the run moves nothing.
+ * the process box, and the text at the end (`splitReply`) is its answer: drawn under the box,
+ * which folds into one row. A finished reply is drawn by the same rule from its row, so the end of
+ * the run moves nothing.
+ *
+ * Text that follows a step stays in the box, as the step's next line, until no step has followed it
+ * for `ANSWER_SETTLE_MS`: until then it is as likely a sentence before the next call. Text before
+ * any step is the answer at once, so a reply without tools never draws a box.
  */
 function LiveReply({
   sessionId,
@@ -811,7 +834,13 @@ function LiveReply({
   time: string;
 }) {
   const blocks = useRunBlocks(sessionId, runFrom);
-  const { steps, answer } = splitReply(blocks);
+  const split = splitReply(blocks);
+  const settled = useSettled(
+    split.steps.length === 0 ? undefined : split.answer[0]?.id,
+  );
+  const answered = split.steps.length === 0 || settled;
+  const steps = answered ? split.steps : blocks;
+  const answer = answered ? split.answer : [];
   // Nothing from the run yet: the placeholder holds the place, and the first block replaces it.
   const placeholder = blocks.length === 0 && !waiting ? <FirstToken /> : null;
   const text = answer.map((block) => (

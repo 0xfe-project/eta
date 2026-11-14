@@ -618,8 +618,9 @@ describe("a reply that is writing", () => {
       });
       fake.handle("sessions.resync", () => ({}));
     });
-    await flush(80);
-    // Its last text is written, so the box has folded while the row still reads as working.
+    // Its last text is written and no call followed it, so the box has folded while the row still
+    // reads as working.
+    await flush(1600);
     const fold = container.querySelector(".process-fold")!;
     expect(fold.textContent).toContain("publish_artifact");
     expect(fold.querySelectorAll('[data-testid="ref"]')).toHaveLength(0);

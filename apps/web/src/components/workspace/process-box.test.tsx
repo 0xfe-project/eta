@@ -130,28 +130,48 @@ describe.each(["group", "direct"] as const)(
     it("folds into a thinking process row once it writes the final text", async () => {
       const { container, say } = await live(kind);
       await say(thought, call("a"), words("正在写答案"));
+      // Until no call has followed it for a moment, the text is the box's next line.
+      expect(container.querySelector(".process-fold")).toBeNull();
+      expect(
+        container.querySelector(".process-box .process-note")?.textContent,
+      ).toBe("正在写答案");
+      await flush(1600);
       expect(container.querySelector(".process-box")).toBeNull();
       const fold = container.querySelector<HTMLDetailsElement>(".process-fold");
       expect(fold?.open).toBe(false);
       expect(fold?.querySelector("summary")?.textContent).toContain("思考过程");
       expect(fold?.querySelector("summary")?.textContent).toContain("2 步");
-      // The text is below the row, not in it.
+      // The text is below the row, not in it, and only once.
       expect(fold?.textContent).not.toContain("正在写答案");
-      expect(container.textContent).toContain("正在写答案");
+      expect(container.querySelectorAll(".message-content")).toHaveLength(1);
     });
 
-    it("returns to the box when a tool call follows the text", async () => {
+    it("keeps a sentence before a call in the box, where it stays: the box does not fold for it", async () => {
       const { container, say } = await live(kind);
       await say(call("a"), words("先说一句"));
-      expect(container.querySelector(".process-fold")).not.toBeNull();
+      const note = container.querySelector(".process-box .process-note");
+      expect(note?.textContent).toBe("先说一句");
+      expect(container.querySelector(".process-fold")).toBeNull();
       await say(call("a"), words("先说一句"), call("b"));
       expect(container.querySelector(".process-fold")).toBeNull();
+      expect(container.querySelector(".process-box .process-note")).toBe(note);
       expect(
         container.querySelectorAll(".process-box .tool-card"),
       ).toHaveLength(2);
       await say(call("a"), words("先说一句"), call("b"), words("最终"));
+      await flush(1600);
       expect(container.querySelector(".process-box")).toBeNull();
       expect(container.querySelector(".process-fold")).not.toBeNull();
+    });
+
+    it("draws text before any step as the answer at once, with no box", async () => {
+      const { container, say } = await live(kind);
+      await say(words("直接回答"));
+      expect(container.querySelector(".process-box")).toBeNull();
+      expect(container.querySelector(".process-fold")).toBeNull();
+      expect(container.querySelector(".message-content")?.textContent).toBe(
+        "直接回答",
+      );
     });
 
     it("is a folded row once finished, and opens in place to its steps", async () => {
@@ -411,8 +431,8 @@ describe.each(["group", "direct"] as const)(
         words("再看文件"),
         call("b"),
       );
-      const box = container.querySelector(".process-box");
-      expect(order(box)).toEqual([
+      const running = order(container.querySelector(".process-box"));
+      expect(running).toEqual([
         "thinking",
         "text:先列目录",
         "tool:shell · a",
@@ -427,9 +447,10 @@ describe.each(["group", "direct"] as const)(
         call("b"),
         words("答案"),
       );
+      await flush(1600);
       const fold = container.querySelector(".process-fold");
       expect(fold?.querySelector("summary")?.textContent).toContain("5 步");
-      expect(order(fold)).toEqual(order(box));
+      expect(order(fold)).toEqual(running);
       expect(fold?.textContent).not.toContain("答案");
     });
 

@@ -151,6 +151,7 @@ describe.each(["group", "direct"] as const)(
 
       // The next turn's words are a block of their own, under the folded process.
       await stream(said(20, [{ type: "text", text: "看完了" }]));
+      await flush(1600);
       expect(
         paragraph(container, "看完了").closest(".process-fold"),
       ).toBeNull();
