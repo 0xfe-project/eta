@@ -27,7 +27,7 @@ export class AbortRequested extends Error {
  * effect it handed that signal to ends with — an `AbortError`, the signal's own
  * reason, or a plain `Error("aborted")` from a provider that spells it its own
  * way — is that cancellation, not a failure. The source is the signal, never
- * the error's name or message: a timeout or a closed gate aborts the signal
+ * the error's name or message: a timeout aborts the signal
  * with some other reason and is not a cancellation, and a signal nobody aborted
  * says nothing, so a real failure stays a failure.
  */
@@ -48,13 +48,11 @@ export interface Gate {
 export interface GateControl {
   beginAbort: (cancellation: Promise<void>) => void;
   signalAbort: () => void;
-  close: (error: Error) => void;
 }
 
 type GateState =
   | { status: "open" }
-  | { status: "aborting"; cancellation: Promise<void> }
-  | { status: "closed"; error: Error };
+  | { status: "aborting"; cancellation: Promise<void> };
 
 /** Create separate procedure-facing and owner-facing views of one effect gate. */
 export function createGate(): { gate: Gate; control: GateControl } {
@@ -64,7 +62,6 @@ export function createGate(): { gate: Gate; control: GateControl } {
   const check = (): void => {
     if (state.status === "aborting")
       throw new AbortRequested(state.cancellation);
-    if (state.status === "closed") throw state.error;
   };
 
   return {
@@ -83,11 +80,6 @@ export function createGate(): { gate: Gate; control: GateControl } {
       signalAbort() {
         if (state.status !== "aborting" || controller.signal.aborted) return;
         controller.abort(new AbortRequested(state.cancellation));
-      },
-      close(error) {
-        if (state.status === "closed") return;
-        state = { status: "closed", error };
-        if (!controller.signal.aborted) controller.abort(error);
       },
     },
   };

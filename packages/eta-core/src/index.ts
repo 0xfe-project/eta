@@ -32,12 +32,6 @@ export type {
   RunDelegateContext,
 } from "./kernel/delegate";
 export {
-  AbortRequested,
-  createGate,
-  type Gate,
-  type GateControl,
-} from "./kernel/effect-gate";
-export {
   DEFAULT_MAX_INTERRUPTS,
   type GenerateOptions,
   generateWithRetry,
