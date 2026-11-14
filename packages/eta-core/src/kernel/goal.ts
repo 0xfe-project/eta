@@ -38,25 +38,6 @@ export const ANTI_SPIN_LIMIT = 3;
 /** Hard cap on self-continuations per goal. */
 export const MAX_CONTINUATIONS = 12;
 
-/** Intent phrases: the model says it is mid-task; continue without a goal. */
-const INTENT_PHRASES = [
-  "now let me",
-  "next i'll",
-  "next i will",
-  "continuing with",
-  "i'll now",
-  "i will now",
-  "let me now",
-  "moving on to",
-  "proceeding to",
-];
-
-/** True when the last assistant text shows clear intent to keep working. */
-export function lastMessageShowsIntent(text: string): boolean {
-  const lower = text.toLowerCase();
-  return INTENT_PHRASES.some((phrase) => lower.includes(phrase));
-}
-
 export class GoalService extends Service {
   static readonly provide = "goal";
 

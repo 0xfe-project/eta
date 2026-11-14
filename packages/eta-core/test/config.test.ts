@@ -164,7 +164,7 @@ describe("configService", () => {
     void kernel.dispose();
   });
 
-  it("is usable as a standalone service", () => {
+  it("setModel replaces the configured model", () => {
     const kernel = Kernel.create({
       config: { model: { provider: "p", modelId: "m" } },
     });
@@ -184,14 +184,27 @@ describe("the runner reads config live", () => {
       config: { model: { provider: "p", modelId: "m" } },
     });
     const fake = fakeModels([
-      assistantMessage({ content: [{ type: "text", text: "first" }] }),
+      assistantMessage({
+        stopReason: "toolUse",
+        content: [
+          { type: "toolCall", id: "c1", name: "switch", arguments: {} },
+        ],
+      }),
+      assistantMessage({ content: [{ type: "text", text: "done" }] }),
     ]);
+    // A model per id, so the requests can tell the models apart.
+    fake.getModel = (provider, id) => ({ provider, id }) as never;
+    kernel.tools.register({
+      name: "switch",
+      execute: () => {
+        kernel.config.setModel("p", "other");
+        return "switched";
+      },
+    });
     const runner = new Runner(kernel, { models: fake });
     kernel.inject(userMsg("go"));
     await runner.run();
-    expect(fake.calls).toHaveLength(1);
-    // Whatever the caller switched to is what the request carries.
-    expect(fake.getModel("p", "m")).toBeDefined();
+    expect(fake.calls.map((call) => call.model.id)).toEqual(["m", "other"]);
     void kernel.dispose();
   });
 

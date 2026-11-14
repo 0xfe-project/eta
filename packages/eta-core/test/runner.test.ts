@@ -146,19 +146,32 @@ describe("runner turn loop", () => {
 
   it("tools are read fresh each turn: a hot-registered tool is available mid-run", async () => {
     const { kernel, runner, fake, dispose } = setup([
-      toolCallMsg([{ id: "c1", name: "late" }]),
+      toolCallMsg([{ id: "c1", name: "install" }]),
+      toolCallMsg([{ id: "c2", name: "late" }]),
       assistantMessage(),
     ]);
-    const tools = (
-      kernel.ctx as unknown as { tools: { register: (t: KernelTool) => void } }
-    ).tools;
-    // Register before the run; the loop must see it without any restart.
-    tools.register({ name: "late", execute: () => "present" });
+    // The first turn's tool registers another one; the run never restarts.
+    kernel.tools.register({
+      name: "install",
+      execute: () => {
+        kernel.tools.register({ name: "late", execute: () => "present" });
+        return "installed";
+      },
+    });
     kernel.inject(userMsg("go"));
     await runner.run();
-    const second = fake.calls[1].context.messages;
-    const toolResult = second.find((m) => m.role === "toolResult");
-    expect(toolResult).toMatchObject({ toolName: "late" });
+    expect(fake.calls[0].context.tools?.map((t) => t.name)).toEqual([
+      "install",
+    ]);
+    expect(fake.calls[1].context.tools?.map((t) => t.name)).toEqual([
+      "install",
+      "late",
+    ]);
+    const third = fake.calls[2].context.messages;
+    const lateResult = third.find(
+      (m) => m.role === "toolResult" && m.toolName === "late",
+    );
+    expect(lateResult).toMatchObject({ isError: false });
     dispose();
   });
 

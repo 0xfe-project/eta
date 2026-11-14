@@ -3,13 +3,8 @@ import type { SearchEntry } from "../src/search-ranking";
  * Ranking, keywords, pagination, tool-name matching and suggestions.
  */
 import { describe, expect, it } from "vitest";
-import { findTools, isToolAllowed, matchesToolPattern } from "../src/names";
-import {
-  paginate,
-  rankTools,
-  resolveSearchKeywords,
-  suggest,
-} from "../src/search-ranking";
+import { isToolAllowed, matchesToolPattern } from "../src/names";
+import { rankTools, resolveSearchKeywords } from "../src/search-ranking";
 
 function entry(
   server: string,
@@ -100,74 +95,8 @@ describe("resolveSearchKeywords", () => {
   });
 });
 
-describe("paginate", () => {
-  const items = Array.from({ length: 25 }, (_, index) => index);
-
-  it("returns a page and where the next one starts", () => {
-    expect(paginate(items, 0, 12)).toMatchObject({
-      total: 25,
-      hasMore: true,
-      nextOffset: 12,
-    });
-    expect(paginate(items, 12, 12).items[0]).toBe(12);
-    const last = paginate(items, 24, 12);
-    expect(last).toMatchObject({
-      items: [24],
-      hasMore: false,
-      nextOffset: null,
-    });
-  });
-
-  it("clamps bad input", () => {
-    expect(paginate(items, -5, 0).items).toEqual([0]);
-    expect(paginate(items, Number.NaN, Number.NaN).items).toEqual([0]);
-    expect(paginate(items, 100, 5)).toMatchObject({
-      items: [],
-      hasMore: false,
-    });
-  });
-});
-
 describe("tool name matching", () => {
-  const tools = [
-    { server: "fs", name: "read-file" },
-    { server: "fs", name: "write_file" },
-    { server: "docs", name: "read_file" },
-    { server: "docs", name: "search" },
-  ];
-
-  it("prefers an exact name, then qualified, then hyphen/underscore folded", () => {
-    expect(findTools("write_file", tools)).toEqual([
-      { server: "fs", name: "write_file" },
-    ]);
-    expect(findTools("mcp__docs__read_file", tools)).toEqual([
-      { server: "docs", name: "read_file" },
-    ]);
-    expect(findTools("fs_write_file", tools)).toEqual([
-      { server: "fs", name: "write_file" },
-    ]);
-    // The model typed an underscore for a hyphen: the exact tool on the other server wins first.
-    expect(findTools("read_file", tools)).toEqual([
-      { server: "docs", name: "read_file" },
-    ]);
-    expect(findTools("read-file", tools)).toEqual([
-      { server: "fs", name: "read-file" },
-    ]);
-    expect(findTools("mcp__fs__read_file", tools)).toEqual([
-      { server: "fs", name: "read-file" },
-    ]);
-  });
-
-  it("returns every hit at the best level, and none for a miss", () => {
-    const both = [
-      { server: "a", name: "ping" },
-      { server: "b", name: "ping" },
-    ];
-    expect(findTools("ping", both)).toHaveLength(2);
-    expect(findTools("nope", tools)).toEqual([]);
-  });
-
-  it("matches include, exclude and approve patterns by name, qualified name and glob", () => {
+  it("matches include and exclude patterns by name, qualified name and glob", () => {
     expect(matchesToolPattern("fs", "read_file", ["read_*"])).toBe(true);
     expect(matchesToolPattern("fs", "read-file", ["read_file"])).toBe(true);
     expect(matchesToolPattern("fs", "x", ["mcp__fs__x"])).toBe(true);
@@ -177,14 +106,5 @@ describe("tool name matching", () => {
     expect(isToolAllowed("fs", "b", ["a", "b"], ["b"])).toBe(false);
     expect(isToolAllowed("fs", "c", ["a", "b"], undefined)).toBe(false);
     expect(isToolAllowed("fs", "c", undefined, undefined)).toBe(true);
-  });
-});
-
-describe("suggest", () => {
-  it("offers close names for a typo, even from a qualified or prefixed name", () => {
-    expect(suggest(entries, "read_fil", 3)[0]).toBe("read_file");
-    expect(suggest(entries, "mcp__fs__write_fil", 3)[0]).toBe("write_file");
-    expect(suggest(entries, "fs_list_dir", 3)[0]).toBe("list_directory");
-    expect(suggest(entries, "zzzz", 3)).toEqual([]);
   });
 });

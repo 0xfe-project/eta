@@ -14,9 +14,9 @@ import {
   TOOL_MESSAGE_DROP_THRESHOLD,
   toolResultShare,
   truncateFairly,
-  UNTRUSTED_SUMMARY_NOTE,
   untrustedFallback,
-} from "../src/index";
+} from "../src/deterministic";
+import { UNTRUSTED_SUMMARY_NOTE } from "../src/prompts";
 
 const user = (text: string, timestamp = 0): AgentMessage =>
   ({
@@ -106,7 +106,7 @@ describe("max-min-fair", () => {
 });
 
 describe("fair truncation", () => {
-  it("marks omitted and truncated messages", () => {
+  it("truncates every message when the budget is split between them", () => {
     const messages = [user("x".repeat(2_000)), user("y".repeat(2_000))];
     const text = truncateFairly(messages, 1_000)!;
     expect(text).toContain("truncated");
@@ -115,10 +115,13 @@ describe("fair truncation", () => {
   });
 
   it("drops messages that cannot hold a useful amount", () => {
+    // The short message fits whole; what is left for the long one is under
+    // the useful minimum, so it is written off rather than cut to a sliver.
     const messages = [user("a"), user("x".repeat(5_000))];
-    const text = truncateFairly(messages, 500)!;
-    expect(text).toContain("a");
-    expect(text).toMatch(/\[omitted message, \d+ chars\]|truncated/);
+    const text = truncateFairly(messages, 150)!;
+    expect(text).toContain('"text":"a"');
+    expect(text).toMatch(/\[omitted message, \d+ chars\]/);
+    expect(text).not.toContain("truncated");
   });
 
   it("returns nothing when no message fits at all", () => {

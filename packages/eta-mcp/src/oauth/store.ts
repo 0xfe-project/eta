@@ -1,5 +1,4 @@
-// Credential storage contract for MCP OAuth. The host implements it (SQLite in eta); the
-// in-memory implementation serves tests.
+// Credential storage contract for MCP OAuth. The host implements it (SQLite in eta).
 // Shape follows opencode's McpOAuth.Store (packages/core/src/mcp/oauth.ts, MIT, (c) 2025
 // opencode), keyed per server and extended with the SDK's discovery state.
 import type {
@@ -33,22 +32,4 @@ export interface CredentialStore {
     value: CredentialRecord[K],
   ) => Promise<void>;
   delete: (serverKey: string, kind: CredentialKind) => Promise<void>;
-}
-
-export function createMemoryCredentialStore(): CredentialStore {
-  const rows = new Map<string, string>();
-  const key = (serverKey: string, kind: CredentialKind) =>
-    `${kind}\0${serverKey}`;
-  return {
-    get: async (serverKey, kind) => {
-      const row = rows.get(key(serverKey, kind));
-      return row === undefined ? undefined : JSON.parse(row);
-    },
-    set: async (serverKey, kind, value) => {
-      rows.set(key(serverKey, kind), JSON.stringify(value));
-    },
-    delete: async (serverKey, kind) => {
-      rows.delete(key(serverKey, kind));
-    },
-  };
 }

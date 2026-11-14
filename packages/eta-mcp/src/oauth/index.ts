@@ -10,7 +10,6 @@ export {
 } from "./login";
 export { createOAuthProvider, type OAuthProviderOptions } from "./provider";
 export {
-  createMemoryCredentialStore,
   type CredentialKind,
   type CredentialRecord,
   type CredentialStore,

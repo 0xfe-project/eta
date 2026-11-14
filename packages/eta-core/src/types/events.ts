@@ -6,13 +6,11 @@
  * lives here, once, and every call site stays checked against `KernelEvents`.
  *
  * Vocabulary discipline, aligned with eta-agent's events.ts:
- * - the category list is eta-agent's own (ETA_EVENT_CATEGORIES); the kernel
- *   emits a subset, with names as `category:action`;
+ * - names are `category:action`, with eta-agent's categories;
  * - payloads mirror eta-agent's HarnessEventPayload shapes and are pure-data
  *   snapshots — nothing here hands out live objects from the runner or a
  *   service;
- * - a name enters the pinned list only when something emits it; streaming,
- *   retry, and compaction events land with their runner machinery.
+ * - a name enters `KernelEvents` only when something emits it.
  */
 import type { Context } from "cordis";
 import type { RunFailure } from "../kernel/failure";
@@ -28,27 +26,6 @@ import type {
 } from "./messages";
 import type { PersonaCard } from "./persona";
 import type { TaskChange } from "./tasks";
-
-/** eta-agent's event categories, kept verbatim. */
-export const ETA_EVENT_CATEGORIES = [
-  "lifecycle",
-  "turn",
-  "usage",
-  "prompt",
-  "compaction",
-  "loop",
-  "goal",
-  "memory",
-  "skill",
-  "task",
-  "state",
-  "tool",
-  "retry",
-  "ask_user",
-  "btw",
-] as const;
-
-export type EtaEventCategory = (typeof ETA_EVENT_CATEGORIES)[number];
 
 export type GoalStatusName = "none" | GoalStatus;
 
@@ -384,58 +361,3 @@ export function kernelOn(ctx: Context): On {
   ).on.bind(ctx);
   return raw as On;
 }
-
-/** Alphabetized event-name list, pinned by a snapshot test so the vocabulary cannot drift. */
-export const KERNEL_EVENT_NAMES = [
-  "btw:asking",
-  "btw:cleared",
-  "btw:failed",
-  "btw:injected",
-  "btw:opened",
-  "btw:saved",
-  "btw:summarized",
-  "compaction:end",
-  "compaction:start",
-  "entry:added",
-  "generation:interrupted",
-  "goal:changed",
-  "goal:cleared",
-  "inject:received",
-  "message:end",
-  "message:start",
-  "message:update",
-  "persona:loaded",
-  "persona:missing",
-  "persona:switched",
-  "prompt:assembled",
-  "queue:update",
-  "retry:end",
-  "retry:scheduled",
-  "retry:start",
-  "state:config-update",
-  "storage:appended",
-  "storage:compacted",
-  "storage:error",
-  "task:cancelled",
-  "task:completed",
-  "task:created",
-  "task:reminder-due",
-  "task:removed",
-  "task:updated",
-  "tool:end",
-  "tool:start",
-  "tool:update",
-  "turn:end",
-  "turn:run-end",
-  "turn:run-failed",
-  "turn:run-start",
-  "turn:start",
-  "usage:recorded",
-] as const;
-
-export type KernelEventName = (typeof KERNEL_EVENT_NAMES)[number];
-
-/** Compile-time lock: the interface keys and the pinned names must match exactly. */
-export type _VocabularyMatches = keyof KernelEvents extends KernelEventName
-  ? true
-  : never;
