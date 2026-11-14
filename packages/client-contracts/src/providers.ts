@@ -1,5 +1,11 @@
 /** Kinds with a built-in endpoint; the rest take one from the user. */
 export const BUILTIN_PROVIDER_PRESETS = {
+  // Eta's own gateway: OpenAI Chat Completions with a model list at `/models`, one key for all of
+  // it. Its models are other makers' (`claude-sonnet-5`), so their facts are found by model id.
+  eta: {
+    name: "Eta Token Plan",
+    baseUrl: "https://eta.0xfe.tech/v1",
+  },
   "openai-codex": {
     name: "Codex",
     baseUrl: "https://chatgpt.com/backend-api",
@@ -31,3 +37,7 @@ export const BUILTIN_PROVIDER_PRESETS = {
     baseUrl: "https://opencode.ai/inference/go/openai/v1",
   },
 } as const;
+
+/** Where an Eta Token Plan key is made. */
+export const ETA_TOKEN_PLAN_KEYS_URL =
+  "https://eta.0xfe.tech/app/dashboard?tab=keys";

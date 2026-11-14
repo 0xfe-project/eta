@@ -2,6 +2,28 @@
   "version": 1,
   "providers": [
     {
+      "id": "eta",
+      "match": {
+        "kinds": ["eta"],
+        "baseUrls": ["https://eta.0xfe.tech/v1"]
+      },
+      "auth": {
+        "adapter": "api-key",
+        "required": true,
+        "missingError": "key_required"
+      },
+      "discovery": { "adapter": "openai-models" },
+      "runtime": {
+        "adapter": "openai-chat",
+        "thinking": "reasoning-effort",
+        "developerRole": false,
+        "store": false,
+        "maxTokensField": "max_tokens"
+      },
+      "restrictToListedModels": false,
+      "models": []
+    },
+    {
       "id": "openai-codex",
       "match": {
         "kinds": ["openai-codex"],

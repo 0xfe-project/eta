@@ -185,6 +185,7 @@ export interface SidebarSession {
 
 /** Kinds with a built-in endpoint; the rest take one from the user. */
 export type ProviderKind =
+  | "eta"
   | "kimi-coding"
   | "deepseek"
   | "zai-coding-cn"

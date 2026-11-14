@@ -724,6 +724,107 @@ describe("adding a source", () => {
   });
 });
 
+describe("Eta Token Plan", () => {
+  const gateway: ProviderDiscoverResult = {
+    models: [
+      {
+        id: "claude-sonnet-5",
+        name: "Claude Sonnet 5",
+        api: "openai-completions",
+        contextWindow: 1_000_000,
+        reasoning: true,
+      },
+      { id: "gpt-5.4", api: "openai-completions" },
+    ],
+  };
+  const etaButton = () => find("[role=dialog] button", /Eta Token Plan/);
+
+  it("sits above every group as the recommended source, with Eta's own mark", async () => {
+    await render();
+    await click(/添加来源/);
+    const card = etaButton();
+    expect(card.textContent).toContain("推荐");
+    expect(card.textContent).toContain("Eta 自家网关");
+    const firstGroup = document.querySelector("[role=dialog] section")!;
+    expect(
+      card.compareDocumentPosition(firstGroup) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(card.querySelector("[style*=mask], svg, img")).not.toBeNull();
+  });
+
+  it("connects with one key, lists the gateway's models and saves the chosen ones", async () => {
+    const page = await render({ discover: () => gateway });
+    await click(/添加来源/);
+    await click(/Eta Token Plan/, "[role=dialog] button");
+    expect(find<HTMLAnchorElement>("a", /获取 key/).getAttribute("href")).toBe(
+      "https://eta.0xfe.tech/app/dashboard?tab=keys",
+    );
+    await type(/Eta Token Plan 的 API key/, "sk-eta");
+    await click(/^连接$/);
+    expect(page.calls("discover")).toEqual([
+      { kind: "eta", baseUrl: "https://eta.0xfe.tech/v1", apiKey: "sk-eta" },
+    ]);
+    expect(text()).toContain("已选 2 个");
+    expect(find("li", /Claude Sonnet 5/).textContent).toContain("1M");
+    await click(/^完成$/);
+    expect(page.calls("save")).toEqual([
+      {
+        provider: {
+          id: "eta-token-plan",
+          name: "Eta Token Plan",
+          kind: "eta",
+          baseUrl: "https://eta.0xfe.tech/v1",
+          apiKey: "sk-eta",
+          models: gateway.models,
+        },
+        revision: "r1",
+      },
+    ]);
+    expect(rows()[0]).toMatch(/Eta Token Plan.*API key.*2 个模型.*正常/);
+  });
+
+  it("says a key the gateway refuses (401) is invalid", async () => {
+    const page = await render({
+      discover: () => {
+        throw new Error("discovery_http_401");
+      },
+    });
+    await click(/添加来源/);
+    await click(/Eta Token Plan/, "[role=dialog] button");
+    await type(/Eta Token Plan 的 API key/, "sk-wrong");
+    await click(/^连接$/);
+    expect(find('[role="alert"]', /key/).textContent).toContain("key 无效");
+    expect(page.calls("save")).toEqual([]);
+  });
+
+  it("is where the empty list leads, straight to its key", async () => {
+    await render();
+    expect(text()).toContain("还没有模型来源");
+    await click(/^添加 Eta Token Plan$/);
+    expect(document.querySelector("[role=dialog] section")).toBeNull();
+    await type(/Eta Token Plan 的 API key/, "sk-eta");
+  });
+
+  it("is listed like any other source: name, model count and status", async () => {
+    await render({
+      providers: [
+        provider({
+          id: "eta",
+          kind: "eta",
+          name: "Eta Token Plan",
+          baseUrl: "https://eta.0xfe.tech/v1",
+          models: [{ id: "claude-sonnet-5" }, { id: "gpt-5.4" }, { id: "x" }],
+        }),
+      ],
+      checks: {
+        eta: { state: "invalid_key", checkedAt: "2026-11-13T00:00:00Z" },
+      },
+    });
+    expect(rows()[0]).toMatch(/Eta Token Plan.*API key.*3 个模型.*key 无效/);
+  });
+});
+
 describe("a source's page", () => {
   const deepseek = () =>
     provider({

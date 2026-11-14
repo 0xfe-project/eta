@@ -6,7 +6,8 @@
  * - **Metadata** (`publicModelMetadata`) fills in names, context windows and inputs for the model
  *   IDs a provider's own list returned, and only for exact official endpoints — never provider
  *   names or arbitrary compatible proxies. Discovery asks for it in the same call that lists the
- *   models, so a settings page gets both at once.
+ *   models, so a settings page gets both at once. Eta Token Plan is the one gateway whose models
+ *   are looked up by id across every provider instead (`modelsDevByModelId`).
  * - **Discovery** for providers whose model list *is* their models.dev entry (OpenCode Zen and Go,
  *   see `discovery.ts`), where every listed model is parsed.
  *
@@ -206,6 +207,100 @@ export function parseModelsDevModel(
   return model;
 }
 
+/**
+ * Providers that make the models they list, in the order they win a tie. A gateway's
+ * `claude-sonnet-5` is Anthropic's model, and Anthropic's entry is the one that says what it is;
+ * a reseller's entry for the same id may carry its own, smaller limits.
+ */
+const MAKERS = [
+  "anthropic",
+  "openai",
+  "google",
+  "xai",
+  "deepseek",
+  "moonshotai",
+  "zai",
+  "zhipuai",
+  "alibaba",
+  "mistral",
+  "minimax",
+] as const;
+
+type ModelFacts = { id: string } & ModelCapabilities;
+
+/**
+ * What models.dev says about each model id, wherever it lists it: for a gateway (Eta Token Plan)
+ * whose ids are other makers' and whose address is in no entry.
+ *
+ * The rules, in order:
+ *
+ * 1. A provider lists the model when its `models` has the id as a key, exactly; only when no
+ *    provider does is the id compared without case.
+ * 2. Among the providers that list it, a maker in `MAKERS` wins, in that order; otherwise the
+ *    provider whose id sorts first, so the answer does not depend on the catalog's key order.
+ * 3. An entry that does not parse is passed over for the next one.
+ * 4. What is taken is what the model is: its name, context window, output limit, inputs, and
+ *    whether and how it reasons. Its protocol, endpoint and status are the provider's, not the
+ *    model's, and are left out.
+ * 5. An id no provider lists gets nothing: unknown stays unknown.
+ */
+export function modelsDevByModelId(
+  body: Record<string, unknown>,
+  modelIds: readonly string[],
+): ModelFacts[] {
+  const providers: ModelsDevProvider[] = [];
+  for (const providerId of Object.keys(body).sort()) {
+    try {
+      const provider = modelsDevProvider(body, providerId);
+      if (provider !== undefined) providers.push(provider);
+    } catch {
+      // One malformed entry is not a reason to know nothing about the rest.
+    }
+  }
+  const rank = (provider: ModelsDevProvider) => {
+    const index = (MAKERS as readonly string[]).indexOf(provider.id);
+    return index === -1 ? MAKERS.length : index;
+  };
+  providers.sort((left, right) => rank(left) - rank(right));
+
+  const found: ModelFacts[] = [];
+  for (const id of modelIds) {
+    const lower = id.toLowerCase();
+    const listings = (exact: boolean) =>
+      providers.flatMap((provider) => {
+        const key = exact
+          ? Object.hasOwn(provider.models, id)
+            ? id
+            : undefined
+          : Object.keys(provider.models).find(
+              (candidate) => candidate.toLowerCase() === lower,
+            );
+        return key === undefined ? [] : [{ provider, key }];
+      });
+    const candidates = listings(true);
+    for (const { provider, key } of candidates.length > 0
+      ? candidates
+      : listings(false)) {
+      let parsed: ModelsDevModel;
+      try {
+        parsed = parseModelsDevModel(key, provider.models[key], provider);
+      } catch {
+        continue;
+      }
+      const {
+        id: _id,
+        npm: _npm,
+        api: _api,
+        deprecated: _deprecated,
+        ...facts
+      } = parsed;
+      found.push({ id, ...facts });
+      break;
+    }
+  }
+  return found;
+}
+
 /** Names, context windows and inputs for explicit model IDs at an exact official endpoint. */
 export async function publicModelMetadata(
   args: { kind: ProviderKind; baseUrl: string; modelIds: readonly string[] },
@@ -219,6 +314,15 @@ export async function publicModelMetadata(
     throw new Error("Invalid endpoint for public model metadata");
   }
   const endpoint = url.href.replace(/\/+$/, "");
+  if (args.kind === "eta")
+    return endpoint === BUILTIN_PROVIDER_PRESETS.eta.baseUrl
+      ? {
+          models: modelsDevByModelId(
+            await fetchModelsDev(send, signal),
+            args.modelIds,
+          ),
+        }
+      : { models: [] };
   const providerId = ENDPOINTS[endpoint];
   const preset =
     BUILTIN_PROVIDER_PRESETS[
