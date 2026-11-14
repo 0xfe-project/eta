@@ -60,8 +60,9 @@ export function CaptainModel() {
 }
 
 /**
- * Operations: the two things about Captain's work that a chat cannot carry — an approval it cannot give
- * itself, and what it handed out recently. There is no list of Captain's alerts: everything one said
+ * Operations: the one thing about Captain's work that a chat cannot carry — an approval it cannot give
+ * itself. There is no list of Captain's alerts, nor of its recent assignments (a round count and
+ * agent id prefixes told the reader nothing the group's own conversation does not): everything one said
  * (a task that stopped retrying, a question waiting in the Inbox, an acceptance recommendation) is
  * already on the board, in the Inbox or on the task, and a second copy only had to be marked read.
  *
@@ -80,98 +81,55 @@ export function CaptainOperations() {
   );
 
   return (
-    <>
-      <Section
-        title={translateText("operations.pending")}
-        count={pending.length}
-      >
-        {pending.length === 0 ? (
-          <p className="text-xs text-muted-foreground">
-            {translateText("operations.none")}
-          </p>
-        ) : (
-          // Rows, edge to edge, as tasks and artifacts draw theirs: the rule between two runs into the
-          // panel's own edges, so the block reads as part of the column and not as cards on it.
-          <ul className="-mx-3 divide-y divide-border">
-            {pending.map((operation) => (
-              <li key={operation.id} className="px-3 py-1.5">
-                <div className="font-mono text-[10px] text-muted-foreground">
-                  {operation.kind}
-                </div>
-                {operation.kind === "create_group" &&
-                typeof operation.payload.name === "string" ? (
-                  <div className="truncate text-xs">
-                    {operation.payload.name}
-                  </div>
-                ) : null}
-                <div className="mt-1 flex gap-2">
-                  <Button
-                    type="button"
-                    size="xs"
-                    onClick={() =>
-                      void actions.decideOperation.mutateAsync({
-                        operationId: operation.id,
-                        decision: "approve",
-                      })
-                    }
-                  >
-                    {translateText("operations.approve")}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="ghost"
-                    onClick={() =>
-                      void actions.decideOperation.mutateAsync({
-                        operationId: operation.id,
-                        decision: "reject",
-                      })
-                    }
-                  >
-                    {translateText("operations.reject")}
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      <Section
-        title={translateText("assignments.title")}
-        count={captain.assignments.length}
-      >
-        {captain.assignments.length === 0 ? (
-          <p className="text-xs text-muted-foreground">
-            {translateText("assignments.none")}
-          </p>
-        ) : (
-          <ul className="-mx-3 divide-y divide-border">
-            {captain.assignments.slice(0, 20).map((assignment) => (
-              <li key={assignment.id} className="px-3 py-1.5 text-xs">
-                <div className="flex justify-between gap-2">
-                  <span>
-                    {translateText("assignments.round", {
-                      round: assignment.round,
-                    })}
-                  </span>
-                  <span className="font-mono text-[10px] text-faint">
-                    {assignment.status}
-                  </span>
-                </div>
-                <p className="mt-0.5 text-muted-foreground">
-                  {assignment.targets
-                    .map(
-                      (target) =>
-                        `${target.agentId.slice(0, 8)}: ${target.status} · ${target.taskCount}`,
-                    )
-                    .join(" / ")}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-    </>
+    <Section title={translateText("operations.pending")} count={pending.length}>
+      {pending.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          {translateText("operations.none")}
+        </p>
+      ) : (
+        // Rows, edge to edge, as tasks and artifacts draw theirs: the rule between two runs into the
+        // panel's own edges, so the block reads as part of the column and not as cards on it.
+        <ul className="-mx-3 divide-y divide-border">
+          {pending.map((operation) => (
+            <li key={operation.id} className="px-3 py-1.5">
+              <div className="font-mono text-[10px] text-muted-foreground">
+                {operation.kind}
+              </div>
+              {operation.kind === "create_group" &&
+              typeof operation.payload.name === "string" ? (
+                <div className="truncate text-xs">{operation.payload.name}</div>
+              ) : null}
+              <div className="mt-1 flex gap-2">
+                <Button
+                  type="button"
+                  size="xs"
+                  onClick={() =>
+                    void actions.decideOperation.mutateAsync({
+                      operationId: operation.id,
+                      decision: "approve",
+                    })
+                  }
+                >
+                  {translateText("operations.approve")}
+                </Button>
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  onClick={() =>
+                    void actions.decideOperation.mutateAsync({
+                      operationId: operation.id,
+                      decision: "reject",
+                    })
+                  }
+                >
+                  {translateText("operations.reject")}
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
   );
 }
