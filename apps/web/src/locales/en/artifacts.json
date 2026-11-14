@@ -20,6 +20,10 @@
     "sharePublicly": "Share publicly",
     "publicLink": "Public link"
   },
+  "print": {
+    "action": "Export PDF",
+    "hint": "Print this page as it is now; choose “Save as PDF” in the print dialog. Turn on background graphics there to keep dark backgrounds."
+  },
   "empty": {
     "title": "No Artifacts yet",
     "description": "Pages published by agents in this group appear here."

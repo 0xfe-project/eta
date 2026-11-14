@@ -20,6 +20,10 @@
     "sharePublicly": "公开分享",
     "publicLink": "公开链接"
   },
+  "print": {
+    "action": "导出 PDF",
+    "hint": "按当前状态打印这个页面，在打印对话框里选「另存为 PDF」。深色背景需在对话框里勾选「背景图形」才会保留。"
+  },
   "empty": {
     "title": "还没有 Artifacts",
     "description": "智能体在这个群里发布的页面会出现在这里。"

@@ -14,6 +14,7 @@ import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
+import { PRINT_LISTENER } from "../src/artifacts/print";
 import { until } from "./support/client";
 import { call, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";
@@ -606,6 +607,31 @@ describe("the artifacts target and its pages", () => {
     expect(out.status).toBe(404);
   });
 
+  it("ends each previewed page with the print listener, and touches nothing else", async () => {
+    const p = await published();
+    const { url } = await p.preview();
+    const page = await fetch(p.base + url);
+    const published_ = await readFile(join(p.project.path, "site/index.html"));
+    // The published bytes, then the listener: no decoding, so any page encoding survives.
+    expect(Buffer.from(await page.arrayBuffer())).toEqual(
+      Buffer.concat([published_, Buffer.from(PRINT_LISTENER)]),
+    );
+    expect(page.headers.get("content-length")).toBe(
+      String(published_.length + PRINT_LISTENER.length),
+    );
+    expect(page.headers.get("content-security-policy")).toMatch(/^sandbox /);
+    // Not a page: as published.
+    const css = await fetch(new URL("css/site.css", p.base + url));
+    expect(await css.text()).toBe("h1{}");
+    // A share stays the published bytes.
+    const { url: shared } = (await p.w.client.call("artifacts", "share", {
+      artifactId: p.artifact.id,
+      version: 1,
+    })) as { url: string };
+    const public_ = await fetch(`${p.base}${shared}files/index.html`);
+    expect(Buffer.from(await public_.arrayBuffer())).toEqual(published_);
+  });
+
   it("opens nothing for a capability that is altered, expired, forged or for another version", async () => {
     const p = await published();
     const good = (await p.preview()).url;
@@ -727,7 +753,9 @@ describe("the artifacts target and its pages", () => {
     it("opens at the root of the site, where a router finds its first route", async () => {
       const a = await app(true);
       expect(a.url).toMatch(/^\/preview\/[^/]+\/files\/$/);
-      expect(await (await fetch(a.base + a.url)).text()).toBe(INDEX);
+      expect(await (await fetch(a.base + a.url)).text()).toBe(
+        INDEX + PRINT_LISTENER,
+      );
     });
 
     it("answers a navigation with index.html, pointed back at the root of the site", async () => {
@@ -750,7 +778,9 @@ describe("the artifacts target and its pages", () => {
         ).text(),
       ).toContain('<base href="../../../">');
       // One level down there is nothing to correct.
-      expect(await (await fetch(`${a.base}${a.url}users`)).text()).toBe(INDEX);
+      expect(await (await fetch(`${a.base}${a.url}users`)).text()).toBe(
+        INDEX + PRINT_LISTENER,
+      );
       // Without an extension it counts as a navigation, whatever it accepts.
       expect(
         (
@@ -772,7 +802,7 @@ describe("the artifacts target and its pages", () => {
         "1",
       );
       expect(await (await fetch(`${a.base}${a.url}about/`)).text()).toBe(
-        "the about page",
+        `the about page${PRINT_LISTENER}`,
       );
       for (const name of ["assets/gone.js", "site.css", "logo.png"]) {
         const missing = await fetch(`${a.base}${a.url}${name}`, {
@@ -803,7 +833,10 @@ describe("the artifacts target and its pages", () => {
       });
       expect(deep.status).toBe(200);
       expect(deep.headers.get("cache-control")).toBe("no-store");
-      expect(await deep.text()).toContain('<base href="../">');
+      const shared = await deep.text();
+      expect(shared).toContain('<base href="../">');
+      // A share is the bytes that were published: its shell has no print button to answer.
+      expect(shared).not.toContain(PRINT_LISTENER);
     });
 
     it("changes nothing without `spa`", async () => {
@@ -817,7 +850,7 @@ describe("the artifacts target and its pages", () => {
         new TextDecoder().decode(
           await (await fetch(a.base + a.url)).arrayBuffer(),
         ),
-      ).toBe(INDEX);
+      ).toBe(INDEX + PRINT_LISTENER);
     });
 
     it("refuses root paths in index.html, and says how to fix them", async () => {
