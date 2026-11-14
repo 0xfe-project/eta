@@ -29,6 +29,7 @@ import type { AgentCreateDeps } from "./create";
 import type { AgentRecord, AgentStore } from "./store";
 import { AGENT_RUNTIMES } from "@eta/client-contracts";
 import { THINKING_LEVELS } from "@eta/core";
+import { openDirect } from "../conversations/direct";
 import { summaryOf } from "../conversations/views";
 import { Args, productPlugin, publish } from "../wire";
 import {
@@ -37,6 +38,7 @@ import {
   checkPlugins,
   createAgent,
 } from "./create";
+import { homeOf } from "./home";
 import { checkModel, requireModel } from "./model";
 import { agentHome } from "./store";
 
@@ -71,9 +73,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
     statuses = timeline.agentStatuses(),
   ): AgentView => {
     const home = agentHome(deps.dataDir, agent.id);
-    const primary = machines.primary();
-    const project =
-      primary === undefined ? undefined : projects.byPath(primary.id, home);
+    const project = homeOf(deps, agent);
     return {
       id: agent.id,
       name: agent.name,
@@ -195,11 +195,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             );
           // Running replies first: they would otherwise outlive the agent that is writing them.
           deps.engine.stopAgent(id);
-          const primary = machines.primary();
-          const home =
-            primary === undefined
-              ? undefined
-              : projects.byPath(primary.id, agentHome(deps.dataDir, id));
+          const home = homeOf(deps, agent);
           deps.db.transaction(() => {
             conversations.archiveDirectOf(id);
             if (home !== undefined)
@@ -235,28 +231,16 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
 
         wire.handle("agents", "direct", (call) => {
           const agent = existing(new Args(call).string("agentId"));
-          const primary = machines.primary();
-          const home =
-            primary === undefined
-              ? undefined
-              : projects.byPath(primary.id, agentHome(deps.dataDir, agent.id));
+          const home = homeOf(deps, agent);
           if (home === undefined)
             throw new Error(`${agent.name} has no workspace`);
           // Asking for the chat is asking to talk: a private chat that was put away comes back.
-          let conversation = conversations.directOf(home.id, agent.id);
-          if (conversation === undefined) {
-            conversation = conversations.create({
-              projectId: home.id,
-              kind: "direct",
-              name: agent.name,
-              agentIds: [agent.id],
-            });
-            deps.created(conversation.id);
-          } else if (conversation.archived) {
-            conversation = conversations.update(conversation.id, {
-              archived: false,
-            })!;
-          }
+          // Published below whether it was made, brought back or found, so not by openDirect.
+          const conversation = openDirect(
+            { conversations, created: deps.created },
+            home,
+            agent,
+          );
           deps.changed([conversation.id]);
           return {
             result: {
@@ -277,11 +261,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
 
   /** The home project and the private chats carry the agent's name; a rename follows them. */
   function renameHome(agent: AgentRecord): void {
-    const primary = machines.primary();
-    const home =
-      primary === undefined
-        ? undefined
-        : projects.byPath(primary.id, agentHome(deps.dataDir, agent.id));
+    const home = homeOf(deps, agent);
     if (home === undefined) return;
     projects.update(home.id, { name: agent.name });
     conversations.renameDirect(home.id, agent.name);

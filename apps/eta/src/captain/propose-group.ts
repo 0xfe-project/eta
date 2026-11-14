@@ -14,7 +14,7 @@ import type { MachineRecord, MachineStore } from "../machines/store";
 import type { ProjectRecord, ProjectStore } from "../projects/store";
 import type { ProposalKind, ProposalOrigin } from "./proposals";
 import { basename, isAbsolute, resolve } from "node:path";
-import { agentHome } from "../agents/store";
+import { isAgentHome } from "../agents/home";
 import { createGroup, groupNamed } from "../conversations/groups";
 
 /** What Captain asks for when it proposes a group. */
@@ -91,12 +91,7 @@ export function groupProposals(
     // A directory that is a project already is that project, the way adding it again is.
     const project = deps.projects.byPath(machine.id, path);
     if (project === undefined) {
-      if (
-        machine.kind === "primary" &&
-        deps.agents
-          .list()
-          .some((agent) => agentHome(deps.dataDir, agent.id) === path)
-      )
+      if (machine.kind === "primary" && isAgentHome(deps, path))
         throw new Error(`${path} is an agent's own workspace`);
       await deps.checkDirectory(machine, path);
     }

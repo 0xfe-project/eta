@@ -32,8 +32,10 @@ import type { AgentProposalDeps } from "./propose-agent";
 import type { CaptainReviewRecord, CaptainStore } from "./store";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/harness";
 import { writeAgent } from "../agents/create";
+import { ensureHome, homeOf } from "../agents/home";
 import { checkModel } from "../agents/model";
 import { agentHome } from "../agents/store";
+import { openDirect } from "../conversations/direct";
 import { effectiveSteward } from "../conversations/views";
 import { isTaskSession, taskOfKey } from "../tasks/session-key";
 import { CaptainProposals } from "./proposals";
@@ -234,36 +236,7 @@ export class CaptainService {
    * made by an older build without one gets it here, the next time it starts.
    */
   #conversation(agent: AgentRecord): string {
-    const primary = this.#deps.machines.primary();
-    if (primary === undefined)
-      throw new Error("this host has no primary machine");
-    const path = agentHome(this.#deps.dataDir, agent.id);
-    const home =
-      this.#deps.projects.byPath(primary.id, path) ??
-      this.#deps.projects.create({
-        machineId: primary.id,
-        path,
-        name: agent.name,
-        kind: "agent_home",
-        stewardId: agent.id,
-      });
-    const found = this.#deps.conversations.directOf(home.id, agent.id);
-    if (found === undefined) {
-      const made = this.#deps.conversations.create({
-        projectId: home.id,
-        kind: "direct",
-        name: agent.name,
-        agentIds: [agent.id],
-      });
-      this.#deps.created?.(made.id);
-      this.#deps.changed([made.id]);
-      return made.id;
-    }
-    if (found.archived) {
-      this.#deps.conversations.update(found.id, { archived: false });
-      this.#deps.changed([found.id]);
-    }
-    return found.id;
+    return openDirect(this.#deps, ensureHome(this.#deps, agent), agent).id;
   }
 
   async direct(): Promise<CaptainIdentityView & { conversationId: string }> {
@@ -743,14 +716,7 @@ export class CaptainService {
           throw new Error("the Captain cannot delete itself");
         this.#deps.engine.stopAgent(agentId);
         this.#deps.conversations.archiveDirectOf(agentId);
-        const primary = this.#deps.machines.primary();
-        const home =
-          primary === undefined
-            ? undefined
-            : this.#deps.projects.byPath(
-                primary.id,
-                agentHome(this.#deps.dataDir, agentId),
-              );
+        const home = homeOf(this.#deps, agent);
         if (home !== undefined)
           this.#deps.projects.update(home.id, { archived: true });
         this.#deps.agents.remove(agentId);
@@ -1200,12 +1166,8 @@ export class CaptainService {
   }
 
   #viewOf(agent: AgentRecord): CaptainIdentityView {
-    const primary = this.#deps.machines.primary();
     const home = agentHome(this.#deps.dataDir, agent.id);
-    const project =
-      primary === undefined
-        ? undefined
-        : this.#deps.projects.byPath(primary.id, home);
+    const project = homeOf(this.#deps, agent);
     const direct =
       project === undefined
         ? undefined
