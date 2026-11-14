@@ -86,6 +86,7 @@ import { ThinkingBlock } from "./transcript/thinking-block";
 import { ToolDetailCard } from "./transcript/tool-detail";
 import { useComposerTarget } from "./use-composer-target";
 import { useInputMethod } from "./use-input-method";
+import { WidgetFrame } from "./widget-frame";
 import { useWorkspaceStore } from "./workspace-store";
 
 type SlashName =
@@ -363,6 +364,21 @@ function withRealmCalls(blocks: readonly RunBlock[]): RunBlock[] {
   });
 }
 
+/** What a `show_widget` call draws: the code its result kept, or, while it streams, its argument. */
+function widgetOf(block: ToolBlock) {
+  if (block.name !== "show_widget") return undefined;
+  const source = (block.status === "completed" ? block.details : block.input) as
+    | { title?: unknown; widget_code?: unknown }
+    | undefined;
+  if (block.status === "failed" || typeof source?.widget_code !== "string")
+    return undefined;
+  return {
+    title: typeof source.title === "string" ? source.title : "",
+    code: source.widget_code,
+    streaming: block.status === "running",
+  };
+}
+
 /** What `publish_artifact` returns in its result's `details`. */
 function publishedArtifact(block: ToolBlock) {
   if (block.name !== "publish_artifact" || block.status !== "completed")
@@ -415,8 +431,8 @@ function emailProposalIds(blocks: readonly RunBlock[]): string[] {
 }
 
 /**
- * The cards a turn leaves beside its answer, in one column: the artifacts it published, in the
- * order it published them, then the task rows it wrote.
+ * The cards a turn leaves beside its answer, in one column: the widgets it drew, the artifacts it
+ * published, in the order it published them, then the task rows it wrote.
  *
  * Neither is a step the agent took, so neither is drawn in the process — a group folds that away as
  * soon as the text is written, which used to take an artifact's card out of the conversation with
@@ -430,6 +446,7 @@ function TurnCards({
   sessionId,
   runFrom,
   taskRows,
+  onPrompt,
 }: {
   /** The tool calls a finished reply kept on its row. */
   saved: readonly ToolBlock[];
@@ -439,16 +456,30 @@ function TurnCards({
   runFrom?: number | undefined;
   /** The task rows this turn wrote, and which are drawn here rather than on the timeline. */
   taskRows: readonly MessageView[] | undefined;
+  /** A widget's `sendPrompt`: the text goes to the conversation as the user's. */
+  onPrompt: (text: string) => void;
 }) {
   const live = useRunBlocks(sessionId, runFrom);
   const blocks = withRealmCalls(sessionId === undefined ? saved : live);
   const published = publishedRefs(blocks);
+  const widgets = blocks.flatMap((block) => {
+    const widget = block.type === "tool" ? widgetOf(block) : undefined;
+    return widget === undefined ? [] : [{ id: block.id, ...widget }];
+  });
   const proposals = emailProposalIds(blocks);
   const rows = taskRows ?? [];
-  if (published.length === 0 && proposals.length === 0 && rows.length === 0)
+  if (
+    published.length === 0 &&
+    widgets.length === 0 &&
+    proposals.length === 0 &&
+    rows.length === 0
+  )
     return null;
   return (
     <div className="turn-tasks">
+      {widgets.map(({ id, ...widget }) => (
+        <WidgetFrame key={id} {...widget} onPrompt={onPrompt} />
+      ))}
       {published.map(({ id, ref }) => (
         <ActivityRefCard key={id} value={ref} variant="framed" />
       ))}
@@ -690,6 +721,7 @@ interface TurnActions {
   onChoose: (question: Question, selections: string[]) => void;
   onAbort: (question: Question) => void;
   onResend: (text: string, agentId?: string) => void;
+  onPrompt: (text: string) => void;
 }
 
 /**
@@ -993,6 +1025,7 @@ const Turn = memo(
           sessionId={running ? sessionId : undefined}
           runFrom={runFromOf(message.data)}
           taskRows={taskRowsOf}
+          onPrompt={(text) => actions.current.onPrompt(text)}
         />
         <div className="message-footer">
           <time dateTime={new Date(message.createdAt).toISOString()}>
@@ -1220,14 +1253,17 @@ export function ChatPanel({
   );
   // The rows call the latest handlers without taking them as props, which
   // change on every render and would undo the rows' memo.
+  // A widget's `sendPrompt` is a message the user sends, queued like one typed in the box.
+  const onPrompt = (text: string) => onSend(text, "queue");
   const actionsRef = useRef<TurnActions>({
     onStop,
     onChoose,
     onAbort,
     onResend,
+    onPrompt,
   });
   useLayoutEffect(() => {
-    actionsRef.current = { onStop, onChoose, onAbort, onResend };
+    actionsRef.current = { onStop, onChoose, onAbort, onResend, onPrompt };
   });
   const transcript = useTranscriptScroll({
     groupId,

@@ -106,6 +106,7 @@ import { entryOf } from "./usage/recorder";
 import { UsageStore } from "./usage/store";
 import { Web } from "./web/service";
 import { webSessionTools } from "./web/tools";
+import { widgetSessionTools } from "./widget/tools";
 
 /** What a test sets to move time by hand; a real host leaves all of it alone. */
 export interface RoutinesOptions {
@@ -774,6 +775,7 @@ export function createProduct(options: {
           },
         ]),
     ...(web === undefined ? [] : [{ sessionTools: webSessionTools(web) }]),
+    { sessionTools: widgetSessionTools() },
   ];
   // What the product's tools are, as a daemon's sessions get them (specs the daemon calls back).
   later.hooks = combineSessionHooks(productHooks);
