@@ -24,7 +24,7 @@ const cut = (text: string, limit: number): string =>
   text.length <= limit ? text : `${text.slice(0, limit)}…`;
 
 /** The arguments of a call with every long value cut. */
-export function shortInput(args: unknown): unknown {
+function shortInput(args: unknown): unknown {
   if (typeof args === "string") return cut(args, MAX_VALUE);
   if (typeof args !== "object" || args === null || Array.isArray(args))
     return args === undefined

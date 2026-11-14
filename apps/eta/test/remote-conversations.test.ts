@@ -466,7 +466,15 @@ describe("watching and driving a remote session from the browser", () => {
     await r.settled(group.id, first.replies[0]!.id);
     const session = sessionOf(r, group.id)!;
     r.client.subscribe(`sessions.${session}`);
-    await until(() => stateFrames(r, session) > 0);
+    const shown = (): string =>
+      JSON.stringify(
+        r.client.frames.filter(
+          (frame) =>
+            frame.type === "state" && frame.target === `sessions.${session}`,
+        ),
+      );
+    // Warm, and what the daemon sent is already on the browser: nothing is still owed to it.
+    await until(() => shown().includes("answer to"));
 
     r.daemon.link.drop();
     await until(
@@ -475,20 +483,17 @@ describe("watching and driving a remote session from the browser", () => {
     await until(
       () => machineView(r.client, r.daemon.machineId)?.status === "online",
     );
+    // Nothing but the link coming back asks for it: the browser subscribed once, before the drop.
+    await until(
+      () =>
+        r.host.product.hub
+          .link(r.daemon.machineId)
+          ?.pipe.subscribed(`sessions.${session}`) === true,
+    );
     const second = await r.send(group.id, "after the drop");
     await r.settled(group.id, second.replies[0]!.id);
-    await until(() =>
-      JSON.stringify(
-        r.client.frames.filter(
-          (frame) =>
-            frame.type === "state" && frame.target === `sessions.${session}`,
-        ),
-      ).includes("answer to"),
-    );
     // The reply that ran after the reconnect is in what the browser was shown.
-    await until(() =>
-      r.traffic.in.some((text) => text.includes("after the drop")),
-    );
+    await until(() => shown().includes("after the drop"));
   });
 });
 

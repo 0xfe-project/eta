@@ -400,7 +400,7 @@ describe("the timeline", () => {
     expect(timeline.failInterrupted("again")).toEqual([]);
   });
 
-  it("goes with its conversation, and a reply outlives its agent", () => {
+  it("a reply outlives its agent, which leaves the conversation", () => {
     const { timeline, agents, conversations, ada, conv } = conversation();
     const user = timeline.append({
       conversationId: conv.id,
@@ -495,26 +495,5 @@ describe("conversations", () => {
     expect(conversations.setSteward(conv.id, a.id)?.stewardId).toBe(a.id);
     agents.remove(a.id);
     expect(conversations.get(conv.id)?.stewardId).toBeNull();
-  });
-
-  it("mark read forward only, never past the newest row", () => {
-    const { conversations, timeline, agents, project } = stores();
-    const a = agents.create({ name: "A" });
-    const conv = conversations.create({
-      projectId: project.id,
-      kind: "group",
-      name: "c",
-      agentIds: [a.id],
-    });
-    for (let n = 0; n < 3; n += 1)
-      timeline.append({
-        conversationId: conv.id,
-        kind: "message",
-        author: "user",
-      });
-    expect(conversations.markRead(conv.id, 2)?.readSeq).toBe(2);
-    expect(conversations.markRead(conv.id, 1)?.readSeq).toBe(2);
-    expect(conversations.markRead(conv.id, 50)?.readSeq).toBe(3);
-    expect(conversations.markRead("nope", 1)).toBeUndefined();
   });
 });

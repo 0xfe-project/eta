@@ -17,7 +17,15 @@ import type {
 } from "@eta/client-contracts";
 import type { World } from "./support/world";
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { createRuntimeRegistry } from "@botiverse/oar";
 import { scriptedRuntime } from "@botiverse/oar/testing";
@@ -408,15 +416,21 @@ describe("an upgrade that breaks the configuration", () => {
     expect(systemOf()).toContain("hello-plugin");
   });
 
-  it("keeps an enabled agent on a level the manifest took away", async () => {
+  it("does not keep a level the user chose once the manifest takes it away", async () => {
     const w = await installed();
     await configure(w, fullConfig);
     await until(() => view(w).state === "ready");
+    // A choice of its own, below the manifest's `value`, so the upgrade is not what sets it.
     await w.client.call("plugins", "setLevel", {
       name: NAME,
       field: "plain_key",
-      level: "value",
+      level: "file",
     });
+    await until(
+      () =>
+        view(w).fields.find((field) => field.name === "plain_key")?.level ===
+        "file",
+    );
     await upgrade(w, (config) => {
       config.plain_key!.agent = "none";
     });
@@ -455,7 +469,7 @@ describe("a session on eta's own loop", () => {
     expect(requests.at(-1)!.system).not.toContain("hello-plugin");
   });
 
-  it("reopens when the plugin's files or values change", async () => {
+  it("reopens when the plugin's files change", async () => {
     const { models, requests } = scriptedModels(() => say("ok"));
     const w = await installed({ models });
     await configure(w, fullConfig);
@@ -1080,11 +1094,27 @@ describe("a plugin from git", () => {
   });
 
   it("is removed, and a local one cannot be", async () => {
+    const added = await world();
+    added.client.subscribe("plugins");
+    const { url } = await repo();
+    await added.client.call("plugins", "add", {
+      repo: url,
+      rev: "main",
+      path: "sub",
+    });
+    await until(() => views(added).length > 0);
+    const sources = join(added.host.dataDir, "plugin-sources");
+    expect(await readdir(sources)).not.toEqual([]);
+    await added.client.call("plugins", "remove", { name: NAME });
+    await until(() => views(added).length === 0);
+    // Its checkout goes with it.
+    expect(await readdir(sources)).toEqual([]);
+
     const w = await installed();
     await expect(
       w.client.call("plugins", "remove", { name: NAME }),
     ).rejects.toThrow(/not from git/);
-    const { url } = await repo();
+    expect(views(w).map((plugin) => plugin.name)).toEqual([NAME]);
     await expect(
       w.client.call("plugins", "add", { repo: url, rev: "main", path: "sub" }),
     ).rejects.toThrow(/already exists/);
@@ -1102,7 +1132,7 @@ describe("a plugin from git", () => {
 });
 
 describe("the plugins target", () => {
-  it("says nothing of a host's plugins it was not asked about", async () => {
+  it("lists none on a host that has none installed", async () => {
     const w = await world();
     w.client.subscribe("plugins");
     await until(

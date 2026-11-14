@@ -73,11 +73,11 @@ export interface HostOptions {
   /** Where the agent's home is, for personas. Defaults to the real one. */
   home?: string;
   /**
-   * MCP for the sessions this host runs (`~/.eta/mcp.json`, the project's `.mcp.json`). `false`
-   * turns it off; an object is a test's tuning (the library's fetch pointed at a fake, and its
-   * manager without timers).
+   * MCP for the sessions this host runs (`~/.eta/mcp.json`, the project's `.mcp.json`) is always
+   * on; this is a test's tuning (the library's fetch pointed at a fake, and its manager without
+   * timers).
    */
-  mcp?: false | McpTuning;
+  mcp?: McpTuning;
   /** What a published site may hold; the defaults are for real use, a test makes them small. */
   artifactLimits?: Partial<SiteLimits> | undefined;
   /**
@@ -235,9 +235,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       agentPromptFor: product.engine.agentPromptFor,
       skillDirsFor: product.skillDirsFor,
       runtimeExtrasFor: product.runtimeExtrasFor,
-      ...(product.mcp === undefined
-        ? {}
-        : { mcpFor: product.mcp.host.sessionMcp }),
+      mcpFor: product.mcp.host.sessionMcp,
       ...product.sessionHooks,
       memoryEnabledFor: product.memoryEnabledFor,
       baseSystemPromptFor: product.baseSystemPromptFor,

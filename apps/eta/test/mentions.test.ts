@@ -161,21 +161,36 @@ describe("the wake budget", () => {
 
   it("does not count a user's mention against it", async () => {
     const { models } = scriptedModels((request) =>
-      say(`${request.agent} here`),
+      request.lastRole === "toolResult"
+        ? say("handed over")
+        : call("mention", {
+            agents: [request.agent === "Ada" ? "Bob" : "Ada"],
+            message: "your turn",
+          }),
     );
     const w = await world({ models });
-    const { ada, bob, group } = await pair(w);
-    for (let n = 0; n < 7; n += 1) {
-      const sent = await w.send(group.id, `ping ${n}`, {
-        mentions: [n % 2 === 0 ? ada.id : bob.id],
-      });
-      await w.settled(group.id, sent.replies[0]!.id);
-    }
-    expect(
-      w
-        .rows(group.id)
-        .filter((row) => row.kind === "message" && row.author === "agent"),
-    ).toHaveLength(7);
+    const { ada, group } = await pair(w);
+
+    // The user names Ada; the five wakes between the agents are all still to come.
+    const sent = await w.send(group.id, "start", { mentions: [ada.id] });
+    await until(
+      () =>
+        w
+          .rows(group.id)
+          .filter((row) => row.author === "agent" && row.kind === "message")
+          .length === 6 &&
+        w.rows(group.id).every((row) => row.status === "done"),
+    );
+    const rows = w.rows(group.id);
+    const mentions = rows.filter((row) => row.kind === "mention");
+    expect(mentions).toHaveLength(6);
+    const replies = rows.filter(
+      (row) => row.author === "agent" && row.kind === "message",
+    );
+    expect(replies.map((row) => row.replyToId)).toEqual([
+      sent.message.id,
+      ...mentions.slice(0, 5).map((row) => row.id),
+    ]);
   });
 });
 
