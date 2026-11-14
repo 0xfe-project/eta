@@ -68,4 +68,37 @@ describe("activityRecorder", () => {
     expect(three).toMatchObject({ status: "completed" });
     expect(three).not.toHaveProperty("details");
   });
+
+  it("keeps thoughts, words and calls in the order the run took them", () => {
+    const recorder = new ActivityRecorder();
+    recorder.see({
+      role: "assistant",
+      content: [
+        { type: "thinking", thinking: "plan" },
+        { type: "text", text: "Looking first." },
+        { type: "toolCall", id: "c1", name: "bash", arguments: {} },
+      ],
+    } as never);
+    recorder.see(answered("c1", "ok"));
+    recorder.see({
+      role: "assistant",
+      content: [
+        { type: "text", text: "  " },
+        { type: "toolCall", id: "c2", name: "read", arguments: {} },
+      ],
+    } as never);
+    recorder.see(answered("c2", "ok"));
+    recorder.see({
+      role: "assistant",
+      content: [{ type: "text", text: "x".repeat(9000) }],
+    } as never);
+    const steps = recorder.steps();
+    expect(steps.slice(0, 4)).toEqual([
+      { type: "thinking", text: "plan" },
+      { type: "text", text: "Looking first." },
+      { type: "tool", id: "c1" },
+      { type: "tool", id: "c2" },
+    ]);
+    expect(steps[4]).toEqual({ type: "text", text: `${"x".repeat(8000)}…` });
+  });
 });

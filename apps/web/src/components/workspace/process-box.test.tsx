@@ -111,111 +111,116 @@ const call = (id: string) => ({
 });
 const words = (text: string) => ({ type: "text", text });
 
-describe("a reply's process in a group", () => {
-  it("sits in a labelled, focusable scroll box with its steps while it works", async () => {
-    const { container, say } = await live();
-    await say(thought, call("a"), call("b"));
-    const box = container.querySelector<HTMLElement>(".process-box");
-    expect(box?.getAttribute("role")).toBe("region");
-    expect(box?.getAttribute("aria-label")).toBeTruthy();
-    expect(box?.tabIndex).toBe(0);
-    expect(box?.querySelectorAll(".tool-card")).toHaveLength(2);
-    expect(box?.querySelectorAll(".thinking-block")).toHaveLength(1);
-    expect(container.querySelector(".process-fold")).toBeNull();
-  });
+// A direct chat and a group draw a reply's process by the same rules.
+describe.each(["group", "direct"] as const)(
+  "a reply's process in a %s",
+  (kind) => {
+    it("sits in a labelled, focusable scroll box with its steps while it works", async () => {
+      const { container, say } = await live(kind);
+      await say(thought, call("a"), call("b"));
+      const box = container.querySelector<HTMLElement>(".process-box");
+      expect(box?.getAttribute("role")).toBe("region");
+      expect(box?.getAttribute("aria-label")).toBeTruthy();
+      expect(box?.tabIndex).toBe(0);
+      expect(box?.querySelectorAll(".tool-card")).toHaveLength(2);
+      expect(box?.querySelectorAll(".thinking-block")).toHaveLength(1);
+      expect(container.querySelector(".process-fold")).toBeNull();
+    });
 
-  it("folds into a thinking process row once it writes the final text", async () => {
-    const { container, say } = await live();
-    await say(thought, call("a"), words("正在写答案"));
-    expect(container.querySelector(".process-box")).toBeNull();
-    const fold = container.querySelector<HTMLDetailsElement>(".process-fold");
-    expect(fold?.open).toBe(false);
-    expect(fold?.querySelector("summary")?.textContent).toContain("思考过程");
-    expect(fold?.querySelector("summary")?.textContent).toContain("2 步");
-    // The text is below the row, not in it.
-    expect(fold?.textContent).not.toContain("正在写答案");
-    expect(container.textContent).toContain("正在写答案");
-  });
+    it("folds into a thinking process row once it writes the final text", async () => {
+      const { container, say } = await live(kind);
+      await say(thought, call("a"), words("正在写答案"));
+      expect(container.querySelector(".process-box")).toBeNull();
+      const fold = container.querySelector<HTMLDetailsElement>(".process-fold");
+      expect(fold?.open).toBe(false);
+      expect(fold?.querySelector("summary")?.textContent).toContain("思考过程");
+      expect(fold?.querySelector("summary")?.textContent).toContain("2 步");
+      // The text is below the row, not in it.
+      expect(fold?.textContent).not.toContain("正在写答案");
+      expect(container.textContent).toContain("正在写答案");
+    });
 
-  it("returns to the box when a tool call follows the text", async () => {
-    const { container, say } = await live();
-    await say(call("a"), words("先说一句"));
-    expect(container.querySelector(".process-fold")).not.toBeNull();
-    await say(call("a"), words("先说一句"), call("b"));
-    expect(container.querySelector(".process-fold")).toBeNull();
-    expect(container.querySelectorAll(".process-box .tool-card")).toHaveLength(
-      2,
-    );
-    await say(call("a"), words("先说一句"), call("b"), words("最终"));
-    expect(container.querySelector(".process-box")).toBeNull();
-    expect(container.querySelector(".process-fold")).not.toBeNull();
-  });
+    it("returns to the box when a tool call follows the text", async () => {
+      const { container, say } = await live(kind);
+      await say(call("a"), words("先说一句"));
+      expect(container.querySelector(".process-fold")).not.toBeNull();
+      await say(call("a"), words("先说一句"), call("b"));
+      expect(container.querySelector(".process-fold")).toBeNull();
+      expect(
+        container.querySelectorAll(".process-box .tool-card"),
+      ).toHaveLength(2);
+      await say(call("a"), words("先说一句"), call("b"), words("最终"));
+      expect(container.querySelector(".process-box")).toBeNull();
+      expect(container.querySelector(".process-fold")).not.toBeNull();
+    });
 
-  it("is a folded row once finished, and opens in place to its steps", async () => {
-    const { container } = await start("group", 8);
-    expect(container.querySelector(".process-box")).toBeNull();
-    const fold = container.querySelector<HTMLDetailsElement>(".process-fold");
-    expect(fold?.open).toBe(false);
-    expect(fold?.querySelector("summary")?.textContent).toContain("思考过程");
-    expect(fold?.querySelector("summary")?.textContent).toContain("9 步");
-    expect(fold?.textContent).not.toContain("最终答案");
-    expect(container.textContent).toContain("最终答案");
-    await click(fold?.querySelector("summary"));
-    expect(fold?.open).toBe(true);
-    expect(fold?.querySelectorAll(".tool-card")).toHaveLength(8);
-    expect(fold?.querySelectorAll(".thinking-block")).toHaveLength(1);
-  });
+    it("is a folded row once finished, and opens in place to its steps", async () => {
+      const { container } = await start(kind, 8);
+      expect(container.querySelector(".process-box")).toBeNull();
+      const fold = container.querySelector<HTMLDetailsElement>(".process-fold");
+      expect(fold?.open).toBe(false);
+      expect(fold?.querySelector("summary")?.textContent).toContain("思考过程");
+      expect(fold?.querySelector("summary")?.textContent).toContain("9 步");
+      expect(fold?.textContent).not.toContain("最终答案");
+      expect(container.textContent).toContain("最终答案");
+      await click(fold?.querySelector("summary"));
+      expect(fold?.open).toBe(true);
+      expect(fold?.querySelectorAll(".tool-card")).toHaveLength(8);
+      expect(fold?.querySelectorAll(".thinking-block")).toHaveLength(1);
+    });
 
-  it("has no box without thinking or tools", async () => {
-    conversations += 1;
-    const id = `process-box-${conversations}`;
-    surfaceHost({
-      agents: [agentView({ id: "a1", name: "研究员" })],
-      conversations: [
-        conversationView({
-          id,
-          participants: [memberView("a1", { sessionId: "s1" })],
-        }),
-      ],
-      messages: {
-        [id]: [
-          messageView({
-            conversationId: id,
-            author: "agent",
-            agentId: "a1",
-            text: "只有文字",
+    it("has no box without thinking or tools", async () => {
+      conversations += 1;
+      const id = `process-box-${conversations}`;
+      surfaceHost({
+        agents: [agentView({ id: "a1", name: "研究员" })],
+        conversations: [
+          conversationView({
+            id,
+            kind,
+            participants: [memberView("a1", { sessionId: "s1" })],
           }),
         ],
-      },
+        messages: {
+          [id]: [
+            messageView({
+              conversationId: id,
+              author: "agent",
+              agentId: "a1",
+              text: "只有文字",
+            }),
+          ],
+        },
+      });
+      const { container } = await mount(<Chat conversationId={id} />);
+      await flush();
+      expect(container.querySelector(".process-box")).toBeNull();
     });
-    const { container } = await mount(<Chat conversationId={id} />);
-    await flush();
-    expect(container.querySelector(".process-box")).toBeNull();
-  });
 
-  it("opens every step and the answer in a dialog, from the box and the folded row", async () => {
-    const { container, say } = await live();
-    await say(thought, call("a"));
-    const more = container.querySelector(".process-box")?.nextElementSibling;
-    expect(more?.tagName).toBe("BUTTON");
-    expect(more?.textContent).toBe("查看全部");
-    await click(more);
-    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
-    await cleanup();
-    setWire(undefined);
+    it("opens every step and the answer in a dialog, from the box and the folded row", async () => {
+      const { container, say } = await live(kind);
+      await say(thought, call("a"));
+      const more = container.querySelector(".process-box")?.nextElementSibling;
+      expect(more?.tagName).toBe("BUTTON");
+      expect(more?.textContent).toBe("查看全部");
+      await click(more);
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+      await cleanup();
+      setWire(undefined);
 
-    const finished = await start("group", 8);
-    await click(finished.container.querySelector(".process-fold summary"));
-    await click(
-      finished.container.querySelector<HTMLElement>(".process-fold button"),
-    );
-    const dialog = document.querySelector('[role="dialog"]');
-    expect(dialog?.querySelectorAll(".tool-card")).toHaveLength(8);
-    expect(dialog?.querySelectorAll(".thinking-block")).toHaveLength(1);
-    expect(dialog?.textContent).toContain("最终答案");
-    expect(dialog?.textContent).toContain("研究员");
-  });
-});
+      const finished = await start(kind, 8);
+      await click(finished.container.querySelector(".process-fold summary"));
+      await click(
+        finished.container.querySelector<HTMLElement>(".process-fold button"),
+      );
+      const dialog = document.querySelector('[role="dialog"]');
+      expect(dialog?.querySelectorAll(".tool-card")).toHaveLength(8);
+      expect(dialog?.querySelectorAll(".thinking-block")).toHaveLength(1);
+      expect(dialog?.textContent).toContain("最终答案");
+      if (kind === "group") expect(dialog?.textContent).toContain("研究员");
+    });
+  },
+);
 
 describe("a reply's process dialog", () => {
   const T = 1_800_000_000_000;
@@ -365,12 +370,12 @@ describe("a reply before its first token", () => {
     ).not.toBeNull();
   });
 
-  it("is one line under the author in a direct chat, gone once text arrives", async () => {
+  it("holds the process box in a direct chat too, gone once text arrives", async () => {
     const { container, say } = await live("direct");
-    expect(container.querySelector(".process-box")).toBeNull();
-    expect(placeholder(container)).not.toBeUndefined();
+    expect(placeholder(container)?.closest(".process-box")).not.toBeNull();
     await say(words("开始写"));
     expect(placeholder(container)).toBeUndefined();
+    expect(container.querySelector(".process-box")).toBeNull();
     expect(container.textContent).toContain("开始写");
   });
 
@@ -380,14 +385,116 @@ describe("a reply before its first token", () => {
   });
 });
 
-describe("a reply's process in a direct chat", () => {
-  it("is not boxed", async () => {
-    const { container } = await start("direct", 3);
-    expect(container.querySelector(".process-box")).toBeNull();
-    expect(container.querySelector(".process-fold")).toBeNull();
-    expect(container.querySelectorAll(".tool-card")).toHaveLength(3);
-  });
-});
+/** The process's steps as one line each: a thought, a call, or words, in the order drawn. */
+const order = (root: ParentNode | null | undefined) =>
+  [
+    ...(root?.querySelectorAll(
+      ".thinking-block, .tool-card-label, .process-note",
+    ) ?? []),
+  ].map((step) =>
+    step.classList.contains("thinking-block")
+      ? "thinking"
+      : step.classList.contains("process-note")
+        ? `text:${step.textContent}`
+        : `tool:${step.textContent}`,
+  );
+
+describe.each(["group", "direct"] as const)(
+  "the words between a reply's calls, in a %s",
+  (kind) => {
+    it("go into the process in their order while it works, and the answer under it", async () => {
+      const { container, say } = await live(kind);
+      await say(
+        thought,
+        words("先列目录"),
+        call("a"),
+        words("再看文件"),
+        call("b"),
+      );
+      const box = container.querySelector(".process-box");
+      expect(order(box)).toEqual([
+        "thinking",
+        "text:先列目录",
+        "tool:shell · a",
+        "text:再看文件",
+        "tool:shell · b",
+      ]);
+      await say(
+        thought,
+        words("先列目录"),
+        call("a"),
+        words("再看文件"),
+        call("b"),
+        words("答案"),
+      );
+      const fold = container.querySelector(".process-fold");
+      expect(fold?.querySelector("summary")?.textContent).toContain("5 步");
+      expect(order(fold)).toEqual(order(box));
+      expect(fold?.textContent).not.toContain("答案");
+    });
+
+    it("are where they were once the reply is finished, read from its row", async () => {
+      conversations += 1;
+      const id = `process-box-${conversations}`;
+      surfaceHost({
+        agents: [agentView({ id: "a1", name: "研究员" })],
+        conversations: [
+          conversationView({
+            id,
+            kind,
+            participants: [memberView("a1", { sessionId: "s1" })],
+          }),
+        ],
+        messages: {
+          [id]: [
+            messageView({
+              conversationId: id,
+              author: "agent",
+              agentId: "a1",
+              thinking: "想一想",
+              text: "答案",
+              data: {
+                activity: activity(2),
+                process: [
+                  { type: "thinking", text: "想一想" },
+                  { type: "text", text: "先列目录" },
+                  { type: "tool", id: "t0" },
+                  { type: "text", text: "再看文件" },
+                  { type: "tool", id: "t1" },
+                  { type: "text", text: "答案" },
+                ],
+              },
+            }),
+          ],
+        },
+      });
+      const { container } = await mount(<Chat conversationId={id} />);
+      await flush();
+      const fold = container.querySelector(".process-fold");
+      expect(fold?.querySelector("summary")?.textContent).toContain("5 步");
+      expect(order(fold)).toEqual([
+        "thinking",
+        "text:先列目录",
+        "tool:shell · step-0",
+        "text:再看文件",
+        "tool:shell · step-1",
+      ]);
+      // The answer once, under the process.
+      expect(fold?.textContent).not.toContain("答案");
+      expect(
+        [...container.querySelectorAll(".message-content")].map(
+          (element) => element.textContent,
+        ),
+      ).toEqual(["答案"]);
+      // Every card folded, a finished one as a running one.
+      expect(
+        [...container.querySelectorAll<HTMLDetailsElement>(".tool-card")].some(
+          (card) => card.open,
+        ),
+      ).toBe(false);
+    });
+  },
+);
 
 describe("following a running reply", () => {
   let box: HTMLElement;

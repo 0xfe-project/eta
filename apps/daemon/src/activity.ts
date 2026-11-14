@@ -1,6 +1,6 @@
-import type { ToolActivity } from "@eta/client-contracts";
+import type { ProcessStep, ToolActivity } from "@eta/client-contracts";
 /**
- * The tool calls of a run, kept short enough to live on the reply's row.
+ * The tool calls of a run, and the order of its steps, kept short enough to live on the reply's row.
  *
  * The session's transcript holds the whole of every call; the row only has to redraw the card the
  * page showed while the run was going: the name, a line of what it was doing, the head of what it
@@ -16,6 +16,9 @@ const MAX_OUTPUT = 2000;
 const MAX_DETAILS = 70_000;
 const MAX_ARGUMENTS = 20;
 const MAX_CALLS = 200;
+/** The longest thought or passage kept as a step, and how many steps (calls included) are kept. */
+const MAX_STEP_TEXT = 8000;
+const MAX_STEPS = 600;
 
 const cut = (text: string, limit: number): string =>
   text.length <= limit ? text : `${text.slice(0, limit)}…`;
@@ -53,6 +56,7 @@ function shortDetails(details: unknown): unknown {
 interface Part {
   type?: string;
   text?: string;
+  thinking?: string;
   id?: string;
   name?: string;
   arguments?: unknown;
@@ -63,14 +67,26 @@ const partsOf = (message: AgentMessage): Part[] => {
   return Array.isArray(content) ? (content as Part[]) : [];
 };
 
-/** Reads the run's messages as they end and keeps its tool calls. */
+/** Reads the run's messages as they end and keeps its tool calls and the order of its steps. */
 export class ActivityRecorder {
   readonly #calls = new Map<string, ToolActivity>();
+  readonly #steps: ProcessStep[] = [];
+
+  #step(step: ProcessStep): void {
+    if (this.#steps.length < MAX_STEPS) this.#steps.push(step);
+  }
 
   /** A message ended: an assistant one may have made calls, a tool result settles one. */
   see(message: AgentMessage): void {
     if (message.role === "assistant") {
       for (const part of partsOf(message)) {
+        if (part.type === "thinking" && part.thinking?.trim())
+          this.#step({
+            type: "thinking",
+            text: cut(part.thinking, MAX_STEP_TEXT),
+          });
+        else if (part.type === "text" && part.text?.trim())
+          this.#step({ type: "text", text: cut(part.text, MAX_STEP_TEXT) });
         if (
           part.type !== "toolCall" ||
           part.id === undefined ||
@@ -85,6 +101,7 @@ export class ActivityRecorder {
           ...(input === undefined ? {} : { input }),
           status: "failed",
         });
+        this.#step({ type: "tool", id: part.id });
       }
     } else if (message.role === "toolResult") {
       const call = this.#calls.get(message.toolCallId);
@@ -103,5 +120,10 @@ export class ActivityRecorder {
   /** The calls in the order they were made; one without a result is `failed`. */
   list(): ToolActivity[] {
     return [...this.#calls.values()];
+  }
+
+  /** The run's thoughts, words and calls in the order they were made. */
+  steps(): ProcessStep[] {
+    return [...this.#steps];
   }
 }
