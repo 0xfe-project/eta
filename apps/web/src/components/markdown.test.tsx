@@ -152,11 +152,12 @@ describe("Markdown", () => {
 describe("Markdown math", () => {
   it("renders $$ as KaTeX, inline and in a block", () => {
     const inline = render("其中 $$\\Delta z_i$$ 表示偏移");
-    expect(inline.querySelector(".katex")).not.toBeNull();
+    expect(inline.querySelector("math")).not.toBeNull();
+    expect(inline.querySelector('math[display="block"]')).toBeNull();
     // KaTeX also emits MathML, so the text is the formula, not the source.
     expect(inline.textContent).not.toContain("$$");
     expect(
-      render("$$\nE = mc^2\n$$").querySelector(".katex-display"),
+      render("$$\nE = mc^2\n$$").querySelector('math[display="block"]'),
     ).not.toBeNull();
   });
 
@@ -164,17 +165,13 @@ describe("Markdown math", () => {
     const root = render(
       "\\[ \\Delta z_i = z_i^{\\mathrm{4DGAT}} - z_i^{\\mathrm{ref}} \\]",
     );
-    expect(root.querySelector(".katex")).not.toBeNull();
+    expect(root.querySelector("math")).not.toBeNull();
     expect(root.textContent).not.toContain("\\[");
   });
 
   it("leaves escaped brackets and code alone", () => {
-    expect(
-      render("区间 \\[1,2\\] 不是公式").querySelector(".katex"),
-    ).toBeNull();
-    expect(
-      render("```tex\n\\[ x^2 \\]\n```").querySelector(".katex"),
-    ).toBeNull();
-    expect(render("`\\[ x^2 \\]`").querySelector(".katex")).toBeNull();
+    expect(render("区间 \\[1,2\\] 不是公式").querySelector("math")).toBeNull();
+    expect(render("```tex\n\\[ x^2 \\]\n```").querySelector("math")).toBeNull();
+    expect(render("`\\[ x^2 \\]`").querySelector("math")).toBeNull();
   });
 });

@@ -99,8 +99,6 @@ export interface AssembleOptions {
   overlayModels?: ((base: KernelModels) => KernelModels) | undefined;
   /** Which bundled plugins to mount. Default: all of them. */
   plugins?: readonly BundledPluginName[];
-  /** How often to check the user's plugin directory for edits. Zero disables watching. */
-  pluginWatchIntervalMs?: number | undefined;
   /** The agent's home, for `~/.eta/persona`. Defaults to the real one. */
   home?: string | undefined;
   /**

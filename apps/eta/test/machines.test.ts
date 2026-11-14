@@ -317,7 +317,7 @@ describe("the link", () => {
     );
   });
 
-  it("a frame over the limit breaks the link rather than being accepted", async () => {
+  it("a frame over the limit is refused before it is sent", async () => {
     const w = await world();
     const daemon = await startDaemon(w.host, w.client);
     await approve(w.client, daemon);

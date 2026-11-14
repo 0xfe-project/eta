@@ -259,10 +259,6 @@ export class EnvFile {
     });
   }
 
-  save(): void {
-    writeFileSync(this.#path, this.source, "utf8");
-  }
-
   /**
    * Execute a function while holding an exclusive lock on this env file.
    *

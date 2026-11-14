@@ -30,15 +30,13 @@ describe("页面代码还在路上时的窗口轮廓", () => {
   });
 
   it("draws the folded rail when the sidebar was left folded", async () => {
+    const rail = (container: HTMLElement) =>
+      container.querySelector("[data-rail]")?.getAttribute("data-rail");
     const open = await mount(<AppSkeleton content="chat" />);
-    expect(
-      open.container.querySelector('[data-rail="false"]')?.className,
-    ).toContain("w-[16rem]");
+    expect(rail(open.container)).toBe("false");
     document.cookie = "sidebar_state=false; path=/";
     const folded = await mount(<AppSkeleton content="chat" />);
-    expect(
-      folded.container.querySelector('[data-rail="true"]')?.className,
-    ).toContain("w-[4rem]");
+    expect(rail(folded.container)).toBe("true");
   });
 
   it("draws the sidebar at its dragged width, and the rail stays the rail", async () => {

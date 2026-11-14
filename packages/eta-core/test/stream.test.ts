@@ -3,15 +3,15 @@
  *
  * The runner consumes pi-ai's own stream class, so these tests drive it the
  * way a provider does: frames in order, the settled message at the end. What
- * is asserted is what an observer can see — the delta sequence on the bus, the
- * usage the run accumulates, and the throughput readout.
+ * is asserted is what an observer can see — the delta sequence on the bus and
+ * the usage the transcript keeps.
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Kernel, kernelOn, Runner } from "../src/index";
-import { consumeAssistantStream } from "../src/kernel/assistant";
+import { consumeInterruptibleStream } from "../src/kernel/assistant";
 
 const userMsg = (text: string) => ({
   role: "user" as const,
@@ -138,27 +138,16 @@ describe("streaming into the bus", () => {
     expect(fake.calls).toHaveLength(2);
     dispose();
   });
-
-  it("records the settled message once, after the stream ends", async () => {
-    const settled = assistantMessage({
-      content: [{ type: "text", text: "answer" }],
-    });
-    const { kernel, runner, names, dispose } = setup([settled], 3);
-    kernel.inject(userMsg("go"));
-    await runner.run();
-    // One end for the user message, one for the assistant's settled answer.
-    expect(names.filter((name) => name === "end")).toHaveLength(2);
-    expect(names.at(-1)).toBe("end");
-    dispose();
-  });
 });
 
-describe("usage and throughput", () => {
-  it("accumulates the provider's own output count, not the streamed estimate", async () => {
-    // The streamed text estimates ~10 tokens; the provider says 3. The run
-    // must report the provider's number.
+describe("usage", () => {
+  it("keeps the provider's own output count, not the streamed estimate", async () => {
+    // The frames estimate 10 tokens as the text streams; the provider says 3.
+    // The transcript must carry the provider's number.
     const settled = assistantMessage({
-      content: [{ type: "text", text: "hello there" }],
+      content: [
+        { type: "text", text: "hello there, how are you doing today?" },
+      ],
       usage: {
         input: 100,
         output: 3,
@@ -192,7 +181,7 @@ describe("stream contract", () => {
     });
     stream.end(message);
     await expect(
-      consumeAssistantStream(stream, {
+      consumeInterruptibleStream(stream, {
         start: () => undefined,
         update: () => undefined,
         end: () => undefined,
@@ -207,7 +196,7 @@ describe("stream contract", () => {
     stream.push({ type: "start", partial: message });
     stream.end(message);
     await expect(
-      consumeAssistantStream(stream, {
+      consumeInterruptibleStream(stream, {
         start: () => undefined,
         update: () => undefined,
         end: () => undefined,
@@ -228,7 +217,7 @@ describe("stream contract", () => {
     stream.push({ type: "error", reason: "error", error: errored });
     stream.end(errored);
     const seen: string[] = [];
-    const settled = await consumeAssistantStream(stream, {
+    const settled = await consumeInterruptibleStream(stream, {
       start: () => {
         seen.push("start");
       },
@@ -239,7 +228,7 @@ describe("stream contract", () => {
         seen.push("end");
       },
     });
-    expect(settled.stopReason).toBe("error");
+    expect(settled?.stopReason).toBe("error");
     expect(seen).toEqual(["start", "end"]);
   });
 

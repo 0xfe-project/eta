@@ -110,6 +110,40 @@ const call = (id: string) => ({
   arguments: { command: id },
 });
 const words = (text: string) => ({ type: "text", text });
+/** The running process: the scroll box a screen reader calls "…的过程". */
+const processBox = (root: ParentNode | null | undefined) =>
+  root?.querySelector<HTMLElement>('[role="region"][aria-label$="过程"]') ??
+  null;
+/** The folds under `root` with the line their own summary says. */
+const folds = (root: ParentNode | null | undefined) =>
+  [...(root?.querySelectorAll<HTMLDetailsElement>("details") ?? [])].map(
+    (details) => ({
+      details,
+      head: details.querySelector(":scope > summary")?.textContent ?? "",
+    }),
+  );
+/** The finished process, folded to one line: "思考过程 … N 步". */
+const processFold = (root: ParentNode | null | undefined) =>
+  folds(root).find(({ head }) => /思考过程.*\d 步/.test(head))?.details ?? null;
+/** A thought, folded: "思考过程 · N 字". */
+const thoughts = (root: ParentNode | null | undefined) =>
+  folds(root).filter(({ head }) => /思考过程 · \d+ 字/.test(head));
+/** A call's card: a fold headed by the tool's name. */
+const toolCards = (root: ParentNode | null | undefined) =>
+  folds(root).filter(({ head }) => /^(?:shell|bash)\b/.test(head));
+/** How many times `text` is drawn as its own block of words under `root`. */
+const drawn = (root: ParentNode, text: string) =>
+  [...root.querySelectorAll("p")].filter((p) => p.textContent === text).length;
+/** Open the folded process, then its "查看全部". */
+async function openAll(root: ParentNode) {
+  const fold = processFold(root);
+  await click(fold?.querySelector("summary"));
+  await click(
+    [...(fold?.querySelectorAll("button") ?? [])].find(
+      (button) => button.textContent === "查看全部",
+    ),
+  );
+}
 
 // A direct chat and a group draw a reply's process by the same rules.
 describe.each(["group", "direct"] as const)(
@@ -118,66 +152,64 @@ describe.each(["group", "direct"] as const)(
     it("sits in a labelled, focusable scroll box with its steps while it works", async () => {
       const { container, say } = await live(kind);
       await say(thought, call("a"), call("b"));
-      const box = container.querySelector<HTMLElement>(".process-box");
-      expect(box?.getAttribute("role")).toBe("region");
-      expect(box?.getAttribute("aria-label")).toBeTruthy();
+      const box = processBox(container);
+      // A group names whose process it is; a direct chat has one agent to name.
+      expect(box?.getAttribute("aria-label")).toBe(
+        kind === "group" ? "研究员 的过程" : "过程",
+      );
       expect(box?.tabIndex).toBe(0);
-      expect(box?.querySelectorAll(".tool-card")).toHaveLength(2);
-      expect(box?.querySelectorAll(".thinking-block")).toHaveLength(1);
-      expect(container.querySelector(".process-fold")).toBeNull();
+      expect(toolCards(box)).toHaveLength(2);
+      expect(thoughts(box)).toHaveLength(1);
+      expect(processFold(container)).toBeNull();
     });
 
     it("folds into a thinking process row once it writes the final text", async () => {
       const { container, say } = await live(kind);
       await say(thought, call("a"), words("正在写答案"));
       // Until no call has followed it for a moment, the text is the box's next line.
-      expect(container.querySelector(".process-fold")).toBeNull();
-      expect(
-        container.querySelector(".process-box .process-note")?.textContent,
-      ).toBe("正在写答案");
+      expect(processFold(container)).toBeNull();
+      expect(drawn(processBox(container)!, "正在写答案")).toBe(1);
       await flush(1600);
-      expect(container.querySelector(".process-box")).toBeNull();
-      const fold = container.querySelector<HTMLDetailsElement>(".process-fold");
+      expect(processBox(container)).toBeNull();
+      const fold = processFold(container);
       expect(fold?.open).toBe(false);
       expect(fold?.querySelector("summary")?.textContent).toContain("思考过程");
       expect(fold?.querySelector("summary")?.textContent).toContain("2 步");
       // The text is below the row, not in it, and only once.
       expect(fold?.textContent).not.toContain("正在写答案");
-      expect(container.querySelectorAll(".message-content")).toHaveLength(1);
+      expect(drawn(container, "正在写答案")).toBe(1);
     });
 
     it("keeps a sentence before a call in the box, where it stays: the box does not fold for it", async () => {
       const { container, say } = await live(kind);
       await say(call("a"), words("先说一句"));
-      const note = container.querySelector(".process-box .process-note");
-      expect(note?.textContent).toBe("先说一句");
-      expect(container.querySelector(".process-fold")).toBeNull();
+      const note = [...processBox(container)!.querySelectorAll("p")].find(
+        (p) => p.textContent === "先说一句",
+      );
+      expect(note).toBeDefined();
+      expect(processFold(container)).toBeNull();
       await say(call("a"), words("先说一句"), call("b"));
-      expect(container.querySelector(".process-fold")).toBeNull();
-      expect(container.querySelector(".process-box .process-note")).toBe(note);
-      expect(
-        container.querySelectorAll(".process-box .tool-card"),
-      ).toHaveLength(2);
+      expect(processFold(container)).toBeNull();
+      expect(processBox(container)?.contains(note!)).toBe(true);
+      expect(toolCards(processBox(container))).toHaveLength(2);
       await say(call("a"), words("先说一句"), call("b"), words("最终"));
       await flush(1600);
-      expect(container.querySelector(".process-box")).toBeNull();
-      expect(container.querySelector(".process-fold")).not.toBeNull();
+      expect(processBox(container)).toBeNull();
+      expect(processFold(container)).not.toBeNull();
     });
 
     it("draws text before any step as the answer at once, with no box", async () => {
       const { container, say } = await live(kind);
       await say(words("直接回答"));
-      expect(container.querySelector(".process-box")).toBeNull();
-      expect(container.querySelector(".process-fold")).toBeNull();
-      expect(container.querySelector(".message-content")?.textContent).toBe(
-        "直接回答",
-      );
+      expect(processBox(container)).toBeNull();
+      expect(processFold(container)).toBeNull();
+      expect(drawn(container, "直接回答")).toBe(1);
     });
 
     it("is a folded row once finished, and opens in place to its steps", async () => {
       const { container } = await start(kind, 8);
-      expect(container.querySelector(".process-box")).toBeNull();
-      const fold = container.querySelector<HTMLDetailsElement>(".process-fold");
+      expect(processBox(container)).toBeNull();
+      const fold = processFold(container);
       expect(fold?.open).toBe(false);
       expect(fold?.querySelector("summary")?.textContent).toContain("思考过程");
       expect(fold?.querySelector("summary")?.textContent).toContain("9 步");
@@ -185,8 +217,8 @@ describe.each(["group", "direct"] as const)(
       expect(container.textContent).toContain("最终答案");
       await click(fold?.querySelector("summary"));
       expect(fold?.open).toBe(true);
-      expect(fold?.querySelectorAll(".tool-card")).toHaveLength(8);
-      expect(fold?.querySelectorAll(".thinking-block")).toHaveLength(1);
+      expect(toolCards(fold)).toHaveLength(8);
+      expect(thoughts(fold)).toHaveLength(1);
     });
 
     it("has no box without thinking or tools", async () => {
@@ -214,28 +246,27 @@ describe.each(["group", "direct"] as const)(
       });
       const { container } = await mount(<Chat conversationId={id} />);
       await flush();
-      expect(container.querySelector(".process-box")).toBeNull();
+      expect(processBox(container)).toBeNull();
+      expect(processFold(container)).toBeNull();
+      expect(container.textContent).toContain("只有文字");
     });
 
     it("opens every step and the answer in a dialog, from the box and the folded row", async () => {
       const { container, say } = await live(kind);
       await say(thought, call("a"));
-      const more = container.querySelector(".process-box")?.nextElementSibling;
-      expect(more?.tagName).toBe("BUTTON");
-      expect(more?.textContent).toBe("查看全部");
+      const more = [...container.querySelectorAll("button")].find(
+        (button) => button.textContent === "查看全部",
+      );
       await click(more);
       expect(document.querySelector('[role="dialog"]')).not.toBeNull();
       await cleanup();
       setWire(undefined);
 
       const finished = await start(kind, 8);
-      await click(finished.container.querySelector(".process-fold summary"));
-      await click(
-        finished.container.querySelector<HTMLElement>(".process-fold button"),
-      );
+      await openAll(finished.container);
       const dialog = document.querySelector('[role="dialog"]');
-      expect(dialog?.querySelectorAll(".tool-card")).toHaveLength(8);
-      expect(dialog?.querySelectorAll(".thinking-block")).toHaveLength(1);
+      expect(toolCards(dialog)).toHaveLength(8);
+      expect(thoughts(dialog)).toHaveLength(1);
       expect(dialog?.textContent).toContain("最终答案");
       if (kind === "group") expect(dialog?.textContent).toContain("研究员");
     });
@@ -325,18 +356,16 @@ describe("a reply's process dialog", () => {
     host.handle("sessions.resync", () => ({}));
     const mounted = await mount(<Chat conversationId={id} />);
     await flush();
-    await click(mounted.container.querySelector(".process-fold summary"));
-    await click(
-      mounted.container.querySelector<HTMLElement>(".process-fold button"),
-    );
+    await openAll(mounted.container);
     await flush();
     return document.querySelector<HTMLElement>('[role="dialog"]')!;
   }
 
   it("is headed by the author's face, name and time on one line, with the run's strip", async () => {
     const dialog = await timed();
-    const line = dialog.querySelector<HTMLElement>(".h-7")!;
-    expect(line.querySelector("svg, [aria-hidden='true']")).not.toBeNull();
+    // The line the 展开 toggle sits on; the face leads it, drawn for the eye only.
+    const line = dialog.querySelector("button[aria-expanded]")!.parentElement!;
+    expect(line.firstElementChild?.getAttribute("aria-hidden")).toBe("true");
     const time = line.querySelector("time")!.textContent;
     expect(time).toBe("1-01 01:00");
     expect(line.textContent).toBe(`研究员${time}展开`);
@@ -365,7 +394,7 @@ describe("a reply's process dialog", () => {
     await click(bash);
     const hit = dialog.querySelector("[data-hit]");
     expect(hit?.getAttribute("data-block")).toBe("c1");
-    expect(hit?.querySelector(".tool-card")).not.toBeNull();
+    expect(toolCards(hit)).toHaveLength(1);
   });
 });
 
@@ -377,25 +406,20 @@ describe("a reply before its first token", () => {
 
   it("holds the process box in a group, at work, until the first block", async () => {
     const { container, say } = await live();
-    const box = container.querySelector<HTMLElement>(".process-box");
+    const box = processBox(container);
     expect(box).not.toBeNull();
-    expect(placeholder(container)?.closest(".process-box")).toBe(box);
-    expect(
-      box?.querySelector(".motion-safe\\:after\\:animate-skeleton-sweep"),
-    ).not.toBeNull();
+    expect(box?.contains(placeholder(container)!)).toBe(true);
     await say(thought);
     expect(placeholder(container)).toBeUndefined();
-    expect(
-      container.querySelector(".process-box .thinking-block"),
-    ).not.toBeNull();
+    expect(thoughts(processBox(container))).toHaveLength(1);
   });
 
   it("holds the process box in a direct chat too, gone once text arrives", async () => {
     const { container, say } = await live("direct");
-    expect(placeholder(container)?.closest(".process-box")).not.toBeNull();
+    expect(processBox(container)?.contains(placeholder(container)!)).toBe(true);
     await say(words("开始写"));
     expect(placeholder(container)).toBeUndefined();
-    expect(container.querySelector(".process-box")).toBeNull();
+    expect(processBox(container)).toBeNull();
     expect(container.textContent).toContain("开始写");
   });
 
@@ -431,7 +455,7 @@ describe.each(["group", "direct"] as const)(
         words("再看文件"),
         call("b"),
       );
-      const running = order(container.querySelector(".process-box"));
+      const running = order(processBox(container));
       expect(running).toEqual([
         "thinking",
         "text:先列目录",
@@ -448,7 +472,7 @@ describe.each(["group", "direct"] as const)(
         words("答案"),
       );
       await flush(1600);
-      const fold = container.querySelector(".process-fold");
+      const fold = processFold(container);
       expect(fold?.querySelector("summary")?.textContent).toContain("5 步");
       expect(order(fold)).toEqual(running);
       expect(fold?.textContent).not.toContain("答案");
@@ -491,7 +515,7 @@ describe.each(["group", "direct"] as const)(
       });
       const { container } = await mount(<Chat conversationId={id} />);
       await flush();
-      const fold = container.querySelector(".process-fold");
+      const fold = processFold(container);
       expect(fold?.querySelector("summary")?.textContent).toContain("5 步");
       expect(order(fold)).toEqual([
         "thinking",
@@ -502,17 +526,11 @@ describe.each(["group", "direct"] as const)(
       ]);
       // The answer once, under the process.
       expect(fold?.textContent).not.toContain("答案");
-      expect(
-        [...container.querySelectorAll(".message-content")].map(
-          (element) => element.textContent,
-        ),
-      ).toEqual(["答案"]);
+      expect(drawn(container, "答案")).toBe(1);
       // Every card folded, a finished one as a running one.
-      expect(
-        [...container.querySelectorAll<HTMLDetailsElement>(".tool-card")].some(
-          (card) => card.open,
-        ),
-      ).toBe(false);
+      expect(toolCards(container).some(({ details }) => details.open)).toBe(
+        false,
+      );
     });
   },
 );
@@ -543,7 +561,7 @@ describe("following a running reply", () => {
   beforeEach(async () => {
     const mounted = await mount(steps(2));
     show = mounted.show;
-    box = mounted.container.querySelector<HTMLElement>(".process-box")!;
+    box = processBox(mounted.container)!;
     measure();
   });
 

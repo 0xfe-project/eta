@@ -60,11 +60,6 @@ export class RunPump {
     for (const off of this.offs.splice(0)) off();
   }
 
-  /** Whether the pump is running the loop right now. */
-  get running(): boolean {
-    return this.runner.running;
-  }
-
   /** Start a run if there is work and nothing is running. */
   pump(): void {
     if (!this.started) return;

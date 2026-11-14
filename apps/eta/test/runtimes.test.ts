@@ -512,7 +512,9 @@ describe("a turn Claude Code opens itself, on a background task's notification",
     });
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({ isError: false });
-    expect(results[0]!.text).toContain('Published "Audit" version 1');
+    expect(results[0]!.text).toMatch(
+      /^Published "Audit" as artifact \S+, version 1 /,
+    );
   });
 
   it("lets a steer from the user join it while it runs", async () => {

@@ -1,6 +1,5 @@
 import type { ApprovalStore } from "./authorize";
 
-import type { EnvFile } from "./env-file";
 import type { CtxView, Hooks } from "./hooks";
 import type { Evaluation } from "./realm";
 import { defaultApprovalStorePath, FileApprovalStore } from "./authorize";
@@ -18,8 +17,6 @@ export interface AgentOptions {
   /** Global layer directory (optional). */
   global?: string;
   hooks?: Hooks;
-  /** Approval store for shared layer capabilities (optional). Defaults to file-based store. */
-  approvalStore?: ApprovalStore;
   /**
    * The working directory a script sees: relative paths in `node:fs`, `$`,
    * `search`/`view`/`edit` resolve here. Defaults to the host process cwd.
@@ -42,8 +39,6 @@ export interface AgentOptions {
 export class Agent {
   readonly root: string;
   readonly layers: EnvLayers;
-  /** Backwards compat: env.js pointing at the self layer */
-  readonly env: EnvFile;
   readonly #hooks: Hooks;
   readonly #approvalStore: ApprovalStore;
   readonly #cwd: string | undefined;
@@ -61,23 +56,9 @@ export class Agent {
       project: options.project,
       global: options.global,
     });
-    // Compat property: points at the self layer
-    this.env = this.layers.get("self")!;
     // Initialize approval store
-    this.#approvalStore =
-      options.approvalStore ??
-      new FileApprovalStore(defaultApprovalStorePath(options.root));
-  }
-
-  get capabilities() {
-    return this.env.capabilities;
-  }
-
-  get awake(): boolean {
-    return (
-      this.#realm !== undefined &&
-      this.#woken &&
-      this.#hash === this.layers.hash
+    this.#approvalStore = new FileApprovalStore(
+      defaultApprovalStorePath(options.root),
     );
   }
 
@@ -121,7 +102,8 @@ export class Agent {
         id: projectFile.path,
       });
     }
-    toEval.push({ source: this.env.source, id: this.env.path });
+    const selfFile = this.layers.get("self")!;
+    toEval.push({ source: selfFile.source, id: selfFile.path });
 
     const done = (async () => {
       for (const { source, id } of toEval) {
@@ -145,13 +127,6 @@ export class Agent {
   ): Promise<Evaluation> {
     await this.wake();
     return (this.#realm as Realm).evaluate(source, options);
-  }
-
-  /** Reloads capability layers to pick up changes in env files. */
-  reload(): void {
-    this.layers.reload();
-    // Dispose and re-wake to rebuild the realm with updated layers
-    this.dispose();
   }
 
   dispose(): void {

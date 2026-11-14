@@ -10,7 +10,7 @@ export interface ProcessLaunch {
  * Splits a command line on white space. Single or double quotes keep a part together and are
  * removed; there are no escapes, so Windows paths keep their backslashes.
  */
-export function splitCommandLine(text: string): string[] {
+function splitCommandLine(text: string): string[] {
   const parts: string[] = [];
   let current: string | undefined;
   let quote: string | undefined;

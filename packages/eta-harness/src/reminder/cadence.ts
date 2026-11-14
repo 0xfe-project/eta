@@ -41,13 +41,6 @@ export function createCadenceState(): CadenceState {
   };
 }
 
-export function resetCadenceState(state: CadenceState): void {
-  state.currentTurn = 0;
-  state.lastTaskToolUseTurn = 0;
-  state.reminderInjectedThisCycle = false;
-  state.reminderDue = false;
-}
-
 /** Call at turn start. */
 export function onTurnStart(state: CadenceState): void {
   state.currentTurn += 1;

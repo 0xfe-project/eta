@@ -89,18 +89,22 @@ describe("execution modes", () => {
 
   it("sequential runs one call to completion before starting the next", async () => {
     const order: string[] = [];
+    const sleep = (ms: number) =>
+      new Promise((resolve) => setTimeout(resolve, ms));
     const tools: KernelTool[] = [
       {
         name: "first",
-        execute: () => {
-          order.push("first");
+        execute: async () => {
+          order.push("first:start");
+          await sleep(20);
+          order.push("first:end");
           return "first";
         },
       },
       {
         name: "second",
         execute: () => {
-          order.push("second");
+          order.push("second:start");
           return "second";
         },
       },
@@ -118,7 +122,7 @@ describe("execution modes", () => {
     );
     kernel.inject(userMsg("go"));
     await runner.run();
-    expect(order).toEqual(["first", "second"]);
+    expect(order).toEqual(["first:start", "first:end", "second:start"]);
     dispose();
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareVersions, desktopTooOld, MIN_DESKTOP } from "../src/desktop";
+import { compareVersions, desktopTooOld } from "../src/desktop";
 
 describe("compareVersions", () => {
   it.each([
@@ -33,9 +33,5 @@ describe("desktopTooOld", () => {
   it("is not an app it cannot place", () => {
     expect(desktopTooOld(undefined, "9.0.0")).toBe(false);
     expect(desktopTooOld("dev", "9.0.0")).toBe(false);
-  });
-
-  it("is never the app this minimum was written for", () => {
-    expect(desktopTooOld(MIN_DESKTOP)).toBe(false);
   });
 });

@@ -16,7 +16,6 @@ import type {
   ProviderSummary,
 } from "@eta/client-contracts";
 import type { ThinkingLevel } from "@eta/core";
-import { BUILTIN_PROVIDER_PRESETS } from "@eta/client-contracts";
 
 export const MODEL_THINKING_LEVELS = [
   "off",
@@ -29,12 +28,6 @@ export const MODEL_THINKING_LEVELS = [
 ] as const satisfies readonly ThinkingLevel[];
 
 export type ModelInput = "text" | "image";
-
-export function providerPreset(kind: ProviderKind) {
-  return isCustomKind(kind)
-    ? undefined
-    : BUILTIN_PROVIDER_PRESETS[kind as keyof typeof BUILTIN_PROVIDER_PRESETS];
-}
 
 /**
  * Kinds with no built-in endpoint: the user supplies the URL, the key and the model list. Both
@@ -160,13 +153,6 @@ export function effectiveModel(model: EtaModelConfig): EtaModelConfig {
   return { ...model, ...model.overrides };
 }
 
-/** Undefined means the provider did not publish input capabilities. */
-export function modelSupportsVision(
-  model: ModelCapabilities,
-): boolean | undefined {
-  return model.input === undefined ? undefined : model.input.includes("image");
-}
-
 /**
  * The thinking levels a model declares.
  *
@@ -183,25 +169,6 @@ export function modelThinkingLevels(input: EtaModelConfig): ThinkingLevel[] {
   if (efforts.length === 0) return [];
   const off = model.thinkingMode === "both";
   return [...(off ? (["off"] as const) : []), ...efforts];
-}
-
-export function modelDefaultThinking(input: EtaModelConfig): ThinkingLevel {
-  const model = effectiveModel(input);
-  const levels = modelThinkingLevels(model);
-  if (
-    model.defaultThinking !== undefined &&
-    levels.includes(model.defaultThinking)
-  )
-    return model.defaultThinking;
-  if (
-    model.providerDefaultEffort !== undefined &&
-    levels.includes(model.providerDefaultEffort)
-  ) {
-    return model.providerDefaultEffort;
-  }
-  // "off" is the harness's no-parameter setting. The provider adapter only translates it to an
-  // explicit disable when the model actually offers an off switch.
-  return "off";
 }
 
 /** One provider, as a client sees it: the key becomes `hasApiKey`, the headers stay. */

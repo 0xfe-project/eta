@@ -3,7 +3,7 @@ import type { ObservedOutputs } from "../src/output-shape";
  * The smaller parts on their own: output shapes, the metadata cache, schema
  * validation and the failure tracker.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -260,9 +260,10 @@ describe("metadata cache", () => {
     const path = join(dir, "deep", "er", "c.json");
     const cache = new MetadataCache(path);
     cache.save({ s: entry("h", ["a"]) });
+    // The save landed on disk, under directories it had to create.
+    expect(new MetadataCache(path).get("s", "h")).toBeDefined();
     cache.remove("s");
     expect(new MetadataCache(path).get("s", "h")).toBeUndefined();
-    mkdirSync(join(dir, "x"), { recursive: true });
   });
 
   it("stamps when an entry was written", () => {

@@ -12,7 +12,7 @@ afterEach(async () => {
 const PARAMS = { provider: "Codex", status: 403 };
 
 describe("llmProblemText", () => {
-  it("tells a code in Chinese and in English, filling its params", async () => {
+  it("tells a code in Chinese and in English, filling its params, never the diagnostic", async () => {
     const problem = {
       code: "model_forbidden",
       message: "diagnostic only",
@@ -29,13 +29,6 @@ describe("llmProblemText", () => {
     expect(llmProblemText({ code: "login_expired", message: "x" })).toBe(
       "The login has expired. Sign in again.",
     );
-  });
-
-  it("never shows the diagnostic of a code it knows", async () => {
-    await i18n.changeLanguage("en");
-    expect(
-      llmProblemText({ code: "rate_limited", message: "Too many requests" }),
-    ).not.toContain("Too many requests;");
   });
 
   it("has a text in both languages for every code, with no placeholder left over", async () => {

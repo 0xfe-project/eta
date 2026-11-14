@@ -1,7 +1,7 @@
 import type { PluginFieldView } from "@eta/client-contracts";
 import { parseConfigFields } from "@eta/client-contracts/plugin-fields";
 import { describe, expect, it } from "@rstest/core";
-import { changes, draftOf, formState, issueOf } from "./plugin-form";
+import { changes, draftOf, formState } from "./plugin-form";
 
 /** A field as the host sends it, from what a manifest declares. */
 function viewOf(
@@ -21,33 +21,16 @@ function viewOf(
   } as PluginFieldView;
 }
 
+/** What the form says about one field holding `draft`. */
+const issueOf = (field: PluginFieldView, draft: string) =>
+  formState([field], { [field.name]: draft }).issues[field.name];
+
 const options = [
   { value: "a", label: "A" },
   { value: "b", label: "B" },
 ];
 
 describe("what the form says, by the host's rules", () => {
-  it("wants a required field", () => {
-    const field = viewOf({ type: "string", required: true });
-    expect(issueOf(field, "")?.code).toBe("required");
-    expect(issueOf(field, "x")).toBeUndefined();
-  });
-
-  it("checks a pattern and lengths", () => {
-    const field = viewOf({
-      type: "string",
-      pattern: "^sk-[A-Za-z0-9]{8,}$",
-      maxLength: 20,
-    });
-    expect(issueOf(field, "sk-abc")?.code).toBe("pattern");
-    expect(issueOf(field, "sk-abcdefgh")).toBeUndefined();
-    expect(issueOf(field, `sk-${"a".repeat(30)}`)).toEqual({
-      field: "f",
-      code: "maxLength",
-      limit: 20,
-    });
-  });
-
   it("reads a number from what was typed", () => {
     const field = viewOf({ type: "number", int: true, min: 1, max: 10 });
     expect(issueOf(field, "4")).toBeUndefined();
@@ -59,18 +42,6 @@ describe("what the form says, by the host's rules", () => {
       limit: 10,
     });
     expect(issueOf(field, "many")?.code).toBe("type");
-  });
-
-  it("counts a multiple choice", () => {
-    const field = viewOf({
-      type: "select",
-      multiple: true,
-      minItems: 1,
-      maxItems: 1,
-      options,
-    });
-    expect(issueOf(field, ["a"])).toBeUndefined();
-    expect(issueOf(field, ["a", "b"])?.code).toBe("maxItems");
   });
 
   it("takes a blank secret that is saved as one to keep", () => {

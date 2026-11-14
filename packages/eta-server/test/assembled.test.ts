@@ -386,7 +386,7 @@ describe("a server started the way main starts it", () => {
     client.close();
   });
 
-  it("keeps the pipe alive when one bundled plugin fails to load", async () => {
+  it("mounts only the bundled plugins it is asked for", async () => {
     const root = await mkdtemp(join(tmpdir(), "eta-half-"));
     roots.push(root);
     const server = await assembleServer({

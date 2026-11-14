@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context } from "cordis";
 import { afterEach, describe, expect, it } from "vitest";
-import { SETTINGS_ACTIONS, settingsPlugin } from "../src/bundled/settings";
+import { settingsPlugin } from "../src/bundled/settings";
 import { SettingsStore } from "../src/settings";
 import { WireService } from "../src/wire-service";
 
@@ -90,9 +90,7 @@ describe("the settings target", () => {
         .descriptors()
         .map((descriptor) => descriptor.name)
         .sort(),
-    ).toEqual(
-      [...SETTINGS_ACTIONS].map((action) => `settings.${action}`).sort(),
-    );
+    ).toEqual(["settings.reload", "settings.save"]);
     expect(h.wire.registry.eagerTargets()).toContain("settings");
     await until(() => h.settings() !== undefined);
     expect(h.settings()).toEqual({});

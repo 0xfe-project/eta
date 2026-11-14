@@ -43,6 +43,7 @@ describe("connection settings", () => {
     globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
     await mount(<HostSettings />);
     await click(document.querySelector("button")!);
+    expect(fetch).toHaveBeenCalledTimes(1);
     const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toContain("/api/native/window-action");
     expect(JSON.parse(String(init.body))).toEqual({

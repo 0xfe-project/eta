@@ -178,15 +178,6 @@ export async function scanMemory(
   };
 }
 
-/** Just the files a session reads — the question asked most often about a scan. */
-export async function scanMemoryPaths(
-  fs: MemoryFs,
-  cwd: string,
-  home: string,
-): Promise<MemoryFile[]> {
-  return (await scanMemory(fs, cwd, home)).files;
-}
-
 /** What one session's memory resolves to: the block, the files behind it, and where notes go. */
 export interface MemoryLoaded {
   text: string;

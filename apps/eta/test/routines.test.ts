@@ -412,8 +412,6 @@ describe("a run", () => {
     });
     // Its next time comes while it is still running: skipped.
     t.setClock("2026-10-19T09:00:00Z");
-    t.tick();
-    t.setClock("2026-10-19T09:00:00Z");
     expect(t.tick()).toEqual([]);
     await expect(t.act("run", { routineId: routine.id })).rejects.toThrow(
       /already running/,
@@ -499,6 +497,7 @@ describe("a run", () => {
           title: "Quiet day",
         });
       if (request.index === 1) return call("finish", { handoff: "nothing" });
+      if (request.index === 3) return call("finish", { report: "# Later" });
       return say("");
     });
     const agent = await t.w.agent("Ada");
@@ -533,9 +532,12 @@ describe("a run", () => {
     await t.runNow(routine.id); // failure
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(t.w.rows(group.id)).toHaveLength(1);
-    // Unlinked, it posts nowhere.
+    // Unlinked, it posts nowhere, not even a report it sent.
     await t.act("update", { routineId: routine.id, conversationId: null });
     expect(t.sections(routine.id).info().conversationId).toBeNull();
+    expect(await t.runNow(routine.id)).toMatchObject({ status: "sent" });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(t.w.rows(group.id)).toHaveLength(1);
   });
 });
 

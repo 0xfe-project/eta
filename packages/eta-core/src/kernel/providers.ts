@@ -50,17 +50,3 @@ export function thinkingLevelsFor(
     (level) => map[level as keyof typeof map] !== null,
   );
 }
-
-/**
- * Delegate to a pi-ai `Models` collection. Kept as a function so a host can
- * wrap it (metrics, a recording proxy) without the kernel knowing.
- */
-export function piAiModels(models: KernelModels): KernelModels {
-  return {
-    getModel: (provider, id) => models.getModel(provider, id),
-    streamSimple: (model, context, options) =>
-      models.streamSimple(model, context, options),
-    completeSimple: (model, context, options) =>
-      models.completeSimple(model, context, options),
-  };
-}

@@ -12,7 +12,7 @@ import { fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { openSession } from "../src/open";
 import { journaledKernel } from "../src/testing";
-import { createStepTools, STEP_TOOL_NAMES } from "../src/tools/tasks";
+import { createStepTools } from "../src/tools/tasks";
 import { toKernelTool } from "../src/tools/tool";
 
 const _userMsg = (text: string) => ({
@@ -28,10 +28,11 @@ function session() {
   const { kernel, journaling } = journaledKernel(
     SessionLog.create(new MemoryStorage()),
   );
-  for (const tool of createStepTools(kernel.tasks))
+  const tools = createStepTools(kernel.tasks);
+  for (const tool of tools)
     kernel.tools.register(toKernelTool(tool, () => undefined));
   kernel.config.update({
-    activeToolNames: [...STEP_TOOL_NAMES],
+    activeToolNames: tools.map((tool) => tool.name),
   });
   return { kernel, journaling };
 }

@@ -5,7 +5,7 @@ function ownsWebApi(pathname: string): boolean {
   return pathname === "/up" || pathname === "/version";
 }
 
-export async function handleWebApi(
+async function handleWebApi(
   request: Request,
   buildId: string,
 ): Promise<Response | null> {

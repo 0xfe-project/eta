@@ -52,29 +52,6 @@ describe("what a session installs", () => {
     session.stop();
   });
 
-  it("installs none of the removed tools", async () => {
-    const session = await openSession({
-      storage: new MemoryStorage(),
-      models: fakeModels([]) as never,
-    });
-    const names = registered(session);
-    expect(names).toContain("update_step");
-    for (const gone of [
-      "read",
-      "write",
-      "edit",
-      "bash",
-      "update_state",
-      "check_state",
-      "list_state",
-      "Agent",
-      "ask_user",
-    ])
-      expect(names).not.toContain(gone);
-    await session.kernel.dispose();
-    session.stop();
-  });
-
   it("installs the ask tool when the session has an ask channel", async () => {
     const session = await openSession({
       storage: new MemoryStorage(),

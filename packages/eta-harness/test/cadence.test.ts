@@ -15,7 +15,6 @@ import {
   drainReminderForContext,
   evaluateToolResult,
   onTurnStart,
-  resetCadenceState,
 } from "../src/index";
 
 const config: CadenceConfig = {
@@ -70,13 +69,5 @@ describe("cadence state machine", () => {
     evaluateToolResult(state, "update_step", true, config);
     turns(state, DEFAULT_REMINDER_INTERVAL);
     expect(evaluateToolResult(state, "read", true, config).markDue).toBe(true);
-  });
-
-  it("reset starts the cadence over", () => {
-    const state = createCadenceState();
-    turns(state, 10);
-    evaluateToolResult(state, "read", true, config);
-    resetCadenceState(state);
-    expect(state).toEqual(createCadenceState());
   });
 });

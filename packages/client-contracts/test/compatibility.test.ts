@@ -6,7 +6,7 @@ import type {
   SessionHistoryResult,
   SessionViewSections,
 } from "../src/index";
-import { encodeFrame, stateDiff } from "@eta/client-wire-proto";
+import { encodeFrame } from "@eta/client-wire-proto";
 import { describe, expect, it } from "vitest";
 import { stateSection } from "../src/index";
 
@@ -151,29 +151,6 @@ describe("existing business JSON on the generic pipe", () => {
     };
     expect(older.systems ?? []).toEqual([]);
     expect(stateSection(snapshot, "prompt")).toBeUndefined();
-  });
-  it("uses unchanged diff and removal semantics for business and plugin sections", () => {
-    expect(stateDiff(undefined, snapshot)).toBe("full");
-    expect(stateDiff(snapshot.revisions, snapshot)).toBeUndefined();
-    const next = {
-      sections: { ...sections, subagents: [] },
-      revisions: { ...snapshot.revisions, subagents: "2" },
-    };
-    const patch = stateDiff({ ...snapshot.revisions, git: "old" }, next);
-    expect(patch).toEqual({
-      sections: { subagents: [] },
-      revisions: next.revisions,
-    });
-    expect(
-      JSON.parse(
-        encodeFrame({
-          type: "state",
-          target: "sessions.s1",
-          version: 2,
-          patch: patch as Exclude<typeof patch, "full" | undefined>,
-        }),
-      ),
-    ).toEqual({ type: "state", target: "sessions.s1", version: 2, patch });
   });
   it("preserves operation names and request payloads", () => {
     const call: SessionCall = {

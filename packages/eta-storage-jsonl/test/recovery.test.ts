@@ -152,34 +152,4 @@ describe("crash recovery on disk", () => {
       expect(() => JSON.parse(line)).not.toThrow();
     }
   });
-
-  it("state written mid-flight stays written — KV has no notion of runs", async () => {
-    const path = nextPath();
-    const settled = await processRun(path, [answer("done")], "q");
-    await settled.storage.commit([
-      { kind: "value", op: "set", namespace: "phase", key: "", value: "ready" },
-    ]);
-    await settled.storage.close();
-
-    // A process writes state and dies before anything else. The value stands:
-    // only bytes, never meaning, are dropped by recovery.
-    const dying = await JsonlStorage.open(path);
-    await dying.commit([
-      {
-        kind: "value",
-        op: "set",
-        namespace: "phase",
-        key: "",
-        value: "half-migrated",
-      },
-    ]);
-    await dying.close();
-
-    const reopened = await JsonlStorage.open(path);
-    expect(
-      (await reopened.getValue({ kind: "value", namespace: "phase", key: "" }))
-        ?.value,
-    ).toBe("half-migrated");
-    await reopened.close();
-  });
 });

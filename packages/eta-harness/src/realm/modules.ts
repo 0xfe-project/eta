@@ -631,25 +631,12 @@ export function mountModules(
               const depth = parentStack.length;
 
               // Enqueue the request through the concurrent queue
-              const result = askQueue.enqueue({
+              return askQueue.enqueue({
                 prompt,
                 model: options?.model,
                 parentStack,
                 depth,
               });
-
-              // Deep recursion is a warning, never a stop (ESMMODE-IMPL §三):
-              // ≥10 layers is where a model is usually going in circles.
-              // The runtime stamps depth; a host with a deeper session stack
-              // stamps its own (larger) warning — whoever sees more wins.
-              if (depth >= 10) {
-                return result.then((value) => {
-                  value.warning ??= `eta.ask recursion depth is ${depth}; consider returning a result instead of asking again`;
-                  return value;
-                });
-              }
-
-              return result;
             },
             (prompt, options) =>
               `${prompt.slice(0, 80)}${options?.model !== undefined ? ` [model:${options.model}]` : ""}`,

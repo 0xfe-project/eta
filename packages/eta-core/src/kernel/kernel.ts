@@ -179,11 +179,6 @@ export class Kernel {
     return this.inbox.enqueue("nextRun", message, images);
   }
 
-  /** Drop a queued input; false when it was already consumed. */
-  cancelQueued(entryId: string): boolean {
-    return this.inbox.cancel(entryId);
-  }
-
   /** What a run takes when it starts (the modes come from the live config). */
   acceptInbox(): QueuedItem[] {
     this.inbox.configure({

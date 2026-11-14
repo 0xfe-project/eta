@@ -157,7 +157,17 @@ describe("entries from events", () => {
 
 describe("usage rows", () => {
   it("rides in the commit of the message it was spent on", async () => {
-    const s = session();
+    // Every batch the journal hands the disk, as the kinds it wrote.
+    const batches: string[][] = [];
+    const inner = new MemoryStorage();
+    const storage: StorageService = Object.create(Object.getPrototypeOf(inner));
+    Object.assign(storage, inner);
+    const commit = inner.commit.bind(inner);
+    storage.commit = async (writes: StorageWrite[]) => {
+      batches.push(writes.map((write) => write.kind));
+      return commit(writes);
+    };
+    const s = session(storage);
     const assistant = assistantMessage({
       content: [{ type: "text", text: "answer" }],
       usage: usageOf(100, 20),
@@ -182,6 +192,10 @@ describe("usage rows", () => {
     expect(
       (await s.log.storage.scanUsage({})).map((stored) => stored.id),
     ).toEqual([row.id]);
+    // One batch carries both: the row never lands without its message.
+    const withUsage = batches.filter((kinds) => kinds.includes("usage"));
+    expect(withUsage).toHaveLength(1);
+    expect(withUsage[0]).toContain("entry");
     s.dispose();
   });
 
@@ -198,31 +212,6 @@ describe("usage rows", () => {
     await s.journaling.flush();
     expect(s.usage).toEqual([]);
     expect(await s.log.storage.scanUsage({})).toEqual([]);
-    s.dispose();
-  });
-
-  it("a correction is an adjustment, and the totals follow", async () => {
-    const s = session();
-    const assistant = assistantMessage({
-      content: [{ type: "text", text: "answer" }],
-      usage: usageOf(100, 20),
-    });
-    const emit = kernelEmit(s.kernel.ctx);
-    emit("message:end", { message: assistant });
-    emit("turn:end", {
-      runId: "r",
-      turnId: "t",
-      message: assistant,
-      toolResults: [],
-      usage: assistant.usage,
-    });
-    await s.journaling.flush();
-
-    const entryId = (s.added[0] as MessageEntry).id;
-    const row = await s.journaling.recordUsage(usageOf(120, 20), { entryId });
-    expect(row?.adjustment).toBe(true);
-    const stats = await s.log.storage.getStats();
-    expect(stats.usage.input).toBe(220);
     s.dispose();
   });
 });

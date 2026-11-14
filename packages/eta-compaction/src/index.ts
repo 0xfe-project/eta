@@ -35,11 +35,7 @@ import type { Entry, MessageEntry } from "@eta/core/session";
 import type { Usage } from "@eta/core/storage";
 import type { FileOperations } from "./serialize";
 import { addUsage, emptyUsage } from "@eta/core/storage";
-import {
-  estimateContextTokens,
-  findCutPoint,
-  fitCompactionSettings,
-} from "@eta/harness";
+import { findCutPoint, fitCompactionSettings } from "@eta/harness";
 import { digestContext, dropToolPairs } from "./deterministic";
 import {
   SUMMARIZATION_PROMPT,
@@ -59,11 +55,6 @@ import {
 
 /** Beyond this many pieces a fold is not worth what it costs; the rest is digested mechanically. */
 export const SUMMARY_FOLD_LIMIT = 12;
-
-export interface EtaCompactionOptions {
-  /** Cap on how many fold requests one compaction may make. Default 12. */
-  foldLimit?: number;
-}
 
 /** The prepared inputs of one compaction: what to summarize, what to keep. */
 export interface CompactionPlan {
@@ -254,7 +245,6 @@ async function foldSummary(
   request: CompactionRequest,
   conversation: readonly AgentMessage[],
   previousSummary: string | undefined,
-  foldLimit: number,
 ): Promise<{ text: string; usage: Usage } | undefined> {
   const settings = request.settings;
   const maxTokens = Math.min(
@@ -294,7 +284,7 @@ async function foldSummary(
 
     const digestRest = (): string | undefined =>
       digestContext(conversation.slice(pieceStart), maxTokens * 4);
-    if (cursor < conversation.length && folds >= foldLimit) {
+    if (cursor < conversation.length && folds >= SUMMARY_FOLD_LIMIT) {
       const digest = digestRest();
       if (digest === undefined)
         throw new SummarizationError(
@@ -410,10 +400,7 @@ async function foldTurnPrefix(
  * summarization that cannot produce notes is either digested or reported as a
  * failure the service records.
  */
-export function etaCompaction(
-  options: EtaCompactionOptions = {},
-): CompactionSummarizer {
-  const foldLimit = options.foldLimit ?? SUMMARY_FOLD_LIMIT;
+export function etaCompaction(): CompactionSummarizer {
   return {
     async summarize(
       request: CompactionRequest,
@@ -462,7 +449,6 @@ export function etaCompaction(
             request,
             plan.messagesToSummarize,
             plan.previousSummary,
-            foldLimit,
           );
           if (folded === undefined) return undefined;
           historyText = folded.text;
@@ -480,7 +466,6 @@ export function etaCompaction(
           request,
           plan.messagesToSummarize,
           plan.previousSummary,
-          foldLimit,
         );
         if (folded === undefined) return undefined;
         summary = folded.text;
@@ -503,22 +488,6 @@ export function etaCompaction(
   };
 }
 
-/** The default summarizer: what a session gets when the host wires none itself. */
-export const defaultCompactionSummarizer = etaCompaction();
-
-/** Estimated tokens a message list costs, with the kernel's own arithmetic. */
-export const contextTokensOf = (messages: readonly AgentMessage[]): number =>
-  estimateContextTokens(messages).tokens;
-
-export {
-  digestContext,
-  dropToolPairs,
-  maxMinFairAllocations,
-  TOOL_MESSAGE_DROP_THRESHOLD,
-  toolResultShare,
-  truncateFairly,
-  untrustedFallback,
-} from "./deterministic";
 export {
   SUMMARIZATION_PROMPT,
   SUMMARIZATION_SYSTEM_PROMPT,
@@ -526,12 +495,3 @@ export {
   UNTRUSTED_SUMMARY_NOTE,
   UPDATE_SUMMARIZATION_PROMPT,
 } from "./prompts";
-export {
-  computeFileLists,
-  createFileOps,
-  extractFileOpsFromMessage,
-  type FileOperations,
-  formatFileOperations,
-  serializeConversation,
-  serializedTokens,
-} from "./serialize";

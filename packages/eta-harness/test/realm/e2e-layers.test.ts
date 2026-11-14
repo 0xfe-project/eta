@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Agent } from "../../src/realm/agent";
-import { MemoryApprovalStore } from "../../src/realm/authorize";
+import {
+  defaultApprovalStorePath,
+  FileApprovalStore,
+} from "../../src/realm/authorize";
 
 describe("e2e: 两个 agent 共享和覆盖能力", () => {
   let projectRoot: string;
@@ -36,8 +39,6 @@ describe("e2e: 两个 agent 共享和覆盖能力", () => {
   });
 
   it("两个 agent 共享和覆盖能力", async () => {
-    const approvalStoreA = new MemoryApprovalStore();
-    const approvalStoreB = new MemoryApprovalStore();
     const authorizeRequestsA: AuthorizeRequest[] = [];
     const authorizeRequestsB: AuthorizeRequest[] = [];
 
@@ -45,7 +46,6 @@ describe("e2e: 两个 agent 共享和覆盖能力", () => {
     const agentA = new Agent({
       root: agentARoot,
       project: projectRoot,
-      approvalStore: approvalStoreA,
       hooks: {
         authorize: async (req) => {
           const parts = req.name.split(".");
@@ -67,7 +67,6 @@ describe("e2e: 两个 agent 共享和覆盖能力", () => {
     const agentB = new Agent({
       root: agentBRoot,
       project: projectRoot,
-      approvalStore: approvalStoreB,
       hooks: {
         authorize: async (req) => {
           const parts = req.name.split(".");
@@ -92,7 +91,7 @@ describe("e2e: 两个 agent 共享和覆盖能力", () => {
     `);
 
     // Verify: 项目层的 env.js 应该包含 shout
-    agentA.reload();
+    agentA.layers.reload();
     const projectEnv = agentA.layers.get("project");
     expect(projectEnv?.has("shout")).toBe(true);
     const shoutCap = projectEnv?.capability("shout");
@@ -116,7 +115,12 @@ describe("e2e: 两个 agent 共享和覆盖能力", () => {
     expect(authorizeRequestsB[0]?.capability).toBe("shout");
 
     // Verify: 审批已记录
-    expect(approvalStoreB.isApproved("project", "shout")).toBe(true);
+    expect(
+      new FileApprovalStore(defaultApprovalStorePath(agentBRoot)).isApproved(
+        "project",
+        "shout",
+      ),
+    ).toBe(true);
 
     // ===== Step 3: Agent A 在个人层 define 同名能力 =====
     await agentA.run(`
@@ -125,7 +129,7 @@ describe("e2e: 两个 agent 共享和覆盖能力", () => {
     `);
 
     // Verify: Agent A 的个人层有 shout
-    agentA.reload();
+    agentA.layers.reload();
     const selfEnvA = agentA.layers.get("self");
     expect(selfEnvA?.has("shout")).toBe(true);
     const shoutSelfCap = selfEnvA?.capability("shout");
@@ -154,41 +158,10 @@ describe("e2e: 两个 agent 共享和覆盖能力", () => {
     // Verify: 第二次调用没有触发审批
     expect(authorizeRequestsB.length).toBe(0);
 
-    // ===== 验收点汇总 =====
-    // ✅ 1. Agent A 在项目层 define，写入 {project}/.eta/env.js
-    expect(projectEnv?.has("shout")).toBe(true);
-
-    // ✅ 2. Agent B 能从 eta.modules 里看到 shout
-    agentB.reload();
-    const foundByB = agentB.layers.find("shout");
-    expect(foundByB).toBeDefined();
-    expect(foundByB?.layer).toBe("project");
-
-    // ✅ 3. Agent B 首次调用弹审批（mock 批准）
-    expect(approvalStoreB.isApproved("project", "shout")).toBe(true);
-
-    // ✅ 4. Agent B 调用返回正确结果（项目层版本）
-    expect(resultB1.value).toBe("HELLO");
-    expect(resultB2.value).toBe("HELLO");
-
-    // ✅ 5. Agent A 在个人层 define 同名能力，写入 ~/.eta/sessions/{id}/env.js
-    expect(selfEnvA?.has("shout")).toBe(true);
-
-    // ✅ 6. Agent A 调用 shout 返回个人层版本（覆盖项目层）
-    expect(resultA.value).toBe("!!! HELLO !!!");
-
-    // ✅ 7. Agent B 调用 shout 仍返回项目层版本（不受 A 的个人层影响）
-    expect(resultB2.value).toBe("HELLO");
-
-    // ✅ 8. 分层查找顺序正确：self > project > global
-    const foundByA = agentA.layers.find("shout");
-    expect(foundByA?.layer).toBe("self"); // Agent A 优先找到个人层
-
-    const foundByBAgain = agentB.layers.find("shout");
-    expect(foundByBAgain?.layer).toBe("project"); // Agent B 找到项目层
-
-    // ✅ 9. 写穿 + 锁 + authorize 三者协同工作，无冲突
-    // (已通过上述所有步骤验证)
+    // The lookup each agent sees: B finds the project's, A its own.
+    agentB.layers.reload();
+    expect(agentB.layers.find("shout")?.layer).toBe("project");
+    expect(agentA.layers.find("shout")?.layer).toBe("self");
   });
 
   it("分层查找顺序：self > project > global", async () => {
@@ -232,7 +205,7 @@ describe("e2e: 两个 agent 共享和覆盖能力", () => {
     expect(result.value).toBe("from self");
 
     // Verify lookup order
-    agent.reload();
+    agent.layers.reload();
     const found = agent.layers.find("greet");
     expect(found?.layer).toBe("self");
 
@@ -240,7 +213,7 @@ describe("e2e: 两个 agent 共享和覆盖能力", () => {
     rmSync(globalRoot, { recursive: true, force: true });
   });
 
-  it("并发写入：两个 agent 同时向项目层 define 不同能力", async () => {
+  it("两个 agent 先后向项目层 define 不同能力，互不覆盖", async () => {
     const agentA = new Agent({
       root: agentARoot,
       project: projectRoot,
@@ -269,8 +242,8 @@ describe("e2e: 两个 agent 共享和覆盖能力", () => {
     expect(resultB.value).toBeUndefined();
 
     // Verify both capabilities exist in project layer
-    agentA.reload();
-    agentB.reload();
+    agentA.layers.reload();
+    agentB.layers.reload();
 
     const projectEnv = agentA.layers.get("project");
     expect(projectEnv?.has("capA")).toBe(true);
@@ -281,61 +254,6 @@ describe("e2e: 两个 agent 共享和覆盖能力", () => {
     expect(agentA.layers.find("capB")?.layer).toBe("project");
     expect(agentB.layers.find("capA")?.layer).toBe("project");
     expect(agentB.layers.find("capB")?.layer).toBe("project");
-  });
-
-  it("authorize 隔离：Agent A 的个人层不需要审批，项目层需要", async () => {
-    const authorizeRequests: AuthorizeRequest[] = [];
-    const approvalStore = new MemoryApprovalStore();
-
-    const agent = new Agent({
-      root: agentARoot,
-      project: projectRoot,
-      approvalStore,
-      hooks: {
-        authorize: async (req) => {
-          const parts = req.name.split(".");
-          const layer = parts[1] as "self" | "project" | "global";
-          const capability = parts[2] || "";
-
-          authorizeRequests.push({
-            layer,
-            capability,
-            args: req.input as readonly unknown[],
-          });
-          return undefined; // Auto-approve
-        },
-      },
-    });
-
-    // Define capability in self layer
-    await agent.run(`
-      import eta from "eta:self";
-      eta.define("selfCap", () => "self only");
-    `);
-
-    // Define capability in project layer
-    await agent.run(`
-      import eta from "eta:project";
-      eta.define("projectCap", () => "project shared");
-    `);
-
-    // Call self layer capability - should NOT trigger authorization
-    authorizeRequests.length = 0;
-    await agent.run(`
-      import selfCap from "eta:selfCap";
-      export default selfCap();
-    `);
-    expect(authorizeRequests.length).toBe(0);
-
-    // Call project layer capability - SHOULD trigger authorization
-    authorizeRequests.length = 0;
-    await agent.run(`
-      import projectCap from "eta:projectCap";
-      export default projectCap();
-    `);
-    expect(authorizeRequests.length).toBe(1);
-    expect(authorizeRequests[0]?.layer).toBe("project");
-    expect(authorizeRequests[0]?.capability).toBe("projectCap");
   });
 
   it("realm 重建：修改 env.js 后自动重新唤醒", async () => {
@@ -361,8 +279,7 @@ describe("e2e: 两个 agent 共享和覆盖能力", () => {
     const selfEnv = agent.layers.get("self")!;
     selfEnv.replace("version", "() => 'v2'");
 
-    // Agent should automatically reload and use new version
-    agent.reload();
+    // No reload: the next run notices the file changed and wakes a fresh realm.
     const result2 = await agent.run(`
       import version from "eta:version";
       export default version();

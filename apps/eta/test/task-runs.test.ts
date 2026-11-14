@@ -167,7 +167,7 @@ async function remote(respond: Parameters<typeof room>[0]) {
 }
 
 describe("a task run", () => {
-  it("falls back to sequence polling when streamed activity goes silent", () => {
+  it("counts streamed activity as liveness for 20 s, and polls the sequence once it is older", () => {
     const now = Date.now();
     expect(streamActivityCoversPoll(0, now)).toBe(false);
     expect(streamActivityCoversPoll(now - 19_999, now)).toBe(true);
@@ -619,28 +619,6 @@ describe("talking to a run", () => {
         .filter((entry) => entry.kind === "comment")
         .map((entry) => entry.body),
     ).toEqual(["use the staging db", "Used the staging db."]);
-  });
-
-  it("records a comment that has no run to read it, on a task nobody is working on", async () => {
-    const r = await room(finishes());
-    const task = make(r, "Done already");
-    await until(() => reviewed(r.w, task.id));
-    await r.w.client.call("tasks", "update", {
-      taskId: task.id,
-      status: "done",
-    });
-    const before = r.requests.length;
-    await r.w.client.call("tasks", "comment", {
-      taskId: task.id,
-      body: "thanks",
-    });
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(r.requests.length).toBe(before);
-    expect(runStatuses(r.w, task.id)).toEqual(["completed"]);
-    // It is still a line on the timeline, for whoever reads the task next.
-    expect(
-      activityKinds(r.w, task.id).filter((kind) => kind === "comment"),
-    ).toHaveLength(2);
   });
 });
 

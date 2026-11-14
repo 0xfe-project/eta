@@ -6,11 +6,10 @@ import {
   it,
   rstest,
 } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { setWire } from "@/lib/wire";
 import { agentView, machineView } from "@/test-product";
+import { cleanup, mount } from "@/test-render";
 import { FakeHost } from "@/test-wire";
 import { AgentEditor } from "./agent-editor";
 import { useWorkspaceStore } from "./workspace-store";
@@ -41,12 +40,6 @@ rstest.mock("sonner", () => ({
   toast: { success: () => {}, error: () => {} },
 }));
 
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-const container = document.createElement("div");
-document.body.append(container);
-const root = createRoot(container);
 const settle = () =>
   act(() => new Promise((resolve) => setTimeout(resolve, 20)));
 
@@ -160,19 +153,13 @@ beforeEach(async () => {
     .install();
   host.hello();
   api.select.mockReset();
-  await act(async () =>
-    root.render(
-      <QueryClientProvider client={new QueryClient()}>
-        <AgentEditor />
-      </QueryClientProvider>,
-    ),
-  );
+  await mount(<AgentEditor />);
 });
 afterEach(async () => {
   await act(async () =>
     useWorkspaceStore.getState().setAgentEditor({ open: false, agentId: null }),
   );
-  await act(async () => root.render(null));
+  await cleanup();
   setWire(undefined);
 });
 
@@ -385,7 +372,7 @@ describe("choosing where a new agent runs", () => {
     list = fleet,
     answer: (args: { machineId?: string }) => unknown = onEach,
   ) {
-    await act(async () => root.render(null));
+    await cleanup();
     setWire(undefined);
     host = new FakeHost()
       .target("providers", { config: providers }, { eager: true })
@@ -404,13 +391,7 @@ describe("choosing where a new agent runs", () => {
       )
       .install();
     host.hello();
-    await act(async () =>
-      root.render(
-        <QueryClientProvider client={new QueryClient()}>
-          <AgentEditor />
-        </QueryClientProvider>,
-      ),
-    );
+    await mount(<AgentEditor />);
     await open();
   }
 

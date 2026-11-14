@@ -1,6 +1,5 @@
 import { afterEach, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { useTranslation } from "react-i18next";
 import {
   i18n,
@@ -8,18 +7,14 @@ import {
   readLanguagePreference,
   setLanguagePreference,
 } from "@/lib/i18n";
+import { cleanup, mount as render } from "@/test-render";
 import { LanguageProvider } from "./language-provider";
 import { LanguageSettings } from "./language-settings";
 import { Loading } from "./states";
 import { AgentStatus } from "./workspace/agent-identity";
 
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-const cleanup: (() => void)[] = [];
-
 afterEach(async () => {
-  await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
+  await cleanup();
   rstest.restoreAllMocks();
   setLanguagePreference("system");
   localStorage.removeItem(languageStorageKey);
@@ -38,19 +33,10 @@ function Content() {
 }
 
 async function mount() {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  cleanup.push(() => {
-    root.unmount();
-    container.remove();
-  });
-  await act(async () =>
-    root.render(
-      <LanguageProvider>
-        <Content />
-      </LanguageProvider>,
-    ),
+  const { container } = await render(
+    <LanguageProvider>
+      <Content />
+    </LanguageProvider>,
   );
   return container;
 }

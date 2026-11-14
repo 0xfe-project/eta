@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { Context } from "cordis";
 import { afterEach, describe, expect, it } from "vitest";
-import { PERSONA_ACTIONS, personasPlugin } from "../src/bundled/personas";
+import { personasPlugin } from "../src/bundled/personas";
 import { SessionsService } from "../src/bundled/sessions";
 import { SessionManager } from "../src/manager";
 import { MemorySessionStore } from "../src/memory-store";
@@ -54,7 +54,7 @@ interface Harness {
   home: string;
   project: string;
   load: () => Promise<() => Promise<void>>;
-  cards: () => { id: string; description: string }[];
+  cards: () => { id: string; description: string; custom?: boolean }[];
 }
 
 async function harness(): Promise<Harness> {
@@ -94,8 +94,11 @@ async function harness(): Promise<Harness> {
     cards() {
       const snapshot = wire.snapshot("personas") as StateSnapshot | undefined;
       return (
-        (snapshot?.sections.cards as { id: string; description: string }[]) ??
-        []
+        (snapshot?.sections.cards as {
+          id: string;
+          description: string;
+          custom?: boolean;
+        }[]) ?? []
       );
     },
   };
@@ -110,9 +113,7 @@ describe("the personas target", () => {
         .descriptors()
         .map((descriptor) => descriptor.name)
         .sort(),
-    ).toEqual(
-      [...PERSONA_ACTIONS].map((action) => `personas.${action}`).sort(),
-    );
+    ).toEqual(["personas.reload", "personas.set"]);
     expect(h.wire.registry.eagerTargets()).toContain("personas");
     await unload();
     expect(h.wire.descriptors()).toEqual([]);
@@ -164,6 +165,20 @@ describe("putting a session on a card", () => {
       join(h.home, ".eta", "persona"),
       "Executor",
       "# Executor\nShip the thing.\n",
+    );
+    // Settle the card list first: the directory watcher reloads on its own after the write, and
+    // a push from that landing after the frames are cleared below is not what this test is about.
+    await h.wire.dispatch(
+      {
+        op: "call",
+        target: "personas",
+        action: "reload",
+        args: { cwd: h.project },
+      },
+      { reply: () => undefined } as never,
+    );
+    await until(() =>
+      h.cards().some((entry) => entry.id === "Executor" && entry.custom),
     );
     const created = await h.manager.create({
       cwd: h.project,

@@ -367,9 +367,17 @@ describe("compacting an external runtime's context", () => {
     const { manager, opened } = setup((turn) => turn.say("ok"), {
       manualCompaction: { kind: "unsupported", reason: "no such thing" },
     });
-    const managed = await manager.create({ cwd: "/work", runtime: "claude" });
-    expect((await manager.compactRuntime(managed)).outcome).toBe("unsupported");
-    expect(opened).toHaveLength(0);
+    // A session with a runtime session to resume: without the declaration,
+    // compacting it would resume that session first.
+    const created = await manager.create({ cwd: "/work", runtime: "claude" });
+    await run(created, "before");
+    await manager.close(created.meta.id);
+    const reopened = (await manager.session(created.meta.id))!;
+    const before = opened.length;
+    expect((await manager.compactRuntime(reopened)).outcome).toBe(
+      "unsupported",
+    );
+    expect(opened).toHaveLength(before);
     await manager.closeAll();
   });
 

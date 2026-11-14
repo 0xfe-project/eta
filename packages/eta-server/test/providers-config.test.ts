@@ -10,18 +10,13 @@ import {
   applyProviderHeaders,
   effectiveModel,
   isCustomKind,
-  modelDefaultThinking,
-  modelSupportsVision,
   modelThinkingLevels,
-  providerPreset,
   providerSummary,
   sanitizeProviderHeaders,
 } from "../src/providers/config-types";
 
 describe("kinds", () => {
   it("knows which kinds bring their own endpoint", () => {
-    expect(providerPreset("deepseek")?.baseUrl).toContain("deepseek.com");
-    expect(providerPreset("openai-compatible")).toBeUndefined();
     expect(isCustomKind(undefined)).toBe(true);
     expect(isCustomKind("openai-compatible")).toBe(true);
     expect(isCustomKind("openai-responses")).toBe(true);
@@ -61,34 +56,6 @@ describe("what a model declares", () => {
     ).toEqual(["off", "low", "high"]);
   });
 
-  it("picks a default thinking level that the model actually has", () => {
-    const model = {
-      id: "m",
-      reasoning: true,
-      reasoningEfforts: ["low", "high"] as ("low" | "high")[],
-      thinkingMode: "both" as const,
-    };
-    // A preference that is not offered is ignored rather than sent.
-    expect(modelDefaultThinking({ ...model, defaultThinking: "max" })).toBe(
-      "off",
-    );
-    expect(modelDefaultThinking({ ...model, defaultThinking: "high" })).toBe(
-      "high",
-    );
-    expect(
-      modelDefaultThinking({ ...model, providerDefaultEffort: "low" }),
-    ).toBe("low");
-    // And a model with no off switch cannot be asked for one.
-    expect(
-      modelDefaultThinking({
-        id: "m",
-        reasoning: true,
-        reasoningEfforts: ["low"],
-        thinkingMode: "only",
-      }),
-    ).toBe("off");
-  });
-
   it("lets overrides correct what a catalog said, without replacing the model", () => {
     const model = {
       id: "m",
@@ -100,9 +67,6 @@ describe("what a model declares", () => {
       contextWindow: 200,
       name: "corrected",
     });
-    expect(modelSupportsVision({ input: ["text", "image"] })).toBe(true);
-    expect(modelSupportsVision({ input: ["text"] })).toBe(false);
-    expect(modelSupportsVision({})).toBeUndefined();
   });
 });
 

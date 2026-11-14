@@ -22,7 +22,6 @@
  */
 
 export {
-  PERSONA_ACTIONS,
   personasPlugin,
   type PersonasPluginOptions,
 } from "./bundled/personas";
@@ -44,24 +43,12 @@ export {
   type SessionsService,
 } from "./bundled/sessions";
 export {
-  SETTINGS_ACTIONS,
   settingsPlugin,
   type SettingsPluginOptions,
 } from "./bundled/settings";
-export {
-  CODEX_PROVIDER_ID,
-  codexAuthPath,
-  CodexCredentialStore,
-  CodexLogin,
-  type CodexLoginRunner,
-  type CodexLoginView,
-  LOGIN_TIMEOUT_MS,
-  piCodexLogin,
-} from "./codex-auth";
 
 /* ------------------------------------------------------------------ the floor */
 
-export { codexCatalog, codexRuntimeProvider } from "./codex-provider";
 export {
   FileSessionStore,
   type FileSessionStoreOptions,
@@ -78,7 +65,7 @@ export {
   type SessionManagerOptions,
   type SessionMcpWiring,
 } from "./manager";
-export { MemorySessionStore, type SessionStorageFactory } from "./memory-store";
+export { MemorySessionStore } from "./memory-store";
 export {
   DEFAULT_PROVIDER,
   formatModelId,
@@ -140,10 +127,7 @@ export {
   type EtaProviderConfig,
   isCustomKind,
   type ModelCapabilities,
-  modelDefaultThinking,
-  modelSupportsVision,
   modelThinkingLevels,
-  providerPreset,
   providerSummary,
   sanitizeProviderHeaders,
 } from "./providers/config-types";
@@ -183,7 +167,6 @@ export {
   createEventRing,
   DEFAULT_RING_CAPACITY,
   type EventRing,
-  matchesFilter,
 } from "./ring";
 export type {
   RuntimeCompaction,
@@ -231,7 +214,6 @@ export {
 export type {
   SessionListing,
   SessionMeta,
-  SessionSeed,
   SessionStore,
   StoredSession,
 } from "./store";

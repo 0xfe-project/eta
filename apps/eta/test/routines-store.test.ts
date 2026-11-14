@@ -333,7 +333,9 @@ describe("runs", () => {
     store.finishRun(c.id, { status: "sent", report: "# Weather\n\nrain" });
     store.addFeedback(c.id, "too much about umbrellas");
     tick();
-    store.startRun(id, "user"); // still going: never found
+    // Still going: never found, though its feedback would match.
+    const going = store.startRun(id, "user")!;
+    store.addFeedback(going.id, "rates and umbrellas");
     const elsewhere = store.startRun(other.id, "user")!;
     store.finishRun(elsewhere.id, {
       status: "sent",

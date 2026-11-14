@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -10,11 +9,10 @@ import {
 } from "@tanstack/react-router";
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { setWire } from "@/lib/wire";
 import { SettingsPage } from "@/pages/settings";
 import { buildProductHost } from "@/test-product";
-import { flush } from "@/test-render";
+import { cleanup, flush, mount } from "@/test-render";
 import { BottomNav } from "./app-shell";
 import { validateSettingsSearch } from "./settings-route";
 import { settingsSections } from "./settings-sections";
@@ -23,10 +21,8 @@ import { settingsSections } from "./settings-sections";
 // address opens it directly, and back leaves the way it was entered. The bottom bar is mounted
 // with the page, so the fourth cell's own state is read from the same render.
 
-const disposers: (() => void)[] = [];
-
 afterEach(async () => {
-  await act(async () => disposers.splice(0).forEach((dispose) => dispose()));
+  await cleanup();
   setWire(undefined);
 });
 
@@ -77,21 +73,8 @@ async function open(...history: string[]) {
     ]),
     history: createMemoryHistory({ initialEntries: history }),
   });
-  const container = document.createElement("div");
-  document.body.append(container);
-  const element = createRoot(container);
-  await act(async () => {
-    element.render(
-      <QueryClientProvider client={new QueryClient()}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>,
-    );
-    await router.load();
-  });
-  disposers.push(() => {
-    element.unmount();
-    container.remove();
-  });
+  const { container } = await mount(<RouterProvider router={router} />);
+  await act(async () => router.load());
   await flush();
   return { container, router };
 }
@@ -100,9 +83,12 @@ async function open(...history: string[]) {
 const settingsTab = () =>
   document.querySelector<HTMLAnchorElement>('a[href="/settings"]')!;
 
+/** Settings' own rail: the nav a screen reader calls 设置分类 (the bottom bar is a nav too). */
+const railNav = () => document.querySelector('nav[aria-label="设置分类"]');
+
 /** The rail's entries, in the order they are listed. */
 const rail = () =>
-  [...document.querySelectorAll(".settings-layout nav button")].map(
+  [...(railNav()?.querySelectorAll("button") ?? [])].map(
     (entry) => entry.textContent ?? "",
   );
 
@@ -129,10 +115,11 @@ describe("设置整页", () => {
   it("the fourth cell is the way in, and it is lit while you are there", async () => {
     host();
     const { router } = await open("/");
+    expect(settingsTab().getAttribute("aria-current")).toBeNull();
     await click(settingsTab());
     expect(router.state.location.pathname).toBe("/settings");
     await flush();
-    expect(settingsTab().className).toContain("text-foreground");
+    expect(settingsTab().getAttribute("aria-current")).toBe("page");
   });
 
   it("offers the same rail as the wide window's dialog", async () => {
@@ -160,10 +147,9 @@ describe("设置整页", () => {
     await open("/settings?section=gone");
     expect(rail()).toContain(labelsOf("agents")[0]);
     expect(document.body.textContent).not.toContain("Something went wrong");
-    expect(
-      document.querySelector(".settings-layout nav [aria-current='page']")
-        ?.textContent,
-    ).toBe(labelsOf("agents")[0]);
+    expect(railNav()?.querySelector("[aria-current='page']")?.textContent).toBe(
+      labelsOf("agents")[0],
+    );
   });
 
   it("picking a section puts it in the address", async () => {

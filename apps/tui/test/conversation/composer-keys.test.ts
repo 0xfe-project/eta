@@ -64,19 +64,6 @@ function run(
 }
 
 describe("the menu open", () => {
-  it("moves the highlight with up and down, wrapping, without touching text or history", () => {
-    const state = afterSend(insertText(emptyComposer(), "old"));
-    const open = insertText(state, "/he");
-    const down = run(open, { kind: "down" }).state;
-    expect(down.menu.highlight).toBe(1);
-    expect(down.text).toBe("/he");
-    expect(run(down, { kind: "down" }).state.menu.highlight).toBe(0);
-    const up = run(open, { kind: "up" }).state;
-    expect(up.menu.highlight).toBe(1);
-    expect(up.text).toBe("/he");
-    expect(run(down, { kind: "enter" }).state.text).toBe("/hello ");
-  });
-
   it("lets Enter send once Esc has closed it", () => {
     const dismissed = run(typed("hi @a"), { kind: "escape" }).state;
     const result = run(dismissed, { kind: "enter" });

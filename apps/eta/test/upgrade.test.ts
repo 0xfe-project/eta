@@ -20,7 +20,6 @@ import {
   parseUpstream,
   Releases,
   releaseToken,
-  UPSTREAM_SETTING,
   upstreamLabel,
 } from "@eta/releases";
 import { Database } from "bun:sqlite";
@@ -31,8 +30,6 @@ import {
   loadMigrations,
   openDatabase,
 } from "../src/db";
-import { SettingStore } from "../src/inbox/setting";
-import { loadSecretKey } from "../src/secret";
 import {
   backupDatabase,
   BACKUPS_KEPT,
@@ -43,12 +40,7 @@ import {
   savedUpstream,
 } from "../src/upgrade/database";
 import { askUp, upUrl } from "../src/upgrade/service";
-import {
-  openToken,
-  sealToken,
-  TOKEN_SETTING,
-  tokenHost,
-} from "../src/upgrade/token";
+import { openToken, sealToken, tokenHost } from "../src/upgrade/token";
 import { upgradeHost } from "../src/upgrade/upgrade";
 import { tempDir } from "./support/host";
 
@@ -689,19 +681,43 @@ describe("eta-host upgrade", () => {
   });
 
   describe("working agents", () => {
+    // The host's own tables, as its migrations make them: a renamed column breaks the queries here.
+    const migrations = loadMigrations();
+    const carried = migrations.map((migration) => migration.id);
+
+    beforeEach(async () => {
+      dataDir = join(dir, "migrated");
+      const db = openDatabase(databasePath(dataDir));
+      applyMigrations(db, migrations);
+      db.exec(`
+        INSERT INTO machine (id, kind, name, created_at) VALUES ('m', 'primary', 'here', 0);
+        INSERT INTO project (id, machine_id, path, name, created_at, updated_at)
+          VALUES ('p', 'm', '/p', 'p', 0, 0);
+        INSERT INTO conversation (id, project_id, kind, name, created_at, updated_at)
+          VALUES ('c1', 'p', 'group', 'eta', 0, 0);
+      `);
+      db.close();
+      await writeFile(exe, build("1.0.0", carried), { mode: 0o755 });
+    });
+
+    const message = (id: string, seq: number, status: string): string =>
+      `INSERT INTO message (id, conversation_id, seq, kind, author, status, created_at, updated_at)
+         VALUES ('${id}', 'c1', ${seq}, 'message', 'agent', '${status}', 0, 0);`;
+
     const working = (): void => {
       const db = new Database(databasePath(dataDir));
       db.exec(`
-        INSERT INTO task VALUES ('t1', 45, 'host upgrade');
-        INSERT INTO task_run VALUES ('r1', 't1', 'running');
-        INSERT INTO task_run VALUES ('r2', 't1', 'queued');
-        INSERT INTO task_run VALUES ('r3', 't1', 'completed');
-        INSERT INTO routine VALUES ('o1', 'digest');
-        INSERT INTO routine_run VALUES ('rr1', 'o1', 'running');
-        INSERT INTO conversation VALUES ('c1', 'eta');
-        INSERT INTO message VALUES ('m1', 'c1', 'waiting_for_input');
-        INSERT INTO message VALUES ('m2', 'c1', 'done');
-        INSERT INTO message VALUES ('m3', 'c1', 'failed');
+        INSERT INTO task (number, id, title, created_at, updated_at)
+          VALUES (45, 't1', 'host upgrade', 0, 0);
+        INSERT INTO task_run (id, task_id, status, created_at) VALUES
+          ('r1', 't1', 'running', 0), ('r2', 't1', 'queued', 0), ('r3', 't1', 'completed', 0);
+        INSERT INTO routine (id, name, schedule, timezone, created_at, updated_at)
+          VALUES ('o1', 'digest', '{}', 'UTC', 0, 0);
+        INSERT INTO routine_run (id, routine_id, started_by, status, started_at)
+          VALUES ('rr1', 'o1', 'schedule', 'running', 0);
+        ${message("m1", 1, "waiting_for_input")}
+        ${message("m2", 2, "done")}
+        ${message("m3", 3, "failed")}
       `);
       db.close();
     };
@@ -722,30 +738,27 @@ describe("eta-host upgrade", () => {
 
     it("counts a reply still starting, which a restart fails too", () => {
       const db = new Database(databasePath(dataDir));
-      db.exec(`
-        INSERT INTO conversation VALUES ('c1', 'eta');
-        INSERT INTO message VALUES ('m1', 'c1', 'queued');
-      `);
+      db.exec(message("m1", 1, "queued"));
       db.close();
       expect(busyAgents(dataDir)).toEqual([{ kind: "reply", name: "eta" }]);
     });
 
     it("gives up after --wait, with nothing changed", async () => {
       working();
-      github.publish("1.1.0", { body: build("1.1.0") });
+      github.publish("1.1.0", { body: build("1.1.0", carried) });
       const fake = fakeService(exe, dataDir);
       await expect(
         upgrade({ service: fake.service, waitMs: 20 }),
       ).rejects.toThrow(/still working.*task #45.*--force/);
       expect(said()).toContain("Waiting for what a restart would stop");
       expect(fake.calls).toEqual([]);
-      expect(await readFile(exe, "utf8")).toBe(build("1.0.0"));
+      expect(await readFile(exe, "utf8")).toBe(build("1.0.0", carried));
       expect(leftovers()).toEqual([]);
     });
 
     it("goes on once they are done", async () => {
       working();
-      github.publish("1.1.0", { body: build("1.1.0") });
+      github.publish("1.1.0", { body: build("1.1.0", carried) });
       const fake = fakeService(exe, dataDir);
       setTimeout(() => {
         const db = new Database(databasePath(dataDir));
@@ -762,7 +775,7 @@ describe("eta-host upgrade", () => {
 
     it("--force does not wait", async () => {
       working();
-      github.publish("1.1.0", { body: build("1.1.0") });
+      github.publish("1.1.0", { body: build("1.1.0", carried) });
       const fake = fakeService(exe, dataDir);
       await upgrade({ service: fake.service, force: true });
       expect(fake.calls).toEqual(["stop", "start"]);
@@ -771,9 +784,9 @@ describe("eta-host upgrade", () => {
 
     it("does not wait when there is no restart", async () => {
       working();
-      github.publish("1.1.0", { body: build("1.1.0") });
+      github.publish("1.1.0", { body: build("1.1.0", carried) });
       await upgrade();
-      expect(await readFile(exe, "utf8")).toBe(build("1.1.0"));
+      expect(await readFile(exe, "utf8")).toBe(build("1.1.0", carried));
     });
   });
 
@@ -1040,17 +1053,6 @@ describe("the saved upstream, from outside the host", () => {
     expect(savedUpstream(dir)).toBeUndefined();
   });
 
-  it("is what the host saved", async () => {
-    const dir = await tempDir();
-    const db = openDatabase(databasePath(dir));
-    applyMigrations(db, loadMigrations());
-    new SettingStore(db).set(UPSTREAM_SETTING, "someone/fork");
-    expect(savedUpstream(dir)).toBe("someone/fork");
-    new SettingStore(db).delete(UPSTREAM_SETTING);
-    expect(savedUpstream(dir)).toBeUndefined();
-    db.close();
-  });
-
   it("stops an upgrade rather than guess past a damaged database", async () => {
     const dir = await tempDir();
     await writeFile(join(dir, "eta.sqlite"), "this is not a database at all");
@@ -1157,18 +1159,13 @@ describe("which token", () => {
       expect(JSON.stringify(stored)).not.toContain('saved"');
     });
 
-    it("is read back outside the host", async () => {
+    it("is nothing outside the host when none is saved, and no key is made to find that out", async () => {
       const dir = await tempDir();
       expect(savedToken(dir)).toBeUndefined();
       const db = openDatabase(databasePath(dir));
       applyMigrations(db, loadMigrations());
       expect(savedToken(dir)).toBeUndefined();
       expect(existsSync(join(dir, "secret.key"))).toBe(false);
-      new SettingStore(db).set(
-        TOKEN_SETTING,
-        sealToken(loadSecretKey(dir), saved),
-      );
-      expect(savedToken(dir)).toEqual(saved);
       db.close();
     });
 

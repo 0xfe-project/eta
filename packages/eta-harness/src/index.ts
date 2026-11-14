@@ -41,7 +41,6 @@ export {
   findCutPoint,
   findTurnStartIndex,
   fitCompactionSettings,
-  getLastAssistantUsage,
   shouldCompact,
 } from "./estimation";
 export {
@@ -84,7 +83,6 @@ export {
   renderMemory,
   renderMemoryBlock,
   scanMemory,
-  scanMemoryPaths,
   type TranscriptLike,
 } from "./memory";
 export { MetricsService } from "./metrics";
@@ -117,7 +115,6 @@ export {
   drainReminderForContext,
   evaluateToolResult,
   onTurnStart,
-  resetCadenceState,
 } from "./reminder/cadence";
 export {
   loadSkills,
@@ -131,12 +128,10 @@ export {
   base64ByteLength,
   decodeBase64,
   detectSupportedImageMimeType,
-  encodeBase64,
   readImageSize,
 } from "./tools/image";
 export {
   createStepTools,
-  STEP_TOOL_NAMES,
   type TaskStatus,
 } from "./tools/tasks";
 export {

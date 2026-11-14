@@ -5,7 +5,6 @@
 
 export {
   type AssistantStreamObserver,
-  consumeAssistantStream,
   consumeInterruptibleStream,
   type InterruptibleStreamObserver,
   STOP_STREAM,
@@ -33,12 +32,6 @@ export type {
   RunDelegateContext,
 } from "./kernel/delegate";
 export {
-  AbortRequested,
-  createGate,
-  type Gate,
-  type GateControl,
-} from "./kernel/effect-gate";
-export {
   DEFAULT_MAX_INTERRUPTS,
   type GenerateOptions,
   generateWithRetry,
@@ -53,7 +46,6 @@ export {
   GoalService,
   type GoalState,
   type GoalStatus,
-  lastMessageShowsIntent,
   MAX_CONTINUATIONS,
 } from "./kernel/goal";
 export {
@@ -75,7 +67,6 @@ export {
 export { PersonaService } from "./kernel/persona";
 export {
   type KernelModels,
-  piAiModels,
   THINKING_LEVELS,
   thinkingLevelsFor,
 } from "./kernel/providers";
@@ -135,14 +126,10 @@ export {
   type ContextPartStats,
   type Emit,
   type EntryEvents,
-  ETA_EVENT_CATEGORIES,
-  type EtaEventCategory,
   type GoalEvents,
   type GoalStatusName,
   type InjectEvents,
-  KERNEL_EVENT_NAMES,
   kernelEmit,
-  type KernelEventName,
   type KernelEvents,
   kernelOn,
   type MessageEvents,

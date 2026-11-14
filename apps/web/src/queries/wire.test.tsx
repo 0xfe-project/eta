@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { setWire, WireError } from "@/lib/wire";
+import { cleanup, mount } from "@/test-render";
 import { FakeHost } from "@/test-wire";
 import {
   useConnectionLost,
@@ -10,10 +9,6 @@ import {
   useWireMutation,
   wireErrorMessage,
 } from "./wire";
-
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
 
 function Reader({ target }: { target: string }) {
   const state = useTarget(target);
@@ -55,29 +50,12 @@ function Save({ onDone }: { onDone: (outcome: string) => void }) {
   );
 }
 
-const cleanup: (() => void)[] = [];
-
 async function render(node: React.ReactNode) {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  const client = new QueryClient();
-  const show = (next: React.ReactNode) =>
-    act(async () =>
-      root.render(
-        <QueryClientProvider client={client}>{next}</QueryClientProvider>,
-      ),
-    );
-  await show(node);
-  cleanup.push(() => {
-    root.unmount();
-    container.remove();
-  });
-  return show;
+  return (await mount(node)).show;
 }
 
 afterEach(async () => {
-  await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
+  await cleanup();
   setWire(undefined);
 });
 

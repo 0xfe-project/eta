@@ -35,7 +35,7 @@ function parsed(field: PluginFieldView, draft: FieldDraft): PluginValue | null {
 }
 
 /** What is wrong with what a control holds, by the same rules the host applies. */
-export function issueOf(
+function issueOf(
   field: PluginFieldView,
   draft: FieldDraft,
 ): FieldIssue | undefined {

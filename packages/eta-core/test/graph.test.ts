@@ -1,4 +1,9 @@
-import type { Entry, MessageEntry, NewEntry } from "@eta/core/session";
+import type {
+  Entry,
+  GraphNode,
+  MessageEntry,
+  NewEntry,
+} from "@eta/core/session";
 import { EntryGraph, spliceMergedChain } from "@eta/core/session";
 import { describe, expect, it } from "vitest";
 
@@ -36,14 +41,6 @@ describe("entry graph", () => {
     expect(g.pathOldestFirst().map((e) => e.id)).toEqual([a.id]);
     expect(() => g.setTip("ghost")).toThrow("unknown entry");
   });
-
-  it("isAncestorOf walks the single-parent chain", () => {
-    const g = new EntryGraph();
-    const a = g.append(msg("a"));
-    const b = g.append(msg("b"));
-    expect(g.isAncestorOf(a.id, b.id)).toBe(true);
-    expect(g.isAncestorOf(b.id, a.id)).toBe(false);
-  });
 });
 
 describe("spliceMergedChain", () => {
@@ -69,57 +66,16 @@ describe("spliceMergedChain", () => {
   });
 
   it("a merge whose merged parent is already on the path adds nothing", () => {
-    const a = { id: "a", parentId: null, type: "message" };
-    const b = { id: "b", parentId: "a", type: "merge", mergedParentId: "a" };
-    const path = [b, a];
-    spliceMergedChain(path, () => undefined);
-    expect(path.map((e) => e.id)).toEqual(["b", "a"]);
-  });
-});
-
-describe("graph with a merge", () => {
-  it("branch path reads merged history identically to the old backends", () => {
-    const g = new EntryGraph();
-    const shared = g.append(msg("shared history"));
-    // Fork the graph manually: a side branch off `shared`.
-    const side = new EntryGraph();
-    // (Simulate two branches in one graph by explicit parents.)
-    void side;
-    const sideEntry = g.append({ ...msg("side work"), parentId: shared.id });
-    const mainWork = g.append({ ...msg("main work"), parentId: shared.id });
-    const merge = g.append({
+    const a: GraphNode = { id: "a", parentId: null, type: "message" };
+    const b: GraphNode = {
+      id: "b",
+      parentId: "a",
       type: "merge",
-      parentId: mainWork.id,
-      mergedParentId: sideEntry.id,
-      summary: "merge side into main",
-    } as NewEntry<Entry>);
-    expect(merge.type).toBe("merge");
-    expect(g.pathOldestFirst().map((e) => e.id)).toEqual([
-      shared.id,
-      mainWork.id,
-      sideEntry.id,
-      merge.id,
-    ]);
-    const texts = g
-      .pathOldestFirst()
-      .filter((e) => e.type === "message")
-      .flatMap((e) => {
-        const message = (e as MessageEntry).message;
-        if (
-          message.role !== "user" &&
-          message.role !== "assistant" &&
-          message.role !== "toolResult"
-        )
-          return [];
-        const content = message.content;
-        return Array.isArray(content)
-          ? content
-              .filter(
-                (c): c is { type: "text"; text: string } => c.type === "text",
-              )
-              .map((c) => c.text)
-          : [];
-      });
-    expect(texts).toEqual(["shared history", "main work", "side work"]);
+      mergedParentId: "a",
+    };
+    const all = new Map([a, b].map((e) => [e.id, e]));
+    const path = [b, a];
+    spliceMergedChain(path, (id) => all.get(id));
+    expect(path.map((e) => e.id)).toEqual(["b", "a"]);
   });
 });

@@ -198,32 +198,3 @@ export interface StorageService {
   flush: () => Promise<void>;
   close: () => Promise<void>;
 }
-
-/** The method surface, asserted in tests so the seam cannot drift silently. */
-export const STORAGE_METHODS = [
-  "commit",
-  "getEntries",
-  "getValue",
-  "listValues",
-  "scanBranch",
-  "scanEntries",
-  "scanUsage",
-  "getStats",
-  "compactJournal",
-  "repairTornTail",
-  "flush",
-  "close",
-] as const satisfies readonly (keyof StorageService)[];
-
-/** Compile-time completeness: every StorageService method is listed above. */
-type _StorageMethodsComplete =
-  Exclude<keyof StorageService, (typeof STORAGE_METHODS)[number]> extends never
-    ? true
-    : {
-        missing: Exclude<
-          keyof StorageService,
-          (typeof STORAGE_METHODS)[number]
-        >;
-      };
-const _storageMethodsComplete: _StorageMethodsComplete = true;
-void _storageMethodsComplete;

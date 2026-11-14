@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -8,16 +8,12 @@ import {
 } from "@tanstack/react-router";
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { setWire } from "@/lib/wire";
 import { interactionView, surfaceHost } from "@/test-inbox";
 import { agentView, conversationView } from "@/test-product";
+import { cleanup, flush, mount } from "@/test-render";
 import { Inbox } from "./inbox";
 import { useWorkspaceStore } from "./workspace-store";
-
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
 
 /** Pending questions, one per agent, each in its own group. */
 async function render(waits: { id: string; agent: string }[]) {
@@ -55,19 +51,13 @@ async function render(waits: { id: string; agent: string }[]) {
     }),
     history: createMemoryHistory(),
   });
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  await act(async () => {
-    root.render(
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>,
-    );
-    await router.load();
-  });
-  await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
-  return { container, host };
+  const { container } = await mount(
+    <RouterProvider router={router} />,
+    queryClient,
+  );
+  await act(async () => router.load());
+  await flush(10);
+  return { container, host, router };
 }
 
 const button = (container: HTMLElement, text: string) =>
@@ -76,9 +66,10 @@ const button = (container: HTMLElement, text: string) =>
   )!;
 
 describe("Inbox", () => {
-  afterEach(() => {
-    document.body.innerHTML = "";
+  afterEach(async () => {
+    await cleanup();
     setWire(undefined);
+    useWorkspaceStore.setState({ mobilePanel: "chat" });
   });
 
   it("lists every agent's pending questions", async () => {
@@ -95,7 +86,7 @@ describe("Inbox", () => {
   it("answers a question on the inbox", async () => {
     const { container, host } = await render([{ id: "i1", agent: "a1" }]);
     await act(async () => button(container, "拒绝").click());
-    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    await flush(10);
     expect(host.calls).toEqual([
       {
         target: "inbox",
@@ -111,7 +102,7 @@ describe("Inbox", () => {
   it("declines a question with 放弃", async () => {
     const { container, host } = await render([{ id: "i1", agent: "a1" }]);
     await act(async () => button(container, "放弃").click());
-    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    await flush(10);
     expect(host.calls[0]?.args).toEqual({
       id: "i1",
       response: { kind: "none" },
@@ -119,10 +110,12 @@ describe("Inbox", () => {
   });
 
   it("opens the agent's conversation", async () => {
-    const { container } = await render([{ id: "i2", agent: "a2" }]);
+    const { container, router } = await render([{ id: "i2", agent: "a2" }]);
+    // On a phone the panel is in front; opening a conversation has to bring the chat back.
+    useWorkspaceStore.getState().setMobilePanel("workspace");
     await act(async () => button(container, "运维 · 群聊").click());
-    const state = useWorkspaceStore.getState();
-    expect(window.location.pathname).toBe("/");
-    expect(state.mobilePanel).toBe("chat");
+    await flush();
+    expect(router.state.location.search).toMatchObject({ group: "g-a2" });
+    expect(useWorkspaceStore.getState().mobilePanel).toBe("chat");
   });
 });

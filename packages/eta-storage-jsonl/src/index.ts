@@ -284,18 +284,6 @@ export class JsonlStorage implements StorageService {
     this.closed = true;
   }
 
-  /** Bytes currently held on disk. */
-  bytes(): number {
-    return this.journalBytes;
-  }
-
-  /** Open the same journal again, as a fresh process would. */
-  async reopen(
-    options: JsonlStorageOptions = this.options,
-  ): Promise<JsonlStorage> {
-    return JsonlStorage.open(this.path, options);
-  }
-
   private async writeAtomic(content: string): Promise<void> {
     await this.closeHandle();
     const tempPath = `${this.path}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;

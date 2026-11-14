@@ -182,11 +182,8 @@ describe("a group Captain proposes", () => {
       const { container } = await show(proposed(), [operation({ status })]);
       const mark = container.querySelector("[data-tone]");
       expect(mark?.getAttribute("data-tone")).toBe(tone);
-      expect(mark?.querySelector('[aria-hidden="true"]')?.className).toContain(
-        "size-1.5",
-      );
-      expect(container.innerHTML).not.toContain("state-warning");
-      expect(container.innerHTML).not.toContain("task-fold-waiting");
+      // One mark on the card, and nothing else carries a tone.
+      expect(container.querySelectorAll("[data-tone]")).toHaveLength(1);
       await cleanup();
       setWire(undefined);
     }
@@ -202,8 +199,6 @@ describe("a group Captain proposes", () => {
 describe("a group Captain made", () => {
   it("opens with the line that says so", async () => {
     const { container } = await show(row({ event: "captain_created" }));
-    expect(container.querySelector(".system-message")?.textContent).toBe(
-      "由 Captain 创建",
-    );
+    expect(container.textContent).toBe("由 Captain 创建");
   });
 });

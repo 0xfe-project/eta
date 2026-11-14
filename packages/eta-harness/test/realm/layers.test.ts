@@ -183,7 +183,7 @@ describe("envLayers", () => {
   });
 
   describe("concurrent writes and locking", () => {
-    it("two concurrent define to project layer, both succeed without overwriting", async () => {
+    it("two writers on one file both keep their define: each re-reads before it writes", async () => {
       // Initialize project layer with empty env.js
       writeFileSync(
         join(projectDir, "env.js"),
@@ -224,7 +224,7 @@ describe("envLayers", () => {
       ]);
     });
 
-    it("two concurrent define with same name, second one fails", async () => {
+    it("two writers defining one name: the second is refused", async () => {
       writeFileSync(
         join(projectDir, "env.js"),
         `// @capabilities []\n// eta:generated\n\n// eta:by hand\n`,
@@ -320,7 +320,7 @@ describe("envLayers", () => {
       expect(envFileB.capabilities).toHaveLength(2);
     });
 
-    it("write uses atomic rename to prevent partial reads", async () => {
+    it("a multi-line ability round-trips through the file", async () => {
       writeFileSync(
         join(projectDir, "env.js"),
         `// @capabilities []\n// eta:generated\n\n// eta:by hand\n`,

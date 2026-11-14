@@ -31,6 +31,7 @@ describe("requestState", () => {
       },
     });
     const fake = fakeModels([]);
+    fake.getModel = (provider, id) => ({ provider, id }) as never;
     kernel.tools.register({
       name: "read",
       description: "read a file",
@@ -42,7 +43,7 @@ describe("requestState", () => {
     });
 
     const before = await runner.requestState();
-    expect(before.model).toBeDefined();
+    expect(before.model?.id).toBe("m");
     expect(before.thinkingLevel).toBe("low");
     expect(before.tools.map((tool) => tool.name)).toEqual(["read"]);
     expect(before.missingToolNames).toEqual([]);
@@ -57,6 +58,7 @@ describe("requestState", () => {
     kernel.tools.register({ name: "bash", execute: () => "ok" });
     kernel.config.update({ activeToolNames: ["bash", "ghost"] });
     const after = await runner.requestState();
+    expect(after.model?.id).toBe("other");
     expect(after.thinkingLevel).toBe("high");
     expect(after.tools.map((tool) => tool.name)).toEqual(["bash"]);
     expect(after.missingToolNames).toEqual(["ghost"]);
@@ -89,6 +91,8 @@ describe("requestState", () => {
       }),
       assistantMessage({ content: [{ type: "text", text: "done" }] }),
     ]);
+    // A model per id, so the two reads can tell the models apart.
+    fake.getModel = (provider, id) => ({ provider, id }) as never;
     const runner = new Runner(kernel, { models: fake });
     kernel.tools.register({
       name: "peek",
@@ -106,7 +110,7 @@ describe("requestState", () => {
     });
     kernel.inject(userMsg("go"));
     await runner.run();
-    expect(seen).toHaveLength(2);
+    expect(seen).toEqual(["first", "second"]);
     void kernel.dispose();
   });
 });

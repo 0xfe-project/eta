@@ -17,11 +17,7 @@ import {
   DEFAULT_IMAGE_LIMITS,
   imageLimitsFor,
 } from "../src/image-limits";
-import {
-  base64ByteLength,
-  encodeBase64,
-  readImageSize,
-} from "../src/tools/image";
+import { base64ByteLength, readImageSize } from "../src/tools/image";
 
 /** A PNG header of the given size: signature, IHDR, nothing to decode. */
 function png(width: number, height: number): Uint8Array {
@@ -125,7 +121,7 @@ describe("checkImage", () => {
 
 describe("checkBase64Image", () => {
   it("reaches the same verdict from the history's base64", () => {
-    const data = encodeBase64(png(1280, 11024));
+    const data = Buffer.from(png(1280, 11024)).toString("base64");
     expect(
       checkBase64Image(data, "image/png", DEFAULT_IMAGE_LIMITS),
     ).toMatchObject({
@@ -134,7 +130,7 @@ describe("checkBase64Image", () => {
     expect(base64ByteLength(data)).toBe(png(1280, 11024).byteLength);
     expect(
       checkBase64Image(
-        encodeBase64(png(100, 100)),
+        Buffer.from(png(100, 100)).toString("base64"),
         "image/png",
         DEFAULT_IMAGE_LIMITS,
       ),

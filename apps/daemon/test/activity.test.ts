@@ -1,6 +1,6 @@
 import type { AgentMessage } from "@eta/core";
 import { describe, expect, it } from "vitest";
-import { ActivityRecorder, shortInput } from "../src/activity";
+import { ActivityRecorder } from "../src/activity";
 
 const asked = (id: string, name: string, args: unknown): AgentMessage =>
   ({
@@ -19,19 +19,6 @@ const answered = (
     isError: false,
     ...extra,
   }) as never;
-
-describe("shortInput", () => {
-  it("cuts long strings and flattens nested values", () => {
-    const kept = shortInput({
-      command: "x".repeat(1000),
-      n: 3,
-      nested: { a: "b" },
-    }) as Record<string, unknown>;
-    expect((kept.command as string).length).toBe(401);
-    expect(kept.n).toBe(3);
-    expect(kept.nested).toBe('{"a":"b"}');
-  });
-});
 
 describe("activityRecorder", () => {
   it("pairs a call with its result and keeps the details", () => {
@@ -100,5 +87,21 @@ describe("activityRecorder", () => {
       { type: "tool", id: "c2" },
     ]);
     expect(steps[4]).toEqual({ type: "text", text: `${"x".repeat(8000)}…` });
+  });
+
+  it("keeps a call's arguments short: long strings cut, nested values flattened", () => {
+    const recorder = new ActivityRecorder();
+    recorder.see(
+      asked("c1", "bash", {
+        command: "x".repeat(1000),
+        n: 3,
+        nested: { a: "b" },
+      }),
+    );
+    expect(recorder.list()[0]?.input).toEqual({
+      command: `${"x".repeat(400)}…`,
+      n: 3,
+      nested: '{"a":"b"}',
+    });
   });
 });

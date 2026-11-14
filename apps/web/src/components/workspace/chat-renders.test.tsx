@@ -3,7 +3,6 @@ import type {
   InteractionView,
   MessageView,
 } from "@eta/client-contracts";
-import { readFileSync } from "node:fs";
 import {
   afterEach,
   beforeEach,
@@ -121,6 +120,17 @@ const push = async (rows: MessageView[], members = summary.participants) =>
       conversationSections({ ...summary, participants: members }, rows),
     ),
   );
+/** A message's row in the timeline, by its anchor (what the rail jumps to). */
+const rowOf = (c: ParentNode, message: MessageView) =>
+  c.querySelector<HTMLElement>(`#msg-${message.id}`);
+/** The finished process, folded to one line: "思考过程 … N 步". */
+const processFold = (c: ParentNode) =>
+  [...c.querySelectorAll("details")].find((details) =>
+    /思考过程.*\d 步/.test(
+      details.querySelector(":scope > summary")?.textContent ?? "",
+    ),
+  ) ?? null;
+
 const rendered = async (action: () => Promise<void>) => {
   renders.length = 0;
   await action();
@@ -286,16 +296,21 @@ describe("what the timeline says besides words", () => {
     ];
     const { container } = await start();
     await flush();
-    const review = container.querySelector(".captain-review");
+    const review = container.querySelector(
+      'section[aria-label="Captain 巡检"]',
+    );
     expect(review).not.toBeNull();
     expect(review?.textContent).toContain("机器离线");
     expect(review?.textContent).toContain("Inbox 待处理");
     expect(review?.textContent).toContain("build-box");
     expect(review?.textContent).toContain("任务 #7");
     expect(review?.textContent).not.toContain("The platform Supervisor queued");
-    expect(container.querySelectorAll(".captain-review-details")).toHaveLength(
-      3,
-    );
+    // One card per observation, each with its technical details folded.
+    const cards = [...review!.querySelectorAll("article")];
+    expect(cards).toHaveLength(3);
+    expect(
+      cards.every((card) => card.querySelector("details")?.open === false),
+    ).toBe(true);
     // Severity is a square beside each label: error for what failed, warning for what needs a
     // person, grey for work that settled. The card itself is not coloured.
     expect(
@@ -304,7 +319,6 @@ describe("what the timeline says besides words", () => {
       ),
     ).toEqual(["error", "warning", "neutral"]);
     expect(review?.textContent).toContain("已落定");
-    expect(review?.querySelector("header")?.className).not.toContain("state-");
   });
 
   it("folds an unparseable Captain review instead of exposing its prompt", async () => {
@@ -321,10 +335,11 @@ describe("what the timeline says besides words", () => {
     ];
     const { container } = await start();
     await flush();
-    const empty = container.querySelector(".captain-review-empty")!;
-    expect(empty.querySelector(":scope > p")?.textContent).toContain(
-      "这条巡检没能解析出条目",
-    );
+    const empty = container.querySelector(
+      'section[aria-label="Captain 巡检"]',
+    )!;
+    expect(empty.querySelector("article")).toBeNull();
+    expect(empty.textContent).toContain("这条巡检没能解析出条目");
     expect(empty.querySelector("details")?.open).toBe(false);
     expect(empty.querySelector("pre")?.textContent).toContain(
       "The platform Supervisor queued",
@@ -508,7 +523,7 @@ describe("a reply that is writing", () => {
     // A group folds the process once the answer is written, so the cards of what the reply produced
     // cannot live in it: they are drawn beside the answer, in the turn's own card layer, in the
     // order they were published and each saying which version it opens.
-    const fold = container.querySelector(".process-fold")!;
+    const fold = processFold(container)!;
     const cards = [...container.querySelectorAll('[data-testid="ref"]')];
     expect(cards.map((c) => c.textContent)).toEqual([
       "artifact:报告 #2",
@@ -517,23 +532,12 @@ describe("a reply that is writing", () => {
     for (const card of cards) {
       // In a chat a card stands among text, with no list to rule it: it draws its own line.
       expect(card.getAttribute("data-variant")).toBe("framed");
-      const layer = card.closest(".turn-tasks") as HTMLElement | null;
-      expect(layer).not.toBeNull();
-      expect(card.closest(".process-fold")).toBeNull();
+      expect(rowOf(container, reply)?.contains(card)).toBe(true);
+      expect(fold.contains(card)).toBe(false);
     }
-    // The column sits flush with the answer: no hairline, and no indent that only held one.
-    const styles = readFileSync(
-      new URL("../../styles.css", import.meta.url),
-      "utf8",
-    );
-    const rule = styles.match(/\.turn-tasks \{[^}]*\}/)?.[0] ?? "";
-    expect(rule).not.toMatch(/border-left/);
-    expect(rule).not.toMatch(/margin-left/);
-    expect(rule).not.toMatch(/padding-left/);
-    expect(styles).not.toContain('.turn-tasks[data-only-email-cards="true"]');
     // After the answer it belongs to, not before it.
-    const answer = container.querySelector(
-      ".message.assistant .message-content",
+    const answer = [...rowOf(container, reply)!.querySelectorAll("p")].find(
+      (p) => p.textContent === "发布好了",
     )!;
     expect(
       answer.compareDocumentPosition(cards[0]!) &
@@ -621,13 +625,13 @@ describe("a reply that is writing", () => {
     // Its last text is written and no call followed it, so the box has folded while the row still
     // reads as working.
     await flush(1600);
-    const fold = container.querySelector(".process-fold")!;
+    const fold = processFold(container)!;
     expect(fold.textContent).toContain("publish_artifact");
     expect(fold.querySelectorAll('[data-testid="ref"]')).toHaveLength(0);
     const card = container.querySelector('[data-testid="ref"]')!;
     expect(card.textContent).toBe("artifact:报告 #2");
     expect(card.getAttribute("data-variant")).toBe("framed");
-    expect(card.closest(".turn-tasks")).not.toBeNull();
+    expect(rowOf(container, reply)?.contains(card)).toBe(true);
 
     // The row settling, or the page reloading, does not move it or change its version: the same
     // cards, in the same layer, from the run's blocks or from the row that kept them.
@@ -643,11 +647,9 @@ describe("a reply that is writing", () => {
     ]);
     const settled = container.querySelector('[data-testid="ref"]')!;
     expect(settled.textContent).toBe("artifact:报告 #2");
-    expect(settled.closest(".turn-tasks")).not.toBeNull();
+    expect(rowOf(container, reply)?.contains(settled)).toBe(true);
     expect(
-      container
-        .querySelector(".process-fold")!
-        .querySelectorAll('[data-testid="ref"]'),
+      processFold(container)!.querySelectorAll('[data-testid="ref"]'),
     ).toHaveLength(0);
   });
 
@@ -746,42 +748,43 @@ describe("a reply that is writing", () => {
     ]);
     const settled = container.querySelector('[data-testid="ref"]')!;
     expect(settled.textContent).toBe("artifact:报告 #2");
-    expect(settled.closest(".turn-tasks")).not.toBeNull();
+    expect(rowOf(container, reply)?.contains(settled)).toBe(true);
+    expect(settled.closest("details")).toBeNull();
   });
 
   // A direct conversation folds its process the same way: the card is in the same layer there.
   it("draws a publish's card in that same layer in a direct conversation", async () => {
     kind = "direct";
     const user = row({ text: "发布一个页面" });
-    history = [
-      user,
-      row({
-        author: "agent",
-        agentId: AGENT,
-        replyToId: user.id,
-        status: "done",
-        text: "发布好了",
-        data: {
-          activity: [
-            {
-              id: "t2",
-              name: "publish_artifact",
-              input: { title: "报告" },
-              status: "completed",
-              details: { artifactId: "art-1", title: "报告", version: 2 },
-            },
-          ],
-        },
-      }),
-    ];
+    const reply = row({
+      author: "agent",
+      agentId: AGENT,
+      replyToId: user.id,
+      status: "done",
+      text: "发布好了",
+      data: {
+        activity: [
+          {
+            id: "t2",
+            name: "publish_artifact",
+            input: { title: "报告" },
+            status: "completed",
+            details: { artifactId: "art-1", title: "报告", version: 2 },
+          },
+        ],
+      },
+    });
+    history = [user, reply];
     const { container } = await start();
     await flush();
-    expect(container.querySelector(".process-fold")).not.toBeNull();
+    const fold = processFold(container);
+    expect(fold).not.toBeNull();
     const card = container.querySelector('[data-testid="ref"]')!;
     expect(card.textContent).toBe("artifact:报告 #2");
-    expect(card.closest(".turn-tasks")).not.toBeNull();
+    expect(rowOf(container, reply)?.contains(card)).toBe(true);
     // Not under the tool line it came from, which stays where the process is drawn.
-    expect(card.closest(".tool-step")).toBeNull();
+    expect(fold!.contains(card)).toBe(false);
+    expect(card.closest("details")).toBeNull();
     expect(container.textContent).toContain("publish_artifact");
   });
 
@@ -908,7 +911,7 @@ describe("a reply that is writing", () => {
       },
     );
     await flush();
-    const card = container.querySelector(".ask-block")!;
+    const card = container.querySelector('section[aria-label="确认请求"]')!;
     expect(card.textContent).toContain("删掉这个分支？");
     await click(
       [...card.querySelectorAll("button")].find((b) => b.textContent === "删"),
