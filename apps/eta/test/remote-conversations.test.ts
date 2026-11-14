@@ -19,7 +19,7 @@ import { join } from "node:path";
 import { DaemonLink, DaemonNode } from "@eta/daemon";
 import { describe, expect, it } from "vitest";
 import { connect, until } from "./support/client";
-import { machineView } from "./support/daemon";
+import { dropLink, machineView } from "./support/daemon";
 import { testHost } from "./support/host";
 import { call, gate, HANG, say, scriptedModels } from "./support/models";
 import { remoteWorld, sessionOf } from "./support/remote";
@@ -476,13 +476,7 @@ describe("watching and driving a remote session from the browser", () => {
     // Warm, and what the daemon sent is already on the browser: nothing is still owed to it.
     await until(() => shown().includes("answer to"));
 
-    r.daemon.link.drop();
-    await until(
-      () => machineView(r.client, r.daemon.machineId)?.status === "offline",
-    );
-    await until(
-      () => machineView(r.client, r.daemon.machineId)?.status === "online",
-    );
+    await dropLink(r.host, r.client, r.daemon);
     // Nothing but the link coming back asks for it: the browser subscribed once, before the drop.
     await until(
       () =>
@@ -930,13 +924,7 @@ describe("the global session list and the mirror", () => {
     await until(() => runEnds() === 1);
 
     // The link drops and returns: the mirror warms again and is replayed the whole ring.
-    r.daemon.link.drop();
-    await until(
-      () => machineView(r.client, r.daemon.machineId)?.status === "offline",
-    );
-    await until(
-      () => machineView(r.client, r.daemon.machineId)?.status === "online",
-    );
+    await dropLink(r.host, r.client, r.daemon);
     const second = await r.send(group.id, "two");
     await r.settled(group.id, second.replies[0]!.id);
     await until(() => runEnds() === 2);
