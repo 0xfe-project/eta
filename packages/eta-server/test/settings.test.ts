@@ -36,14 +36,12 @@ describe("the settings file", () => {
     await store.save({
       cwd: "/work/eta",
       persona: "Executor",
-      model: "fake:fake-model",
       thinkingLevel: "high",
       keepRecentTokens: 12_000,
     });
     expect(await store.read()).toEqual({
       cwd: "/work/eta",
       persona: "Executor",
-      model: "fake:fake-model",
       thinkingLevel: "high",
       keepRecentTokens: 12_000,
     });
@@ -59,19 +57,24 @@ describe("the settings file", () => {
     const store = new SettingsStore({ path });
     await store.save({
       cwd: "/work/eta",
-      model: "fake:fake-model",
       thinkingLevel: "high",
     });
     // A patch is a patch: what it does not mention stays.
     const merged = await store.save({ persona: "Executor" });
     expect(merged).toMatchObject({
       cwd: "/work/eta",
-      model: "fake:fake-model",
       thinkingLevel: "high",
       persona: "Executor",
     });
-    // A key this file does not own is not written.
-    await store.save({ providers: [{ id: "sneaky" }], theme: "dark" });
+    // A key this file does not own is not written. Nor is a model: there is no default model.
+    await store.save({
+      providers: [{ id: "sneaky" }],
+      theme: "dark",
+      model: "fake:fake-model",
+    });
+    expect(JSON.parse(await readFile(path, "utf8"))).not.toHaveProperty(
+      "model",
+    );
     expect(JSON.parse(await readFile(path, "utf8"))).not.toHaveProperty(
       "providers",
     );
@@ -141,12 +144,11 @@ describe("what a new session inherits", () => {
       settings: async () => ({
         cwd: "/work/eta",
         persona: "Executor",
-        model: "fake:fake-model",
         thinkingLevel: "high",
         keepRecentTokens: 9_000,
       }),
     });
-    const created = await sessions.create({});
+    const created = await sessions.create({ model: "fake:fake-model" });
     expect(created.meta).toMatchObject({
       cwd: "/work/eta",
       persona: "Executor",

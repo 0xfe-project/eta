@@ -1,80 +1,17 @@
-import type { Model } from "@/queries/providers";
 import type { Source } from "@/queries/sources";
 import { BUILTIN_PROVIDER_PRESETS } from "@eta/client-contracts";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { useId, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 import { LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { logoOf, useSourceLogos } from "@/queries/logos";
-import {
-  providerErrorMessage,
-  useModels,
-  useSetDefaultModel,
-} from "@/queries/providers";
 import { useSources } from "@/queries/sources";
 import { AddSourceDialog } from "./add-source-dialog";
-import { Select, SelectOption } from "./select-field";
 import { SourceDetail } from "./source-detail";
 import { QuotaMeter, SourceLogo, StatusLabel } from "./source-parts";
 import { viaText } from "./source-text";
-
-/**
- * The model new agents start on, chosen from every model a working source offers. A source that
- * needs a key or a sign-in offers none until it has one.
- */
-function DefaultModel({ sources }: { sources: readonly Source[] }) {
-  const { t: translateText } = useTranslation(["providers"] as const);
-  const labelId = useId();
-  const { data: models } = useModels();
-  const setDefault = useSetDefaultModel();
-  const working = new Set(
-    sources.flatMap((source) =>
-      source.type === "provider" && source.status === "ok"
-        ? [source.provider.id]
-        : [],
-    ),
-  );
-  const current = models?.find((model) => model.default);
-  const offered = (models ?? []).filter(
-    (model: Model) =>
-      model === current ||
-      (model.available &&
-        (model.provider === "llm" || working.has(model.provider))),
-  );
-  return (
-    <div className="flex min-w-0 items-center gap-2.5 bg-surface px-3 py-2">
-      <span id={labelId} className="shrink-0 text-xs text-muted-foreground">
-        {translateText("defaultModel.label")}
-      </span>
-      {offered.length === 0 ? (
-        <span className="text-xs text-faint">
-          {translateText("defaultModel.none")}
-        </span>
-      ) : (
-        <Select
-          aria-labelledby={labelId}
-          className="h-7 min-w-0 flex-1 text-xs"
-          value={current?.id ?? ""}
-          disabled={setDefault.isPending}
-          onValueChange={(value) =>
-            setDefault.mutate(value, {
-              onError: (error) => toast.error(providerErrorMessage(error)),
-            })
-          }
-        >
-          {offered.map((model) => (
-            <SelectOption key={model.id} value={model.id}>
-              {model.providerName} · {model.name}
-            </SelectOption>
-          ))}
-        </Select>
-      )}
-    </div>
-  );
-}
 
 function SourceRow({
   source,
@@ -157,7 +94,6 @@ export function ProviderSettings() {
         <Loading rows={3} />
       ) : (
         <>
-          <DefaultModel sources={sources} />
           {sources.length === 0 ? (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border border-dashed px-3 py-2.5 text-xs">
               <p className="min-w-0 flex-1 text-muted-foreground">

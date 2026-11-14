@@ -134,7 +134,6 @@ export {
 } from "./providers/catalog";
 export {
   applyProviderHeaders,
-  configDefaultModel,
   effectiveModel,
   type EtaConfig,
   type EtaModelConfig,

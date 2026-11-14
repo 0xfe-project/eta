@@ -61,6 +61,7 @@ it("answers a question from another conversation without leaving the one in fron
   const makeRoom = async (agentName: string, name: string) => {
     const { agent } = await ask<{ agent: AgentView }>("agents", "create", {
       name: agentName,
+      model: "fake:fake-model",
     });
     const { project } = await ask<{ project: ProjectView }>(
       "projects",

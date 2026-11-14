@@ -118,7 +118,6 @@ function runtimeModelsOf(info: AgentRuntimeInfo): Model[] {
     providerName: info.label,
     name: model.name,
     available: info.status === "available",
-    default: model.default,
   }));
 }
 

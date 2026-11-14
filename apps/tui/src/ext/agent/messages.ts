@@ -51,7 +51,7 @@ export const agentMessages = defineMessages({
       'persona: a persona card, or "" for the default card. Cards: {list}',
     guideRuntime: "runtime: one of {list}.",
     guideModel:
-      "model: provider:modelId, or null for the settings' default. On an external runtime it is runtime:modelId, and null is that runtime's default.",
+      "model: provider:modelId; an agent on eta needs one. On an external runtime it is runtime:modelId, and null is that runtime's default.",
     guideEtaModels: "  eta models: {list}",
     guideRuntimeModels: "  {runtime} models: {list}",
     guideRuntimesFailed:
@@ -113,7 +113,7 @@ export const agentMessages = defineMessages({
     guidePersona: 'persona：persona 卡片，"" 表示默认卡片。可选：{list}',
     guideRuntime: "runtime：{list} 之一。",
     guideModel:
-      "model：provider:modelId，null 表示用设定里的默认模型。外部运行时写 runtime:modelId，null 表示该运行时的默认模型。",
+      "model：provider:modelId；eta 运行时的智能体必须写一个。外部运行时写 runtime:modelId，null 表示该运行时的默认模型。",
     guideEtaModels: "  eta 的模型：{list}",
     guideRuntimeModels: "  {runtime} 的模型：{list}",
     guideRuntimesFailed: "  没能列出外部运行时的模型：{reason}",

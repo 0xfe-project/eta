@@ -203,23 +203,6 @@ export function providersPlugin(options: ProvidersPluginOptions) {
             wire.pushNow("providers");
             return { result: { revision: view.revision } };
           }),
-          wire.handle("providers", "setDefault", async (call) => {
-            const args = (call.args ?? {}) as Partial<
-              ProviderArgs["setDefault"]
-            >;
-            const view = await options.store.setDefault(
-              args.defaultModel ?? null,
-              args.revision,
-            );
-            latest = view;
-            wire.pushNow("providers");
-            return {
-              result: {
-                revision: view.revision,
-                defaultModel: view.defaultModel ?? null,
-              },
-            };
-          }),
           wire.handle("providers", "setNetwork", async (call) => {
             const args = (call.args ?? {}) as Partial<
               ProviderArgs["setNetwork"]

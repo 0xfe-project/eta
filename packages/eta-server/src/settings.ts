@@ -1,9 +1,10 @@
 /**
  * Settings: what a *new* session starts as.
  *
- * Deliberately narrow (eta-agent's list, kept whole): only the things that are useless to change
- * per message and have no better home — the folder, the persona, the model, the thinking level,
- * and how much history a compaction keeps. Everything else about a session is decided at the
+ * Deliberately narrow: only the things that are useless to change per message and have no better
+ * home — the folder, the persona, the thinking level, and how much history a compaction keeps.
+ * Not the model: a session runs on the one its agent names, and a default model here would be one
+ * the user never sees being used (a `model` key in an older file is ignored). Everything else about a session is decided at the
  * moment it matters (which tools are installed, which prompt is composed) or lives in its own
  * file (`~/.eta/config.json` owns providers).
  *
@@ -25,8 +26,6 @@ export interface Settings {
   cwd?: string;
   /** The persona card new sessions start on. */
   persona?: string;
-  /** `provider:modelId`. */
-  model?: string;
   thinkingLevel?: ThinkingLevel;
   /** How many tokens of recent history a compaction keeps. */
   keepRecentTokens?: number;
@@ -40,7 +39,7 @@ export interface SettingsStoreOptions {
 }
 
 /** The keys a patch may carry, and how each one is read. */
-const STRING_KEYS = ["cwd", "persona", "model"] as const;
+const STRING_KEYS = ["cwd", "persona"] as const;
 
 export class SettingsStore {
   readonly path: string;

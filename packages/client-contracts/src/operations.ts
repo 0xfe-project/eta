@@ -48,7 +48,6 @@ export interface PromptInput {
 export const PROVIDER_ACTIONS = [
   "save",
   "delete",
-  "setDefault",
   "setNetwork",
   "reload",
   "refresh",
@@ -169,7 +168,6 @@ export interface ProviderInput {
 export interface ProviderArgs {
   save: { revision: string; provider: ProviderInput };
   delete: { revision: string; id: string };
-  setDefault: { revision: string; defaultModel?: string | null };
   setNetwork: { revision: string } & import("./types").NetworkConfig;
   reload: Record<string, never>;
   /**

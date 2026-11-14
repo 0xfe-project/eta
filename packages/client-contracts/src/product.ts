@@ -36,7 +36,8 @@ export interface AgentView {
   /** What answers for it: eta's own loop, or an external runtime on the machine. */
   runtime: AgentRuntime;
   /**
-   * `provider:modelId`; null means whatever the settings choose. On an external runtime it is
+   * `provider:modelId`. On eta's own loop it names a model: the host refuses to save one without,
+   * and one left from before is told to choose when asked to answer. On an external runtime it is
    * `runtime:modelId` in that runtime's names, and null means the runtime's default.
    */
   model: string | null;

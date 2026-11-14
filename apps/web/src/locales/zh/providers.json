@@ -10,10 +10,6 @@
     "signOut": "退出"
   },
   "title": "模型服务",
-  "defaultModel": {
-    "label": "默认模型",
-    "none": "还没有可用的模型"
-  },
   "list": {
     "label": "模型来源",
     "empty": "还没有模型来源。添加一个，智能体才有模型可用。",
@@ -153,7 +149,6 @@
     "modelsRequired": "至少要有一个模型。",
     "invalidProviderId": "名字不能留空，也不能太长。",
     "invalidConfig": "接口地址不对。",
-    "invalidDefaultModel": "默认模型不在已配置的模型里。",
     "invalidNetwork": "代理地址不对。",
     "invalidSavedConfig": "config.json 读不出来，先修好这个文件。",
     "readFailed": "读不了 config.json。",

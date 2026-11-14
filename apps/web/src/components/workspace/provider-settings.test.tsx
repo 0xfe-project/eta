@@ -54,7 +54,6 @@ const connectors: LlmAccounts["connectors"] = [
 
 interface Setup {
   providers?: ProviderSummary[];
-  defaultModel?: string;
   checks?: Record<string, ProviderCheck>;
   connections?: LlmConnection[];
   models?: LlmModel[];
@@ -75,9 +74,6 @@ async function render(setup: Setup = {}) {
   let config: ProvidersView = {
     revision: "r1",
     providers: setup.providers ?? [],
-    ...(setup.defaultModel === undefined
-      ? {}
-      : { defaultModel: setup.defaultModel }),
   };
   let revision = 1;
   const fake = new FakeHost().target(
@@ -143,12 +139,6 @@ async function render(setup: Setup = {}) {
         providers: config.providers.filter(
           (entry) => entry.id !== (args as { id: string }).id,
         ),
-      }),
-    )
-    .handle("providers.setDefault", (args) =>
-      write({
-        ...config,
-        defaultModel: (args as { defaultModel: string }).defaultModel,
       }),
     )
     .handle("providers.check", (args) => {
@@ -493,7 +483,7 @@ describe("the model sources list", () => {
 });
 
 describe("the default model", () => {
-  it("offers the models of working sources, gateway ones included, and writes the choice", async () => {
+  it("is not offered: an agent names its own model", async () => {
     const page = await render({
       providers: [
         provider({
@@ -501,55 +491,12 @@ describe("the default model", () => {
           name: "DeepSeek",
           models: [{ id: "deepseek-chat" }],
         }),
-        provider({
-          id: "kimi",
-          kind: "kimi-coding",
-          hasApiKey: false,
-          models: [{ id: "kimi-for-coding" }],
-        }),
-      ],
-      defaultModel: "ds:deepseek-chat",
-      connections: [
-        {
-          id: "c1",
-          connector: "codex",
-          label: "dev@example.com",
-          state: "active",
-          createdAt: "2026-10-01T00:00:00Z",
-        },
-      ],
-      models: [
-        {
-          id: "gpt-5",
-          connector: "codex",
-          name: "GPT-5",
-          status: "available",
-          available: true,
-        },
       ],
     });
-    const trigger = find('[role="combobox"]', /默认模型|DeepSeek/);
-    expect(trigger.textContent).toContain("DeepSeek · deepseek-chat");
-    await act(async () =>
-      trigger.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
-      ),
-    );
-    const options = [...document.querySelectorAll('[role="option"]')].map(
-      (option) => option.textContent,
-    );
-    // Kimi has no key: its models are not offered.
-    expect(options).toEqual(["DeepSeek · deepseek-chat", "Codex · GPT-5"]);
-    await act(async () =>
-      find('[role="option"]', /GPT-5/).dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
-      ),
-    );
-    await settle();
-    expect(page.calls("setDefault")).toEqual([
-      { defaultModel: "llm:gpt-5", revision: "r1" },
-    ]);
-    expect(page.config().defaultModel).toBe("llm:gpt-5");
+    expect(document.body.textContent).toContain("DeepSeek");
+    expect(document.body.textContent).not.toContain("默认模型");
+    expect(document.querySelector('[role="combobox"]')).toBeNull();
+    expect(page.calls("setDefault")).toEqual([]);
   });
 });
 

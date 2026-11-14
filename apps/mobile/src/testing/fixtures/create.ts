@@ -66,7 +66,6 @@ const parentOf = (path: string) => path.slice(0, path.lastIndexOf("/")) || "/";
 
 const PROVIDERS: ProvidersView = {
   revision: "r1",
-  defaultModel: "codex:gpt-5.1-codex",
   providers: [
     {
       id: "codex",

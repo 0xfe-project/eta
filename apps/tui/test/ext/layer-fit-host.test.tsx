@@ -63,7 +63,10 @@ describe(`layers with a list on a ${COLUMNS}×${ROWS} terminal`, () => {
       (_, i) => `Agent ${String(i + 1).padStart(2, "0")}`,
     );
     for (const name of names)
-      await r.wire.call<{ agent: AgentView }>("agents", "create", { name });
+      await r.wire.call<{ agent: AgentView }>("agents", "create", {
+        name,
+        model: "fake:fake-model",
+      });
     const from = r.stdout.frames.length;
     await r.runCommand("/model");
     await r.waitFor(/Agent 01/);
@@ -172,6 +175,7 @@ describe("/new on a 60×9 terminal", () => {
     });
     await r.wire.call<{ agent: AgentView }>("agents", "create", {
       name: "Ada",
+      model: "fake:fake-model",
     });
     for (let i = 0; i < 3; i += 1)
       await r.wire.call<{ project: ProjectView }>("projects", "create", {

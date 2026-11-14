@@ -77,13 +77,11 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
   const machine = machines.find((item) => item.id === machineId);
   const { runtimes, models } = useAgentRuntimeChoices(runtime, machineId);
   const usable = (models ?? []).filter((item) => item.available);
-  // New agents start with the last used model, else the default one, else the first usable one.
-  // An external runtime starts on its own default, which is no choice at all.
+  // New agents start with the last used model, else the first usable one. An external runtime
+  // starts on its own default, which is no choice at all.
   const preferred = external
     ? undefined
-    : (usable.find((item) => item.id === lastModel) ??
-      usable.find((item) => item.default) ??
-      usable[0]);
+    : (usable.find((item) => item.id === lastModel) ?? usable[0]);
   useEffect(() => {
     if (!model && preferred) form.setValue("model", preferred.id);
   }, [form, model, preferred]);
@@ -126,9 +124,10 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
     runtimes,
     translateText,
   ]);
-  // The runtime is here but its model is not: the runtime's own default stands in.
+  // The model picked is no longer offered (the runtime lacks it, or it left the providers while
+  // the wizard was open). Nothing is saved yet, so the pick is let go: an external runtime's own
+  // default stands in, and on eta's own loop the next usable model is picked, or none is.
   const modelGone =
-    external &&
     Boolean(models) &&
     model !== "" &&
     !usable.some((item) => item.id === model);
@@ -154,8 +153,8 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
       });
       return false;
     }
-    // Agents can be created before any account is connected, not after.
-    if (at === 0 && !external && !form.getValues("model") && usable.length) {
+    // An agent on eta's own loop needs a model: there is no default one to run on.
+    if (at === 0 && !external && !form.getValues("model")) {
       form.setError("model", {
         message: translateText("validation:modelRequired"),
       });

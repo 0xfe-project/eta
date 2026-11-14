@@ -231,6 +231,8 @@ export function RoutineForm({
   ] as const);
   const { data: models } = useModels();
   const setSettings = useWorkspaceStore((s) => s.setSettings);
+  const lastModel = useWorkspaceStore((s) => s.workspace.lastModel);
+  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const noModels =
     models !== undefined && !models.some((item) => item.available);
   const create = useCreateRoutine();
@@ -243,7 +245,21 @@ export function RoutineForm({
     conversations.find((candidate) => candidate.id === selectedGroupId) ?? null;
   const [name, setName] = useState(routine?.name ?? "");
   const [brief, setBrief] = useState(routine?.briefs[0]?.text ?? "");
-  const [model, setModel] = useState(routine?.model ?? "");
+  // A routine runs on eta's own loop, which has no default model: it names one. A new routine
+  // starts on the last used model, else the first usable one; one saved without a model (from
+  // before) waits for a choice.
+  const usable = (models ?? []).filter((item) => item.available);
+  const [picked, setModel] = useState(routine?.model ?? "");
+  const model =
+    picked ||
+    (routine === null
+      ? ((usable.find((item) => item.id === lastModel) ?? usable[0])?.id ?? "")
+      : "");
+  // Chosen once, then removed from the providers: said, never swapped for another.
+  const modelGone =
+    model !== "" &&
+    models !== undefined &&
+    !models.some((item) => item.id === model);
   const [schedule, setSchedule] = useState<Schedule>(
     routine?.schedule ?? { kind: "daily", time: "08:00" },
   );
@@ -252,7 +268,7 @@ export function RoutineForm({
   );
   const zones = ZONES.includes(timezone) ? ZONES : [timezone, ...ZONES];
   const preview = nextRuns(schedule, timezone);
-  const ready = name.trim() && brief.trim();
+  const ready = name.trim() && brief.trim() && model;
 
   return (
     <form
@@ -263,11 +279,11 @@ export function RoutineForm({
         const fields = {
           name: name.trim(),
           brief: brief.trim(),
-          // Empty is the settings' own choice of model.
-          model: model || null,
+          model,
           schedule,
           timezone,
         };
+        setWorkspace((state) => ({ ...state, lastModel: model }));
         const onError = (error: Error) => toast.error(wireErrorMessage(error));
         if (routine === null)
           create.mutate(
@@ -374,16 +390,22 @@ export function RoutineForm({
                   {translateText("providers:actions.openSettings")}
                 </Button>
               </span>
+            ) : modelGone ? (
+              <span id="routine-model-hint" className="text-state-warning">
+                {translateText("agents:models.gone")}
+              </span>
             ) : undefined
           }
         >
           <ModelSelect
             id="routine-model"
             aria-label={translateText("common:entities.model")}
-            aria-describedby={noModels ? "routine-model-hint" : undefined}
+            aria-describedby={
+              noModels || modelGone ? "routine-model-hint" : undefined
+            }
             value={model}
             models={models}
-            defaultLabel={translateText("agents:models.default")}
+            invalid={modelGone}
             onValueChange={(value) => setModel(value)}
           />
         </Field>

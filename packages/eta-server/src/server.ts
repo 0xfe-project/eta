@@ -40,12 +40,11 @@ import { sessionsPlugin } from "./bundled/sessions";
 import { settingsPlugin } from "./bundled/settings";
 import { FileSessionStore } from "./file-store";
 import { SessionManager } from "./manager";
-import { formatModelId, parseModelId } from "./model-id";
+import { parseModelId } from "./model-id";
 import { initializeNetwork } from "./network";
 import { observedModels } from "./observed-models";
 import { discoverPersonas } from "./personas";
 import { PluginManager } from "./plugins";
-import { configDefaultModel } from "./providers/config-types";
 import { buildModels, withSessionHeader } from "./providers/runtime";
 import { defaultConfigPath, ProviderConfigStore } from "./providers/store";
 import { messageText } from "./search";
@@ -159,7 +158,7 @@ export interface AssembledServer {
   readonly server: WireServer;
   /** The model layer sessions generate with: what a host proxies for a machine that has none. */
   readonly models: KernelModels;
-  /** What a new session starts as: the user's settings, then the config's default model. */
+  /** What a new session starts as: the user's settings (never a model). */
   readonly defaults: () => Promise<Settings>;
   /** The scanned plugins: what is loaded, and what became of the ones that are not. */
   readonly manager: PluginManager;
@@ -372,18 +371,10 @@ export async function assembleServer(
     }
   }
 
-  // What a new session starts as: the user's settings, with the config's default model as the
-  // last resort. The order matters — a model the user chose explicitly wins over the provider
-  // file's default, which is a fallback and not an instruction. Without a provider to fall
-  // back to, a session is left without a model and says so at its first run.
-  const defaults = async (): Promise<Settings> => {
-    const chosen = await settings.read();
-    if (chosen.model !== undefined) return chosen;
-    const fallback = configDefaultModel(live);
-    return fallback === undefined
-      ? chosen
-      : { ...chosen, model: formatModelId(fallback) };
-  };
+  // What a new session starts as: the user's settings. There is no model among them and no
+  // fallback to one: a session runs on the model it was created with, and one created without
+  // says so at its first run instead of quietly running on whichever model the config lists first.
+  const defaults = (): Promise<Settings> => settings.read();
 
   const store = new FileSessionStore({
     root: join(options.dataDir, "sessions"),

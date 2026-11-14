@@ -97,8 +97,6 @@ export interface EtaConfig {
     noProxy?: string;
   };
   providers?: EtaProviderConfig[];
-  /** `providerId:modelId`; the first provider's first model when absent. */
-  defaultModel?: string;
 }
 
 /** RFC 7230 token: the only names worth accepting from a settings form. */
@@ -204,25 +202,6 @@ export function modelDefaultThinking(input: EtaModelConfig): ThinkingLevel {
   // "off" is the harness's no-parameter setting. The provider adapter only translates it to an
   // explicit disable when the model actually offers an off switch.
   return "off";
-}
-
-/** `provider:modelId`, else the first configured model. */
-export function configDefaultModel(
-  config: EtaConfig,
-): { provider: string; modelId: string } | undefined {
-  const first = (config.providers ?? []).flatMap((provider) =>
-    provider.models.map((model) => ({
-      provider: provider.id,
-      modelId: model.id,
-    })),
-  )[0];
-  if (config.defaultModel === undefined) return first;
-  const split = config.defaultModel.indexOf(":");
-  if (split <= 0) return first;
-  return {
-    provider: config.defaultModel.slice(0, split),
-    modelId: config.defaultModel.slice(split + 1),
-  };
 }
 
 /** One provider, as a client sees it: the key becomes `hasApiKey`, the headers stay. */

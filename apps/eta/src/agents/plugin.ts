@@ -31,7 +31,7 @@ import { AGENT_RUNTIMES } from "@eta/client-contracts";
 import { THINKING_LEVELS } from "@eta/core";
 import { summaryOf } from "../conversations/views";
 import { Args, productPlugin, publish } from "../wire";
-import { checkModel } from "./model";
+import { checkModel, requireModel } from "./model";
 import { agentHome } from "./store";
 
 export interface AgentsDeps {
@@ -149,7 +149,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
 
         wire.handle("agents", "create", async (call) => {
           const fields = fieldsOf(call, true);
-          checkModel(fields.runtime ?? "eta", fields.model ?? null);
+          requireModel(fields.runtime ?? "eta", fields.model ?? null);
           checkMachine(fields.machineId);
           checkPlugins(undefined, fields.plugins);
           const primary = machines.primary();
@@ -206,7 +206,9 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             fields.runtime !== undefined && fields.runtime !== before.runtime;
           // Another runtime's names mean nothing on this one: a move that names no model clears it.
           if (moved && fields.model === undefined) fields.model = null;
-          checkModel(
+          // Clearing the model of an agent on eta's own loop, or moving one there without a model,
+          // is refused; an edit that leaves the model alone (its plugins, say) is not held up by it.
+          (fields.model !== undefined || moved ? requireModel : checkModel)(
             fields.runtime ?? before.runtime,
             fields.model === undefined ? before.model : fields.model,
           );

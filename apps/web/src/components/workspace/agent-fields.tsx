@@ -178,6 +178,13 @@ export function ModelField({
   // Only once they have loaded can there be none.
   const noModels =
     !external && models?.some((model) => model.available) === false;
+  // The model it names was removed from the providers since: said, never swapped for another.
+  const gone =
+    !external &&
+    Boolean(chosenModel) &&
+    Array.isArray(models) &&
+    !models.some((model) => model.id === chosenModel);
+  const hint = Boolean(error) || noModels || gone;
   return (
     <div className="space-y-1.5">
       <Label htmlFor="agent-model">
@@ -189,9 +196,9 @@ export function ModelField({
         models={models}
         invalid={Boolean(error)}
         {...(external
-          ? { defaultLabel: translateText("agents:runtime.defaultModel") }
+          ? { defaultLabel: translateText("agents:runtime.ownDefault") }
           : {})}
-        aria-describedby={error || noModels ? "agent-model-hint" : undefined}
+        aria-describedby={hint ? "agent-model-hint" : undefined}
         onValueChange={(value) =>
           form.setValue("model", value, {
             shouldDirty: true,
@@ -199,15 +206,22 @@ export function ModelField({
           })
         }
       />
-      {error || noModels ? (
+      {hint ? (
         <p
           id="agent-model-hint"
           role={error ? "alert" : undefined}
           className={
-            error ? "text-xs text-destructive" : "text-xs text-muted-foreground"
+            error
+              ? "text-xs text-destructive"
+              : gone
+                ? "text-xs text-state-warning"
+                : "text-xs text-muted-foreground"
           }
         >
-          {error?.message ?? translateText("models.noneAvailable")}
+          {error?.message ??
+            (gone
+              ? translateText("models.gone")
+              : translateText("models.noneAvailable"))}
           {noModels ? (
             <Button
               type="button"
