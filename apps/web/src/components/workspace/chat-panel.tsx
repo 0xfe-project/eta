@@ -772,6 +772,7 @@ function LiveReply({
   boxed,
   waiting,
   author,
+  agentId,
   time,
 }: {
   sessionId: string;
@@ -782,6 +783,7 @@ function LiveReply({
   /** It is waiting on the reader, not working: no first-token placeholder. */
   waiting: boolean;
   author?: string | undefined;
+  agentId: string | null;
   time: string;
 }) {
   const blocks = useRunBlocks(sessionId, runFrom);
@@ -792,7 +794,7 @@ function LiveReply({
     block.type === "thinking" ? (
       <ThinkingBlock key={block.id} text={block.text} />
     ) : block.type === "tool" ? (
-      <div key={block.id} className="tool-step space-y-1">
+      <div key={block.id} data-block={block.id} className="tool-step space-y-1">
         <ToolActivity block={block} sessionId={sessionId} />
       </div>
     ) : null;
@@ -819,6 +821,9 @@ function LiveReply({
           // Text after the last tool or thinking block: the final response is being written.
           folded={blocks.at(-1)?.type === "text"}
           author={author}
+          agentId={agentId}
+          sessionId={sessionId}
+          runFrom={runFrom}
           time={time}
           answer={blocks.map(text)}
         />
@@ -917,7 +922,11 @@ const Turn = memo(
           )}
           {tools.map((block) => (
             // What it did with tools, as the cards the run showed while it worked.
-            <div key={block.id} className="tool-step space-y-1">
+            <div
+              key={block.id}
+              data-block={block.id}
+              className="tool-step space-y-1"
+            >
               <ToolActivity block={block} />
             </div>
           ))}
@@ -956,6 +965,7 @@ const Turn = memo(
             boxed={boxed}
             waiting={message.status === "waiting_for_input"}
             author={author}
+            agentId={message.agentId}
             time={when(message.createdAt)}
           />
         ) : (
@@ -967,6 +977,9 @@ const Turn = memo(
                 running={false}
                 folded
                 author={author}
+                agentId={message.agentId}
+                sessionId={sessionId}
+                runFrom={runFromOf(message.data)}
                 time={when(message.createdAt)}
                 answer={answer}
               />

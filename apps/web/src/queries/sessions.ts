@@ -7,9 +7,11 @@ import type {
   ViewMessageRow,
 } from "@eta/client-contracts";
 import type { LogBlock, RunImage } from "@/lib/run";
+import type { RunTiming } from "@/lib/run-timing";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { logBlocks, runBlocks } from "@/lib/run";
+import { replyRows, runTiming } from "@/lib/run-timing";
 import { getWire } from "@/lib/wire";
 import { useWireMutation } from "@/queries/wire";
 
@@ -198,6 +200,10 @@ export interface SessionLog {
   loadEarlier: () => void;
   /** What each running call has printed so far, by call id. */
   progress: ReadonlyMap<string, string>;
+  /** The rows the blocks are drawn from, oldest first (for the run's timing). */
+  rows: readonly ViewMessageRow[] | undefined;
+  /** The message being streamed, if one is. */
+  streaming: AgentMessage | undefined;
 }
 
 /**
@@ -288,7 +294,65 @@ export function useSessionLog(
     loadingEarlier: pages?.loading === true,
     loadEarlier,
     progress,
+    rows,
+    streaming,
   };
+}
+
+/**
+ * Where a group reply's run spent its time, from its member's session: the rows after `runFrom`
+ * (the place in the session the reply's row names) up to the next reply's briefing, or — for a
+ * reply at work, which runs to `now` — everything after it. Undefined when the session view no
+ * longer holds the run (it keeps the newest 200 messages) or its rows carry no times.
+ */
+export function useReplyTiming(
+  sessionId: string | undefined,
+  runFrom: number | undefined,
+  now: number | undefined,
+): RunTiming | undefined {
+  const session = useSession(sessionId);
+  const streamed = useStreamedMessage(sessionId);
+  const rows = session?.transcript?.messages;
+  const live = now !== undefined;
+  const streaming = live ? (streamed ?? session?.core?.streaming) : undefined;
+  return useMemo(() => {
+    if (rows === undefined) return undefined;
+    // A run that started before the oldest row the view holds is not all there.
+    if (runFrom !== undefined && (rows[0]?.seq ?? 0) > runFrom + 1)
+      return undefined;
+    const own =
+      runFrom !== undefined
+        ? replyRows(rows, runFrom)
+        : live
+          ? rows.slice(lastUserIndex(rows))
+          : undefined;
+    return own === undefined
+      ? undefined
+      : runTiming(own, { streaming, ...(live ? { now } : {}) });
+  }, [rows, runFrom, live, streaming, now]);
+}
+
+/** Where the newest user message is (the briefing of the run in flight); 0 when there is none. */
+function lastUserIndex(rows: readonly ViewMessageRow[]): number {
+  for (let at = rows.length - 1; at >= 0; at -= 1)
+    if (rows[at]!.message.role === "user") return at;
+  return 0;
+}
+
+/** The time, every second while `live`; undefined otherwise. */
+export function useNow(live: boolean): number | undefined {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!live) return undefined;
+    // At once, then every second: the time the hook was mounted at may be long gone.
+    const first = setTimeout(() => setNow(Date.now()), 0);
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
+  }, [live]);
+  return live ? now : undefined;
 }
 
 /** No call is printing anything. */

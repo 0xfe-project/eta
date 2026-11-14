@@ -494,7 +494,7 @@ describe("task board", () => {
     host.hello();
   }
 
-  /** The open task's properties, and the description of its run's log once opened. */
+  /** The open task's properties, and what its run log's workspace button opens to. */
   async function workspaceAndLog() {
     const { container } = await mount(<TaskBoard />);
     await flush();
@@ -505,7 +505,13 @@ describe("task board", () => {
       ),
     );
     await flush();
-    const log = document.querySelector('[role="dialog"]')!.textContent;
+    const dialog = document.querySelector('[role="dialog"]')!;
+    // The header is one line: the path is behind the workspace button, not under the title.
+    expect(dialog.textContent).not.toContain("/");
+    await click(dialog.querySelector('button[aria-label="工作区"]'));
+    await flush();
+    const log = document.querySelector("[data-slot=popover-content]")!
+      .textContent;
     return { properties, log };
   }
 
@@ -517,7 +523,7 @@ describe("task board", () => {
     // Nothing of the worktree the run never worked in.
     expect(properties).not.toContain("独立 worktree");
     expect(properties).not.toContain("eta/task-1");
-    expect(log).toContain("工作区 macbook · /Users/me");
+    expect(log).toBe("机器macbook路径/Users/me复制路径");
   });
 
   it("says the worktree of a run on its project's machine, with no machine", async () => {
@@ -526,7 +532,7 @@ describe("task board", () => {
     expect(properties).toContain("独立 worktree · eta/task-1");
     expect(properties).toContain("/data/worktrees/p1/task-1");
     expect(properties).not.toContain("builder");
-    expect(log).toContain("工作区 /data/worktrees/p1/task-1");
+    expect(log).toBe("分支eta/task-1路径/data/worktrees/p1/task-1复制路径");
   });
 
   it("draws a run's log from its session's transcript", async () => {

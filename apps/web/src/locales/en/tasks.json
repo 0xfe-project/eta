@@ -91,7 +91,6 @@
     "loading": "Loading records…",
     "empty": "No records yet.",
     "title": "Execution log",
-    "workspacePrefix": "Workspace ",
     "done": "Done",
     "failed": "Failed",
     "error": "Error",
@@ -102,7 +101,25 @@
     "group_one": "{{name}} · {{count}} call",
     "group_other": "{{name}} · {{count}} calls",
     "earlier": "Load earlier records",
-    "loadingEarlier": "Loading earlier records…"
+    "loadingEarlier": "Loading earlier records…",
+    "header": {
+      "status": {
+        "queued": "Queued",
+        "starting": "Starting",
+        "running": "Running",
+        "completed": "Done",
+        "failed": "Failed",
+        "interrupted": "Stopped"
+      },
+      "elapsed": "took {{duration}}",
+      "attempt": "run {{count}}",
+      "workspace": "Workspace",
+      "branch": "Branch",
+      "machine": "Machine",
+      "path": "Path",
+      "copyPath": "Copy path",
+      "pathCopied": "Path copied"
+    }
   },
   "draft": {
     "title": "Task draft",

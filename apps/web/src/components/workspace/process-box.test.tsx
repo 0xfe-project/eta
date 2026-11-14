@@ -217,6 +217,124 @@ describe("a reply's process in a group", () => {
   });
 });
 
+describe("a reply's process dialog", () => {
+  const T = 1_800_000_000_000;
+  /** A finished group reply whose run is still in its member's session, with times. */
+  async function timed() {
+    conversations += 1;
+    const id = `process-box-${conversations}`;
+    const host = surfaceHost({
+      agents: [agentView({ id: "a1", name: "研究员" })],
+      conversations: [
+        conversationView({
+          id,
+          kind: "group",
+          participants: [memberView("a1", { sessionId: "s1" })],
+        }),
+      ],
+      messages: {
+        [id]: [
+          messageView({
+            conversationId: id,
+            author: "agent",
+            agentId: "a1",
+            text: "最终答案",
+            data: {
+              runFrom: 1,
+              activity: [
+                {
+                  id: "c1",
+                  name: "bash",
+                  input: { command: "ls" },
+                  output: "ok",
+                  status: "completed",
+                },
+              ],
+            },
+          }),
+        ],
+      },
+    });
+    const row = (seq: number, at: number, message: object) => ({
+      entryId: `e${seq}`,
+      seq,
+      at: T + at,
+      message,
+    });
+    host.target("sessions.s1", {
+      core: { session: "s1", running: false },
+      transcript: {
+        messages: [
+          row(1, 0, { role: "user", content: "上一次", timestamp: T }),
+          row(2, 100, { role: "user", content: "这一次", timestamp: T + 100 }),
+          row(3, 3000, {
+            role: "assistant",
+            timestamp: T + 105,
+            content: [
+              {
+                type: "toolCall",
+                id: "c1",
+                name: "bash",
+                arguments: { command: "ls" },
+              },
+            ],
+          }),
+          row(4, 9000, {
+            role: "toolResult",
+            toolCallId: "c1",
+            toolName: "bash",
+            isError: false,
+            content: [{ type: "text", text: "ok" }],
+            timestamp: T + 9000,
+          }),
+          row(5, 11_000, {
+            role: "assistant",
+            timestamp: T + 9005,
+            content: [{ type: "text", text: "最终答案" }],
+          }),
+        ],
+      },
+    });
+    host.handle("sessions.resync", () => ({}));
+    const mounted = await mount(<Chat conversationId={id} />);
+    await flush();
+    await click(mounted.container.querySelector(".process-fold summary"));
+    await click(
+      mounted.container.querySelector<HTMLElement>(".process-fold button"),
+    );
+    await flush();
+    return document.querySelector<HTMLElement>('[role="dialog"]')!;
+  }
+
+  it("is headed by the author's face, name and time on one line, with the run's strip", async () => {
+    const dialog = await timed();
+    const line = dialog.querySelector<HTMLElement>(".h-7")!;
+    expect(line.querySelector("svg, [aria-hidden='true']")).not.toBeNull();
+    const time = line.querySelector("time")!.textContent;
+    expect(time).toBe("1-01 01:00");
+    expect(line.textContent).toBe(`研究员${time}展开`);
+    const toolbar = dialog.querySelector('[role="toolbar"]')!;
+    // From this reply's briefing on; the run before it is not this one's.
+    expect(toolbar.getAttribute("aria-label")).toBe("3 步，用时 0:10");
+    expect(
+      [...toolbar.querySelectorAll("button")].map(
+        (b) => b.getAttribute("aria-label")?.split("，")[0],
+      ),
+    ).toEqual(["生成", "bash", "生成"]);
+  });
+
+  it("sends the dialog to the step picked", async () => {
+    const dialog = await timed();
+    const bash = [...dialog.querySelectorAll('[role="toolbar"] button')].find(
+      (b) => b.getAttribute("aria-label")?.startsWith("bash"),
+    );
+    await click(bash);
+    const hit = dialog.querySelector("[data-hit]");
+    expect(hit?.getAttribute("data-block")).toBe("c1");
+    expect(hit?.querySelector(".tool-card")).not.toBeNull();
+  });
+});
+
 describe("a reply before its first token", () => {
   const placeholder = (container: HTMLElement) =>
     [...container.querySelectorAll('[role="status"]')].find(
