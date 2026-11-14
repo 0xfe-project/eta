@@ -125,18 +125,11 @@ export interface CaptainGroupResult {
   projectCreated: boolean;
 }
 
-/** The data of the system row that draws a proposal as a card (`event: "captain_group_proposal"`). */
-export interface CaptainGroupProposalRowData {
-  event: "captain_group_proposal";
-  operationId: string;
-  proposal: CaptainGroupProposal;
-}
-
 /**
  * An agent Captain proposed: the payload of a `create_agent` operation. Nothing exists until the user
- * confirms it; then the agent, its workspace project and its first prompt versions are made. The
- * persona is one of the cards that already exist — its id here, its body becomes the agent's persona,
- * and no card is written — and the model is the one the user chose.
+ * confirms it; then the agent, its workspace project and its first prompt versions are made, on the
+ * primary machine. The persona is one of the cards that already exist, named by its id — no card is
+ * written — and the model is the one the user chose.
  */
 export interface CaptainAgentProposal {
   /** Where Captain proposed it: the card is there. */
@@ -147,12 +140,10 @@ export interface CaptainAgentProposal {
   /** What the agent is for, and when it should retire: one sentence, read on the card. */
   purpose: string;
   instructions: string;
-  /** The id of an existing persona card. */
+  /** The id of an existing persona card: the agent's `persona` is this id, never the card's text. */
   persona: string;
   model: string;
   runtime: AgentRuntime;
-  /** The primary machine's id, or null: an agent is only made on the primary. */
-  machineId: string | null;
   plugins: string[];
 }
 
@@ -163,75 +154,102 @@ export interface CaptainAgentResult {
   name: string;
 }
 
-/** The data of the system row that draws a proposal as a card (`event: "captain_agent_proposal"`). */
-export interface CaptainAgentProposalRowData {
-  event: "captain_agent_proposal";
-  operationId: string;
-  proposal: CaptainAgentProposal;
-}
-
 /**
- * `MessageView.data.captainGroupOutcome` of the message that tells Captain how a group proposal it
- * made ended. That message is Captain's context, in English, and wakes its next turn; the user
- * already sees the outcome on the proposal's card, so clients do not draw it.
+ * Every proposal Captain makes goes the same way: a pending operation of its kind (`create_group`,
+ * `create_agent`), a card in the conversation it was proposed from, the user's answer on that card,
+ * and a message that tells Captain how it ended. What follows is what clients read of that.
  */
-export interface CaptainGroupOutcomeData {
+
+/** The `event` of the system row that draws a proposal as a card. */
+export const CAPTAIN_PROPOSAL_EVENT = "captain_proposal";
+
+/** The data of that row. `kind` is the operation's; `proposal` is its payload, as it was proposed. */
+export interface CaptainProposalRowData<P = Record<string, unknown>> {
+  event: typeof CAPTAIN_PROPOSAL_EVENT;
+  kind: string;
   operationId: string;
-  status: CaptainOperationStatus;
+  proposal: P;
+}
+
+/** A proposal card's row, as `captainProposalOf` reads it. */
+export interface CaptainProposalRow<P = Record<string, unknown>> {
+  kind: string;
+  operationId: string;
+  proposal: P;
 }
 
 /**
- * `MessageView.data.captainAgentOutcome` of the message that tells Captain how an agent proposal it
- * made ended. Like a group's outcome it is Captain's context, in English, and it wakes its next
- * turn; the user already sees the outcome on the proposal's card, so clients do not draw it.
+ * The events rows were drawn from before every kind shared one, with the kind each stands for. A
+ * row of these carries the same `operationId` and `proposal`.
+ */
+const LEGACY_PROPOSAL_EVENTS: Record<string, string> = {
+  captain_group_proposal: "create_group",
+  captain_agent_proposal: "create_agent",
+};
+
+/** The proposal a row draws as a card, old rows included; undefined for any other row. */
+export function captainProposalOf<P = Record<string, unknown>>(
+  message: Pick<MessageView, "data">,
+): CaptainProposalRow<P> | undefined {
+  const { event, kind, operationId, proposal } = message.data as {
+    event?: unknown;
+    kind?: unknown;
+    operationId?: unknown;
+    proposal?: unknown;
+  };
+  if (typeof event !== "string") return undefined;
+  const known =
+    event === CAPTAIN_PROPOSAL_EVENT
+      ? typeof kind === "string"
+        ? kind
+        : undefined
+      : LEGACY_PROPOSAL_EVENTS[event];
+  if (
+    known === undefined ||
+    typeof operationId !== "string" ||
+    typeof proposal !== "object" ||
+    proposal === null
+  )
+    return undefined;
+  return { kind: known, operationId, proposal: proposal as P };
+}
+
+/**
+ * `MessageView.data.captainOutcome` of the message that tells Captain how a proposal it made ended.
+ * That message is Captain's context, in English, and wakes its next turn; the user already sees the
+ * outcome on the proposal's card, so clients do not draw it.
  *
- * Only an agent Captain proposed reports back. An agent the user makes in the agent dialog is not
- * an operation at all, so nothing is said about it.
+ * Only a proposal reports back. An agent or a group the user makes in a dialog is no operation, so
+ * nothing is said about it.
  */
-export interface CaptainAgentOutcomeData {
+export interface CaptainOutcomeData {
   operationId: string;
+  kind: string;
   status: CaptainOperationStatus;
 }
 
+/** The keys the mark had before every kind shared one; messages carrying them are still skipped. */
+const LEGACY_OUTCOME_KEYS = ["captainGroupOutcome", "captainAgentOutcome"];
+
 /**
- * The opening of the outcome message as the host wrote it before it carried
- * `data.captainGroupOutcome`: `Your proposed group "<name>" (operation <uuid>) was confirmed…` or
- * `…was rejected…`. Only a `system` message is matched, and only the host writes those.
+ * The opening of the outcome message as the host wrote it before it carried a mark at all:
+ * `Your proposed group "<name>" (operation <uuid>) was confirmed…` or `…was rejected…`. Only a
+ * `system` message is matched, and only the host writes those. The host still opens a group's
+ * outcome this way, so a client from before the shared mark keeps skipping it.
  */
 const LEGACY_GROUP_OUTCOME =
   /^Your proposed group "[\s\S]*" \(operation [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\) was (?:confirmed|rejected) by the user/;
 
-/** Whether a row is the message that tells Captain how its group proposal ended; clients skip it. */
-export function isCaptainGroupOutcome(
-  message: Pick<MessageView, "author" | "kind" | "text" | "data">,
-): boolean {
-  if (message.author !== "system" || message.kind !== "message") return false;
-  const outcome = message.data.captainGroupOutcome;
-  if (typeof outcome === "object" && outcome !== null) return true;
-  return LEGACY_GROUP_OUTCOME.test(message.text);
-}
-
-/**
- * Whether a row is the message that tells Captain how an agent proposal it made ended; clients skip
- * it, as they do a group's. There is no legacy text to match: no such message was written before
- * the data key existed.
- */
-export function isCaptainAgentOutcome(
-  message: Pick<MessageView, "author" | "kind" | "data">,
-): boolean {
-  if (message.author !== "system" || message.kind !== "message") return false;
-  const outcome = message.data.captainAgentOutcome;
-  return typeof outcome === "object" && outcome !== null;
-}
-
-/**
- * Whether a row is the message that tells Captain how any proposal it made ended. One place for
- * clients to ask, so a new kind of proposal does not need every client taught about it.
- */
+/** Whether a row is the message that tells Captain how a proposal it made ended; clients skip it. */
 export function isCaptainOutcome(
   message: Pick<MessageView, "author" | "kind" | "text" | "data">,
 ): boolean {
-  return isCaptainGroupOutcome(message) || isCaptainAgentOutcome(message);
+  if (message.author !== "system" || message.kind !== "message") return false;
+  for (const key of ["captainOutcome", ...LEGACY_OUTCOME_KEYS]) {
+    const outcome = message.data[key];
+    if (typeof outcome === "object" && outcome !== null) return true;
+  }
+  return LEGACY_GROUP_OUTCOME.test(message.text);
 }
 
 export interface CaptainPromptVersionView {

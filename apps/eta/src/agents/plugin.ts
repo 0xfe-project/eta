@@ -25,12 +25,18 @@ import type { Timeline } from "../conversations/timeline";
 import type { MachineStore } from "../machines/store";
 import type { Plugins } from "../plugins/service";
 import type { ProjectStore } from "../projects/store";
+import type { AgentCreateDeps } from "./create";
 import type { AgentRecord, AgentStore } from "./store";
-import { mkdir, rm } from "node:fs/promises";
 import { AGENT_RUNTIMES } from "@eta/client-contracts";
 import { THINKING_LEVELS } from "@eta/core";
 import { summaryOf } from "../conversations/views";
 import { Args, productPlugin, publish } from "../wire";
+import {
+  checkAgentName,
+  checkMachine,
+  checkPlugins,
+  createAgent,
+} from "./create";
 import { checkModel, requireModel } from "./model";
 import { agentHome } from "./store";
 
@@ -54,14 +60,7 @@ export interface AgentsDeps {
     | ((machineId: string, fresh: boolean) => Promise<AgentRuntimeInfo[]>)
     | undefined;
   /** Append prompt history for user edits as well as Captain edits. */
-  capturePrompt?:
-    | ((input: {
-        agentId: string;
-        kind: "instructions" | "persona";
-        content: string;
-        actorAgentId: string | null;
-      }) => void)
-    | undefined;
+  capturePrompt?: AgentCreateDeps["capturePrompt"];
 }
 
 export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
@@ -120,48 +119,13 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
 
         wire.handle("agents", "create", async (call) => {
           const fields = fieldsOf(call, true);
-          requireModel(fields.runtime ?? "eta", fields.model ?? null);
-          checkMachine(machines, fields.machineId);
-          checkPlugins(plugins, undefined, fields.plugins);
-          const primary = machines.primary();
-          if (primary === undefined)
-            throw new Error("this host has no machine");
-          const id = crypto.randomUUID();
-          const home = agentHome(deps.dataDir, id);
-          await mkdir(home, { recursive: true });
-          try {
-            // The agent and its workspace appear together or not at all.
-            deps.db.transaction(() => {
-              agents.create({ ...fields, name: fields.name! }, id);
-              projects.create({
-                machineId: primary.id,
-                path: home,
-                name: fields.name!,
-                kind: "agent_home",
-                stewardId: id,
-              });
-              if (fields.plugins !== undefined)
-                plugins.rows.setEnabled(id, fields.plugins);
-            })();
-          } catch (error) {
-            await rm(home, { recursive: true, force: true });
-            throw error;
-          }
-          const made = existing(id);
-          deps.capturePrompt?.({
-            agentId: id,
-            kind: "instructions",
-            content: made.instructions,
-            actorAgentId: null,
-          });
-          deps.capturePrompt?.({
-            agentId: id,
-            kind: "persona",
-            content: made.persona,
-            actorAgentId: null,
-          });
+          const { agent } = await createAgent(
+            deps,
+            { ...fields, name: fields.name! },
+            null,
+          );
           deps.changed();
-          return { result: { agent: viewOf(existing(id)) } };
+          return { result: { agent: viewOf(existing(agent.id)) } };
         }),
 
         wire.handle("agents", "update", async (call) => {
@@ -183,6 +147,8 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             fields.runtime ?? before.runtime,
             fields.model === undefined ? before.model : fields.model,
           );
+          if (fields.name !== undefined)
+            checkAgentName(agents, fields.name, id);
           checkMachine(machines, fields.machineId);
           checkPlugins(plugins, id, fields.plugins);
           const agent = agents.update(id, fields)!;
@@ -320,37 +286,6 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
     projects.update(home.id, { name: agent.name });
     conversations.renameDirect(home.id, agent.name);
   }
-}
-
-/** A machine an agent can be pinned to: the primary or a daemon that was let in. */
-export function checkMachine(
-  machines: MachineStore,
-  machineId: string | null | undefined,
-): void {
-  if (machineId === undefined || machineId === null) return;
-  const machine = machines.get(machineId);
-  if (
-    machine === undefined ||
-    (machine.kind !== "primary" && machine.kind !== "daemon")
-  )
-    throw new Error(`no such machine: ${machineId}`);
-  if (machine.status === "revoked" || machine.status === "pending")
-    throw new Error(
-      `${machine.name} is ${machine.status}: an agent cannot run there`,
-    );
-}
-
-/** What an agent can be set to use: what it has already, and what can be enabled. */
-export function checkPlugins(
-  plugins: Plugins,
-  agentId: string | undefined,
-  wanted: readonly string[] | undefined,
-): void {
-  if (wanted === undefined) return;
-  const has = agentId === undefined ? [] : plugins.rows.enabled(agentId);
-  for (const name of wanted)
-    if (!has.includes(name) && !plugins.canEnable(name))
-      throw new Error(`plugin ${name} cannot be enabled: it needs configuring`);
 }
 
 /** The fields of an agent a call carries; `create` needs a name, `update` takes what is sent. */

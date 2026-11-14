@@ -105,7 +105,7 @@ function rowItems(context: Context, row: MessageView): TranscriptItem[] {
       if (row.author === "user") return userItems(context, row);
       if (row.author === "agent") return replyItems(context, row);
       // A message the host or Captain wrote into the conversation, among them what Captain is told
-      // about its group proposal and its review prompt: Captain's context, not drawn here.
+      // about its proposals and its review prompt: Captain's context, not drawn here.
       return [];
   }
 }

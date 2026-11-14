@@ -58,19 +58,8 @@
     "persona": "人格卡",
     "model": "模型",
     "runtime": "运行时",
-    "machine": "机器",
     "plugins": "插件",
-    "create": "创建",
-    "reject": "拒绝",
-    "created": "「{{name}}」已就绪，在侧栏可以找到它。",
-    "status": {
-      "pending": "待确认",
-      "approved": "创建中…",
-      "applied": "已创建",
-      "rejected": "已拒绝",
-      "failed": "失败",
-      "expired": "已过期"
-    }
+    "created": "「{{name}}」已就绪，在侧栏可以找到它。"
   },
   "review": {
     "title": "Captain 巡检",

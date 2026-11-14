@@ -2,6 +2,7 @@
   "modelRequired": "请选择模型。",
   "nameRequired": "请输入名称。",
   "nameMaxLength": "名称最多 100 个字符。",
+  "nameTaken": "已有名为「{{name}}」的智能体。",
   "instructionsMaxLength": "指令最多 {{maxCharacters}} 个字符。",
   "integerRange": "请输入 {{min}} 到 {{max}} 之间的整数。"
 }

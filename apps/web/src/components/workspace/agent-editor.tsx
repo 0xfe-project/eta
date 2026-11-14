@@ -44,7 +44,7 @@ import {
   RuntimeField,
   ThinkingField,
 } from "./agent-fields";
-import { agentDraft, agentFormSchema } from "./agent-form";
+import { agentDraft, agentFormSchema, agentNameTaken } from "./agent-form";
 import { AgentAvatar } from "./agent-identity";
 import { AgentPluginsField } from "./agent-plugins";
 import { CreateAgentWizard } from "./create-agent-wizard";
@@ -162,6 +162,7 @@ function AgentEditorForm({
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const updateAgent = useUpdateAgent();
+  const { agents } = useAgents();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [tab, setTab] = useState<Tab>("general");
   const form = useForm<AgentForm>({
@@ -211,6 +212,15 @@ function AgentEditorForm({
           message: translateText("validation:modelRequired"),
         });
         showError("model");
+        return;
+      }
+      if (agentNameTaken(agents, values.name, agent.id)) {
+        form.setError("name", {
+          message: translateText("validation:nameTaken", {
+            name: values.name.trim(),
+          }),
+        });
+        showError("name");
         return;
       }
       if (values.model && values.runtime === "eta") {

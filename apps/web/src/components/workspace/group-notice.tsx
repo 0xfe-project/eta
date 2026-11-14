@@ -1,10 +1,10 @@
 import type { MessageView } from "@eta/client-contracts";
+import { captainProposalOf } from "@eta/client-contracts";
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { ROUTINES_VISIBLE } from "@/lib/features";
 import { agentName, useAgentList } from "@/queries/agents";
-import { AgentProposalCard } from "./agent-proposal-card";
-import { GroupProposalCard } from "./group-proposal-card";
+import { ProposalCard } from "./proposal-card";
 import { useSectionLink } from "./workspace-search";
 
 /**
@@ -28,10 +28,9 @@ export function GroupNotice({ message }: { message: MessageView }) {
       runId?: string;
       title?: string | null;
     };
-  if (event === "captain_group_proposal")
-    return <GroupProposalCard message={message} />;
-  if (event === "captain_agent_proposal")
-    return <AgentProposalCard message={message} />;
+  const proposal = captainProposalOf(message);
+  if (proposal !== undefined)
+    return <ProposalCard message={message} row={proposal} />;
   let text = message.text;
   if (event === "captain_created") {
     text = translateText("chat:system.createdByCaptain");

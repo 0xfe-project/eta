@@ -31,9 +31,12 @@ const providers = {
   ],
 };
 
-const api = rstest.hoisted(() => ({ select: rstest.fn() }));
+const api = rstest.hoisted(() => ({
+  select: rstest.fn(),
+  agents: [] as { id: string; name: string }[],
+}));
 rstest.mock("./use-agents", () => ({
-  useAgents: () => ({ agents: [], select: api.select }),
+  useAgents: () => ({ agents: api.agents, select: api.select }),
 }));
 rstest.mock("./agent-identity", () => ({ AgentAvatar: () => <span /> }));
 rstest.mock("sonner", () => ({
@@ -153,6 +156,7 @@ beforeEach(async () => {
     .install();
   host.hello();
   api.select.mockReset();
+  api.agents = [];
   await mount(<AgentEditor />);
 });
 afterEach(async () => {
@@ -201,6 +205,20 @@ describe("creating an agent step by step", () => {
     ]);
     expect(api.select).toHaveBeenCalledWith("new");
     expect(dialog()).toBeNull();
+  });
+
+  it("stops at the name when another agent already answers to it", async () => {
+    api.agents = [{ id: "a1", name: "审查" }];
+    await open();
+    await type("agent-name", " 审查 ");
+    await click("下一步");
+    // Said where the name is typed, before anything is sent: the host refuses it too.
+    expect(step()).toContain("名称与模型");
+    expect(alerts()).toContain("已有名为「审查」的智能体。");
+    expect(created).toEqual([]);
+    await type("agent-name", "审查二");
+    await click("下一步");
+    expect(step()).toContain("指令");
   });
 
   it("creates an agent on an external runtime, with one of its own models", async () => {
