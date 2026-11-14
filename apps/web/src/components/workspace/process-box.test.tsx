@@ -239,6 +239,8 @@ describe("a reply's process dialog", () => {
             author: "agent",
             agentId: "a1",
             text: "最终答案",
+            // 1:00 on the clock of whoever runs the test, whatever its time zone.
+            createdAt: new Date(1970, 0, 1, 1, 0).getTime(),
             data: {
               ...(runFrom === undefined ? {} : { runFrom }),
               activity: [
