@@ -173,14 +173,17 @@ On Windows, unzip and run `eta-Setup.exe`. When SmartScreen says "Windows protec
 
 ## Download and run
 
-The repo is private, so downloading needs a token with permission; a logged-in `gh` is enough:
+The repository is public, so the files download without a token:
 
 ```sh
-gh release download v0.2.0 --repo 0xfe-project/eta --pattern 'eta-*' --pattern SHA256SUMS
-sha256sum -c SHA256SUMS
+curl -LO https://github.com/0xfe-project/eta/releases/latest/download/eta-host-linux-x64
+curl -LO https://github.com/0xfe-project/eta/releases/latest/download/SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing
 ```
 
-To download only one platform, put the exact filename in `--pattern` and add `--ignore-missing` when verifying. macOS has no `sha256sum`; use `shasum -a 256 -c SHA256SUMS --ignore-missing`. On Windows use PowerShell's `Get-FileHash <file>` and compare against that line in `SHA256SUMS`.
+`latest/download` is the newest full release; for a given version use `releases/download/v0.2.0/<file>`, or `gh release download v0.2.0 --repo 0xfe-project/eta --pattern 'eta-*' --pattern SHA256SUMS` for every platform at once.
+
+macOS has no `sha256sum`; use `shasum -a 256 -c SHA256SUMS --ignore-missing`. On Windows use PowerShell's `Get-FileHash <file>` and compare against that line in `SHA256SUMS`.
 
 Then:
 
@@ -191,7 +194,7 @@ chmod +x eta-host-linux-x64
 
 `--version` outputs `eta-host 0.2.0 (37d8188c1234)`; the parentheses hold the commit.
 
-Running it and installing it as a service work the same as a build from a checkout; see "Running in production" in the README.
+Running it and installing it as a service: see [Self-hosting](self-hosting.md).
 
 ## Install as a service
 
