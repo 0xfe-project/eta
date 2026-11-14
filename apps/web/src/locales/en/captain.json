@@ -30,11 +30,6 @@
     "approve": "Approve",
     "reject": "Reject"
   },
-  "assignments": {
-    "title": "Recent assignments",
-    "none": "No assignments yet.",
-    "round": "Round {{round}}"
-  },
   "pendingBadge": "Awaiting approval · {{count}}",
   "proposal": {
     "label": "Proposed group {{name}}",

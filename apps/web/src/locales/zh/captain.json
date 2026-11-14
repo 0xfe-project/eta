@@ -30,11 +30,6 @@
     "approve": "批准",
     "reject": "拒绝"
   },
-  "assignments": {
-    "title": "最近派工",
-    "none": "还没有派工。",
-    "round": "第 {{round}} 轮"
-  },
   "pendingBadge": "待审批 · {{count}}",
   "proposal": {
     "label": "提议的群 {{name}}",

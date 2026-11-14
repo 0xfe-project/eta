@@ -337,7 +337,6 @@ it("Captain 的会话里第一块是运营，不是任务", async () => {
   expect(sections(container)).toEqual([
     "Captain 模型",
     "待审批操作",
-    "最近派工",
     "产物",
     "成员",
   ]);
@@ -349,7 +348,7 @@ it("Captain 的会话里第一块是运营，不是任务", async () => {
   expect(container.textContent).toContain("拒绝");
   expect(container.textContent).not.toContain("任务 9 卡住了");
   expect(container.textContent).not.toContain("运营告警");
-  expect(container.textContent).toContain("第 2 轮");
+  expect(container.textContent).not.toContain("第 2 轮");
   // The tasks of that conversation are elsewhere (the 任务 page), not lost here by accident.
   expect(container.textContent).not.toContain("任务1");
   // Its model is chosen here: Captain is not edited like the other agents.
