@@ -9,8 +9,7 @@
     ".": "./src/index.ts",
     "./connect-link": "./src/connect-link.ts",
     "./desktop": "./src/desktop.ts",
-    "./plugin-fields": "./src/plugin-fields.ts",
-    "./widget": "./src/widget.ts"
+    "./plugin-fields": "./src/plugin-fields.ts"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -21,10 +20,7 @@
   },
   "dependencies": {
     "@eta/client-wire-proto": "*",
-    "@json-render/core": "0.21.3",
-    "@json-render/react": "0.21.3",
-    "re2js": "2.9.1",
-    "zod": "^4.6.5"
+    "re2js": "2.9.1"
   },
   "devDependencies": {
     "@types/node": "22.19.19",
