@@ -548,12 +548,14 @@ describe("折叠成图标栏", () => {
   });
 
   it("右缘只留 sidebar-rule，默认 border-r 不再从窗顶画到底", async () => {
-    // The component's default edge is full height. Stacked on `sidebar-rule` (the 1px line that
-    // starts under the band) it reads as one thick rule. The shell zeros that edge; the rule stays.
+    // The component's default edge is full height. Stacked on `sidebar-rule` it reads as one thick
+    // rule. The shell zeros that edge; the rule stays — and only the folded rail marks its edge,
+    // the one place the shell keeps the rule's top out of the window's lights.
     for (const open of [true, false]) {
       const container = await render(<Sidebar />, { open });
       const edge = container.querySelector('[data-slot="sidebar-container"]')!;
       expect(edge.className).toContain("sidebar-rule");
+      expect(edge.getAttribute("data-rail-edge")).toBe(open ? null : "true");
       expect(edge.className).toContain("group-data-[side=left]:border-r-0");
       expect(edge.className).not.toContain("group-data-[side=left]:border-r ");
       expect(edge.className).not.toMatch(/group-data-\[side=left\]:border-r$/);

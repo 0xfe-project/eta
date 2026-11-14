@@ -155,10 +155,12 @@ export function Sidebar({
   return (
     <SidebarRoot
       collapsible="icon"
-      // `sidebar-rule`, not the component's default `border-r`: that border runs the full height,
-      // through the window's lights inside the band. The rule starts under the band (see
-      // `styles.css`). The zero is the same `group-data-[side=left]` variant, because a bare
-      // `border-r-0` does not win the merge against `group-data-[side=left]:border-r`.
+      // `sidebar-rule`, not the component's default `border-r`: the rule is drawn top to bottom
+      // everywhere except a folded rail in the shell, where its top would cut the window's lights
+      // (`data-rail-edge`, see `styles.css`). The zero is the same `group-data-[side=left]`
+      // variant, because a bare `border-r-0` does not win the merge against
+      // `group-data-[side=left]:border-r`.
+      data-rail-edge={rail ? "true" : undefined}
       className="sidebar-rule group-data-[side=left]:border-r-0 hidden shrink-0 md:flex"
     >
       <SidebarHeader
@@ -543,7 +545,9 @@ export function PageHeader({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4 sm:px-6">
+    // The band, like the chat's header and the sidebar's: one height, one field, one rule under
+    // it, so moving between pages never moves the line.
+    <div className="band gap-2 px-4 sm:px-6">
       <h1 className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm font-semibold">
         {title}
       </h1>
