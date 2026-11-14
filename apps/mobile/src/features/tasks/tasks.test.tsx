@@ -36,6 +36,15 @@ test("05: the board reads as the design: sections, then folds", async () => {
   expect(app.shows("产物支持 PDF 预览")).toBe(false);
 });
 
+test("05: a task that runs stays over a queued one of its status, even one that moved later", async () => {
+  const app = await board("queued-newer");
+  await app.waitFor("Run history supports pagination");
+  const texts = app.texts();
+  expect(texts.indexOf("Board column width remembers last drag")).toBeLessThan(
+    texts.indexOf("Run history supports pagination"),
+  );
+});
+
 test("05a: an empty board says how tasks come to be", async () => {
   const app = await board("empty");
   await app.waitFor("还没有任务");

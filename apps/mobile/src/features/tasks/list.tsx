@@ -1,4 +1,5 @@
 import type { BoardTaskStatus, BoardTaskView } from "@eta/client-contracts";
+import { runningFirst } from "@eta/client-contracts";
 import { computed, Scroll, signal, Text, View } from "nsh";
 import { boardTasks, conversations } from "../../app/lists";
 import { t } from "../../i18n";
@@ -284,8 +285,9 @@ export function TasksTab() {
       ? boardTasks()
       : boardTasks().filter((task) => task.conversationId === id);
   });
+  // The board's order, newest first, but a task that runs before one that waits.
   const of = (status: BoardTaskStatus) =>
-    tasks().filter((task) => task.status === status);
+    runningFirst(tasks().filter((task) => task.status === status));
   const sections = () =>
     OPEN_STATUSES.filter((status) => of(status).length > 0);
   const folds = () => FOLDED_STATUSES.filter((status) => of(status).length > 0);
