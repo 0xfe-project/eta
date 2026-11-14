@@ -78,7 +78,9 @@ describe("publish_artifact", () => {
     const [first] = await r.play("Ada", [
       publish({ path: "dist", title: "Report" }),
     ]);
-    expect(first).toContain('Published "Report" version 1 (2 files)');
+    expect(first).toMatch(
+      /^Published "Report" as artifact \S+, version 1 \(2 files\)/,
+    );
     await until(() => list(r.w).length === 1);
     const artifact = list(r.w)[0]!;
     expect(artifact).toMatchObject({
@@ -112,6 +114,61 @@ describe("publish_artifact", () => {
     await until(() => list(r.w)[0]?.versions.length === 2);
     expect(list(r.w)).toHaveLength(1);
     expect(list(r.w)[0]!.versions.map((v) => v.number)).toEqual([2, 1]);
+  });
+
+  it("says the artifact's id, and publishing with that id is version 2 of the same artifact", async () => {
+    const r = await room();
+    await r.write({ "site/index.html": "v1" });
+    const [first] = await r.play("Ada", [
+      publish({ path: "site", title: "Design" }),
+    ]);
+    await until(() => list(r.w).length === 1);
+    const { id } = list(r.w)[0]!;
+    expect(first).toBe(
+      `Published "Design" as artifact ${id}, version 1 (1 files). The user can preview, share ` +
+        `and download it. To revise it, publish again with artifactId "${id}".`,
+    );
+    // What the model read is all it has: the id is taken from the text, not from the list.
+    const said = /as artifact (\S+),/.exec(first!)![1]!;
+    await r.write({ "site/index.html": "v2" });
+    const [second] = await r.play("Ada", [
+      publish({ path: "site", title: "Design", artifactId: said }),
+    ]);
+    expect(second).toContain(`as artifact ${id}, version 2`);
+    await until(() => list(r.w)[0]?.versions.length === 2);
+    expect(list(r.w)).toHaveLength(1);
+  });
+
+  it("takes the title of an artifact the agent published here in place of a lost id", async () => {
+    const r = await room();
+    await r.write({ "site/index.html": "x" });
+    await r.play("Ada", [
+      publish({ path: "site", title: "Plan" }),
+      publish({ path: "site", title: "Twin" }),
+      publish({ path: "site", title: "Twin" }),
+    ]);
+    await until(() => list(r.w).length === 3);
+    const plan = list(r.w).find((a) => a.title === "Plan")!;
+    const results = await r.play("Ada", [
+      publish({ path: "site", title: "Plan", artifactId: "Plan" }),
+      publish({ path: "site", title: "Twin", artifactId: "Twin" }),
+      publish({ path: "site", title: "x", artifactId: "Nothing" }),
+    ]);
+    expect(results[0]).toContain(`as artifact ${plan.id}, version 2`);
+    expect(results[1]).toMatch(
+      /^several artifacts you published here are titled "Twin"; name one by id: "Twin" \S+; "Twin" \S+$/,
+    );
+    expect(results[2]).toContain(
+      "no such artifact: Nothing. You published here: ",
+    );
+    expect(results[2]).toContain(`"Plan" ${plan.id}`);
+    // Another agent's title is not its own.
+    const [bobs] = await r.play("Bob", [
+      publish({ path: "site", title: "Plan", artifactId: "Plan" }),
+    ]);
+    expect(bobs).toBe("no such artifact: Plan");
+    await until(() => list(r.w).length === 3);
+    expect(list(r.w).find((a) => a.id === plan.id)!.versions).toHaveLength(2);
   });
 
   it("lets only the agent that published an artifact add a version", async () => {
@@ -334,7 +391,7 @@ describe("publish_artifact from a task's session", () => {
   it("goes on its own task's timeline without being told, from the conversation the task is in", async () => {
     const r = await tasks();
     const { task, results } = await r.run([site]);
-    expect(results[0]).toContain('Published "Report" version 1');
+    expect(results[0]).toMatch(/Published "Report" as artifact \S+, version 1/);
     await until(() => list(r.w).length === 1);
     const artifact = list(r.w)[0]!;
     expect(artifact).toMatchObject({
@@ -358,7 +415,7 @@ describe("publish_artifact from a task's session", () => {
     const { task, results } = await r.run((made) => [
       publish({ path: "site", title: "Report", taskId: `#${made.number}` }),
     ]);
-    expect(results[0]).toContain('Published "Report" version 1');
+    expect(results[0]).toMatch(/Published "Report" as artifact \S+, version 1/);
     await until(() => list(r.w).length === 1);
     expect(list(r.w)[0]).toMatchObject({
       taskId: task.id,
@@ -373,7 +430,7 @@ describe("publish_artifact from a task's session", () => {
     const { task, results } = await r.run([
       publish({ path: "site", title: "Theirs", taskId: other.id }),
     ]);
-    expect(results[0]).toContain('Published "Theirs" version 1');
+    expect(results[0]).toMatch(/Published "Theirs" as artifact \S+, version 1/);
     await until(() => list(r.w).length === 1);
     expect(list(r.w)[0]).toMatchObject({
       taskId: other.id,
@@ -411,7 +468,7 @@ describe("publish_artifact from a task's session", () => {
     const { task, results } = await r.run([site], () => {
       r.w.host.db.run("DELETE FROM conversation WHERE id = ?", [r.group.id]);
     });
-    expect(results[0]).toContain('Published "Report" version 1');
+    expect(results[0]).toMatch(/Published "Report" as artifact \S+, version 1/);
     await until(() => list(r.w).length === 1);
     const artifact = list(r.w)[0]!;
     expect(artifact).toMatchObject({ taskId: task.id, conversationId: null });
@@ -431,7 +488,9 @@ describe("publish_artifact from a task's session", () => {
     const results = await r.mention(task.id, [
       publish({ path: "site", title: "From Bea" }),
     ]);
-    expect(results[0]).toContain('Published "From Bea" version 1');
+    expect(results[0]).toMatch(
+      /Published "From Bea" as artifact \S+, version 1/,
+    );
     await until(() => list(r.w).length === 1);
     expect(list(r.w)[0]).toMatchObject({
       taskId: task.id,
@@ -479,7 +538,9 @@ describe("publish_artifact from a task's session", () => {
     const second = await r.run([
       publish({ path: "site", title: "Report", artifactId }),
     ]);
-    expect(second.results[0]).toContain('Published "Report" version 2');
+    expect(second.results[0]).toMatch(
+      /Published "Report" as artifact \S+, version 2/,
+    );
     await until(() => list(r.w)[0]!.versions.length === 2);
     expect(list(r.w)[0]).toMatchObject({ taskId: first.task.id });
     expect(r.timeline(first.task.id)).toHaveLength(2);

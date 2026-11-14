@@ -40,7 +40,8 @@ const parameters = () =>
     artifactId: Type.Optional(
       Type.String({
         description:
-          "The id of an artifact you published, to add a version to it",
+          "The artifact to add a version to: its id, which publishing returns, or the exact " +
+          "title of one you published in this conversation or for this task",
       }),
     ),
     taskId: Type.Optional(
@@ -68,9 +69,11 @@ export function artifactSessionTools(deps: {
       label: "publish_artifact",
       description:
         "Publish a static site as an artifact the user can preview, share and download: a " +
-        "directory with index.html at its root, plus any CSS, scripts and images. Publishing " +
-        "again with `artifactId` adds a version to the artifact you published, instead of making " +
-        "a second one. Symbolic links are refused; .git and node_modules are left out. The page " +
+        "directory with index.html at its root, plus any CSS, scripts and images. The result " +
+        "names the artifact's id. To revise an artifact, publish again with that id as " +
+        "`artifactId`: it adds a version to the same artifact instead of making a second one. " +
+        "If the id is lost, `artifactId` also takes the exact title of an artifact you published " +
+        "in this conversation or for this task. Symbolic links are refused; .git and node_modules are left out. The page " +
         "runs in a sandbox: it can use scripts, but it cannot reach the host's API, cookies or " +
         "anything else of the user's. localStorage, cookies, IndexedDB and Service Workers are " +
         "not available, and there is no backend: only GET requests for the published files.\n\n" +
@@ -94,6 +97,17 @@ export function artifactSessionTools(deps: {
           // Read now, not when the session opened: a task can move to another conversation.
           const ownId = taskOfKey(conversationId, deps.taskOfRun);
           const own = ownId === undefined ? undefined : deps.board.find(ownId);
+          const where = isTaskSession(conversationId)
+            ? (own?.conversationId ?? own?.originConversationId ?? undefined)
+            : conversationId;
+          const artifactId =
+            args.artifactId === undefined
+              ? undefined
+              : resolveArtifact(deps.artifacts, args.artifactId, {
+                  agentId,
+                  conversationId: where,
+                  taskId: own?.id,
+                });
           const files = await collectSite(
             meta.cwd,
             args.path,
@@ -104,12 +118,10 @@ export function artifactSessionTools(deps: {
             title: args.title,
             files,
             options: args.spa === true ? { fallback: "index.html" } : {},
-            artifactId: args.artifactId,
+            artifactId,
             taskId: task?.id,
             sessionTaskId: own?.id,
-            conversationId: isTaskSession(conversationId)
-              ? (own?.conversationId ?? own?.originConversationId ?? undefined)
-              : conversationId,
+            conversationId: where,
             publisherAgentId: agentId,
           });
           if (artifact.taskId !== null) {
@@ -124,8 +136,9 @@ export function artifactSessionTools(deps: {
             );
           }
           return text(
-            `Published "${artifact.title}" version ${version.number} (${version.files} files). ` +
-              "The user can preview, share and download it.",
+            `Published "${artifact.title}" as artifact ${artifact.id}, version ${version.number} ` +
+              `(${version.files} files). The user can preview, share and download it. To revise ` +
+              `it, publish again with artifactId "${artifact.id}".`,
             {
               artifactId: artifact.id,
               title: artifact.title,
@@ -142,4 +155,45 @@ export function artifactSessionTools(deps: {
 
     return [toKernelTool(publish, contextOf)] as KernelTool[];
   };
+}
+
+/**
+ * What `artifactId` names. An id is taken as it is: whether it may be added to is the service's
+ * judgement. Anything else is read as the exact title of an artifact this agent published in this
+ * conversation or for this task, so a model that lost the id, to a compaction or a fresh session,
+ * can still revise what it made. When nothing matches, the refusal lists what it could have named.
+ */
+function resolveArtifact(
+  artifacts: ArtifactService,
+  ref: string,
+  scope: {
+    agentId: string;
+    conversationId: string | undefined;
+    taskId: string | undefined;
+  },
+): string {
+  if (artifacts.view(ref) !== undefined) return ref;
+  const own = artifacts
+    .list()
+    .filter(
+      (artifact) =>
+        artifact.publisherAgentId === scope.agentId &&
+        ((scope.conversationId !== undefined &&
+          artifact.conversationId === scope.conversationId) ||
+          (scope.taskId !== undefined && artifact.taskId === scope.taskId)),
+    );
+  const title = ref.trim();
+  const named = own.filter((artifact) => artifact.title === title);
+  if (named.length === 1) return named[0]!.id;
+  const listed = (list: typeof own) =>
+    list.map((artifact) => `"${artifact.title}" ${artifact.id}`).join("; ");
+  if (named.length > 1)
+    throw new ArtifactError(
+      `several artifacts you published here are titled "${title}"; name one by id: ${listed(named)}`,
+    );
+  throw new ArtifactError(
+    own.length === 0
+      ? `no such artifact: ${ref}`
+      : `no such artifact: ${ref}. You published here: ${listed(own)}`,
+  );
 }
