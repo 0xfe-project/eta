@@ -4,7 +4,7 @@
 
 import type { MessageStatus, MessageView } from "@eta/client-contracts";
 import type { Signal } from "nsh";
-import { isCaptainGroupOutcome } from "@eta/client-contracts";
+import { isCaptainOutcome } from "@eta/client-contracts";
 import { signal, untracked } from "nsh";
 
 /** A reply that has not ended: someone is, or is about to be, answering. */
@@ -65,7 +65,7 @@ export function taskRowsByTurn(messages: readonly MessageView[]): {
   const rows: MessageView[] = [];
   const under = new Map<string, MessageView[]>();
   for (const row of messages) {
-    if (isCaptainGroupOutcome(row)) continue;
+    if (isCaptainOutcome(row)) continue;
     const turn =
       row.kind === "task_draft" || row.kind === "task_card"
         ? row.data.turnMessageId

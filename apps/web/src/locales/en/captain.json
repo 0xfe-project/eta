@@ -51,6 +51,27 @@
       "expired": "Expired"
     }
   },
+  "agentProposal": {
+    "label": "Proposed agent {{name}}",
+    "title": "New agent",
+    "purpose": "Purpose",
+    "persona": "Persona",
+    "model": "Model",
+    "runtime": "Runtime",
+    "machine": "Machine",
+    "plugins": "Plugins",
+    "create": "Create",
+    "reject": "Reject",
+    "created": "{{name}} is ready; it is in the sidebar.",
+    "status": {
+      "pending": "Awaiting confirmation",
+      "approved": "Creating…",
+      "applied": "Created",
+      "rejected": "Rejected",
+      "failed": "Failed",
+      "expired": "Expired"
+    }
+  },
   "review": {
     "title": "Captain review",
     "observations": "{{count}} observation(s)",

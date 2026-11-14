@@ -1,5 +1,5 @@
 import type { CallFrame } from "@eta/client-wire-proto";
-import type { MessageView } from "./product";
+import type { AgentRuntime, MessageView } from "./product";
 import type { BoardTaskDetail, BoardTaskStatus } from "./tasks";
 
 export const CAPTAIN_ACTIONS = [
@@ -133,11 +133,62 @@ export interface CaptainGroupProposalRowData {
 }
 
 /**
+ * An agent Captain proposed: the payload of a `create_agent` operation. Nothing exists until the user
+ * confirms it; then the agent, its workspace project and its first prompt versions are made. The
+ * persona is one of the cards that already exist — its id here, its body becomes the agent's persona,
+ * and no card is written — and the model is the one the user chose.
+ */
+export interface CaptainAgentProposal {
+  /** Where Captain proposed it: the card is there. */
+  originConversationId: string;
+  /** The card's row in that conversation. */
+  messageId: string;
+  name: string;
+  /** What the agent is for, and when it should retire: one sentence, read on the card. */
+  purpose: string;
+  instructions: string;
+  /** The id of an existing persona card. */
+  persona: string;
+  model: string;
+  runtime: AgentRuntime;
+  /** The primary machine's id, or null: an agent is only made on the primary. */
+  machineId: string | null;
+  plugins: string[];
+}
+
+/** What a confirmed `create_agent` made. */
+export interface CaptainAgentResult {
+  agentId: string;
+  projectId: string;
+  name: string;
+}
+
+/** The data of the system row that draws a proposal as a card (`event: "captain_agent_proposal"`). */
+export interface CaptainAgentProposalRowData {
+  event: "captain_agent_proposal";
+  operationId: string;
+  proposal: CaptainAgentProposal;
+}
+
+/**
  * `MessageView.data.captainGroupOutcome` of the message that tells Captain how a group proposal it
  * made ended. That message is Captain's context, in English, and wakes its next turn; the user
  * already sees the outcome on the proposal's card, so clients do not draw it.
  */
 export interface CaptainGroupOutcomeData {
+  operationId: string;
+  status: CaptainOperationStatus;
+}
+
+/**
+ * `MessageView.data.captainAgentOutcome` of the message that tells Captain how an agent proposal it
+ * made ended. Like a group's outcome it is Captain's context, in English, and it wakes its next
+ * turn; the user already sees the outcome on the proposal's card, so clients do not draw it.
+ *
+ * Only an agent Captain proposed reports back. An agent the user makes in the agent dialog is not
+ * an operation at all, so nothing is said about it.
+ */
+export interface CaptainAgentOutcomeData {
   operationId: string;
   status: CaptainOperationStatus;
 }
@@ -158,6 +209,29 @@ export function isCaptainGroupOutcome(
   const outcome = message.data.captainGroupOutcome;
   if (typeof outcome === "object" && outcome !== null) return true;
   return LEGACY_GROUP_OUTCOME.test(message.text);
+}
+
+/**
+ * Whether a row is the message that tells Captain how an agent proposal it made ended; clients skip
+ * it, as they do a group's. There is no legacy text to match: no such message was written before
+ * the data key existed.
+ */
+export function isCaptainAgentOutcome(
+  message: Pick<MessageView, "author" | "kind" | "data">,
+): boolean {
+  if (message.author !== "system" || message.kind !== "message") return false;
+  const outcome = message.data.captainAgentOutcome;
+  return typeof outcome === "object" && outcome !== null;
+}
+
+/**
+ * Whether a row is the message that tells Captain how any proposal it made ended. One place for
+ * clients to ask, so a new kind of proposal does not need every client taught about it.
+ */
+export function isCaptainOutcome(
+  message: Pick<MessageView, "author" | "kind" | "text" | "data">,
+): boolean {
+  return isCaptainGroupOutcome(message) || isCaptainAgentOutcome(message);
 }
 
 export interface CaptainPromptVersionView {
