@@ -11,82 +11,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatLocale } from "@/lib/i18n";
 import { THINKING_LEVELS } from "@/lib/thinking";
 import { usePersonas } from "@/queries/personas";
-import { modelGroups } from "@/queries/providers";
 import { DESCRIPTION_MAX } from "./agent-form";
-import { Select, SelectGroup, SelectOption } from "./select-field";
+import { ModelSelect } from "./model-select";
+import { Select, SelectOption } from "./select-field";
 
 type Form = UseFormReturn<AgentForm>;
-
-/** Models grouped by service; unusable ones stay visible but disabled. */
-export function ModelSelect({
-  value,
-  models,
-  invalid,
-  defaultLabel,
-  ...props
-}: Omit<React.ComponentProps<typeof Select>, "children"> & {
-  value: string;
-  /**
-   * Undefined while they load. Null when they cannot be listed (the machine is out of reach): the
-   * chosen one then shows as it is, since there is no list to say it is gone.
-   */
-  models: Model[] | null | undefined;
-  invalid?: boolean;
-  /** Offers "no model of its own" (the empty value) under this name, instead of asking to pick. */
-  defaultLabel?: string;
-}) {
-  const { t: translateText } = useTranslation([
-    "agents",
-    "common",
-    "providers",
-  ] as const);
-  const loading = models === undefined;
-  const groups = modelGroups(models ?? []);
-  const known = (models ?? []).some((model) => model.id === value);
-  return (
-    <Select
-      className="w-full"
-      aria-invalid={invalid}
-      value={value}
-      {...props}
-      disabled={loading || props.disabled}
-    >
-      <SelectOption value="" disabled={defaultLabel === undefined}>
-        {defaultLabel ??
-          (loading
-            ? translateText("models.loading")
-            : translateText("models.select"))}
-      </SelectOption>
-      {value && !known ? (
-        <SelectOption value={value} disabled>
-          {loading
-            ? translateText("models.loading")
-            : models === null
-              ? value
-              : translateText("models.deletedOption", { modelName: value })}
-        </SelectOption>
-      ) : null}
-      {groups.map(({ provider, label, models }) => (
-        <SelectGroup key={provider} label={label}>
-          {models.map((model) => (
-            <SelectOption
-              key={model.id}
-              value={model.id}
-              disabled={!model.available && model.id !== value}
-            >
-              {model.name}
-              {model.available
-                ? model.delisted
-                  ? translateText("providers:models.delistedSuffix")
-                  : ""
-                : translateText("common:status.unavailableSuffix")}
-            </SelectOption>
-          ))}
-        </SelectGroup>
-      ))}
-    </Select>
-  );
-}
 
 export function NameField({
   form,

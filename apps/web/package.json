@@ -25,6 +25,7 @@
     "@tanstack/react-router": "^1.170.41",
     "blobatar": "^2.7.0",
     "class-variance-authority": "^0.7.1",
+    "cmdk": "^1.1.1",
     "cn": "^0.4.0",
     "diff": "^9.0.0",
     "i18next": "^26.4.4",

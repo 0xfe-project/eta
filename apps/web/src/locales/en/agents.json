@@ -28,6 +28,8 @@
     "deletedOption": "{{modelName}} (no longer exists)",
     "noneAvailable": "No models available.",
     "noneSelected": "No model selected",
+    "search": "Search models",
+    "noMatch": "No matching models",
     "errors": {
       "deleted": "{{modelName}} no longer exists. Select another model.",
       "unavailable": "{{modelName}} is temporarily unavailable: {{reason}}"

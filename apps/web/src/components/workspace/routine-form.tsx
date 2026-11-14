@@ -15,7 +15,7 @@ import { useConversationList } from "@/queries/conversations";
 import { useModels } from "@/queries/providers";
 import { useCreateRoutine, useUpdateRoutine } from "@/queries/routines";
 import { wireErrorMessage } from "@/queries/wire";
-import { ModelSelect } from "./agent-fields";
+import { ModelSelect } from "./model-select";
 import { occurrences, when } from "./routine-format";
 import { Select, SelectOption } from "./select-field";
 import { useWorkspaceStore } from "./workspace-store";
