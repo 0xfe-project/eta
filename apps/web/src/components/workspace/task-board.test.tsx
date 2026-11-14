@@ -510,8 +510,9 @@ describe("task board", () => {
     expect(dialog.textContent).not.toContain("/");
     await click(dialog.querySelector('button[aria-label="工作区"]'));
     await flush();
-    const log = document.querySelector("[data-slot=popover-content]")!
-      .textContent;
+    const log = document.querySelector(
+      "[data-slot=popover-content]",
+    )!.textContent;
     return { properties, log };
   }
 

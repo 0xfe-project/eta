@@ -26,6 +26,7 @@ export function ProcessBox({
   agentId,
   sessionId,
   runFrom,
+  callId,
   time,
   answer,
 }: {
@@ -42,6 +43,8 @@ export function ProcessBox({
   /** The member's session and where the reply's run starts in it: the dialog times the run from it. */
   sessionId?: string | undefined;
   runFrom?: number | undefined;
+  /** The first call a finished reply kept: where its run is in the session, when `runFrom` is gone. */
+  callId?: string | undefined;
   time: string;
   /** The reply's text, shown under the whole process in the dialog. */
   answer: React.ReactNode;
@@ -132,6 +135,7 @@ export function ProcessBox({
             time={time}
             sessionId={sessionId}
             runFrom={runFrom}
+            callId={callId}
             running={running}
             bodyRef={bodyRef}
           />
@@ -157,6 +161,7 @@ function ReplyHeader({
   time,
   sessionId,
   runFrom,
+  callId,
   running,
   bodyRef,
 }: {
@@ -165,11 +170,12 @@ function ReplyHeader({
   time: string;
   sessionId: string | undefined;
   runFrom: number | undefined;
+  callId: string | undefined;
   running: boolean;
   bodyRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const now = useNow(running);
-  const timing = useReplyTiming(sessionId, runFrom, now);
+  const timing = useReplyTiming(sessionId, runFrom, now, callId);
   return (
     <RunHeader
       agentId={agentId}

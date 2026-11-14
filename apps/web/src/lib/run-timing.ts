@@ -95,13 +95,6 @@ function scriptKind(input: unknown): StepKind {
   return "other";
 }
 
-/**
- * How far a transcript's times can be trusted. `full`: steps by kind. `coarse`: a runtime whose
- * events were not measured — the model and its tools are told apart, not one tool from another.
- * `none`: nothing to draw.
- */
-export type TimingPrecision = "full" | "coarse" | "none";
-
 /** The oar runtimes whose times were measured against real runs (task #98). */
 const MEASURED_RUNTIMES = new Set(["oar-claude", "oar-codex"]);
 
@@ -121,7 +114,12 @@ export interface RunStep {
 }
 
 export interface RunTiming {
-  precision: Exclude<TimingPrecision, "none">;
+  /**
+   * How far the times can be trusted. `full`: steps by kind. `coarse`: a runtime whose events were
+   * not measured — the model and its tools are told apart, not one tool from another. A transcript
+   * with no usable times has no timing at all (`runTiming` is undefined).
+   */
+  precision: "full" | "coarse";
   start: number;
   end: number;
   steps: RunStep[];
@@ -206,6 +204,11 @@ export function runTiming(
     now?: number;
     /** When the run started, if before its first row: the strip starts there. */
     start?: number;
+    /**
+     * When a finished run ended, if after its last row (a model retried and gave up writes
+     * nothing): the strip runs to there, blank where the transcript says nothing.
+     */
+    end?: number;
   } = {},
 ): RunTiming | undefined {
   const { streaming, now } = options;
@@ -301,7 +304,7 @@ export function runTiming(
     assistant(streaming, undefined, "stream");
   }
   if (first === undefined) return undefined;
-  const end = now ?? last;
+  const end = now ?? Math.max(last, options.end ?? last);
   times.sort((a, b) => a - b);
   for (const step of calls.values()) {
     if (!Number.isNaN(step.end)) continue;
@@ -350,6 +353,33 @@ export function replyRows(
     out.push(row);
   }
   return out;
+}
+
+/**
+ * Where a finished reply's run starts in its session when its row no longer says (`runFrom` is
+ * lost when the host saves the reply's end): before the briefing of the run that made `callId`,
+ * one of the calls the reply kept. Undefined when the rows do not hold that call.
+ */
+export function runFromOfCall(
+  rows: readonly ViewMessageRow[],
+  callId: string,
+): number | undefined {
+  const at = rows.findIndex(
+    (row) =>
+      row.message.role === "assistant" &&
+      partsOf(row.message).some(
+        (part) => part.type === "toolCall" && part.id === callId,
+      ),
+  );
+  if (at < 0) return undefined;
+  for (let back = at - 1; back >= 0; back -= 1)
+    if (rows[back]!.message.role === "user") {
+      // The briefing may be several user messages in a row; the run starts before the first.
+      let first = back;
+      while (first > 0 && rows[first - 1]!.message.role === "user") first -= 1;
+      return rows[first]!.seq - 1;
+    }
+  return rows[0]!.seq - 1;
 }
 
 /** Each kind's time, summed over its steps (calls made together each count their own). */

@@ -1018,6 +1018,7 @@ function RunLogButton({ task, run }: { task: TaskDetail; run: TaskRun }) {
             streaming,
             ...(now === undefined ? {} : { now }),
             ...(run.startedAt === null ? {} : { start: run.startedAt }),
+            ...(run.finishedAt === null ? {} : { end: run.finishedAt }),
           }),
     [rows, streaming, now, run.startedAt, run.finishedAt],
   );

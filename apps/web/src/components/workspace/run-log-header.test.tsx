@@ -265,8 +265,8 @@ describe("the run's timing strip", () => {
     host([run()]);
     const { dialog } = await open();
     const toolbar = strip(dialog)!;
-    // From the run's start to its last message.
-    expect(toolbar.getAttribute("aria-label")).toBe("4 步，用时 0:20");
+    // From the run's start to its end, as the header counts it.
+    expect(toolbar.getAttribute("aria-label")).toBe("4 步，用时 4:08");
     expect(dialog.getAttribute("aria-describedby")).not.toBeNull();
     const labels = [...toolbar.querySelectorAll("button")].map((b) =>
       b.getAttribute("aria-label"),

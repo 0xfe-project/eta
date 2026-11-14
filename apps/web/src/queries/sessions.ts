@@ -11,7 +11,7 @@ import type { RunTiming } from "@/lib/run-timing";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { logBlocks, runBlocks } from "@/lib/run";
-import { replyRows, runTiming } from "@/lib/run-timing";
+import { replyRows, runFromOfCall, runTiming } from "@/lib/run-timing";
 import { getWire } from "@/lib/wire";
 import { useWireMutation } from "@/queries/wire";
 
@@ -301,14 +301,17 @@ export function useSessionLog(
 
 /**
  * Where a group reply's run spent its time, from its member's session: the rows after `runFrom`
- * (the place in the session the reply's row names) up to the next reply's briefing, or — for a
+ * (the place in the session the reply's row names, or for a finished one, where the call it kept
+ * was made) up to the next reply's briefing, or — for a
  * reply at work, which runs to `now` — everything after it. Undefined when the session view no
  * longer holds the run (it keeps the newest 200 messages) or its rows carry no times.
  */
 export function useReplyTiming(
   sessionId: string | undefined,
-  runFrom: number | undefined,
+  savedRunFrom: number | undefined,
   now: number | undefined,
+  /** One of the calls a finished reply kept: where its run is, when its row lost `runFrom`. */
+  callId?: string | undefined,
 ): RunTiming | undefined {
   const session = useSession(sessionId);
   const streamed = useStreamedMessage(sessionId);
@@ -317,6 +320,9 @@ export function useReplyTiming(
   const streaming = live ? (streamed ?? session?.core?.streaming) : undefined;
   return useMemo(() => {
     if (rows === undefined) return undefined;
+    const runFrom =
+      savedRunFrom ??
+      (live || callId === undefined ? undefined : runFromOfCall(rows, callId));
     // A run that started before the oldest row the view holds is not all there.
     if (runFrom !== undefined && (rows[0]?.seq ?? 0) > runFrom + 1)
       return undefined;
@@ -329,7 +335,7 @@ export function useReplyTiming(
     return own === undefined
       ? undefined
       : runTiming(own, { streaming, ...(live ? { now } : {}) });
-  }, [rows, runFrom, live, streaming, now]);
+  }, [rows, savedRunFrom, callId, live, streaming, now]);
 }
 
 /** Where the newest user message is (the briefing of the run in flight); 0 when there is none. */

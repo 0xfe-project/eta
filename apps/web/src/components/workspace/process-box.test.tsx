@@ -220,7 +220,7 @@ describe("a reply's process in a group", () => {
 describe("a reply's process dialog", () => {
   const T = 1_800_000_000_000;
   /** A finished group reply whose run is still in its member's session, with times. */
-  async function timed() {
+  async function timed(runFrom: number | undefined = 1) {
     conversations += 1;
     const id = `process-box-${conversations}`;
     const host = surfaceHost({
@@ -240,7 +240,7 @@ describe("a reply's process dialog", () => {
             agentId: "a1",
             text: "最终答案",
             data: {
-              runFrom: 1,
+              ...(runFrom === undefined ? {} : { runFrom }),
               activity: [
                 {
                   id: "c1",
@@ -321,6 +321,13 @@ describe("a reply's process dialog", () => {
         (b) => b.getAttribute("aria-label")?.split("，")[0],
       ),
     ).toEqual(["生成", "bash", "生成"]);
+  });
+
+  it("finds a finished reply's run by the call it kept, when its row lost where it started", async () => {
+    const dialog = await timed(undefined);
+    expect(
+      dialog.querySelector('[role="toolbar"]')?.getAttribute("aria-label"),
+    ).toBe("3 步，用时 0:10");
   });
 
   it("sends the dialog to the step picked", async () => {

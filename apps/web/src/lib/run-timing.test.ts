@@ -4,6 +4,7 @@ import {
   kindTotals,
   replyRows,
   rowsBetween,
+  runFromOfCall,
   runTiming,
   stripSegments,
   toolKind,
@@ -171,6 +172,14 @@ describe("a run's timing, from eta's own loop", () => {
     expect(runTiming(rows)!.steps[2]!.blocks).toEqual(["at4000:error"]);
   });
 
+  it("runs from when the run started to when it ended, when those are outside its rows", () => {
+    const rows = [user(1000), eta(1001, 3000, [{ type: "text", text: "x" }])];
+    const timing = runTiming(rows, { start: 900, end: 9000 })!;
+    expect([timing.start, timing.end]).toEqual([900, 9000]);
+    // A run at work runs to now, whatever it says about its end.
+    expect(runTiming(rows, { start: 900, now: 4000 })!.end).toBe(4000);
+  });
+
   it("is nothing when the rows carry no times", () => {
     const rows = [
       row(0, { role: "user", content: "go" }),
@@ -326,5 +335,22 @@ describe("the rows of a run", () => {
       eta(51, 60, [{ type: "text", text: "next reply" }]),
     ];
     expect(replyRows(rows, 2).map((r) => r.seq)).toEqual([3, 4, 5, 6]);
+  });
+
+  it("of a finished group reply are found by a call it kept, when its row lost where it started", () => {
+    seq = 0;
+    const rows = [
+      user(1, "earlier"),
+      eta(2, 3, [{ type: "text", text: "earlier reply" }]),
+      user(10, "this one"),
+      eta(11, 20, [call("c", "bash")]),
+      result(30, "c"),
+      eta(31, 40, [{ type: "text", text: "done" }]),
+      user(50, "next one"),
+    ];
+    const from = runFromOfCall(rows, "c")!;
+    expect(from).toBe(2);
+    expect(replyRows(rows, from).map((r) => r.seq)).toEqual([3, 4, 5, 6]);
+    expect(runFromOfCall(rows, "gone")).toBeUndefined();
   });
 });

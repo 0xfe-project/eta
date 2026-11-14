@@ -118,7 +118,7 @@ interface Tip {
  * Hovering or focusing a step says what it was; picking one sends the log to it. Both the strip
  * and the waterfall are one tab stop, walked with the arrow keys.
  */
-export function RunTimeline({
+function RunTimeline({
   id,
   timing,
   expanded,

@@ -980,6 +980,7 @@ const Turn = memo(
                 agentId={message.agentId}
                 sessionId={sessionId}
                 runFrom={runFromOf(message.data)}
+                callId={tools[0]?.id}
                 time={when(message.createdAt)}
                 answer={answer}
               />
