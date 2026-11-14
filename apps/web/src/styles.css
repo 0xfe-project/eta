@@ -138,13 +138,12 @@
    * The same control on the sidebar's edge, laid over the line instead of being one. The column
    * already draws its own rule (`.sidebar-rule`), so at rest this paints nothing and that rule stays
    * the one line; under the pointer its 2px cover the rule, which is what the `z-index` is for. It
-   * starts under the band like the rule does: the band is the window's in the shell, and the corner
-   * of it the lights sit in stays clear of any vertical line.
+   * runs the window's full height like the rule does, so the line it lights up is the one there.
    */
   .sidebar-divider {
     position: absolute;
     z-index: 1;
-    inset-block: var(--header-band) 0;
+    inset-block: 0;
     right: 0;
     background: none;
   }
@@ -1862,10 +1861,10 @@ html[data-host="desktop"] [data-lights-corridor] {
 }
 
 /*
- * The rule down the sidebar's right edge starts under the band, not at the top of the window. The
- * band is one horizontal strip across every column — that is what makes three headers read as one
- * bar — and a vertical rule inside it cuts the bar in two, in exactly the corner the lights sit in
- * once the rail folds. The sidebar draws it itself so the line lands inside its own box.
+ * The rule down the sidebar's right edge runs from the top of the window to the bottom, through
+ * the band too: it is the one vertical line of the app, and stopping it under the band left the
+ * wordmark's corner open on the right. The sidebar draws it itself so the line lands inside its
+ * own box.
  */
 .sidebar-rule {
   position: relative;
@@ -1873,12 +1872,21 @@ html[data-host="desktop"] [data-lights-corridor] {
 .sidebar-rule::after {
   content: "";
   position: absolute;
-  top: var(--header-band);
+  top: 0;
   right: 0;
   bottom: 0;
   width: 1px;
   background: var(--border);
   pointer-events: none;
+}
+/*
+ * The one exception: a folded rail in the shell. It is 4rem wide and the lights' corridor is 82px,
+ * so the rail's edge falls on the third light (it ends at 66px) and a line there would cut through
+ * it. In that corner alone the rule starts under the band; an open sidebar is far wider than the
+ * corridor and a browser has no lights, so both draw it to the top.
+ */
+html[data-host="desktop"] [data-rail-edge="true"].sidebar-rule::after {
+  top: var(--header-band);
 }
 
 /*

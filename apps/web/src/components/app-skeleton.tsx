@@ -91,6 +91,7 @@ function SidebarSkeleton() {
   return (
     <div
       data-rail={rail ? "true" : "false"}
+      data-rail-edge={rail ? "true" : undefined}
       style={{ width }}
       className={cn(
         "sidebar-rule hidden shrink-0 flex-col bg-sidebar md:flex",
@@ -141,7 +142,7 @@ function BottomNavSkeleton() {
 function PageBody() {
   return (
     <>
-      <div className="flex h-12 shrink-0 items-center border-b px-4 sm:px-6">
+      <div className="band px-4 sm:px-6">
         <Skeleton className="w-24" />
       </div>
       <div className="mx-auto min-h-0 w-full max-w-content flex-1 overflow-hidden px-2 py-2 sm:px-4">
