@@ -295,6 +295,11 @@
   --color-overlay: var(--overlay);
   --color-overlay-hover: var(--overlay-hover);
   --color-faint: var(--faint);
+  --color-run-model: var(--run-model);
+  --color-run-shell: var(--run-shell);
+  --color-run-read: var(--run-read);
+  --color-run-edit: var(--run-edit);
+  --color-run-other: var(--run-other);
   --color-state-error: var(--state-error);
   --color-state-warning: var(--state-warning);
   --color-state-success: var(--state-success);
@@ -367,6 +372,14 @@
   --state-warning: oklch(0.62 0.18 75);
   --state-success: oklch(0.527 0.154 150.069);
   --state-info: oklch(0.52 0.18 240);
+  /* A run's steps by kind (the timing strip): slots 1-4 of the reference categorical palette, in
+     its order, checked for colour blindness; "other" is a neutral grey. Two of them sit under 3:1
+     on white, so the strip always shows its legend. */
+  --run-model: #2a78d6;
+  --run-shell: #eb6834;
+  --run-read: #1baf7a;
+  --run-edit: #eda100;
+  --run-other: oklch(0.72 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.556 0 0);
   --chart-1: oklch(0.87 0 0);
@@ -414,6 +427,11 @@
   --state-warning: oklch(0.72 0.16 75);
   --state-success: oklch(0.65 0.16 150);
   --state-info: oklch(0.65 0.16 240);
+  --run-model: #3987e5;
+  --run-shell: #d95926;
+  --run-read: #199e70;
+  --run-edit: #c98500;
+  --run-other: oklch(0.5 0 0);
   --input: oklch(0.98 0 0 / 28%);
   --ring: oklch(0.72 0 0);
   --chart-1: oklch(0.86 0 0);
@@ -1358,6 +1376,45 @@
   .lightbox-bar button:disabled {
     color: var(--faint);
     cursor: default;
+  }
+
+  /* A run's timing strip: a 1px cut in the background's colour between two steps. */
+  .run-segment {
+    min-width: 0;
+    box-shadow: inset -1px 0 0 var(--background);
+    cursor: pointer;
+  }
+  .run-segment:hover,
+  .run-segment:focus-visible,
+  .run-segment[aria-current] {
+    z-index: 1;
+    outline: 1px solid var(--foreground);
+    outline-offset: 1px;
+  }
+  /* The waterfall: what the step was, where it sat in the run, how long it took. */
+  .run-waterfall-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 13rem) minmax(0, 1fr) 3.5rem;
+    gap: 8px;
+    align-items: center;
+  }
+  @media (max-width: 639px) {
+    .run-waterfall-grid {
+      grid-template-columns: 7rem minmax(0, 1fr) 2.75rem;
+    }
+  }
+  .run-waterfall-row {
+    padding-block: 1px;
+    cursor: pointer;
+  }
+  .run-waterfall-row:hover,
+  .run-waterfall-row[aria-current] {
+    background: var(--overlay-hover);
+  }
+  /* The block a step was picked from the strip for. */
+  [data-block][data-hit] {
+    outline: 1px solid var(--foreground);
+    outline-offset: 2px;
   }
 
   /* A task run's log. Off-screen rows skip layout and paint: a long run is hundreds of them. */

@@ -91,7 +91,6 @@
     "loading": "正在读取记录…",
     "empty": "还没有记录。",
     "title": "执行记录",
-    "workspacePrefix": "工作区 ",
     "done": "完成",
     "failed": "失败",
     "error": "出错",
@@ -102,7 +101,25 @@
     "group_one": "{{name}} · {{count}} 次",
     "group_other": "{{name}} · {{count}} 次",
     "earlier": "加载更早的记录",
-    "loadingEarlier": "正在加载更早的记录…"
+    "loadingEarlier": "正在加载更早的记录…",
+    "header": {
+      "status": {
+        "queued": "排队中",
+        "starting": "正在启动",
+        "running": "运行中",
+        "completed": "完成",
+        "failed": "失败",
+        "interrupted": "已停止"
+      },
+      "elapsed": "用时 {{duration}}",
+      "attempt": "第 {{count}} 次",
+      "workspace": "工作区",
+      "branch": "分支",
+      "machine": "机器",
+      "path": "路径",
+      "copyPath": "复制路径",
+      "pathCopied": "路径已复制"
+    }
   },
   "draft": {
     "title": "任务草稿",
