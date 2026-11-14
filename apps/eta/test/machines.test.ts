@@ -11,7 +11,13 @@ import { DaemonLink, enroll } from "@eta/daemon";
 import { describe, expect, it } from "vitest";
 import { MachineStore } from "../src/machines/store";
 import { connect, until } from "./support/client";
-import { approve, machineView, makeCode, startDaemon } from "./support/daemon";
+import {
+  approve,
+  dropLink,
+  machineView,
+  makeCode,
+  startDaemon,
+} from "./support/daemon";
 import { tempDir, testHost } from "./support/host";
 import { world } from "./support/world";
 
@@ -279,16 +285,9 @@ describe("the link", () => {
           return false;
         }
       });
-      daemon.link.drop();
+      await dropLink(w.host, w.client, daemon);
       // The caller is told it does not know: the script may or may not have finished.
       expect(await running).toMatch(/outcome is unknown/);
-      await until(
-        () => machineView(w.client, daemon.machineId)?.status === "offline",
-      );
-      await daemon.reached("online");
-      await until(
-        () => machineView(w.client, daemon.machineId)?.status === "online",
-      );
       // A new epoch, and the old call is not run again.
       expect(await readFile(marker, "utf8")).toBe("ran\n");
     },
