@@ -1,7 +1,7 @@
 import type { AgentRuntimeInfo, MachineView } from "@eta/client-contracts";
 import type { UseFormReturn } from "react-hook-form";
 import type { AgentForm } from "./agent-form";
-import { useWatch } from "react-hook-form";
+import { useFormState, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -105,7 +105,8 @@ export function MachinePicker({
   const { agents } = useAgentList();
   const value = useWatch({ control: form.control, name: "machineId" });
   const saved = form.formState.defaultValues?.machineId ?? "";
-  const error = form.formState.errors.machineId;
+  const error = useFormState({ control: form.control, name: "machineId" })
+    .errors.machineId;
   const listed = machines.filter(
     (machine) =>
       machine.id === saved ||

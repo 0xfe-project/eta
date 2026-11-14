@@ -7,7 +7,7 @@ import { ScrollIcon } from "@phosphor-icons/react/Scroll";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/SlidersHorizontal";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
 import { useEffect, useState } from "react";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm, useFormState, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
@@ -198,7 +198,7 @@ function AgentEditorForm({
     if (target) setTab(target.value);
     setFocus({ field });
   };
-  const errors = form.formState.errors;
+  const { errors } = useFormState({ control: form.control });
   const runtime = useWatch({ control: form.control, name: "runtime" });
   const machineId = useWatch({ control: form.control, name: "machineId" });
   const { runtimes, models } = useAgentRuntimeChoices(runtime, machineId);

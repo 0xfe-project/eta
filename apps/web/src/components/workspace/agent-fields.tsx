@@ -2,7 +2,7 @@ import type { AgentRuntimeInfo } from "@eta/client-contracts";
 import type { UseFormReturn } from "react-hook-form";
 import type { AgentForm } from "./agent-form";
 import type { Model } from "@/queries/providers";
-import { useWatch } from "react-hook-form";
+import { useFormState, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +29,10 @@ export function NameField({
     "common",
     "providers",
   ] as const);
-  const error = form.formState.errors.name;
+  // useFormState, not form.formState: the React Compiler memoises this component on `form`, which
+  // is the same object every render, so an error read off it would never show.
+  const error = useFormState({ control: form.control, name: "name" }).errors
+    .name;
   return (
     <div className="space-y-1.5">
       <Label htmlFor="agent-name">{translateText("common:labels.name")}</Label>
@@ -170,7 +173,8 @@ export function ModelField({
     "common",
     "providers",
   ] as const);
-  const error = form.formState.errors.model;
+  const error = useFormState({ control: form.control, name: "model" }).errors
+    .model;
   // useWatch, not form.watch: the React Compiler memoises these components on their props, and
   // `form` is the same object every render. A read the compiler cannot see never invalidates that
   // memo, so the component kept its old render and the trigger kept its old label.
@@ -288,7 +292,8 @@ export function InstructionsField({
     "common",
     "providers",
   ] as const);
-  const error = form.formState.errors.description;
+  const error = useFormState({ control: form.control, name: "description" })
+    .errors.description;
   const description = useWatch({ control: form.control, name: "description" });
   const length = (description ?? "").length;
   return (
@@ -378,6 +383,7 @@ function PersonaSelect({
 export function PersonaField({ form }: { form: Form }) {
   const { t: translateText } = useTranslation(["agents", "common"] as const);
   const persona = useWatch({ control: form.control, name: "persona" });
+  const { errors } = useFormState({ control: form.control, name: "persona" });
   return (
     <div className="space-y-1.5">
       <Label htmlFor="agent-persona">
@@ -388,7 +394,7 @@ export function PersonaField({ form }: { form: Form }) {
         onChange={(next) =>
           form.setValue("persona", next, { shouldDirty: true })
         }
-        invalid={Boolean(form.formState.errors.persona)}
+        invalid={Boolean(errors.persona)}
       />
     </div>
   );
