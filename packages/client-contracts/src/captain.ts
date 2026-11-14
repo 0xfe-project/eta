@@ -181,6 +181,19 @@ export interface CaptainGroupOutcomeData {
 }
 
 /**
+ * `MessageView.data.captainAgentOutcome` of the message that tells Captain how an agent proposal it
+ * made ended. Like a group's outcome it is Captain's context, in English, and it wakes its next
+ * turn; the user already sees the outcome on the proposal's card, so clients do not draw it.
+ *
+ * Only an agent Captain proposed reports back. An agent the user makes in the agent dialog is not
+ * an operation at all, so nothing is said about it.
+ */
+export interface CaptainAgentOutcomeData {
+  operationId: string;
+  status: CaptainOperationStatus;
+}
+
+/**
  * The opening of the outcome message as the host wrote it before it carried
  * `data.captainGroupOutcome`: `Your proposed group "<name>" (operation <uuid>) was confirmed…` or
  * `…was rejected…`. Only a `system` message is matched, and only the host writes those.
@@ -196,6 +209,29 @@ export function isCaptainGroupOutcome(
   const outcome = message.data.captainGroupOutcome;
   if (typeof outcome === "object" && outcome !== null) return true;
   return LEGACY_GROUP_OUTCOME.test(message.text);
+}
+
+/**
+ * Whether a row is the message that tells Captain how an agent proposal it made ended; clients skip
+ * it, as they do a group's. There is no legacy text to match: no such message was written before
+ * the data key existed.
+ */
+export function isCaptainAgentOutcome(
+  message: Pick<MessageView, "author" | "kind" | "data">,
+): boolean {
+  if (message.author !== "system" || message.kind !== "message") return false;
+  const outcome = message.data.captainAgentOutcome;
+  return typeof outcome === "object" && outcome !== null;
+}
+
+/**
+ * Whether a row is the message that tells Captain how any proposal it made ended. One place for
+ * clients to ask, so a new kind of proposal does not need every client taught about it.
+ */
+export function isCaptainOutcome(
+  message: Pick<MessageView, "author" | "kind" | "text" | "data">,
+): boolean {
+  return isCaptainGroupOutcome(message) || isCaptainAgentOutcome(message);
 }
 
 export interface CaptainPromptVersionView {

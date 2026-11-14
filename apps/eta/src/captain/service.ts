@@ -2,6 +2,7 @@ import type {
   AgentRuntime,
   BoardTaskDetail,
   BoardTaskView,
+  CaptainAgentOutcomeData,
   CaptainAgentProposal,
   CaptainAgentProposalRowData,
   CaptainAgentResult,
@@ -887,6 +888,12 @@ export class CaptainService {
       captainAgentId: string;
     },
   ): Promise<{ operation: CaptainOperationView; messageId: string }> {
+    // Who may make an agent is not a caller's argument: the identity recorded on the operation is
+    // the one this service has, so a `create_agent` can only ever be proposed by the Captain.
+    const captain = this.identity();
+    if (captain === undefined) throw new Error("Captain is not initialized");
+    if (input.captainAgentId !== captain.agentId)
+      throw new Error("only the Captain can propose an agent");
     const origin = this.#deps.conversations.get(input.originConversationId);
     if (origin === undefined) throw new Error("no such conversation");
     const resolved = await this.#resolveAgent(input);
@@ -1198,47 +1205,79 @@ export class CaptainService {
   }
 
   /**
-   * A decided operation that Captain is waiting on: for a group proposal, Captain hears the outcome
-   * in the conversation it proposed from, as a message that starts its next turn.
+   * A decided proposal that Captain is waiting on: Captain hears the outcome in the conversation it
+   * proposed from, as a message that starts its next turn.
+   *
+   * Only a proposal reaches this: a `create_group` or `create_agent` operation Captain recorded
+   * itself. An agent the user makes in the agent dialog goes straight to `agents.create` and is no
+   * operation at all, so nothing is reported to Captain about it.
    */
   async #settled(operation: CaptainOperationView): Promise<void> {
-    if (operation.kind !== "create_group") return;
-    const proposal = operation.payload as unknown as CaptainGroupProposal;
+    const group = operation.kind === "create_group";
+    if (!group && operation.kind !== "create_agent") return;
     const captain = this.identity();
     if (captain === undefined) return;
+    const originConversationId = String(
+      operation.payload.originConversationId ?? "",
+    );
     try {
-      const origin = this.#deps.conversations.get(
-        proposal.originConversationId,
+      const conversationId = await this.#outcomeConversation(
+        originConversationId,
+        captain.agentId,
       );
-      const reachable =
-        origin !== undefined &&
-        !origin.archived &&
-        this.#deps.conversations
-          .participants(origin.id)
-          .some((member) => member.agentId === captain.agentId);
-      const conversationId = reachable
-        ? origin.id
-        : (await this.direct()).conversationId;
       await this.#deps.engine.send({
         conversationId,
-        text: groupOutcome(operation, proposal),
+        text: group
+          ? groupOutcome(
+              operation,
+              operation.payload as unknown as CaptainGroupProposal,
+            )
+          : agentOutcome(
+              operation,
+              operation.payload as unknown as CaptainAgentProposal,
+            ),
         author: "system",
         // Captain's context, not the user's: the card already shows how it ended.
-        data: {
-          captainGroupOutcome: {
-            operationId: operation.id,
-            status: operation.status,
-          } satisfies CaptainGroupOutcomeData,
-        },
+        data: group
+          ? {
+              captainGroupOutcome: {
+                operationId: operation.id,
+                status: operation.status,
+              } satisfies CaptainGroupOutcomeData,
+            }
+          : {
+              captainAgentOutcome: {
+                operationId: operation.id,
+                status: operation.status,
+              } satisfies CaptainAgentOutcomeData,
+            },
         mentions: [captain.agentId],
         mode: "queue",
       });
       this.#deps.changed([conversationId]);
     } catch (error) {
       this.#deps.warn(
-        `[eta] Captain was not told how its group proposal ended: ${error instanceof Error ? error.message : String(error)}`,
+        `[eta] Captain was not told how its ${group ? "group" : "agent"} proposal ended: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  /**
+   * Where Captain hears how a proposal ended: the conversation it proposed from, or its direct
+   * chat when it can no longer speak there (archived, or it is not a member any more).
+   */
+  async #outcomeConversation(
+    originConversationId: string,
+    captainAgentId: string,
+  ): Promise<string> {
+    const origin = this.#deps.conversations.get(originConversationId);
+    const reachable =
+      origin !== undefined &&
+      !origin.archived &&
+      this.#deps.conversations
+        .participants(origin.id)
+        .some((member) => member.agentId === captainAgentId);
+    return reachable ? origin.id : (await this.direct()).conversationId;
   }
 
   async taskControl(input: {
@@ -1696,6 +1735,26 @@ function groupOutcome(
   }
   if (operation.status === "rejected")
     return `${head} was rejected by the user. Nothing was created. If a group is still needed, ask what to change before proposing again.`;
+  return `${head} was confirmed by the user, but creating it failed: ${operation.error ?? "unknown error"}. Nothing was created.`;
+}
+
+/** What Captain is told when the user decided on an agent it proposed. */
+function agentOutcome(
+  operation: CaptainOperationView,
+  proposal: CaptainAgentProposal,
+): string {
+  const head = `Your proposed agent "${proposal.name}" (operation ${operation.id})`;
+  if (operation.status === "applied") {
+    const result = operation.result as unknown as CaptainAgentResult;
+    return [
+      `${head} was confirmed by the user and created.`,
+      `agentId: ${result.agentId}`,
+      `projectId: ${result.projectId}`,
+      "It is in no group yet: propose_group with its id as a member, then assign work there with assign_in_group.",
+    ].join("\n");
+  }
+  if (operation.status === "rejected")
+    return `${head} was rejected by the user. Nothing was created. If an agent is still needed, ask what to change before proposing again.`;
   return `${head} was confirmed by the user, but creating it failed: ${operation.error ?? "unknown error"}. Nothing was created.`;
 }
 

@@ -1,6 +1,10 @@
 import type { MessageView } from "../src/index";
 import { describe, expect, it } from "vitest";
-import { isCaptainGroupOutcome } from "../src/index";
+import {
+  isCaptainAgentOutcome,
+  isCaptainGroupOutcome,
+  isCaptainOutcome,
+} from "../src/index";
 
 const OPERATION = "6f1c2a3b-0d4e-4f5a-8b6c-7d8e9f0a1b2c";
 
@@ -65,5 +69,56 @@ describe("the message that tells Captain how its group proposal ended", () => {
         message({ text: "<captain-review>\n</captain-review>" }),
       ),
     ).toBe(false);
+  });
+});
+
+describe("the message that tells Captain how its agent proposal ended", () => {
+  it("is known by its mark, and only as a system message", () => {
+    const marked = message({
+      data: {
+        captainAgentOutcome: { operationId: OPERATION, status: "applied" },
+      },
+    });
+    expect(isCaptainAgentOutcome(marked)).toBe(true);
+    expect(isCaptainAgentOutcome({ ...marked, author: "user" })).toBe(false);
+    expect(isCaptainAgentOutcome({ ...marked, kind: "system" })).toBe(false);
+  });
+
+  it("is not a group's outcome, and a group's is not its", () => {
+    const agent = message({
+      data: {
+        captainAgentOutcome: { operationId: OPERATION, status: "rejected" },
+      },
+    });
+    const group = message({
+      data: {
+        captainGroupOutcome: { operationId: OPERATION, status: "rejected" },
+      },
+    });
+    expect(isCaptainGroupOutcome(agent)).toBe(false);
+    expect(isCaptainAgentOutcome(group)).toBe(false);
+  });
+
+  it("is what isCaptainOutcome answers for, either kind", () => {
+    expect(
+      isCaptainOutcome(
+        message({
+          data: {
+            captainAgentOutcome: { operationId: OPERATION, status: "failed" },
+          },
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isCaptainOutcome(
+        message({
+          data: {
+            captainGroupOutcome: { operationId: OPERATION, status: "applied" },
+          },
+        }),
+      ),
+    ).toBe(true);
+    // A plain system message is neither.
+    expect(isCaptainOutcome(message({ text: "hi" }))).toBe(false);
   });
 });

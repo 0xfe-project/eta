@@ -437,7 +437,7 @@ export function captainSessionTools(
         "Before proposing, call list_persona_cards and pick the single card that fits the work best: persona must be one of those ids. Never write a card and never invent one — the card's own text becomes the agent's persona.",
         "model has no default: ask the user which model the agent should run with ask_user, offering the configured models, and propose the one they choose.",
         "name must not be the name of an agent that already exists. purpose is one sentence: what the agent is responsible for, and when it should be retired. instructions is what it is told to do, and cannot be empty. An agent is only created on the primary machine.",
-        "Several agents can be proposed in one turn; each gets its own card. Do not wait for the decision: once everything is proposed, end your turn.",
+        "Several agents can be proposed in one turn; each gets its own card. Do not wait for the decision: once everything is proposed, end your turn. When the user decides, you are told the outcome in that conversation as a message that starts your next turn. Only a proposal you made is reported back — an agent the user creates in the agent dialog is not yours to track.",
       ].join(" "),
       parameters: Type.Object({
         name: Type.String({

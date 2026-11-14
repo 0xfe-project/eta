@@ -7,6 +7,10 @@
  * agent, its workspace and its home project, and starts its instructions and persona histories;
  * rejecting makes nothing. A name another agent answers to stops it at both points, and a proposal
  * may not make a card of its own: the card's body is copied in, the card is left alone.
+ *
+ * Once the user decides, Captain is told in the conversation it proposed from. That message is for a
+ * proposal only: an agent the user makes in the agent dialog is no operation, so nothing is said
+ * about it.
  */
 import type {
   CaptainAgentProposalRowData,
@@ -16,6 +20,7 @@ import type { AgentProposalInput } from "../src/captain/service";
 import type { World } from "./support/world";
 import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { isCaptainAgentOutcome } from "@eta/client-contracts";
 import { builtinPersonas } from "@eta/harness";
 import { describe, expect, it } from "vitest";
 import { agentHome } from "../src/agents/store";
@@ -95,6 +100,10 @@ const cardOf = (w: World, conversationId: string) =>
         (row.data as { event?: string }).event === "captain_agent_proposal",
     )?.data as unknown as CaptainAgentProposalRowData | undefined;
 
+/** The message that told Captain how its agent proposal ended, as the conversation shows it. */
+const outcomeOf = (w: World, conversationId: string) =>
+  w.rows(conversationId).find(isCaptainAgentOutcome);
+
 /** A host with Captain and Ada, and Captain's agent proposals made through the service. */
 async function setup(models?: ReturnType<typeof scriptedModels>["models"]) {
   const w = await world({ ...options, ...(models ? { models } : {}) });
@@ -134,6 +143,26 @@ describe("propose_agent is Captain's", () => {
     expect(tools("Captain")).toContain("list_persona_cards");
     expect(tools("Ada")).not.toContain("propose_agent");
     expect(tools("Ada")).not.toContain("list_persona_cards");
+  });
+
+  it("cannot be proposed in another agent's name", async () => {
+    const { w, ada, captain } = await setup();
+    const start = counts(w);
+    // The identity on the operation is not a caller's argument to choose.
+    await expect(
+      w.host.product.captain.proposeAgent({
+        name: "Scout",
+        purpose: "Watch the repository and say what changed.",
+        instructions:
+          "Watch the repository and report what changed each morning.",
+        persona: "Executor",
+        model: "openai:gpt-5",
+        originConversationId: captain,
+        captainAgentId: ada.id,
+      }),
+    ).rejects.toThrow(/only the Captain can propose an agent/);
+    expect(w.host.product.captain.store.operations()).toEqual([]);
+    expect(counts(w)).toEqual(start);
   });
 });
 
@@ -303,6 +332,71 @@ describe("an agent Captain proposes", () => {
   });
 });
 
+describe("how a decided proposal reaches Captain", () => {
+  it("tells Captain the agent was created, with what it needs to assign work", async () => {
+    const { w, captain, propose } = await setup();
+    const { operation } = await propose();
+    // Nothing is said while it is only a card: there is no decision yet.
+    expect(outcomeOf(w, captain)).toBeUndefined();
+
+    const decided = await decide(w, operation.id, "approve");
+    const { agentId, projectId } = decided.result as {
+      agentId: string;
+      projectId: string;
+    };
+    await until(() => outcomeOf(w, captain) !== undefined);
+    const told = outcomeOf(w, captain)!;
+    expect(told).toMatchObject({
+      author: "system",
+      data: {
+        captainAgentOutcome: { operationId: operation.id, status: "applied" },
+      },
+    });
+    expect(told.text).toContain(`agentId: ${agentId}`);
+    expect(told.text).toContain(`projectId: ${projectId}`);
+  });
+
+  it("says nothing was created when the user rejected it", async () => {
+    const { w, captain, propose } = await setup();
+    const start = counts(w);
+    const { operation } = await propose();
+    expect((await decide(w, operation.id, "reject")).status).toBe("rejected");
+    await until(() => outcomeOf(w, captain) !== undefined);
+    const told = outcomeOf(w, captain)!;
+    expect(told.data).toMatchObject({
+      captainAgentOutcome: { operationId: operation.id, status: "rejected" },
+    });
+    expect(told.text).toContain("rejected");
+    expect(told.text).toContain("Nothing was created");
+    expect(counts(w)).toEqual(start);
+  });
+
+  it("says so when the confirmation failed, and not as a creation", async () => {
+    const { w, captain, propose } = await setup();
+    const { operation } = await propose();
+    // An agent of that name appears between the proposal and the confirmation.
+    await w.agent("Scout");
+    const decided = await decide(w, operation.id, "approve");
+    expect(decided.status).toBe("failed");
+    await until(() => outcomeOf(w, captain) !== undefined);
+    const told = outcomeOf(w, captain)!;
+    expect(told.data).toMatchObject({
+      captainAgentOutcome: { operationId: operation.id, status: "failed" },
+    });
+    expect(told.text).toContain("already exists");
+  });
+
+  it("says nothing about an agent the user made in the agent dialog", async () => {
+    const { w, captain } = await setup();
+    const before = w.rows(captain).length;
+    // The dialog's create is `agents.create` on the wire: not a proposal, no operation.
+    await w.agent("Scout");
+    expect(w.host.product.captain.store.operations()).toEqual([]);
+    expect(outcomeOf(w, captain)).toBeUndefined();
+    // Nothing reached Captain's conversation at all: it was not told, and not woken.
+    expect(w.rows(captain).length).toBe(before);
+  });
+});
 describe("what a proposal is refused for", () => {
   it("refuses a name that is empty or taken, a card that is not there, and what cannot be run", async () => {
     const { w, propose } = await setup();
