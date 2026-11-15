@@ -336,6 +336,89 @@ describe("a routine's report", () => {
     await act(async () => host.set("routines.r1", { ...feedback(null, true) }));
     expect(container.textContent).toContain("没能据此修订要求");
   });
+
+  describe("the brief under the title", () => {
+    // No layout in the test DOM: a folded box is 84px tall (three lines), its content as tall as
+    // its text is long.
+    const height = (el: HTMLElement) =>
+      (el.textContent?.length ?? 0) > 60 ? 600 : 28;
+    const layOut = () => {
+      Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+        configurable: true,
+        get(this: HTMLElement) {
+          return height(this);
+        },
+      });
+      Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+        configurable: true,
+        get(this: HTMLElement) {
+          return this.classList.contains("max-h-21")
+            ? Math.min(84, height(this))
+            : height(this);
+        },
+      });
+    };
+    afterEach(() => {
+      // Defined on HTMLElement only: the DOM's own getters are further up.
+      Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
+      Reflect.deleteProperty(HTMLElement.prototype, "clientHeight");
+    });
+    const long = Array.from(
+      { length: 12 },
+      (_, i) => `第 ${i + 1} 条：检查上游 Herdr 有没有新版本`,
+    ).join("\n");
+    const show = async (text: string) => {
+      layOut();
+      navigation.routine = "r1";
+      open(
+        routineSections(info, {
+          briefs: [{ version: 3, text, createdAt: 1000, feedback: null }],
+        }),
+      );
+      const { container } = await mount(<RoutineBoard />);
+      await flush();
+      return container.querySelector<HTMLElement>(
+        'section[aria-label="要求 v3"]',
+      )!;
+    };
+
+    it("folds a long one to three lines, unfolds it below, and folds it back", async () => {
+      const brief = await show(long);
+      expect(brief.textContent).toContain("要求 · v3");
+      // The text is text, not a button: it can be selected and copied.
+      expect(brief.querySelector("button .markdown")).toBeNull();
+      const box = brief.querySelector<HTMLElement>(".max-h-21")!;
+      expect(box.className).toContain("mask-image");
+      const toggle = button(brief, "展开全文")!;
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
+      await click(toggle);
+      expect(brief.querySelector(".max-h-21")).toBeNull();
+      expect(brief.textContent).toContain("第 12 条");
+      expect(button(brief, "收起")?.getAttribute("aria-expanded")).toBe("true");
+      await click(button(brief, "收起"));
+      expect(brief.querySelector(".max-h-21")).not.toBeNull();
+      expect(button(brief, "展开全文")).toBeDefined();
+    });
+
+    it("leaves a short one as it is: no button, no fade", async () => {
+      const brief = await show("每天看一眼 Herdr");
+      expect(brief.querySelector("button")).toBeNull();
+      expect(brief.querySelector(".max-h-21")!.className).not.toContain(
+        "mask-image",
+      );
+    });
+
+    it("renders Markdown and keeps one item per line", async () => {
+      const brief = await show("先看 **发布页**\n再看 changelog");
+      expect(brief.querySelector("strong")?.textContent).toBe("发布页");
+      const paragraph = brief.querySelector(".markdown p")!;
+      expect(paragraph.textContent).toBe("先看 发布页\n再看 changelog");
+      // The single line break is kept on screen, not run into one line.
+      expect(brief.querySelector(".max-h-21")!.className).toContain(
+        "whitespace-pre-line",
+      );
+    });
+  });
 });
 
 describe("while Captain is off", () => {

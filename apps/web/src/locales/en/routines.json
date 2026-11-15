@@ -52,6 +52,7 @@
   },
   "brief": {
     "version": "Brief v{{version}}",
+    "current": "Brief · v{{version}}",
     "revisedFrom": " · Revised from “{{feedback}}”",
     "restored": "Restored v{{version}}"
   },
