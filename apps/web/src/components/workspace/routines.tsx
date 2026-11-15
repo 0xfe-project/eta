@@ -48,6 +48,7 @@ import {
   useSendFeedback,
   useUpdateRoutine,
 } from "@/queries/routines";
+import { Folded } from "./folded";
 import {
   describeSchedule,
   describeScheduleFor,
@@ -604,7 +605,6 @@ export function RoutineDetail({
   const runNow = useRunRoutineNow();
   const remove = useDeleteRoutine();
   const [brief] = routine.briefs;
-  const [expanded, setExpanded] = useState(false);
   const running = routine.runs[0]?.status === "running";
   // Opened: its reports and failures so far are seen.
   const finished = routine.runs.find((run) => run.finishedAt)?.id;
@@ -696,24 +696,18 @@ export function RoutineDetail({
         </p>
       </div>
 
-      <button
-        type="button"
-        aria-expanded={expanded}
-        aria-label={translateText("brief.version", {
-          version: brief.version,
-        })}
-        onClick={() => setExpanded(!expanded)}
-        className="block w-full border-l-2 border-foreground pl-3 text-left outline-none focus-visible:bg-muted/60"
+      <section
+        aria-label={translateText("brief.version", { version: brief.version })}
       >
-        <span
-          className={cn(
-            "block text-sm leading-relaxed whitespace-pre-wrap",
-            expanded ? null : "line-clamp-3",
-          )}
-        >
-          {brief.text}
-        </span>
-      </button>
+        <p className="mb-1 text-xs text-muted-foreground tabular-nums">
+          {translateText("brief.current", { version: brief.version })}
+        </p>
+        {/* Three lines of `.markdown` text (leading-7) folded; one brief item per line, so a
+            single line break stays a break. */}
+        <Folded max="max-h-21" className="[&_:is(p,li)]:whitespace-pre-line">
+          <Markdown className="text-sm">{brief.text}</Markdown>
+        </Folded>
+      </section>
 
       <Timeline routine={routine} />
     </div>

@@ -52,6 +52,7 @@
   },
   "brief": {
     "version": "要求 v{{version}}",
+    "current": "要求 · v{{version}}",
     "revisedFrom": " · 按“{{feedback}}”修订",
     "restored": "已恢复 v{{version}}"
   },
