@@ -43,6 +43,8 @@ export function ConfirmSheet(props: {
   body?: string;
   confirm: string;
   danger?: boolean;
+  /** Not yet: the confirm button is off (what it would do is still being worked out). */
+  disabled?: boolean;
   onConfirm: () => void;
   onClose: () => void;
 }) {
@@ -68,6 +70,7 @@ export function ConfirmSheet(props: {
           title={props.confirm}
           height={44}
           variant={props.danger ? "danger" : "primary"}
+          disabled={props.disabled}
           onPress={props.onConfirm}
         />
       </View>

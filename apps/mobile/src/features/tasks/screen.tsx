@@ -6,7 +6,7 @@ import type {
 import type { ScrollRef } from "nsh";
 import type { TaskDetail } from "./format";
 import { computed, effect, Scroll, signal, Text, View } from "nsh";
-import { boardTasks } from "../../app/lists";
+import { boardLoaded, boardTasks } from "../../app/lists";
 import { retry, wire } from "../../app/session";
 import { t } from "../../i18n";
 import { nav } from "../../nav/stack";
@@ -172,7 +172,12 @@ function TaskView(props: { task: () => TaskDetail }) {
       showError,
     );
   };
+  // The count is the only thing between a press and a whole tree cancelled: until the board is
+  // here (with this task in it), say nothing about how many and keep the button off.
+  const counted = () =>
+    boardLoaded() && boardTasks().some((one) => one.id === task().id);
   const cancelTreeBody = () => {
+    if (!counted()) return t("tasks.cancelTree.counting");
     const under = cancelledWith(task().id, boardTasks());
     const body =
       under === 1
@@ -366,6 +371,7 @@ function TaskView(props: { task: () => TaskDetail }) {
         title={t("tasks.cancelTree.title", { number: task().number })}
         body={cancelTreeBody()}
         confirm={t("tasks.cancelTree.confirm")}
+        disabled={!counted()}
         danger
         onConfirm={cancelTree}
         onClose={close}

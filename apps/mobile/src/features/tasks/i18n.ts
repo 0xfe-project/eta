@@ -29,6 +29,8 @@ export const i18n = {
       "它下面没完成的 {count} 个子任务会一起转为已取消。",
     "tasks.cancelTree.bodyOne": "它下面没完成的 1 个子任务会一起转为已取消。",
     "tasks.cancelTree.confirm": "全部取消",
+    "tasks.cancelTree.counting":
+      "它下面没完成的子任务会一起转为已取消（正在清点…）。",
     "tasks.run.queued": "排队中",
     "tasks.run.starting": "启动中",
     "tasks.run.running": "正在运行",
@@ -179,6 +181,8 @@ export const i18n = {
     "tasks.cancelTree.bodyOne":
       "The 1 unfinished subtask under it is cancelled with it.",
     "tasks.cancelTree.confirm": "Cancel all",
+    "tasks.cancelTree.counting":
+      "The unfinished subtasks under it are cancelled with it (counting…).",
     "tasks.run.queued": "Queued",
     "tasks.run.starting": "Starting",
     "tasks.run.running": "Running",

@@ -198,4 +198,20 @@ describe("the status menu", () => {
       h.calls.filter((c) => c.action === "update").map((c) => c.args),
     ).toEqual([{ taskId: "t1", status: "cancelled" }]);
   });
+
+  it("will not cancel a tree before the board is here to count it", async () => {
+    const task = detail({ subtasks: { total: 2, done: 0 } });
+    // The task's own page has arrived, the board list has not.
+    const h = productHost({ tasks: [{ task }], absent: ["tasks"] });
+    h.hello();
+    await mount(<CancelTreeDialog task={task} open onOpenChange={() => {}} />);
+    await flush();
+    const dialog = document.querySelector<HTMLElement>('[role="alertdialog"]')!;
+    expect(dialog.textContent).toContain("正在清点");
+    expect(dialog.textContent).not.toContain("0 个子任务");
+    const confirm = [...dialog.querySelectorAll("button")].find(
+      (button) => button.textContent === "全部取消",
+    )!;
+    expect(confirm.disabled).toBe(true);
+  });
 });

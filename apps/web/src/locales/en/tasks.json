@@ -44,7 +44,8 @@
     "cancelTreeConfirm": "Cancel all",
     "keep": "Keep it",
     "cancelTreeDescription_one": "The {{count}} unfinished subtask under it is cancelled with it.",
-    "cancelTreeDescription_other": "The {{count}} unfinished subtasks under it are cancelled with it."
+    "cancelTreeDescription_other": "The {{count}} unfinished subtasks under it are cancelled with it.",
+    "cancelTreeCounting": "The unfinished subtasks under it are cancelled with it (counting…)."
   },
   "runStatus": {
     "queued": "Queued",

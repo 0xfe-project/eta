@@ -28,6 +28,9 @@ export const interactions = (): InteractionView[] =>
   eager<InboxSections["list"]>("inbox", "list") ?? [];
 export const boardTasks = (): BoardTaskView[] =>
   eager<BoardTaskView[]>("tasks", "list") ?? [];
+/** Whether the board's list has arrived: an empty `boardTasks()` may be one still on its way. */
+export const boardLoaded = (): boolean =>
+  eager<BoardTaskView[]>("tasks", "list") !== undefined;
 
 export const agentById = (
   id: string | null | undefined,

@@ -44,7 +44,8 @@
     "cancelTreeConfirm": "全部取消",
     "keep": "先不取消",
     "cancelTreeDescription_one": "它下面没完成的 {{count}} 个子任务会一起转为已取消。",
-    "cancelTreeDescription_other": "它下面没完成的 {{count}} 个子任务会一起转为已取消。"
+    "cancelTreeDescription_other": "它下面没完成的 {{count}} 个子任务会一起转为已取消。",
+    "cancelTreeCounting": "它下面没完成的子任务会一起转为已取消（正在清点…）。"
   },
   "runStatus": {
     "queued": "排队中",

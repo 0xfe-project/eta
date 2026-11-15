@@ -233,8 +233,11 @@ export function CancelTreeDialog({
 }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
   const update = useUpdateTask();
-  const { tasks } = useTasks();
+  const { tasks, loaded } = useTasks();
   const blocked = blockedByCancel(task);
+  // The count is the only thing between a click and a whole tree cancelled: until the board is
+  // here (with this task in it), say nothing about how many and keep the button off.
+  const counted = loaded && tasks.some((t) => t.id === task.id);
   const under = cancelledWith(task.id, tasks);
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -246,9 +249,11 @@ export function CancelTreeDialog({
             })}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {translateText("statusMenu.cancelTreeDescription", {
-              count: under,
-            })}
+            {counted
+              ? translateText("statusMenu.cancelTreeDescription", {
+                  count: under,
+                })
+              : translateText("statusMenu.cancelTreeCounting")}
             {blocked > 0 ? (
               <>
                 {" "}
@@ -265,7 +270,7 @@ export function CancelTreeDialog({
           </AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
-            disabled={update.isPending}
+            disabled={update.isPending || !counted}
             onClick={() =>
               update.mutate(
                 { taskId: task.id, status: "cancelled" },
