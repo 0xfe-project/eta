@@ -44,7 +44,7 @@ import {
   RuntimeField,
   ThinkingField,
 } from "./agent-fields";
-import { agentDraft, agentFormSchema, agentNameTaken } from "./agent-form";
+import { agentDraft, agentFormSchema, agentNameProblem } from "./agent-form";
 import { AgentAvatar } from "./agent-identity";
 import { AgentPluginsField } from "./agent-plugins";
 import { CreateAgentWizard } from "./create-agent-wizard";
@@ -216,11 +216,15 @@ function AgentEditorForm({
         showError("model");
         return;
       }
-      if (agentNameTaken(agents, values.name, agent.id)) {
+      const problem = agentNameProblem(agents, values.name, agent.id);
+      if (problem !== undefined) {
         form.setError("name", {
-          message: translateText("validation:nameTaken", {
-            name: values.name.trim(),
-          }),
+          message: translateText(
+            problem === "reserved"
+              ? "validation:nameReserved"
+              : "validation:nameTaken",
+            { name: values.name.trim() },
+          ),
         });
         showError("name");
         return;

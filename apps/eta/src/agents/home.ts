@@ -2,8 +2,9 @@
  * An agent's home: its workspace directory under the data directory (`agentHome`) and the project
  * on the primary machine that stands for it (kind `agent_home`, stewarded by the agent).
  *
- * The project is made with the agent, in `writeAgent`. Everything else finds it here, and only
- * `ensureHome` makes one besides — for a Captain an older build made without it.
+ * The project is made with the agent (`createAgent`, `createCaptainIdentity`). Everything else
+ * finds it here, and only `ensureHome` makes one besides — for a Captain an older build made
+ * without it.
  */
 import type { MachineStore } from "../machines/store";
 import type { ProjectRecord, ProjectStore } from "../projects/store";

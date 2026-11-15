@@ -17,7 +17,7 @@ import {
   RuntimeField,
   ThinkingField,
 } from "./agent-fields";
-import { agentDraft, agentFormSchema, agentNameTaken } from "./agent-form";
+import { agentDraft, agentFormSchema, agentNameProblem } from "./agent-form";
 import { MachinePicker } from "./machine-picker";
 import { Stepper } from "./stepper";
 import { useAgents } from "./use-agents";
@@ -144,11 +144,18 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
   const valid = async (at: number) => {
     if (!(await form.trigger([...stepFields[at]]))) return false;
     if (at === 0 && checkingRuntime) return false;
-    // Names tell agents apart (a mention, a group's members): the host refuses a second one.
+    // Names tell agents apart (a mention, a group's members): the host refuses a second one, and
+    // Captain's.
     const name = form.getValues("name");
-    if (at === 0 && agentNameTaken(agents, name)) {
+    const problem = at === 0 ? agentNameProblem(agents, name) : undefined;
+    if (problem !== undefined) {
       form.setError("name", {
-        message: translateText("validation:nameTaken", { name: name.trim() }),
+        message: translateText(
+          problem === "reserved"
+            ? "validation:nameReserved"
+            : "validation:nameTaken",
+          { name: name.trim() },
+        ),
       });
       return false;
     }

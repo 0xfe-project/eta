@@ -9,7 +9,12 @@ import type { Plugins } from "../src/plugins/service";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { checkNewAgent, createAgent, writeAgent } from "../src/agents/create";
+import {
+  checkAgentName,
+  checkNewAgent,
+  createAgent,
+  createCaptainIdentity,
+} from "../src/agents/create";
 import { AgentStore } from "../src/agents/store";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { MachineStore } from "../src/machines/store";
@@ -110,15 +115,53 @@ describe("createAgent", () => {
     expect(d.captured).toEqual([]);
   });
 
-  it("writes with no rules in writeAgent, and takes back what `within` was part of", async () => {
+  it("gives an ordinary agent no system role, whatever it is handed", async () => {
     const d = await deps();
-    // No model and a system role: what only Captain's own identity is written with.
+    const sneaked = {
+      name: "Scout",
+      model: "openai:gpt-5",
+      systemRole: "captain",
+    } as const;
+    const { agent } = await createAgent(d, sneaked, null);
+    expect(agent.systemRole).toBeNull();
+  });
+
+  it("refuses Captain's name, in any case", async () => {
+    const d = await deps();
+    for (const name of ["Captain", "captain", "  CAPTAIN "])
+      expect(() => checkNewAgent(d, { name, model: "openai:gpt-5" })).toThrow(
+        /is reserved for Captain/,
+      );
     await expect(
-      writeAgent(
+      createAgent(d, { name: "captain", model: "openai:gpt-5" }, null),
+    ).rejects.toThrow(/reserved for Captain/);
+    expect(count(d.db, "agent")).toBe(0);
+  });
+
+  it("lets an agent that already has Captain's name keep it", async () => {
+    const d = await deps();
+    // A user agent from before the name was reserved: an edit that keeps its name is not refused.
+    const old = d.agents.create({ name: "captain", model: "openai:gpt-5" });
+    expect(() => checkAgentName(d.agents, "Captain", old.id)).not.toThrow();
+    const ada = await createAgent(
+      d,
+      { name: "Ada", model: "openai:gpt-5" },
+      null,
+    );
+    expect(() => checkAgentName(d.agents, "captain", ada.agent.id)).toThrow(
+      /reserved for Captain/,
+    );
+  });
+});
+
+describe("createCaptainIdentity", () => {
+  it("skips createAgent's rules, and takes back what `within` was part of", async () => {
+    const d = await deps();
+    await expect(
+      createCaptainIdentity(
         d,
-        { name: "Captain", systemRole: "captain" },
+        { instructions: "Coordinate." },
         {
-          actorAgentId: null,
           within: () => {
             throw new Error("base prompt broke");
           },
@@ -128,14 +171,24 @@ describe("createAgent", () => {
     expect(count(d.db, "agent")).toBe(0);
     expect(count(d.db, "project")).toBe(0);
     expect(await readdir(join(d.dataDir, "agents"))).toEqual([]);
-    const { agent } = await writeAgent(
+    // A user agent already called "Captain", from before the name was reserved, does not stop it.
+    d.agents.create({ name: "Captain", model: "openai:gpt-5" });
+    // No model, a system role and the reserved name: what createAgent would refuse.
+    const { agent } = await createCaptainIdentity(
       d,
-      { name: "Captain", systemRole: "captain" },
-      { actorAgentId: null },
+      { instructions: "Coordinate." },
+      {},
     );
-    expect(agent).toMatchObject({ model: null, systemRole: "captain" });
+    expect(agent).toMatchObject({
+      name: "Captain",
+      model: null,
+      systemRole: "captain",
+      instructions: "Coordinate.",
+    });
   });
+});
 
+describe("checkNewAgent names", () => {
   it("refuses a name another agent answers to, in any case", async () => {
     const d = await deps();
     await createAgent(d, { name: "Scout", model: "openai:gpt-5" }, null);
@@ -163,5 +216,19 @@ describe("agents.create and agents.update over the wire", () => {
     ).rejects.toThrow(/already exists/);
     // An agent keeps its own name, in another case if it likes.
     await w.client.call("agents", "update", { agentId: ada.id, name: "ADA" });
+  });
+
+  it("refuse Captain's name, for a new agent and a rename", async () => {
+    const w = await world();
+    await expect(
+      w.client.call("agents", "create", {
+        name: "captain",
+        model: "fake:model",
+      }),
+    ).rejects.toThrow(/"captain" is reserved for Captain/);
+    const bob = await w.agent("Bob");
+    await expect(
+      w.client.call("agents", "update", { agentId: bob.id, name: "CAPTAIN" }),
+    ).rejects.toThrow(/reserved for Captain/);
   });
 });

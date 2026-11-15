@@ -17,6 +17,9 @@ import { mkdir, rm } from "node:fs/promises";
 import { requireModel } from "./model";
 import { agentHome } from "./store";
 
+/** Captain's name: no other agent may take it, in any case (`checkAgentName`). */
+const CAPTAIN_NAME = "Captain";
+
 export interface AgentCreateDeps {
   dataDir: string;
   db: Database;
@@ -66,8 +69,11 @@ export function checkNewAgent(
 }
 
 /**
- * Make an ordinary agent: `checkNewAgent`, then `writeAgent`. `actorAgentId` is who the first prompt
+ * Make an ordinary agent: `checkNewAgent`, then write it. `actorAgentId` is who the first prompt
  * versions are recorded as: null for the user, Captain's id for its proposal.
+ *
+ * The rules live here rather than with each caller because the write below is not exported: there
+ * is no way to make an agent that skips them, short of `createCaptainIdentity`.
  */
 export async function createAgent(
   deps: AgentCreateDeps,
@@ -75,19 +81,55 @@ export async function createAgent(
   actorAgentId: string | null,
 ): Promise<{ agent: AgentRecord; project: ProjectRecord }> {
   checkNewAgent(deps, input);
-  return await writeAgent(deps, input, { actorAgentId });
+  // Only `createCaptainIdentity` gives an agent a system role, whatever `input` carries.
+  return await writeAgent(
+    deps,
+    { ...input, systemRole: null },
+    { actorAgentId },
+  );
 }
 
 /**
- * Write an agent, with no rules about what it may be: the only place an agent row is made. Callers
- * check first — `createAgent` for an ordinary agent; Captain's own identity, which has no model, a
- * system role and a fixed name, skips those rules on purpose (`CaptainService.ensure`).
+ * Make Captain's own agent, when the host starts without one (`CaptainService.ensure`). It skips
+ * the rules `createAgent` applies, on purpose:
+ *
+ * - its name: it is always called "Captain", the name no other agent may take. A user agent that
+ *   took it before the name was reserved must not stop the host from starting, so the name is not
+ *   checked against the others; whatever looks Captain up by name prefers the one with the system
+ *   role (`resolveNamed`, `resolveAssignee`).
+ * - its model: it has none until the user picks one (`CaptainService.setModel`).
+ * - its machine and plugins: it runs on the primary and has none to check.
+ *
+ * It carries the captain system role, which no ordinary agent can. `within` adds rows that belong
+ * to Captain's creation to the same transaction.
+ */
+export async function createCaptainIdentity(
+  deps: AgentCreateDeps,
+  input: { instructions: string },
+  options: { within?: ((agent: AgentRecord) => void) | undefined },
+): Promise<{ agent: AgentRecord; project: ProjectRecord }> {
+  return await writeAgent(
+    deps,
+    {
+      name: CAPTAIN_NAME,
+      instructions: input.instructions,
+      runtime: "eta",
+      systemRole: "captain",
+      machineId: null,
+    },
+    { actorAgentId: null, within: options.within },
+  );
+}
+
+/**
+ * Write an agent, with no rules about what it may be: the only place an agent row is made. Not
+ * exported, so the only ways in are `createAgent`, which checks first, and `createCaptainIdentity`.
  *
  * The workspace directory comes first; then, in one transaction, the agent, its home project on the
  * primary machine, its plugins, its first instructions and persona versions, and whatever `within`
  * adds. A failure anywhere takes all of it back, the directory included.
  */
-export async function writeAgent(
+async function writeAgent(
   deps: AgentCreateDeps,
   input: NewAgent & { systemRole?: "captain" | null | undefined },
   options: {
@@ -147,15 +189,34 @@ function agentNamed(
     );
 }
 
+/** Whether `name` is Captain's, compared without case. */
+function isCaptainName(name: string): boolean {
+  return name.trim().toLowerCase() === CAPTAIN_NAME.toLowerCase();
+}
+
 /**
  * Names are how agents are told apart: a mention, the members of a group, the agent list. A second
- * agent of the same name is refused, whether the user or Captain asks for it.
+ * agent of the same name is refused, whether the user or Captain asks for it, and so is Captain's
+ * own name, so that "@Captain" means Captain.
+ *
+ * `except` is the agent being renamed. Keeping the name it has is no new name, and is not refused:
+ * a user agent called "Captain" from before the name was reserved can still be edited.
  */
 export function checkAgentName(
   agents: AgentStore,
   name: string,
   except?: string,
 ): void {
+  const current = except === undefined ? undefined : agents.get(except);
+  if (
+    current !== undefined &&
+    current.name.trim().toLowerCase() === name.trim().toLowerCase()
+  )
+    return;
+  if (isCaptainName(name))
+    throw new Error(
+      `"${name.trim()}" is reserved for Captain; choose another name`,
+    );
   if (agentNamed(agents, name, except) !== undefined)
     throw new Error(`an agent named "${name.trim()}" already exists`);
 }

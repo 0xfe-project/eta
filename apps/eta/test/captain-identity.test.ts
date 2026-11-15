@@ -1,13 +1,17 @@
 /**
- * Captain's own agent is made the way every agent is written (`writeAgent`): all of it or none of
- * it. It skips the rules for the agents users add — no model, the captain role, the fixed name —
- * so a user agent that is already called "Captain" does not stop the host from starting.
+ * Captain's own agent is made the way every agent is written (`createCaptainIdentity`): all of it
+ * or none of it. It skips the rules for the agents users add — no model, the captain role, the
+ * fixed name — so a user agent that is already called "Captain" does not stop the host from
+ * starting, and in such a host "Captain" still means Captain.
  */
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { describe, expect, it } from "vitest";
+import { AgentStore } from "../src/agents/store";
+import { resolveNamed } from "../src/conversations/routing";
 import { databasePath } from "../src/db";
+import { resolveAssignee } from "../src/tasks/assignee";
 import { tempDir, testHost } from "./support/host";
 
 const count = (db: Database, sql: string) =>
@@ -77,6 +81,36 @@ describe("the first start of Captain", () => {
       { id: "user-captain", role: null },
       { id: identity.agentId, role: "captain" },
     ]);
+  });
+
+  it("is who @Captain and an assignment by name reach, when a user agent is already called Captain", async () => {
+    const dataDir = await tempDir();
+    const plain = await testHost({ dataDir, captain: false });
+    plain.db.run(
+      `INSERT INTO agent (id, name, instructions, persona, runtime, model, created_at, updated_at)
+       VALUES ('user-captain', 'captain', '', '', 'eta', 'fake:fake-model', 1, 1)`,
+    );
+    await plain.close();
+
+    const host = await testHost({ dataDir, captain: true });
+    const captain = host.product.captain.identity()!.agentId;
+    const agents = new AgentStore(host.db);
+    // The user agent first, as in a group it joined first: the one a first match used to take.
+    const members = agents
+      .list()
+      .sort((a) => (a.id === "user-captain" ? -1 : 1));
+    expect(members.map((m) => m.id)).toEqual(["user-captain", captain]);
+    for (const name of ["@Captain", "captain", "CAPTAIN"]) {
+      expect(resolveNamed([name], members, "someone-else").ids).toEqual([
+        captain,
+      ]);
+      expect(resolveAssignee(name.replace(/^@/, ""), agents)).toBe(captain);
+    }
+    // The user agent is still reachable by its id.
+    expect(resolveNamed(["user-captain"], members, "x").ids).toEqual([
+      "user-captain",
+    ]);
+    expect(resolveAssignee("user-captain", agents)).toBe("user-captain");
   });
 
   it("does not make a second Captain when one is there", async () => {
