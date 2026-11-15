@@ -1,5 +1,6 @@
 import type { PlanEdge } from "./task-plan";
 import type { Task } from "@/queries/tasks";
+import { LockSimpleIcon } from "@phosphor-icons/react/LockSimple";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import {
   useCallback,
@@ -59,6 +60,8 @@ interface Drag {
   over: string | undefined;
   refusal: string | undefined;
   moved: boolean;
+  /** What it is over waits for where it started already: letting go changes nothing. */
+  existing: boolean;
 }
 
 /** What a step's head says beside its name: all done, waiting for the step before, side by side. */
@@ -95,11 +98,18 @@ function AddStep({
   const openGroup = useOpenGroup();
   const setNewConversation = useWorkspaceStore((s) => s.setNewConversation);
   const ask = () => {
-    const text = t("plan.addStepDraft", {
-      number: parent.number,
-      title: parent.title,
-      tasks: numbersLabel(last.map((x) => x.number)),
-    });
+    // Nothing to wait for when the plan is empty (all of it cancelled, or never split).
+    const text =
+      last.length === 0
+        ? t("plan.addStepDraftFirst", {
+            number: parent.number,
+            title: parent.title,
+          })
+        : t("plan.addStepDraft", {
+            number: parent.number,
+            title: parent.title,
+            tasks: numbersLabel(last.map((x) => x.number)),
+          });
     const conversation =
       parent.conversationId ?? detail?.originConversationId ?? null;
     if (conversation === null) {
@@ -208,7 +218,9 @@ function EdgeMenu({
   all,
   onLeave,
   onEnter,
+  ref,
 }: {
+  ref: React.Ref<HTMLDivElement>;
   edge: PlanEdge;
   at: { x: number; y: number };
   all: readonly Task[];
@@ -224,8 +236,11 @@ function EdgeMenu({
     <div
       role="group"
       aria-label={t("plan.edge", { from: from?.number, to: to?.number })}
+      ref={ref}
       onPointerEnter={onEnter}
       onPointerLeave={onLeave}
+      onFocus={onEnter}
+      onBlur={onLeave}
       style={{ left: at.x, top: at.y }}
       className="absolute z-20 flex -translate-x-1/2 -translate-y-1/2 gap-px border bg-popover p-0.5 shadow-md"
     >
@@ -293,6 +308,7 @@ function WidePlan({
   const [drag, setDrag] = useState<Drag | undefined>();
   const [connectFrom, setConnectFrom] = useState<string | undefined>();
   const [hovered, setHovered] = useState<string | undefined>();
+  const menuRef = useRef<HTMLDivElement>(null);
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const register = useCallback((id: string, el: HTMLElement | null) => {
     if (el) nodesRef.current.set(id, el);
@@ -334,7 +350,15 @@ function WidePlan({
   }, [connectFrom]);
 
   const refusalOf = (to: string, from: string) => edgeRefusal(to, from, all);
+  /** Whether `to` waits for `from` already: then there is nothing to make. */
+  const waitsAlready = (to: string, from: string) =>
+    (all.find((x) => x.id === to)?.dependsOn ?? []).some(
+      (e) => e.taskId === from,
+    );
   const connect = (from: string, to: string) => {
+    // The host would take the edge again as an upsert and reset it to "delivered is enough";
+    // changing how an edge lets go is its menu's job, not a drag's.
+    if (waitsAlready(to, from)) return true;
     if (refusalOf(to, from) !== undefined) return false;
     add.mutate({ taskId: to, dependsOn: from }, { onError: showError });
     return true;
@@ -366,6 +390,7 @@ function WidePlan({
       over: undefined,
       refusal: undefined,
       moved: false,
+      existing: false,
     });
     const move = (ev: PointerEvent) => {
       const over = nodeAt(ev, from);
@@ -379,7 +404,11 @@ function WidePlan({
             ...d,
             ...point(ev),
             over,
-            refusal: over === undefined ? undefined : refusalOf(over, from),
+            existing: over !== undefined && waitsAlready(over, from),
+            refusal:
+              over === undefined || waitsAlready(over, from)
+                ? undefined
+                : refusalOf(over, from),
             moved: d.moved || moved,
           },
       );
@@ -409,7 +438,14 @@ function WidePlan({
   };
   const onPick = (id: string) => {
     if (connectFrom === undefined) return false;
-    if (id !== connectFrom) {
+    if (id !== connectFrom && waitsAlready(id, connectFrom))
+      toast(
+        t("plan.exists", {
+          from: all.find((x) => x.id === connectFrom)?.number,
+          to: all.find((x) => x.id === id)?.number,
+        }),
+      );
+    else if (id !== connectFrom) {
       const refusal = refusalOf(id, connectFrom);
       if (refusal !== undefined) {
         toast.error(t(`cards.refusal.${refusal}`));
@@ -474,6 +510,15 @@ function WidePlan({
                 })}
                 onFocus={() => enter(key)}
                 onBlur={leave}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter" && e.key !== " ") return;
+                  e.preventDefault();
+                  enter(key);
+                  // Into the menu, which the keyboard can then tab through.
+                  requestAnimationFrame(() =>
+                    menuRef.current?.querySelector("button")?.focus(),
+                  );
+                }}
                 onPointerEnter={() => enter(key)}
                 onPointerLeave={leave}
                 className={cn(
@@ -482,6 +527,11 @@ function WidePlan({
                   lit && "text-foreground",
                 )}
               >
+                <title>
+                  {t(
+                    edge.requireDone ? "plan.waitsDone" : "plan.waitsDelivered",
+                  )}
+                </title>
                 {p ? (
                   <>
                     <path
@@ -495,7 +545,6 @@ function WidePlan({
                       fill="none"
                       stroke="currentColor"
                       strokeWidth={heavy ? 1.7 : 1.2}
-                      strokeDasharray={edge.requireDone ? undefined : undefined}
                     />
                     <path d={arrow(p.x2, p.y2)} fill="currentColor" />
                   </>
@@ -527,6 +576,7 @@ function WidePlan({
         </svg>
         {hoveredEdge && hoveredEnds ? (
           <EdgeMenu
+            ref={menuRef}
             edge={hoveredEdge}
             all={all}
             at={{
@@ -574,7 +624,9 @@ function WidePlan({
             </li>
           ))}
         </ol>
-        {drag?.refusal !== undefined || connectFrom !== undefined ? (
+        {drag?.refusal !== undefined ||
+        drag?.existing ||
+        connectFrom !== undefined ? (
           <p
             role="status"
             className={cn(
@@ -584,9 +636,14 @@ function WidePlan({
           >
             {drag?.refusal
               ? t("plan.cycle")
-              : t("plan.connectHint", {
-                  number: all.find((x) => x.id === connectFrom)?.number,
-                })}
+              : drag?.existing
+                ? t("plan.exists", {
+                    from: all.find((x) => x.id === drag.from)?.number,
+                    to: all.find((x) => x.id === drag.over)?.number,
+                  })
+                : t("plan.connectHint", {
+                    number: all.find((x) => x.id === connectFrom)?.number,
+                  })}
           </p>
         ) : null}
       </div>
@@ -704,6 +761,18 @@ export function PlanGroup({
       )}
       {phone || tasks.length === 0 ? null : (
         <div className="flex flex-wrap gap-x-3.5 gap-y-1 px-3.5 pb-3 text-xs text-muted-foreground">
+          {(["done", "in_review", "in_progress"] as const).map((status) => (
+            <span key={status} className="inline-flex items-center gap-1.5">
+              <StatusIcon status={status} className="size-3.5" />
+              {t(
+                `plan.legend.${status === "in_review" ? "inReview" : status === "in_progress" ? "inProgress" : "done"}`,
+              )}
+            </span>
+          ))}
+          <span className="inline-flex items-center gap-1.5">
+            <LockSimpleIcon aria-hidden="true" className="size-3.5" />
+            {t("plan.legend.waiting")}
+          </span>
           <span className="inline-flex items-center gap-1.5">
             <i className="inline-block w-4 border-t-[1.6px] border-foreground" />
             {t("plan.critical")}

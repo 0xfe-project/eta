@@ -97,8 +97,10 @@ function ParentGroup({
   const siblings = childrenOf(parent.id, all);
   const plan = planOf(siblings);
   const shown = new Set(tasks.map((x) => x.id));
+  // The piece of work itself matched and none of its parts did: all of it shows, as in the plan.
+  const whole = shown.has(parent.id) && !siblings.some((x) => shown.has(x.id));
   const order = [...siblings]
-    .filter((x) => shown.has(x.id))
+    .filter((x) => whole || shown.has(x.id))
     .sort(
       (a, b) =>
         plan.stepOf.get(a.id)! - plan.stepOf.get(b.id)! || a.number - b.number,

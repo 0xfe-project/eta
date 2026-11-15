@@ -378,6 +378,16 @@
     "edgeLabel": "#{{to}} 等 #{{from}}：删除或切换放行方式",
     "removeEdge": "删除",
     "requireDone": "改成等它完成",
-    "requireAny": "改成交付就行"
+    "requireAny": "改成交付就行",
+    "addStepDraftFirst": "给 #{{number}}「{{title}}」加一步：起草一个子任务（属于 #{{number}}）。要做的是：",
+    "exists": "#{{to}} 已经在等 #{{from}} 了，松手不生效；要改放行方式，用这条连线的菜单",
+    "waitsDone": "等它完成",
+    "waitsDelivered": "它交付了就行",
+    "legend": {
+      "done": "完成",
+      "inReview": "待验收（已放行后续）",
+      "inProgress": "进行中",
+      "waiting": "等前置"
+    }
   }
 }

@@ -378,6 +378,16 @@
     "edgeLabel": "#{{to}} waits for #{{from}}: remove it or change when it lets go",
     "removeEdge": "Remove",
     "requireDone": "Wait until done",
-    "requireAny": "Delivered is enough"
+    "requireAny": "Delivered is enough",
+    "addStepDraftFirst": "Add a step to #{{number}} “{{title}}”: draft a subtask (part of #{{number}}). It should: ",
+    "exists": "#{{to}} waits for #{{from}} already; letting go does nothing. Use the edge's menu to change when it lets go",
+    "waitsDone": "Waits until it is done",
+    "waitsDelivered": "Delivered is enough",
+    "legend": {
+      "done": "Done",
+      "inReview": "In review (lets the next go)",
+      "inProgress": "In progress",
+      "waiting": "Waiting for others"
+    }
   }
 }

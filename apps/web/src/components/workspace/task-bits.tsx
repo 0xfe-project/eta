@@ -277,7 +277,13 @@ function ReplaceDependency({
   const remove = useRemoveDependency();
   const [open, setOpen] = useState(false);
   const candidates = all
-    .filter((other) => other.id !== task.id && !cancelled.includes(other.id))
+    // What it waits for already is not a new choice: picking it would only reset how it lets go.
+    .filter(
+      (other) =>
+        other.id !== task.id &&
+        !cancelled.includes(other.id) &&
+        !(task.dependsOn ?? []).some((e) => e.taskId === other.id),
+    )
     .map((other) => ({ other, refusal: edgeRefusal(task.id, other.id, all) }))
     .sort((a, b) => Number(Boolean(a.refusal)) - Number(Boolean(b.refusal)));
   const choose = (dependsOn: string) => {

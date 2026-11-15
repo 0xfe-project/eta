@@ -13,7 +13,7 @@ import { useOutbox } from "@/queries/outbox";
 import { agentView, productHost, taskDetail } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
 import { TaskBoard } from "./task-board";
-import { release } from "./task-tree-fixture";
+import { board, release } from "./task-tree-fixture";
 import { emptyFilter, useTaskView } from "./task-view";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -40,7 +40,8 @@ function host(tasks: Task[] = release()) {
     tasks: tasks.map((task) => ({
       task: taskDetail({
         ...task,
-        conversationId: task.number === 4 ? "c1" : null,
+        conversationId:
+          task.conversationId ?? (task.number === 4 ? "c1" : null),
       }),
     })),
   });
@@ -327,6 +328,21 @@ describe("the tasks page's views", () => {
       );
       expect(group.querySelectorAll("li[data-task]")).toHaveLength(0);
     });
+    it("shows a whole piece of work when only its parent matches, as the plan does", async () => {
+      host();
+      useTaskView.setState({
+        view: "list",
+        filter: { q: "v1.0", who: null, under: null },
+      });
+      const { container } = await mount(<TaskBoard />);
+      await flush();
+      const group = container.querySelector('li[data-group="4"]')!;
+      expect(
+        [...group.querySelectorAll("li[data-task]")].map((li) =>
+          li.getAttribute("data-task"),
+        ),
+      ).toEqual(["5", "6", "7", "8", "9"]);
+    });
   });
 
   describe("the plan", () => {
@@ -458,6 +474,87 @@ describe("the tasks page's views", () => {
       expect(callsOf(h, "removeDependency")).toEqual([
         { taskId: "t9", dependsOn: "t8" },
       ]);
+    });
+
+    it('leaves an edge that is there alone when it is dragged again, keeping "until done"', async () => {
+      // #9 waits for #8 until it is done; dragging #8 onto #9 again must not reset that.
+      const tasks = release();
+      const nine = tasks.find((t) => t.number === 9)!;
+      nine.dependsOn = nine.dependsOn!.map((e) =>
+        e.number === 8 ? { ...e, requireDone: true } : e,
+      );
+      const h = host(tasks);
+      useTaskView.setState({ view: "plan" });
+      const { container } = await mount(<TaskBoard />);
+      await flush();
+      expect(
+        container
+          .querySelector('g[data-edge="t8>t9"]')!
+          .hasAttribute("data-require-done"),
+      ).toBe(true);
+      const result = await drag(container, "t8", "t9");
+      expect(result.refused).toBe(false);
+      expect(callsOf(h, "addDependency")).toEqual([]);
+      expect(
+        container
+          .querySelector('g[data-edge="t8>t9"]')!
+          .hasAttribute("data-require-done"),
+      ).toBe(true);
+    });
+
+    it("asks for a step that waits for every task of the last step", async () => {
+      const tasks = board([
+        { number: 1, title: "上线" },
+        { number: 2, parent: 1 },
+        { number: 3, parent: 1, after: [2] },
+        { number: 4, parent: 1, after: [2] },
+      ]);
+      host(
+        tasks.map((t) => (t.number === 1 ? { ...t, conversationId: "c2" } : t)),
+      );
+      useTaskView.setState({ view: "plan" });
+      const { container } = await mount(<TaskBoard />);
+      await flush();
+      await click(
+        [...container.querySelectorAll('[data-plan="1"] button')].find(
+          (b) => b.textContent === "在最后加一步",
+        ),
+      );
+      expect(opened.group).toHaveBeenCalledWith("c2");
+      const text = useOutbox
+        .getState()
+        .drafts.c2!.map((p) => ("text" in p ? p.text : ""))
+        .join("");
+      expect(text).toContain("属于 #1，等 #3、#4");
+    });
+
+    it("asks for a first step, waiting for nothing, when every subtask was cancelled", async () => {
+      const tasks = board([
+        { number: 1, title: "上线", status: "blocked" },
+        { number: 2, parent: 1, status: "cancelled" },
+        { number: 3, parent: 1, status: "cancelled" },
+      ]);
+      host(
+        tasks.map((t) => (t.number === 1 ? { ...t, conversationId: "c3" } : t)),
+      );
+      useTaskView.setState({ view: "plan" });
+      const { container } = await mount(<TaskBoard />);
+      await flush();
+      const plan = container.querySelector('[data-plan="1"]')!;
+      expect(plan.querySelectorAll("[data-plan-node]")).toHaveLength(0);
+      await click(
+        [...plan.querySelectorAll("button")].find(
+          (b) => b.textContent === "在最后加一步",
+        ),
+      );
+      const text = useOutbox
+        .getState()
+        .drafts.c3!.map((p) => ("text" in p ? p.text : ""))
+        .join("");
+      expect(text).toBe(
+        "给 #1「上线」加一步：起草一个子任务（属于 #1）。要做的是：",
+      );
+      expect(text).not.toContain("等");
     });
 
     it("asks for a last step in the work's conversation, waiting for the last step", async () => {
