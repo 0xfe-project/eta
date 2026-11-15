@@ -170,7 +170,7 @@ export const runStatusLabels: Record<RunStatus, string> = {
 };
 
 /** "#12、#13" (or "#12, #13"): tasks named by their numbers. */
-export const numbersLabel = (numbers: readonly number[]): string =>
+const numbersLabel = (numbers: readonly number[]): string =>
   numbers.map((n) => `#${n}`).join(translate("common:listSeparator"));
 
 /** The numbers of the tasks a task still waits for, for the queue's words. */
