@@ -3,6 +3,7 @@ import type {
   TaskActivityView,
   TaskActor,
   TaskDependencyView,
+  TaskRefView,
   TaskWorkspaceMode,
 } from "@eta/client-contracts";
 import type { KernelTool } from "@eta/core";
@@ -32,6 +33,8 @@ import type { RunRecord } from "./runs";
 import type { TaskRecord } from "./store";
 import {
   dependencyEntry,
+  parentEntry,
+  subtaskEntry,
   TASK_DRAFT_STATUSES,
   TASK_WORKSPACE_MODES,
 } from "@eta/client-contracts";
@@ -143,6 +146,20 @@ const dependsOnParameter = Type.Optional(
   ),
 );
 
+/** The task a new one is part of, as a model names it. */
+const parentParameter = Type.Optional(
+  Type.String({
+    description:
+      "The task this one is a subtask of: its number (12 or #12) or id. A task with subtasks " +
+      "does not run itself; its status comes from them, and waiting for it is waiting for all of " +
+      "them. A subtask waits for what its parent waits for. Use it to split work into stages: a " +
+      "stage is a parent task, and a stage that depends on another holds all its subtasks back. " +
+      "Make a stage's parent task with status backlog, then its subtasks under it: a parent made " +
+      "todo starts running at once, before it has subtasks; made backlog, it takes its status " +
+      "from them as they come.",
+  }),
+);
+
 /** One edge in words: `#12 [in_review] Title (resolved, done required)`. */
 const edgeLine = (edge: TaskDependencyView): string =>
   `#${edge.number} [${edge.status}] ${edge.title} (${edge.state}${edge.requireDone ? ", done required" : ""})`;
@@ -166,16 +183,22 @@ function reading(deps: TaskToolDeps) {
 
   /** One line: what a model can read without asking for the task. */
   const line = (task: BoardTaskView): string => {
-    const waits = (task.dependsOn ?? []).filter(
-      (edge) => edge.state !== "resolved",
-    );
+    const waits = task.waitingOn ?? [];
+    const parent =
+      task.parentId == null ? undefined : board.find(task.parentId);
     return (
       `#${task.number} [${task.status}] ${task.title} — ` +
       `${task.runStatus === null ? "never run" : `run ${task.runStatus}`}, ` +
       `created by ${whoIs(task.createdBy)}${
+        parent === undefined ? "" : `; subtask of #${parent.number}`
+      }${
+        task.subtasks == null
+          ? ""
+          : `; subtasks ${task.subtasks.done}/${task.subtasks.total} done`
+      }${
         waits.length === 0
           ? ""
-          : `; waits for ${waits.map((edge) => `#${edge.number}${edge.state === "cancelled" ? " (cancelled)" : ""}`).join(", ")}`
+          : `; waits for ${waits.map((edge) => `#${edge.number}${edge.state === "cancelled" ? " (cancelled)" : ""}${edge.via === null ? "" : ` (via #${edge.via})`}`).join(", ")}`
       }`
     );
   };
@@ -203,10 +226,39 @@ function reading(deps: TaskToolDeps) {
     }
   };
 
+  /** A `parent` or `subtask` entry in words, from its data, like `dependencySaid`. */
+  const treeSaid = (activity: TaskActivityView): string | null => {
+    const named = (ref: { number: number; title: string }) =>
+      `#${ref.number} "${ref.title}"`;
+    if (activity.kind === "parent") {
+      const read = parentEntry(activity.data);
+      if (read === undefined) return null;
+      if (read.to !== null) return `A subtask of ${named(read.to)}.`;
+      return read.deleted
+        ? `${named(read.from!)} was deleted, so this task is no longer a subtask of it.`
+        : `No longer a subtask of ${named(read.from!)}.`;
+    }
+    if (activity.kind !== "subtask") return null;
+    const read = subtaskEntry(activity.data);
+    if (read === undefined) return null;
+    switch (read.action) {
+      case "added":
+        return `${named(read.task)} is a subtask of this task.`;
+      case "removed":
+        return `${named(read.task)} is no longer a subtask of this task.`;
+      case "deleted":
+        return `Subtask ${named(read.task)} was deleted.`;
+      case "all_cancelled":
+        return "Every subtask of this task is cancelled, so there is nothing left to work on. Add a subtask, or decide what becomes of this task.";
+    }
+  };
+
   const entry = (activity: TaskActivityView): string => {
     const { data } = activity;
     const said =
-      (activity.kind === "dependency" ? dependencySaid(data) : null) ??
+      (activity.kind === "dependency"
+        ? dependencySaid(data)
+        : treeSaid(activity)) ??
       activity.body ??
       (activity.kind === "status" || activity.kind === "title"
         ? `${String(data.from)} -> ${String(data.to)}`
@@ -267,7 +319,15 @@ function reading(deps: TaskToolDeps) {
               `${new Date(run.createdAt).toISOString()} ${run.status}${run.error === null ? "" : ` (${run.error})`}`,
           )
           .join("\n");
+        const ref = (t: TaskRefView): string =>
+          `#${t.number} [${t.status}] ${t.title}`;
         const graph = [
+          (task.ancestors ?? []).length === 0
+            ? undefined
+            : `Part of: ${task.ancestors!.map(ref).join(" › ")}`,
+          (task.children ?? []).length === 0
+            ? undefined
+            : `Subtasks (its status comes from them):\n${task.children!.map(ref).join("\n")}`,
           (task.dependsOn ?? []).length === 0
             ? undefined
             : `Waits for:\n${task.dependsOn!.map(edgeLine).join("\n")}`,
@@ -368,6 +428,7 @@ function conversationTools(
         }),
       ),
       dependsOn: dependsOnParameter,
+      parent: parentParameter,
     }),
     async execute(args) {
       try {
@@ -450,6 +511,7 @@ function conversationTools(
         }),
       ),
       dependsOn: dependsOnParameter,
+      parent: parentParameter,
     }),
     async execute(args) {
       try {
@@ -512,6 +574,12 @@ function conversationTools(
             "backlog, todo, in_progress, in_review, done, blocked or cancelled",
         }),
       ),
+      parent: Type.Optional(
+        Type.String({
+          description:
+            "Make it a subtask of this task (number or id), or of none with an empty string",
+        }),
+      ),
       addDependencies: dependsOnParameter,
       removeDependencies: Type.Optional(
         Type.Array(Type.String(), {
@@ -524,11 +592,14 @@ function conversationTools(
       try {
         const {
           task: which,
+          parent,
           addDependencies,
           removeDependencies,
           ...fields
         } = args;
         const id = taskOf(which).id;
+        if (parent !== undefined)
+          board.setParent(id, parent.trim() === "" ? null : parent, actor);
         for (const other of removeDependencies ?? [])
           board.removeDependency(id, other, actor);
         for (const edge of addDependencies ?? [])
@@ -683,6 +754,75 @@ function runTools(
     },
   });
 
+  const subtask = defineTool({
+    name: "create_subtask",
+    label: "create_subtask",
+    description:
+      "Split this task: make a subtask of it, which starts on its own (in a session of its own) " +
+      "once what it waits for is resolved. Make every subtask the work needs, ordering them with " +
+      "dependsOn (subtasks without dependencies on each other run in parallel; a closing subtask " +
+      "that depends on the others pulls the work together). This task then does not run itself " +
+      "any more: its status comes from its subtasks. When the subtasks are made, call finish_task " +
+      "saying how you split the work; that ends this run.",
+    parameters: Type.Object({
+      title: Type.String({ description: "A short title" }),
+      description: Type.String({
+        description:
+          "What it is: the goal, what is decided and how it will be judged done, for a reader who knows nothing else",
+      }),
+      dependsOn: dependsOnParameter,
+      assignee: Type.Optional(
+        Type.String({
+          description:
+            "The agent that executes it, by name or id; absent is you, the executor of this task",
+        }),
+      ),
+      base: Type.Optional(
+        Type.String({
+          description:
+            "A branch, a commit, or `#N`, its worktree starts at. Absent with exactly one dependency in this project: that task's branch; else the project checkout's HEAD.",
+        }),
+      ),
+    }),
+    execute(args) {
+      try {
+        workingRun();
+        const parent = task();
+        const conversationId =
+          parent.conversationId ?? parent.originConversationId;
+        if (conversationId === null)
+          throw new Error(
+            "this task is in no conversation, so it has nowhere to make subtasks",
+          );
+        const made = board.create(
+          {
+            title: args.title,
+            description: args.description,
+            status: "todo",
+            conversationId,
+            workspace: parent.workspaceMode,
+            base: args.base,
+            assignee: args.assignee,
+            dependsOn: args.dependsOn,
+            parent: parent.id,
+          },
+          actor,
+        );
+        const waits = made.waitingOn ?? [];
+        return text(
+          `Created subtask #${made.number} "${made.title}" of #${parent.number}${
+            waits.length === 0
+              ? "; it starts now"
+              : `; it waits for ${waits.map((w) => `#${w.number}`).join(", ")}`
+          }.`,
+          { id: made.id, number: made.number },
+        );
+      } catch (error) {
+        return failure(error);
+      }
+    },
+  });
+
   const comment = defineTool({
     name: "comment_task",
     label: "comment_task",
@@ -745,6 +885,7 @@ function runTools(
     toKernelTool(list, none),
     toKernelTool(get, none),
     toKernelTool(update, none),
+    toKernelTool(subtask, none),
     toKernelTool(comment, none),
     toKernelTool(finish, none),
   ] as KernelTool[];

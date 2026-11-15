@@ -26,6 +26,8 @@ export interface TaskRecord extends BoardTaskView {
   baseBranch: string | null;
   captainAssignmentId: string | null;
   captainMessageId: string | null;
+  /** The task it is a subtask of. */
+  parentId: string | null;
   /** The agent that executes it, when that is not the maker; null is the maker. */
   assigneeAgentId: string | null;
   worktreePath: string | null;
@@ -45,6 +47,8 @@ export interface NewTask {
   baseBranch?: string | null | undefined;
   captainAssignmentId?: string | null | undefined;
   captainMessageId?: string | null | undefined;
+  /** The task it is a subtask of; checking it is the graph's. */
+  parentId?: string | null | undefined;
   /** Where it is discussed, and, for good, where it came from. */
   conversationId?: string | undefined;
   projectId?: string | undefined;
@@ -101,6 +105,7 @@ interface TaskRow {
   base_branch: string | null;
   captain_assignment_id: string | null;
   captain_message_id: string | null;
+  parent_id: string | null;
   assignee_agent: string | null;
   worktree_path: string | null;
   worktree_branch: string | null;
@@ -134,6 +139,7 @@ const recordOf = (row: TaskRow): TaskRecord => ({
   baseBranch: row.base_branch,
   captainAssignmentId: row.captain_assignment_id,
   captainMessageId: row.captain_message_id,
+  parentId: row.parent_id,
   assigneeAgentId: row.assignee_agent,
   worktreePath: row.worktree_path,
   worktreeBranch: row.worktree_branch,
@@ -205,8 +211,8 @@ export class TaskStore {
           `INSERT INTO task
              (id, title, description, status, created_by_agent, assignee_agent, conversation_id, origin_conversation_id,
               project_id, workspace_mode, base_branch, captain_assignment_id, captain_message_id,
-              created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              parent_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           id,
@@ -222,6 +228,7 @@ export class TaskStore {
           input.baseBranch ?? null,
           input.captainAssignmentId ?? null,
           input.captainMessageId ?? null,
+          input.parentId ?? null,
           now,
           now,
         );
@@ -417,6 +424,13 @@ export class TaskStore {
         )
         .run(taskId, dependsOnId).changes > 0
     );
+  }
+
+  /** Make the task a subtask of another, or (null) of none. Checking it is the graph's. */
+  setParent(id: string, parentId: string | null): void {
+    this.#db
+      .query("UPDATE task SET parent_id = ?, updated_at = ? WHERE id = ?")
+      .run(parentId, Date.now(), id);
   }
 
   /** The newest `status` entry of a task: who moved it last, and why. */

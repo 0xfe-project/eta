@@ -7,7 +7,12 @@ import type {
   TaskRun,
   TaskStatus,
 } from "@/queries/tasks";
-import { dependencyEntry, runningFirst } from "@eta/client-contracts";
+import {
+  dependencyEntry,
+  parentEntry,
+  runningFirst,
+  subtaskEntry,
+} from "@eta/client-contracts";
 import { AppWindowIcon } from "@phosphor-icons/react/AppWindow";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
@@ -99,7 +104,12 @@ import {
   waitingNumbers,
   workspaceLabel,
 } from "./task-format";
-import { DependencyBadge, DependencyRows } from "./task-graph";
+import {
+  DependencyBadge,
+  DependencyRows,
+  SubtaskCount,
+  TreeRows,
+} from "./task-graph";
 import { useTaskNav } from "./task-nav";
 import { RunLog } from "./task-run-log";
 import { StatusIcon } from "./task-status-icon";
@@ -211,6 +221,7 @@ function TaskRow({ task }: { task: Task }) {
               {actorName(task.createdBy, agents)}
             </span>
             <span className="ml-auto flex shrink-0 items-center gap-3 pl-2">
+              <SubtaskCount task={task} />
               <RunState task={task} />
               <Comments count={task.comments} />
             </span>
@@ -665,6 +676,7 @@ export function TaskProperties({
           </dd>
           <RunRow task={task} />
           <TaskMemoryPause taskId={task.id} />
+          <TreeRows task={task} labelClassName={propertyLabel} />
           <DependencyRows task={task} labelClassName={propertyLabel} />
         </>
       ) : null}
@@ -765,6 +777,39 @@ function dependencyLine(a: TaskActivity): React.ReactNode {
   }
 }
 
+/** A `parent` or `subtask` entry in the reader's words, from its data; an older one has its body. */
+function treeLine(a: TaskActivity): React.ReactNode {
+  const named = (ref: { number: number; title: string }) =>
+    `#${ref.number} ${ref.title}`.trim();
+  if (a.kind === "parent") {
+    const read = parentEntry(a.data);
+    if (read === undefined) return a.body;
+    if (read.to !== null)
+      return translate("tasks:activity.parentSet", { task: named(read.to) });
+    return read.deleted
+      ? translate("tasks:activity.parentDeleted", { task: named(read.from!) })
+      : translate("tasks:activity.parentCleared", { task: named(read.from!) });
+  }
+  const read = subtaskEntry(a.data);
+  if (read === undefined) return a.body;
+  switch (read.action) {
+    case "added":
+      return translate("tasks:activity.subtaskAdded", {
+        task: named(read.task),
+      });
+    case "removed":
+      return translate("tasks:activity.subtaskRemoved", {
+        task: named(read.task),
+      });
+    case "deleted":
+      return translate("tasks:activity.subtaskDeleted", {
+        task: named(read.task),
+      });
+    case "all_cancelled":
+      return translate("tasks:activity.subtasksAllCancelled");
+  }
+}
+
 /** One line for an event that is not a comment. */
 function describe(a: TaskActivity): React.ReactNode {
   const d = a.data;
@@ -830,10 +875,9 @@ function describe(a: TaskActivity): React.ReactNode {
       });
     case "dependency":
       return dependencyLine(a);
-    // The graph's entries say themselves, in the host's words.
     case "parent":
     case "subtask":
-      return a.body;
+      return treeLine(a);
     default:
       // A kind from a newer host: what it said, if anything.
       return a.body;
@@ -1364,6 +1408,23 @@ function RunRow({ task }: { task: TaskDetail }) {
   const own = task.runs.filter((run) => run.agentId === null);
   const latest = own.at(-1);
   const open = own.some((run) => isActive(run.status));
+  // A parent does not run itself (the host refuses it): no button, and it says why instead.
+  if (task.subtasks != null)
+    return (
+      <>
+        <dt className={propertyLabel}>{translateText("runs.label")}</dt>
+        <dd className="flex min-w-0 flex-wrap items-center gap-x-1 leading-8">
+          {latest ? (
+            <span className="mr-1">
+              <RunStatusText run={latest} />
+            </span>
+          ) : null}
+          <p className="w-full text-xs leading-5 text-muted-foreground">
+            {translateText("runs.parentHint")}
+          </p>
+        </dd>
+      </>
+    );
   return (
     <>
       <dt className={propertyLabel}>{translateText("runs.label")}</dt>

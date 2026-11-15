@@ -95,6 +95,14 @@ export function useRemoveDependency() {
   >("tasks", "removeDependency");
 }
 
+/** Make a task a subtask of another, or (null) of none. */
+export function useSetParent() {
+  return useWireMutation<TaskArgs["setParent"], TaskResults["setParent"]>(
+    "tasks",
+    "setParent",
+  );
+}
+
 export function useCommentTask() {
   return useWireMutation<TaskArgs["comment"], TaskResults["comment"]>(
     "tasks",

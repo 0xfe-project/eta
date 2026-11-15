@@ -39,7 +39,8 @@
     "never": "还没运行过",
     "run": "运行",
     "rerun": "从头重跑",
-    "fromScratchHint": "评论会让执行者接着上次往下做；这样是开一个它什么都不记得的新会话。"
+    "fromScratchHint": "评论会让执行者接着上次往下做；这样是开一个它什么都不记得的新会话。",
+    "parentHint": "父任务不单独运行，状态由子任务推出"
   },
   "scope": {
     "group": "{{name}}",
@@ -93,6 +94,13 @@
     "dependencyDeleted": "{{task}} 被删除了，不再等它",
     "dependencyBlocked": "{{task}} 被取消了，本任务不会自己开始。去掉这条依赖，或者取消本任务。",
     "dependencyUnblocked": "依赖的任务不再是取消状态，本任务回到「待办」，依赖解决后开始",
+    "parentSet": "成为 {{task}} 的子任务",
+    "parentCleared": "不再是 {{task}} 的子任务",
+    "parentDeleted": "{{task}} 被删除了，本任务不再是它的子任务",
+    "subtaskAdded": "{{task}} 成为本任务的子任务",
+    "subtaskRemoved": "{{task}} 不再是本任务的子任务",
+    "subtaskDeleted": "子任务 {{task}} 被删除了",
+    "subtasksAllCancelled": "子任务全部取消了，没有剩下要做的工作。新建子任务，或者决定本任务怎么处理。",
     "changeCount": "{{count}} 条动态",
     "changeCount_one": "{{count}} 条动态",
     "changeCount_other": "{{count}} 条动态"
@@ -195,6 +203,14 @@
       "waiting": "等待中",
       "cancelled": "已取消"
     },
-    "blockedHint": "它依赖的任务被取消了，这个任务不会自己开始。去掉这条依赖，或者取消本任务。"
+    "blockedHint": "它依赖的任务被取消了，这个任务不会自己开始。去掉这条依赖，或者取消本任务。",
+    "subtasks": "子任务 {{done}}/{{total}}",
+    "parent": "父任务",
+    "children": "子任务",
+    "setParent": "设为子任务",
+    "clearParent": "移出父任务",
+    "expand": "展开 #{{number}} 的子任务",
+    "collapse": "收起 #{{number}} 的子任务",
+    "via": "经 #{{number}}"
   }
 }

@@ -79,6 +79,24 @@ export type TaskQueueReason = (typeof TASK_QUEUE_REASONS)[number];
  */
 export type TaskDependencyState = "resolved" | "waiting" | "cancelled";
 
+/** Another task, as a task names it: enough to show it and go to it. */
+export interface TaskRefView {
+  taskId: string;
+  number: number;
+  title: string;
+  status: BoardTaskStatus;
+}
+
+/**
+ * Something a task's work still waits for: its own edge or a parent's (`via` names that parent),
+ * not resolved yet (`waiting`) or never to be (`cancelled`).
+ */
+export interface TaskWaitView extends TaskRefView {
+  state: Exclude<TaskDependencyState, "resolved">;
+  /** The parent whose dependency this is, inherited; null for the task's own. */
+  via: number | null;
+}
+
 /** One edge of the task graph, from the side of the task that reads it. */
 export interface TaskDependencyView {
   /** The task at the other end: the one waited for, or the one waiting. */
@@ -126,6 +144,18 @@ export interface BoardTaskView {
    * Absent from a host older than dependencies, which is none.
    */
   dependsOn?: TaskDependencyView[];
+  /**
+   * What its work still waits for, its parents' dependencies included: what the board says
+   * "waiting for #12" with. Empty when it may start.
+   */
+  waitingOn?: TaskWaitView[];
+  /** The task it is a subtask of. */
+  parentId?: string | null;
+  /**
+   * Its subtasks, counted, when it has any: a task with subtasks does not run, and its status is
+   * theirs. Cancelled subtasks are not counted.
+   */
+  subtasks?: { total: number; done: number } | null;
   comments: number;
   createdAt: number;
   /** Moves on every change, comment and artifact: the board is ordered by it, newest first. */
@@ -198,6 +228,10 @@ export interface BoardTaskDetail extends BoardTaskView {
   runs: TaskRunView[];
   /** The tasks that wait for this one; `state` is where each of their edges to it stands. */
   dependents?: TaskDependencyView[];
+  /** Its subtasks, oldest first. */
+  children?: TaskRefView[];
+  /** Its parent, the parent's parent and so on, the top first: a breadcrumb. */
+  ancestors?: TaskRefView[];
 }
 
 /**
@@ -214,7 +248,11 @@ export interface BoardTaskDetail extends BoardTaskView {
  * words, in English, in `body`.
  * A `status` entry the system wrote because of a cancelled dependency has `reason:
  * "dependency_cancelled"`: only such a block is undone by the system.
- * `parent` and `subtask` are written by the subtasks part of the graph.
+ * `parent` is on a task whose parent changed (`from`, `to`: task refs or null, and `deleted` when
+ * the parent left because it was deleted); `subtask` on the parent (`action`: `added`, `removed`,
+ * `deleted`, with the subtask as `taskId`, `number`, `title`; or `all_cancelled`). Like
+ * `dependency`, neither has a `body` (`parentEntry`, `subtaskEntry`). A `status` entry the system
+ * wrote because the subtasks moved has `reason: "subtasks"` (or `"all_cancelled"`).
  */
 export type TaskActivityKind =
   | "created"
@@ -275,6 +313,59 @@ export function dependencyEntry(
   };
 }
 
+/** A task at the other end of a graph entry, as the entry names it. */
+export interface TaskEntryRef {
+  number: number;
+  title: string;
+}
+
+const entryRef = (value: unknown): TaskEntryRef | null => {
+  if (typeof value !== "object" || value === null) return null;
+  const { number, title } = value as Record<string, unknown>;
+  return typeof number === "number"
+    ? { number, title: typeof title === "string" ? title : "" }
+    : null;
+};
+
+/** What a `parent` entry's `data` says: the parent it left, the one it went under, and why. */
+export interface TaskParentEntry {
+  from: TaskEntryRef | null;
+  to: TaskEntryRef | null;
+  /** It left `from` because `from` was deleted. */
+  deleted: boolean;
+}
+
+/** A `parent` entry's `data` read, or undefined when it names no parent at all. */
+export function parentEntry(
+  data: Record<string, unknown>,
+): TaskParentEntry | undefined {
+  const from = entryRef(data.from);
+  const to = entryRef(data.to);
+  if (from === null && to === null) return undefined;
+  return { from, to, deleted: data.deleted === true };
+}
+
+/** What a `subtask` entry's `data` says (see `TaskActivityKind`). */
+export type TaskSubtaskEntry =
+  | { action: "added" | "removed" | "deleted"; task: TaskEntryRef }
+  | { action: "all_cancelled" };
+
+/** A `subtask` entry's `data` read, or undefined when it is not one this reader knows. */
+export function subtaskEntry(
+  data: Record<string, unknown>,
+): TaskSubtaskEntry | undefined {
+  if (data.action === "all_cancelled") return { action: "all_cancelled" };
+  const task = entryRef(data);
+  if (
+    task === null ||
+    (data.action !== "added" &&
+      data.action !== "removed" &&
+      data.action !== "deleted")
+  )
+    return undefined;
+  return { action: data.action, task };
+}
+
 export interface TaskActivityView {
   id: string;
   kind: TaskActivityKind;
@@ -328,6 +419,8 @@ export interface TaskDraftData {
    * when it is confirmed. Absent is none, as it always was.
    */
   dependsOn?: { taskId: string; requireDone: boolean }[] | undefined;
+  /** The task it will be a subtask of, checked like `dependsOn`. Absent is none. */
+  parentId?: string | undefined;
   /** The Captain instruction that authorized this draft, when it came from one. */
   captainAssignmentId?: string | undefined;
   captainMessageId?: string | undefined;
@@ -392,6 +485,7 @@ export const TASK_ACTIONS = [
   "rerun",
   "addDependency",
   "removeDependency",
+  "setParent",
 ] as const;
 export type TaskAction = (typeof TASK_ACTIONS)[number];
 
@@ -458,6 +552,11 @@ export interface TaskArgs {
    */
   addDependency: { taskId: string; dependsOn: string; requireDone?: boolean };
   removeDependency: { taskId: string; dependsOn: string };
+  /**
+   * Make the task a subtask of `parent` (an id or `#N`), or of none (null). Refused when the
+   * parent is the task or one of its subtasks, or when it would close a cycle of waiting.
+   */
+  setParent: { taskId: string; parent: string | null };
 }
 export interface TaskResults {
   update: { task: BoardTaskDetail };
@@ -469,6 +568,7 @@ export interface TaskResults {
   rerun: { task: BoardTaskDetail; run: TaskRunView };
   addDependency: { task: BoardTaskDetail };
   removeDependency: { task: BoardTaskDetail };
+  setParent: { task: BoardTaskDetail };
 }
 export type TaskCall = {
   [A in TaskAction]: Omit<CallFrame, "target" | "action" | "args"> & {

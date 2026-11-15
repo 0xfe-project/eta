@@ -8,6 +8,8 @@ import type {
   TaskActor,
   TaskArtifactRef,
   TaskDependencyView,
+  TaskRefView,
+  TaskWaitView,
   TaskWorkspaceMode,
 } from "@eta/client-contracts";
 /**
@@ -39,6 +41,8 @@ export interface DependencyInput {
 
 /** What the system writes on a status it set because a dependency was cancelled. */
 const DEPENDENCY_CANCELLED = "dependency_cancelled";
+
+const SYSTEM: TaskActor = { kind: "system", agentId: null };
 
 /** Something a viewer of the board may want to read again. */
 export interface BoardChange {
@@ -72,11 +76,13 @@ export interface TaskRuns {
   /** Whether a run of the task is starting or going. */
   active: (taskId: string) => boolean;
   /**
-   * The runs that would start the task's work and have not started (its first run, a rerun)
-   * are withdrawn: they end interrupted, with no words of their own, since the board's entry
-   * says why. Runs already going, and the runs of comments and mentions, are left alone.
+   * The executor's runs that have not started are withdrawn: they end interrupted, with no words
+   * of their own, since the board's entry next to them says why. `start` (the default) takes only
+   * the ones that would start the task's work (its first run, a rerun); `executor` takes every one,
+   * the comment wakes too, for a task that will not run itself any more. Runs already going, and
+   * mentioned agents' runs, are left alone.
    */
-  withdraw: (taskId: string) => void;
+  withdraw: (taskId: string, which?: "start" | "executor") => void;
   /** Something that decides whether a queued run may start has changed: look at the queue again. */
   pump: () => void;
   /**
@@ -121,7 +127,45 @@ const graphTaskOf = (task: TaskRecord): GraphTask => ({
   status: task.status,
   projectId: task.projectId,
   workspaceMode: task.workspaceMode,
+  parentId: task.parentId,
 });
+
+/** Another task, as one names it. */
+const refOf = (task: GraphTask): TaskRefView => ({
+  taskId: task.id,
+  number: task.number,
+  title: task.title,
+  status: task.status,
+});
+
+/** What the task's work still waits for, its parents' edges included. */
+const waitingOnOf = (graph: TaskGraph, id: string): TaskWaitView[] =>
+  graph.heldBy(id).flatMap((edge) => {
+    const state = graph.stateOf(edge);
+    if (state === "resolved") return [];
+    const owner = graph.task(edge.taskId)!;
+    return [
+      {
+        ...refOf(graph.task(edge.dependsOnId)!),
+        state,
+        via: edge.inherited ? owner.number : null,
+      },
+    ];
+  });
+
+/** Its subtasks, counted without the cancelled ones; null for a task that has none. */
+const subtasksOf = (
+  graph: TaskGraph,
+  id: string,
+): { total: number; done: number } | null => {
+  const children = graph.childrenOf(id);
+  if (children.length === 0) return null;
+  const live = children.filter((child) => child.status !== "cancelled");
+  return {
+    total: live.length,
+    done: live.filter((child) => child.status === "done").length,
+  };
+};
 
 /** One end of an edge, as the task at the other end reads it. */
 const endOf = (
@@ -157,6 +201,9 @@ const viewOf = (task: TaskRecord, graph: TaskGraph): BoardTaskView => ({
   captainMessageId: task.captainMessageId,
   runStatus: task.runStatus,
   dependsOn: dependsOnOf(graph, task.id),
+  waitingOn: waitingOnOf(graph, task.id),
+  parentId: task.parentId,
+  subtasks: subtasksOf(graph, task.id),
   comments: task.comments,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
@@ -212,6 +259,11 @@ export class TaskBoard {
     };
   }
 
+  /** Whether the task has subtasks: then it does not run, and its status is theirs. */
+  isParent(id: string): boolean {
+    return this.graph().hasChildren(id);
+  }
+
   /** By id or number. */
   find(idOrNumber: string): TaskRecord | undefined {
     return this.#deps.tasks.find(idOrNumber);
@@ -246,6 +298,8 @@ export class TaskBoard {
       captainMessageId?: string | null | undefined;
       /** What it waits for before its work starts. */
       dependsOn?: readonly DependencyInput[] | undefined;
+      /** The task it is a subtask of (`#N` or id). */
+      parent?: string | undefined;
     },
     actor: TaskActor,
   ): BoardTaskDetail {
@@ -257,6 +311,10 @@ export class TaskBoard {
     const assigneeAgent = resolveAssignee(assignee, this.#deps.agents);
     const conversationId = this.#conversation(input.conversationId)!;
     const dependsOn = this.#dependenciesOf(input.dependsOn);
+    const parent =
+      input.parent === undefined || input.parent.trim() === ""
+        ? undefined
+        : this.#named(input.parent);
     const maker = actor.agentId;
     // The task and what it waits for are one write: a task that would start before its
     // dependencies are in place is the thing they are there to prevent.
@@ -273,22 +331,59 @@ export class TaskBoard {
         projectId: this.#deps.conversations.get(conversationId)?.projectId,
         workspaceMode: input.workspace,
       });
+      // The parent first: what the subtask inherits is part of the cycles its edges could close.
+      if (parent !== undefined) this.#setParent(made.id, parent.id, actor);
       for (const edge of dependsOn)
         this.#addEdge(made.id, edge.taskId, edge.requireDone, actor);
       return made;
     })();
     this.#announce(task.id, "created", []);
     for (const edge of dependsOn) this.#announce(edge.taskId, "changed", []);
+    if (parent !== undefined) this.#adopted(parent.id, null);
     if (workable(task.status)) this.#runs?.start(task.id);
+    if (parent !== undefined) this.#graphChanged();
     return this.#detailOf(this.#existing(task.id));
   }
 
   update(id: string, input: FieldsInput, actor: TaskActor): BoardTaskDetail {
     const before = this.#existing(id);
     const fields = this.#fieldsOf(input);
+    const graph = this.graph();
+    const parent =
+      fields.status !== undefined &&
+      fields.status !== before.status &&
+      graph.hasChildren(id);
+    if (
+      parent &&
+      fields.status !== "cancelled" &&
+      before.status !== "cancelled"
+    )
+      throw new Error(
+        `#${before.number} takes its status from its subtasks (${graph
+          .childrenOf(id)
+          .map((child) => `#${child.number}`)
+          .join(", ")}); change theirs instead, or cancel it with all of them`,
+      );
+    // Cancelling a parent cancels the work under it that is not finished: it is the user saying the
+    // whole of it is off.
+    const cancelled =
+      parent && fields.status === "cancelled"
+        ? graph
+            .descendantsOf(id)
+            .filter((t) => t.status !== "done" && t.status !== "cancelled")
+        : [];
     this.#commit(id, "changed", () => {
+      for (const below of cancelled)
+        this.#deps.tasks.update(below.id, { status: "cancelled" }, actor);
       this.#deps.tasks.update(id, fields, actor);
     });
+    for (const below of cancelled) {
+      this.#announce(below.id, "changed", []);
+      this.#runs?.stop(
+        below.id,
+        `The task is cancelled with #${before.number}.`,
+      );
+    }
     const after = this.#existing(id);
     if (after.status !== before.status) {
       // Done or cancelled work is not worked on any more. Out of the backlog, a task that never
@@ -298,7 +393,8 @@ export class TaskBoard {
       else if (
         workable(after.status) &&
         !workable(before.status) &&
-        this.#deps.runs.ofTask(id).length === 0
+        this.#deps.runs.ofTask(id).length === 0 &&
+        !parent
       )
         this.#runs?.start(id);
       // What waits for this task reads it again, and may start, block or unblock.
@@ -353,6 +449,32 @@ export class TaskBoard {
   }
 
   /**
+   * Make the task a subtask of `parent` (`#N` or id), or of none (null). The graph refuses a parent
+   * that is the task or under it, or one that would close a cycle. The parent stops running if this
+   * is its first subtask, and both the old parent and the new one take their status again.
+   */
+  setParent(
+    taskId: string,
+    parent: string | null,
+    actor: TaskActor,
+  ): BoardTaskDetail {
+    const task = this.#existing(taskId);
+    const next =
+      parent === null || parent.trim() === "" ? null : this.#named(parent);
+    const before = task.parentId;
+    if ((next?.id ?? null) === before) return this.#detailOf(task);
+    this.#commit(task.id, "changed", () => {
+      this.#setParent(task.id, next?.id ?? null, actor);
+    });
+    for (const other of [before, next?.id ?? null])
+      if (other !== null) this.#announce(other, "changed", []);
+    if (next !== null) this.#adopted(next.id, before);
+    else if (before !== null) this.#derive(before);
+    this.#graphChanged();
+    return this.#detailOf(this.#existing(task.id));
+  }
+
+  /**
    * A queued run of the task found something it waits for cancelled (the runner asks, in `pump`):
    * the task cannot start on its own, so it is blocked, saying which dependency and that the user
    * decides, and the runs that would start it are withdrawn. Nothing happens when the graph does
@@ -378,6 +500,7 @@ export class TaskBoard {
     });
     // The run ends with no words: the `blocked` entry above says why, in the reader's language.
     this.#runs?.withdraw(taskId);
+    if (task.parentId !== null) this.#derive(task.parentId);
   }
 
   /**
@@ -450,7 +573,21 @@ export class TaskBoard {
     const graph = this.graph();
     const waiting = graph.dependentsOf(id).map((edge) => edge.taskId);
     const awaited = graph.dependenciesOf(id).map((edge) => edge.dependsOnId);
+    const children = graph.childrenOf(id);
     this.#deps.db.transaction(() => {
+      // Its subtasks stay, with no parent: they say so, and so does the parent it was under.
+      for (const child of children)
+        this.#commit(child.id, "changed", () => {
+          this.#deps.tasks.record(child.id, "parent", SYSTEM, {
+            data: { from: this.#refOf(task), to: null, deleted: true },
+          });
+        });
+      if (task.parentId !== null)
+        this.#commit(task.parentId, "changed", () => {
+          this.#deps.tasks.record(task.parentId!, "subtask", SYSTEM, {
+            data: { action: "deleted", ...this.#refOf(task) },
+          });
+        });
       for (const dependent of waiting)
         this.#commit(dependent, "changed", () => {
           this.#deps.tasks.record(
@@ -465,6 +602,7 @@ export class TaskBoard {
       });
     })();
     for (const other of awaited) this.#announce(other, "changed", []);
+    if (task.parentId !== null) this.#derive(task.parentId);
     this.#graphChanged();
   }
 
@@ -548,20 +686,25 @@ export class TaskBoard {
   draft(input: {
     conversationId: string;
     agentId: string;
-    draft: Omit<DraftInput, "dependsOn"> & {
+    draft: Omit<DraftInput, "dependsOn" | "parentId"> & {
       dependsOn?: readonly DependencyInput[] | undefined;
+      /** The task it would be a subtask of (`#N` or id). */
+      parent?: string | undefined;
     };
   }): MessageView {
     const dependsOn = this.#dependenciesOf(input.draft.dependsOn);
+    const { parent: named, ...draft } = input.draft;
+    const parent =
+      named === undefined || named.trim() === ""
+        ? undefined
+        : this.#named(named);
     const row = this.#deps.cards.draft({
       ...input,
       draft: {
-        ...input.draft,
-        base:
-          input.draft.base === undefined
-            ? undefined
-            : this.#baseOf(input.draft.base),
+        ...draft,
+        base: draft.base === undefined ? undefined : this.#baseOf(draft.base),
         dependsOn: dependsOn.length === 0 ? undefined : dependsOn,
+        parentId: parent?.id,
       },
     });
     this.#deps.changed([input.conversationId]);
@@ -585,6 +728,8 @@ export class TaskBoard {
         });
         const edges = confirmed.created ? confirmed.dependsOn : [];
         const actor: TaskActor = { kind: "user", agentId: null };
+        if (confirmed.created && confirmed.parentId !== undefined)
+          this.#setParent(confirmed.task.id, confirmed.parentId, actor);
         for (const edge of edges)
           this.#addEdge(
             confirmed.task.id,
@@ -598,7 +743,10 @@ export class TaskBoard {
     if (created) {
       this.#announce(task.id, "created", [input.conversationId]);
       for (const edge of dependsOn) this.#announce(edge.taskId, "changed", []);
+      const parentId = this.#existing(task.id).parentId;
+      if (parentId !== null) this.#adopted(parentId, null);
       if (workable(task.status)) this.#runs?.start(task.id);
+      if (parentId !== null) this.#graphChanged();
     }
     return { task: this.#detailOf(this.#existing(task.id)), message };
   }
@@ -681,7 +829,81 @@ export class TaskBoard {
   #statusMoved(id: string): void {
     for (const edge of this.graph().dependentsOf(id))
       this.#announce(edge.taskId, "changed", []);
+    const parent = this.#deps.tasks.get(id)?.parentId ?? null;
+    if (parent !== null) this.#derive(parent);
     this.#graphChanged();
+  }
+
+  /**
+   * Make `taskId` a subtask of `parentId` (or of none), inside the caller's write: the graph checks
+   * it as things are in that write. The subtask and both parents say so on their timelines.
+   */
+  #setParent(taskId: string, parentId: string | null, actor: TaskActor): void {
+    const graph = this.graph();
+    const task = graph.task(taskId)!;
+    if (parentId !== null) graph.checkParent(taskId, parentId);
+    const from = task.parentId === null ? undefined : graph.task(task.parentId);
+    const to = parentId === null ? undefined : graph.task(parentId);
+    this.#deps.tasks.setParent(taskId, parentId);
+    this.#deps.tasks.record(taskId, "parent", actor, {
+      data: {
+        from: from === undefined ? null : this.#refOf(from),
+        to: to === undefined ? null : this.#refOf(to),
+      },
+    });
+    if (from !== undefined)
+      this.#deps.tasks.record(from.id, "subtask", actor, {
+        data: { action: "removed", ...this.#refOf(task) },
+      });
+    if (to !== undefined)
+      this.#deps.tasks.record(to.id, "subtask", actor, {
+        data: { action: "added", ...this.#refOf(task) },
+      });
+    if (from !== undefined) this.#deps.cards.sync(from.id);
+    if (to !== undefined) this.#deps.cards.sync(to.id);
+  }
+
+  /**
+   * A task got a subtask: it does not start its own work any more (a run that would has not
+   * started yet is withdrawn; one that is going, such as an executor splitting its task, goes on),
+   * and it takes its status from its subtasks, as does the parent the subtask left.
+   */
+  #adopted(parentId: string, formerParentId: string | null): void {
+    // No words of its own: the `subtask` entry next to it says why, in the reader's language.
+    this.#runs?.withdraw(parentId, "executor");
+    this.#derive(parentId);
+    if (formerParentId !== null) this.#derive(formerParentId);
+  }
+
+  /**
+   * A parent takes the status its subtasks make (`TaskGraph.derive`), and its parent then does the
+   * same, up the tree while anything changes. A cancelled parent is left alone: that was the
+   * user's word on the whole of it. Its timeline says the system moved it, and why.
+   */
+  #derive(id: string): void {
+    let at: string | null = id;
+    while (at !== null) {
+      const task = this.#deps.tasks.get(at);
+      if (task === undefined || task.status === "cancelled") return;
+      const derived = this.graph().derive(at);
+      if (derived === undefined || derived.status === task.status) return;
+      this.#commit(at, "changed", () => {
+        if (derived.reason === "all_cancelled")
+          this.#deps.tasks.record(task.id, "subtask", SYSTEM, {
+            data: { action: "all_cancelled" },
+          });
+        this.#deps.tasks.update(
+          task.id,
+          { status: derived.status, statusReason: derived.reason },
+          SYSTEM,
+        );
+      });
+      if (derived.status === "done")
+        this.#runs?.stop(task.id, "The task is done: all of its subtasks are.");
+      for (const edge of this.graph().dependentsOf(task.id))
+        this.#announce(edge.taskId, "changed", []);
+      at = task.parentId;
+    }
   }
 
   /** The graph changed: the system's own blocks that no longer hold are undone, and the queue is looked at again. */
@@ -713,6 +935,7 @@ export class TaskBoard {
           this.#deps.tasks.update(task.id, { status: "todo" }, system);
         });
         this.#runs?.start(task.id);
+        if (task.parentId !== null) this.#derive(task.parentId);
       }
     } finally {
       this.#settling = false;
@@ -765,6 +988,8 @@ export class TaskBoard {
       dependents: graph
         .dependentsOf(task.id)
         .map((edge) => endOf(graph, edge, edge.taskId)),
+      children: graph.childrenOf(task.id).map(refOf),
+      ancestors: graph.ancestorsOf(task.id).reverse().map(refOf),
     };
   }
 

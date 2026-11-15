@@ -39,7 +39,8 @@
     "never": "Never run",
     "run": "Run",
     "rerun": "Start over",
-    "fromScratchHint": "A comment lets the executor carry on where it stopped; this opens a session that remembers nothing."
+    "fromScratchHint": "A comment lets the executor carry on where it stopped; this opens a session that remembers nothing.",
+    "parentHint": "A parent task does not run itself: its status comes from its subtasks."
   },
   "scope": {
     "group": "{{name}}",
@@ -93,6 +94,13 @@
     "dependencyDeleted": "{{task}} was deleted, so this no longer waits for it",
     "dependencyBlocked": "{{task}} was cancelled, so this will not start on its own. Remove the dependency, or cancel this task.",
     "dependencyUnblocked": "no dependency is cancelled any more, so this goes back to todo and starts once what it waits for is resolved",
+    "parentSet": "became a subtask of {{task}}",
+    "parentCleared": "is no longer a subtask of {{task}}",
+    "parentDeleted": "{{task}} was deleted, so this is no longer a subtask of it",
+    "subtaskAdded": "{{task}} became a subtask of this",
+    "subtaskRemoved": "{{task}} is no longer a subtask of this",
+    "subtaskDeleted": "subtask {{task}} was deleted",
+    "subtasksAllCancelled": "every subtask is cancelled, so nothing is left to work on. Add a subtask, or decide what becomes of this task.",
     "changeCount": "{{count}} updates",
     "changeCount_one": "{{count}} update",
     "changeCount_other": "{{count}} updates"
@@ -195,6 +203,14 @@
       "waiting": "Waiting",
       "cancelled": "Cancelled"
     },
-    "blockedHint": "A task this one depends on was cancelled, so it will not start on its own. Remove that dependency, or cancel this task."
+    "blockedHint": "A task this one depends on was cancelled, so it will not start on its own. Remove that dependency, or cancel this task.",
+    "subtasks": "Subtasks {{done}}/{{total}}",
+    "parent": "Parent",
+    "children": "Subtasks",
+    "setParent": "Set parent",
+    "clearParent": "Remove from parent",
+    "expand": "Show the subtasks of #{{number}}",
+    "collapse": "Hide the subtasks of #{{number}}",
+    "via": "via #{{number}}"
   }
 }
