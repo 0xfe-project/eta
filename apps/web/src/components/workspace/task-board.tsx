@@ -27,6 +27,7 @@ import { when } from "./routine-format";
 import {
   actorName,
   ago,
+  canCancelTree,
   createdBy,
   statusLabel,
   statusTone,
@@ -34,6 +35,7 @@ import {
 import { BlockedExits, DependencyBadge, SubtaskCount } from "./task-graph";
 import { useTaskNav } from "./task-nav";
 import { StatusIcon } from "./task-status-icon";
+import { CancelTreeDialog } from "./task-status-select";
 import {
   CommentBox,
   Comments,
@@ -291,6 +293,7 @@ function TaskPage({ id }: { id: string }) {
   const { task, missing, error } = useTask(id);
   const { agents } = useAgentList();
   const [deleting, setDeleting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   // Opened from the header, only while the rail does not fit.
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const back = () => void setNav({ task: null });
@@ -354,6 +357,11 @@ function TaskPage({ id }: { id: string }) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {canCancelTree(task) ? (
+              <DropdownMenuItem onSelect={() => setCancelling(true)}>
+                {translateText("statusMenu.cancelTree")}
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem
               variant="destructive"
               onSelect={() => setDeleting(true)}
@@ -362,6 +370,11 @@ function TaskPage({ id }: { id: string }) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <CancelTreeDialog
+          task={task}
+          open={cancelling}
+          onOpenChange={setCancelling}
+        />
         <DeleteTaskDialog
           task={task}
           open={deleting}

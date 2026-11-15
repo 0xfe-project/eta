@@ -4,7 +4,7 @@ import { act } from "react";
 import { setWire } from "@/lib/wire";
 import { productHost, taskDetail } from "@/test-product";
 import { cleanup, flush, mount } from "@/test-render";
-import { TaskStatusControl } from "./task-status-select";
+import { CancelTreeDialog, TaskStatusControl } from "./task-status-select";
 
 // A task's status where it is changed: a label in its colour that opens the seven, keyed 1–7, with
 // what a cancel would do to the tasks that wait; a parent's is its subtasks' and only shows.
@@ -12,7 +12,7 @@ import { TaskStatusControl } from "./task-status-select";
 const edge = (
   number: number,
   state: "resolved" | "waiting" | "cancelled",
-  status: "todo" | "backlog" | "in_progress" | "done" = "todo",
+  status: "todo" | "backlog" | "in_progress" | "done" | "blocked" = "todo",
 ) => ({
   taskId: `t${number}`,
   number,
@@ -62,7 +62,7 @@ describe("the status menu", () => {
     const button = trigger(container);
     expect(button.dataset.status).toBe("in_progress");
     expect(button.textContent).toBe("进行中");
-    expect(button.className).toContain("text-state-info");
+    expect(button.className).toContain("text-state-info-ink");
     expect(button.className).toContain("border-state-info");
     await press(button, "Enter");
     expect(
@@ -116,6 +116,8 @@ describe("the status menu", () => {
         // Already let through, already finished: a cancel blocks neither.
         edge(4, "resolved", "in_progress"),
         edge(5, "waiting", "done"),
+        // Blocked already: a cancel changes nothing for it.
+        edge(6, "waiting", "blocked"),
       ],
     });
     host(task);
@@ -139,13 +141,14 @@ describe("the status menu", () => {
   });
 
   it("shows a parent's status as a label, Auto beside it, and no menu", async () => {
+    // Five subtasks, one of them cancelled: the host derives the status from the other four.
     const task = detail({
-      subtasks: { total: 5, done: 2 },
+      subtasks: { total: 4, done: 2 },
       children: [1, 2, 3, 4, 5].map((n) => ({
         taskId: `c${n}`,
         number: 10 + n,
         title: `C${n}`,
-        status: "todo" as const,
+        status: n === 5 ? ("cancelled" as const) : ("todo" as const),
       })),
     });
     host(task);
@@ -157,6 +160,42 @@ describe("the status menu", () => {
     const auto = [...container.querySelectorAll("span")].find(
       (span) => span.textContent === "自动",
     )!;
-    expect(auto.getAttribute("aria-description")).toBe("由 5 个子任务推出");
+    expect(auto.getAttribute("aria-description")).toBe("由 4 个子任务推出");
+  });
+
+  it("cancels a parent with its subtasks once asked, saying what it blocks", async () => {
+    const task = detail({
+      subtasks: { total: 2, done: 0 },
+      dependents: [edge(2, "waiting")],
+    });
+    // Under it: one open, one done, and an open grandchild under the open one.
+    const h = productHost({
+      tasks: [
+        { task },
+        { task: taskDetail({ id: "c1", parentId: "t1", status: "todo" }) },
+        { task: taskDetail({ id: "c2", parentId: "t1", status: "done" }) },
+        {
+          task: taskDetail({ id: "c3", parentId: "c1", status: "in_progress" }),
+        },
+      ],
+    });
+    h.handle("tasks.update", () => ({ task }));
+    h.hello();
+    await mount(<CancelTreeDialog task={task} open onOpenChange={() => {}} />);
+    await flush();
+    const dialog = document.querySelector<HTMLElement>('[role="alertdialog"]')!;
+    expect(dialog.textContent).toContain("取消 #");
+    expect(dialog.textContent).toContain(
+      "它下面没完成的 2 个子任务会一起转为已取消",
+    );
+    expect(dialog.textContent).toContain("等它的 1 个任务会转为受阻");
+    const confirm = [...dialog.querySelectorAll("button")].find(
+      (button) => button.textContent === "全部取消",
+    )!;
+    await act(async () => confirm.click());
+    await flush();
+    expect(
+      h.calls.filter((c) => c.action === "update").map((c) => c.args),
+    ).toEqual([{ taskId: "t1", status: "cancelled" }]);
   });
 });

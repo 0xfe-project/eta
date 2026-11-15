@@ -1,7 +1,7 @@
 import type { BoardTaskStatus } from "@eta/client-contracts";
 import type { Tokens } from "nsh";
 import { Image, Text, token, View } from "nsh";
-import { TINTS, TONES } from "./status-tone";
+import { statusInk, TINTS, TONES } from "./status-tone";
 
 // A task's status, drawn as the web app draws it: the outlined three are work not finished yet,
 // the four solid ones want the reader or are settled. Each takes its status's state colour, which
@@ -63,7 +63,7 @@ export function StatusPill(props: {
       <If when={props.icon !== false}>
         <TaskStatusIcon status={props.status} size={12} />
       </If>
-      <Text class={`text-sm leading-4 text-${TONES[props.status]}`}>
+      <Text class={`text-sm leading-4 ${statusInk(props.status)}`}>
         {props.label}
       </Text>
     </View>

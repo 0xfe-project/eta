@@ -120,7 +120,7 @@ export function StatusPill({
         "inline-flex shrink-0 items-center gap-1 py-px pr-1.5 text-xs leading-5 whitespace-nowrap",
         icon ? "pl-1" : "pl-1.5",
         tone.tint,
-        tone.text,
+        tone.ink,
         className,
       )}
     >

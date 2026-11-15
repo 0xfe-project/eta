@@ -37,7 +37,14 @@
     "auto": "Auto",
     "autoHint": "Derived from its {{count}} subtasks",
     "autoHint_one": "Derived from its {{count}} subtask",
-    "autoHint_other": "Derived from its {{count}} subtasks"
+    "autoHint_other": "Derived from its {{count}} subtasks",
+    "cancelTree": "Cancel this tree (with its unfinished subtasks)…",
+    "cancelTreeTitle": "Cancel #{{number}} and the tasks under it?",
+    "cancelTreeDescription": "The {{count}} unfinished subtasks under it are cancelled with it.",
+    "cancelTreeConfirm": "Cancel all",
+    "keep": "Keep it",
+    "cancelTreeDescription_one": "The {{count}} unfinished subtask under it is cancelled with it.",
+    "cancelTreeDescription_other": "The {{count}} unfinished subtasks under it are cancelled with it."
   },
   "runStatus": {
     "queued": "Queued",

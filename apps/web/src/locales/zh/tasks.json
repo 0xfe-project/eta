@@ -37,7 +37,14 @@
     "auto": "自动",
     "autoHint": "由 {{count}} 个子任务推出",
     "autoHint_one": "由 {{count}} 个子任务推出",
-    "autoHint_other": "由 {{count}} 个子任务推出"
+    "autoHint_other": "由 {{count}} 个子任务推出",
+    "cancelTree": "取消这棵任务（连下面未完成的子任务）…",
+    "cancelTreeTitle": "取消 #{{number}} 和它下面的任务？",
+    "cancelTreeDescription": "它下面没完成的 {{count}} 个子任务会一起转为已取消。",
+    "cancelTreeConfirm": "全部取消",
+    "keep": "先不取消",
+    "cancelTreeDescription_one": "它下面没完成的 {{count}} 个子任务会一起转为已取消。",
+    "cancelTreeDescription_other": "它下面没完成的 {{count}} 个子任务会一起转为已取消。"
   },
   "runStatus": {
     "queued": "排队中",

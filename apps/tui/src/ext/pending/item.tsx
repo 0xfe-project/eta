@@ -32,7 +32,7 @@ import { LineInput } from "../../ui/components/line-input";
 import { inkColor } from "../../ui/theme";
 import { callsFor, showItem, startCall } from "./calls";
 import { usePanelState, useTaskTarget } from "./hooks";
-import { graphText, statusText } from "./labels";
+import { graphText, statusColor, statusText } from "./labels";
 import { pendingMessages } from "./messages";
 import {
   agentName,
@@ -330,7 +330,7 @@ export function ItemContent({
 
   if (facts === undefined) return null;
 
-  const title = itemTitle(state, facts, t);
+  const title = itemTitle(state, facts, t, theme);
   const footer = [
     t("keyMove"),
     t(facts.kind === "question" ? "keyAnswer" : "keyChoose"),
@@ -428,10 +428,19 @@ function itemTitle(
   state: Pick<WireState, "targets">,
   facts: Facts,
   t: Texts,
-): string {
+  theme: Parameters<typeof statusColor>[1],
+): React.ReactNode {
   if (facts.kind === "question") return questionTitle(state, facts.interaction);
   const { task } = facts;
-  return `#${task.number} ${task.title} · ${t(statusText(task.status))}${graphText(task, t)}`;
+  return (
+    <>
+      {`#${task.number} ${task.title} · `}
+      <Text color={statusColor(task.status, theme)}>
+        {t(statusText(task.status))}
+      </Text>
+      {graphText(task, t)}
+    </>
+  );
 }
 
 function QuestionBody({

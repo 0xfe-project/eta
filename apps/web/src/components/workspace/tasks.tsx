@@ -96,6 +96,7 @@ import { useTaskDraft } from "./task-draft";
 import {
   actorName,
   ago,
+  canCancelTree,
   isActive,
   queueReasonLabel,
   runStatusLabels,
@@ -113,7 +114,7 @@ import {
 import { useTaskNav } from "./task-nav";
 import { RunLog } from "./task-run-log";
 import { StatusIcon } from "./task-status-icon";
-import { TaskStatusControl } from "./task-status-select";
+import { CancelTreeDialog, TaskStatusControl } from "./task-status-select";
 import { RunHeader } from "./transcript/run-timeline";
 import { SlashMenu } from "./transcript/slash-menu";
 import { TranscriptDialog } from "./transcript/transcript-dialog";
@@ -2093,6 +2094,7 @@ function TaskView({ task }: { task: TaskDetail }) {
   const [, setNav] = useTaskNav();
   const { agents } = useAgentList();
   const [deleting, setDeleting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const replies = task.activity.filter((a) => a.kind === "comment").length;
   // A thread opens on its latest reply, next to the box to answer it; once more after the first
   // paint, for what lays itself out late (folded text measuring itself). It is at least as tall as
@@ -2147,6 +2149,11 @@ function TaskView({ task }: { task: TaskDetail }) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {canCancelTree(task) ? (
+                <DropdownMenuItem onSelect={() => setCancelling(true)}>
+                  {translateText("statusMenu.cancelTree")}
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem
                 variant="destructive"
                 onSelect={() => setDeleting(true)}
@@ -2155,6 +2162,11 @@ function TaskView({ task }: { task: TaskDetail }) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <CancelTreeDialog
+            task={task}
+            open={cancelling}
+            onOpenChange={setCancelling}
+          />
           <DeleteTaskDialog
             task={task}
             open={deleting}

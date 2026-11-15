@@ -38,15 +38,41 @@ export const statusLabel = (status: BoardTaskStatus): string =>
 
 /**
  * The tasks a cancel would block: those that wait for this one and have not started (their edge
- * is not resolved yet), as the web app counts them.
+ * is not resolved yet) and are not blocked already, as the web app counts them.
  */
 export const blockedByCancel = (task: Pick<TaskDetail, "dependents">): number =>
   (task.dependents ?? []).filter(
     (edge) =>
       edge.state === "waiting" &&
       edge.status !== "done" &&
-      edge.status !== "cancelled",
+      edge.status !== "cancelled" &&
+      edge.status !== "blocked",
   ).length;
+
+/**
+ * The tasks a parent's cancel takes with it, as the host picks them: everything under it, at any
+ * depth, that is neither done nor cancelled.
+ */
+export function cancelledWith(
+  id: string,
+  tasks: readonly Pick<BoardTaskView, "id" | "parentId" | "status">[],
+): number {
+  const under: string[] = [id];
+  let count = 0;
+  for (let i = 0; i < under.length; i++)
+    for (const task of tasks)
+      if (task.parentId === under[i]) {
+        under.push(task.id);
+        if (task.status !== "done" && task.status !== "cancelled") count++;
+      }
+  return count;
+}
+
+/** What a cancel does to the tasks that wait, in words: none, one, or how many. */
+export const cancelImpact = (dependents: number): string =>
+  dependents === 1
+    ? t("tasks.statusHint.cancelledDependent")
+    : t("tasks.statusHint.cancelledDependents", { count: dependents });
 
 export const runLabel = (status: TaskRunStatus): string =>
   t(`tasks.run.${status}` as TextKey);

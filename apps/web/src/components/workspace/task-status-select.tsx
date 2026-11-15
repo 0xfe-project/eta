@@ -6,6 +6,16 @@ import { Fragment, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuLabel,
@@ -21,9 +31,14 @@ import {
 } from "@/components/ui/tooltip";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { useUpdateTask } from "@/queries/tasks";
+import { useTasks, useUpdateTask } from "@/queries/tasks";
 import { wireErrorMessage } from "@/queries/wire";
-import { blockedByCancel, statusLabel, statusTone } from "./task-format";
+import {
+  blockedByCancel,
+  cancelledWith,
+  statusLabel,
+  statusTone,
+} from "./task-format";
 import { StatusIcon, StatusPill } from "./task-status-icon";
 
 // Where a task's status is changed: a label in its status's colour that opens the seven, each with
@@ -88,7 +103,7 @@ function StatusSelect({
           "inline-flex h-7 min-w-32 items-center gap-1.5 border px-2 text-xs whitespace-nowrap outline-none focus-visible:ring-1 focus-visible:ring-ring/50",
           tone.border,
           tone.tint,
-          tone.text,
+          tone.ink,
           className,
         )}
       >
@@ -164,7 +179,8 @@ export function TaskStatusControl({
   const { t: translateText } = useTranslation(["tasks"] as const);
   const update = useUpdateTask();
   if (task.subtasks != null) {
-    const count = task.children?.length ?? task.subtasks.total;
+    // As the host derives it: from the subtasks that are not cancelled.
+    const count = task.subtasks.total;
     const why = translateText("statusMenu.autoHint", { count });
     return (
       <span className={cn("inline-flex items-center gap-2", className)}>
@@ -198,5 +214,69 @@ export function TaskStatusControl({
         )
       }
     />
+  );
+}
+
+/**
+ * A parent's way to "none of this": its status is its subtasks', so the menu cannot move it, but
+ * the host cancels a parent together with the unfinished work under it. Asks first, saying what
+ * goes with it and how many waiting tasks it would block.
+ */
+export function CancelTreeDialog({
+  task,
+  open,
+  onOpenChange,
+}: {
+  task: TaskDetail;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { t: translateText } = useTranslation(["tasks"] as const);
+  const update = useUpdateTask();
+  const { tasks } = useTasks();
+  const blocked = blockedByCancel(task);
+  const under = cancelledWith(task.id, tasks);
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {translateText("statusMenu.cancelTreeTitle", {
+              number: task.number,
+            })}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {translateText("statusMenu.cancelTreeDescription", {
+              count: under,
+            })}
+            {blocked > 0 ? (
+              <>
+                {" "}
+                {translateText("statusMenu.hint.cancelledDependents", {
+                  count: blocked,
+                })}
+              </>
+            ) : null}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>
+            {translateText("statusMenu.keep")}
+          </AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={update.isPending}
+            onClick={() =>
+              update.mutate(
+                { taskId: task.id, status: "cancelled" },
+                { onError: (error) => toast.error(wireErrorMessage(error)) },
+              )
+            }
+          >
+            {translateText("statusMenu.cancelTreeConfirm")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

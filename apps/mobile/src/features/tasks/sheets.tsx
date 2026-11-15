@@ -14,6 +14,7 @@ import {
   actorName,
   executor,
   failure,
+  cancelImpact,
   isActive,
   runLabel,
   shortPath,
@@ -67,7 +68,7 @@ const STATUS_GROUPS: BoardTaskStatus[][] = [
 /** What moving to a status means; for a cancel, the waiting tasks it would block. */
 const statusHint = (status: BoardTaskStatus, dependents: number): string =>
   status === "cancelled" && dependents > 0
-    ? t("tasks.statusHint.cancelledDependents", { count: dependents })
+    ? cancelImpact(dependents)
     : t(`tasks.statusHint.${status}` as TextKey);
 
 /** 06d: each status with its mark and what it means, as the web app's menu has them. */

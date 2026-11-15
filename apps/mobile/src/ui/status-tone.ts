@@ -17,6 +17,22 @@ export const TONES: Record<BoardTaskStatus, Tone> = {
   cancelled: "muted-foreground",
 };
 
+/**
+ * A label's words, by status: in the light theme a step deeper than the mark (theme.json's `*-ink`),
+ * so small text keeps 4.5:1 on the tint; the dark theme's are the colours themselves.
+ */
+const INKS: Record<BoardTaskStatus, string> = {
+  backlog: "text-muted-ink",
+  todo: "text-foreground",
+  in_progress: "text-state-info-ink",
+  in_review: "text-state-warning-ink",
+  done: "text-state-success-ink",
+  blocked: "text-state-error-ink",
+  cancelled: "text-muted-ink",
+};
+
+export const statusInk = (status: BoardTaskStatus): string => INKS[status];
+
 /** A label's tint, by status: the colour at a tenth or so. */
 export const TINTS: Record<BoardTaskStatus, string> = {
   backlog: "bg-muted-foreground/10",
@@ -44,5 +60,5 @@ const BORDERS: Record<BoardTaskStatus, string> = {
 /** The classes of a control that is a status's label: frame, tint, and the words' colour. */
 export const statusClasses = (status: BoardTaskStatus) => ({
   frame: `${BORDERS[status]} ${TINTS[status]}`,
-  text: `text-${TONES[status]}`,
+  text: INKS[status],
 });
