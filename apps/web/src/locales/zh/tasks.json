@@ -20,6 +20,25 @@
     "done": "已完成",
     "cancelled": "已取消"
   },
+  "statusMenu": {
+    "title": "改状态",
+    "hint": {
+      "backlog": "先放着，不会开始执行",
+      "todo": "排队等执行者开始",
+      "inProgress": "执行者正在做",
+      "inReview": "做完了，等你看；依赖它的任务会被放行",
+      "done": "验收通过",
+      "blocked": "需要你决定才能继续",
+      "cancelled": "不做了",
+      "cancelledDependents": "不做了；等它的 {{count}} 个任务会转为受阻",
+      "cancelledDependents_one": "不做了；等它的 {{count}} 个任务会转为受阻",
+      "cancelledDependents_other": "不做了；等它的 {{count}} 个任务会转为受阻"
+    },
+    "auto": "自动",
+    "autoHint": "由 {{count}} 个子任务推出",
+    "autoHint_one": "由 {{count}} 个子任务推出",
+    "autoHint_other": "由 {{count}} 个子任务推出"
+  },
   "runStatus": {
     "queued": "排队中",
     "running": "正在运行",

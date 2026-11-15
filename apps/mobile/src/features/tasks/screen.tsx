@@ -14,20 +14,21 @@ import { Markdown } from "../../ui/Markdown";
 import { Header, Page } from "../../ui/Page";
 import { ConfirmSheet, Sheet } from "../../ui/Sheet";
 import { Empty, Failed, Loading } from "../../ui/States";
+import { statusClasses, statusTone } from "../../ui/status-tone";
+import { StatusPill, TaskStatusIcon } from "../../ui/StatusIcon";
 import { toast } from "../../ui/toast";
 import { call, useTarget } from "../../wire/target";
 import { Composer, OutgoingComments, useComments } from "./composer";
 import { openEditTask } from "./edit";
 import {
   actorName,
+  blockedByCancel,
   failure,
   isActive,
   queueReason,
-  waitingNumbers,
   runActor,
-  STATUS_ICONS,
-  statusColor,
   statusLabel,
+  waitingNumbers,
 } from "./format";
 import { openRunLog, openRuns } from "./runs";
 import { LinkSheet, PropertiesSheet, SheetOption, StatusSheet } from "./sheets";
@@ -154,6 +155,10 @@ function TaskView(props: { task: () => TaskDetail }) {
     setTimeout(() => scroll?.scrollToEnd({ animated: false }), 0);
   });
 
+  const autoHint = () =>
+    t("tasks.status.autoHint", {
+      count: task().children?.length ?? task().subtasks?.total ?? 0,
+    });
   const setStatus = (status: BoardTaskStatus): void => {
     close();
     if (status === task().status) return;
@@ -180,23 +185,48 @@ function TaskView(props: { task: () => TaskDetail }) {
         border={false}
         right={
           <View class="flex-row items-center gap-2" style={{ marginRight: -8 }}>
-            <View
-              role="button"
-              testID="task-status"
-              accessibilityLabel={t("tasks.fields.status")}
-              onPress={() => sheet.set("status")}
-              class="h-8 flex-row items-center gap-[6px] border border-border-strong px-2 active:bg-muted"
+            <If
+              when={task().subtasks == null}
+              else={
+                // A parent's status is its subtasks': a label, and "Auto" saying from how many.
+                <View
+                  role="button"
+                  testID="task-status-auto"
+                  accessibilityLabel={`${statusLabel(task().status)} · ${t("tasks.status.auto")}`}
+                  accessibilityHint={autoHint()}
+                  onPress={() => toast(autoHint())}
+                  class="h-8 flex-row items-center gap-[6px] active:opacity-60"
+                >
+                  <StatusPill
+                    status={task().status}
+                    label={statusLabel(task().status)}
+                  />
+                  <Text class="text-sm leading-4 text-muted-foreground">
+                    {t("tasks.status.auto")}
+                  </Text>
+                </View>
+              }
             >
-              <Icon
-                name={STATUS_ICONS[task().status]}
-                size={14}
-                color={statusColor(task().status)}
-              />
-              <Text class="text-md leading-4 text-foreground">
-                {statusLabel(task().status)}
-              </Text>
-              <Icon name="caretDown" size={12} color="muted-foreground" />
-            </View>
+              <View
+                role="button"
+                testID="task-status"
+                accessibilityLabel={`${t("tasks.fields.status")}: ${statusLabel(task().status)}`}
+                onPress={() => sheet.set("status")}
+                class={`h-8 flex-row items-center gap-[6px] border px-2 active:opacity-60 ${statusClasses(task().status).frame}`}
+              >
+                <TaskStatusIcon status={task().status} size={14} />
+                <Text
+                  class={`text-md leading-4 ${statusClasses(task().status).text}`}
+                >
+                  {statusLabel(task().status)}
+                </Text>
+                <Icon
+                  name="caretDown"
+                  size={12}
+                  color={statusTone(task().status)}
+                />
+              </View>
+            </If>
             <View
               role="button"
               testID="task-properties"
@@ -265,6 +295,7 @@ function TaskView(props: { task: () => TaskDetail }) {
       <StatusSheet
         open={sheet() === "status"}
         value={task().status}
+        dependents={blockedByCancel(task())}
         onChange={setStatus}
         onClose={close}
       />

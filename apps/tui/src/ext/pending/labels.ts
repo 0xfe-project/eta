@@ -1,5 +1,7 @@
 import type { BoardTaskStatus, BoardTaskView } from "@eta/client-contracts";
+import type { Theme } from "../../config/types";
 import type { PendingMessageKey } from "./messages";
+import { inkColor } from "../../ui/theme";
 
 const STATUS_TEXT: Record<BoardTaskStatus, PendingMessageKey> = {
   backlog: "statusBacklog",
@@ -14,6 +16,30 @@ const STATUS_TEXT: Record<BoardTaskStatus, PendingMessageKey> = {
 /** The words for a task's status. */
 export const statusText = (status: BoardTaskStatus): PendingMessageKey =>
   STATUS_TEXT[status];
+
+/**
+ * A status's colour, as the web app's marks have it in terminal colours: running is the accent,
+ * waiting for review the warning, done the success, blocked the error; the backlog and the
+ * cancelled are muted, to-do is plain text.
+ */
+export function statusColor(
+  status: BoardTaskStatus,
+  theme: Pick<
+    Theme,
+    "text" | "muted" | "accent" | "warning" | "error" | "success"
+  >,
+): string | undefined {
+  const tokens: Record<BoardTaskStatus, string> = {
+    backlog: theme.muted,
+    todo: theme.text,
+    in_progress: theme.accent,
+    in_review: theme.warning,
+    done: theme.success,
+    blocked: theme.error,
+    cancelled: theme.muted,
+  };
+  return inkColor(tokens[status]);
+}
 
 /**
  * Where a task stands in the task graph, as the words after its status: what its work still waits

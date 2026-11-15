@@ -806,12 +806,6 @@
     text-decoration: underline;
     text-underline-offset: 2px;
   }
-  .task-fold-backlog {
-    flex: none;
-    border: 1px solid var(--border);
-    padding: 0 5px;
-    color: var(--muted-foreground);
-  }
   .task-fold-waiting {
     flex: none;
     border: 1px solid var(--state-warning);

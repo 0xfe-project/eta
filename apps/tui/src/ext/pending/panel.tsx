@@ -11,7 +11,7 @@ import { participantsStatus } from "../conversation/facts";
 import { CONVERSATION_VIEW } from "../conversation/kind";
 import { usePanelState, usePendingItems } from "./hooks";
 import { openItemLayer } from "./item-layer";
-import { graphText, statusText } from "./labels";
+import { graphText, statusColor, statusText } from "./labels";
 import { pendingMessages } from "./messages";
 import { firstLine, panelConversations, questionTitle } from "./model";
 import { ScrollList } from "./scroll-list";
@@ -115,6 +115,7 @@ function EmptyPanel({ onEscape }: { onEscape: () => void }) {
 
 function PendingLine({ item }: { item: PendingItem }) {
   const t = useMessages(pendingMessages);
+  const theme = useTheme();
   const state = usePanelState();
   if (item.kind === "question")
     return (
@@ -123,7 +124,13 @@ function PendingLine({ item }: { item: PendingItem }) {
       </Text>
     );
   return (
-    <Text>{`#${item.task.number} ${item.task.title}  ${t(statusText(item.task.status))}${graphText(item.task, t)}`}</Text>
+    <Text>
+      {`#${item.task.number} ${item.task.title}  `}
+      <Text color={statusColor(item.task.status, theme)}>
+        {t(statusText(item.task.status))}
+      </Text>
+      {graphText(item.task, t)}
+    </Text>
   );
 }
 

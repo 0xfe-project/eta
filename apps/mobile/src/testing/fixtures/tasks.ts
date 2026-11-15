@@ -107,6 +107,8 @@ interface Fixture {
   projectId?: string;
   branch?: string;
   path?: string;
+  /** The tasks that wait for it. */
+  dependents?: BoardTaskDetail["dependents"];
 }
 
 function detail(task: Fixture): {
@@ -140,6 +142,7 @@ function detail(task: Fixture): {
       },
       originConversationId: conversationId,
       runs,
+      ...(task.dependents === undefined ? {} : { dependents: task.dependents }),
     },
     activity,
   };
@@ -208,6 +211,17 @@ const FEATURED: Fixture[] = [
       "After a disconnect, the client sends the last seq it received, and the host replays from that row forward, then reattaches to live frames.\n\n## Definition of done\n- No frame loss across 200 kill-and-reconnect cycles\n- Order stays intact during backfill",
     branch: "task/128-replay",
     path: WORKTREE_128,
+    // #131 waits for it to be accepted: cancelling #128 would block it.
+    dependents: [
+      {
+        taskId: "task-131",
+        number: 131,
+        title: "Board column width remembers last drag",
+        status: "todo",
+        requireDone: true,
+        state: "waiting",
+      },
+    ],
     runs: [replay],
     activity: [
       entry("created", agent("ache"), at(1, 18, 20), {

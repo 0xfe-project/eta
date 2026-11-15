@@ -24,7 +24,13 @@ import { wireErrorMessage } from "@/queries/wire";
 import { PageHeader } from "./app-shell";
 import { BackToTop } from "./back-to-top";
 import { when } from "./routine-format";
-import { actorName, ago, createdBy, statusLabel } from "./task-format";
+import {
+  actorName,
+  ago,
+  createdBy,
+  statusLabel,
+  statusTone,
+} from "./task-format";
 import { BlockedExits, DependencyBadge, SubtaskCount } from "./task-graph";
 import { useTaskNav } from "./task-nav";
 import { StatusIcon } from "./task-status-icon";
@@ -151,6 +157,7 @@ function Card({
           <span className="ml-auto flex items-center gap-2">
             <RunState task={task} />
             <Comments count={task.comments} />
+            <StatusIcon status={task.status} className="size-3.5" />
           </span>
         </span>
         <span className="line-clamp-3 text-sm wrap-anywhere">{task.title}</span>
@@ -232,7 +239,8 @@ function BoardView({ tasks }: { tasks: readonly Task[] }) {
                 update.mutate({ taskId: id, status }, { onError: showError });
             }}
             className={cn(
-              "flex w-72 shrink-0 flex-col bg-muted/50 outline-offset-[-1px] duration-[60ms] ease-linear",
+              "flex w-72 shrink-0 flex-col border-t-2 bg-muted/50 outline-offset-[-1px] duration-[60ms] ease-linear",
+              statusTone(status).border,
               over === status && "bg-muted outline outline-foreground/30",
             )}
           >

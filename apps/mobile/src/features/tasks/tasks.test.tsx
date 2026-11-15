@@ -174,6 +174,14 @@ test("06d: the status moves, on the page and on the board", async () => {
   expect(app.shows("id:task-128")).toBe(false);
 });
 
+test("06d: each status says what it means, and a cancel how many waiting tasks it blocks", async () => {
+  const app = await task(128);
+  await app.press("id:task-status");
+  await app.waitFor("id:status-cancelled");
+  expect(app.texts()).toContain("做完了，等你看；依赖它的任务会被放行");
+  expect(app.texts()).toContain("不做了；等它的 1 个任务会转为受阻");
+});
+
 test("06f: title and description save together", async () => {
   const app = await task(128);
   await app.press("id:task-more");

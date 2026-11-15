@@ -21,8 +21,8 @@ import { cn } from "@/lib/utils";
 import { muted } from "./activity-card";
 import { ArtifactButton } from "./artifact-dialog";
 import { TaskFoldHead } from "./task-fold";
-import { runStatusLabels, statusLabel, workspaceLabel } from "./task-format";
-import { StatusIcon } from "./task-status-icon";
+import { runStatusLabels, workspaceLabel } from "./task-format";
+import { StatusPill } from "./task-status-icon";
 import { TaskForm } from "./tasks";
 import { useSectionLink } from "./workspace-search";
 
@@ -58,11 +58,7 @@ export function TaskDraftRow({ message }: { message: MessageView }) {
         title={draft.title}
         marker={
           <>
-            {backlog ? (
-              <span className="task-fold-backlog">
-                {translateText("status.backlog")}
-              </span>
-            ) : null}
+            {backlog ? <StatusPill status="backlog" /> : null}
             <span className="task-fold-waiting">
               {translateText("draft.awaitingConfirm")}
             </span>
@@ -171,14 +167,7 @@ export function TaskCardRow({ message }: { message: MessageView }) {
             {card.title}
           </Link>
         }
-        marker={
-          <span
-            className={cn("ml-auto flex shrink-0 items-center gap-1", muted)}
-          >
-            <StatusIcon status={card.status} className="size-3.5" />
-            {statusLabel(card.status)}
-          </span>
-        }
+        marker={<StatusPill status={card.status} className="ml-auto" />}
       />
       <div className="task-fold-body">
         {meta.length > 0 ? (

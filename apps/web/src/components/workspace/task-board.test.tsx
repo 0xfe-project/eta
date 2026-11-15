@@ -95,6 +95,14 @@ function board() {
 }
 
 /** The board's pane: the page's first child, behind an open task. */
+/** Open a menu from its trigger, as the keyboard does (Radix opens on pointerdown, not click). */
+const openMenu = (trigger: HTMLElement) =>
+  act(async () => {
+    trigger.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
+  });
+
 const boardPane = (container: HTMLElement) =>
   container.firstElementChild!.firstElementChild as HTMLElement;
 
@@ -289,12 +297,13 @@ describe("task board", () => {
     expect(aside.textContent).toContain("/data/worktrees/p1/task-1");
     // Nobody is assigned: the executor is whoever made the task.
     expect(aside.textContent).not.toContain("指派");
-    const trigger = aside.querySelector<HTMLElement>('[role="combobox"]')!;
-    await click(trigger);
+    const trigger = aside.querySelector<HTMLElement>('[data-status="todo"]')!;
+    expect(trigger.getAttribute("aria-label")).toBe("状态: 待办");
+    await openMenu(trigger);
     await click(
-      [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
-        (option) => option.textContent === "受阻",
-      ),
+      [
+        ...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]'),
+      ].find((option) => option.textContent?.startsWith("受阻")),
     );
     await flush();
     expect(
@@ -321,7 +330,7 @@ describe("task board", () => {
     expect(aside.className).toContain("fixed");
     expect(aside.className.split(" ")).not.toContain("hidden");
     // Still the same properties, status included.
-    expect(aside.querySelector('[role="combobox"]')).not.toBeNull();
+    expect(aside.querySelector('button[aria-label^="状态"]')).not.toBeNull();
     await click(open);
     expect(aside.className.split(" ")).toContain("hidden");
   });

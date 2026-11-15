@@ -55,6 +55,60 @@ export const statuses: { value: TaskStatus; label: string }[] = [
 export const statusLabel = (status: TaskStatus) =>
   statuses.find((s) => s.value === status)?.label ?? status;
 
+/** A status's colours: the mark and its text, a label's tint, and a control's border. */
+const tones = {
+  backlog: {
+    text: "text-muted-foreground",
+    tint: "bg-muted-foreground/10 dark:bg-muted-foreground/15",
+    border: "border-muted-foreground/40",
+  },
+  todo: {
+    text: "text-foreground",
+    tint: "bg-foreground/6 dark:bg-foreground/8",
+    border: "border-foreground/40",
+  },
+  in_progress: {
+    text: "text-state-info",
+    tint: "bg-state-info/10 dark:bg-state-info/16",
+    border: "border-state-info",
+  },
+  in_review: {
+    text: "text-state-warning",
+    tint: "bg-state-warning/13 dark:bg-state-warning/16",
+    border: "border-state-warning",
+  },
+  done: {
+    text: "text-state-success",
+    tint: "bg-state-success/10 dark:bg-state-success/15",
+    border: "border-state-success",
+  },
+  blocked: {
+    text: "text-state-error",
+    tint: "bg-state-error/9 dark:bg-state-error/16",
+    border: "border-state-error",
+  },
+  cancelled: {
+    text: "text-muted-foreground",
+    tint: "bg-muted-foreground/10 dark:bg-muted-foreground/15",
+    border: "border-muted-foreground/40",
+  },
+} satisfies Record<TaskStatus, { text: string; tint: string; border: string }>;
+
+export const statusTone = (status: TaskStatus) => tones[status] ?? tones.todo;
+
+/**
+ * The tasks a cancel would block: those that wait for this one and have not started (their edge
+ * is not resolved yet). A run queued behind a cancelled task is not started; it is blocked.
+ */
+export function blockedByCancel(task: Pick<TaskDetail, "dependents">) {
+  return (task.dependents ?? []).filter(
+    (edge) =>
+      edge.state === "waiting" &&
+      edge.status !== "done" &&
+      edge.status !== "cancelled",
+  ).length;
+}
+
 export const runStatusLabels: Record<RunStatus, string> = {
   get queued() {
     return translate("tasks:runStatus.queued");

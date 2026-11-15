@@ -221,7 +221,8 @@ test("03d: the draft stays in its turn, opens in place and confirms into a card"
   await app.waitFor("text:写迁移回滚脚本");
   expect(app.texts()).toContain("待确认");
   expect(app.texts()).toContain("#128 重连后补发丢失的帧");
-  expect(app.texts()).toContain("待验收 · 已完成 · 3 条评论");
+  expect(app.texts()).toContain("已完成 · 3 条评论");
+  expect(app.texts()).toContain("待验收");
   expect(app.texts()).toContain("重连方案 · 第 2 版");
   expect(app.texts()).toContain("Mori 成为主理人，接替 阿澈。");
   expect(app.texts()).toContain(

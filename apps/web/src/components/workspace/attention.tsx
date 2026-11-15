@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { InteractionView } from "@/queries/inbox";
+import type { TaskStatus } from "@/queries/tasks";
 
 import { BellIcon } from "@phosphor-icons/react/Bell";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
@@ -22,6 +23,7 @@ import { useAnswerQuestion } from "@/queries/questions";
 import { useRoutines } from "@/queries/routines";
 import { useTasks } from "@/queries/tasks";
 import { AgentAvatar } from "./agent-identity";
+import { StatusIcon, StatusPill } from "./task-status-icon";
 import { useAgents } from "./use-agents";
 import { useAttention } from "./use-attention";
 import { useGroups, useOpenGroup } from "./use-groups";
@@ -218,11 +220,14 @@ const linkRow =
 /** A task or routine's row: what it is and why it waits, then a caret. */
 function LinkRowBody({
   icon: Icon,
+  status,
   title,
   reason,
   alert,
 }: {
   icon: typeof ClockIcon;
+  /** A task's status: its mark in place of the icon, and the reason as its label. */
+  status?: TaskStatus;
   title: ReactNode;
   reason: string;
   alert: boolean;
@@ -231,17 +236,27 @@ function LinkRowBody({
     <>
       <span className="min-w-0 flex-1">
         <span className="line-clamp-3 text-sm break-words">{title}</span>
-        <span
-          className={cn(
-            "block text-xs",
-            alert ? "text-destructive" : "text-muted-foreground",
-          )}
-        >
-          {reason}
-        </span>
+        {status === undefined ? (
+          <span
+            className={cn(
+              "block text-xs",
+              alert ? "text-destructive" : "text-muted-foreground",
+            )}
+          >
+            {reason}
+          </span>
+        ) : (
+          <StatusPill status={status} icon={false} className="mt-1">
+            {reason}
+          </StatusPill>
+        )}
       </span>
       <span className="flex size-7 shrink-0 items-center justify-center">
-        <Icon aria-hidden="true" className="size-4 text-muted-foreground" />
+        {status === undefined ? (
+          <Icon aria-hidden="true" className="size-4 text-muted-foreground" />
+        ) : (
+          <StatusIcon status={status} />
+        )}
       </span>
       <CaretRightIcon
         aria-hidden="true"
@@ -345,6 +360,7 @@ export function PendingList() {
             >
               <LinkRowBody
                 icon={ListChecksIcon}
+                status={task.status}
                 title={
                   <>
                     <span className="text-muted-foreground tabular-nums">

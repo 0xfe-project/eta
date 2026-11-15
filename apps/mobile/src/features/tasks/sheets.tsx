@@ -1,11 +1,13 @@
 import type { BoardTaskStatus } from "@eta/client-contracts";
 import type { JSX } from "nsh";
+import type { TextKey } from "../../i18n";
 import type { TaskDetail } from "./format";
 import { Scroll, signal, Text, View } from "nsh";
 import { conversations, machineById, projectById } from "../../app/lists";
 import { t } from "../../i18n";
 import { Icon } from "../../ui/Icon";
 import { Sheet } from "../../ui/Sheet";
+import { TaskStatusIcon } from "../../ui/StatusIcon";
 import { toast } from "../../ui/toast";
 import { call } from "../../wire/target";
 import {
@@ -15,9 +17,7 @@ import {
   isActive,
   runLabel,
   shortPath,
-  STATUS_ICONS,
   statusLabel,
-  STATUSES,
   updated,
 } from "./format";
 
@@ -58,36 +58,59 @@ export function SheetOption(props: {
   );
 }
 
-/** 06d. */
+/** The sheet's order: the way through the work, then (below a rule) the two ways out of it. */
+const STATUS_GROUPS: BoardTaskStatus[][] = [
+  ["backlog", "todo", "in_progress", "in_review", "done"],
+  ["blocked", "cancelled"],
+];
+
+/** What moving to a status means; for a cancel, the waiting tasks it would block. */
+const statusHint = (status: BoardTaskStatus, dependents: number): string =>
+  status === "cancelled" && dependents > 0
+    ? t("tasks.statusHint.cancelledDependents", { count: dependents })
+    : t(`tasks.statusHint.${status}` as TextKey);
+
+/** 06d: each status with its mark and what it means, as the web app's menu has them. */
 export function StatusSheet(props: {
   open: boolean;
   value: BoardTaskStatus;
+  /** How many tasks a cancel would block. */
+  dependents: number;
   onChange: (status: BoardTaskStatus) => void;
   onClose: () => void;
 }) {
   return (
     <Sheet open={props.open} onClose={props.onClose}>
       <SheetTitle title={t("tasks.fields.status")} />
-      <Each of={STATUSES}>
-        {(status) => (
+      <Each of={STATUS_GROUPS}>
+        {(group, index) => (
           <View
-            role="button"
-            testID={`status-${status()}`}
-            accessibilityLabel={statusLabel(status())}
-            onPress={() => props.onChange(status())}
-            class={`h-[52px] shrink-0 flex-row items-center gap-[10px] border-t border-border px-4 active:bg-muted ${props.value === status() ? "bg-muted" : ""}`}
+            class={index() === 0 ? "" : "mt-2 border-t border-border-strong"}
           >
-            <Icon
-              name={STATUS_ICONS[status()]}
-              size={18}
-              color="muted-foreground"
-            />
-            <Text class="grow basis-0 text-lead leading-[18px] text-foreground">
-              {statusLabel(status())}
-            </Text>
-            <If when={props.value === status()}>
-              <Icon name="check" size={16} />
-            </If>
+            <Each of={group()}>
+              {(status) => (
+                <View
+                  role="button"
+                  testID={`status-${status()}`}
+                  accessibilityLabel={statusLabel(status())}
+                  onPress={() => props.onChange(status())}
+                  class={`min-h-[52px] shrink-0 flex-row items-center gap-[10px] border-t border-border px-4 py-2 active:bg-muted ${props.value === status() ? "bg-muted" : ""}`}
+                >
+                  <TaskStatusIcon status={status()} size={18} />
+                  <View class="min-w-0 grow basis-0">
+                    <Text class="text-lead leading-[18px] text-foreground">
+                      {statusLabel(status())}
+                    </Text>
+                    <Text class="text-sm leading-4 text-muted-foreground">
+                      {statusHint(status(), props.dependents)}
+                    </Text>
+                  </View>
+                  <If when={props.value === status()}>
+                    <Icon name="check" size={16} />
+                  </If>
+                </View>
+              )}
+            </Each>
           </View>
         )}
       </Each>
