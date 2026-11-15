@@ -40,6 +40,7 @@ import { kernelOn } from "@eta/core";
 import { lastSeq, LinkError, listen } from "@eta/daemon";
 import { parseModelId } from "@eta/server";
 import { explainRunError, missingModel } from "../agents/model";
+import { isRoutineSession } from "../routines/session-key";
 import { isTaskSession } from "../tasks/session-key";
 import { viewOf as attachmentView } from "./attachments";
 import { briefing } from "./briefing";
@@ -233,10 +234,7 @@ export class Engine {
         ? undefined
         : this.#away.get(keyOf(meta.conversationId, meta.agentId));
     this.#opened.set(meta.id, this.#stamp(agent, away, meta.conversationId));
-    return withAway(
-      agentPromptOf(agent, isTaskSession(meta.conversationId)),
-      away,
-    );
+    return withAway(agentPromptOf(agent, heldIn(meta.conversationId)), away);
   };
 
   /** What a session's prompt, persona and plugins were read from. */
@@ -281,8 +279,8 @@ export class Engine {
   readonly sessionTools = (input: { meta: SessionMeta }): KernelTool[] => {
     const { agentId, conversationId } = input.meta;
     if (agentId === undefined || conversationId === undefined) return [];
-    // A task's session is held in no conversation: it has no members to reach.
-    if (isTaskSession(conversationId)) return [];
+    // A task's or a routine run's session is held in no conversation: it has no members to reach.
+    if (heldIn(conversationId) !== "conversation") return [];
     return conversationTools(this, conversationId, agentId);
   };
 
@@ -300,7 +298,7 @@ export class Engine {
       agentId === undefined ||
       conversationId === undefined ||
       runtime === undefined ||
-      isTaskSession(conversationId)
+      heldIn(conversationId) !== "conversation"
     )
       return Promise.resolve();
     kernelOn(input.session.kernel.ctx)("turn:run-start", () => {
@@ -463,7 +461,7 @@ export class Engine {
       machine: input.machine,
       cwd: input.cwd,
       existing: input.existing,
-      prompt: withAway(agentPromptOf(input.agent, true), away),
+      prompt: withAway(agentPromptOf(input.agent, heldIn(input.key)), away),
       stamp: this.#stamp(input.agent, away, input.key),
       created: input.created,
     });
@@ -1309,11 +1307,25 @@ function withAway(prompt: string, away: string | undefined): string {
 }
 
 /** Who an agent is here and what it was told: its system prompt's platform section, not its base. */
-function agentPromptOf(agent: AgentRecord, task = false): string {
+/** What a session is held in, from its key: a conversation, a task, or a routine's run. */
+function heldIn(
+  conversationId: string | undefined,
+): "conversation" | "task" | "routine" {
+  if (isTaskSession(conversationId)) return "task";
+  if (isRoutineSession(conversationId)) return "routine";
+  return "conversation";
+}
+
+function agentPromptOf(
+  agent: AgentRecord,
+  held: "conversation" | "task" | "routine" = "conversation",
+): string {
   const parts = [
-    task
+    held === "task"
       ? `In this task you are ${agent.name}. You work on it alone, in a session of your own: nobody else is in it, and what you report on the task is what the user reads.`
-      : `In this conversation you are ${agent.name}. The other members, and the user, address you by that name.`,
+      : held === "routine"
+        ? `In this session you are ${agent.name}, running one of the user's routines. It is a session of your own: nobody else is in it, and the user reads only the report you send with the report tool.`
+        : `In this conversation you are ${agent.name}. The other members, and the user, address you by that name.`,
   ];
   if (agent.instructions.trim() !== "") parts.push(agent.instructions);
   return parts.join("\n\n");

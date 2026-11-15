@@ -373,8 +373,14 @@ export function captainSessionTools(
     });
 
     /** Where a proposal's card goes: this conversation, or Captain's direct chat from a task. */
+    /**
+     * Where a proposal's card goes: this conversation, or Captain's direct chat from a session held
+     * in none (a task's, a routine run's).
+     */
     const proposalOrigin = async (): Promise<string> =>
-      meta.conversationId === undefined || isTaskSession(meta.conversationId)
+      meta.conversationId === undefined ||
+      isTaskSession(meta.conversationId) ||
+      deps.conversations.get(meta.conversationId) === undefined
         ? (await deps.service.direct()).conversationId
         : meta.conversationId;
 
@@ -1032,6 +1038,159 @@ export function captainSessionTools(
       },
     });
 
+    const post = defineTool({
+      name: "post_in_group",
+      description:
+        "Post a plain message in a group conversation, as Captain, without waking anyone: no agent is named and no reply is started. Use it to share something (a routine's result the brief says to send there, a notice). To get work done, use assign_in_group instead. Only groups; not an agent's direct chat.",
+      parameters: Type.Object({
+        conversationId: Type.String(),
+        text: Type.String({ minLength: 1 }),
+      }),
+      execute: async (args) => {
+        try {
+          const result = await deps.service.post(args);
+          return text(`Posted (message ${result.messageId}).`, result);
+        } catch (error) {
+          return toolError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    });
+
+    const schedule = Type.Union(
+      [
+        Type.Object({
+          kind: Type.Literal("daily"),
+          time: Type.String({ description: "HH:MM, 24 hours" }),
+        }),
+        Type.Object({
+          kind: Type.Literal("weekly"),
+          days: Type.Array(Type.Integer({ minimum: 0, maximum: 6 }), {
+            minItems: 1,
+            description: "0 is Sunday",
+          }),
+          time: Type.String({ description: "HH:MM, 24 hours" }),
+        }),
+        Type.Object({
+          kind: Type.Literal("hourly"),
+          every: Type.Integer({
+            description: "Hours between runs: 1, 2, 3, 4, 6, 8 or 12",
+          }),
+        }),
+        Type.Object({
+          kind: Type.Literal("cron"),
+          cron: Type.String({
+            description: "Five fields: minute hour day-of-month month day-of-week",
+          }),
+        }),
+      ],
+      { description: "When it runs, in timezone's wall clock" },
+    );
+
+    const listRoutines = defineTool({
+      name: "list_routines",
+      description:
+        "List the routines: the work you run on a schedule. Each has its id, name, schedule, time zone, whether it is enabled, its current brief and its latest runs (status and report title).",
+      parameters: Type.Object({}),
+      execute() {
+        const routines = deps.service.routines;
+        return text(
+          json(
+            routines.store.list().map((routine) => ({
+              id: routine.id,
+              name: routine.name,
+              schedule: routine.schedule,
+              timezone: routine.timezone,
+              enabled: routine.enabled,
+              brief: routines.store.brief(routine.id),
+              runs: routines.store.runs(routine.id, 5).map((run) => ({
+                id: run.id,
+                status: run.status,
+                startedAt: new Date(run.startedAt).toISOString(),
+                title: run.title,
+                error: run.error,
+              })),
+            })),
+          ),
+        );
+      },
+    });
+
+    const proposeRoutine = defineTool({
+      name: "propose_routine",
+      description: [
+        "Propose a routine: work you will do on a schedule, each time in a new session of your own with all your tools. Nothing is created yet: the proposal appears as a card in this conversation, and only the user's confirmation creates it.",
+        "Use it when the user asks for something to be done regularly (\"every Monday morning, …\").",
+        "brief is what each run is asked to do, written as instructions to yourself: what to check or do, and what to report. If the user wants the result sent somewhere (a group), say so in the brief; there is no other setting for it. A routine has no agent and no model: it is yours.",
+        "timezone is an IANA zone such as Asia/Shanghai: ask the user if you do not know theirs.",
+        "Do not wait for the decision: end your turn. A message here will tell you the outcome.",
+      ].join(" "),
+      parameters: Type.Object({
+        name: Type.String({ description: "A short name" }),
+        brief: Type.String({ description: "What each run is asked to do" }),
+        schedule,
+        timezone: Type.String(),
+      }),
+      execute: async (args) => {
+        try {
+          const { operation } = await deps.service.proposals.propose(
+            deps.service.propose.routine,
+            args,
+            await proposalOrigin(),
+          );
+          return text(
+            `Proposed routine "${args.name.trim()}" (operation ${operation.id}). It is waiting for the user's confirmation on its card. End this turn; a message will tell you the outcome.`,
+            { operationId: operation.id, status: operation.status },
+          );
+        } catch (error) {
+          return toolError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    });
+
+    const updateRoutine = defineTool({
+      name: "update_routine",
+      description:
+        "Change a routine the user already has: rename it, rewrite its brief (written as a new version; the old ones are kept), change its schedule or time zone, or disable and enable it. Only what you give changes. Do it when the user asks you to.",
+      parameters: Type.Object({
+        routineId: Type.String(),
+        name: Type.Optional(Type.String()),
+        brief: Type.Optional(Type.String()),
+        schedule: Type.Optional(schedule),
+        timezone: Type.Optional(Type.String()),
+        enabled: Type.Optional(Type.Boolean()),
+      }),
+      execute: async (args) => {
+        try {
+          const { routineId, ...patch } = args;
+          const routine = deps.service.routines.update(routineId, patch);
+          await deps.service.audit.record({
+            action: "captain.routine.update",
+            actorAgentId: captain.agentId,
+            data: { routineId, fields: Object.keys(patch) },
+          });
+          return text(
+            json({
+              id: routine.id,
+              name: routine.name,
+              schedule: routine.schedule,
+              timezone: routine.timezone,
+              enabled: routine.enabled,
+              briefVersion: deps.service.routines.store.brief(routine.id)
+                ?.version,
+            }),
+          );
+        } catch (error) {
+          return toolError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    });
+
     return [
       listAgents,
       readAgent,
@@ -1063,6 +1222,10 @@ export function captainSessionTools(
       rollbackSetting,
       requestDeleteAgent,
       recommendAcceptance,
+      post,
+      listRoutines,
+      proposeRoutine,
+      updateRoutine,
     ].map((tool) => toKernelTool(tool, () => undefined)) as KernelTool[];
   };
 }

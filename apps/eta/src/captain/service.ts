@@ -22,6 +22,7 @@ import type { Inbox } from "../inbox/inbox";
 import type { MachineRecord, MachineStore } from "../machines/store";
 import type { Plugins } from "../plugins/service";
 import type { ProjectStore } from "../projects/store";
+import type { RoutineService } from "../routines/service";
 import type { TaskBoard } from "../tasks/board";
 import type { TaskRunner } from "../tasks/runner";
 import type { TaskRunStore } from "../tasks/runs";
@@ -41,6 +42,7 @@ import { isTaskSession, taskOfKey } from "../tasks/session-key";
 import { CaptainProposals } from "./proposals";
 import { agentProposals, listPersonaCards } from "./propose-agent";
 import { groupProposals } from "./propose-group";
+import { routineProposals } from "./propose-routine";
 import { redactJson, redactText } from "./redact";
 import { MAX_CAPTAIN_REVIEW_ATTEMPTS } from "./store";
 
@@ -93,6 +95,8 @@ export interface CaptainServiceDeps {
   warn: (message: string) => void;
   /** Whether a path is a directory on the machine; throws saying why not (`projects/check.ts`). */
   checkDirectory: (machine: MachineRecord, path: string) => Promise<void>;
+  /** The routines Captain runs, proposes and changes. */
+  routines?: RoutineService | undefined;
 }
 
 export interface CaptainOperationRequest {
@@ -119,6 +123,7 @@ export class CaptainService {
   readonly propose: {
     group: ReturnType<typeof groupProposals>;
     agent: ReturnType<typeof agentProposals>;
+    routine: ReturnType<typeof routineProposals>;
   };
 
   constructor(deps: CaptainServiceDeps) {
@@ -127,6 +132,7 @@ export class CaptainService {
     this.propose = {
       group: groupProposals({ ...deps, captainId }),
       agent: agentProposals(this.#agentDeps()),
+      routine: routineProposals({ routines: () => this.routines }),
     };
     this.proposals = new CaptainProposals(
       {
@@ -152,6 +158,13 @@ export class CaptainService {
           actorAgentId: input.actorAgentId,
         }),
     };
+  }
+
+  /** The routines, as Captain proposes and changes them. */
+  get routines(): RoutineService {
+    const routines = this.#deps.routines;
+    if (routines === undefined) throw new Error("routines are not available");
+    return routines;
   }
 
   get store(): CaptainStore {
@@ -368,6 +381,51 @@ export class CaptainService {
       messageId: sent.message.id,
       replyIds: sent.replies.map((reply) => reply.id),
     };
+  }
+
+  /**
+   * A plain Captain message in a group: said, and nobody woken. It is what `assign` is without the
+   * work: no agent is named, the steward is not defaulted to, no reply is queued, and no assignment
+   * is recorded. Only a group: an agent's direct chat is the user's with that agent. Captain joins
+   * a group it is not in, as `assign` does, so the members see who spoke.
+   */
+  async post(input: { conversationId: string; text: string }): Promise<{
+    messageId: string;
+  }> {
+    const captain = (await this.ensure()).identity;
+    const conversation = this.#deps.conversations.get(input.conversationId);
+    if (conversation === undefined) throw new Error("no such conversation");
+    if (conversation.kind !== "group")
+      throw new Error("Captain posts in group conversations");
+    if (conversation.archived)
+      throw new Error("that group is archived");
+    const text = input.text.trim();
+    if (text === "") throw new Error("a message needs text");
+    if (
+      !this.#deps.conversations
+        .participants(conversation.id)
+        .some((member) => member.agentId === captain.agentId)
+    )
+      this.#deps.conversations.addParticipant(conversation.id, captain.agentId);
+    const id = crypto.randomUUID();
+    this.#deps.timeline.append({
+      id,
+      conversationId: conversation.id,
+      kind: "message",
+      author: "captain",
+      agentId: captain.agentId,
+      text,
+      mentions: [],
+      rootMessageId: id,
+      data: { woke: [], joined: [] },
+    });
+    await this.#deps.audit.record({
+      action: "captain.post",
+      actorAgentId: captain.agentId,
+      data: { conversationId: conversation.id, messageId: id },
+    });
+    this.#deps.changed([conversation.id]);
+    return { messageId: id };
   }
 
   /** Explicit name from the product plan; `assign` is the shorter internal spelling. */

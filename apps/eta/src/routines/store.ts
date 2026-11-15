@@ -16,8 +16,6 @@ import type { Database } from "bun:sqlite";
 export interface RoutineRecord {
   id: string;
   name: string;
-  conversationId: string | null;
-  model: string | null;
   schedule: RoutineSchedule;
   timezone: string;
   enabled: boolean;
@@ -59,17 +57,18 @@ export interface FeedbackRecord {
   briefVersion: number | null;
 }
 
-/** What a run ends with. A report makes it `sent`; none makes it `no_news` unless it failed. */
+/**
+ * What a run ends with. A report makes it `sent`; none makes it `no_news` unless it failed. The
+ * handoff, the run's note to the next one, is kept whichever way it ended.
+ */
 export type RunOutcome =
   | { status: "sent"; report: string; title?: string; handoff?: string }
   | { status: "no_news"; handoff?: string }
-  | { status: "failed"; error: string };
+  | { status: "failed"; error: string; handoff?: string };
 
 interface RoutineRow {
   id: string;
   name: string;
-  conversation_id: string | null;
-  model: string | null;
   schedule: string;
   timezone: string;
   enabled: number;
@@ -113,8 +112,6 @@ interface FeedbackRow {
 const routineOf = (row: RoutineRow): RoutineRecord => ({
   id: row.id,
   name: row.name,
-  conversationId: row.conversation_id,
-  model: row.model,
   // Written only through `parseSchedule`, so it reads back as what it was.
   schedule: JSON.parse(row.schedule) as RoutineSchedule,
   timezone: row.timezone,
@@ -215,8 +212,6 @@ export class RoutineStore {
   create(input: {
     name: string;
     brief: string;
-    conversationId: string | null;
-    model: string | null;
     schedule: RoutineSchedule;
     timezone: string;
     enabled: boolean;
@@ -226,14 +221,12 @@ export class RoutineStore {
     this.#db.transaction(() => {
       this.#db
         .query(
-          `INSERT INTO routine (id, name, conversation_id, model, schedule, timezone, enabled, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO routine (id, name, schedule, timezone, enabled, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           id,
           input.name,
-          input.conversationId,
-          input.model,
           JSON.stringify(input.schedule),
           input.timezone,
           input.enabled ? 1 : 0,
@@ -245,13 +238,11 @@ export class RoutineStore {
     return this.get(id)!;
   }
 
-  /** Change what was sent. `null` clears the model and the conversation; `undefined` leaves a field. */
+  /** Change what was sent; `undefined` leaves a field. */
   update(
     id: string,
     patch: {
       name?: string;
-      conversationId?: string | null;
-      model?: string | null;
       schedule?: RoutineSchedule;
       timezone?: string;
       enabled?: boolean;
@@ -261,16 +252,11 @@ export class RoutineStore {
     if (current === undefined) return undefined;
     this.#db
       .query(
-        `UPDATE routine SET name = ?, conversation_id = ?, model = ?, schedule = ?, timezone = ?,
-                enabled = ?, updated_at = ?
+        `UPDATE routine SET name = ?, schedule = ?, timezone = ?, enabled = ?, updated_at = ?
           WHERE id = ?`,
       )
       .run(
         patch.name ?? current.name,
-        patch.conversationId === undefined
-          ? current.conversationId
-          : patch.conversationId,
-        patch.model === undefined ? current.model : patch.model,
         JSON.stringify(patch.schedule ?? current.schedule),
         patch.timezone ?? current.timezone,
         (patch.enabled ?? current.enabled) ? 1 : 0,
@@ -390,6 +376,22 @@ export class RoutineStore {
     return this.run(id);
   }
 
+  /**
+   * A time that came while the run could not happen (Captain was off): a run that is over as soon
+   * as it is written, `skipped`, with the reason. It takes no slot, so it never races a real run.
+   */
+  skipRun(routineId: string, startedBy: RunTrigger, reason: string): RunRecord {
+    const id = crypto.randomUUID();
+    const now = this.#now();
+    this.#db
+      .query(
+        `INSERT INTO routine_run (id, routine_id, started_by, status, started_at, finished_at, error)
+         VALUES (?, ?, ?, 'skipped', ?, ?, ?)`,
+      )
+      .run(id, routineId, startedBy, now, now, reason);
+    return this.run(id)!;
+  }
+
   /** Say which session is doing a run's work. */
   setRunSession(runId: string, sessionId: string): void {
     this.#db
@@ -419,7 +421,8 @@ export class RoutineStore {
         this.#now(),
         title,
         report,
-        outcome.status === "failed" ? null : present(outcome.handoff),
+        // A run that failed after leaving a note still leaves it: the next run reads it.
+        present(outcome.handoff),
         outcome.status === "failed" ? outcome.error : null,
         runId,
       ).changes;
@@ -463,22 +466,28 @@ export class RoutineStore {
       .map(runOf);
   }
 
-  /** The routine's finished runs that mention a text in their report, handoff or title, or in feedback on them. */
+  /**
+   * The routine's finished runs that mention a text in their report or title, or in feedback on
+   * them. Not in a handoff: that is read by the next run's prompt and by nothing else.
+   */
   searchRuns(routineId: string, text: string, limit: number): RunRecord[] {
     const pattern = likeOf(text);
     return this.#db
-      .query<RunRow, [string, string, string, string, string, number]>(
+      .query<RunRow, [string, string, string, string, number]>(
         `SELECT r.* FROM routine_run r
-          WHERE r.routine_id = ? AND r.status <> 'running'
-            AND (r.report LIKE ? ESCAPE '\\' OR r.handoff LIKE ? ESCAPE '\\' OR r.title LIKE ? ESCAPE '\\'
+          WHERE r.routine_id = ? AND r.status NOT IN ('running', 'skipped')
+            AND (r.report LIKE ? ESCAPE '\\' OR r.title LIKE ? ESCAPE '\\'
                  OR EXISTS (SELECT 1 FROM routine_feedback f WHERE f.run_id = r.id AND f.text LIKE ? ESCAPE '\\'))
           ORDER BY r.started_at DESC, r.rowid DESC LIMIT ?`,
       )
-      .all(routineId, pattern, pattern, pattern, pattern, limit)
+      .all(routineId, pattern, pattern, pattern, limit)
       .map(runOf);
   }
 
-  /** The newest handoff anybody wrote: what the next run reads before it starts. */
+  /**
+   * The newest handoff a run wrote: what the next run reads before it starts. Its only reader is
+   * the run prompt (`runner.ts`); no view, tool or notification is made from it.
+   */
   handoff(
     routineId: string,
   ): { text: string; runId: string; writtenAt: number } | undefined {

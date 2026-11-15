@@ -1,43 +1,70 @@
 /**
  * What a routine's sessions are told. Pure, so the words can be read, and tested, in one place.
  *
- * A run starts from nothing: it has no conversation to read back, and nobody is online to ask. The
- * first message carries everything it cannot look up: who it is, when it is, what it is for, what
- * the last run left for it, and how to end. Its tools (`routines/tools.ts`) cover the rest.
+ * A run is a new Captain session with nobody watching. The first message carries what it cannot
+ * look up: which routine, when it is, the brief, and what the previous run left for it. The last
+ * of these is private: it sits in its own fenced block that says so, after the brief and away from
+ * the instructions about the report, so the model reads it as context and not as content.
  */
 import type { RoutineSchedule } from "@eta/client-contracts";
 import { describeSchedule, wallClock } from "./schedule";
+
+/** The fence around the previous run's notes. Tests look for it, and for nothing of it in a report. */
+export const PRIVATE_OPEN = "<private-notes-from-your-previous-run>";
+export const PRIVATE_CLOSE = "</private-notes-from-your-previous-run>";
 
 export function runPrompt(input: {
   name: string;
   schedule: RoutineSchedule;
   timezone: string;
   now: number;
+  /** When the previous run started, if there was one. */
+  previousRunAt?: number | undefined;
   brief: { version: number; text: string };
   handoff: { text: string; writtenAt: number } | undefined;
 }): string {
   const { handoff } = input;
   return [
-    `You are running the routine "${input.name}". It runs on a schedule (${describeSchedule(input.schedule)}, time zone ${input.timezone}) with nobody online: do not ask questions, decide for yourself.`,
-    `It is ${wallClock(input.now, input.timezone)} (${input.timezone}) now. The working directory is this routine's own and is kept between runs, so you can leave files there for later runs.`,
+    `<routine-run>`,
+    `This turn was not started by the user. You are running the routine "${input.name}", a scheduled job the user gave you (${describeSchedule(input.schedule)}, time zone ${input.timezone}). Nobody is watching this session: do not ask questions, decide for yourself.`,
+    `It is ${wallClock(input.now, input.timezone)} (${input.timezone}) now.${input.previousRunAt === undefined ? " This routine has not run before." : ` The previous run started ${wallClock(input.previousRunAt, input.timezone)}.`}`,
     "",
-    `## What you are asked to do (version ${input.brief.version})`,
+    `## The brief (version ${input.brief.version})`,
     "",
     input.brief.text,
     "",
-    "## What the previous run left for you",
+    "## How to do it",
     "",
+    "- You have all your usual Captain tools. Do the brief however fits: look things up yourself, assign work in a group with assign_in_group, post in a group with post_in_group, check tasks with captain_list_tasks. Work you dispatched may finish long after this run: a later run checks it and reports on it.",
+    "- If the brief says to send something somewhere (a group, a person), do that with your tools; the report below is not sent there by itself.",
+    "- Before you report, check the earlier reports (list_runs, search_runs) so you do not repeat one.",
+    "",
+    "## How to end: two separate things",
+    "",
+    "1. **For the user** — call `report(title, body)` once, or `no_news()` if nothing is worth the user's time. The report is shown to the user. It says what this run did and found, in the language of the brief. It never contains notes to yourself, plans for the next run, or anything from the private notes below.",
+    "2. **For your next run only** — call `handoff(notes)`: what you did, what you dispatched and where (task numbers, conversation ids), what to check next time. The user never sees it.",
+    "",
+    "Then end your turn.",
+    "",
+    "## Your private notes from the previous run",
+    "",
+    "Only you can see what is between the tags below. It is context for you, not content: use it to know what to check, and never copy it, quote it or paraphrase it into a report. If it says what you planned to do, do it; report the outcome, not the plan.",
+    "",
+    PRIVATE_OPEN,
     handoff === undefined
-      ? "This is the first run, or the earlier runs left nothing."
+      ? "(none: this is the first run, or the earlier runs left nothing)"
       : `(written ${wallClock(handoff.writtenAt, input.timezone)})\n${handoff.text}`,
-    "",
-    "## How to work",
-    "",
-    "- To learn what earlier runs did and what the user thought of them, use list_runs, get_run and search_runs.",
-    "- Before you report, make sure it is not a repeat of an earlier report. If there is nothing new worth the user's time, report nothing.",
-    "- End by calling finish, once. Give it `report` (Markdown, starting with a `# title` line, in the language of the brief) when there is something to send; leave `report` out when there is not. Give it `handoff` too: a few sentences for the next run about what you sent, what you noticed and what to watch for.",
-    "- If you stop without calling finish, your last message is sent as the report.",
+    PRIVATE_CLOSE,
+    `</routine-run>`,
   ].join("\n");
+}
+
+/** What a run that stopped without report or no_news is told, once. */
+export function nudgePrompt(): string {
+  return [
+    "This routine run has not called `report` or `no_news` yet, so the user has been told nothing.",
+    "Call `report(title, body)` with what this run did and found, or `no_news()` if there is nothing worth telling. Notes for the next run belong in `handoff`, never in the report. Then end your turn.",
+  ].join(" ");
 }
 
 export function revisionPrompt(input: {

@@ -1,25 +1,22 @@
 /**
- * The `routines` plugin: the register of what runs on a schedule, and what to do with it.
+ * The `routines` plugin: the register of what Captain runs on a schedule, and what to do with it.
  *
- * The list is eager (a client draws its routines from `hello`), and each routine is a target of
- * its own with its brief versions, its runs and its handoff. The clock and the runs are not here:
- * this file is the surface in front of them. Arguments are read, the rules of a routine are
- * checked, the clock is told to look again (it works out the rest from the rows), and state is
- * pushed.
+ * The list is eager (a client draws its routines from `hello`), with `status`, whether Captain is
+ * on to run them. Each routine is a target of its own with its brief versions and its runs. The
+ * clock and the runs are not here, and neither are the rules of a routine (`service.ts`): this file
+ * is the surface in front of them. A run's handoff is in no section: it is the next run's alone.
  */
 import type { RoutineSummary } from "@eta/client-contracts";
-import type { ConversationStore } from "../conversations/store";
 import type { RoutineRunner } from "./runner";
 import type { Scheduler } from "./scheduler";
+import type { RoutineService } from "./service";
 import type { RoutineRecord } from "./store";
 import type { ViewDeps } from "./views";
 import { Args, productPlugin, publish } from "../wire";
-import { checkSchedule, parseSchedule } from "./schedule";
 import {
   briefsOf,
   briefViewOf,
   feedbackViewOf,
-  handoffOf,
   infoOf,
   listingOf,
   runsOf,
@@ -27,27 +24,19 @@ import {
 } from "./views";
 
 export interface RoutinesDeps extends ViewDeps {
+  service: RoutineService;
   runner: RoutineRunner;
   scheduler: Scheduler;
-  conversations: ConversationStore;
   /** Say that a routine's state moved (and the list, always). */
   changed: (routineId: string) => void;
 }
 
-/** What a routine may be made of, so a brief cannot be a book and a name cannot be a paragraph. */
-const MAX_NAME = 100;
-const MAX_BRIEF = 8_000;
 const MAX_FEEDBACK = 4_000;
-const MAX_MODEL = 200;
 
 export function routinesPlugin(deps: RoutinesDeps, applied: () => void) {
-  const { store, runner, scheduler, conversations, now } = deps;
+  const { store, service, runner, scheduler } = deps;
 
-  const existing = (id: string): RoutineRecord => {
-    const routine = store.get(id);
-    if (routine === undefined) throw new Error(`no such routine: ${id}`);
-    return routine;
-  };
+  const existing = (id: string): RoutineRecord => service.existing(id);
   const summary = (routine: RoutineRecord): RoutineSummary =>
     summaryOf(deps, routine);
 
@@ -66,11 +55,15 @@ export function routinesPlugin(deps: RoutinesDeps, applied: () => void) {
             info: () => infoOf(deps, routine()),
             briefs: () => briefsOf(deps, id),
             runs: () => runsOf(deps, id),
-            handoff: () => handoffOf(deps, id),
           }),
         );
       };
       for (const routine of store.list()) publishDetail(routine.id);
+      service.created = publishDetail;
+      service.removed = (id) => {
+        details.get(id)?.();
+        details.delete(id);
+      };
 
       runner.attach(ctx.sessions);
       scheduler.start();
@@ -79,94 +72,54 @@ export function routinesPlugin(deps: RoutinesDeps, applied: () => void) {
         publish(
           wire,
           "routines",
-          { list: () => store.list().map(summary) },
+          {
+            list: () => store.list().map(summary),
+            status: () => runner.status(),
+          },
           { eager: true },
         ),
 
         wire.handle("routines", "create", (call) => {
           const args = new Args(call);
-          const name = nameOf(args.string("name"));
-          const brief = briefOf(args.string("brief"));
-          const schedule = parseSchedule(
-            (call.args as Record<string, unknown>).schedule,
-          );
-          const timezone = args.string("timezone").trim();
-          checkSchedule(schedule, timezone, now());
-          const routine = store.create({
-            name,
-            brief,
-            schedule,
-            timezone,
-            model: requiredModel(modelOf(args.nullableString("model"))),
-            conversationId:
-              conversationOf(
-                conversations,
-                args.nullableString("conversationId"),
-              ) ?? null,
+          const routine = service.create({
+            name: args.string("name"),
+            brief: args.string("brief"),
+            schedule: (call.args as Record<string, unknown>).schedule,
+            timezone: args.string("timezone"),
             enabled: args.optionalBoolean("enabled") ?? true,
           });
-          publishDetail(routine.id);
-          scheduler.tick();
-          deps.changed(routine.id);
           return { result: { routine: summary(routine) } };
         }),
 
         wire.handle("routines", "update", (call) => {
           const args = new Args(call);
-          const before = existing(args.string("routineId"));
           const raw = call.args as Record<string, unknown>;
           const name = args.optionalString("name");
           const brief = args.optionalString("brief");
-          const timezone = args.optionalString("timezone")?.trim();
-          const schedule =
-            raw.schedule === undefined
-              ? undefined
-              : parseSchedule(raw.schedule);
-          if (schedule !== undefined || timezone !== undefined)
-            checkSchedule(
-              schedule ?? before.schedule,
-              timezone ?? before.timezone,
-              now(),
-            );
-          const chosen = modelOf(args.nullableString("model"));
-          const model =
-            chosen === undefined ? undefined : requiredModel(chosen);
-          const conversationId = conversationOf(
-            conversations,
-            args.nullableString("conversationId"),
-          );
-          const routine = store.update(before.id, {
-            ...(name === undefined ? {} : { name: nameOf(name) }),
-            ...(schedule === undefined ? {} : { schedule }),
+          const timezone = args.optionalString("timezone");
+          const enabled = args.optionalBoolean("enabled");
+          const routine = service.update(args.string("routineId"), {
+            ...(name === undefined ? {} : { name }),
+            ...(brief === undefined ? {} : { brief }),
             ...(timezone === undefined ? {} : { timezone }),
-            ...(model === undefined ? {} : { model }),
-            ...(conversationId === undefined ? {} : { conversationId }),
-            ...(args.optionalBoolean("enabled") === undefined
-              ? {}
-              : { enabled: args.optionalBoolean("enabled")! }),
-          })!;
-          if (brief !== undefined) store.editBrief(before.id, briefOf(brief));
-          scheduler.tick();
-          deps.changed(routine.id);
-          return { result: { routine: summary(existing(routine.id)) } };
+            ...(raw.schedule === undefined ? {} : { schedule: raw.schedule }),
+            ...(enabled === undefined ? {} : { enabled }),
+          });
+          return { result: { routine: summary(routine) } };
         }),
 
         wire.handle("routines", "delete", (call) => {
-          const routine = existing(new Args(call).string("routineId"));
-          if (store.runningRun(routine.id) !== undefined)
-            throw new Error(
-              `${routine.name} is running; delete it when the run has ended`,
-            );
-          store.remove(routine.id);
-          details.get(routine.id)?.();
-          details.delete(routine.id);
-          scheduler.tick();
-          deps.changed(routine.id);
-          return { result: { routineId: routine.id } };
+          const id = new Args(call).string("routineId");
+          service.remove(id);
+          return { result: { routineId: id } };
         }),
 
         wire.handle("routines", "run", (call) => {
           const routine = existing(new Args(call).string("routineId"));
+          if (!runner.status().captainOn)
+            throw new Error(
+              "Captain is off, so routines do not run. Turn Captain on to run it.",
+            );
           const run = runner.start(routine.id, "user");
           if (run === undefined)
             throw new Error(
@@ -223,6 +176,8 @@ export function routinesPlugin(deps: RoutinesDeps, applied: () => void) {
       ];
       return () => {
         scheduler.stop();
+        service.created = undefined;
+        service.removed = undefined;
         for (const off of offs.splice(0)) off();
         for (const off of details.values()) off();
         details.clear();
@@ -232,52 +187,4 @@ export function routinesPlugin(deps: RoutinesDeps, applied: () => void) {
     },
     applied,
   );
-}
-
-function nameOf(name: string): string {
-  const trimmed = name.trim();
-  if (trimmed === "") throw new Error("a routine needs a name");
-  if (trimmed.length > MAX_NAME)
-    throw new Error(`a name is at most ${MAX_NAME} characters`);
-  return trimmed;
-}
-
-function briefOf(brief: string): string {
-  const trimmed = brief.trim();
-  if (trimmed === "") throw new Error("a routine needs a brief");
-  if (trimmed.length > MAX_BRIEF)
-    throw new Error(`a brief is at most ${MAX_BRIEF} characters`);
-  return trimmed;
-}
-
-/**
- * A routine runs on eta's own loop, and that loop has no default model: a routine names one, and
- * it cannot be cleared.
- */
-function requiredModel(model: string | null | undefined): string {
-  if (model === undefined || model === null)
-    throw new Error("a routine needs a model: choose one");
-  return model;
-}
-
-/** `provider:modelId`; an empty string reads as null; undefined leaves it alone. */
-function modelOf(model: string | null | undefined): string | null | undefined {
-  if (model === undefined || model === null) return model;
-  const trimmed = model.trim();
-  if (trimmed === "") return null;
-  if (!trimmed.includes(":") || trimmed.length > MAX_MODEL)
-    throw new Error("model must be provider:modelId");
-  return trimmed;
-}
-
-/** The conversation a report goes to: it has to exist; an empty string unlinks like null does. */
-function conversationOf(
-  conversations: ConversationStore,
-  id: string | null | undefined,
-): string | null | undefined {
-  if (id === undefined || id === null) return id;
-  if (id === "") return null;
-  if (conversations.get(id) === undefined)
-    throw new Error(`no such conversation: ${id}`);
-  return id;
 }

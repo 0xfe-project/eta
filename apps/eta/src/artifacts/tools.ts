@@ -16,6 +16,7 @@ import type { SiteLimits } from "./files";
 import type { ArtifactService } from "./service";
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
+import { isRoutineSession } from "../routines/session-key";
 import { isTaskSession, taskOfKey } from "../tasks/session-key";
 import { ArtifactError, collectSite } from "./files";
 
@@ -99,7 +100,10 @@ export function artifactSessionTools(deps: {
           const own = ownId === undefined ? undefined : deps.board.find(ownId);
           const where = isTaskSession(conversationId)
             ? (own?.conversationId ?? own?.originConversationId ?? undefined)
-            : conversationId;
+            : // A routine run is held in no conversation, and has none to file it under.
+              isRoutineSession(conversationId)
+              ? undefined
+              : conversationId;
           const artifactId =
             args.artifactId === undefined
               ? undefined
