@@ -94,7 +94,7 @@ function RoutineReport({
   const { t: translateText } = useTranslation(["chat"] as const);
   const sectionLink = useSectionLink();
   return (
-    <div className="system-message">
+    <div className="system-message as-written">
       <Link
         {...sectionLink("routines", {
           routine: routineId,
