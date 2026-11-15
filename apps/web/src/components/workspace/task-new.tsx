@@ -167,7 +167,7 @@ function NewTaskForm({ preset }: { preset: NewTaskPreset }) {
   const [picked, setAssignee] = useState<string | undefined>();
   const assignee =
     picked ??
-    (parent === undefined ? undefined : (executorOf(parent) ?? undefined)) ??
+    (parent === undefined ? null : executorOf(parent)) ??
     conversation?.participants.find((member) =>
       people.some((agent) => agent.id === member.agentId),
     )?.agentId ??
