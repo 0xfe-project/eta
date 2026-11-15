@@ -476,6 +476,7 @@ export interface TaskDetailSections {
 /* ------------------------------------------------------------------ actions */
 
 export const TASK_ACTIONS = [
+  "create",
   "update",
   "comment",
   "delete",
@@ -488,6 +489,32 @@ export const TASK_ACTIONS = [
   "setParent",
 ] as const;
 export type TaskAction = (typeof TASK_ACTIONS)[number];
+
+/**
+ * One task of `tasks.create`: the user making tasks from the page's form, the press of "Create"
+ * being the confirmation. `after` (earlier tasks of the same call it waits for) and `under` (the
+ * earlier task it is a subtask of) are indexes into the call's `tasks`.
+ */
+export interface NewTaskArgs {
+  title: string;
+  description?: string;
+  /** The agent that executes it: a name or an id. */
+  assignee: string;
+  dependsOn?: { task: string; requireDone?: boolean }[];
+  after?: number[];
+  under?: number;
+}
+
+/** `tasks.create`: every task made in one write, or none. */
+export interface CreateTasksArgs {
+  tasks: NewTaskArgs[];
+  /** The task they go under (`#N` or id); also gives them its project and conversation. */
+  parent?: string;
+  /** Where they are discussed; with no parent, its project is where they work. */
+  conversationId?: string;
+  /** `todo` (start once what they wait for is there, the default) or `backlog`. */
+  status?: "todo" | "backlog";
+}
 
 /** What may be changed about a task, and what a draft may be edited to on its way to the board. */
 export interface TaskFields {

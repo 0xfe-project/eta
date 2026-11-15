@@ -1,21 +1,30 @@
-import type { TaskActor } from "@eta/client-contracts";
-import type { CallFrame } from "@eta/client-wire-proto";
+import type { TaskActor, TaskWorkspaceMode } from "@eta/client-contracts";
 /**
  * The `tasks` plugin: the board on the wire.
  *
  * `tasks` is eager, the whole board as one list; every task is a target of its own (`tasks.<id>`)
  * with its detail and its activity, made when the task is and taken away when it is deleted. What
  * the actions do is the board's (`board.ts`); this file reads the arguments and publishes. Every
- * action here is the user's: an agent changes the board with its tools. There is no action that
- * makes a task: tasks are made by agents and confirmed by the user (`confirmDraft`).
+ * action here is the user's: an agent changes the board with its tools. An agent's task is drafted
+ * and confirmed by the user (`confirmDraft`); the user's own, from the page's form, is made by
+ * `create`, whose call is the user pressing "Create" (`TaskBoard.make`).
  */
-import type { FieldsInput, TaskBoard } from "./board";
+import type { CallFrame } from "@eta/client-wire-proto";
+import type {
+  DependencyInput,
+  FieldsInput,
+  NewTaskInput,
+  TaskBoard,
+} from "./board";
 import type { TaskRunner } from "./runner";
+import type { WorkspaceChoice } from "./tools";
 import { Args, productPlugin, publish } from "../wire";
 
 export interface TasksDeps {
   board: TaskBoard;
   runner: TaskRunner;
+  /** The workspace a task made in a conversation gets, when its parent does not say. */
+  workspaceFor?: WorkspaceChoice;
 }
 
 const USER: TaskActor = { kind: "user", agentId: null };
@@ -38,8 +47,51 @@ function editsOf(call: CallFrame): FieldsInput {
   return fieldsOf(new Args({ ...call, args: raw }));
 }
 
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** A list of batch indexes; absent is none. */
+function indexesOf(value: unknown, what: string): number[] | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !Array.isArray(value) ||
+    !value.every((n) => typeof n === "number" && Number.isInteger(n))
+  )
+    throw new TypeError(`tasks.create: ${what} must be a list of integers`);
+  return value as number[];
+}
+
+/** `create`'s `tasks`: what each one is, as the board reads it (`NewTaskInput`). */
+function newTasksOf(call: CallFrame): NewTaskInput[] {
+  const raw = (call.args as Record<string, unknown> | undefined)?.tasks;
+  if (!Array.isArray(raw) || raw.length === 0)
+    throw new TypeError("tasks.create: tasks must be a list of at least one");
+  return raw.map((entry, i) => {
+    if (!isObject(entry))
+      throw new TypeError(`tasks.create: tasks[${i}] must be an object`);
+    const args = new Args({ ...call, args: entry });
+    const dependsOn = entry.dependsOn ?? [];
+    if (!Array.isArray(dependsOn))
+      throw new TypeError(`tasks.create: tasks[${i}].dependsOn must be a list`);
+    return {
+      title: args.string("title"),
+      description: args.optionalString("description"),
+      assignee: args.string("assignee"),
+      dependsOn: dependsOn.map((edge, j): DependencyInput => {
+        if (!isObject(edge) || typeof edge.task !== "string")
+          throw new TypeError(
+            `tasks.create: tasks[${i}].dependsOn[${j}] needs a task`,
+          );
+        return { task: edge.task, requireDone: edge.requireDone === true };
+      }),
+      after: indexesOf(entry.after, `tasks[${i}].after`),
+      under: args.optionalInteger("under"),
+    };
+  });
+}
+
 export function tasksPlugin(deps: TasksDeps, applied: () => void) {
-  const { board, runner } = deps;
+  const { board, runner, workspaceFor } = deps;
 
   return productPlugin(
     "tasks",
@@ -157,6 +209,39 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
             throw new Error("tasks.setParent needs parent (or null)");
           const task = board.setParent(args.string("taskId"), parent, USER);
           return { result: { task } };
+        }),
+
+        wire.handle("tasks", "create", async (call) => {
+          const args = new Args(call);
+          const tasks = newTasksOf(call);
+          const parent = args.optionalString("parent");
+          const conversationId = args.optionalString("conversationId");
+          const workspace = args.optionalString("workspace") as
+            | TaskWorkspaceMode
+            | undefined;
+          if (
+            workspace !== undefined &&
+            workspace !== "local" &&
+            workspace !== "worktree"
+          )
+            throw new TypeError("tasks.create: workspace is local or worktree");
+          // With no parent to take it from, the conversation's project says (a repository or not).
+          const chosen =
+            workspace ??
+            (parent === undefined && conversationId !== undefined
+              ? await workspaceFor?.(conversationId, undefined)
+              : undefined);
+          const made = board.make(
+            {
+              tasks,
+              parent,
+              conversationId,
+              status: args.optionalString("status"),
+              workspace: chosen,
+            },
+            USER,
+          );
+          return { result: { tasks: made } };
         }),
 
         wire.handle("tasks", "confirmDraft", (call) => {

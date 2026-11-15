@@ -39,6 +39,19 @@ export interface DependencyInput {
   requireDone?: boolean | undefined;
 }
 
+/** One task of a batch the user makes (`TaskBoard.make`). */
+export interface NewTaskInput {
+  title: string;
+  description?: string | undefined;
+  /** Who executes it: an agent's name or id. */
+  assignee: string;
+  dependsOn?: readonly DependencyInput[] | undefined;
+  /** Earlier tasks of the batch it waits for, by index. */
+  after?: readonly number[] | undefined;
+  /** An earlier task of the batch it is a subtask of, by index; else the batch's parent. */
+  under?: number | undefined;
+}
+
 /** What the system writes on a status it set because a dependency was cancelled. */
 const DEPENDENCY_CANCELLED = "dependency_cancelled";
 
@@ -343,6 +356,129 @@ export class TaskBoard {
     if (workable(task.status)) this.#runs?.start(task.id);
     if (parent !== undefined) this.#graphChanged();
     return this.#detailOf(this.#existing(task.id));
+  }
+
+  /**
+   * The user makes tasks from the page: one, or several at once (a piece of work split into
+   * subtasks). Pressing "Create" in the form is the user's confirmation, so nothing else may come
+   * this way: an agent proposes, with `draft`, and the user confirms.
+   *
+   * Every task has an executor (an agent that exists). It works in its parent's project, else the
+   * conversation's; it is discussed in the conversation given, else its parent's. A task of the
+   * batch waits for the tasks it names (`dependsOn`) and for the earlier tasks of the batch it
+   * points at (`after`, their indexes); it is under the task named `parent`, or under an earlier
+   * task of the batch (`under`). The graph checks every edge and parent as it is written, and the
+   * whole batch is one write: a refused edge leaves nothing behind.
+   */
+  make(
+    input: {
+      tasks: readonly NewTaskInput[];
+      /** The task the batch goes under (`#N` or id). */
+      parent?: string | undefined;
+      conversationId?: string | undefined;
+      /** Start once what they wait for is there, or keep them in the backlog. */
+      status?: string | undefined;
+      /** Where they work; absent is the parent's, else what `workspaceFor` chose for the conversation. */
+      workspace?: TaskWorkspaceMode | undefined;
+    },
+    actor: TaskActor,
+  ): BoardTaskDetail[] {
+    if (actor.kind !== "user")
+      throw new Error(
+        "only the user makes tasks this way; an agent drafts one for the user to confirm",
+      );
+    if (input.tasks.length === 0) throw new Error("nothing to make");
+    const { status } = this.#fieldsOf({ status: input.status ?? "todo" });
+    if (status !== "todo" && status !== "backlog")
+      throw new Error(`a new task starts in todo or backlog, not ${status}`);
+    const parent =
+      input.parent === undefined || input.parent.trim() === ""
+        ? undefined
+        : this.#named(input.parent);
+    const conversationId =
+      this.#conversation(input.conversationId) ??
+      parent?.conversationId ??
+      parent?.originConversationId ??
+      undefined;
+    const projectId =
+      parent?.projectId ??
+      (conversationId === undefined
+        ? undefined
+        : this.#deps.conversations.get(conversationId)?.projectId);
+    if (projectId === undefined || projectId === null)
+      throw new Error(
+        "a task needs a project to work in: give it a parent, or a conversation in a project",
+      );
+    const workspace = input.workspace ?? parent?.workspaceMode ?? "local";
+    // Everything named is checked before anything is written.
+    const planned = input.tasks.map((entry, index) => {
+      const { title, description } = this.#fieldsOf(entry);
+      if (title === undefined)
+        throw new Error(`task ${index + 1} needs a title`);
+      const assigneeAgent = resolveAssignee(entry.assignee, this.#deps.agents);
+      if (assigneeAgent === undefined)
+        throw new Error(`task ${index + 1} needs an executor`);
+      for (const at of [
+        ...(entry.after ?? []),
+        ...(entry.under === undefined ? [] : [entry.under]),
+      ])
+        if (!Number.isInteger(at) || at < 0 || at >= index)
+          throw new Error(
+            `task ${index + 1} can only point at a task before it in the batch, not ${at + 1}`,
+          );
+      return {
+        title,
+        description,
+        assigneeAgent,
+        dependsOn: this.#dependenciesOf(entry.dependsOn),
+        after: [...new Set(entry.after ?? [])],
+        under: entry.under,
+      };
+    });
+    const made = this.#deps.db.transaction(() => {
+      const rows = planned.map((entry) =>
+        this.#deps.tasks.create({
+          title: entry.title,
+          description: entry.description,
+          status,
+          assigneeAgent: entry.assigneeAgent,
+          conversationId,
+          projectId,
+          workspaceMode: workspace,
+        }),
+      );
+      planned.forEach((entry, index) => {
+        const id = rows[index]!.id;
+        const above =
+          entry.under === undefined ? parent?.id : rows[entry.under]!.id;
+        if (above !== undefined) this.#setParent(id, above, actor);
+      });
+      planned.forEach((entry, index) => {
+        const id = rows[index]!.id;
+        for (const edge of entry.dependsOn)
+          this.#addEdge(id, edge.taskId, edge.requireDone, actor);
+        for (const at of entry.after)
+          this.#addEdge(id, rows[at]!.id, false, actor);
+      });
+      return rows;
+    })();
+    const parents = new Set(
+      planned.flatMap((entry) =>
+        entry.under === undefined ? [] : [made[entry.under]!.id],
+      ),
+    );
+    for (const task of made) this.#announce(task.id, "created", []);
+    for (const entry of planned)
+      for (const edge of entry.dependsOn)
+        this.#announce(edge.taskId, "changed", []);
+    // Leaves start; a task of the batch with subtasks of its own takes their status instead.
+    for (const task of made) if (parents.has(task.id)) this.#derive(task.id);
+    if (parent !== undefined) this.#adopted(parent.id, null);
+    for (const task of made)
+      if (!parents.has(task.id) && workable(task.status))
+        this.#runs?.start(task.id);
+    this.#graphChanged();
+    return made.map((task) => this.#detailOf(this.#existing(task.id)));
   }
 
   update(id: string, input: FieldsInput, actor: TaskActor): BoardTaskDetail {

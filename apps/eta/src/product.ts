@@ -429,9 +429,11 @@ export function createProduct(options: {
         taskRun: (session) => {
           const run = runRows.bySession(session);
           const task = run === undefined ? undefined : taskRows.get(run.taskId);
+          // The maker, as ever; a task the user made has only its executor.
+          const agentId = task?.createdBy.agentId ?? task?.assigneeAgentId;
           if (
             run === undefined ||
-            task?.createdBy.agentId == null ||
+            agentId == null ||
             run.machineId === null ||
             run.workspace === null
           )
@@ -440,7 +442,7 @@ export function createProduct(options: {
             // What the session is held in: the key it was made with, which is what the daemon
             // files its prompt and tools under, whatever run is working in it now.
             key: sessionKeyOf(run),
-            agentId: task.createdBy.agentId,
+            agentId,
             machineId: run.machineId,
             cwd: run.workspace,
           };
@@ -618,6 +620,12 @@ export function createProduct(options: {
   // The executors of tasks: a fresh session of the agent that made a task for each run, on the
   // machine of the task's project.
   const transport = (machine: MachineRecord) => transportOn(machine, hub);
+  const taskWorkspaceFor = workspaceChooser({
+    conversations,
+    projects,
+    machines,
+    transport,
+  });
   const taskRunner = new TaskRunner({
     board,
     tasks: taskRows,
@@ -783,12 +791,7 @@ export function createProduct(options: {
         board,
         agents,
         runner: taskRunner,
-        workspaceFor: workspaceChooser({
-          conversations,
-          projects,
-          machines,
-          transport,
-        }),
+        workspaceFor: taskWorkspaceFor,
         captain: {
           isCaptain: (agentId) => captain.identity()?.agentId === agentId,
           assignmentFor: (conversationId, agentId) =>
@@ -1034,7 +1037,10 @@ export function createProduct(options: {
       );
       server.mount(
         "tasks",
-        tasksPlugin({ board, runner: taskRunner }, applied("tasks")),
+        tasksPlugin(
+          { board, runner: taskRunner, workspaceFor: taskWorkspaceFor },
+          applied("tasks"),
+        ),
       );
       server.mount(
         "artifacts",

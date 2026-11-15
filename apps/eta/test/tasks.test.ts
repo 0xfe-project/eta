@@ -70,11 +70,11 @@ describe("the tasks target", () => {
     );
     expect(hello.state.tasks?.sections.list).toEqual([]);
     expect(hello.mounted.map((plugin) => plugin.name)).toContain("tasks");
-    // Users do not make tasks: there is no way to, and an agent's tool is the only one.
-    expect(hello.ops.map((op) => op.name)).not.toContain("tasks.create");
+    // The user makes a task only through the form (`tasks.create`, task-create.test.ts), which
+    // names everything a task needs: a bare title is not a task.
     await expect(
       w.client.call("tasks", "create", { title: "By hand" }),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/tasks must be a list/);
     expect(w.host.db.query("SELECT COUNT(*) AS n FROM task").get()).toEqual({
       n: 0,
     });
