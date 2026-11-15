@@ -31,6 +31,7 @@ import { COMPILED } from "../resources";
 import { loadSecretKey } from "../secret";
 import { VERSION } from "../version";
 import { Args, productPlugin } from "../wire";
+import { PRERELEASE_SETTING } from "./database";
 import { findHostService, sameFile } from "./service";
 import { readStatus } from "./status";
 import {
@@ -40,7 +41,7 @@ import {
   TOKEN_SETTING,
   tokenHost,
 } from "./token";
-import { versionOrder } from "./upgrade";
+import { heldOnPrerelease, versionOrder } from "./upgrade";
 import { cancelWorker, startWorker } from "./worker";
 
 const STATUS_PATH = "/upgrade/status";
@@ -109,8 +110,13 @@ function currentUpstream({ settings }: UpgradePluginOptions): {
   };
 }
 
+/** The switch under Settings → Update: what the worker reads too (`savedPrerelease`). */
+const prereleaseOn = ({ settings }: UpgradePluginOptions): boolean =>
+  settings.get(PRERELEASE_SETTING) === true;
+
 async function check(options: UpgradePluginOptions): Promise<UpgradeCheckView> {
   const version = options.version ?? VERSION;
+  const prerelease = prereleaseOn(options);
   const { blocked } = await blockedBy(options).catch(() => ({
     blocked: noService(options),
   }));
@@ -135,12 +141,16 @@ async function check(options: UpgradePluginOptions): Promise<UpgradeCheckView> {
     const releases =
       options.releases ??
       new Releases({ upstream: text, token: () => Promise.resolve(found) });
-    const latest = (await releases.latest()).version;
+    const latest = (await releases.latest({ prerelease })).version;
     const order = versionOrder(latest, version);
+    const available = latest !== version && (order === undefined || order > 0);
     return {
       version,
       latest,
-      available: latest !== version && (order === undefined || order > 0),
+      available,
+      prerelease,
+      heldOnPrerelease:
+        !available && heldOnPrerelease(version, latest, prerelease),
       blocked,
       busy: options.busy(),
       upstream,
@@ -152,6 +162,8 @@ async function check(options: UpgradePluginOptions): Promise<UpgradeCheckView> {
       version,
       latest: null,
       available: false,
+      prerelease,
+      heldOnPrerelease: false,
       blocked,
       busy: options.busy(),
       upstream,
@@ -211,6 +223,15 @@ export function upgradePlugin(
           }
           const result: UpgradeResults["setToken"] = {
             saved: tokenHost(settings.get(TOKEN_SETTING)) ?? null,
+          };
+          return { result };
+        }),
+        wire.handle("upgrade", "setPrerelease", async (call) => {
+          const on = new Args(call).optionalBoolean("prerelease") === true;
+          if (on) options.settings.set(PRERELEASE_SETTING, true);
+          else options.settings.delete(PRERELEASE_SETTING);
+          const result: UpgradeResults["setPrerelease"] = {
+            prerelease: prereleaseOn(options),
           };
           return { result };
         }),

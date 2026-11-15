@@ -166,6 +166,20 @@ jobs:
           if [[ -f eta-host.json ]]; then files+=(eta-host.json); fi
           gh release upload "$TAG" "${files[@]}" --clobber
 
+  # A release guard: a migration in the previous `v*` tag, pre-release tags included, is here under
+  # the same name with the same content. Hosts that ran it refuse a build without it, and do not run
+  # it again when it changed (docs/release.md, "Pre-releases").
+  migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # Every tag, with what it points at.
+          fetch-depth: 0
+      - run: scripts/check-migrations-frozen.sh
+
   # From the last release to this draft, on Linux: a release is what people upgrade to. macOS and
   # Windows are `gh workflow run upgrade-cross.yml -f platforms=all`, by hand.
   cross:
@@ -176,10 +190,10 @@ jobs:
     with:
       to: ${{ needs.prepare.outputs.version }}
 
-  # `check` runs beside the builds: nothing is published until both are through, and neither has
-  # anything to wait for from the other.
+  # `check` and `migrations` run beside the builds: nothing is published until all are through, and
+  # none has anything to wait for from the others.
   publish:
-    needs: [check, cross]
+    needs: [check, cross, migrations]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

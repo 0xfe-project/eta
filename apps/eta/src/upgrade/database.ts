@@ -68,6 +68,21 @@ export function savedUpstream(dataDir: string): string | undefined {
   return typeof saved === "string" ? saved : undefined;
 }
 
+/**
+ * Whether the user let upgrades go to pre-releases (Settings → Update), beside `upgrade.upstream`
+ * and `upgrade.token`. Only `true` turns it on; the switch off deletes it.
+ */
+export const PRERELEASE_SETTING = "upgrade.prerelease";
+
+/**
+ * The pre-release switch, as saved. The worker reads it here and is not handed it: the page's
+ * button gives it no version, so what it upgrades to is its own `latest()`, which has to be the one
+ * the page offered.
+ */
+export function savedPrerelease(dataDir: string): boolean {
+  return readSetting(dataDir, PRERELEASE_SETTING) === true;
+}
+
 /** The token saved in the settings. The key is only touched when there is one to open. */
 export function savedToken(dataDir: string): SavedToken | undefined {
   const stored = readSetting(dataDir, TOKEN_SETTING);

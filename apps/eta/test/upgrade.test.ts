@@ -86,19 +86,24 @@ function fakeGitHub(options: { requireToken?: string } = {}) {
         authorization !== `Bearer ${options.requireToken}`
       )
         return new Response("not found", { status: 404 });
+      const view = (tag: string, release: FakeRelease) => ({
+        tag_name: `v${tag}`,
+        prerelease: release.prerelease === true,
+        assets: [PLATFORM, "SHA256SUMS"].map((name) => ({
+          name,
+          url: `${origin}/assets/${tag}/${name}`,
+        })),
+      });
       const describe = (tag: string): Response => {
         const release = releases.get(tag);
         if (release === undefined)
           return new Response("not found", { status: 404 });
-        return Response.json({
-          tag_name: `v${tag}`,
-          prerelease: release.prerelease === true,
-          assets: [PLATFORM, "SHA256SUMS"].map((name) => ({
-            name,
-            url: `${origin}/assets/${tag}/${name}`,
-          })),
-        });
+        return Response.json(view(tag, release));
       };
+      if (pathname === "/repo/releases")
+        return Response.json(
+          [...releases].reverse().map(([tag, release]) => view(tag, release)),
+        );
       if (pathname === "/repo/releases/latest")
         return latest === undefined
           ? new Response("not found", { status: 404 })
@@ -286,6 +291,36 @@ describe("eta-host upgrade", () => {
 
       await upgrade({ wanted: "1.2.0-rc.1", version: "1.1.0" });
       expect(await readFile(exe, "utf8")).toBe(build("1.2.0-rc.1"));
+    });
+
+    it("takes the latest pre-release when pre-releases are on", async () => {
+      github.publish("1.1.0", { body: build("1.1.0") });
+      github.publish("1.2.0-rc.1", {
+        body: build("1.2.0-rc.1"),
+        prerelease: true,
+      });
+      await upgrade({ prerelease: true });
+      expect(await readFile(exe, "utf8")).toBe(build("1.2.0-rc.1"));
+    });
+
+    it("stays on a pre-release when they are turned off, and says why", async () => {
+      github.publish("1.1.0", { body: build("1.1.0") });
+      github.publish("1.2.0-rc.1", {
+        body: build("1.2.0-rc.1"),
+        prerelease: true,
+      });
+      await upgrade({ version: "1.2.0-rc.1" });
+      expect(said()).toContain(
+        "This is the pre-release 1.2.0-rc.1, and pre-releases are off",
+      );
+      expect(await readFile(exe, "utf8")).toBe(build("1.0.0"));
+      expect(existsSync(`${exe}.prev`)).toBe(false);
+
+      // Its full release is newer than it, and is offered as usual.
+      lines.length = 0;
+      github.publish("1.2.0", { body: build("1.2.0") });
+      await upgrade({ check: true, version: "1.2.0-rc.1" });
+      expect(said()).toBe("1.2.0 is available; this is 1.2.0-rc.1.");
     });
 
     it("--check says what there is and changes nothing", async () => {

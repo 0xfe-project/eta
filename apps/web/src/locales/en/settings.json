@@ -39,6 +39,11 @@
     "remoteHost": "Connected host",
     "version": "This version",
     "latest": "Latest version",
+    "latestFull": "Latest full release",
+    "latestWithPrerelease": "Latest version (incl. pre-releases)",
+    "prerelease": "Pre-releases",
+    "prereleaseHint": "Also offer -alpha, -beta and -rc versions. They can be unstable. Turning this off never goes back to an older version.",
+    "heldOnPrerelease": "You're on the pre-release {{version}}. With pre-releases off, an update will be offered once a newer full release is out.",
     "upstream": "Updates from",
     "upstreamFrom": {
       "build": "Default",
