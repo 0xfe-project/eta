@@ -76,19 +76,48 @@ export const runStatusLabels: Record<RunStatus, string> = {
   },
 };
 
+/** "#12、#13" (or "#12, #13"): tasks named by their numbers. */
+export const numbersLabel = (numbers: readonly number[]): string =>
+  numbers.map((n) => `#${n}`).join(translate("common:listSeparator"));
+
+/** The numbers of the tasks a task still waits for, for the queue's words. */
+export const waitingNumbers = (task: {
+  dependsOn?: readonly { number: number; state: string }[];
+}): number[] =>
+  (task.dependsOn ?? [])
+    .filter((edge) => edge.state === "waiting")
+    .map((edge) => edge.number);
+
 /**
  * Why a run waits. The two machine reasons name the machine, so the person knows which one to
  * turn on or whose limit to raise; `machine` is undefined only when the run's machine is unknown.
+ * Waiting for dependencies names the tasks (`waitingOn`, numbers), so the person knows whom.
  */
 export function queueReasonLabel(
   reason: TaskQueueReason,
   machine: string | undefined,
-) {
-  if (reason === "task_busy") return translate("tasks:queueReason.taskBusy");
+  waitingOn: readonly number[] = [],
+): string {
   const named = machine ?? translate("tasks:queueReason.thisMachine");
-  return reason === "machine_full"
-    ? translate("tasks:queueReason.machineFull", { machine: named })
-    : translate("tasks:queueReason.machineOffline", { machine: named });
+  switch (reason) {
+    case "task_busy":
+      return translate("tasks:queueReason.taskBusy");
+    case "waiting_deps":
+      return waitingOn.length === 0
+        ? translate("tasks:queueReason.waitingDepsUnknown")
+        : translate("tasks:queueReason.waitingDeps", {
+            tasks: numbersLabel(waitingOn),
+          });
+    case "machine_full":
+      return translate("tasks:queueReason.machineFull", { machine: named });
+    case "machine_offline":
+      return translate("tasks:queueReason.machineOffline", { machine: named });
+    default: {
+      // A reason this client does not know yet, from a newer host: say nothing wrong.
+      const unknown: never = reason;
+      return String(unknown);
+    }
+  }
 }
 
 /** Whether a run has not ended. */

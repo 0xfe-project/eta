@@ -6,6 +6,7 @@ import type {
 } from "@eta/client-contracts";
 import type { JSX } from "nsh";
 import type { TaskDetail } from "./format";
+import { dependencyEntry } from "@eta/client-contracts";
 import { signal, Text, View } from "nsh";
 import { t } from "../../i18n";
 import { go } from "../../nav/links";
@@ -18,6 +19,31 @@ import { openRunLog } from "./runs";
 
 const str = (value: unknown): string =>
   typeof value === "string" ? value : "";
+
+/** A `dependency` entry in the reader's words, from its data; an older entry has only its body. */
+function dependencyLine(a: TaskActivityView): string | null {
+  const read = dependencyEntry(a.data);
+  if (read === undefined) return a.body;
+  const task = `#${read.number} ${read.title}`.trim();
+  switch (read.action) {
+    case "added":
+      return read.requireDone
+        ? t("tasks.activity.dependencyAddedDone", { task })
+        : t("tasks.activity.dependencyAdded", { task });
+    case "required":
+      return read.requireDone
+        ? t("tasks.activity.dependencyRequireDone", { task })
+        : t("tasks.activity.dependencyRequireAny", { task });
+    case "removed":
+      return t("tasks.activity.dependencyRemoved", { task });
+    case "deleted":
+      return t("tasks.activity.dependencyDeleted", { task });
+    case "blocked":
+      return t("tasks.activity.dependencyBlocked", { task });
+    case "unblocked":
+      return t("tasks.activity.dependencyUnblocked");
+  }
+}
 
 /** One line for what is not a comment. */
 function describe(a: TaskActivityView): string | null {
@@ -57,6 +83,12 @@ function describe(a: TaskActivityView): string | null {
       return t("tasks.activity.turnFailed", { reason: why });
     case "run_interrupted":
       return t("tasks.activity.turnStopped", { reason: why });
+    case "dependency":
+      return dependencyLine(a);
+    // The task graph's entries say themselves, in the host's words.
+    case "parent":
+    case "subtask":
+      return a.body;
     default:
       return null;
   }

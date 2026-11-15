@@ -133,6 +133,38 @@ describe("the task tools", () => {
     );
   });
 
+  it("say a dependency's history in words a model reads, though the host writes only its data", async () => {
+    const { models, results } = script([
+      call("create_task", { title: "A" }),
+      call("create_task", {
+        title: "B",
+        dependsOn: [{ task: "#1", requireDone: true }],
+      }),
+      call("update_task", { task: "#2", removeDependencies: ["#1"] }),
+      call("get_task", { task: "2" }),
+    ]);
+    const w = await world({ models, tasks: { runs: false } });
+    const ada = await w.agent("Ada");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id]);
+    await w.watch(group.id);
+    const sent = await w.send(group.id, "go");
+    await w.settled(group.id, sent.replies[0]!.id);
+
+    const stored = w.host.db
+      .query<{ body: string | null }, []>(
+        "SELECT body FROM task_activity WHERE kind = 'dependency'",
+      )
+      .all();
+    expect(stored.map((row) => row.body)).toEqual([null, null]);
+    expect(results[3]).toMatch(
+      /\[dependency\] Ada: Waits for #1 "A" \(only done resolves it\)\./,
+    );
+    expect(results[3]).toMatch(
+      /\[dependency\] Ada: No longer waits for #1 "A"\./,
+    );
+  });
+
   it("report what the board refuses as an error the model reads", async () => {
     const { models, results } = script([
       call("create_task", { title: "x", status: "finished" }),

@@ -2,6 +2,7 @@ import type {
   BoardTaskView,
   TaskActivityView,
   TaskActor,
+  TaskDependencyView,
   TaskWorkspaceMode,
 } from "@eta/client-contracts";
 import type { KernelTool } from "@eta/core";
@@ -30,6 +31,7 @@ import type { TaskRunner } from "./runner";
 import type { RunRecord } from "./runs";
 import type { TaskRecord } from "./store";
 import {
+  dependencyEntry,
   TASK_DRAFT_STATUSES,
   TASK_WORKSPACE_MODES,
 } from "@eta/client-contracts";
@@ -116,6 +118,35 @@ const workspaceParameter = Type.Optional(
   ),
 );
 
+/** What a task waits for, as a model names it; the board checks it (`graph.ts` says what is refused). */
+const dependsOnParameter = Type.Optional(
+  Type.Array(
+    Type.Object({
+      task: Type.String({
+        description: "The task waited for: its number (12 or #12) or id",
+      }),
+      requireDone: Type.Optional(
+        Type.Boolean({
+          description:
+            "Only done resolves it. By default the other task in review is enough to start.",
+        }),
+      ),
+    }),
+    {
+      description:
+        "Tasks this one waits for: its work starts only once every one of them is in review or " +
+        "done (done only, with requireDone). Use it to order work that builds on other work; " +
+        "independent tasks run in parallel. With exactly one dependency in the same project and " +
+        "no base, the worktree starts from that task's branch. A cycle, or a cancelled task, is " +
+        "refused.",
+    },
+  ),
+);
+
+/** One edge in words: `#12 [in_review] Title (resolved, done required)`. */
+const edgeLine = (edge: TaskDependencyView): string =>
+  `#${edge.number} [${edge.status}] ${edge.title} (${edge.state}${edge.requireDone ? ", done required" : ""})`;
+
 /** The reading tools every task session has, and the helpers they share. */
 function reading(deps: TaskToolDeps) {
   const { board, agents } = deps;
@@ -134,14 +165,48 @@ function reading(deps: TaskToolDeps) {
   };
 
   /** One line: what a model can read without asking for the task. */
-  const line = (task: BoardTaskView): string =>
-    `#${task.number} [${task.status}] ${task.title} — ` +
-    `${task.runStatus === null ? "never run" : `run ${task.runStatus}`}, ` +
-    `created by ${whoIs(task.createdBy)}`;
+  const line = (task: BoardTaskView): string => {
+    const waits = (task.dependsOn ?? []).filter(
+      (edge) => edge.state !== "resolved",
+    );
+    return (
+      `#${task.number} [${task.status}] ${task.title} — ` +
+      `${task.runStatus === null ? "never run" : `run ${task.runStatus}`}, ` +
+      `created by ${whoIs(task.createdBy)}${
+        waits.length === 0
+          ? ""
+          : `; waits for ${waits.map((edge) => `#${edge.number}${edge.state === "cancelled" ? " (cancelled)" : ""}`).join(", ")}`
+      }`
+    );
+  };
+
+  /** A `dependency` entry in words: the host writes only its data, and a model reads English. */
+  const dependencySaid = (data: TaskActivityView["data"]): string | null => {
+    const read = dependencyEntry(data);
+    if (read === undefined) return null;
+    const other = `#${read.number} "${read.title}"`;
+    switch (read.action) {
+      case "added":
+        return `Waits for ${other}${read.requireDone ? " (only done resolves it)" : ""}.`;
+      case "required":
+        return read.requireDone
+          ? `Waits for ${other} to be done, not only in review.`
+          : `Waits for ${other} to be in review or done.`;
+      case "removed":
+        return `No longer waits for ${other}.`;
+      case "deleted":
+        return `${other} was deleted, so this task no longer waits for it.`;
+      case "blocked":
+        return `${other} was cancelled, and this task waits for it, so it will not start on its own. Remove the dependency to let it start, or cancel this task.`;
+      case "unblocked":
+        return "No dependency of this task is cancelled any more, so it goes back to todo and its work starts once what it waits for is resolved.";
+    }
+  };
 
   const entry = (activity: TaskActivityView): string => {
     const { data } = activity;
     const said =
+      (activity.kind === "dependency" ? dependencySaid(data) : null) ??
       activity.body ??
       (activity.kind === "status" || activity.kind === "title"
         ? `${String(data.from)} -> ${String(data.to)}`
@@ -202,8 +267,16 @@ function reading(deps: TaskToolDeps) {
               `${new Date(run.createdAt).toISOString()} ${run.status}${run.error === null ? "" : ` (${run.error})`}`,
           )
           .join("\n");
+        const graph = [
+          (task.dependsOn ?? []).length === 0
+            ? undefined
+            : `Waits for:\n${task.dependsOn!.map(edgeLine).join("\n")}`,
+          (task.dependents ?? []).length === 0
+            ? undefined
+            : `Waited for by:\n${task.dependents!.map(edgeLine).join("\n")}`,
+        ].filter((part) => part !== undefined);
         return text(
-          `${line(task)}\nWorks in ${where}.\n\n${task.description}\n\nRuns:\n${runs === "" ? "(none)" : runs}\n\nTimeline:\n${timeline}`,
+          `${line(task)}\nWorks in ${where}.\n\n${task.description}\n\n${graph.length === 0 ? "" : `${graph.join("\n\n")}\n\n`}Runs:\n${runs === "" ? "(none)" : runs}\n\nTimeline:\n${timeline}`,
           { id: task.id, number: task.number },
         );
       } catch (error) {
@@ -294,6 +367,7 @@ function conversationTools(
             "Absent is you, the proposer, which executes it itself.",
         }),
       ),
+      dependsOn: dependsOnParameter,
     }),
     async execute(args) {
       try {
@@ -375,6 +449,7 @@ function conversationTools(
             "Absent is you, the maker, which executes it itself.",
         }),
       ),
+      dependsOn: dependsOnParameter,
     }),
     async execute(args) {
       try {
@@ -425,8 +500,8 @@ function conversationTools(
     name: "update_task",
     label: "update_task",
     description:
-      "Change a task's title, description or status. Only the fields you give change. Moving a " +
-      "task to done or cancelled stops its runs.",
+      "Change a task's title, description or status, or what it waits for. Only the fields you " +
+      "give change. Moving a task to done or cancelled stops its runs.",
     parameters: Type.Object({
       task: Type.String({ description: "The task's number (12 or #12) or id" }),
       title: Type.Optional(Type.String()),
@@ -437,11 +512,33 @@ function conversationTools(
             "backlog, todo, in_progress, in_review, done, blocked or cancelled",
         }),
       ),
+      addDependencies: dependsOnParameter,
+      removeDependencies: Type.Optional(
+        Type.Array(Type.String(), {
+          description:
+            "Tasks this one should no longer wait for: numbers (12 or #12) or ids",
+        }),
+      ),
     }),
     execute(args) {
       try {
-        const { task: which, ...fields } = args;
-        const task = board.update(taskOf(which).id, fields, actor);
+        const {
+          task: which,
+          addDependencies,
+          removeDependencies,
+          ...fields
+        } = args;
+        const id = taskOf(which).id;
+        for (const other of removeDependencies ?? [])
+          board.removeDependency(id, other, actor);
+        for (const edge of addDependencies ?? [])
+          board.addDependency(
+            id,
+            edge.task,
+            { requireDone: edge.requireDone },
+            actor,
+          );
+        const task = board.update(id, fields, actor);
         return text(
           `#${task.number} is now [${task.status}] "${task.title}".`,
           { id: task.id, status: task.status },

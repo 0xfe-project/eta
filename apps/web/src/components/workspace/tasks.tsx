@@ -7,7 +7,7 @@ import type {
   TaskRun,
   TaskStatus,
 } from "@/queries/tasks";
-import { runningFirst } from "@eta/client-contracts";
+import { dependencyEntry, runningFirst } from "@eta/client-contracts";
 import { AppWindowIcon } from "@phosphor-icons/react/AppWindow";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
@@ -96,8 +96,10 @@ import {
   runStatusLabels,
   statuses,
   statusLabel,
+  waitingNumbers,
   workspaceLabel,
 } from "./task-format";
+import { DependencyBadge, DependencyRows } from "./task-graph";
 import { useTaskNav } from "./task-nav";
 import { RunLog } from "./task-run-log";
 import { StatusIcon } from "./task-status-icon";
@@ -213,6 +215,7 @@ function TaskRow({ task }: { task: Task }) {
               <Comments count={task.comments} />
             </span>
           </span>
+          <DependencyBadge task={task} />
         </span>
       </button>
     </li>
@@ -662,6 +665,7 @@ export function TaskProperties({
           </dd>
           <RunRow task={task} />
           <TaskMemoryPause taskId={task.id} />
+          <DependencyRows task={task} labelClassName={propertyLabel} />
         </>
       ) : null}
       {children}
@@ -736,6 +740,31 @@ function str(v: unknown) {
   return typeof v === "string" ? v : "";
 }
 
+/** A `dependency` entry in the reader's words, from its data; an older entry has only its body. */
+function dependencyLine(a: TaskActivity): React.ReactNode {
+  const read = dependencyEntry(a.data);
+  if (read === undefined) return a.body;
+  const task = `#${read.number} ${read.title}`.trim();
+  switch (read.action) {
+    case "added":
+      return read.requireDone
+        ? translate("tasks:activity.dependencyAddedDone", { task })
+        : translate("tasks:activity.dependencyAdded", { task });
+    case "required":
+      return read.requireDone
+        ? translate("tasks:activity.dependencyRequireDone", { task })
+        : translate("tasks:activity.dependencyRequireAny", { task });
+    case "removed":
+      return translate("tasks:activity.dependencyRemoved", { task });
+    case "deleted":
+      return translate("tasks:activity.dependencyDeleted", { task });
+    case "blocked":
+      return translate("tasks:activity.dependencyBlocked", { task });
+    case "unblocked":
+      return translate("tasks:activity.dependencyUnblocked");
+  }
+}
+
 /** One line for an event that is not a comment. */
 function describe(a: TaskActivity): React.ReactNode {
   const d = a.data;
@@ -799,6 +828,15 @@ function describe(a: TaskActivity): React.ReactNode {
       return translate("tasks:activity.turnStopped", {
         reason: a.body ? `：${a.body}` : "",
       });
+    case "dependency":
+      return dependencyLine(a);
+    // The graph's entries say themselves, in the host's words.
+    case "parent":
+    case "subtask":
+      return a.body;
+    default:
+      // A kind from a newer host: what it said, if anything.
+      return a.body;
   }
 }
 
@@ -1279,7 +1317,7 @@ function LiveRun({ task, run }: { task: TaskDetail; run: TaskRun }) {
         {queued && run.queueReason ? (
           <span className="text-muted-foreground">
             {" · "}
-            {queueReasonLabel(run.queueReason, machine)}
+            {queueReasonLabel(run.queueReason, machine, waitingNumbers(task))}
           </span>
         ) : null}
       </span>

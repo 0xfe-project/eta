@@ -22,7 +22,11 @@ import type { SshTransport } from "@eta/ssh";
  * - **A run is a row, and the table is the queue.** A run starts when its machine is online with a
  *   free slot (`machine.maxActiveRuns` runs at once) and the task's previous run has ended; until
  *   then it says which it waits for. `pump` looks at the queue and is called by everything that can
- *   change the answer (a run asked for, a run ended, a machine came up, the limit moved).
+ *   change the answer (a run asked for, a run ended, a machine came up, the limit moved, a task's
+ *   status or dependencies moved).
+ * - **A run that starts the work waits for the task's dependencies** (its first run, a rerun:
+ *   `waitsForDeps`). Whether they are resolved is the graph's answer (`graph.ts`), asked through the
+ *   board; a comment's wake and a mentioned agent's answer do not wait for them.
  * - **A run ends with `finish_task`.** The executor calls it to say what it did: the task moves to
  *   review (or `blocked`), its summary is a comment, and the same words are posted in the
  *   conversation the task came from, as the agent. A run that goes quiet without it is reminded
@@ -252,6 +256,9 @@ export class TaskRunner implements TaskRuns {
   readonly #work = new Set<Promise<void>>();
   #attached = false;
   #closing = false;
+  /** `pump` is going; a call from inside it (a run ended, a task was blocked) asks for one more pass. */
+  #pumping = false;
+  #again = false;
 
   constructor(deps: TaskRunnerDeps) {
     this.#deps = deps;
@@ -338,6 +345,11 @@ export class TaskRunner implements TaskRuns {
   stop(taskId: string, why: string): void {
     this.#forget(taskId);
     for (const run of this.#deps.runs.openOf(taskId)) this.#stop(run, why);
+  }
+
+  withdraw(taskId: string): void {
+    for (const run of this.#deps.runs.openOf(taskId))
+      if (run.status === "queued" && run.waitsForDeps) this.#stop(run);
   }
 
   active(taskId: string): boolean {
@@ -647,7 +659,16 @@ export class TaskRunner implements TaskRuns {
         ? project.machineId
         : (this.#deps.engine.machineFor(runner, project.machineId)?.id ??
           project.machineId);
-    const run = runs.create(task.id, machineId, continued?.id ?? null, agentId);
+    // The executor's run that starts the work (a first run, a rerun) waits for the task's
+    // dependencies; one woken by a comment carries on work that started, and a mentioned agent
+    // only answers.
+    const run = runs.create(
+      task.id,
+      machineId,
+      continued?.id ?? null,
+      agentId,
+      agentId === null && options.continues !== true,
+    );
     board.runEvent(task.id, {
       kind: "run_queued",
       runId: run.id,
@@ -657,19 +678,53 @@ export class TaskRunner implements TaskRuns {
     return runs.get(run.id)!;
   }
 
-  /** Start the runs that can start. Cheap, and safe to call whenever anything may have changed. */
+  /**
+   * Start the runs that can start. Cheap, and safe to call whenever anything may have changed,
+   * from inside a pass too: such a call (a run withdrawn, a task blocked) asks for one more pass
+   * after this one rather than a pass inside it.
+   */
   pump(): void {
     if (!this.#attached || this.#closing) return;
+    if (this.#pumping) {
+      this.#again = true;
+      return;
+    }
+    this.#pumping = true;
+    try {
+      do {
+        this.#again = false;
+        this.#pass();
+      } while (this.#again && this.#attached && !this.#closing);
+    } finally {
+      this.#pumping = false;
+    }
+  }
+
+  /**
+   * One look at the queue, oldest first. The order of the reasons is the order of the questions: is
+   * the machine there, is the task's lane free, is what the task waits for resolved, is there a
+   * slot. A run that waits for its dependencies takes no slot, so a later run whose are resolved
+   * starts in its place.
+   */
+  #pass(): void {
     // A comment is such a moment: it is a request for the executor to look at the task again.
     this.#wakeWaiting();
     const { runs, machines, board } = this.#deps;
+    const graph = board.graph();
     for (const run of runs.queued()) {
       const machine =
         run.machineId === null ? undefined : machines.get(run.machineId);
+      const gate = run.waitsForDeps ? graph.gate(run.taskId) : undefined;
+      if (gate?.state === "broken") {
+        // It will never start on its own: the board blocks the task and withdraws this run.
+        board.blockOnCancelled(run.taskId);
+        continue;
+      }
       let reason: TaskQueueReason | null = null;
       if (machine === undefined || machine.status !== "online")
         reason = "machine_offline";
       else if (runs.busy(run)) reason = "task_busy";
+      else if (gate?.state === "waiting") reason = "waiting_deps";
       else if (runs.activeOn(machine.id) >= machine.maxActiveRuns)
         reason = "machine_full";
       if (reason !== null || machine === undefined) {
@@ -689,13 +744,19 @@ export class TaskRunner implements TaskRuns {
     }
   }
 
-  #stop(run: RunRecord, why: string): void {
+  /**
+   * Stop a run, saying why. A run withdrawn by the board has no words of its own (`why` absent):
+   * the board's entry next to it says why, in the reader's language.
+   */
+  #stop(run: RunRecord, why?: string): void {
     const live = this.#live.get(run.id);
     if (live === undefined) {
       // It never started: it never will. Nothing is going to read what was left for it, and the
       // user asked for the task to stop, so the words stay on the timeline and the queue is clear.
       this.#waiting.delete(laneKey(run));
-      if (this.#deps.runs.finish(run.id, "interrupted", why) !== undefined) {
+      if (
+        this.#deps.runs.finish(run.id, "interrupted", why ?? null) !== undefined
+      ) {
         this.#deps.board.runEvent(run.taskId, {
           kind: "run_interrupted",
           runId: run.id,
@@ -823,15 +884,22 @@ export class TaskRunner implements TaskRuns {
       : project.path;
     let branch: string | null = null;
     if (task.workspaceMode === "worktree" && !elsewhere) {
+      // The base is worked out now: one the task depends on may be done, and its branch gone.
+      const { base, why } = board.baseFor(task);
       const made = await prepareWorktree(this.#deps.transport(machine), {
         projectPath: project.path,
         projectId: project.id,
         number: task.number,
-        base: task.baseBranch,
+        base,
         root:
           machine.kind === "primary"
             ? shellQuote(this.#deps.dataDir)
             : '"$HOME/.eta"',
+      }).catch((error: unknown) => {
+        if (why === undefined) throw error;
+        throw new Error(
+          `The worktree could not be made: ${why}. (${messageOf(error)})`,
+        );
       });
       cwd = made.cwd;
       branch = made.branch;

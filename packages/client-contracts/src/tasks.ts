@@ -60,8 +60,36 @@ export const TASK_RUN_STATUSES = [
 ] as const;
 export type TaskRunStatus = (typeof TASK_RUN_STATUSES)[number];
 
-/** Why a queued run waits: the task's previous run, its machine's limit, or the machine being away. */
-export type TaskQueueReason = "task_busy" | "machine_full" | "machine_offline";
+/**
+ * Why a queued run waits: the task's previous run, the tasks it depends on (`dependsOn` says which
+ * are not resolved yet), its machine's limit, or the machine being away.
+ */
+export const TASK_QUEUE_REASONS = [
+  "task_busy",
+  "waiting_deps",
+  "machine_full",
+  "machine_offline",
+] as const;
+export type TaskQueueReason = (typeof TASK_QUEUE_REASONS)[number];
+
+/**
+ * Where one dependency stands: the task it waits for is in review or done (`resolved`; done only
+ * when the edge requires it), not yet (`waiting`), or was cancelled and never will be
+ * (`cancelled`: the user decides).
+ */
+export type TaskDependencyState = "resolved" | "waiting" | "cancelled";
+
+/** One edge of the task graph, from the side of the task that reads it. */
+export interface TaskDependencyView {
+  /** The task at the other end: the one waited for, or the one waiting. */
+  taskId: string;
+  number: number;
+  title: string;
+  status: BoardTaskStatus;
+  /** Only `done` resolves this edge; else `in_review` does too. */
+  requireDone: boolean;
+  state: TaskDependencyState;
+}
 
 /** Who did something to a task. `agentId` is set for an agent (which may have been deleted since). */
 export interface TaskActor {
@@ -93,6 +121,11 @@ export interface BoardTaskView {
   captainMessageId?: string | null;
   /** The status of its newest run; null before the first. */
   runStatus: TaskRunStatus | null;
+  /**
+   * The tasks it waits for: its first run (and a rerun) starts only once every one is resolved.
+   * Absent from a host older than dependencies, which is none.
+   */
+  dependsOn?: TaskDependencyView[];
   comments: number;
   createdAt: number;
   /** Moves on every change, comment and artifact: the board is ordered by it, newest first. */
@@ -163,6 +196,8 @@ export interface BoardTaskDetail extends BoardTaskView {
   originConversationId: string | null;
   /** Oldest first. */
   runs: TaskRunView[];
+  /** The tasks that wait for this one; `state` is where each of their edges to it stands. */
+  dependents?: TaskDependencyView[];
 }
 
 /**
@@ -171,7 +206,15 @@ export interface BoardTaskDetail extends BoardTaskView {
  * `from` and `to` (conversation ids or null); `comment` has its text in `body`; `description` says
  * only that it changed; `artifact` has `artifactId`, `title` and `version`. The `run_*` kinds are a
  * run's life (`runId` names it): `run_started` has the `workspace` it works in, `run_failed` and
- * `run_interrupted` say why in `body`.
+ * `run_interrupted` say why in `body`. `dependency` is the graph: `action` (`added`, `removed`,
+ * `required` when `requireDone` changed, `deleted` when the task waited for was deleted, `blocked`
+ * when it was cancelled and the task stopped, `unblocked` when that was undone), and the task at the
+ * other end as `taskId`, `number`, `title`, with `requireDone`. It has no `body`: each reader says
+ * it in its own language from `data` (`dependencyEntry`); an entry written before that has its
+ * words, in English, in `body`.
+ * A `status` entry the system wrote because of a cancelled dependency has `reason:
+ * "dependency_cancelled"`: only such a block is undone by the system.
+ * `parent` and `subtask` are written by the subtasks part of the graph.
  */
 export type TaskActivityKind =
   | "created"
@@ -186,7 +229,51 @@ export type TaskActivityKind =
   | "run_completed"
   | "run_failed"
   | "run_interrupted"
-  | "run_nudged";
+  | "run_nudged"
+  | "dependency"
+  | "parent"
+  | "subtask";
+
+/** What a `dependency` entry's `data` says, when it says it (see `TaskActivityKind`). */
+export interface TaskDependencyEntry {
+  action:
+    | "added"
+    | "removed"
+    | "required"
+    | "deleted"
+    | "blocked"
+    | "unblocked";
+  /** The task at the other end; absent for `unblocked`. */
+  number: number | null;
+  title: string;
+  requireDone: boolean;
+}
+
+const DEPENDENCY_ACTIONS: readonly string[] = [
+  "added",
+  "removed",
+  "required",
+  "deleted",
+  "blocked",
+  "unblocked",
+];
+
+/** A `dependency` entry's `data` read, or undefined when it is not one this reader knows. */
+export function dependencyEntry(
+  data: Record<string, unknown>,
+): TaskDependencyEntry | undefined {
+  const action = data.action;
+  if (typeof action !== "string" || !DEPENDENCY_ACTIONS.includes(action))
+    return undefined;
+  const number = typeof data.number === "number" ? data.number : null;
+  if (number === null && action !== "unblocked") return undefined;
+  return {
+    action: action as TaskDependencyEntry["action"],
+    number,
+    title: typeof data.title === "string" ? data.title : "",
+    requireDone: data.requireDone === true,
+  };
+}
 
 export interface TaskActivityView {
   id: string;
@@ -236,6 +323,11 @@ export interface TaskDraftData {
    * proposing agent, which executes it itself, as it always was.
    */
   assignee?: string | undefined;
+  /**
+   * The tasks it will wait for, checked and resolved to ids when it was drafted and checked again
+   * when it is confirmed. Absent is none, as it always was.
+   */
+  dependsOn?: { taskId: string; requireDone: boolean }[] | undefined;
   /** The Captain instruction that authorized this draft, when it came from one. */
   captainAssignmentId?: string | undefined;
   captainMessageId?: string | undefined;
@@ -298,6 +390,8 @@ export const TASK_ACTIONS = [
   "confirmDraft",
   "interrupt",
   "rerun",
+  "addDependency",
+  "removeDependency",
 ] as const;
 export type TaskAction = (typeof TASK_ACTIONS)[number];
 
@@ -357,6 +451,13 @@ export interface TaskArgs {
    * carry on where the executor left off, comment instead.
    */
   rerun: { taskId: string };
+  /**
+   * `taskId` waits for `dependsOn` (an id or `#N`). Refused when it would close a cycle (the error
+   * names it), when `dependsOn` is cancelled, or is the task itself. Adding an edge that is there
+   * changes only its `requireDone`.
+   */
+  addDependency: { taskId: string; dependsOn: string; requireDone?: boolean };
+  removeDependency: { taskId: string; dependsOn: string };
 }
 export interface TaskResults {
   update: { task: BoardTaskDetail };
@@ -366,6 +467,8 @@ export interface TaskResults {
   confirmDraft: { task: BoardTaskDetail; message: MessageView };
   interrupt: { task: BoardTaskDetail };
   rerun: { task: BoardTaskDetail; run: TaskRunView };
+  addDependency: { task: BoardTaskDetail };
+  removeDependency: { task: BoardTaskDetail };
 }
 export type TaskCall = {
   [A in TaskAction]: Omit<CallFrame, "target" | "action" | "args"> & {

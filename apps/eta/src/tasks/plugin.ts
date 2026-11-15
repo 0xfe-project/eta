@@ -129,6 +129,27 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
           return { result: { task, run: view } };
         }),
 
+        wire.handle("tasks", "addDependency", (call) => {
+          const args = new Args(call);
+          const task = board.addDependency(
+            args.string("taskId"),
+            args.string("dependsOn"),
+            { requireDone: args.optionalBoolean("requireDone") },
+            USER,
+          );
+          return { result: { task } };
+        }),
+
+        wire.handle("tasks", "removeDependency", (call) => {
+          const args = new Args(call);
+          const task = board.removeDependency(
+            args.string("taskId"),
+            args.string("dependsOn"),
+            USER,
+          );
+          return { result: { task } };
+        }),
+
         wire.handle("tasks", "confirmDraft", (call) => {
           const args = new Args(call);
           return {

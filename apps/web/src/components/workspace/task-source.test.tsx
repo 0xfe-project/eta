@@ -52,6 +52,6 @@ describe("任务详情的来源", () => {
     const labels = [...container.querySelectorAll("dt")].map(
       (dt) => dt.textContent,
     );
-    expect(labels).toEqual(["状态", "执行者", "工作区", "运行"]);
+    expect(labels).toEqual(["状态", "执行者", "工作区", "运行", "依赖"]);
   });
 });
