@@ -9,6 +9,10 @@ describe("工具调用的一句话摘要", () => {
     expect(summarizeArgs({ path: "src/app.ts", offset: 10 })).toBe(
       "src/app.ts",
     );
+    // 组件的 JSONL 写在前面也不该占这一行。
+    expect(
+      summarizeArgs({ spec: '{"op":"add","path":"/root"}', title: "发布总结" }),
+    ).toBe("发布总结");
   });
 
   it("没有偏好字段时取第一个字符串值", () => {

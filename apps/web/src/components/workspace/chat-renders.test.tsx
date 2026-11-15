@@ -549,6 +549,91 @@ describe("a reply that is writing", () => {
     expect(fold.querySelectorAll('[data-testid="ref"]')).toHaveLength(0);
   });
 
+  it("draws a widget a finished reply kept, in a frame with no origin of its own", async () => {
+    const user = row({ text: "构建情况" });
+    const reply = row({
+      author: "agent",
+      agentId: AGENT,
+      replyToId: user.id,
+      status: "done",
+      text: "如上",
+      data: {
+        activity: [
+          {
+            id: "w1",
+            name: "show_widget",
+            // A row cuts long arguments: the code it draws is the one in `details`.
+            input: { title: "构建", widget_code: "<div>…" },
+            status: "completed",
+            details: {
+              title: "构建",
+              widget_code: "<h2>构建</h2><p>通过率 98%</p>",
+            },
+          },
+        ],
+      },
+    });
+    history = [user, reply];
+    const { container } = await start();
+    await flush();
+    const widget = container.querySelector(".turn-tasks figure")!;
+    expect(widget.getAttribute("aria-label")).toBe("构建");
+    expect(widget.getAttribute("aria-busy")).toBe("false");
+    expect(widget.closest(".process-fold")).toBeNull();
+    const frame = widget.querySelector("iframe")!;
+    expect(frame.getAttribute("sandbox")).toBe("allow-scripts");
+    expect(frame.getAttribute("srcdoc")).toContain("connect-src 'none'");
+  });
+
+  it("draws a widget while its call is still streaming", async () => {
+    const user = row({ text: "构建情况" });
+    const reply = row({
+      author: "agent",
+      agentId: AGENT,
+      replyToId: user.id,
+      status: "working",
+    });
+    history = [user, reply];
+    const { container } = await start(undefined, (fake) => {
+      fake.target("sessions.s1", {
+        core: {
+          session: "s1",
+          running: true,
+          streaming: {
+            role: "assistant",
+            timestamp: 2,
+            content: [
+              {
+                type: "toolCall",
+                id: "w1",
+                name: "show_widget",
+                arguments: {
+                  title: "构建",
+                  widget_code: "<h2>构建</h2><p>通过",
+                },
+              },
+            ],
+          },
+        },
+        transcript: {
+          messages: [
+            {
+              entryId: "e1",
+              seq: 1,
+              at: 1,
+              message: { role: "user", content: "构建情况", timestamp: 1 },
+            },
+          ],
+        },
+      });
+      fake.handle("sessions.resync", () => ({}));
+    });
+    await flush(80);
+    const widget = container.querySelector(".turn-tasks figure")!;
+    expect(widget.getAttribute("aria-label")).toBe("构建");
+    expect(widget.getAttribute("aria-busy")).toBe("true");
+  });
+
   it("draws a publish's card beside the answer while the reply is still writing", async () => {
     const user = row({ text: "发布一个页面" });
     const reply = row({
