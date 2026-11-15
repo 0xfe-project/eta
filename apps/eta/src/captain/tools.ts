@@ -195,18 +195,36 @@ export function captainSessionTools(
     const listTasks = defineTool({
       name: "captain_list_tasks",
       description:
-        "List the task board with status, executor, assignment source and run status.",
+        "List the task board with status, executor, assignment source and run status, and the task graph: parentId and subtasks (done/total) for the tree, dependsOn (each edge with its state and requireDone) and waitingOn (what its work still waits for, inherited from parents too, `via` the parent). `under` lists one tree: the task and everything below it.",
       parameters: Type.Object({
         status: Type.Optional(Type.String()),
+        under: Type.Optional(
+          Type.String({ description: "A task's number (#12) or id" }),
+        ),
       }),
       execute(args) {
+        const root =
+          args.under === undefined ? undefined : deps.board.find(args.under);
+        if (args.under !== undefined && root === undefined)
+          return toolError("No such task.");
+        const tree =
+          root === undefined
+            ? undefined
+            : new Set([
+                root.id,
+                ...deps.board
+                  .graph()
+                  .descendantsOf(root.id)
+                  .map((task) => task.id),
+              ]);
         return text(
           json(
             deps.board
               .list()
               .filter(
                 (task) =>
-                  args.status === undefined || task.status === args.status,
+                  (args.status === undefined || task.status === args.status) &&
+                  (tree === undefined || tree.has(task.id)),
               )
               .map((task) => redactValue(task)),
           ),
@@ -217,7 +235,7 @@ export function captainSessionTools(
     const readTask = defineTool({
       name: "captain_read_task",
       description:
-        "Read one task, its workspace, runs and full activity timeline. Assignment provenance is included.",
+        "Read one task, its workspace, runs and full activity timeline. Assignment provenance is included, and its place in the task graph: ancestors (top first) and children, dependsOn and dependents, waitingOn.",
       parameters: Type.Object({ taskId: Type.String() }),
       execute(args) {
         const task = deps.board.find(args.taskId);
@@ -327,7 +345,7 @@ export function captainSessionTools(
     const assign = defineTool({
       name: "assign_in_group",
       description:
-        "Send a visible Captain instruction to one or more members of an existing group. With no agentIds, speak to the group's steward, like a user message without mentions. This only chats and authorizes work; the target agents create and execute their own tasks.",
+        "Send a visible Captain instruction to one or more members of an existing group. With no agentIds, speak to the group's steward, like a user message without mentions. This only chats and authorizes work; the target agents create and execute their own tasks. For staged work, ask for a task tree: a parent task per stage, subtasks under it (create_task parent), and dependsOn between them (a later stage depends on the earlier stage's parent; requireDone when it must wait until the earlier work is done, not only in review).",
       parameters: Type.Object({
         conversationId: Type.String(),
         text: Type.String(),
