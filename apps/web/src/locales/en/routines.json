@@ -43,7 +43,8 @@
   "runStatus": {
     "sent": "Sent",
     "nothingNew": "Nothing new",
-    "skipped": "Skipped"
+    "skipped": "Skipped",
+    "skippedCaptainOff": "Skipped: Captain was off"
   },
   "reports": {
     "previous": "Previous report",

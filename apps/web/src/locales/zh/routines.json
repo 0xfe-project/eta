@@ -43,7 +43,8 @@
   "runStatus": {
     "sent": "已发送",
     "nothingNew": "没有新内容",
-    "skipped": "已跳过"
+    "skipped": "已跳过",
+    "skippedCaptainOff": "已跳过：Captain 已关闭"
   },
   "reports": {
     "previous": "上一份报告",

@@ -393,6 +393,7 @@ function RunMoment({
         </button>
       ) : (
         <p
+          title={run.error ?? undefined}
           className={cn(
             "truncate",
             run.status === "failed"
@@ -400,7 +401,13 @@ function RunMoment({
               : "text-muted-foreground",
           )}
         >
-          {run.error ?? runStatusLabels[run.status]}
+          {
+            // A skipped run is always Captain being off: said in the reader's language, with the
+            // host's own words a hover away.
+            run.status === "skipped"
+              ? translate("routines:runStatus.skippedCaptainOff")
+              : (run.error ?? runStatusLabels[run.status])
+          }
         </p>
       )}
       {run.feedback.map((feedback) => (

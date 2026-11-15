@@ -269,7 +269,8 @@ describe("a routine's page", () => {
     );
     const { container } = await mount(<RoutineBoard />);
     await flush();
-    expect(container.textContent).toContain("Captain is off");
+    expect(container.textContent).toContain("已跳过：Captain 已关闭");
+    expect(container.querySelector('[title^="Captain is off"]')).not.toBeNull();
   });
 
   it("restores an old version of the brief as the newest", async () => {
