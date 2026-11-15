@@ -32,5 +32,40 @@
     "title": "这个版本不能在这里打开",
     "description": "可以下载 ZIP 查看内容。"
   },
-  "gone": "这个 Artifact 已不存在"
+  "gone": "这个 Artifact 已不存在",
+  "list": {
+    "searchPlaceholder": "搜索标题",
+    "searchLabel": "搜索产物标题",
+    "clearSearch": "清空搜索",
+    "all": "全部",
+    "publishers": "发布者",
+    "sort": "排序",
+    "sortBy": {
+      "updated": "最近更新",
+      "created": "最近创建",
+      "title": "标题 A→Z"
+    },
+    "only": "只看",
+    "withTask": "关联了任务的",
+    "revised": "改过不止一版的",
+    "filter": "筛选",
+    "found": "{{total}} 个里找到 {{count}} 个",
+    "clear": "清除筛选",
+    "noMatch": "没有找到匹配『{{query}}』的产物",
+    "noFilterMatch": "没有符合筛选的产物",
+    "groups": {
+      "today": "今天",
+      "yesterday": "昨天",
+      "earlier": "更早"
+    },
+    "range": "{{first}}–{{last}} / {{total}}",
+    "pagination": "分页",
+    "previous": "上一页",
+    "next": "下一页",
+    "page": "第 {{page}} 页",
+    "version": "v{{version}}",
+    "openTask": "打开任务 #{{number}}",
+    "recent": "共 {{total}} 个，这里只列最近 {{shown}} 个",
+    "viewAll": "查看全部 →"
+  }
 }

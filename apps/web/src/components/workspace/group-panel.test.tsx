@@ -56,6 +56,9 @@ function Panel() {
   );
 }
 
+/** The query string of the last panel mounted. */
+let searchOf = () => "";
+
 async function mount(path = "/?group=g1") {
   const router = createRouter({
     routeTree: createRootRoute({
@@ -69,6 +72,7 @@ async function mount(path = "/?group=g1") {
   });
   const { container } = await render(<RouterProvider router={router} />);
   await act(async () => router.load());
+  searchOf = () => router.state.location.searchStr;
   return container;
 }
 
@@ -167,11 +171,12 @@ it("orders 任务 by the last move made, and leaves none out", async () => {
   expect(countOf(container, "任务")).toBe("任务6");
 });
 
-it("scrolls 任务 and 产物 in lists of one height, and hands the rest on to the panel", async () => {
+it("scrolls 任务 in a list of its own height, and hands the rest on to the panel", async () => {
   // Layout itself is measured in a real browser; what happy-dom can hold in place is the shape that
   // broke the panel. The pane rule `[class*="overflow-y-auto"]` sets `overscroll-behavior: none`,
   // and any element under it that keeps it stops the wheel and the finger right there, even with
   // nothing to scroll: so a list opts out, and `WorkspacePanel` is the only other scroller.
+  // 产物 has no scroller at all: it lists a few and links to the rest.
   surfaceHost({
     conversations: [group],
     tasks: [task(1), task(2)],
@@ -180,17 +185,57 @@ it("scrolls 任务 and 产物 in lists of one height, and hands the rest on to t
     ],
   });
   const container = await mount();
-  const lists = ["任务", "产物"].map(
-    (section) =>
-      container.querySelector(`section[aria-label="${section}"] ul`)!,
-  );
+  const tasks = container.querySelector('section[aria-label="任务"] ul')!;
   const scrollers = [
     ...container.querySelectorAll('[class*="overflow-y-auto"]'),
   ];
-  expect(scrollers).toEqual(lists);
-  expect(lists[0].className).toBe(lists[1].className);
-  expect(lists[0].className).toContain("max-h-");
-  expect(lists[0].classList.contains("overscroll-y-auto")).toBe(true);
+  expect(scrollers).toEqual([tasks]);
+  expect(tasks.className).toContain("max-h-");
+  expect(tasks.classList.contains("overscroll-y-auto")).toBe(true);
+  const artifacts = container.querySelector('section[aria-label="产物"] ul')!;
+  expect(artifacts.className).not.toContain("max-h-");
+});
+
+const artifacts = (count: number) =>
+  Array.from({ length: count }, (_, i) =>
+    artifactView({
+      id: `a${i}`,
+      title: `产物${i}`,
+      conversationId: "g1",
+      updatedAt: 1000 + i,
+    }),
+  );
+
+it("lists the five most recently updated artifacts, and no more", async () => {
+  surfaceHost({ conversations: [group], artifacts: artifacts(5) });
+  const container = await mount();
+  expect(rowsOf(container, "产物")).toHaveLength(5);
+  expect(countOf(container, "产物")).toBe("产物5");
+  // Five or fewer: nothing more to see, so no way to see it.
+  expect(container.textContent).not.toContain("查看全部");
+});
+
+it("past five, says how many there are and switches to the 产物 tab for the rest", async () => {
+  surfaceHost({ conversations: [group, other], artifacts: artifacts(12) });
+  const container = await mount();
+  const rows = rowsOf(container, "产物");
+  // Latest first, whatever the 产物 tab is filtered to.
+  expect(rows.map((row) => row.match(/产物\d+/)?.[0])).toEqual([
+    "产物11",
+    "产物10",
+    "产物9",
+    "产物8",
+    "产物7",
+  ]);
+  expect(countOf(container, "产物")).toBe("产物12");
+  const section = container.querySelector('section[aria-label="产物"]')!;
+  expect(section.textContent).toContain("共 12 个，这里只列最近 5 个");
+  const viewAll = [...section.querySelectorAll("button")].find((b) =>
+    b.textContent?.includes("查看全部"),
+  )!;
+  await act(async () => viewAll.click());
+  await flush();
+  expect(new URLSearchParams(searchOf()).get("view")).toBe("artifacts");
 });
 
 it("draws its cards as flat rows: the list rules them, not a frame each", async () => {

@@ -3,13 +3,12 @@ import type {
   ConversationSummary,
   MemberStatus,
 } from "@eta/client-contracts";
-import { AppWindowIcon } from "@phosphor-icons/react/AppWindow";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Empty, Loading } from "@/components/states";
+import { Loading } from "@/components/states";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,7 +39,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { agentName } from "@/queries/agents";
-import { useArtifacts } from "@/queries/artifacts";
 import { useCaptain } from "@/queries/captain";
 import {
   useConversation,
@@ -666,46 +664,5 @@ export function GroupMembers() {
         )}
       />
     </section>
-  );
-}
-
-/** A group chat's Artifacts tab: what its agents published in it. */
-export function GroupArtifacts() {
-  const { t: translateText } = useTranslation([
-    "chat",
-    "agents",
-    "artifacts",
-    "common",
-    "settings",
-  ] as const);
-  const { current: group } = useGroups();
-  const { artifacts: all, loaded } = useArtifacts();
-  if (!group) return null;
-  const artifacts = all.filter((a) => a.conversationId === group.id);
-  if (!loaded) return <Loading rows={2} />;
-  if (!artifacts.length)
-    return (
-      <Empty
-        icon={AppWindowIcon}
-        title={translateText("artifacts:empty.title")}
-      >
-        {translateText("artifacts:empty.description")}
-      </Empty>
-    );
-  return (
-    <ul aria-label="Artifacts" className="-mx-3 divide-y divide-border">
-      {artifacts.map((a) => (
-        <li key={a.id}>
-          <ActivityRefCard
-            value={{
-              kind: "artifact",
-              id: a.id,
-              title: a.title,
-              number: a.versions[0]?.number,
-            }}
-          />
-        </li>
-      ))}
-    </ul>
   );
 }

@@ -4,8 +4,9 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { useGroupArtifacts } from "./artifact-filter";
+import { GroupArtifacts } from "./artifact-list";
 import { GroupPanel } from "./group-panel";
-import { GroupArtifacts } from "./groups";
 import { Inbox } from "./inbox";
 import { Tasks } from "./tasks";
 import { useAttention } from "./use-attention";
@@ -39,6 +40,7 @@ export function WorkspacePanel({
   ] as const);
   const pending = useAttention().total;
   const { current: group } = useGroups();
+  const artifactCount = useGroupArtifacts(group?.id).artifacts.length;
   const tabs = usePanelViews();
   const view = tabs.some((tab) => tab.value === linked)
     ? linked
@@ -82,6 +84,9 @@ export function WorkspacePanel({
               {value === "inbox" && pending ? (
                 <span className="tabular-nums">{pending}</span>
               ) : null}
+              {value === "artifacts" && artifactCount ? (
+                <span className="tabular-nums">{artifactCount}</span>
+              ) : null}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -101,15 +106,27 @@ export function WorkspacePanel({
         </div>
       </div>
       {/* The context tab's sections draw their own edge-to-edge rules and pad themselves; the
-          other tabs (and the task detail's sticky header, which bleeds back over it) assume p-3. */}
+          other tabs (and the task detail's sticky header, which bleeds back over it) assume p-3.
+          The artifacts tab lays itself out in three: its search on top and its pages at the
+          bottom stay put, and only the list between them scrolls. */}
       <div
         className={cn(
-          "min-h-0 flex-1 overflow-y-auto",
-          view === "context" ? "p-0" : "p-3",
+          "min-h-0 flex-1",
+          view === "artifacts"
+            ? "flex flex-col overflow-hidden"
+            : "overflow-y-auto",
+          view === "context" || view === "artifacts" ? "p-0" : "p-3",
         )}
       >
         {tabs.map(({ value }) => (
-          <TabsContent key={value} value={value} className="mt-0">
+          <TabsContent
+            key={value}
+            value={value}
+            className={cn(
+              "mt-0",
+              value === "artifacts" && "flex min-h-0 flex-col",
+            )}
+          >
             {/* A group's panel is one column of blocks, not a tab per half of it. */}
             {value === "context" ? <GroupPanel group={group} /> : null}
             {value === "artifacts" ? <GroupArtifacts /> : null}
