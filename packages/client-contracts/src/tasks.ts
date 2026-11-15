@@ -525,9 +525,11 @@ export interface TaskFields {
 
 export interface TaskArgs {
   /**
-   * Moving a task to `done` or `cancelled` stops its runs. There is no `create`: tasks are made
-   * by agents, with their tools, and confirmed by the user (`confirmDraft`).
+   * The user's own tasks, from the page's form: the call is the user pressing "Create", the
+   * confirmation an agent's draft waits for (`confirmDraft`). Agents cannot make tasks this way.
    */
+  create: CreateTasksArgs;
+  /** Moving a task to `done` or `cancelled` stops its runs. */
   update: TaskFields & { taskId: string };
   /**
    * A comment on a task is always read. A run of the task is going: it goes into that run's session
@@ -586,6 +588,7 @@ export interface TaskArgs {
   setParent: { taskId: string; parent: string | null };
 }
 export interface TaskResults {
+  create: { tasks: BoardTaskDetail[] };
   update: { task: BoardTaskDetail };
   comment: { task: BoardTaskDetail; activity: TaskActivityView };
   delete: { taskId: string };

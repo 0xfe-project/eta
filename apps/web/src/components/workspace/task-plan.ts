@@ -177,10 +177,34 @@ export function edgeRefusal(
     descendantsOf(taskId, all).some((t) => t.id === dependsOnId)
   )
     return "tree";
-  const own = (id: string) => [
-    ...(byId.get(id)?.dependsOn ?? []).map((e) => e.taskId),
-    ...(id === taskId ? [dependsOnId] : []),
-  ];
+  const withEdge = all.map((t) =>
+    t.id === taskId
+      ? {
+          ...t,
+          dependsOn: [
+            ...(t.dependsOn ?? []),
+            {
+              taskId: dependsOnId,
+              number: target.number,
+              title: target.title,
+              status: target.status,
+              requireDone: false,
+              state: "waiting" as const,
+            },
+          ],
+        }
+      : t,
+  );
+  if (hasCycle(withEdge)) return "cycle";
+  return undefined;
+}
+
+/**
+ * Whether the board waits in a circle, counted as the host counts it: a task waits for what its
+ * parents wait for, and waiting for a parent is waiting for all of its subtasks.
+ */
+export function hasCycle(all: readonly Task[]): boolean {
+  const byId = new Map(all.map((t) => [t.id, t]));
   const hasChildren = (id: string) => all.some((t) => t.parentId === id);
   // What a task really waits for: the leaves under each task its line waits for.
   const waitsFor = (id: string): string[] => {
@@ -188,7 +212,7 @@ export function edgeRefusal(
     if (at === undefined) return [];
     const held = new Set<string>();
     for (const owner of [at, ...ancestorsOf(at, all)])
-      for (const dep of own(owner.id)) held.add(dep);
+      for (const dep of owner.dependsOn ?? []) held.add(dep.taskId);
     const out = new Set<string>();
     for (const dep of held) {
       const leaves = descendantsOf(dep, all).filter((t) => !hasChildren(t.id));
@@ -208,11 +232,16 @@ export function edgeRefusal(
     done.add(id);
     return false;
   };
-  // The board had no cycle before, so any found now goes through the new edge.
-  for (const start of [taskId, ...all.map((t) => t.id)])
-    if (walk(start)) return "cycle";
-  return undefined;
+  return all.some((t) => walk(t.id));
 }
+
+/** Every task under it, at any depth (exported for the picker). */
+export const descendantsOfTask = (id: string, all: readonly Task[]) =>
+  descendantsOf(id, all);
+
+/** Its parent, the parent's parent and so on, nearest first (exported for the picker). */
+export const ancestorsOfTask = (task: Task, all: readonly Task[]) =>
+  ancestorsOf(task, all);
 
 // --- a parent's progress ------------------------------------------------------------
 
