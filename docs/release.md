@@ -31,12 +31,15 @@ Hosts that switched pre-releases on upgrade to them, so a pre-release tag is a r
 - **Pre-release tags are cut from `main` only**, like full releases.
 - **A migration that is in any `v*` tag, pre-release tags included, is never renamed or edited. To change it, add a new migration.** `upgrade.ts` holds the new build's `--migrations` against the ids the database has already run and refuses the upgrade when the database has one the build does not carry; `--force` does not get past that. A renamed migration therefore leaves every host that installed the beta unable to upgrade, ever. A migration whose content changed passes that check, but it does not run again, so the database quietly stops matching the code.
 
+`release.yml` enforces the second rule: its `migrations` job compares `apps/eta/src/migrations/` with the previous `v*` tag (pre-release tags included) and fails the release if a file there was renamed, removed or changed (`scripts/check-migrations-frozen.sh`). Run it by hand before tagging: `scripts/check-migrations-frozen.sh <previous tag>`.
+
 Known gap: `upgrade-cross.yml` only tests full release → new version (`from` is the highest earlier full release). Pre-release → pre-release (rc.1 → rc.2) and pre-release → its full release (rc → 0.3.0) are not covered by any workflow; run `upgrade-cross.yml` by hand with `-f from=<rc>` when it matters.
 
 Pipeline order:
 
 1. `prepare`: read the version from the tag, open a draft Release.
 2. `check`: runs alongside the build, the full `bun run check`, not `--affected`. If it fails nothing is published and the draft stays.
+   `migrations` runs alongside it too: every migration in the previous `v*` tag (pre-release tags included) must be unchanged, see "Pre-releases".
 3. `build`: each platform on its own runner, clean checkout, frozen lockfile build. The host is run separately once to check `--version`, `/up` and the page, and only then uploaded to the draft. The Linux one also writes `eta-host.json` (`eta-host --version --json`) and uploads it too.
 4. `cross`: `upgrade-cross.yml` upgrades from the previous stable release to this draft on Linux, see "Cross-version upgrade test" below. With no previous release, or if the previous one is older than the earliest seed (e.g. v0.1.0, which cannot self-upgrade), it is skipped and noted in the run summary.
 5. `publish`: only runs if everything before it succeeded, computes `SHA256SUMS` from the draft, then publishes. If any step fails the Release stays a draft and users cannot see it.
