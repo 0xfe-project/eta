@@ -4,7 +4,6 @@ import type {
   TaskDraftData,
 } from "@eta/client-contracts";
 import { draftStatus } from "@eta/client-contracts";
-import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -17,10 +16,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useFold } from "@/lib/fold";
+import { foldable, useFold } from "@/lib/fold";
 import { cn } from "@/lib/utils";
 import { muted } from "./activity-card";
 import { ArtifactButton } from "./artifact-dialog";
+import { TaskFoldHead } from "./task-fold";
 import { runStatusLabels, statusLabel, workspaceLabel } from "./task-format";
 import { StatusIcon } from "./task-status-icon";
 import { TaskForm } from "./tasks";
@@ -39,77 +39,6 @@ import { useSectionLink } from "./workspace-search";
 // A card, which exists because the reader asked for it, is open until they say otherwise. Folding
 // hides a draft's prose and never its question. A choice the reader made themselves outranks both
 // defaults and outlives the reload (see `lib/fold.ts`).
-
-/**
- * The fold, and who it really belongs to.
- *
- * The browser does the toggling under the line, as it does for every other fold in a transcript, and
- * reports it as a `toggle`; the report is what the state, the chevron, the body and the remembered
- * choice are all drawn from, so they cannot disagree. A report that agrees with what the card already
- * shows is the browser catching up with a default that moved underneath it — a turn settling folds
- * the draft it left open — and only a report that disagrees is the reader having an opinion.
- */
-function foldable(
-  open: boolean,
-  fold: (open: boolean) => void,
-): {
-  open: boolean;
-  onToggle: (event: { currentTarget: HTMLDetailsElement }) => void;
-} {
-  return {
-    open,
-    onToggle: (event) => {
-      const next = event.currentTarget.open;
-      if (next !== open) fold(next);
-    },
-  };
-}
-
-/**
- * The line a folded task row leaves on the page: chevron, what it is, what it proposes, what it
- * waits on, and the way to act on it.
- *
- * A control standing on the line — the way to the form, the way to the task — is the line's other
- * purpose, and its click is spent there: it should not also fold the card around the reader's
- * fingers. That has to be said on the way into the line rather than on the way out of it, because the
- * browser begins its toggling as soon as the click has passed the line, and by the time the control's
- * own handler hears about the click the decision is already made.
- */
-function TaskFoldHead({
-  label,
-  title,
-  marker,
-  children,
-}: {
-  label: string;
-  /**
-   * The one line the row is about: a proposed title, or a task's number and title — as a link when
-   * there is somewhere for it to go, since this line is the card while it is folded.
-   */
-  title: React.ReactNode;
-  /** What the reader owes this row, said quietly at the right end of the line. */
-  marker?: React.ReactNode;
-  children?: React.ReactNode;
-}) {
-  return (
-    <summary
-      className="thinking-block-header task-fold-head"
-      onClickCapture={(event) => {
-        const target = event.target as Element;
-        if (target.closest("button,a") !== null) event.preventDefault();
-      }}
-    >
-      <span aria-hidden="true" className="thinking-block-chevron">
-        ▶
-      </span>
-      <ListChecksIcon aria-hidden="true" className="size-3.5 shrink-0" />
-      <span className="shrink-0">{label}</span>
-      <span className="task-fold-title">{title}</span>
-      {marker}
-      {children}
-    </summary>
-  );
-}
 
 /** A task an agent proposed, to confirm: its words as written, and the way to the form. */
 export function TaskDraftRow({ message }: { message: MessageView }) {

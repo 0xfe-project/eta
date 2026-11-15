@@ -11,12 +11,15 @@ import { UsersThreeIcon } from "@phosphor-icons/react/UsersThree";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { foldable, useFold } from "@/lib/fold";
+import { cn } from "@/lib/utils";
 import { useCaptain, useCaptainActions } from "@/queries/captain";
 import { wireErrorMessage } from "@/queries/wire";
 import { AgentProposalDetails, AgentReady } from "./agent-proposal-card";
 import { GroupProposalDetails, OpenGroup } from "./group-proposal-card";
 import { RoutineProposalDetails, RoutineReady } from "./routine-proposal-card";
 import { StateMark } from "./state-mark";
+import { TaskFoldHead } from "./task-fold";
 
 /**
  * What a kind of proposal draws of its own: its icon and words, what it would make, and what it
@@ -70,6 +73,10 @@ const CARDS: Record<string, AnyCardKind> = {
  *
  * The state is the operation's, the same record the operations list in Captain's panel shows. An
  * operation too old to be in that list leaves the proposal with no state and nothing to press.
+ *
+ * It folds the way a task draft does: one line — what kind, its name, where it stands — opened in
+ * place, folded until the reader opens it, and remembered by the row once they have. Folding hides
+ * what it would be and the two answers, never where it stands: one still waiting says so on the line.
  */
 export function ProposalCard({
   message,
@@ -81,6 +88,7 @@ export function ProposalCard({
   const { t: translateText } = useTranslation(["captain", "common"] as const);
   const captain = useCaptain();
   const actions = useCaptainActions();
+  const [open, fold] = useFold(message.id, false);
   const kind = CARDS[row.kind];
   if (kind === undefined)
     return (
@@ -114,16 +122,19 @@ export function ProposalCard({
     );
 
   return (
-    <section
+    <details
       className="task-fold w-full self-start"
       aria-label={translateText(kind.label as never, { name })}
+      {...foldable(open, fold)}
     >
-      <div className="flex items-center gap-2 px-2.5 py-[5px] font-mono text-[10px] tracking-[0.08em] text-faint uppercase">
-        <KindIcon aria-hidden="true" className="size-3.5 shrink-0" />
-        <span className="shrink-0">{translateText(kind.title as never)}</span>
-        <span className="task-fold-title">{name}</span>
-        {status === undefined ? null : <OperationStatusMark status={status} />}
-      </div>
+      <TaskFoldHead
+        icon={KindIcon}
+        label={translateText(kind.title as never)}
+        title={name}
+        marker={
+          status === undefined ? null : <OperationStatusMark status={status} />
+        }
+      />
       <div className="task-fold-body">
         <Details proposal={proposal} />
         {status === "pending" ? (
@@ -149,14 +160,15 @@ export function ProposalCard({
         ) : null}
         {outcome}
       </div>
-    </section>
+    </details>
   );
 }
 
 /**
  * Where a proposed operation stands, at the right end of its line: a square and a word. Waiting for
  * you to press Create is not a warning, so it is grey; only the outcome has a colour — created, or
- * failed.
+ * failed. It is still the one thing on the folded line that asks something of the reader, so it is
+ * framed and in the reader's colour rather than the line's faint one: seen without opening the card.
  */
 function OperationStatusMark({ status }: { status: CaptainOperationStatus }) {
   const { t: translateText } = useTranslation(["captain"] as const);
@@ -169,7 +181,12 @@ function OperationStatusMark({ status }: { status: CaptainOperationStatus }) {
             ? "error"
             : "neutral"
       }
-      className="ml-auto shrink-0 text-muted-foreground"
+      className={cn(
+        "ml-auto shrink-0",
+        status === "pending"
+          ? "border px-[5px] text-foreground"
+          : "text-muted-foreground",
+      )}
     >
       {translateText(`proposal.status.${status}`)}
     </StateMark>

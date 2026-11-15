@@ -106,3 +106,28 @@ export function useFold(
   );
   return [choice ?? defaultOpen, (next: boolean) => rememberFold(id, next)];
 }
+
+/**
+ * The fold, and who it really belongs to.
+ *
+ * The browser does the toggling under the line, as it does for every other fold in a transcript, and
+ * reports it as a `toggle`; the report is what the state, the chevron, the body and the remembered
+ * choice are all drawn from, so they cannot disagree. A report that agrees with what the card already
+ * shows is the browser catching up with a default that moved underneath it — a turn settling folds
+ * the draft it left open — and only a report that disagrees is the reader having an opinion.
+ */
+export function foldable(
+  open: boolean,
+  fold: (open: boolean) => void,
+): {
+  open: boolean;
+  onToggle: (event: { currentTarget: HTMLDetailsElement }) => void;
+} {
+  return {
+    open,
+    onToggle: (event) => {
+      const next = event.currentTarget.open;
+      if (next !== open) fold(next);
+    },
+  };
+}
