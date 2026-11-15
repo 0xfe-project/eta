@@ -265,6 +265,119 @@ describe("a task run", () => {
     expect(result.text).toContain("Login works again, on a branch.");
   });
 
+  describe("drafted into the backlog", () => {
+    /** Ada drafts "Plan the migration" with the arguments given, and the user has not decided yet. */
+    async function proposed(extra: Record<string, unknown>) {
+      const { models, requests } = scriptedModels((request) => {
+        if (isRun(request))
+          return request.lastRole === "toolResult"
+            ? say("finished")
+            : call("finish_task", { summary: "Planned." });
+        return request.lastRole === "toolResult"
+          ? say("Drafted.")
+          : call("draft_task", {
+              title: "Plan the migration",
+              goal: "A plan for moving the database",
+              acceptance: "The plan is written",
+              ...extra,
+            });
+      });
+      const w = await world({ models });
+      const ada = await w.agent("Ada");
+      const project = await w.project({ stewardId: ada.id });
+      const group = await w.group(project.id, [ada.id], "db");
+      await w.watch(group.id);
+      const sent = await w.send(group.id, "we will need to move the db");
+      await w.settled(group.id, sent.replies[0]!.id);
+      const draft = w.rows(group.id).find((row) => row.kind === "task_draft")!;
+      const confirm = async () =>
+        (
+          (await w.client.call("tasks", "confirmDraft", {
+            conversationId: group.id,
+            messageId: draft.id,
+          })) as { task: BoardTaskDetail }
+        ).task;
+      return { w, ada, group, draft, requests, confirm };
+    }
+
+    it("is put on the board when confirmed and not run, and runs once the user moves it to todo", async () => {
+      const r = await proposed({ status: "backlog" });
+      expect(r.draft.data).toMatchObject({ status: "backlog" });
+
+      const task = await r.confirm();
+      expect(task).toMatchObject({ status: "backlog", runStatus: null });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(runsOf(r.w, task.id)).toEqual([]);
+      expect(r.requests.filter(isRun)).toHaveLength(0);
+      // The card says where it went.
+      await until(() => r.w.row(r.group.id, r.draft.id)?.kind === "task_card");
+      expect(r.w.row(r.group.id, r.draft.id)!.data).toMatchObject({
+        status: "backlog",
+        runStatus: null,
+      });
+
+      // The user takes it out of the backlog: it starts, as a confirmed draft would have.
+      await r.w.client.call("tasks", "update", {
+        taskId: task.id,
+        status: "todo",
+      });
+      await until(() => reviewed(r.w, task.id));
+      expect(runStatuses(r.w, task.id)).toEqual(["completed"]);
+      expect(r.requests.filter(isRun)[0]!.transcript.join("\n")).toContain(
+        "A plan for moving the database",
+      );
+    });
+
+    it("runs when the user starts it from the task page, without moving it first", async () => {
+      const r = await proposed({ status: "backlog" });
+      const task = await r.confirm();
+      expect(runsOf(r.w, task.id)).toEqual([]);
+      await r.w.client.call("tasks", "rerun", { taskId: task.id });
+      await until(() => reviewed(r.w, task.id));
+      expect(runStatuses(r.w, task.id)).toEqual(["completed"]);
+    });
+
+    it("goes by what the user chose on the card over what the agent proposed", async () => {
+      const r = await proposed({ status: "backlog" });
+      const { task } = (await r.w.client.call("tasks", "confirmDraft", {
+        conversationId: r.group.id,
+        messageId: r.draft.id,
+        edits: { status: "todo" },
+      })) as { task: BoardTaskDetail };
+      await until(() => reviewed(r.w, task.id));
+      expect(runStatuses(r.w, task.id)).toEqual(["completed"]);
+    });
+
+    it("is not what a draft that does not say is: that one starts at once, as it always did", async () => {
+      const r = await proposed({});
+      expect(r.draft.data).toMatchObject({ status: "todo" });
+      const task = await r.confirm();
+      expect(task.status).toBe("todo");
+      await until(() => reviewed(r.w, task.id));
+      expect(runStatuses(r.w, task.id)).toEqual(["completed"]);
+    });
+
+    it("is not what a draft written before drafts had a status is: that one is confirmed and starts", async () => {
+      const r = await proposed({});
+      // A row from an older host: no `status` in its data at all.
+      const { status: _status, ...old } = r.draft.data;
+      r.w.host.db
+        .query("UPDATE message SET data = ? WHERE id = ?")
+        .run(JSON.stringify(old), r.draft.id);
+      const task = await r.confirm();
+      expect(task.status).toBe("todo");
+      await until(() => reviewed(r.w, task.id));
+      expect(runStatuses(r.w, task.id)).toEqual(["completed"]);
+    });
+
+    it("refuses a status a draft cannot propose", async () => {
+      const r = await proposed({ status: "done" });
+      expect(
+        r.w.rows(r.group.id).some((row) => row.kind === "task_draft"),
+      ).toBe(false);
+    });
+  });
+
   it("is run by the agent it was assigned to, which is not always the agent that made it", async () => {
     const r = await room(finishes());
     const bola = await r.w.agent("Bola");

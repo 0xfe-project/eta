@@ -127,7 +127,10 @@
     "editAndCreate": "编辑并确认",
     "notCreatedHint": "确认后创建任务，由提出它的智能体在{{workspace}}里执行。",
     "confirmTitle": "确认任务草稿",
-    "confirmDescription": "编辑内容后确认，智能体随即开始。"
+    "confirmDescription": "编辑内容后确认。",
+    "startNow": "立即执行",
+    "startNowHint": "确认后立即开始执行。",
+    "backlogHint": "确认后放入积压，不会立即执行；移到待办时才开始。"
   },
   "card": {
     "title": "任务卡片",

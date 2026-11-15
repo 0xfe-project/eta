@@ -201,6 +201,17 @@ export interface TaskActivityView {
 
 /* ------------------------------------------------------------------ timeline rows */
 
+/** The statuses a draft may propose: made and started, or made and kept for later. */
+export const TASK_DRAFT_STATUSES = ["todo", "backlog"] as const;
+export type TaskDraftStatus = (typeof TASK_DRAFT_STATUSES)[number];
+
+/** What a draft proposes, reading a draft written before it could say as `todo`. */
+export function draftStatus(
+  draft: Pick<TaskDraftData, "status">,
+): TaskDraftStatus {
+  return draft.status === "backlog" ? "backlog" : "todo";
+}
+
 /** `MessageView.data` of a `task_draft` row: what the user is asked to confirm. */
 export interface TaskDraftData {
   title: string;
@@ -208,6 +219,12 @@ export interface TaskDraftData {
   description: string;
   /** Where the executor will work, as the agent chose it. */
   workspace: TaskWorkspaceMode;
+  /**
+   * Where the task goes on the board once confirmed, as the agent proposed it: `todo` starts its
+   * first run at once, `backlog` only puts it on the board, to start when the user moves it to
+   * todo. Absent on drafts written before a draft could say so, which are `todo` (`draftStatus`).
+   */
+  status?: TaskDraftStatus | undefined;
   /**
    * The branch (or `#number` of another task) the worktree starts at; the board resolves a
    * `#number` to `eta/task-<number>` when it makes the task. Absent is the project checkout's
@@ -325,7 +342,8 @@ export interface TaskArgs {
   link: { taskId: string; conversationId: string | null };
   /**
    * Turn a `task_draft` row of the conversation into a task and the row into its `task_card`, and
-   * start its first run. Confirming again, from a second click or a retry, returns the same task.
+   * start its first run unless it lands in the backlog. The status is `edits.status` when given,
+   * else the draft's own (`todo` for a draft that does not say). Confirming again, from a second click or a retry, returns the same task.
    */
   confirmDraft: {
     conversationId: string;

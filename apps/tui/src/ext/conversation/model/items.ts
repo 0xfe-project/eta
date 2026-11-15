@@ -389,7 +389,11 @@ function systemText(context: Context, row: MessageView): string {
 
 function taskDraftText(context: Context, row: MessageView): string {
   const title = typeof row.data.title === "string" ? row.data.title : "";
-  return context.t("taskDraft", { title });
+  // A draft that does not say (an older one) starts when confirmed, as they all did.
+  return context.t(
+    row.data.status === "backlog" ? "taskDraftBacklog" : "taskDraft",
+    { title },
+  );
 }
 
 function taskCardText(context: Context, row: MessageView): string {

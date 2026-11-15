@@ -820,6 +820,30 @@ describe("a task row", () => {
   });
 });
 
+describe("a backlog task draft", () => {
+  it("says it waits in the backlog once confirmed; one that does not say reads as before", () => {
+    const later = row({
+      kind: "task_draft",
+      author: "agent",
+      agentId: ADA.id,
+      data: { title: "Plan it", status: "backlog" },
+    });
+    const now = row({
+      kind: "task_draft",
+      author: "agent",
+      agentId: ADA.id,
+      data: { title: "Do it", status: "todo" },
+    });
+    expect(items({ rows: [later, now], locale: "zh" })).toMatchObject([
+      { text: "任务草稿：Plan it（确认后放入积压，不会立即执行）" },
+      { text: "任务草稿：Do it" },
+    ]);
+    expect(items({ rows: [later] })[0]).toMatchObject({
+      text: "Task draft: Plan it (goes to the backlog when confirmed; does not run yet)",
+    });
+  });
+});
+
 describe("keys", () => {
   it("are unique across a mixed timeline and the same when worked out again", () => {
     const user = row({ text: "go", data: { joined: [ADA.id] } });
