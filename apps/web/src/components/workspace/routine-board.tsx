@@ -73,26 +73,30 @@ export function RoutineBoard() {
           </span>
         </Button>
       </PageHeader>
-      <CaptainOffNotice className="mx-auto mt-3 w-[calc(100%-1rem)] max-w-content sm:w-[calc(100%-2rem)]" />
+      {/* Inset like the header, so it lines up with the title and the list. */}
+      <CaptainOffNotice className="mx-4 mt-3 sm:mx-6" />
+      {/* The inbox's frame: the list pinned to the sidebar, the open routine centred in the rest. */}
       <main
         id="main"
-        className="mx-auto flex min-h-0 w-full max-w-content flex-1"
+        className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[22rem_minmax(0,1fr)]"
       >
-        <div
+        <aside
           className={cn(
-            "w-full overflow-y-auto px-2 py-3 sm:px-4 md:block md:w-80 md:shrink-0 md:border-r lg:w-96",
-            open && "hidden",
+            "min-h-0 overflow-y-auto border-r px-4 py-3 sm:px-6",
+            open && "hidden md:block",
           )}
         >
           <RoutineList selected={nav.routine} bare />
-        </div>
+        </aside>
         <div
           className={cn(
-            "min-w-0 flex-1 overflow-y-auto",
+            "min-h-0 min-w-0 overflow-y-auto",
             !open && "hidden md:block",
           )}
         >
-          <div className="px-4 py-6 sm:px-8">{content}</div>
+          <div className="mx-auto max-w-content px-4 py-6 sm:px-8">
+            {content}
+          </div>
         </div>
       </main>
     </>
