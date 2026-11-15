@@ -253,6 +253,8 @@
   --animate-skeleton-hold: skeleton-hold 1ms 180ms backwards;
   --animate-upload-pulse: upload-pulse 1.6s linear infinite;
   --animate-copied-check: copied-check 2.5s linear both;
+  /* The square beside a run that is going: on, dim, on. */
+  --animate-run-blink: run-blink 1.2s ease-in-out infinite;
   --spacing: 0.225rem;
   /* One header height for every column, so the rule under it is one line across the window. */
   --header-band: 40px;
@@ -538,6 +540,12 @@
 @keyframes upload-pulse {
   50% {
     opacity: 0.45;
+  }
+}
+
+@keyframes run-blink {
+  50% {
+    opacity: 0.25;
   }
 }
 
