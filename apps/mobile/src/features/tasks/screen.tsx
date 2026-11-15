@@ -23,6 +23,7 @@ import {
   failure,
   isActive,
   queueReason,
+  waitingNumbers,
   runActor,
   STATUS_ICONS,
   statusColor,
@@ -80,7 +81,7 @@ function LiveRun(props: { task: () => TaskDetail; run: TaskRunView }) {
   const why = () => {
     const code = run().queueReason;
     return queued() && code !== null
-      ? queueReason(code, run().machineId)
+      ? queueReason(code, run().machineId, waitingNumbers(props.task()))
       : undefined;
   };
   const stop = () => {

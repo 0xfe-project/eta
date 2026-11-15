@@ -30,7 +30,9 @@
     "taskBusy": "等这个任务上一次运行结束",
     "machineFull": "{{machine}} 同时运行的任务数已满，等空位",
     "machineOffline": "{{machine}} 不在线，连上后开始",
-    "thisMachine": "这台机器"
+    "thisMachine": "这台机器",
+    "waitingDeps": "等待 {{tasks}}",
+    "waitingDepsUnknown": "等它依赖的任务"
   },
   "runs": {
     "label": "运行",
@@ -83,6 +85,14 @@
     "noReplyReminder": "这一轮结束时没有汇报，已提醒一次",
     "turnFailed": "这一轮失败了{{reason}}",
     "turnStopped": "这一轮已停止{{reason}}",
+    "dependencyAdded": "开始等 {{task}}",
+    "dependencyAddedDone": "开始等 {{task}}，只有它「已完成」才放行",
+    "dependencyRequireDone": "改为等 {{task}}「已完成」，「待验收」不再放行",
+    "dependencyRequireAny": "改为 {{task}} 进入「待验收」或「已完成」就放行",
+    "dependencyRemoved": "不再等 {{task}}",
+    "dependencyDeleted": "{{task}} 被删除了，不再等它",
+    "dependencyBlocked": "{{task}} 被取消了，本任务不会自己开始。去掉这条依赖，或者取消本任务。",
+    "dependencyUnblocked": "依赖的任务不再是取消状态，本任务回到「待办」，依赖解决后开始",
     "changeCount": "{{count}} 条动态",
     "changeCount_one": "{{count}} 条动态",
     "changeCount_other": "{{count}} 条动态"
@@ -166,5 +176,25 @@
   "delete": {
     "confirmTitle": "删除任务 #{{number}}？",
     "confirmDescription": "描述、评论和动态会一并删除，无法恢复。"
+  },
+  "graph": {
+    "waitingOn": "等待 {{tasks}}",
+    "cancelledDependency": "依赖 {{tasks}} 已取消",
+    "dependsOn": "依赖",
+    "dependents": "被依赖",
+    "none": "无",
+    "requireDone": "必须完成",
+    "requireDoneHint": "只有它变为「已完成」才放行；不勾选时进入「待验收」就放行",
+    "remove": "去掉对 #{{number}} 的依赖",
+    "removeShort": "去掉依赖 #{{number}}",
+    "cancelTask": "取消本任务",
+    "add": "添加依赖",
+    "addPlaceholder": "#编号",
+    "state": {
+      "resolved": "已就绪",
+      "waiting": "等待中",
+      "cancelled": "已取消"
+    },
+    "blockedHint": "它依赖的任务被取消了，这个任务不会自己开始。去掉这条依赖，或者取消本任务。"
   }
 }

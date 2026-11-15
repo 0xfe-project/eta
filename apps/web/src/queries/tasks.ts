@@ -80,6 +80,21 @@ export function useUpdateTask() {
   );
 }
 
+/** Make a task wait for another, or change whether only done resolves the edge. */
+export function useAddDependency() {
+  return useWireMutation<
+    TaskArgs["addDependency"],
+    TaskResults["addDependency"]
+  >("tasks", "addDependency");
+}
+
+export function useRemoveDependency() {
+  return useWireMutation<
+    TaskArgs["removeDependency"],
+    TaskResults["removeDependency"]
+  >("tasks", "removeDependency");
+}
+
 export function useCommentTask() {
   return useWireMutation<TaskArgs["comment"], TaskResults["comment"]>(
     "tasks",

@@ -25,6 +25,8 @@ export const i18n = {
     "tasks.queue.machineFull": "{machine} 同时运行的任务数已满，等空位",
     "tasks.queue.machineOffline": "{machine} 不在线，连上后开始",
     "tasks.queue.thisMachine": "这台机器",
+    "tasks.queue.waitingDeps": "等待 {tasks}",
+    "tasks.queue.theirDependencies": "它依赖的任务",
     "tasks.scope.all": "所有群",
     "tasks.scope.title": "看哪个群的任务",
     "tasks.scope.emptyGroup": "这个群还没有任务",
@@ -69,6 +71,19 @@ export const i18n = {
     "tasks.activity.nudged": "这一轮结束时没有汇报，已提醒一次",
     "tasks.activity.turnFailed": "这一轮失败了{reason}",
     "tasks.activity.turnStopped": "这一轮已停止{reason}",
+    "tasks.activity.dependencyAdded": "开始等 {task}",
+    "tasks.activity.dependencyAddedDone":
+      "开始等 {task}，只有它「已完成」才放行",
+    "tasks.activity.dependencyRequireDone":
+      "改为等 {task}「已完成」，「待验收」不再放行",
+    "tasks.activity.dependencyRequireAny":
+      "改为 {task} 进入「待验收」或「已完成」就放行",
+    "tasks.activity.dependencyRemoved": "不再等 {task}",
+    "tasks.activity.dependencyDeleted": "{task} 被删除了，不再等它",
+    "tasks.activity.dependencyBlocked":
+      "{task} 被取消了，本任务不会自己开始。去掉这条依赖，或者取消本任务。",
+    "tasks.activity.dependencyUnblocked":
+      "依赖的任务不再是取消状态，本任务回到「待办」，依赖解决后开始",
     "tasks.live.working": "{name} 正在工作",
     "tasks.live.answering": "{name} 正在回答",
     "tasks.live.starting": "{name} 正在启动",
@@ -127,6 +142,8 @@ export const i18n = {
     "tasks.queue.machineOffline":
       "{machine} is offline, starts once it connects",
     "tasks.queue.thisMachine": "This machine",
+    "tasks.queue.waitingDeps": "Waiting for {tasks}",
+    "tasks.queue.theirDependencies": "the tasks it depends on",
     "tasks.scope.all": "All groups",
     "tasks.scope.title": "Show tasks from",
     "tasks.scope.emptyGroup": "This group has no tasks yet",
@@ -172,6 +189,20 @@ export const i18n = {
       "ended the turn without reporting and was reminded once",
     "tasks.activity.turnFailed": "This turn failed{reason}",
     "tasks.activity.turnStopped": "stopped this turn{reason}",
+    "tasks.activity.dependencyAdded": "now waits for {task}",
+    "tasks.activity.dependencyAddedDone":
+      "now waits for {task}, and only done lets it go",
+    "tasks.activity.dependencyRequireDone":
+      "now waits for {task} to be done, not only in review",
+    "tasks.activity.dependencyRequireAny":
+      "now lets {task} go once it is in review or done",
+    "tasks.activity.dependencyRemoved": "no longer waits for {task}",
+    "tasks.activity.dependencyDeleted":
+      "{task} was deleted, so this no longer waits for it",
+    "tasks.activity.dependencyBlocked":
+      "{task} was cancelled, so this will not start on its own. Remove the dependency, or cancel this task.",
+    "tasks.activity.dependencyUnblocked":
+      "no dependency is cancelled any more, so this goes back to todo and starts once what it waits for is resolved",
     "tasks.live.working": "{name} is working",
     "tasks.live.answering": "{name} is answering",
     "tasks.live.starting": "{name} is starting",

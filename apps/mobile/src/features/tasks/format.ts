@@ -71,17 +71,46 @@ export const runLabel = (status: TaskRunStatus): string =>
 export const isActive = (status: TaskRunStatus | null | undefined): boolean =>
   status === "queued" || status === "starting" || status === "running";
 
-/** Why a run waits; the machine reasons name the machine, so the user knows which to turn on. */
+/**
+ * Why a run waits; the machine reasons name the machine, so the user knows which to turn on, and
+ * waiting for dependencies names the tasks (`waitingOn`, their numbers).
+ */
 export function queueReason(
   reasonCode: TaskQueueReason,
   machineId: string | null,
+  waitingOn: readonly number[] = [],
 ): string {
-  if (reasonCode === "task_busy") return t("tasks.queue.taskBusy");
-  const machine = machineById(machineId)?.name ?? t("tasks.queue.thisMachine");
-  return reasonCode === "machine_full"
-    ? t("tasks.queue.machineFull", { machine })
-    : t("tasks.queue.machineOffline", { machine });
+  const machine = () =>
+    machineById(machineId)?.name ?? t("tasks.queue.thisMachine");
+  switch (reasonCode) {
+    case "task_busy":
+      return t("tasks.queue.taskBusy");
+    case "waiting_deps":
+      return t("tasks.queue.waitingDeps", {
+        tasks:
+          waitingOn.length === 0
+            ? t("tasks.queue.theirDependencies")
+            : waitingOn.map((n) => `#${n}`).join(", "),
+      });
+    case "machine_full":
+      return t("tasks.queue.machineFull", { machine: machine() });
+    case "machine_offline":
+      return t("tasks.queue.machineOffline", { machine: machine() });
+    default: {
+      // A reason from a newer host than this app: its code, rather than a wrong reason.
+      const unknown: never = reasonCode;
+      return String(unknown);
+    }
+  }
 }
+
+/** The numbers of the tasks a task still waits for. A host older than dependencies sends none. */
+export const waitingNumbers = (task: {
+  dependsOn?: readonly { number: number; state: string }[];
+}): number[] =>
+  (task.dependsOn ?? [])
+    .filter((edge) => edge.state === "waiting")
+    .map((edge) => edge.number);
 
 /** Who did something to a task: me, an agent by its name, or the system. */
 export function actorName(actor: TaskActor): string {

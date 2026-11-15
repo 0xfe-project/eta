@@ -23,6 +23,7 @@ import { PageHeader } from "./app-shell";
 import { BackToTop } from "./back-to-top";
 import { when } from "./routine-format";
 import { actorName, ago, createdBy, statusLabel } from "./task-format";
+import { BlockedExits, DependencyBadge } from "./task-graph";
 import { useTaskNav } from "./task-nav";
 import { StatusIcon } from "./task-status-icon";
 import {
@@ -84,11 +85,13 @@ function Card({ task }: { task: Task }) {
           </span>
         </span>
         <span className="line-clamp-3 text-sm wrap-anywhere">{task.title}</span>
+        <DependencyBadge task={task} />
         <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground tabular-nums">
           <span className="truncate">{actorName(task.createdBy, agents)}</span>
           <span className="shrink-0">{ago(task.updatedAt)}</span>
         </span>
       </button>
+      <BlockedExits task={task} />
     </li>
   );
 }

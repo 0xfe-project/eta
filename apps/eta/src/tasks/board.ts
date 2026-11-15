@@ -7,6 +7,7 @@ import type {
   TaskActivityView,
   TaskActor,
   TaskArtifactRef,
+  TaskDependencyView,
   TaskWorkspaceMode,
 } from "@eta/client-contracts";
 /**
@@ -16,16 +17,28 @@ import type {
  * what an operation owes does not depend on the way in: the fields are checked, the change and
  * the activity it leaves are one write, every card of the task is refreshed in that same write,
  * and then the people looking are told, the conversations whose cards moved and the board itself.
- * That is all this class is; the rows are `store.ts` and the cards `cards.ts`.
+ * That is all this class is; the rows are `store.ts`, the cards `cards.ts`, and what the graph of
+ * dependencies means is `graph.ts`, which the board asks and never second-guesses.
  */
 import type { Database } from "bun:sqlite";
 import type { AgentStore } from "../agents/store";
 import type { ConversationStore } from "../conversations/store";
 import type { DraftInput, TaskCards } from "./cards";
+import type { GraphEdge, GraphTask } from "./graph";
 import type { TaskRunStore } from "./runs";
 import type { TaskRecord, TaskStore } from "./store";
 import { TASK_STATUSES } from "@eta/client-contracts";
 import { resolveAssignee } from "./assignee";
+import { nameOf, TaskGraph } from "./graph";
+
+/** A dependency as a caller names it: the task (`#N` or id), and whether only done resolves it. */
+export interface DependencyInput {
+  task: string;
+  requireDone?: boolean | undefined;
+}
+
+/** What the system writes on a status it set because a dependency was cancelled. */
+const DEPENDENCY_CANCELLED = "dependency_cancelled";
 
 /** Something a viewer of the board may want to read again. */
 export interface BoardChange {
@@ -58,6 +71,14 @@ export interface TaskRuns {
   stop: (taskId: string, why: string) => void;
   /** Whether a run of the task is starting or going. */
   active: (taskId: string) => boolean;
+  /**
+   * The runs that would start the task's work and have not started (its first run, a rerun)
+   * are withdrawn: they end interrupted, with no words of their own, since the board's entry
+   * says why. Runs already going, and the runs of comments and mentions, are left alone.
+   */
+  withdraw: (taskId: string) => void;
+  /** Something that decides whether a queued run may start has changed: look at the queue again. */
+  pump: () => void;
   /**
    * A comment on the task, for whoever should read it: the executor's run, and the agents it
    * mentions. `wake: false` only hands it to a run that is going (a mentioned agent's answer).
@@ -92,8 +113,39 @@ export interface TaskBoardDeps {
   changed: (conversationIds: readonly string[]) => void;
 }
 
+/** A task as the graph needs it. */
+const graphTaskOf = (task: TaskRecord): GraphTask => ({
+  id: task.id,
+  number: task.number,
+  title: task.title,
+  status: task.status,
+  projectId: task.projectId,
+  workspaceMode: task.workspaceMode,
+});
+
+/** One end of an edge, as the task at the other end reads it. */
+const endOf = (
+  graph: TaskGraph,
+  edge: GraphEdge,
+  other: string,
+): TaskDependencyView => {
+  const task = graph.task(other)!;
+  return {
+    taskId: task.id,
+    number: task.number,
+    title: task.title,
+    status: task.status,
+    requireDone: edge.requireDone,
+    state: graph.stateOf(edge),
+  };
+};
+
+/** What the task waits for, each edge with where it stands. */
+const dependsOnOf = (graph: TaskGraph, id: string): TaskDependencyView[] =>
+  graph.dependenciesOf(id).map((edge) => endOf(graph, edge, edge.dependsOnId));
+
 /** A task as the board lists it: without what only its own page shows. */
-const viewOf = (task: TaskRecord): BoardTaskView => ({
+const viewOf = (task: TaskRecord, graph: TaskGraph): BoardTaskView => ({
   id: task.id,
   number: task.number,
   title: task.title,
@@ -104,6 +156,7 @@ const viewOf = (task: TaskRecord): BoardTaskView => ({
   captainAssignmentId: task.captainAssignmentId,
   captainMessageId: task.captainMessageId,
   runStatus: task.runStatus,
+  dependsOn: dependsOnOf(graph, task.id),
   comments: task.comments,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
@@ -113,6 +166,8 @@ export class TaskBoard {
   readonly #deps: TaskBoardDeps;
   readonly #listeners = new Set<(change: BoardChange) => void>();
   #runs: TaskRuns | undefined;
+  /** Settling the graph changes statuses, which asks for settling again: once is enough. */
+  #settling = false;
 
   constructor(deps: TaskBoardDeps) {
     this.#deps = deps;
@@ -132,7 +187,29 @@ export class TaskBoard {
   /* ---------------------------------------------------------------- reads */
 
   list(): BoardTaskView[] {
-    return this.#deps.tasks.list().map(viewOf);
+    const tasks = this.#deps.tasks.list();
+    const graph = this.#graphOf(tasks);
+    return tasks.map((task) => viewOf(task, graph));
+  }
+
+  /** The graph as it is now, to ask (`graph.ts`). */
+  graph(): TaskGraph {
+    return this.#graphOf(this.#deps.tasks.list());
+  }
+
+  /**
+   * Where a task's worktree starts: the base it was given, or else what its one dependency makes
+   * it (`TaskGraph.derivedBase`), worked out now and not when the task was made. `why` says, for
+   * the run's error, where a derived base came from.
+   */
+  baseFor(task: TaskRecord): { base: string | null; why?: string } {
+    if (task.baseBranch !== null) return { base: task.baseBranch };
+    const derived = this.graph().derivedBase(task.id);
+    if (derived.kind !== "branch") return { base: null };
+    return {
+      base: derived.branch,
+      why: `it starts at ${derived.branch}, the branch of ${nameOf(derived.task)}, the one task it depends on, which is not done`,
+    };
   }
 
   /** By id or number. */
@@ -167,6 +244,8 @@ export class TaskBoard {
       assignee?: string | undefined;
       captainAssignmentId?: string | null | undefined;
       captainMessageId?: string | null | undefined;
+      /** What it waits for before its work starts. */
+      dependsOn?: readonly DependencyInput[] | undefined;
     },
     actor: TaskActor,
   ): BoardTaskDetail {
@@ -177,19 +256,29 @@ export class TaskBoard {
     if (title === undefined) throw new Error("a task needs a title");
     const assigneeAgent = resolveAssignee(assignee, this.#deps.agents);
     const conversationId = this.#conversation(input.conversationId)!;
-    const task = this.#deps.tasks.create({
-      ...fields,
-      title,
-      conversationId,
-      createdByAgent: actor.agentId,
-      assigneeAgent,
-      captainAssignmentId: input.captainAssignmentId,
-      captainMessageId: input.captainMessageId,
-      baseBranch: base === undefined ? undefined : this.#baseOf(base),
-      projectId: this.#deps.conversations.get(conversationId)?.projectId,
-      workspaceMode: input.workspace,
-    });
+    const dependsOn = this.#dependenciesOf(input.dependsOn);
+    const maker = actor.agentId;
+    // The task and what it waits for are one write: a task that would start before its
+    // dependencies are in place is the thing they are there to prevent.
+    const task = this.#deps.db.transaction(() => {
+      const made = this.#deps.tasks.create({
+        ...fields,
+        title,
+        conversationId,
+        createdByAgent: maker,
+        assigneeAgent,
+        captainAssignmentId: input.captainAssignmentId,
+        captainMessageId: input.captainMessageId,
+        baseBranch: base === undefined ? undefined : this.#baseOf(base),
+        projectId: this.#deps.conversations.get(conversationId)?.projectId,
+        workspaceMode: input.workspace,
+      });
+      for (const edge of dependsOn)
+        this.#addEdge(made.id, edge.taskId, edge.requireDone, actor);
+      return made;
+    })();
     this.#announce(task.id, "created", []);
+    for (const edge of dependsOn) this.#announce(edge.taskId, "changed", []);
     if (workable(task.status)) this.#runs?.start(task.id);
     return this.#detailOf(this.#existing(task.id));
   }
@@ -212,8 +301,83 @@ export class TaskBoard {
         this.#deps.runs.ofTask(id).length === 0
       )
         this.#runs?.start(id);
+      // What waits for this task reads it again, and may start, block or unblock.
+      this.#statusMoved(id);
     }
-    return this.#detailOf(after);
+    return this.#detailOf(this.#existing(id));
+  }
+
+  /* ---------------------------------------------------------------- the graph */
+
+  /**
+   * `taskId` waits for `dependsOn` (`#N` or id). An edge that is there already only has its
+   * `requireDone` changed. The graph refuses what cannot be: itself, a cancelled task, a cycle.
+   */
+  addDependency(
+    taskId: string,
+    dependsOn: string,
+    options: { requireDone?: boolean | undefined },
+    actor: TaskActor,
+  ): BoardTaskDetail {
+    const task = this.#existing(taskId);
+    const target = this.#named(dependsOn);
+    this.#commit(task.id, "changed", () => {
+      this.#addEdge(task.id, target.id, options.requireDone === true, actor);
+    });
+    this.#announce(target.id, "changed", []);
+    this.#graphChanged();
+    return this.#detailOf(this.#existing(task.id));
+  }
+
+  /** `taskId` no longer waits for `dependsOn`. A task the system blocked on it may start again. */
+  removeDependency(
+    taskId: string,
+    dependsOn: string,
+    actor: TaskActor,
+  ): BoardTaskDetail {
+    const task = this.#existing(taskId);
+    const target = this.#named(dependsOn);
+    let removed = false;
+    this.#commit(task.id, "changed", () => {
+      removed = this.#deps.tasks.removeDependency(task.id, target.id);
+      if (removed)
+        this.#deps.tasks.record(task.id, "dependency", actor, {
+          data: { action: "removed", ...this.#refOf(target) },
+        });
+    });
+    if (!removed)
+      throw new Error(`#${task.number} does not wait for #${target.number}`);
+    this.#announce(target.id, "changed", []);
+    this.#graphChanged();
+    return this.#detailOf(this.#existing(task.id));
+  }
+
+  /**
+   * A queued run of the task found something it waits for cancelled (the runner asks, in `pump`):
+   * the task cannot start on its own, so it is blocked, saying which dependency and that the user
+   * decides, and the runs that would start it are withdrawn. Nothing happens when the graph does
+   * not say broken. The status carries the mark that lets the system undo it (`#settle`).
+   */
+  blockOnCancelled(taskId: string): void {
+    const task = this.#deps.tasks.get(taskId);
+    if (task === undefined) return;
+    const gate = this.graph().gate(taskId);
+    if (gate.state !== "broken") return;
+    const system: TaskActor = { kind: "system", agentId: null };
+    this.#commit(taskId, "changed", () => {
+      for (const cancelled of gate.cancelled)
+        this.#deps.tasks.record(taskId, "dependency", system, {
+          data: { action: "blocked", ...this.#refOf(cancelled) },
+        });
+      if (task.status !== "blocked")
+        this.#deps.tasks.update(
+          taskId,
+          { status: "blocked", statusReason: DEPENDENCY_CANCELLED },
+          system,
+        );
+    });
+    // The run ends with no words: the `blocked` entry above says why, in the reader's language.
+    this.#runs?.withdraw(taskId);
   }
 
   /**
@@ -275,14 +439,33 @@ export class TaskBoard {
     return this.#detailOf(this.#existing(id));
   }
 
-  /** Delete a task. Its cards stay in the timelines they are in, and say it is gone. */
+  /**
+   * Delete a task. Its cards stay in the timelines they are in, and say it is gone. What waited
+   * for it no longer does (the edges go with it), and each of those says so on its timeline.
+   */
   remove(id: string): void {
-    this.#existing(id);
+    const task = this.#existing(id);
     if (this.#runs?.active(id) === true)
       throw new Error("a run is working on this task; stop it before deleting");
-    this.#commit(id, "removed", () => {
-      this.#deps.tasks.remove(id);
-    });
+    const graph = this.graph();
+    const waiting = graph.dependentsOf(id).map((edge) => edge.taskId);
+    const awaited = graph.dependenciesOf(id).map((edge) => edge.dependsOnId);
+    this.#deps.db.transaction(() => {
+      for (const dependent of waiting)
+        this.#commit(dependent, "changed", () => {
+          this.#deps.tasks.record(
+            dependent,
+            "dependency",
+            { kind: "system", agentId: null },
+            { data: { action: "deleted", ...this.#refOf(task) } },
+          );
+        });
+      this.#commit(id, "removed", () => {
+        this.#deps.tasks.remove(id);
+      });
+    })();
+    for (const other of awaited) this.#announce(other, "changed", []);
+    this.#graphChanged();
   }
 
   /** An artifact was published for the task: it goes on the task's timeline and into its cards. */
@@ -358,12 +541,18 @@ export class TaskBoard {
     return trimmed;
   }
 
-  /** An agent proposes work in the conversation it is in; the user decides. */
+  /**
+   * An agent proposes work in the conversation it is in; the user decides. What it would wait for
+   * is resolved to ids and checked now, so the agent hears what is wrong while it can fix it.
+   */
   draft(input: {
     conversationId: string;
     agentId: string;
-    draft: DraftInput;
+    draft: Omit<DraftInput, "dependsOn"> & {
+      dependsOn?: readonly DependencyInput[] | undefined;
+    };
   }): MessageView {
+    const dependsOn = this.#dependenciesOf(input.draft.dependsOn);
     const row = this.#deps.cards.draft({
       ...input,
       draft: {
@@ -372,6 +561,7 @@ export class TaskBoard {
           input.draft.base === undefined
             ? undefined
             : this.#baseOf(input.draft.base),
+        dependsOn: dependsOn.length === 0 ? undefined : dependsOn,
       },
     });
     this.#deps.changed([input.conversationId]);
@@ -384,19 +574,150 @@ export class TaskBoard {
     messageId: string;
     edits?: FieldsInput | undefined;
   }): { task: BoardTaskDetail; message: MessageView } {
-    const { task, message, created } = this.#deps.cards.confirm({
-      conversationId: input.conversationId,
-      messageId: input.messageId,
-      fields: this.#fieldsOf(input.edits ?? {}),
-    });
+    // The draft's dependencies were checked when it was drafted; much can change before it is
+    // confirmed, so they are checked again here, in the same write that makes the task.
+    const { task, message, created, dependsOn } = this.#deps.db.transaction(
+      () => {
+        const confirmed = this.#deps.cards.confirm({
+          conversationId: input.conversationId,
+          messageId: input.messageId,
+          fields: this.#fieldsOf(input.edits ?? {}),
+        });
+        const edges = confirmed.created ? confirmed.dependsOn : [];
+        const actor: TaskActor = { kind: "user", agentId: null };
+        for (const edge of edges)
+          this.#addEdge(
+            confirmed.task.id,
+            edge.taskId,
+            edge.requireDone,
+            actor,
+          );
+        return { ...confirmed, dependsOn: edges };
+      },
+    )();
     if (created) {
       this.#announce(task.id, "created", [input.conversationId]);
+      for (const edge of dependsOn) this.#announce(edge.taskId, "changed", []);
       if (workable(task.status)) this.#runs?.start(task.id);
     }
     return { task: this.#detailOf(this.#existing(task.id)), message };
   }
 
   /* ---------------------------------------------------------------- inside */
+
+  #graphOf(tasks: readonly TaskRecord[]): TaskGraph {
+    return new TaskGraph(
+      tasks.map(graphTaskOf),
+      this.#deps.tasks.dependencies(),
+    );
+  }
+
+  /** A task another one names: by `#N` or id. */
+  #named(idOrNumber: string): TaskRecord {
+    const task = this.#deps.tasks.find(idOrNumber.trim());
+    if (task === undefined) throw new Error(`no such task: ${idOrNumber}`);
+    return task;
+  }
+
+  /** The other end of an edge, as a timeline entry keeps it. */
+  #refOf(
+    task: Pick<GraphTask, "id" | "number" | "title">,
+  ): Record<string, unknown> {
+    return { taskId: task.id, number: task.number, title: task.title };
+  }
+
+  /** Dependencies a caller named, found and with no task named twice; checked when added. */
+  #dependenciesOf(
+    input: readonly DependencyInput[] | undefined,
+  ): { taskId: string; requireDone: boolean }[] {
+    const found = new Map<string, boolean>();
+    for (const dependency of input ?? []) {
+      const task = this.#named(dependency.task);
+      found.set(
+        task.id,
+        (found.get(task.id) ?? false) || dependency.requireDone === true,
+      );
+    }
+    // A task waiting for a cancelled one is refused before anything is made, not after.
+    const graph = this.graph();
+    for (const id of found.keys()) {
+      const task = graph.task(id)!;
+      if (task.status === "cancelled")
+        throw new Error(
+          `${nameOf(task)} is cancelled, so nothing can wait for it`,
+        );
+    }
+    return [...found].map(([taskId, requireDone]) => ({ taskId, requireDone }));
+  }
+
+  /**
+   * Add or change one edge, inside the caller's write: the graph checks it as things are in that
+   * write, so a cycle cannot slip in between the check and the row.
+   */
+  #addEdge(
+    taskId: string,
+    dependsOnId: string,
+    requireDone: boolean,
+    actor: TaskActor,
+  ): void {
+    this.graph().checkEdge(taskId, dependsOnId);
+    const target = this.#existing(dependsOnId);
+    const before = this.#deps.tasks.setDependency(
+      taskId,
+      dependsOnId,
+      requireDone,
+    );
+    if (before !== undefined && before.requireDone === requireDone) return;
+    this.#deps.tasks.record(taskId, "dependency", actor, {
+      data: {
+        action: before === undefined ? "added" : "required",
+        ...this.#refOf(target),
+        requireDone,
+      },
+    });
+  }
+
+  /** A task's status moved: the tasks that wait for it read it again, and the graph settles. */
+  #statusMoved(id: string): void {
+    for (const edge of this.graph().dependentsOf(id))
+      this.#announce(edge.taskId, "changed", []);
+    this.#graphChanged();
+  }
+
+  /** The graph changed: the system's own blocks that no longer hold are undone, and the queue is looked at again. */
+  #graphChanged(): void {
+    this.#settle();
+    this.#runs?.pump();
+  }
+
+  /**
+   * Undo the blocks the system made itself (`blockOnCancelled`) whose cause is gone: the
+   * dependency was removed, or the task it waited for is not cancelled any more. Such a task goes
+   * back to `todo` and asks for its first run again, which waits, if it must, like any other. A
+   * task someone else blocked (the user, its executor) stays blocked: that is theirs to undo.
+   */
+  #settle(): void {
+    if (this.#settling) return;
+    this.#settling = true;
+    try {
+      const system: TaskActor = { kind: "system", agentId: null };
+      for (const task of this.#deps.tasks.list()) {
+        if (task.status !== "blocked") continue;
+        const last = this.#deps.tasks.lastStatusEntry(task.id);
+        if (last?.data.reason !== DEPENDENCY_CANCELLED) continue;
+        if (this.graph().gate(task.id).state === "broken") continue;
+        this.#commit(task.id, "changed", () => {
+          this.#deps.tasks.record(task.id, "dependency", system, {
+            data: { action: "unblocked" },
+          });
+          this.#deps.tasks.update(task.id, { status: "todo" }, system);
+        });
+        this.#runs?.start(task.id);
+      }
+    } finally {
+      this.#settling = false;
+    }
+  }
 
   /** A change, the refresh of the task's cards in the same write, and then the news of it. */
   #commit(id: string, kind: BoardChange["kind"], work: () => void): void {
@@ -427,19 +748,23 @@ export class TaskBoard {
       worktreeBranch,
       originConversationId,
     } = task;
+    const graph = this.graph();
     return {
-      ...viewOf(task),
+      ...viewOf(task, graph),
       description,
       projectId,
       originConversationId,
       workspace: {
         mode: workspaceMode,
-        base: baseBranch,
+        base: baseBranch ?? this.baseFor(task).base,
         path: worktreePath,
         branch: worktreeBranch,
       },
       artifacts: this.#deps.artifactsOf(task.id),
       runs: this.#deps.runs.ofTask(task.id).map(({ taskId: _, ...run }) => run),
+      dependents: graph
+        .dependentsOf(task.id)
+        .map((edge) => endOf(graph, edge, edge.taskId)),
     };
   }
 

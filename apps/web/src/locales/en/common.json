@@ -197,5 +197,6 @@
     "running": "in progress",
     "step": "{{name}}, {{kind}}, {{detail}}, starts at {{start}}, {{took}}",
     "stepPlain": "{{name}}, {{kind}}, starts at {{start}}, {{took}}"
-  }
+  },
+  "listSeparator": ", "
 }

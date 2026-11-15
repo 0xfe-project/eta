@@ -58,6 +58,8 @@ export interface DraftInput {
    * executes it itself, as it always was.
    */
   assignee?: string | undefined;
+  /** What the task will wait for, as the board found and checked it (`TaskDraftData.dependsOn`). */
+  dependsOn?: { taskId: string; requireDone: boolean }[] | undefined;
   captainAssignmentId?: string | undefined;
   captainMessageId?: string | undefined;
 }
@@ -146,6 +148,9 @@ export class TaskCards {
       status: draftStatus(input.draft),
       ...(input.draft.base === undefined ? {} : { base: input.draft.base }),
       ...(assignee === undefined ? {} : { assignee }),
+      ...(input.draft.dependsOn === undefined
+        ? {}
+        : { dependsOn: input.draft.dependsOn }),
       ...(input.draft.captainAssignmentId === undefined
         ? {}
         : { captainAssignmentId: input.draft.captainAssignmentId }),
@@ -174,7 +179,13 @@ export class TaskCards {
     conversationId: string;
     messageId: string;
     fields: ConfirmFields;
-  }): { task: TaskRecord; message: MessageView; created: boolean } {
+  }): {
+    task: TaskRecord;
+    message: MessageView;
+    created: boolean;
+    /** What the draft said the task waits for; the board adds the edges. */
+    dependsOn: { taskId: string; requireDone: boolean }[];
+  } {
     const { db, tasks, timeline } = this.#deps;
     const row = timeline.get(input.messageId);
     if (
@@ -186,7 +197,7 @@ export class TaskCards {
     if (row.kind === "task_card") {
       const task = tasks.get(String(row.data.taskId));
       if (task === undefined) throw new Error("that task was deleted");
-      return { task, message: row, created: false };
+      return { task, message: row, created: false, dependsOn: [] };
     }
 
     const draft = row.data as unknown as TaskDraftData;
@@ -223,7 +234,7 @@ export class TaskCards {
           draft.turnMessageId,
         ),
       })!;
-      return { task, message, created: true };
+      return { task, message, created: true, dependsOn: draft.dependsOn ?? [] };
     })();
   }
 

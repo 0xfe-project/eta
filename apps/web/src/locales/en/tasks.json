@@ -30,7 +30,9 @@
     "taskBusy": "Waiting for this task's previous run to end",
     "machineFull": "{{machine}} is running as many tasks as it may; waiting for a slot",
     "machineOffline": "{{machine}} is offline; it starts when it connects",
-    "thisMachine": "This machine"
+    "thisMachine": "This machine",
+    "waitingDeps": "Waiting for {{tasks}}",
+    "waitingDepsUnknown": "Waiting for the tasks it depends on"
   },
   "runs": {
     "label": "Run",
@@ -83,6 +85,14 @@
     "noReplyReminder": "This turn ended without a report; one reminder was sent",
     "turnFailed": "This turn failed{{reason}}",
     "turnStopped": "This turn stopped{{reason}}",
+    "dependencyAdded": "now waits for {{task}}",
+    "dependencyAddedDone": "now waits for {{task}}, and only done lets it go",
+    "dependencyRequireDone": "now waits for {{task}} to be done, not only in review",
+    "dependencyRequireAny": "now lets {{task}} go once it is in review or done",
+    "dependencyRemoved": "no longer waits for {{task}}",
+    "dependencyDeleted": "{{task}} was deleted, so this no longer waits for it",
+    "dependencyBlocked": "{{task}} was cancelled, so this will not start on its own. Remove the dependency, or cancel this task.",
+    "dependencyUnblocked": "no dependency is cancelled any more, so this goes back to todo and starts once what it waits for is resolved",
     "changeCount": "{{count}} updates",
     "changeCount_one": "{{count}} update",
     "changeCount_other": "{{count}} updates"
@@ -166,5 +176,25 @@
   "delete": {
     "confirmTitle": "Delete task #{{number}}?",
     "confirmDescription": "Its description, comments and activity are deleted and can't be restored."
+  },
+  "graph": {
+    "waitingOn": "Waiting for {{tasks}}",
+    "cancelledDependency": "Dependency {{tasks}} cancelled",
+    "dependsOn": "Depends on",
+    "dependents": "Needed by",
+    "none": "None",
+    "requireDone": "Must be done",
+    "requireDoneHint": "Only done lets this task start; unchecked, in review is enough",
+    "remove": "Stop waiting for #{{number}}",
+    "removeShort": "Remove dependency #{{number}}",
+    "cancelTask": "Cancel this task",
+    "add": "Add dependency",
+    "addPlaceholder": "#number",
+    "state": {
+      "resolved": "Ready",
+      "waiting": "Waiting",
+      "cancelled": "Cancelled"
+    },
+    "blockedHint": "A task this one depends on was cancelled, so it will not start on its own. Remove that dependency, or cancel this task."
   }
 }

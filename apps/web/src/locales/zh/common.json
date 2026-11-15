@@ -197,5 +197,6 @@
     "summary_one": "{{count}} 步，用时 {{duration}}",
     "summary_other": "{{count}} 步，用时 {{duration}}",
     "stepPlain": "{{name}}，{{kind}}，{{start}} 开始，{{took}}"
-  }
+  },
+  "listSeparator": "、"
 }

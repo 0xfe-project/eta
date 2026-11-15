@@ -24,6 +24,11 @@ export interface RunRecord extends TaskRunView {
   retryable: boolean | null;
   /** The last time this run's journal moved. */
   lastEventAt: number | null;
+  /**
+   * It starts the work (a task's first run, a rerun), so it waits for the task's dependencies. A
+   * comment's wake and a mentioned agent's answer do not.
+   */
+  waitsForDeps: boolean;
   /** What the session is held in (`session-key.ts`); null until the run has a session. */
   sessionKey: string | null;
 }
@@ -44,6 +49,7 @@ interface Row {
   error_code: string | null;
   retryable: number | null;
   last_event_at: number | null;
+  waits_for_deps: number;
   created_at: number;
   started_at: number | null;
   finished_at: number | null;
@@ -65,6 +71,7 @@ const recordOf = (row: Row): RunRecord => ({
   errorCode: row.error_code,
   retryable: row.retryable === null ? null : row.retryable === 1,
   lastEventAt: row.last_event_at,
+  waitsForDeps: row.waits_for_deps === 1,
   createdAt: row.created_at,
   startedAt: row.started_at,
   finishedAt: row.finished_at,
@@ -84,20 +91,22 @@ export class TaskRunStore {
    * A run, queued, on the machine it works on: its agent's, when the agent is pinned to one; else
    * the project's. A run that continues another one works in the session the other one made, and
    * says so with `continuesRunId` (`tasks.rerun` leaves it null: a rerun starts afresh and
-   * remembers nothing). `agentId` is a mentioned agent's lane.
+   * remembers nothing). `agentId` is a mentioned agent's lane. `waitsForDeps` marks a run that
+   * starts the work, which waits for the task's dependencies.
    */
   create(
     taskId: string,
     machineId: string | null,
     continuesRunId: string | null = null,
     agentId: string | null = null,
+    waitsForDeps = false,
   ): RunRecord {
     const id = crypto.randomUUID();
     this.#db
       .query(
         `INSERT INTO task_run
-           (id, task_id, machine_id, continues_run_id, agent_id, created_at, last_event_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           (id, task_id, machine_id, continues_run_id, agent_id, created_at, last_event_at, waits_for_deps)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -107,6 +116,7 @@ export class TaskRunStore {
         agentId,
         Date.now(),
         Date.now(),
+        waitsForDeps ? 1 : 0,
       );
     return this.get(id)!;
   }

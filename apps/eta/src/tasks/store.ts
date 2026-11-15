@@ -59,7 +59,34 @@ export interface TaskChanges {
   status?: BoardTaskStatus | undefined;
   /** Null unlinks. */
   conversationId?: string | null | undefined;
+  /**
+   * Why the status changed, kept on its entry, when the system moved it for a reason a later
+   * change has to recognize (`dependency_cancelled`).
+   */
+  statusReason?: string | undefined;
 }
+
+/** One edge of the graph as stored: `taskId` waits for `dependsOnId`. */
+export interface DependencyRecord {
+  taskId: string;
+  dependsOnId: string;
+  requireDone: boolean;
+  createdAt: number;
+}
+
+interface DependencyRow {
+  task_id: string;
+  depends_on_id: string;
+  require_done: number;
+  created_at: number;
+}
+
+const dependencyOf = (row: DependencyRow): DependencyRecord => ({
+  taskId: row.task_id,
+  dependsOnId: row.depends_on_id,
+  requireDone: row.require_done === 1,
+  createdAt: row.created_at,
+});
 
 interface TaskRow {
   number: number;
@@ -265,7 +292,16 @@ export class TaskStore {
     if (next.description !== before.description)
       entries.push(["description", {}]);
     if (next.status !== before.status)
-      entries.push(["status", { from: before.status, to: next.status }]);
+      entries.push([
+        "status",
+        {
+          from: before.status,
+          to: next.status,
+          ...(changes.statusReason === undefined
+            ? {}
+            : { reason: changes.statusReason }),
+        },
+      ]);
     if (next.conversationId !== before.conversationId) {
       entries.push([
         "conversation",
@@ -333,6 +369,64 @@ export class TaskStore {
           WHERE task_id = ? AND kind = 'comment' AND json_extract(data, '$.clientId') = ?`,
       )
       .get(taskId, clientId);
+    return row === null ? undefined : activityOf(row);
+  }
+
+  /* ---------------------------------------------------------------- the graph's rows */
+
+  /** Every edge, oldest first: the graph is read whole, since a rule can reach across it. */
+  dependencies(): DependencyRecord[] {
+    return this.#db
+      .query<DependencyRow, []>(
+        "SELECT * FROM task_dependency ORDER BY created_at, rowid",
+      )
+      .all()
+      .map(dependencyOf);
+  }
+
+  /**
+   * `taskId` waits for `dependsOnId`. Returns what was there before (undefined when the edge is
+   * new), so the caller can say what changed. Checking it is the graph's, not this.
+   */
+  setDependency(
+    taskId: string,
+    dependsOnId: string,
+    requireDone: boolean,
+  ): DependencyRecord | undefined {
+    const before = this.#db
+      .query<DependencyRow, [string, string]>(
+        "SELECT * FROM task_dependency WHERE task_id = ? AND depends_on_id = ?",
+      )
+      .get(taskId, dependsOnId);
+    this.#db
+      .query(
+        `INSERT INTO task_dependency (task_id, depends_on_id, require_done, created_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT (task_id, depends_on_id) DO UPDATE SET require_done = excluded.require_done`,
+      )
+      .run(taskId, dependsOnId, requireDone ? 1 : 0, Date.now());
+    return before === null ? undefined : dependencyOf(before);
+  }
+
+  /** Whether there was such an edge to take away. */
+  removeDependency(taskId: string, dependsOnId: string): boolean {
+    return (
+      this.#db
+        .query(
+          "DELETE FROM task_dependency WHERE task_id = ? AND depends_on_id = ?",
+        )
+        .run(taskId, dependsOnId).changes > 0
+    );
+  }
+
+  /** The newest `status` entry of a task: who moved it last, and why. */
+  lastStatusEntry(taskId: string): TaskActivityView | undefined {
+    const row = this.#db
+      .query<ActivityRow, [string]>(
+        `SELECT * FROM task_activity WHERE task_id = ? AND kind = 'status'
+          ORDER BY rowid DESC LIMIT 1`,
+      )
+      .get(taskId);
     return row === null ? undefined : activityOf(row);
   }
 
