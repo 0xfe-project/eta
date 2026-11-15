@@ -169,3 +169,34 @@ export function failure(error: unknown): string {
   }
   return reason(error);
 }
+
+/**
+ * A task's place in the task graph, in a few words: what its work still waits for (or that a
+ * dependency was cancelled), else how far its subtasks are. Undefined outside the graph.
+ */
+export function graphLabel(task: {
+  status: string;
+  waitingOn?: readonly { number: number; state: string }[];
+  subtasks?: { total: number; done: number } | null;
+}): string | undefined {
+  const open =
+    task.status === "todo" ||
+    task.status === "blocked" ||
+    task.status === "backlog";
+  const waits = open ? (task.waitingOn ?? []) : [];
+  const named = (state: string) =>
+    waits
+      .filter((wait) => wait.state === state)
+      .map((wait) => `#${wait.number}`)
+      .join(", ");
+  if (named("cancelled") !== "")
+    return t("tasks.graph.cancelled", { tasks: named("cancelled") });
+  if (named("waiting") !== "")
+    return t("tasks.queue.waitingDeps", { tasks: named("waiting") });
+  if (task.subtasks != null)
+    return t("tasks.graph.subtasks", {
+      done: task.subtasks.done,
+      total: task.subtasks.total,
+    });
+  return undefined;
+}

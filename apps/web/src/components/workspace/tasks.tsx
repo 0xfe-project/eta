@@ -1688,6 +1688,14 @@ export function CommentBox({
       ) : null}
       <div className={className}>
         {top}
+        {task.subtasks == null ||
+        task.runs.some(
+          (run) => run.agentId === null && isActive(run.status),
+        ) ? null : (
+          <p className="pb-1.5 text-xs text-muted-foreground">
+            {translateText("graph.parentCommentHint")}
+          </p>
+        )}
         <form
           className="relative flex items-end border border-input bg-background focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/50 dark:bg-input/30"
           onSubmit={(e) => {

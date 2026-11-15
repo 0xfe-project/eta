@@ -32,7 +32,7 @@ import { LineInput } from "../../ui/components/line-input";
 import { inkColor } from "../../ui/theme";
 import { callsFor, showItem, startCall } from "./calls";
 import { usePanelState, useTaskTarget } from "./hooks";
-import { statusText } from "./labels";
+import { graphText, statusText } from "./labels";
 import { pendingMessages } from "./messages";
 import {
   agentName,
@@ -431,7 +431,7 @@ function itemTitle(
 ): string {
   if (facts.kind === "question") return questionTitle(state, facts.interaction);
   const { task } = facts;
-  return `#${task.number} ${task.title} · ${t(statusText(task.status))}`;
+  return `#${task.number} ${task.title} · ${t(statusText(task.status))}${graphText(task, t)}`;
 }
 
 function QuestionBody({
@@ -503,6 +503,16 @@ function TaskBody({
           </Text>
         </Box>
       )}
+      {facts.task.subtasks != null &&
+        !["queued", "starting", "running"].includes(
+          facts.task.runStatus ?? "",
+        ) && (
+          <Box marginTop={1}>
+            <Text color={inkColor(theme.muted)} wrap="wrap">
+              {t("parentCommentHint")}
+            </Text>
+          </Box>
+        )}
     </Box>
   );
 }

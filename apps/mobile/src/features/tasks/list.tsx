@@ -12,6 +12,7 @@ import { useTarget } from "../../wire/target";
 import {
   actorName,
   executor,
+  graphLabel,
   FOLDED_STATUSES,
   isActive,
   OPEN_STATUSES,
@@ -65,6 +66,9 @@ function TaskRow(props: { task: BoardTaskView }) {
   const meta = () => {
     const task = props.task;
     const base = `#${task.number} · ${actorName(executor(task))}`;
+    // Where it stands in the task graph, when it is in one; nothing from an older host.
+    const graph = graphLabel(task);
+    if (graph !== undefined) return `${base} · ${graph}`;
     return task.status === "todo" && task.runStatus === null
       ? `${base} · ${t("tasks.run.never")}`
       : base;

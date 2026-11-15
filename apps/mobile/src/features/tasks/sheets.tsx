@@ -112,6 +112,8 @@ function RunsRow(props: { task: () => TaskDetail; onDone: () => void }) {
   const own = () => props.task().runs.filter((run) => run.agentId === null);
   const latest = () => own().at(-1);
   const going = () => own().some((run) => isActive(run.status));
+  // A parent does not run itself (the host refuses it): no button, and it says why instead.
+  const parent = () => props.task().subtasks != null;
   const busy = signal(false);
   const rerun = (): void => {
     if (busy()) return;
@@ -122,7 +124,8 @@ function RunsRow(props: { task: () => TaskDetail; onDone: () => void }) {
   };
   const words = () => {
     const run = latest();
-    if (run === undefined) return t("tasks.run.never");
+    if (run === undefined)
+      return parent() ? t("tasks.run.parentHint") : t("tasks.run.never");
     const label = runLabel(run.status);
     return run.status === "failed" && run.error
       ? `${label}：${run.error}`
@@ -145,7 +148,7 @@ function RunsRow(props: { task: () => TaskDetail; onDone: () => void }) {
               {words()}
             </Text>
           </View>
-          <If when={!going()}>
+          <If when={!going() && !parent()}>
             <View
               role="button"
               testID="task-rerun"
@@ -163,7 +166,9 @@ function RunsRow(props: { task: () => TaskDetail; onDone: () => void }) {
         </View>
         <If when={latest() !== undefined && !going()}>
           <Text class="text-sm leading-[18px] text-muted-foreground">
-            {t("tasks.run.fromScratchHint")}
+            {parent()
+              ? t("tasks.run.parentHint")
+              : t("tasks.run.fromScratchHint")}
           </Text>
         </If>
       </View>

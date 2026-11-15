@@ -21,12 +21,17 @@ export const i18n = {
     "tasks.run.rerun": "从头重跑",
     "tasks.run.fromScratchHint":
       "评论会让执行者接着上次往下做；这样是开一个它什么都不记得的新会话。",
+    "tasks.run.parentHint": "父任务不单独运行，状态由子任务推出",
     "tasks.queue.taskBusy": "等这个任务上一次运行结束",
     "tasks.queue.machineFull": "{machine} 同时运行的任务数已满，等空位",
     "tasks.queue.machineOffline": "{machine} 不在线，连上后开始",
     "tasks.queue.thisMachine": "这台机器",
     "tasks.queue.waitingDeps": "等待 {tasks}",
     "tasks.queue.theirDependencies": "它依赖的任务",
+    "tasks.graph.cancelled": "依赖 {tasks} 已取消",
+    "tasks.graph.subtasks": "子任务 {done}/{total}",
+    "tasks.graph.parentCommentHint":
+      "父任务不会因为评论开始新的执行；要改工作，在子任务上评论或新建子任务。",
     "tasks.scope.all": "所有群",
     "tasks.scope.title": "看哪个群的任务",
     "tasks.scope.emptyGroup": "这个群还没有任务",
@@ -144,6 +149,8 @@ export const i18n = {
     "tasks.run.rerun": "Rerun from scratch",
     "tasks.run.fromScratchHint":
       "A comment lets the executor carry on from where it left off; this opens a new session that remembers nothing.",
+    "tasks.run.parentHint":
+      "A parent task does not run itself: its status comes from its subtasks.",
     "tasks.queue.taskBusy": "Waiting for this task's previous run",
     "tasks.queue.machineFull":
       "{machine} is at its run limit, waiting for a slot",
@@ -152,6 +159,10 @@ export const i18n = {
     "tasks.queue.thisMachine": "This machine",
     "tasks.queue.waitingDeps": "Waiting for {tasks}",
     "tasks.queue.theirDependencies": "the tasks it depends on",
+    "tasks.graph.cancelled": "dependency {tasks} cancelled",
+    "tasks.graph.subtasks": "subtasks {done}/{total}",
+    "tasks.graph.parentCommentHint":
+      "A parent task starts no new run because of a comment. To change the work, comment on a subtask or add one.",
     "tasks.scope.all": "All groups",
     "tasks.scope.title": "Show tasks from",
     "tasks.scope.emptyGroup": "This group has no tasks yet",

@@ -277,6 +277,47 @@ describe("dependencies on the board", () => {
     navigation.task = null;
   });
 
+  it("says over a parent's comment box that a comment starts no run, unless one is going", async () => {
+    const run = {
+      id: "r1",
+      agentId: null,
+      status: "running" as const,
+      queueReason: null,
+      machineId: "m1",
+      sessionId: "s1",
+      continuesRunId: null,
+      workspace: null,
+      nudged: false,
+      error: null,
+      createdAt: 1,
+      startedAt: 1,
+      finishedAt: null,
+    };
+    const parent = (runs: (typeof run)[]) =>
+      taskDetail({
+        id: "p1",
+        number: 10,
+        title: "阶段一",
+        status: "in_progress",
+        createdBy: { kind: "agent", agentId: "a1" },
+        subtasks: { total: 1, done: 0 },
+        runs,
+      });
+    const hint = "父任务不会因为评论开始新的执行";
+    navigation.task = "p1";
+    productHost({ tasks: [{ task: parent([]) }] }).hello();
+    let { container } = await mount(<TaskBoard />);
+    await flush();
+    expect(container.textContent).toContain(hint);
+    await cleanup();
+    // The executor splitting its task is still at work, and reads what is said.
+    productHost({ tasks: [{ task: parent([run]) }] }).hello();
+    ({ container } = await mount(<TaskBoard />));
+    await flush();
+    expect(container.textContent).not.toContain(hint);
+    navigation.task = null;
+  });
+
   it("names whom a queued run waits for", () => {
     expect(queueReasonLabel("waiting_deps", "m", [12, 13])).toBe(
       "等待 #12、#13",

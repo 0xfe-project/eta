@@ -211,6 +211,7 @@
     "clearParent": "Remove from parent",
     "expand": "Show the subtasks of #{{number}}",
     "collapse": "Hide the subtasks of #{{number}}",
-    "via": "via #{{number}}"
+    "via": "via #{{number}}",
+    "parentCommentHint": "A parent task starts no new run because of a comment. To change the work, comment on a subtask or add one."
   }
 }

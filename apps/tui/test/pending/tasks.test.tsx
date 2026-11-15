@@ -76,6 +76,33 @@ describe("the /tasks command", () => {
     expect(closed).toBeGreaterThan(planLine);
   }, 240_000);
 
+  it("says what a task waits for, and how far a parent's subtasks are", async () => {
+    const w = await twoRooms();
+    const first = await w.reviewTask("Ada", w.ada.group.id, "First", "First");
+    const second = await w.reviewTask(
+      "Ada",
+      w.ada.group.id,
+      "Second",
+      "Second",
+    );
+    const stage = await w.reviewTask("Ada", w.ada.group.id, "Stage", "Stage");
+    await w.moveTask(first.id, "todo");
+    await w.moveTask(second.id, "todo");
+    await w.ask("tasks", "addDependency", {
+      taskId: second.id,
+      dependsOn: first.id,
+    });
+    await w.ask("tasks", "setParent", { taskId: first.id, parent: stage.id });
+    const r = await w.show();
+    await r.type("/tasks");
+    await r.press(KEYS.enter);
+    await screenShows(r, "#2 Second");
+    expect(lineWith(r, "#2 Second", "to do", "waiting for #1")).toBeGreaterThan(
+      -1,
+    );
+    expect(lineWith(r, "#3 Stage", "subtasks 0/1")).toBeGreaterThan(-1);
+  }, 240_000);
+
   it("opens a task in review as a waiting item, and Esc goes back to the list", async () => {
     const w = await twoRooms();
     const task = await w.reviewTask("Ada", w.ada.group.id, "Ship it", "Ship");

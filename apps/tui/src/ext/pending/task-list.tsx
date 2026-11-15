@@ -7,7 +7,7 @@ import { LayerFrame } from "../../ui/components/layer-frame";
 import { inkColor } from "../../ui/theme";
 import { usePanelState } from "./hooks";
 import { openItemLayer } from "./item-layer";
-import { statusText } from "./labels";
+import { graphText, statusText } from "./labels";
 import { pendingMessages } from "./messages";
 import { isWaitingTask, openTasks, taskList } from "./model";
 import { ScrollList } from "./scroll-list";
@@ -44,7 +44,7 @@ export function TaskList({ handle }: { handle: LayerHandle }) {
                 kind: "choice",
                 key: task.id,
                 content: (
-                  <Text>{`#${task.number} ${task.title}  ${t(statusText(task.status))}`}</Text>
+                  <Text>{`#${task.number} ${task.title}  ${t(statusText(task.status))}${graphText(task, t)}`}</Text>
                 ),
               }))
         }
