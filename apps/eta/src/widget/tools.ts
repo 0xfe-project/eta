@@ -40,6 +40,7 @@ const showWidget = defineTool({
     "Draw visual content in the conversation, under your reply: an SVG diagram, a chart, a " +
     "dashboard or an interactive HTML explainer. It is drawn while you write it and its " +
     "scripts run when it is complete. Use it when the answer is easier to see than to read. " +
+    "For a page the user keeps, shares or downloads, use publish_artifact instead. " +
     "Only the web chat draws it; elsewhere the user sees its title. Call visualize_read_me " +
     `first. At most ${MAX_CODE / 1000}KB.`,
   parameters: Type.Object({

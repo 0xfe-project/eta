@@ -125,6 +125,13 @@ const RUNTIME = `(() => {
     } else if (message.kind === "content") {
       apply(message.html);
       if (message.final) run();
+    } else if (message.kind === "font") {
+      // The app's face arrives as bytes: the frame may load no font, and a widget drawn in a
+      // system face would be a second typeface in the product.
+      new FontFace(message.family, message.data)
+        .load()
+        .then((face) => document.fonts.add(face))
+        .catch((error) => console.error("eta widget: font", error));
     }
   });
   new ResizeObserver(() =>
@@ -138,6 +145,28 @@ export const WIDGET_SHELL = `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>${STYLE}</style></head><body><div id="root"></div>
 <script>${morphdom}</script><script>${RUNTIME}</script></body></html>`;
+
+/** The one face the app ships (declared in index.html), as `--font-sans` names it. */
+export const APP_FONT = {
+  family: "Eta Sans",
+  url: "AKRDWGSCNFM-Regular.woff2",
+} as const;
+
+let appFont: Promise<ArrayBuffer> | undefined;
+
+/**
+ * The app's face, read once for every widget: the page has fetched it already, so this comes from
+ * the browser's cache.
+ */
+export function appFontData(): Promise<ArrayBuffer> {
+  appFont ??= fetch(new URL(APP_FONT.url, document.baseURI)).then(
+    (response) => {
+      if (!response.ok) throw new Error(`font: HTTP ${response.status}`);
+      return response.arrayBuffer();
+    },
+  );
+  return appFont;
+}
 
 /** The app's theme as the shell's variables: read from the page, so the frame matches it. */
 export function widgetTheme(): {

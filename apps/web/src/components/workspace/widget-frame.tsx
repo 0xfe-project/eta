@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { WIDGET_MESSAGE, WIDGET_SHELL, widgetTheme } from "./widget-shell";
+import {
+  APP_FONT,
+  appFontData,
+  WIDGET_MESSAGE,
+  WIDGET_SHELL,
+  widgetTheme,
+} from "./widget-shell";
 
 /** Rapid stream updates are drawn at most this often. */
 const STREAM_EVERY_MS = 150;
@@ -51,6 +57,11 @@ export function WidgetFrame({
       if (message.kind === "ready") {
         post({ kind: "theme", ...widgetTheme() });
         setReady(true);
+        appFontData().then(
+          (data) => post({ kind: "font", family: APP_FONT.family, data }),
+          // The widget still draws, in a fallback face.
+          (error: unknown) => console.error("widget font", error),
+        );
       } else if (
         message.kind === "height" &&
         typeof message.height === "number"
