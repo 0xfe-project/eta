@@ -113,7 +113,7 @@ import {
 } from "./task-format";
 import { DependencyRows, TreeRows } from "./task-graph";
 import { useTaskNav } from "./task-nav";
-import { executorOf, isWaiting } from "./task-plan";
+import { executorOf, isRunning, isWaiting } from "./task-plan";
 import { RunLog } from "./task-run-log";
 import { sideGroups } from "./task-side";
 import { SideMarker } from "./task-side-rows";
@@ -235,7 +235,10 @@ function TaskRow({ task, all }: { task: Task; all: readonly Task[] }) {
               {ago(task.updatedAt)}
             </span>
             <span className="ml-auto flex shrink-0 items-center gap-3 pl-2">
-              <RunState task={task} />
+              {/* Running and waiting say so at the line's end already. */}
+              {isRunning(task) || isWaiting(task) ? null : (
+                <RunState task={task} />
+              )}
               <Comments count={task.comments} />
             </span>
           </span>
@@ -881,7 +884,13 @@ function describe(a: TaskActivity): React.ReactNode {
 }
 
 /** What the thread gives a line of its own: what was said, what was delivered, what went wrong. */
-const standalone = new Set<string>(["comment", "artifact", "run_failed"]);
+const standalone = new Set<string>([
+  "comment",
+  "artifact",
+  "run_failed",
+  // What it waits for, and what happened to that: the graph's story, each a line with its mark.
+  "dependency",
+]);
 
 /**
  * Never a line: the first message already says who made the task and when, and a run waiting for

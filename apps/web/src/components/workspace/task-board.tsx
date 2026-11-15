@@ -111,7 +111,12 @@ function TaskPage({ id }: { id: string }) {
       className="flex min-w-0 items-center gap-1.5 text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
     >
       <ArrowLeftIcon aria-hidden="true" className="size-3.5 shrink-0" />
-      <span className="truncate">
+      {task?.ancestors?.at(-1) === undefined ? null : (
+        <span className="max-w-[40%] shrink-0 truncate">
+          {task.ancestors.at(-1)!.title} ›
+        </span>
+      )}
+      <span className="truncate text-foreground">
         {task ? task.title : translateText("navigation:sections.tasks")}
       </span>
     </button>

@@ -71,7 +71,7 @@ function FlowNode({
       <button
         type="button"
         onClick={() => void setNav({ task: edge.taskId })}
-        className="flex w-full min-w-0 items-start gap-1.5 text-left text-xs leading-5 hover:underline"
+        className="flex w-full min-w-0 items-start gap-1.5 border bg-card px-2.5 py-1.5 text-left text-xs leading-5 hover:border-foreground/40"
       >
         <StatusIcon status={edge.status} className="mt-0.75 size-3.5" />
         <span className="min-w-0 flex-1 wrap-anywhere">{edge.title}</span>
@@ -116,7 +116,7 @@ export function FlowBar({
         <h3 className="text-xs text-muted-foreground">
           {label} · {edges.length}
         </h3>
-        <ul className="space-y-0.5">
+        <ul className="space-y-1">
           {edges.map((edge) => (
             <FlowNode key={edge.taskId} edge={edge} side={side} />
           ))}
@@ -125,38 +125,37 @@ export function FlowBar({
     );
   if (phone)
     return (
-      <div data-flow="column" className="space-y-3 border bg-card p-3">
+      <div data-flow="column" className="space-y-3">
         {column("before", before, t("flow.before"))}
         {column("after", after, t("flow.after"))}
       </div>
     );
   return (
-    <div
-      data-flow="row"
-      className="flex items-stretch gap-3 border bg-card p-3"
-    >
+    <div data-flow="row" className="flex items-center gap-2">
       {column("before", before, t("flow.before"))}
       {before.length > 0 ? (
         <ArrowRightIcon
           aria-hidden="true"
-          className="mt-6 size-3.5 shrink-0 text-muted-foreground"
+          className="mt-5 size-3.5 shrink-0 text-muted-foreground"
         />
       ) : null}
-      <div className="w-32 shrink-0 space-y-1 self-center border-x px-3 text-center text-xs">
-        <p className="flex items-center justify-center gap-1.5 font-medium">
+      <div className="mt-5 flex min-w-0 flex-1 items-center gap-1.5 border-2 border-foreground bg-card px-3 py-2 text-xs">
+        {left > 0 ? (
+          <LockSimpleIcon aria-hidden="true" className="size-3.5 shrink-0" />
+        ) : (
           <StatusIcon status={task.status} className="size-3.5" />
-          {t("flow.self")}
-        </p>
-        <p className="text-muted-foreground">
+        )}
+        <span className="font-semibold">{t("flow.self")}</span>
+        <span className="ml-auto shrink-0 text-muted-foreground">
           {left > 0
             ? t("flow.left", { count: left })
             : flowWord("before", { status: task.status, state: "resolved" })}
-        </p>
+        </span>
       </div>
       {after.length > 0 ? (
         <ArrowRightIcon
           aria-hidden="true"
-          className="mt-6 size-3.5 shrink-0 text-muted-foreground"
+          className="mt-5 size-3.5 shrink-0 text-muted-foreground"
         />
       ) : null}
       {column("after", after, t("flow.after"))}
@@ -210,35 +209,45 @@ export function QueueReason({
           aria-hidden="true"
           className="mt-0.75 size-3.5 shrink-0 text-muted-foreground"
         />
-        <span>{sentence}</span>
+        <span>
+          {sentence.includes("：") ? (
+            <>
+              <b className="font-semibold">
+                {sentence.slice(0, sentence.indexOf("：") + 1)}
+              </b>
+              {sentence.slice(sentence.indexOf("：") + 1)}
+            </>
+          ) : (
+            sentence
+          )}
+        </span>
       </p>
       {isWaiting(task) && own.length > 0 ? (
-        <div role="group" className="flex flex-wrap gap-1.5 pl-5.5">
+        <div
+          role="group"
+          className="flex flex-wrap items-center gap-x-2 pl-5.5 text-xs text-muted-foreground"
+        >
           {one !== undefined && wait?.kind === "one" ? (
             <>
-              <Button
-                variant={wait.requireDone ? "ghost" : "outline"}
-                size="xs"
-                aria-pressed={!wait.requireDone}
+              <QueueChoice
+                pressed={!wait.requireDone}
                 disabled={busy}
                 onClick={() => setRequireDone(false)}
               >
                 {t("queue.waitDelivery")}
-              </Button>
-              <Button
-                variant={wait.requireDone ? "outline" : "ghost"}
-                size="xs"
-                aria-pressed={wait.requireDone}
+              </QueueChoice>
+              <span aria-hidden="true">·</span>
+              <QueueChoice
+                pressed={wait.requireDone}
                 disabled={busy}
                 onClick={() => setRequireDone(true)}
               >
                 {t("queue.waitDone")}
-              </Button>
+              </QueueChoice>
+              <span aria-hidden="true">·</span>
             </>
           ) : null}
-          <Button
-            variant="ghost"
-            size="xs"
+          <QueueChoice
             disabled={busy}
             onClick={() => {
               for (const w of own)
@@ -249,10 +258,40 @@ export function QueueReason({
             }}
           >
             {t("queue.startNow")}
-          </Button>
+          </QueueChoice>
         </div>
       ) : null}
     </section>
+  );
+}
+
+/** One of the queue's choices, as a link; the one that holds now is plain. */
+function QueueChoice({
+  pressed,
+  disabled,
+  onClick,
+  children,
+}: {
+  pressed?: boolean;
+  disabled: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "py-0.5 outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50",
+        pressed === true
+          ? "text-muted-foreground"
+          : "text-foreground underline underline-offset-4 hover:decoration-2",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 

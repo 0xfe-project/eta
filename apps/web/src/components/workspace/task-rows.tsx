@@ -169,7 +169,7 @@ export function TaskCardRow({ message }: { message: MessageView }) {
     <div
       data-task-card
       data-blocked={blocked || undefined}
-      className={cn(blocked && "border-l-2 border-state-error pl-2")}
+      className={cn(blocked && "-ml-2.5 border-l-2 border-state-error pl-2")}
     >
       <details className="task-fold" {...foldable(open, fold)}>
         <TaskFoldHead

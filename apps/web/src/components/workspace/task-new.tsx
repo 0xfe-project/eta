@@ -110,7 +110,11 @@ function Segments<V extends string>({
   labelledBy: string;
 }) {
   return (
-    <div role="group" aria-labelledby={labelledBy} className="flex border">
+    <div
+      role="group"
+      aria-labelledby={labelledBy}
+      className="flex w-fit border"
+    >
       {options.map((option) => (
         <button
           key={option.value}
@@ -156,15 +160,18 @@ function NewTaskForm({ preset }: { preset: NewTaskPreset }) {
   const [conversationId, setConversationId] = useState<string | undefined>(
     group?.id ?? open[0]?.id,
   );
-  // The executor: the parent's, else the first agent of the conversation, else the first there is.
+  // The executor, until the user picks one: the parent's, else the conversation's first member
+  // that is not Captain, else the first such agent there is. Picking a parent changes it with it.
   const people = agents.filter((agent) => agent.systemRole !== "captain");
   const conversation = conversations.find((c) => c.id === conversationId);
-  const [assignee, setAssignee] = useState<string | undefined>(
-    () =>
-      (parent === undefined ? undefined : (executorOf(parent) ?? undefined)) ??
-      conversation?.participants[0]?.agentId ??
-      people[0]?.id,
-  );
+  const [picked, setAssignee] = useState<string | undefined>();
+  const assignee =
+    picked ??
+    (parent === undefined ? undefined : (executorOf(parent) ?? undefined)) ??
+    conversation?.participants.find((member) =>
+      people.some((agent) => agent.id === member.agentId),
+    )?.agentId ??
+    people[0]?.id;
   const projectId =
     parent === undefined
       ? conversation?.projectId

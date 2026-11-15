@@ -184,6 +184,7 @@ function AddDependency({ task }: { task: TaskDetail }) {
   return (
     <TaskPicker
       mode="dependsOn"
+      align="end"
       subject={{ id: task.id, parentId: task.parentId ?? null }}
       projectId={task.projectId ?? undefined}
       exclude={own}
@@ -227,12 +228,6 @@ export function DependencyRows({
               <Edge key={edge.taskId} task={task} edge={edge} editable />
             ))}
           </ul>
-        ) : null}
-        {task.status === "blocked" &&
-        dependsOn.some((edge) => edge.state === "cancelled") ? (
-          <p className="text-xs leading-5 text-destructive">
-            {t("graph.blockedHint")}
-          </p>
         ) : null}
         <AddDependency task={task} />
       </dd>
@@ -304,6 +299,7 @@ function ParentField({ task }: { task: TaskDetail }) {
   return (
     <TaskPicker
       mode="parent"
+      align="end"
       subject={{ id: task.id, parentId: null }}
       projectId={task.projectId ?? undefined}
       onPick={(other) =>

@@ -229,7 +229,6 @@
       "waiting": "Waiting",
       "cancelled": "Cancelled"
     },
-    "blockedHint": "A task this one depends on was cancelled, so it will not start on its own. Remove that dependency, or cancel this task.",
     "subtasks": "Subtasks {{done}}/{{total}}",
     "parent": "Parent",
     "children": "Subtasks",
@@ -482,7 +481,7 @@
   },
   "stuck": {
     "title": "This task is stuck and needs your decision",
-    "body": "“{{title}}” (#{{number}}), which it waits for, was cancelled {{when}}, so {{who}} won’t start it. It stays blocked until you decide.",
+    "body": "“{{title}}” (#{{number}}), which it waits for, was cancelled ({{when}}), so {{who}} won’t start it. It stays blocked until you decide.",
     "bodyMany": "{{count}} tasks it waits for were cancelled, so {{who}} won’t start it. It stays blocked until you decide.",
     "bodyMany_one": "{{count}} task it waits for was cancelled, so {{who}} won’t start it. It stays blocked until you decide.",
     "bodyMany_other": "{{count}} tasks it waits for were cancelled, so {{who}} won’t start it. It stays blocked until you decide.",
