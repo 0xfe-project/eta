@@ -162,8 +162,12 @@ export function TaskDraftRow({ message }: { message: MessageView }) {
               branch: null,
             }),
           })}
-          {backlog ? ` ${translateText("draft.backlogHint")}` : null}
         </p>
+        {backlog ? (
+          <p className="text-xs text-muted-foreground">
+            {translateText("draft.backlogHint")}
+          </p>
+        ) : null}
       </div>
       <Dialog open={form} onOpenChange={setForm}>
         <DialogContent className="sm:max-w-lg">
