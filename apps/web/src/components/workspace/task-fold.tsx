@@ -17,6 +17,7 @@ import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
  */
 export function TaskFoldHead({
   icon: Icon = ListChecksIcon,
+  mark,
   label,
   title,
   marker,
@@ -24,6 +25,8 @@ export function TaskFoldHead({
 }: {
   /** What kind of row it is, beside its label. A task's by default. */
   icon?: PhosphorIcon;
+  /** Drawn in place of the icon: a task's status mark. */
+  mark?: React.ReactNode;
   label: string;
   /**
    * The one line the row is about: a proposed title, or a task's number and title — as a link when
@@ -45,7 +48,7 @@ export function TaskFoldHead({
       <span aria-hidden="true" className="thinking-block-chevron">
         ▶
       </span>
-      <Icon aria-hidden="true" className="size-3.5 shrink-0" />
+      {mark ?? <Icon aria-hidden="true" className="size-3.5 shrink-0" />}
       <span className="shrink-0">{label}</span>
       <span className="task-fold-title">{title}</span>
       {marker}

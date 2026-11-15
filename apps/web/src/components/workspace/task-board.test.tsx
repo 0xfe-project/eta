@@ -12,6 +12,7 @@ import {
 } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
 import { TaskBoard } from "./task-board";
+import { useNewTask } from "./task-new-store";
 import { storageKey, useWorkspaceStore } from "./workspace-store";
 
 const navigation = rstest.hoisted(() => ({
@@ -114,6 +115,7 @@ describe("task board", () => {
     navigation.set.mockClear();
     localStorage.clear();
     useWorkspaceStore.setState({ workspace: {} });
+    useNewTask.setState({ preset: undefined });
   });
 
   it("opens on the board, with the list and the plan to switch to", async () => {
@@ -217,7 +219,7 @@ describe("task board", () => {
     expect(card.textContent).toContain("正在运行");
   });
 
-  it("makes a new task in a conversation: tasks are proposed by agents", async () => {
+  it("opens the new-task form from the bar; nothing is made until it is sent", async () => {
     const host = board();
     const { container } = await mount(<TaskBoard />);
     await flush();
@@ -226,12 +228,8 @@ describe("task board", () => {
         (b) => b.textContent === "新建",
       ),
     );
-    await click(
-      [...document.querySelectorAll("button")].find(
-        (b) => b.textContent === "开一个对话",
-      ),
-    );
-    expect(useWorkspaceStore.getState().newConversation.open).toBe(true);
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dialog.textContent).toContain("新建任务");
     expect(host.calls.filter((c) => c.action === "create")).toHaveLength(0);
   });
 

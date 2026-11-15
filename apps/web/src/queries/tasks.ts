@@ -57,6 +57,17 @@ export function useTask(id: string | null) {
   return { task, missing, error };
 }
 
+/**
+ * The user's own tasks, from the form: one, or a piece of work split into several, made in one
+ * write. The call is the confirmation; nothing else makes tasks from the page.
+ */
+export function useCreateTasks() {
+  return useWireMutation<TaskArgs["create"], TaskResults["create"]>(
+    "tasks",
+    "create",
+  );
+}
+
 /** Stop a run: a queued one never starts, a going one ends `interrupted`. */
 export function useInterruptRun() {
   return useWireMutation<TaskArgs["interrupt"], TaskResults["interrupt"]>(

@@ -216,8 +216,14 @@ describe("dependencies on the board", () => {
     ))
       await click(fold);
     const text = main.textContent!;
-    expect(text).toContain("开始等 #5 T5，只有它「已完成」才放行");
-    expect(text).toContain("#5 T5 被取消了，本任务不会自己开始");
+    expect(text).toContain("加了前置「T5」，等它被验收完成");
+    expect(text).toContain("「T5」被取消，本任务暂停，等你决定");
+    // Each with its mark: linked, and broken.
+    expect(
+      [...main.querySelectorAll("[data-dependency]")].map((e) =>
+        e.getAttribute("data-dependency"),
+      ),
+    ).toEqual(["added", "blocked"]);
     expect(text).not.toMatch(/was cancelled|Waits for/);
     expect(text).toContain("Old words from the host.");
     navigation.task = null;
@@ -272,7 +278,7 @@ describe("dependencies on the board", () => {
       ),
     );
     const main = container.querySelector("main")!;
-    expect(main.textContent).toContain("父任务不单独运行，状态由子任务推出");
+    expect(main.textContent).toContain("由 2 个子任务推进");
     expect(main.textContent).not.toContain("还没运行过");
     const labels = [...main.querySelectorAll("button")].map(
       (b) => b.textContent,
@@ -313,7 +319,7 @@ describe("dependencies on the board", () => {
         subtasks: { total: 1, done: 0 },
         runs,
       });
-    const hint = "父任务不会因为评论开始新的执行";
+    const hint = "在这里讨论；要改某一步，请在那个子任务里说";
     navigation.task = "p1";
     productHost({ tasks: [{ task: parent([]) }] }).hello();
     let { container } = await mount(<TaskBoard />);

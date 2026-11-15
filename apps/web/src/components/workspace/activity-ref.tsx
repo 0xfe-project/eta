@@ -60,9 +60,12 @@ const taskStatus = (status: string | undefined) =>
 export function ActivityRefCard({
   value,
   variant = "flat",
+  aside,
   className,
 }: {
   value: ActivityRef;
+  /** What the row says at its end in place of a task's status label (a bar, a wait). */
+  aside?: React.ReactNode;
   /** `flat` is a row of a list, which draws the rules; `framed` stands alone, in a chat. */
   variant?: "flat" | "framed";
   className?: string;
@@ -108,7 +111,8 @@ export function ActivityRefCard({
           </span>
         ) : null}
       </span>
-      {status ? <StatusPill status={status.value} icon={false} /> : null}
+      {aside ??
+        (status ? <StatusPill status={status.value} icon={false} /> : null)}
       <CaretRightIcon aria-hidden="true" className={iconClass} />
     </>
   );
