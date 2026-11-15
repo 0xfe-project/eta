@@ -211,6 +211,7 @@
     "clearParent": "移出父任务",
     "expand": "展开 #{{number}} 的子任务",
     "collapse": "收起 #{{number}} 的子任务",
-    "via": "经 #{{number}}"
+    "via": "经 #{{number}}",
+    "parentCommentHint": "父任务不会因为评论开始新的执行；要改工作，在子任务上评论或新建子任务。"
   }
 }

@@ -11,7 +11,7 @@ import { participantsStatus } from "../conversation/facts";
 import { CONVERSATION_VIEW } from "../conversation/kind";
 import { usePanelState, usePendingItems } from "./hooks";
 import { openItemLayer } from "./item-layer";
-import { statusText } from "./labels";
+import { graphText, statusText } from "./labels";
 import { pendingMessages } from "./messages";
 import { firstLine, panelConversations, questionTitle } from "./model";
 import { ScrollList } from "./scroll-list";
@@ -123,7 +123,7 @@ function PendingLine({ item }: { item: PendingItem }) {
       </Text>
     );
   return (
-    <Text>{`#${item.task.number} ${item.task.title}  ${t(statusText(item.task.status))}`}</Text>
+    <Text>{`#${item.task.number} ${item.task.title}  ${t(statusText(item.task.status))}${graphText(item.task, t)}`}</Text>
   );
 }
 

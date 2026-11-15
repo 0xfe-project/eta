@@ -16,6 +16,11 @@ export const pendingMessages = defineMessages({
     statusBlocked: "blocked",
     statusDone: "done",
     statusCancelled: "cancelled",
+    waitingFor: "waiting for {tasks}",
+    dependencyCancelled: "{tasks} cancelled",
+    subtasks: "subtasks {done}/{total}",
+    parentCommentHint:
+      "A parent task starts no new run because of a comment. To change the work, comment on a subtask or add one.",
     decline: "Decline",
     accept: "Accept (mark done)",
     comment: "Comment…",
@@ -63,6 +68,11 @@ export const pendingMessages = defineMessages({
     statusBlocked: "卡住",
     statusDone: "已完成",
     statusCancelled: "已取消",
+    waitingFor: "等待 {tasks}",
+    dependencyCancelled: "依赖 {tasks} 已取消",
+    subtasks: "子任务 {done}/{total}",
+    parentCommentHint:
+      "父任务不会因为评论开始新的执行；要改工作，在子任务上评论或新建子任务。",
     decline: "放弃（不回答）",
     accept: "验收通过（标为完成）",
     comment: "留言…",

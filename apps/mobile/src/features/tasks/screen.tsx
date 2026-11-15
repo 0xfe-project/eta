@@ -241,6 +241,20 @@ function TaskView(props: { task: () => TaskDetail }) {
         </Scroll>
       </View>
       <LiveRuns task={task} />
+      <If
+        when={
+          task().subtasks != null &&
+          !task().runs.some(
+            (run) => run.agentId === null && isActive(run.status),
+          )
+        }
+      >
+        <View class="px-4 pb-1">
+          <Text class="text-sm leading-[18px] text-muted-foreground">
+            {t("tasks.graph.parentCommentHint")}
+          </Text>
+        </View>
+      </If>
       <Composer
         task={task}
         comments={comments}
