@@ -3,7 +3,7 @@
     "selectTitle": "Select a routine",
     "selectDescription": "Select one on the left to view its instructions and run reports.",
     "title": "No routines yet",
-    "description": "Have an agent do something on a schedule, such as summarizing morning news. Each run leaves a report.",
+    "description": "Have Captain do something on a schedule, such as summarizing what moved this week. Each run leaves a report here.",
     "deletedTitle": "This routine no longer exists"
   },
   "actions": {
@@ -36,15 +36,16 @@
   "fields": {
     "namePlaceholder": "e.g. Daily tech news",
     "briefLabel": "Brief",
-    "briefPlaceholder": "For example: Each morning, summarize tech news from Hacker News and 36Kr. Pick the 3 most important stories, explain each in one or two sentences and include the source link. Skip previously shared stories; send nothing if there’s no new content.",
-    "scheduleLabel": "Schedule"
+    "briefPlaceholder": "For example: Every Monday morning, look at last week's tasks and what each group did. Report what finished, what is stuck and why. If something needs doing, assign it in the right group. Post the summary in the Team group too.",
+    "scheduleLabel": "Schedule",
+    "runByCaptain": "Captain runs it, in a new session each time, with its own tools and model. To have results sent somewhere (a group, say), write that in the brief."
   },
   "runStatus": {
     "sent": "Sent",
-    "nothingNew": "Nothing new"
+    "nothingNew": "Nothing new",
+    "skipped": "Skipped"
   },
   "reports": {
-    "handoffNotes": "Handoff notes for the next run: {{notes}}",
     "previous": "Previous report",
     "next": "Next report"
   },
@@ -60,7 +61,11 @@
     "revising": "Revising brief…",
     "briefUpdated": "Brief updated to v{{version}}"
   },
-  "scope": {
-    "noGroup": "No group"
+  "captainOff": {
+    "title": "Captain is off, so routines are not running",
+    "supervisorOff": "Its supervisor is switched off. While it is off, each time that comes is recorded as skipped; missed runs are not made up when it is back.",
+    "noModel": "Captain has no model. Choose one in Captain's settings; until then each time that comes is recorded as skipped.",
+    "noCaptain": "Captain is not set up yet. Until it is, each time that comes is recorded as skipped.",
+    "turnOn": "Turn Captain on"
   }
 }

@@ -6,7 +6,6 @@ import type {
   BoardTaskView,
   ConversationInfo,
   MemberView,
-  RoutineSummary,
   TimelineSection,
 } from "@eta/client-contracts";
 import type { JSX } from "nsh";
@@ -24,13 +23,12 @@ import { t } from "../../i18n";
 import { go } from "../../nav/links";
 import { open } from "../../nav/stack";
 import { AgentAvatar } from "../../ui/AgentAvatar";
-import { moment } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
 import { Body, Header, Page } from "../../ui/Page";
 import { Sheet } from "../../ui/Sheet";
 import { Empty } from "../../ui/States";
 import { toast } from "../../ui/toast";
-import { call, eager, useTarget } from "../../wire/target";
+import { call, useTarget } from "../../wire/target";
 import { EditGroupScreen } from "./edit";
 import { MemberSheet } from "./member";
 import {
@@ -312,10 +310,6 @@ export function GroupInfoScreen(props: { id: string }) {
     (artifactList.section<ArtifactView[]>("list") ?? []).filter(
       (artifact) => artifact.conversationId === props.id,
     );
-  const routines = () =>
-    (eager<RoutineSummary[]>("routines", "list") ?? []).filter(
-      (routine) => routine.conversationId === props.id,
-    );
   const members = () => group()?.participants ?? [];
 
   const menu = signal(false);
@@ -445,30 +439,6 @@ export function GroupInfoScreen(props: { id: string }) {
                 </View>
               </If>
             </View>
-
-            <If when={routines().length > 0}>
-              <View class="shrink-0">
-                <Caption
-                  title={t("group.routines", { count: routines().length })}
-                />
-                <View class="border-b border-border">
-                  <Each of={routines()} key={(routine) => routine.id}>
-                    {(routine) => (
-                      <View class="h-12 shrink-0 flex-row items-center gap-[10px] border-t border-border px-4">
-                        <Text class="truncate grow basis-0 text-base leading-[18px] text-foreground">
-                          {routine().name}
-                        </Text>
-                        <Text class="shrink-0 text-sm leading-4 text-muted-foreground">
-                          {routine().nextRunAt === null
-                            ? "—"
-                            : moment(routine().nextRunAt as number)}
-                        </Text>
-                      </View>
-                    )}
-                  </Each>
-                </View>
-              </View>
-            </If>
 
             <View class="shrink-0">
               <Caption

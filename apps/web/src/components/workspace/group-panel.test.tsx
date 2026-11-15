@@ -118,7 +118,6 @@ it("leaves what waits to the 待处理 tab, even when something does", async () 
         routineInfo({
           id: "r1",
           name: "日报",
-          conversationId: "g1",
           unseenFailures: 1,
         }),
       ),
@@ -133,7 +132,8 @@ it("leaves what waits to the 待处理 tab, even when something does", async () 
   expect(sections(container)).toEqual(["任务", "产物", "成员", "目标"]);
   expect(container.textContent).not.toContain("等你");
   expect(container.textContent).not.toContain("去待处理");
-  expect(container.querySelector("[data-badge]")!.textContent).toBe("3");
+  // Two tasks, the question, and the routine's failure.
+  expect(container.querySelector("[data-badge]")!.textContent).toBe("4");
   // The background is still here, at the bottom.
   expect(container.textContent).toContain("本周上线");
 });

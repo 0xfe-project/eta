@@ -137,11 +137,11 @@ describe("activity ref cards", () => {
     expect(router.state.location.search).toEqual({ task: "t1" });
   });
 
-  it("draws nothing for a routine", async () => {
+  it("draws a routine as a card that opens it on the routines page", async () => {
     const { container } = await mount([
       { kind: "routine", id: "r1", title: "日报" },
     ]);
-    // 定时 is off in this build: its card would be a dead link, so it draws nothing.
-    expect(frames(container)).toEqual([]);
+    expect(frames(container)).toHaveLength(1);
+    expect(cards(container)[0].href).toContain("/routines?routine=r1");
   });
 });

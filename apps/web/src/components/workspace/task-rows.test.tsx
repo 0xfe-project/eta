@@ -463,7 +463,7 @@ describe("a draft belongs to the turn that wrote it", () => {
 });
 
 describe("a routine's report", () => {
-  it("says it in the reader's language, with no page to open", async () => {
+  it("says it in the reader's language, and links to the report", async () => {
     const report = messageView({
       conversationId: CONV,
       kind: "system",
@@ -478,10 +478,14 @@ describe("a routine's report", () => {
       },
     });
     const { container } = await chat([report]);
-    // 定时 is off in this build: the line stays as news, the link to its page does not.
     const notice = rowOf(container, report)!;
-    expect(notice.textContent).toBe("例行任务「日报」发来报告：今日要闻");
-    expect(notice.querySelector("a")).toBeNull();
+    expect(notice.textContent).toBe("定时任务「日报」发来汇报：今日要闻");
+    expect(notice.querySelector("a")!.getAttribute("href")).toContain(
+      "routine=r1",
+    );
+    expect(notice.querySelector("a")!.getAttribute("href")).toContain(
+      "run=run1",
+    );
   });
 
   it("falls back to the name alone for a report with no title", async () => {
@@ -499,8 +503,8 @@ describe("a routine's report", () => {
     });
     const { container } = await chat([report]);
     const notice = rowOf(container, report)!;
-    expect(notice.textContent).toBe("例行任务「日报」发来报告");
-    expect(notice.querySelector("a")).toBeNull();
+    expect(notice.textContent).toBe("定时任务「日报」发来汇报");
+    expect(notice.querySelector("a")).not.toBeNull();
   });
 });
 

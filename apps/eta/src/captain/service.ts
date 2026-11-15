@@ -397,8 +397,7 @@ export class CaptainService {
     if (conversation === undefined) throw new Error("no such conversation");
     if (conversation.kind !== "group")
       throw new Error("Captain posts in group conversations");
-    if (conversation.archived)
-      throw new Error("that group is archived");
+    if (conversation.archived) throw new Error("that group is archived");
     const text = input.text.trim();
     if (text === "") throw new Error("a message needs text");
     if (

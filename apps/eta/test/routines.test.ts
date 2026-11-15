@@ -48,7 +48,9 @@ const step = (request: Request): number =>
  * not a run (a revision, a memory pass) is answered by `other`.
  */
 function runs(
-  scripts: readonly (readonly Answer[])[] | ((run: number) => readonly Answer[]),
+  scripts:
+    | readonly (readonly Answer[])[]
+    | ((run: number) => readonly Answer[]),
   other: (request: Request) => Answer | Promise<Answer> = () => say(""),
 ) {
   let started = -1;
@@ -332,9 +334,7 @@ describe("a run is Captain's", () => {
     const routine = await t.create({ name: "Ops" });
     const run = await t.runNow(routine.id);
     await until(() =>
-      t.w
-        .rows(t.direct)
-        .some((row) => row.data?.event === "routine_report"),
+      t.w.rows(t.direct).some((row) => row.data?.event === "routine_report"),
     );
     const row = t.w
       .rows(t.direct)
@@ -367,7 +367,13 @@ describe("a run is Captain's", () => {
     const results: string[] = [];
     const t = await setup(
       runs(
-        [[report("One", "first"), report("Two", "second"), call("no_news", {})]],
+        [
+          [
+            report("One", "first"),
+            report("Two", "second"),
+            call("no_news", {}),
+          ],
+        ],
         () => say(""),
       ),
     );
@@ -376,7 +382,11 @@ describe("a run is Captain's", () => {
     const run = await t.runNow(routine.id);
     for (const request of t.requests.slice(unwatched).filter(isRun))
       if (request.lastRole === "toolResult") results.push(request.last);
-    expect(run).toMatchObject({ status: "sent", title: "One", report: "first" });
+    expect(run).toMatchObject({
+      status: "sent",
+      title: "One",
+      report: "first",
+    });
     expect(results[1]).toMatch(/already sent its report/);
     expect(results[2]).toMatch(/already sent its report/);
   });
@@ -387,14 +397,19 @@ describe("a run is Captain's", () => {
         // Talks, then reports when reminded.
         [say("I looked around."), report("Late", "Found it.")],
         // Talks twice and never reports: a failure, and what it said is not taken for a report.
-        [handoff("KEEP-THIS"), say("Next time I will check the logs."), say("Still nothing.")],
+        [
+          handoff("KEEP-THIS"),
+          say("Next time I will check the logs."),
+          say("Still nothing."),
+        ],
       ]),
     );
     const routine = await t.create();
     const nudged = await t.runNow(routine.id);
     expect(nudged).toMatchObject({ status: "sent", title: "Late" });
     const reminders = t.requests.filter(
-      (r) => isRun(r) && r.last.includes("has not called `report` or `no_news`"),
+      (r) =>
+        isRun(r) && r.last.includes("has not called `report` or `no_news`"),
     );
     expect(reminders).toHaveLength(1);
 
@@ -488,7 +503,10 @@ describe("a run is Captain's", () => {
     let group = "";
     const t = await setup(
       runs(() => [
-        call("post_in_group", { conversationId: group, text: "Weekly: all green." }),
+        call("post_in_group", {
+          conversationId: group,
+          text: "Weekly: all green.",
+        }),
         report("Posted", "Posted the weekly note in the group."),
       ]),
     );
@@ -544,7 +562,9 @@ describe("the handoff is the next run's alone", () => {
         tool.push(request.last);
 
     // The second run's prompt: the mark, inside the fence, under a heading that says it is private.
-    const prompt = t.requests.filter(isRun).find((r) => step(r) === 0 && r.transcript[0]!.includes(MARK))!
+    const prompt = t.requests
+      .filter(isRun)
+      .find((r) => step(r) === 0 && r.transcript[0]!.includes(MARK))!
       .transcript[0]!;
     const open = prompt.indexOf(PRIVATE_OPEN);
     const close = prompt.indexOf(PRIVATE_CLOSE);
@@ -552,7 +572,9 @@ describe("the handoff is the next run's alone", () => {
     expect(prompt.indexOf(MARK)).toBeGreaterThan(open);
     expect(prompt.indexOf(MARK)).toBeLessThan(close);
     expect(prompt).toContain("## Your private notes from the previous run");
-    expect(prompt).toContain("never copy it, quote it or paraphrase it into a report");
+    expect(prompt).toContain(
+      "never copy it, quote it or paraphrase it into a report",
+    );
     // The mark appears in that prompt once, and nowhere above the fence.
     expect(prompt.split(MARK)).toHaveLength(2);
 
@@ -621,7 +643,8 @@ describe("while Captain is off", () => {
       startedBy: "schedule",
       sessionId: null,
       report: null,
-      error: "Captain is off (its supervisor is switched off), so this run did not happen.",
+      error:
+        "Captain is off (its supervisor is switched off), so this run did not happen.",
     });
     expect(t.requests.some(isRun)).toBe(false);
     await expect(t.act("run", { routineId: routine.id })).rejects.toThrow(
@@ -637,10 +660,12 @@ describe("while Captain is off", () => {
     await until(() => t.status()?.captainOn === true);
     expect(t.tick()).toEqual([]);
     expect(t.requests.some(isRun)).toBe(false);
-    expect(t.sections(routine.id).runs().map((r) => r.status)).toEqual([
-      "skipped",
-      "skipped",
-    ]);
+    expect(
+      t
+        .sections(routine.id)
+        .runs()
+        .map((r) => r.status),
+    ).toEqual(["skipped", "skipped"]);
     // Its next time runs.
     t.setClock("2026-10-20T09:00:00Z");
     expect(t.tick()).toEqual([routine.id]);
@@ -767,9 +792,12 @@ describe("what a restart settles", () => {
     ).run(routine.id);
     db.close();
 
-    const second = await setup(runs(() => [report("Back", "b")]), {
-      dataDir,
-    } as never);
+    const second = await setup(
+      runs(() => [report("Back", "b")]),
+      {
+        dataDir,
+      } as never,
+    );
     await second.watch(routine.id);
     expect(second.sections(routine.id).runs()[0]).toMatchObject({
       id: "ghost",
@@ -863,8 +891,7 @@ describe("feedback and the brief", () => {
     await until(() => !t.sections(routine.id).info().revising);
     await t.runNow(routine.id);
     expect(
-      t.requests.filter((r) => isRun(r) && step(r) === 0).at(-1)!
-        .transcript[0],
+      t.requests.filter((r) => isRun(r) && step(r) === 0).at(-1)!.transcript[0],
     ).toContain("(version 2)");
   });
 
@@ -895,7 +922,12 @@ describe("feedback and the brief", () => {
     const run = await t.runNow(routine.id);
     await feedbackOn(t, routine.id, run);
     await until(() => t.sections(routine.id).briefs().length === 3);
-    expect(t.sections(routine.id).briefs().map((b) => b.text)).toEqual([
+    expect(
+      t
+        .sections(routine.id)
+        .briefs()
+        .map((b) => b.text),
+    ).toEqual([
       "A person rewrote it. And shorter.",
       "A person rewrote it.",
       "Summarise the news.",

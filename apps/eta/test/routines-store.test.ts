@@ -307,7 +307,10 @@ describe("runs", () => {
     store.finishRun(b.id, { status: "no_news", handoff: "watch the_budget" });
     tick();
     const b2 = store.startRun(id, "user")!;
-    store.finishRun(b2.id, { status: "sent", report: "# Budget\n\nthe_budget moved" });
+    store.finishRun(b2.id, {
+      status: "sent",
+      report: "# Budget\n\nthe_budget moved",
+    });
     tick();
     const c = store.startRun(id, "user")!;
     store.finishRun(c.id, { status: "sent", report: "# Weather\n\nrain" });

@@ -192,11 +192,10 @@ test("a preview the host refuses can be asked for again", async () => {
   await app.waitFor("id:artifact-page");
 });
 
-test("a group's routines are listed, and a group with none says nothing of them", async () => {
+test("a group lists no routines: they are Captain's, not a group's", async () => {
   const app = await start("group:artifacts");
-  await app.waitFor("text:定时 1");
-  expect(app.texts()).toContain("每周汇总");
-  expect(app.texts()).not.toContain("定时 0");
+  await app.waitFor("id:group-more");
+  expect(app.texts().some((text) => text.startsWith("定时"))).toBe(false);
 });
 
 test("a conversation that is gone says so", async () => {

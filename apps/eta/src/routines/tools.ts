@@ -25,7 +25,7 @@ export type Said =
   | { kind: "report"; title: string; body: string }
   | { kind: "no_news" };
 
-export interface RunRecorder {
+interface RunRecorder {
   /** Record what this run tells the user; an error message when it already did. */
   say: (said: Said) => string | undefined;
   /** Record the note for the next run; a second call replaces the first. */
@@ -45,16 +45,6 @@ const MAX_BODY = 20_000;
 const MAX_NOTES = 8_000;
 
 const when = (at: number): string => new Date(at).toISOString();
-
-/** The tool names, for whoever checks a run's toolset. */
-export const ROUTINE_TOOL_NAMES = [
-  "report",
-  "no_news",
-  "handoff",
-  "list_runs",
-  "get_run",
-  "search_runs",
-] as const;
 
 export function routineTools(input: RoutineToolsInput): KernelTool[] {
   const { store, routineId } = input;

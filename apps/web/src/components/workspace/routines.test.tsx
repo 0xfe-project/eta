@@ -25,7 +25,6 @@ const run = (fields: Partial<RunView> & { id: string }): RunView => ({
   title: "今日要闻",
   sessionId: "s1",
   report: "# 今日\n\n三条新闻",
-  handoff: null,
   error: null,
   seenAt: null,
   feedback: [],
@@ -35,7 +34,6 @@ const run = (fields: Partial<RunView> & { id: string }): RunView => ({
 const info = routineInfo({
   id: "r1",
   name: "日报",
-  model: "p:m",
   nextRunAt: Date.now() + 3_600_000,
 });
 
@@ -120,14 +118,14 @@ afterEach(async () => {
 });
 
 describe("creating and editing a routine", () => {
-  it("creates one on the first usable model, and opens it", async () => {
+  it("creates one from a name, a brief and a time, with no agent or model to pick, and opens it", async () => {
     navigation.edit = "new";
     const host = open();
     const { container } = await mount(<RoutineBoard />);
     await flush();
-    // A routine names its model: there is no default one, so the first usable model is picked.
-    expect(container.querySelector("#routine-model")?.textContent).toBe("M");
-    expect(container.textContent).not.toContain("默认模型");
+    // A routine is Captain's: there is nothing to choose about who runs it.
+    expect(container.querySelector("#routine-model")).toBeNull();
+    expect(container.textContent).toContain("由 Captain 执行");
     await write(container.querySelector("#routine-name")!, "周报");
     await write(container.querySelector("#routine-brief")!, "整理本周");
     await submit(container.querySelector("form")!);
@@ -136,7 +134,6 @@ describe("creating and editing a routine", () => {
       {
         name: "周报",
         brief: "整理本周",
-        model: "p:m",
         schedule: { kind: "daily", time: "08:00" },
         timezone: expect.any(String),
       },
@@ -144,14 +141,12 @@ describe("creating and editing a routine", () => {
     expect(navigation.set).toHaveBeenCalledWith({ edit: null, routine: "r1" });
   });
 
-  it("cannot be created without a model", async () => {
+  it("cannot be created without a brief", async () => {
     navigation.edit = "new";
-    const host = open(undefined, { revision: "r1", providers: [] });
+    const host = open();
     const { container } = await mount(<RoutineBoard />);
     await flush();
     await write(container.querySelector("#routine-name")!, "周报");
-    await write(container.querySelector("#routine-brief")!, "整理本周");
-    expect(container.textContent).toContain("暂无可用模型");
     expect(
       container.querySelector<HTMLButtonElement>('button[type="submit"]')!
         .disabled,
@@ -159,21 +154,6 @@ describe("creating and editing a routine", () => {
     await submit(container.querySelector("form")!);
     await flush();
     expect(callsOf(host, "create")).toEqual([]);
-  });
-
-  it("says a model removed from the providers is no longer available, and swaps in none", async () => {
-    navigation.edit = "r1";
-    open(
-      routineSections(routineInfo({ ...info, model: "p:gone" }), {
-        runs: [],
-      }),
-    );
-    const { container } = await mount(<RoutineBoard />);
-    await flush();
-    expect(container.querySelector("#routine-model")?.textContent).toBe(
-      "p:gone（已不可用）",
-    );
-    expect(container.textContent).toContain("模型已不可用，请重新选择。");
   });
 
   it("edits one: a new brief is sent with the rest, in the routine's own words", async () => {
@@ -195,7 +175,6 @@ describe("creating and editing a routine", () => {
         routineId: "r1",
         name: "日报",
         brief: "说点别的",
-        model: "p:m",
         schedule: { kind: "daily", time: "08:00" },
         timezone: "Asia/Shanghai",
       },
@@ -271,6 +250,28 @@ describe("a routine's page", () => {
     expect(container.textContent).toContain("没有新内容");
   });
 
+  it("says why a skipped run did not happen", async () => {
+    navigation.routine = "r1";
+    open(
+      routineSections(info, {
+        runs: [
+          run({
+            id: "run1",
+            status: "skipped",
+            title: null,
+            report: null,
+            sessionId: null,
+            error:
+              "Captain is off (its supervisor is switched off), so this run did not happen.",
+          }),
+        ],
+      }),
+    );
+    const { container } = await mount(<RoutineBoard />);
+    await flush();
+    expect(container.textContent).toContain("Captain is off");
+  });
+
   it("restores an old version of the brief as the newest", async () => {
     navigation.routine = "r1";
     const host = open(
@@ -332,5 +333,50 @@ describe("a routine's report", () => {
     expect(container.textContent).toContain("要求已更新为 v2");
     await act(async () => host.set("routines.r1", { ...feedback(null, true) }));
     expect(container.textContent).toContain("没能据此修订要求");
+  });
+});
+
+describe("while Captain is off", () => {
+  it("says so at the top of the page, and turns Captain back on from there", async () => {
+    const host = buildProductHost(
+      {
+        routines: [routineSections(info)],
+        routinesStatus: { captainOn: false, reason: "supervisor_off" },
+      },
+      ["captain"],
+    );
+    host.install();
+    host.handle("captain.setSetting", () => ({ setting: {} }));
+    host.hello();
+    const { container } = await mount(<RoutineBoard />);
+    await flush();
+    const notice = container.querySelector('[role="status"]')!;
+    expect(notice.textContent).toContain("Captain 已关闭，定时任务不会运行");
+    expect(notice.textContent).toContain("不会补跑");
+    await click(button(container, "打开 Captain"));
+    await flush();
+    expect(
+      host.calls.filter((c) => c.action === "setSetting").map((c) => c.args),
+    ).toEqual([{ key: "supervisorEnabled", value: true }]);
+  });
+
+  it("says nothing while Captain is on", async () => {
+    open();
+    const { container } = await mount(<RoutineBoard />);
+    await flush();
+    expect(container.textContent).not.toContain("Captain 已关闭");
+  });
+
+  it("names a missing model, with no switch to press", async () => {
+    const host = buildProductHost({
+      routines: [routineSections(info)],
+      routinesStatus: { captainOn: false, reason: "no_model" },
+    });
+    host.install();
+    host.hello();
+    const { container } = await mount(<RoutineBoard />);
+    await flush();
+    expect(container.textContent).toContain("Captain 还没有配置模型");
+    expect(button(container, "打开 Captain")).toBeUndefined();
   });
 });

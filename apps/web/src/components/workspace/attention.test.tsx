@@ -98,19 +98,21 @@ describe("what waits for the user", () => {
         task(4),
         task(5, { status: "done" }),
       ],
-      // 定时 is off in this build: its reports must not reach the list or its count.
+      // A routine waits with reports or failures the user has not seen; one with neither does not.
       routines: [routine("a", 2, 0), routine("b", 0, 1), routine("c", 0, 0)],
     });
     const container = await mount(new QueryClient(), () => <PendingList />);
     const rows = [...container.querySelectorAll("li")].map(
       (li) => li.textContent,
     );
-    expect(rows).toEqual(["#2 任务2待验收", "#3 任务3受阻"]);
+    expect(rows.slice(0, 2)).toEqual(["#2 任务2待验收", "#3 任务3受阻"]);
+    expect(rows).toHaveLength(4);
+    expect(rows[2]).toContain("定时a");
+    expect(rows[3]).toContain("定时b");
   });
 
   it("groups confirmations and tasks, and says which failed to load", async () => {
-    // The host has no routines plugin, but with 定时 off its absence is not a
-    // failure the reader is told about.
+    // The host has no routines plugin: the reader is told the routines could not be loaded.
     waiting(
       "i1",
       {},
@@ -119,8 +121,7 @@ describe("what waits for the user", () => {
     const container = await mount(new QueryClient(), () => <PendingList />);
     await flush(10);
     expect(headings(container)).toEqual(["确认请求1", "任务1"]);
-    expect(container.textContent).not.toContain("定时");
-    expect(container.textContent).not.toContain("无法加载");
+    expect(container.textContent).toContain("无法加载定时");
     expect(container.querySelector("li")!.textContent).toContain(
       "删除i1？允许拒绝放弃",
     );

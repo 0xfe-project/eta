@@ -15,6 +15,7 @@ import type {
   ProjectView,
   RoutineInfo,
   RoutineSections,
+  RoutinesStatus,
   RoutineSummary,
   TaskActivityView,
 } from "@eta/client-contracts";
@@ -196,8 +197,6 @@ export const routineInfo = (
   fields: Partial<RoutineInfo> & { id: string },
 ): RoutineInfo => ({
   name: fields.id,
-  conversationId: null,
-  model: null,
   schedule: { kind: "daily", time: "08:00" },
   timezone: "Asia/Shanghai",
   enabled: true,
@@ -218,7 +217,6 @@ export const routineSections = (
   info,
   briefs: [{ version: 1, text: "说点什么", createdAt: 1000, feedback: null }],
   runs: [],
-  handoff: null,
   ...rest,
 });
 
@@ -272,6 +270,8 @@ export interface ProductSeed {
   artifacts?: ArtifactView[];
   /** Each routine's sections; the list is made from them. A `routines.<id>` target for each. */
   routines?: RoutineSections[];
+  /** Whether Captain is on to run routines; on unless a test says otherwise. */
+  routinesStatus?: RoutinesStatus;
   /** Plugins the host does not have: no target and no mount, so reading them fails. */
   absent?: ("tasks" | "artifacts" | "routines")[];
 }
@@ -340,6 +340,7 @@ export function buildProductHost(
         list: (seed.routines ?? []).map((sections) =>
           routineSummary(sections.info, sections.runs),
         ),
+        status: seed.routinesStatus ?? { captainOn: true, reason: null },
       },
       { eager: true },
     );

@@ -1081,7 +1081,8 @@ export function captainSessionTools(
         Type.Object({
           kind: Type.Literal("cron"),
           cron: Type.String({
-            description: "Five fields: minute hour day-of-month month day-of-week",
+            description:
+              "Five fields: minute hour day-of-month month day-of-week",
           }),
         }),
       ],
@@ -1121,7 +1122,7 @@ export function captainSessionTools(
       name: "propose_routine",
       description: [
         "Propose a routine: work you will do on a schedule, each time in a new session of your own with all your tools. Nothing is created yet: the proposal appears as a card in this conversation, and only the user's confirmation creates it.",
-        "Use it when the user asks for something to be done regularly (\"every Monday morning, …\").",
+        'Use it when the user asks for something to be done regularly ("every Monday morning, …").',
         "brief is what each run is asked to do, written as instructions to yourself: what to check or do, and what to report. If the user wants the result sent somewhere (a group), say so in the brief; there is no other setting for it. A routine has no agent and no model: it is yours.",
         "timezone is an IANA zone such as Asia/Shanghai: ask the user if you do not know theirs.",
         "Do not wait for the decision: end your turn. A message here will tell you the outcome.",

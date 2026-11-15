@@ -1,25 +1,22 @@
 import type { ConversationSummary } from "@eta/client-contracts";
 import { runningFirst } from "@eta/client-contracts";
 import { useTranslation } from "react-i18next";
-import { ROUTINES_VISIBLE } from "@/lib/features";
 import { useArtifacts } from "@/queries/artifacts";
 import { useCaptain } from "@/queries/captain";
 import { useConversation } from "@/queries/conversations";
-import { useRoutines } from "@/queries/routines";
 import { useTasks } from "@/queries/tasks";
 import { ActivityRefCard } from "./activity-ref";
 import { CaptainModel, CaptainOperations } from "./captain-operations";
 import { GroupMembers } from "./groups";
 import { Section } from "./panel-section";
-import { when } from "./routine-format";
 
 /**
  * Context: what this conversation is made of, for the panel beside it, ordered by
  * whether it is worth a look *now* — reading it top down should cost one glance,
  * not a scroll to find out whether anything needs the user.
  *
- * So: what the group made and what it is on track to make first (tasks, artifacts,
- * routines), then the background that is only news when it changes (members, goals).
+ * So: what the group made and what it is on track to make first (tasks, artifacts),
+ * then the background that is only news when it changes (members, goals).
  *
  * Captain's own conversation is the one exception: its first block is Operations rather than tasks —
  * the approvals, alerts and assignments it holds for everyone else — because "which tasks is
@@ -60,7 +57,6 @@ export function GroupPanel({
     "tasks",
   ] as const);
   const { tasks: board } = useTasks();
-  const { routines } = useRoutines();
   const { artifacts } = useArtifacts();
   const { info } = useConversation(group?.id);
   const captain = useCaptain();
@@ -71,9 +67,6 @@ export function GroupPanel({
   const isCaptain = captain.identity?.conversationId === group.id;
   const groupTasks = board.filter((task) => task.conversationId === group.id);
   const tasks = groupTasks.filter((task) => !closed.has(task.status));
-  const groupRoutines = routines.filter(
-    (routine) => routine.conversationId === group.id,
-  );
   const groupArtifacts = artifacts.filter(
     (artifact) => artifact.conversationId === group.id,
   );
@@ -151,35 +144,6 @@ export function GroupPanel({
           </ul>
         )}
       </Section>
-
-      {ROUTINES_VISIBLE ? (
-        <Section
-          title={translateText("navigation:sections.routines")}
-          count={groupRoutines.length}
-        >
-          {groupRoutines.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              {translateText("routines:empty.title")}
-            </p>
-          ) : (
-            <ul className="space-y-1">
-              {groupRoutines.map((routine) => (
-                <li
-                  key={routine.id}
-                  className="flex min-w-0 items-baseline gap-2"
-                >
-                  <span className="min-w-0 flex-1 truncate text-xs">
-                    {routine.name}
-                  </span>
-                  <span className="shrink-0 font-mono text-[10px] text-faint tabular-nums">
-                    {routine.nextRunAt === null ? "—" : when(routine.nextRunAt)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
-      ) : null}
 
       <div className="px-3 py-2">
         <GroupMembers />

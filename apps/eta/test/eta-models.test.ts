@@ -55,10 +55,7 @@ function seeded(db: Database): void {
   `);
 }
 
-function models(
-  db: Database,
-  routines = true,
-): Record<string, string | null> {
+function models(db: Database, routines = true): Record<string, string | null> {
   const rows = db
     .query<{ id: string; model: string | null }, []>(
       routines
@@ -176,9 +173,10 @@ describe("the upgrade's migration", () => {
       empty: "a:m2",
       claude: null,
     });
-    expect(
-      host.db.query("SELECT id FROM routine ORDER BY id").all(),
-    ).toEqual([{ id: "r-chosen" }, { id: "r-unset" }]);
+    expect(host.db.query("SELECT id FROM routine ORDER BY id").all()).toEqual([
+      { id: "r-chosen" },
+      { id: "r-unset" },
+    ]);
   });
 });
 

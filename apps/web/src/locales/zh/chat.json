@@ -339,8 +339,8 @@
     "stewardSet": "{{to}} 成为主理人。",
     "stewardCleared": "{{from}} 不再是主理人。",
     "wakeBudget": "这条消息已经用完 {{budget}} 次唤醒；之后的 @ 只记入对话，等你再发言才会唤醒。",
-    "routineReport": "例行任务「{{name}}」发来报告：{{title}}",
-    "routineReportUntitled": "例行任务「{{name}}」发来报告",
+    "routineReport": "定时任务「{{name}}」发来汇报：{{title}}",
+    "routineReportUntitled": "定时任务「{{name}}」发来汇报",
     "createdByCaptain": "由 Captain 创建"
   },
   "usage": {

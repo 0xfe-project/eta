@@ -89,5 +89,13 @@
       "waiting": "等待用户回答",
       "other": "巡检观察"
     }
+  },
+  "routineProposal": {
+    "label": "定时任务提议 {{name}}",
+    "title": "新建定时任务",
+    "schedule": "时间",
+    "timezone": "时区",
+    "brief": "要求",
+    "open": "在定时页面打开「{{name}}」"
   }
 }

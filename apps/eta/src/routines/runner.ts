@@ -53,7 +53,7 @@ import { routineTools } from "./tools";
 export const INTERRUPTED = "The server restarted before this run finished.";
 
 /** Why a time that came while Captain was off made no run. */
-export function skippedBecause(status: RoutinesStatus): string {
+function skippedBecause(status: RoutinesStatus): string {
   switch (status.reason) {
     case "no_model":
       return "Captain is off (it has no model), so this run did not happen.";

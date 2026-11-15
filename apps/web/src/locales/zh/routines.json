@@ -3,7 +3,7 @@
     "selectTitle": "选择一个定时任务",
     "selectDescription": "在左边选一个，查看它的说明和每次运行的报告。",
     "title": "还没有定时任务",
-    "description": "让智能体按时去做一件事，比如每天早上整理新闻，每次的结果留成一份报告。",
+    "description": "让 Captain 按时去做一件事，比如每周一整理上周的进展。每次运行在这里留一份汇报。",
     "deletedTitle": "这个定时任务已不存在"
   },
   "actions": {
@@ -36,15 +36,16 @@
   "fields": {
     "namePlaceholder": "例如：科技日报",
     "briefLabel": "要求",
-    "briefPlaceholder": "例如：每天早上整理 Hacker News 和 36 氪的科技新闻，挑出最重要的 3 条，每条一两句话说明为什么重要，附原文链接。发过的不要重复；没有新内容就不发。",
-    "scheduleLabel": "计划"
+    "briefPlaceholder": "例如：每周一早上看一下上周的任务和各个群做了什么。汇报完成了什么、卡在哪里、为什么。需要有人跟进的，到对应的群里派工。总结也发到「团队」群里。",
+    "scheduleLabel": "计划",
+    "runByCaptain": "由 Captain 执行，每次开一个新会话，用它自己的工具和模型。要把结果发到某个地方（比如某个群），写在要求里就行。"
   },
   "runStatus": {
     "sent": "已发送",
-    "nothingNew": "没有新内容"
+    "nothingNew": "没有新内容",
+    "skipped": "已跳过"
   },
   "reports": {
-    "handoffNotes": "交接说明（写给下一次运行）：{{notes}}",
     "previous": "上一份报告",
     "next": "下一份报告"
   },
@@ -60,7 +61,11 @@
     "revising": "修订要求中…",
     "briefUpdated": "要求已更新为 v{{version}}"
   },
-  "scope": {
-    "noGroup": "没有群"
+  "captainOff": {
+    "title": "Captain 已关闭，定时任务不会运行",
+    "supervisorOff": "Captain 的监督开关已关闭。关闭期间每次到点都会记一条「已跳过」；重新打开后不会补跑错过的那些次。",
+    "noModel": "Captain 还没有配置模型。请在 Captain 的设置里选一个；在此之前每次到点都记为「已跳过」。",
+    "noCaptain": "Captain 还没有初始化。在此之前每次到点都记为「已跳过」。",
+    "turnOn": "打开 Captain"
   }
 }

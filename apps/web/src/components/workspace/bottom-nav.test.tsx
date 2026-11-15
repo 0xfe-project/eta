@@ -50,11 +50,16 @@ afterEach(async () => {
 });
 
 describe("手机底部栏", () => {
-  it("has four destinations with the plus between them", async () => {
+  it("has five destinations with the plus between them", async () => {
     const container = await render();
-    expect(links(container)).toEqual(["/", "/tasks", "/email", "/settings"]);
-    // Four destinations and the solid square between tasks/email and settings. 定时 is off in
-    // this build, so it has no cell of its own.
+    expect(links(container)).toEqual([
+      "/",
+      "/tasks",
+      "/email",
+      "/routines",
+      "/settings",
+    ]);
+    // Five destinations and the solid square between tasks/email and routines/settings.
     const anchors = [...container.querySelectorAll("a")];
     const follows = (a: Node, b: Node) =>
       (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;

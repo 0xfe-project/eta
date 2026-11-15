@@ -7,10 +7,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
  * then. Between the two, the replies a dead process left in flight are failed, so nothing a client
  * is ever shown says `working` without something working.
  */
-import type {
-  AgentRuntimeInfo,
-  RoutinesStatus,
-} from "@eta/client-contracts";
+import type { AgentRuntimeInfo, RoutinesStatus } from "@eta/client-contracts";
 import type {
   AssembledServer,
   RemoteSessions,
@@ -142,7 +139,11 @@ export interface Product {
   /** The routines' clock; `tick()` makes it look. */
   readonly scheduler: Scheduler;
   /** The routines: their rows and rules (`service.store`), and the runs Captain does. */
-  readonly routines: { readonly store: RoutineStore; readonly runner: RoutineRunner; readonly service: RoutineService };
+  readonly routines: {
+    readonly store: RoutineStore;
+    readonly runner: RoutineRunner;
+    readonly service: RoutineService;
+  };
   /** Every feature's per-session hooks, combined into the one set the session manager takes. */
   readonly sessionHooks: Required<SessionHooks>;
   /** Whether long-term/project memory is enabled for a session. */
@@ -294,10 +295,12 @@ export function createProduct(options: {
   const made: { captain?: CaptainService; engine?: Engine } = {};
   const routineStatus = (): RoutinesStatus => {
     const identity = captainOn ? made.captain?.identity() : undefined;
-    if (identity === undefined) return { captainOn: false, reason: "no_captain" };
+    if (identity === undefined)
+      return { captainOn: false, reason: "no_captain" };
     if (made.captain?.settings().supervisorEnabled !== true)
       return { captainOn: false, reason: "supervisor_off" };
-    if (identity.model === null) return { captainOn: false, reason: "no_model" };
+    if (identity.model === null)
+      return { captainOn: false, reason: "no_model" };
     return { captainOn: true, reason: null };
   };
   const runner = new RoutineRunner({

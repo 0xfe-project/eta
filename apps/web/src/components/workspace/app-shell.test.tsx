@@ -402,16 +402,18 @@ describe("左栏的页眉", () => {
         .filter((a) => a.getAttribute("data-active") === "true")
         .map((a) => a.getAttribute("data-to"));
     // The whole list, in the order it draws: 对话 leads, because it is the way back to the
-    // conversation view; 定时 is off in this build, and pending and memory have no button.
+    // conversation view; pending and memory have no button.
     expect(rowsAt(container).map((a) => a.getAttribute("data-to"))).toEqual([
       "/",
       "/tasks",
       "/email",
+      "/routines",
     ]);
     expect(rowsAt(container).map((a) => a.textContent)).toEqual([
       "对话",
       "任务",
       "邮箱",
+      "定时",
     ]);
     // 对话 must not stay lit from another section: `to: "/"` prefixes every path, so the home row is
     // lit by the home path alone. Each path is read from a sidebar mounted at that path -- a row
@@ -455,9 +457,10 @@ describe("折叠成图标栏", () => {
       "对话",
       "任务",
       "邮箱",
+      "定时",
     ]);
     // No text in the rail: the name a link lost is the name it has to carry for the reader.
-    expect(links.map((a) => a.textContent)).toEqual(["", "", ""]);
+    expect(links.map((a) => a.textContent)).toEqual(["", "", "", ""]);
     expect(links[0]?.querySelector("svg")).not.toBeNull();
   });
 
@@ -490,9 +493,15 @@ describe("折叠成图标栏", () => {
       });
     };
     const open = await render(<Sidebar />, { open: true });
-    expect(rows(open)).toEqual(["对话", "任务", "邮箱"]);
+    expect(rows(open)).toEqual(["对话", "任务", "邮箱", "定时"]);
     const rail = await render(<Sidebar />, { open: false });
-    expect(rows(rail)).toEqual(["折叠或展开侧栏", "对话", "任务", "邮箱"]);
+    expect(rows(rail)).toEqual([
+      "折叠或展开侧栏",
+      "对话",
+      "任务",
+      "邮箱",
+      "定时",
+    ]);
 
     // 它自己那一组：页脚里一条，不在分区列表里。
     for (const [container, isRail] of [

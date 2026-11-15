@@ -14,7 +14,7 @@ import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlayIcon } from "@phosphor-icons/react/Play";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Markdown } from "@/components/markdown";
@@ -31,19 +31,19 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { listSeparator, translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { useConversationList } from "@/queries/conversations";
+import { useCaptainActions } from "@/queries/captain";
 import {
   useDeleteRoutine,
   useMarkRoutineSeen,
   useRestoreBrief,
   useRoutines,
+  useRoutinesStatus,
   useRunRoutineNow,
   useSendFeedback,
   useUpdateRoutine,
 } from "@/queries/routines";
 import { describeSchedule, when } from "./routine-format";
 import { useRoutineNav } from "./routine-nav";
-import { useWorkspaceStore } from "./workspace-store";
 
 const runStatusLabels: Record<RunStatus, string> = {
   get running() {
@@ -57,6 +57,9 @@ const runStatusLabels: Record<RunStatus, string> = {
   },
   get failed() {
     return translate("common:status.failed");
+  },
+  get skipped() {
+    return translate("routines:runStatus.skipped");
   },
 };
 
@@ -83,6 +86,8 @@ function RunMark({ status }: { status: RunStatus }) {
         status === "sent" && "bg-foreground",
         status === "no_news" && "border border-muted-foreground/50",
         status === "failed" && "bg-destructive",
+        status === "skipped" &&
+          "border border-dashed border-muted-foreground/50",
         status === "running" &&
           "border border-foreground motion-safe:animate-pulse",
       )}
@@ -101,6 +106,62 @@ function Back({ label, onClick }: { label: string; onClick: () => void }) {
       <ArrowLeftIcon aria-hidden="true" />
       {label}
     </Button>
+  );
+}
+
+// --- Captain off ----------------------------------------------------------------
+
+const OFF_REASONS = {
+  supervisor_off: "captainOff.supervisorOff",
+  no_model: "captainOff.noModel",
+  no_captain: "captainOff.noCaptain",
+} as const;
+
+/**
+ * Routines are Captain's: while Captain is off nothing runs, and each time that comes is recorded
+ * as skipped. Said at the top of wherever routines are listed, with the way back on when there is
+ * one to press.
+ */
+export function CaptainOffNotice({ className }: { className?: string }) {
+  const { t: translateText } = useTranslation([
+    "routines",
+    "common",
+    "navigation",
+  ] as const);
+  const status = useRoutinesStatus();
+  const { setSetting } = useCaptainActions();
+  if (status === undefined || status.captainOn) return null;
+  const reason = status.reason ?? "supervisor_off";
+  return (
+    <div
+      role="status"
+      className={cn(
+        "flex flex-wrap items-center gap-x-3 gap-y-1 border border-state-warning/40 bg-state-warning/10 px-3 py-2 text-sm",
+        className,
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <p className="font-medium">{translateText("captainOff.title")}</p>
+        <p className="text-xs text-muted-foreground">
+          {translateText(OFF_REASONS[reason])}
+        </p>
+      </div>
+      {reason === "supervisor_off" ? (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={setSetting.isPending}
+          onClick={() =>
+            setSetting.mutate(
+              { key: "supervisorEnabled", value: true },
+              { onError: showError },
+            )
+          }
+        >
+          {translateText("captainOff.turnOn")}
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -169,38 +230,6 @@ export function RoutineList({
   ] as const);
   const [, setNav] = useRoutineNav();
   const { routines, loaded, error } = useRoutines();
-  // No nuqs here: this list is also rendered by tests and by the full-window page, and the group
-  // list plus the remembered selection are enough to know which section goes first.
-  // Names come from the snapshot already on screen: a list of routines should not be the thing
-  // that goes and asks for the sidebar's data.
-  const { conversations } = useConversationList();
-  const selectedGroupId = useWorkspaceStore((s) => s.workspace.selectedGroupId);
-  const allGroups = conversations;
-  const group = allGroups.find((candidate) => candidate.id === selectedGroupId);
-  // Grouped by the conversation that owns them, because that is the question the overview answers:
-  // "which groups have something on a clock, and what". A flat list made you open each one to find
-  // out whose it is.
-  const sections = useMemo(() => {
-    const byGroup = new Map<
-      string,
-      { name: string; items: RoutineSummary[] }
-    >();
-    for (const routine of routines) {
-      const id = routine.conversationId ?? "";
-      const name =
-        id.length === 0
-          ? translateText("scope.noGroup")
-          : (allGroups.find((candidate) => candidate.id === id)?.name ?? id);
-      const bucket = byGroup.get(id);
-      if (bucket === undefined) byGroup.set(id, { name, items: [routine] });
-      else bucket.items.push(routine);
-    }
-    return [...byGroup.entries()]
-      .sort(([left], [right]) =>
-        left === (group?.id ?? "") ? -1 : right === (group?.id ?? "") ? 1 : 0,
-      )
-      .map(([id, bucket]) => ({ id, ...bucket }));
-  }, [routines, allGroups, group, translateText]);
   return (
     <div className="space-y-2">
       <div
@@ -217,6 +246,7 @@ export function RoutineList({
           <PlusIcon aria-hidden="true" />
         </Button>
       </div>
+      {bare ? null : <CaptainOffNotice />}
       {error ? (
         <LoadError what={translateText("title")} error={error} />
       ) : !loaded ? (
@@ -236,53 +266,42 @@ export function RoutineList({
         </Empty>
       ) : (
         <div aria-label={translateText("title")} className="-mx-2">
-          {sections.map((section) => (
-            <section key={section.id || "none"}>
-              <h3 className="px-2 pt-2 font-mono text-[10px] tracking-[0.12em] text-faint uppercase">
-                {section.name}
-              </h3>
-              <ul>
-                {section.items.map((routine) => (
-                  <li key={routine.id}>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void setNav({
-                          routine: routine.id,
-                          run: null,
-                          edit: null,
-                        })
-                      }
-                      aria-current={
-                        routine.id === selected ? "true" : undefined
-                      }
-                      className={cn(
-                        "grid w-full grid-cols-[1fr_auto_5.5rem] items-center gap-4 px-2 py-2 text-left duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60 aria-[current]:bg-muted",
-                        !routine.enabled && "text-muted-foreground",
-                      )}
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium">
-                          {routine.name}
-                        </span>
-                        <span className="block text-xs text-muted-foreground tabular-nums">
-                          {describeSchedule(routine.schedule)}
-                        </span>
-                      </span>
-                      <span
-                        className={routine.enabled ? undefined : "opacity-40"}
-                      >
-                        <History runs={routine.runs} length={bare ? 7 : 14} />
-                      </span>
-                      <span className="text-right text-xs text-muted-foreground tabular-nums">
-                        <NextRun routine={routine} />
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
+          <ul>
+            {routines.map((routine) => (
+              <li key={routine.id}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void setNav({
+                      routine: routine.id,
+                      run: null,
+                      edit: null,
+                    })
+                  }
+                  aria-current={routine.id === selected ? "true" : undefined}
+                  className={cn(
+                    "grid w-full grid-cols-[1fr_auto_5.5rem] items-center gap-4 px-2 py-2 text-left duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60 aria-[current]:bg-muted",
+                    !routine.enabled && "text-muted-foreground",
+                  )}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium">
+                      {routine.name}
+                    </span>
+                    <span className="block text-xs text-muted-foreground tabular-nums">
+                      {describeSchedule(routine.schedule)}
+                    </span>
+                  </span>
+                  <span className={routine.enabled ? undefined : "opacity-40"}>
+                    <History runs={routine.runs} length={bare ? 7 : 14} />
+                  </span>
+                  <span className="text-right text-xs text-muted-foreground tabular-nums">
+                    <NextRun routine={routine} />
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>
@@ -349,19 +368,13 @@ function Entry({
 function RunMoment({
   routine,
   run,
-  handoff,
   last,
 }: {
   routine: Routine;
   run: Run;
-  handoff: boolean;
   last: boolean;
 }) {
-  const { t: translateText } = useTranslation([
-    "routines",
-    "common",
-    "navigation",
-  ] as const);
+  useTranslation(["routines", "common", "navigation"] as const);
   const [, setNav] = useRoutineNav();
   const open = () => void setNav({ routine: routine.id, run: run.id });
   return (
@@ -400,16 +413,6 @@ function RunMoment({
           “{feedback.text}”
         </button>
       ))}
-      {handoff && routine.handoff ? (
-        <p
-          title={translateText("reports.handoffNotes", {
-            notes: routine.handoff.text,
-          })}
-          className="mt-1 line-clamp-2 border-l pl-2 text-xs text-muted-foreground"
-        >
-          {routine.handoff.text}
-        </p>
-      ) : null}
     </Entry>
   );
 }
@@ -488,7 +491,6 @@ function Timeline({ routine }: { routine: Routine }) {
     "navigation",
   ] as const);
   const all = moments(routine);
-  const latest = routine.runs.find((run) => run.status !== "running");
   return (
     <ol aria-label={translateText("common:labels.timeline")}>
       {all.map((moment, i) => {
@@ -522,7 +524,6 @@ function Timeline({ routine }: { routine: Routine }) {
             key={moment.run.id}
             routine={routine}
             run={moment.run}
-            handoff={moment.run.id === latest?.id}
             last={last}
           />
         );
@@ -637,7 +638,7 @@ export function RoutineDetail({
           </DropdownMenu>
         </div>
         <p className="text-xs text-muted-foreground tabular-nums">
-          {[describeSchedule(routine.schedule), routine.timezone, routine.model]
+          {[describeSchedule(routine.schedule), routine.timezone]
             .filter(Boolean)
             .join(" · ")}
         </p>
