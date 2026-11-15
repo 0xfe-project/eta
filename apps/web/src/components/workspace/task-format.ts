@@ -83,8 +83,10 @@ export const numbersLabel = (numbers: readonly number[]): string =>
 /** The numbers of the tasks a task still waits for, for the queue's words. */
 export const waitingNumbers = (task: {
   dependsOn?: readonly { number: number; state: string }[];
+  /** What its work waits for, its parents' edges included; a host older than subtasks has none. */
+  waitingOn?: readonly { number: number; state: string }[];
 }): number[] =>
-  (task.dependsOn ?? [])
+  (task.waitingOn ?? task.dependsOn ?? [])
     .filter((edge) => edge.state === "waiting")
     .map((edge) => edge.number);
 

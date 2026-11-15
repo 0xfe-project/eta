@@ -1,7 +1,8 @@
-import type { TaskDependencyView } from "@eta/client-contracts";
+import type { TaskDependencyView, TaskRefView } from "@eta/client-contracts";
 import type { Task, TaskDetail } from "@/queries/tasks";
 import { HourglassIcon } from "@phosphor-icons/react/Hourglass";
 import { LinkBreakIcon } from "@phosphor-icons/react/LinkBreak";
+import { TreeStructureIcon } from "@phosphor-icons/react/TreeStructure";
 import { XIcon } from "@phosphor-icons/react/X";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -13,6 +14,7 @@ import { cn } from "@/lib/utils";
 import {
   useAddDependency,
   useRemoveDependency,
+  useSetParent,
   useUpdateTask,
 } from "@/queries/tasks";
 import { wireErrorMessage } from "@/queries/wire";
@@ -25,9 +27,16 @@ import { StatusIcon } from "./task-status-icon";
 
 const showError = (error: Error) => toast.error(wireErrorMessage(error));
 
-/** The edges of a task that are not resolved: waiting, or cancelled. */
-const open = (task: Pick<Task, "dependsOn">) => {
-  const edges = task.dependsOn ?? [];
+/**
+ * What a task's work still waits for, its parents' edges included: waiting, or cancelled. A host
+ * that sends no `waitingOn` (older than subtasks) has the task's own edges only.
+ */
+const open = (task: Pick<Task, "dependsOn" | "waitingOn">) => {
+  const edges =
+    task.waitingOn ??
+    (task.dependsOn ?? [])
+      .filter((edge) => edge.state !== "resolved")
+      .map((edge) => ({ ...edge, via: null }));
   return {
     waiting: edges.filter((edge) => edge.state === "waiting"),
     cancelled: edges.filter((edge) => edge.state === "cancelled"),
@@ -95,6 +104,7 @@ export function BlockedExits({ task }: { task: Task }) {
   const update = useUpdateTask();
   const { cancelled } = open(task);
   if (task.status !== "blocked" || cancelled.length === 0) return null;
+  // Only the task's own edges can be removed here; an inherited one is its parent's to remove.
   const busy = remove.isPending || update.isPending;
   return (
     <div
@@ -102,23 +112,25 @@ export function BlockedExits({ task }: { task: Task }) {
       aria-label={t("graph.blockedHint")}
       className="flex flex-wrap gap-1 border-x border-b bg-card px-2 pb-2"
     >
-      {cancelled.map((edge) => (
-        <Button
-          key={edge.taskId}
-          variant="outline"
-          size="xs"
-          disabled={busy}
-          onClick={() =>
-            remove.mutate(
-              { taskId: task.id, dependsOn: edge.taskId },
-              { onError: showError },
-            )
-          }
-        >
-          <LinkBreakIcon aria-hidden="true" />
-          {t("graph.removeShort", { number: edge.number })}
-        </Button>
-      ))}
+      {cancelled
+        .filter((edge) => edge.via === null)
+        .map((edge) => (
+          <Button
+            key={edge.taskId}
+            variant="outline"
+            size="xs"
+            disabled={busy}
+            onClick={() =>
+              remove.mutate(
+                { taskId: task.id, dependsOn: edge.taskId },
+                { onError: showError },
+              )
+            }
+          >
+            <LinkBreakIcon aria-hidden="true" />
+            {t("graph.removeShort", { number: edge.number })}
+          </Button>
+        ))}
       <Button
         variant="ghost"
         size="xs"
@@ -325,5 +337,151 @@ export function DependencyRows({
         </>
       ) : null}
     </>
+  );
+}
+
+/** A task named by its number and title, which opens it. */
+function TaskLink({ task }: { task: TaskRefView }) {
+  const [, setNav] = useTaskNav();
+  return (
+    <button
+      type="button"
+      onClick={() => void setNav({ task: task.taskId })}
+      className="min-w-0 truncate text-left hover:underline"
+    >
+      <span className="text-muted-foreground tabular-nums">#{task.number}</span>{" "}
+      {task.title}
+    </button>
+  );
+}
+
+/** A field to name the task this one is a subtask of, `#12` or `12`, and a way out of it. */
+function ParentField({ task }: { task: TaskDetail }) {
+  const { t } = useTranslation(["tasks"] as const);
+  const set = useSetParent();
+  const [which, setWhich] = useState("");
+  const parent = task.ancestors?.at(-1);
+  if (parent !== undefined)
+    return (
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        aria-label={t("graph.clearParent")}
+        disabled={set.isPending}
+        onClick={() =>
+          set.mutate({ taskId: task.id, parent: null }, { onError: showError })
+        }
+      >
+        <XIcon aria-hidden="true" />
+      </Button>
+    );
+  return (
+    <form
+      className="flex items-center gap-1.5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (which.trim() === "") return;
+        set.mutate(
+          { taskId: task.id, parent: which.trim() },
+          { onError: showError, onSuccess: () => setWhich("") },
+        );
+      }}
+    >
+      <Input
+        aria-label={t("graph.setParent")}
+        placeholder={t("graph.addPlaceholder")}
+        value={which}
+        onChange={(e) => setWhich(e.target.value)}
+        className="h-7 w-20 text-xs"
+      />
+      <Button
+        type="submit"
+        variant="ghost"
+        size="xs"
+        disabled={set.isPending || which.trim() === ""}
+      >
+        {t("graph.setParent")}
+      </Button>
+    </form>
+  );
+}
+
+/**
+ * The two rows of the tree on a task's page: where it sits (its parents, the top first, as a
+ * breadcrumb) and its subtasks, whose statuses its own comes from.
+ */
+export function TreeRows({
+  task,
+  labelClassName,
+}: {
+  task: TaskDetail;
+  labelClassName: string;
+}) {
+  const { t } = useTranslation(["tasks"] as const);
+  const ancestors = task.ancestors ?? [];
+  const children = task.children ?? [];
+  return (
+    <>
+      <dt className={labelClassName}>{t("graph.parent")}</dt>
+      <dd className="flex min-w-0 items-center gap-1 py-1 text-xs leading-6">
+        {ancestors.length > 0 ? (
+          <nav
+            aria-label={t("graph.parent")}
+            className="flex min-w-0 flex-1 items-center gap-1"
+          >
+            {ancestors.map((ancestor, i) => (
+              <span
+                key={ancestor.taskId}
+                className="flex min-w-0 items-center gap-1"
+              >
+                {i > 0 ? (
+                  <span aria-hidden="true" className="text-muted-foreground">
+                    ›
+                  </span>
+                ) : null}
+                <TaskLink task={ancestor} />
+              </span>
+            ))}
+          </nav>
+        ) : null}
+        <ParentField task={task} />
+      </dd>
+      {children.length > 0 ? (
+        <>
+          <dt className={labelClassName}>{t("graph.children")}</dt>
+          <dd className="min-w-0 py-1">
+            <ul aria-label={t("graph.children")}>
+              {children.map((child) => (
+                <li
+                  key={child.taskId}
+                  className="flex min-w-0 items-center gap-1.5 text-xs leading-6"
+                >
+                  <StatusIcon
+                    status={child.status}
+                    className="size-3.5 shrink-0"
+                  />
+                  <TaskLink task={child} />
+                </li>
+              ))}
+            </ul>
+          </dd>
+        </>
+      ) : null}
+    </>
+  );
+}
+
+/** "Subtasks 3/5", the cancelled ones not counted; nothing for a task without subtasks. */
+export function SubtaskCount({ task }: { task: Task }) {
+  const { t } = useTranslation(["tasks"] as const);
+  if (task.subtasks == null) return null;
+  return (
+    <span className="inline-flex items-center gap-1 tabular-nums">
+      <TreeStructureIcon aria-hidden="true" className="size-3.5" />
+      {t("graph.subtasks", {
+        done: task.subtasks.done,
+        total: task.subtasks.total,
+      })}
+    </span>
   );
 }

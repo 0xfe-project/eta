@@ -60,6 +60,8 @@ export interface DraftInput {
   assignee?: string | undefined;
   /** What the task will wait for, as the board found and checked it (`TaskDraftData.dependsOn`). */
   dependsOn?: { taskId: string; requireDone: boolean }[] | undefined;
+  /** The task it will be a subtask of, as the board found and checked it. */
+  parentId?: string | undefined;
   captainAssignmentId?: string | undefined;
   captainMessageId?: string | undefined;
 }
@@ -151,6 +153,9 @@ export class TaskCards {
       ...(input.draft.dependsOn === undefined
         ? {}
         : { dependsOn: input.draft.dependsOn }),
+      ...(input.draft.parentId === undefined
+        ? {}
+        : { parentId: input.draft.parentId }),
       ...(input.draft.captainAssignmentId === undefined
         ? {}
         : { captainAssignmentId: input.draft.captainAssignmentId }),
@@ -185,6 +190,8 @@ export class TaskCards {
     created: boolean;
     /** What the draft said the task waits for; the board adds the edges. */
     dependsOn: { taskId: string; requireDone: boolean }[];
+    /** The parent the draft named; the board sets it. */
+    parentId?: string | undefined;
   } {
     const { db, tasks, timeline } = this.#deps;
     const row = timeline.get(input.messageId);
@@ -234,7 +241,13 @@ export class TaskCards {
           draft.turnMessageId,
         ),
       })!;
-      return { task, message, created: true, dependsOn: draft.dependsOn ?? [] };
+      return {
+        task,
+        message,
+        created: true,
+        dependsOn: draft.dependsOn ?? [],
+        parentId: draft.parentId,
+      };
     })();
   }
 

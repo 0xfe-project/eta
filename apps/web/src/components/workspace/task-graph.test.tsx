@@ -109,6 +109,54 @@ describe("dependencies on the board", () => {
     });
   });
 
+  it("folds a parent's subtasks under it in its column, and names the parent of one elsewhere", async () => {
+    const parent = taskDetail({
+      id: "p1",
+      number: 10,
+      title: "阶段一",
+      status: "in_progress",
+      subtasks: { total: 2, done: 0 },
+      updatedAt: 900,
+    });
+    const working = taskDetail({
+      id: "c1",
+      number: 11,
+      title: "子任务甲",
+      status: "in_progress",
+      parentId: "p1",
+      updatedAt: 800,
+    });
+    const reviewing = taskDetail({
+      id: "c2",
+      number: 12,
+      title: "子任务乙",
+      status: "in_review",
+      parentId: "p1",
+      updatedAt: 700,
+    });
+    const h = productHost({
+      tasks: [{ task: parent }, { task: working }, { task: reviewing }],
+    });
+    h.hello();
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    const column = (label: string) =>
+      container.querySelector(`section[aria-label="${label}"]`)!;
+    const going = column("进行中");
+    // One card at the top of the column: the subtask is folded under its parent.
+    expect(going.querySelectorAll(":scope > ul > li")).toHaveLength(1);
+    expect(going.textContent).toContain("子任务 0/2");
+    expect(going.textContent).not.toContain("子任务甲");
+    const toggle = going.querySelector<HTMLButtonElement>(
+      'button[aria-expanded="false"]',
+    )!;
+    expect(toggle.getAttribute("aria-label")).toBe("展开 #10 的子任务");
+    await click(toggle);
+    expect(going.textContent).toContain("子任务甲");
+    // In review, away from its parent: on its own, saying whose it is.
+    expect(column("待验收").textContent).toContain("#10 阶段一 ›");
+  });
+
   it("says the graph's history in the reader's language, and an old entry in its own words", async () => {
     const system = { kind: "system" as const, agentId: null };
     const blocked = taskDetail({
@@ -168,6 +216,64 @@ describe("dependencies on the board", () => {
     expect(text).toContain("#5 T5 被取消了，本任务不会自己开始");
     expect(text).not.toMatch(/was cancelled|Waits for/);
     expect(text).toContain("Old words from the host.");
+    navigation.task = null;
+  });
+
+  it("offers a parent no run, and says its status comes from its subtasks", async () => {
+    const parent = taskDetail({
+      id: "p1",
+      number: 10,
+      title: "阶段一",
+      status: "in_progress",
+      subtasks: { total: 2, done: 0 },
+      // An agent's task: one that has an executor, and so a run row.
+      createdBy: { kind: "agent", agentId: "a1" },
+    });
+    const child = taskDetail({
+      id: "c1",
+      number: 11,
+      title: "子任务一",
+      status: "in_progress",
+      parentId: "p1",
+    });
+    const h = productHost({
+      tasks: [
+        {
+          task: parent,
+          activity: [
+            taskActivity({
+              id: "s1",
+              kind: "subtask",
+              body: null,
+              data: {
+                action: "added",
+                taskId: "c1",
+                number: 11,
+                title: "子任务一",
+              },
+            }),
+          ],
+        },
+        { task: child },
+      ],
+    });
+    h.hello();
+    navigation.task = "p1";
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    const main = container.querySelector("main")!;
+    expect(main.textContent).toContain("父任务不单独运行，状态由子任务推出");
+    expect(main.textContent).not.toContain("还没运行过");
+    const labels = [...main.querySelectorAll("button")].map(
+      (b) => b.textContent,
+    );
+    expect(labels).not.toContain("运行");
+    expect(labels).not.toContain("从头重跑");
+    for (const fold of main.querySelectorAll<HTMLButtonElement>(
+      "button[aria-expanded=false]",
+    ))
+      await click(fold);
+    expect(main.textContent).toContain("#11 子任务一 成为本任务的子任务");
     navigation.task = null;
   });
 

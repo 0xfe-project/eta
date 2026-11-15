@@ -15,10 +15,14 @@ import type {
 import type { GraphEdge, GraphTask } from "../src/tasks/graph";
 import type { Request } from "./support/models";
 import type { World } from "./support/world";
+import { execFileSync } from "node:child_process";
+import { existsSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { TaskGraph } from "../src/tasks/graph";
 import { until } from "./support/client";
+import { tempDir } from "./support/host";
 import { call, gate, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";
 
@@ -35,6 +39,7 @@ const node = (
   status,
   projectId: "p",
   workspaceMode: "worktree",
+  parentId: null,
   ...extra,
 });
 
@@ -500,5 +505,67 @@ describe("the migration", () => {
       { n: 0 },
     );
     expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
+  });
+});
+
+/* ------------------------------------------------------------------ the derived base */
+
+describe("the base of a task that builds on one other", () => {
+  it("starts from that task's branch while it is open, and from HEAD once it is done", async () => {
+    const git = (cwd: string, ...args: string[]) =>
+      execFileSync(
+        "git",
+        ["-c", "user.email=t@example.com", "-c", "user.name=t", ...args],
+        { cwd, encoding: "utf8" },
+      ).trim();
+    const dir = await tempDir("eta-repo-");
+    git(dir, "init", "-q", "-b", "main");
+    git(dir, "commit", "-q", "--allow-empty", "-m", "init");
+
+    const { models } = scriptedModels((request) =>
+      !isRun(request)
+        ? say("ok")
+        : request.lastRole === "toolResult"
+          ? say("finished")
+          : call("finish_task", { summary: "ok" }),
+    );
+    const w = await world({ models });
+    const ada = await w.agent("Ada");
+    const project = await w.project({ path: dir, stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id], "plan");
+    const make = (title: string, dependsOn?: { task: string }[]) =>
+      w.host.product.board.create(
+        {
+          title,
+          description: title,
+          status: "todo",
+          conversationId: group.id,
+          workspace: "worktree",
+          dependsOn,
+        },
+        { kind: "agent", agentId: ada.id },
+      );
+    const a = make("A");
+    await until(() => reviewed(w, a.id));
+    const path = taskOf(w, a.id).workspace.path!;
+    writeFileSync(join(path, "from-a.txt"), "a");
+    git(path, "add", ".");
+    git(path, "commit", "-q", "-m", "a's work");
+
+    const b = make("B", [{ task: a.id }]);
+    expect(taskOf(w, b.id).workspace.base).toBe("eta/task-1");
+    await until(() => reviewed(w, b.id));
+    expect(
+      existsSync(join(taskOf(w, b.id).workspace.path!, "from-a.txt")),
+    ).toBe(true);
+
+    // Done, and its branch merged away: the next one starts from the checkout's HEAD.
+    await w.client.call("tasks", "update", { taskId: a.id, status: "done" });
+    const c = make("C", [{ task: a.id }]);
+    expect(taskOf(w, c.id).workspace.base).toBeNull();
+    await until(() => reviewed(w, c.id));
+    expect(
+      existsSync(join(taskOf(w, c.id).workspace.path!, "from-a.txt")),
+    ).toBe(false);
   });
 });

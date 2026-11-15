@@ -1,6 +1,8 @@
 import type { Task, TaskStatus } from "@/queries/tasks";
 import { runningFirst } from "@eta/client-contracts";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
+import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
+import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { SidebarSimpleIcon } from "@phosphor-icons/react/SidebarSimple";
@@ -23,7 +25,7 @@ import { PageHeader } from "./app-shell";
 import { BackToTop } from "./back-to-top";
 import { when } from "./routine-format";
 import { actorName, ago, createdBy, statusLabel } from "./task-format";
-import { BlockedExits, DependencyBadge } from "./task-graph";
+import { BlockedExits, DependencyBadge, SubtaskCount } from "./task-graph";
 import { useTaskNav } from "./task-nav";
 import { StatusIcon } from "./task-status-icon";
 import {
@@ -61,10 +63,72 @@ const flow: TaskStatus[] = [
 
 const dragType = "application/x-eta-task";
 
-function Card({ task }: { task: Task }) {
-  useTranslation(["tasks", "common", "navigation"] as const);
+/**
+ * How a column lays out its tasks: a subtask whose parent is in the same column sits under it,
+ * folded until the parent is opened, two levels deep at most; a deeper one sits on the second
+ * level and says the rest of the way in its breadcrumb, and one whose parent is in another column
+ * stands on its own and says whose it is.
+ */
+interface Placed {
+  task: Task;
+  /** The column's subtasks of it, placed the same way. */
+  children: Placed[];
+  /** The tasks between it and where it is drawn: its parent in another column, or the levels skipped. */
+  crumb: Task[];
+}
+
+function place(column: readonly Task[], all: readonly Task[]): Placed[] {
+  const here = new Set(column.map((t) => t.id));
+  const byId = new Map(all.map((t) => [t.id, t]));
+  const childrenOf = (id: string) => column.filter((t) => t.parentId === id);
+  const below = (task: Task, depth: number): Placed[] => {
+    const direct = childrenOf(task.id);
+    if (depth < 2)
+      return direct.map((child) => ({
+        task: child,
+        children: below(child, depth + 1),
+        crumb: [],
+      }));
+    // Deeper than the board indents: flattened onto this level, each with the way down.
+    const out: Placed[] = [];
+    const walk = (t: Task, path: Task[]) => {
+      for (const child of childrenOf(t.id)) {
+        out.push({ task: child, children: [], crumb: path });
+        walk(child, [...path, child]);
+      }
+    };
+    for (const child of direct) {
+      out.push({ task: child, children: [], crumb: [] });
+      walk(child, [child]);
+    }
+    return out;
+  };
+  return column
+    .filter((t) => t.parentId == null || !here.has(t.parentId))
+    .map((task) => {
+      const parent =
+        task.parentId == null ? undefined : byId.get(task.parentId);
+      return {
+        task,
+        children: below(task, 1),
+        crumb: parent === undefined ? [] : [parent],
+      };
+    });
+}
+
+function Card({
+  task,
+  crumb = [],
+  nested = [],
+}: {
+  task: Task;
+  crumb?: Task[];
+  nested?: Placed[];
+}) {
+  const { t } = useTranslation(["tasks", "common", "navigation"] as const);
   const [, setNav] = useTaskNav();
   const { agents } = useAgentList();
+  const [unfolded, setUnfolded] = useState(false);
   return (
     <li>
       <button
@@ -77,6 +141,11 @@ function Card({ task }: { task: Task }) {
         onClick={() => void setNav({ task: task.id })}
         className="block w-full space-y-1.5 border bg-card p-2.5 text-left duration-[60ms] ease-linear outline-none hover:border-foreground/30 focus-visible:ring-1 focus-visible:ring-ring active:cursor-grabbing"
       >
+        {crumb.length > 0 ? (
+          <span className="block truncate text-xs text-muted-foreground">
+            {crumb.map((up) => `#${up.number} ${up.title}`).join(" › ")} ›
+          </span>
+        ) : null}
         <span className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
           #{task.number}
           <span className="ml-auto flex items-center gap-2">
@@ -92,6 +161,37 @@ function Card({ task }: { task: Task }) {
         </span>
       </button>
       <BlockedExits task={task} />
+      {task.subtasks == null ? null : (
+        <button
+          type="button"
+          aria-expanded={unfolded}
+          aria-label={t(unfolded ? "graph.collapse" : "graph.expand", {
+            number: task.number,
+          })}
+          disabled={nested.length === 0}
+          onClick={() => setUnfolded((open) => !open)}
+          className="flex w-full items-center gap-1 border-x border-b bg-card px-2.5 py-1 text-xs text-muted-foreground duration-[60ms] ease-linear outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring disabled:hover:text-muted-foreground"
+        >
+          {nested.length === 0 ? null : unfolded ? (
+            <CaretDownIcon aria-hidden="true" className="size-3" />
+          ) : (
+            <CaretRightIcon aria-hidden="true" className="size-3" />
+          )}
+          <SubtaskCount task={task} />
+        </button>
+      )}
+      {unfolded && nested.length > 0 ? (
+        <ul className="mt-1.5 ml-3 space-y-1.5 border-l pl-1.5">
+          {nested.map((child) => (
+            <Card
+              key={child.task.id}
+              task={child.task}
+              crumb={child.crumb}
+              nested={child.children}
+            />
+          ))}
+        </ul>
+      ) : null}
     </li>
   );
 }
@@ -144,8 +244,13 @@ function BoardView({ tasks }: { tasks: readonly Task[] }) {
               </span>
             </div>
             <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-1.5 pb-1.5">
-              {group.map((task) => (
-                <Card key={task.id} task={task} />
+              {place(group, tasks).map((placed) => (
+                <Card
+                  key={placed.task.id}
+                  task={placed.task}
+                  crumb={placed.crumb}
+                  nested={placed.children}
+                />
               ))}
             </ul>
           </section>

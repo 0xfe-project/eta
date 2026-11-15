@@ -150,6 +150,15 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
           return { result: { task } };
         }),
 
+        wire.handle("tasks", "setParent", (call) => {
+          const args = new Args(call);
+          const parent = args.nullableString("parent");
+          if (parent === undefined)
+            throw new Error("tasks.setParent needs parent (or null)");
+          const task = board.setParent(args.string("taskId"), parent, USER);
+          return { result: { task } };
+        }),
+
         wire.handle("tasks", "confirmDraft", (call) => {
           const args = new Args(call);
           return {

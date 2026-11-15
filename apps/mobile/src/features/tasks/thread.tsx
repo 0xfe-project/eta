@@ -6,7 +6,11 @@ import type {
 } from "@eta/client-contracts";
 import type { JSX } from "nsh";
 import type { TaskDetail } from "./format";
-import { dependencyEntry } from "@eta/client-contracts";
+import {
+  dependencyEntry,
+  parentEntry,
+  subtaskEntry,
+} from "@eta/client-contracts";
 import { signal, Text, View } from "nsh";
 import { t } from "../../i18n";
 import { go } from "../../nav/links";
@@ -42,6 +46,33 @@ function dependencyLine(a: TaskActivityView): string | null {
       return t("tasks.activity.dependencyBlocked", { task });
     case "unblocked":
       return t("tasks.activity.dependencyUnblocked");
+  }
+}
+
+/** A `parent` or `subtask` entry in the reader's words, from its data; an older one has its body. */
+function treeLine(a: TaskActivityView): string | null {
+  const named = (ref: { number: number; title: string }) =>
+    `#${ref.number} ${ref.title}`.trim();
+  if (a.kind === "parent") {
+    const read = parentEntry(a.data);
+    if (read === undefined) return a.body;
+    if (read.to !== null)
+      return t("tasks.activity.parentSet", { task: named(read.to) });
+    return read.deleted
+      ? t("tasks.activity.parentDeleted", { task: named(read.from!) })
+      : t("tasks.activity.parentCleared", { task: named(read.from!) });
+  }
+  const read = subtaskEntry(a.data);
+  if (read === undefined) return a.body;
+  switch (read.action) {
+    case "added":
+      return t("tasks.activity.subtaskAdded", { task: named(read.task) });
+    case "removed":
+      return t("tasks.activity.subtaskRemoved", { task: named(read.task) });
+    case "deleted":
+      return t("tasks.activity.subtaskDeleted", { task: named(read.task) });
+    case "all_cancelled":
+      return t("tasks.activity.subtasksAllCancelled");
   }
 }
 
@@ -85,10 +116,9 @@ function describe(a: TaskActivityView): string | null {
       return t("tasks.activity.turnStopped", { reason: why });
     case "dependency":
       return dependencyLine(a);
-    // The task graph's entries say themselves, in the host's words.
     case "parent":
     case "subtask":
-      return a.body;
+      return treeLine(a);
     default:
       return null;
   }

@@ -302,6 +302,8 @@ export class TaskRunner implements TaskRuns {
   /** The task's first run (it was confirmed, or taken out of the backlog). */
   start(taskId: string): void {
     if (!this.#attached) return;
+    // A task with subtasks does not run itself: that is the design, not something to warn about.
+    if (this.#deps.board.isParent(taskId)) return;
     try {
       this.#queue(taskId);
     } catch (error) {
@@ -347,9 +349,14 @@ export class TaskRunner implements TaskRuns {
     for (const run of this.#deps.runs.openOf(taskId)) this.#stop(run, why);
   }
 
-  withdraw(taskId: string): void {
+  withdraw(taskId: string, which: "start" | "executor" = "start"): void {
     for (const run of this.#deps.runs.openOf(taskId))
-      if (run.status === "queued" && run.waitsForDeps) this.#stop(run);
+      if (
+        run.status === "queued" &&
+        run.agentId === null &&
+        (which === "executor" || run.waitsForDeps)
+      )
+        this.#stop(run);
   }
 
   active(taskId: string): boolean {
@@ -401,11 +408,15 @@ export class TaskRunner implements TaskRuns {
       options.wake !== false &&
       (mentions.length === 0 ||
         (executor !== null && mentions.includes(executor)));
-    // Words left with a task that will not be worked on again are none of the runner's business.
+    // Words left with a task that will not be worked on again are none of the runner's business,
+    // and a task with subtasks is not worked on itself: a run of it that is going (an executor
+    // splitting its task) still reads them, but nothing wakes one.
     this.#hand(
       { taskId, agentId: null },
       text,
-      forExecutor && workable(task.status),
+      forExecutor &&
+        workable(task.status) &&
+        !this.#deps.board.isParent(task.id),
     );
   }
 
@@ -576,10 +587,15 @@ export class TaskRunner implements TaskRuns {
     if (summary === "") throw new Error("finish_task needs a summary");
     // The comment is the executor's own words: the run that wrote it does not read it back.
     this.#deps.board.comment(task.id, summary, executor, { deliver: false });
-    this.#deps.board.update(task.id, { status: submission.status }, executor);
+    // A task the executor split into subtasks takes its status from them, not from this run.
+    const split = this.#deps.board.isParent(task.id);
+    if (!split)
+      this.#deps.board.update(task.id, { status: submission.status }, executor);
     live.reported = true;
     this.#post(task, executor, summary);
-    return `Task #${task.number} is now [${submission.status}] and your summary is posted.`;
+    return split
+      ? `Your summary is posted. Task #${task.number} has subtasks, so its status comes from them: it is [${this.#task(task.id).status}].`
+      : `Task #${task.number} is now [${submission.status}] and your summary is posted.`;
   }
 
   /** The result goes where the task came from, in the executor's name. */
@@ -641,6 +657,10 @@ export class TaskRunner implements TaskRuns {
       const executor = this.#executorOf(task);
       if (task.createdBy.kind !== "agent" || executor === null)
         throw new Error("this task has no executor: only an agent's task runs");
+      if (board.isParent(task.id))
+        throw new Error(
+          `#${task.number} has subtasks: it does not run itself, and its status comes from them. Run or comment on a subtask instead`,
+        );
       if (agents.get(executor) === undefined)
         throw new Error(executorGoneText(task));
     }
@@ -714,6 +734,12 @@ export class TaskRunner implements TaskRuns {
     for (const run of runs.queued()) {
       const machine =
         run.machineId === null ? undefined : machines.get(run.machineId);
+      if (run.agentId === null && graph.hasChildren(run.taskId)) {
+        // A task with subtasks does not run itself; this run should have been withdrawn with it
+        // (its `subtask` entries say why).
+        this.withdraw(run.taskId, "executor");
+        continue;
+      }
       const gate = run.waitsForDeps ? graph.gate(run.taskId) : undefined;
       if (gate?.state === "broken") {
         // It will never start on its own: the board blocks the task and withdraws this run.
@@ -943,7 +969,7 @@ export class TaskRunner implements TaskRuns {
     if (live.stopped !== undefined) return { ended: { status: "interrupted" } };
 
     runs.running(run.id);
-    if (!mentioned && task.status !== "in_progress")
+    if (!mentioned && task.status !== "in_progress" && !board.isParent(task.id))
       board.update(
         task.id,
         { status: "in_progress" },

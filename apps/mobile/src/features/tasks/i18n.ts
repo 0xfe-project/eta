@@ -84,6 +84,14 @@ export const i18n = {
       "{task} 被取消了，本任务不会自己开始。去掉这条依赖，或者取消本任务。",
     "tasks.activity.dependencyUnblocked":
       "依赖的任务不再是取消状态，本任务回到「待办」，依赖解决后开始",
+    "tasks.activity.parentSet": "成为 {task} 的子任务",
+    "tasks.activity.parentCleared": "不再是 {task} 的子任务",
+    "tasks.activity.parentDeleted": "{task} 被删除了，本任务不再是它的子任务",
+    "tasks.activity.subtaskAdded": "{task} 成为本任务的子任务",
+    "tasks.activity.subtaskRemoved": "{task} 不再是本任务的子任务",
+    "tasks.activity.subtaskDeleted": "子任务 {task} 被删除了",
+    "tasks.activity.subtasksAllCancelled":
+      "子任务全部取消了，没有剩下要做的工作。新建子任务，或者决定本任务怎么处理。",
     "tasks.live.working": "{name} 正在工作",
     "tasks.live.answering": "{name} 正在回答",
     "tasks.live.starting": "{name} 正在启动",
@@ -203,6 +211,15 @@ export const i18n = {
       "{task} was cancelled, so this will not start on its own. Remove the dependency, or cancel this task.",
     "tasks.activity.dependencyUnblocked":
       "no dependency is cancelled any more, so this goes back to todo and starts once what it waits for is resolved",
+    "tasks.activity.parentSet": "became a subtask of {task}",
+    "tasks.activity.parentCleared": "is no longer a subtask of {task}",
+    "tasks.activity.parentDeleted":
+      "{task} was deleted, so this is no longer a subtask of it",
+    "tasks.activity.subtaskAdded": "{task} became a subtask of this",
+    "tasks.activity.subtaskRemoved": "{task} is no longer a subtask of this",
+    "tasks.activity.subtaskDeleted": "subtask {task} was deleted",
+    "tasks.activity.subtasksAllCancelled":
+      "every subtask is cancelled, so nothing is left to work on. Add a subtask, or decide what becomes of this task.",
     "tasks.live.working": "{name} is working",
     "tasks.live.answering": "{name} is answering",
     "tasks.live.starting": "{name} is starting",
