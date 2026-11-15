@@ -15,7 +15,7 @@ import {
 // sees why before choosing, and the host still decides.
 
 /** The id a task being made has here, before the host gives it one. */
-export const NEW_TASK = "__new__";
+const NEW_TASK = "__new__";
 
 /**
  * The task the picker is for: one that exists, or one being made (`id` absent), with what it is
@@ -31,7 +31,7 @@ export interface PickSubject {
 export type PickMode = "dependsOn" | "parent";
 
 /** Why a task cannot be picked: it waits for this one (a cycle), or it is this one's line. */
-export type PickRefusal = "cycle" | "tree" | "cancelled" | "self";
+type PickRefusal = "cycle" | "tree" | "cancelled" | "self";
 
 export interface PickOption {
   task: Task;
@@ -54,10 +54,7 @@ function rootOf(id: string | null, all: readonly Task[]): string | null {
  * The board with the subject in it as the form has it: a task being made is added, and an existing
  * one gets the parent and edges the form gives it.
  */
-export function withSubject(
-  subject: PickSubject,
-  all: readonly Task[],
-): Task[] {
+function withSubject(subject: PickSubject, all: readonly Task[]): Task[] {
   const id = subject.id ?? NEW_TASK;
   const byId = new Map(all.map((t) => [t.id, t]));
   const edges = (subject.dependsOn ?? []).flatMap((dep) => {

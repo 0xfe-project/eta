@@ -1,8 +1,5 @@
 import type { TaskDependencyView, TaskRefView } from "@eta/client-contracts";
-import type { Task, TaskDetail } from "@/queries/tasks";
-import { HourglassIcon } from "@phosphor-icons/react/Hourglass";
-import { LinkBreakIcon } from "@phosphor-icons/react/LinkBreak";
-import { TreeStructureIcon } from "@phosphor-icons/react/TreeStructure";
+import type { TaskDetail } from "@/queries/tasks";
 import { XIcon } from "@phosphor-icons/react/X";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -16,7 +13,6 @@ import {
   useTasks,
 } from "@/queries/tasks";
 import { wireErrorMessage } from "@/queries/wire";
-import { numbersLabel } from "./task-format";
 import { useTaskNav } from "./task-nav";
 import { TaskPicker } from "./task-picker";
 import { stepAmongSiblings } from "./task-plan";
@@ -26,72 +22,6 @@ import { StatusIcon } from "./task-status-icon";
 // `dependents`); the rules are the host's, these only show them and send the user's changes.
 
 const showError = (error: Error) => toast.error(wireErrorMessage(error));
-
-/**
- * What a task's work still waits for, its parents' edges included: waiting, or cancelled. A host
- * that sends no `waitingOn` (older than subtasks) has the task's own edges only.
- */
-const open = (task: Pick<Task, "dependsOn" | "waitingOn">) => {
-  const edges =
-    task.waitingOn ??
-    (task.dependsOn ?? [])
-      .filter((edge) => edge.state !== "resolved")
-      .map((edge) => ({ ...edge, via: null }));
-  return {
-    waiting: edges.filter((edge) => edge.state === "waiting"),
-    cancelled: edges.filter((edge) => edge.state === "cancelled"),
-  };
-};
-
-/**
- * "Waiting for #12, #13" on a card or a row, and the cancelled ones in red. Nothing when the
- * task waits for nothing, or has started its work (what it waited for no longer matters then).
- */
-export function DependencyBadge({
-  task,
-  className,
-}: {
-  task: Task;
-  className?: string;
-}) {
-  const { t } = useTranslation(["tasks"] as const);
-  const { waiting, cancelled } = open(task);
-  const started =
-    task.status === "in_progress" ||
-    task.status === "in_review" ||
-    task.status === "done" ||
-    task.status === "cancelled";
-  if (started || (waiting.length === 0 && cancelled.length === 0)) return null;
-  return (
-    <span
-      className={cn(
-        "flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs",
-        className,
-      )}
-    >
-      {cancelled.length > 0 ? (
-        <span className="inline-flex min-w-0 items-center gap-1 text-destructive">
-          <LinkBreakIcon aria-hidden="true" className="size-3.5 shrink-0" />
-          <span className="truncate">
-            {t("graph.cancelledDependency", {
-              tasks: numbersLabel(cancelled.map((edge) => edge.number)),
-            })}
-          </span>
-        </span>
-      ) : null}
-      {waiting.length > 0 ? (
-        <span className="inline-flex min-w-0 items-center gap-1 text-muted-foreground">
-          <HourglassIcon aria-hidden="true" className="size-3.5 shrink-0" />
-          <span className="truncate">
-            {t("graph.waitingOn", {
-              tasks: numbersLabel(waiting.map((edge) => edge.number)),
-            })}
-          </span>
-        </span>
-      ) : null}
-    </span>
-  );
-}
 
 /** One edge: the other task, where the edge stands, and (for what it waits for) its controls. */
 function Edge({
@@ -395,20 +325,5 @@ export function TreeRows({
         </>
       ) : null}
     </>
-  );
-}
-
-/** "Subtasks 3/5", the cancelled ones not counted; nothing for a task without subtasks. */
-export function SubtaskCount({ task }: { task: Task }) {
-  const { t } = useTranslation(["tasks"] as const);
-  if (task.subtasks == null) return null;
-  return (
-    <span className="inline-flex items-center gap-1 tabular-nums">
-      <TreeStructureIcon aria-hidden="true" className="size-3.5" />
-      {t("graph.subtasks", {
-        done: task.subtasks.done,
-        total: task.subtasks.total,
-      })}
-    </span>
   );
 }
