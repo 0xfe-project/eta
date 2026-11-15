@@ -183,6 +183,8 @@ export function QueueReason({
   const remove = useRemoveDependency();
   const sentence = queueSentence(task, all, who, machine);
   if (sentence === undefined) return null;
+  // The lead in bold, up to its colon: full-width in Chinese, ": " in English.
+  const lead = /^[^：:]+(?:：|: )/.exec(sentence)?.[0];
   const own = waitsOf(task).filter(
     (w) => w.state === "waiting" && w.via === null,
   );
@@ -210,15 +212,13 @@ export function QueueReason({
           className="mt-0.75 size-3.5 shrink-0 text-muted-foreground"
         />
         <span>
-          {sentence.includes("：") ? (
-            <>
-              <b className="font-semibold">
-                {sentence.slice(0, sentence.indexOf("：") + 1)}
-              </b>
-              {sentence.slice(sentence.indexOf("：") + 1)}
-            </>
-          ) : (
+          {lead === undefined ? (
             sentence
+          ) : (
+            <>
+              <b className="font-semibold">{lead}</b>
+              {sentence.slice(lead.length)}
+            </>
           )}
         </span>
       </p>

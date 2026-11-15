@@ -104,10 +104,10 @@ export function queueSentence(
         who,
       });
     }
-    const own = (task.dependsOn ?? []).length;
-    const inherited = waitsOf(task).filter((w) => w.via !== null).length;
+    // How many it waits for in all: the board's own count (`waitSummary`).
+    const wait = waitSummary(task, all);
     return translate("tasks:queue.many", {
-      count: Math.max(own + inherited, waiting.length),
+      count: wait?.kind === "many" ? wait.total : waiting.length,
       titles: waiting.map((w) => `「${w.title}」`).join(""),
     });
   }
