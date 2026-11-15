@@ -29,6 +29,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { listSeparator, translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useCaptainActions } from "@/queries/captain";
@@ -42,7 +48,15 @@ import {
   useSendFeedback,
   useUpdateRoutine,
 } from "@/queries/routines";
-import { describeSchedule, when } from "./routine-format";
+import {
+  describeSchedule,
+  describeScheduleFor,
+  fullTime,
+  localSchedule,
+  nextRunState,
+  scheduleSetting,
+  when,
+} from "./routine-format";
 import { useRoutineNav } from "./routine-nav";
 
 const runStatusLabels: Record<RunStatus, string> = {
@@ -195,21 +209,53 @@ function History({
   );
 }
 
-function NextRun({ routine }: { routine: RoutineSummary }) {
-  const { t: translateText } = useTranslation([
-    "routines",
-    "common",
-    "navigation",
-  ] as const);
-  if (routine.runs[0]?.status === "running")
+/** The clock, read again every interval while mounted. */
+function useNow(interval: number) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), interval);
+    return () => clearInterval(timer);
+  }, [interval]);
+  return now;
+}
+
+/**
+ * The bottom right of a row: running, paused, Captain off, no further time,
+ * or how long until the next run, its full time on the viewer's clock on
+ * hover (and what it was set to, when the routine's zone reads differently).
+ */
+function NextRun({
+  routine,
+  captainOn,
+}: {
+  routine: RoutineSummary;
+  captainOn: boolean;
+}) {
+  useTranslation(["routines", "common", "navigation"] as const);
+  const state = nextRunState(routine, captainOn, useNow(15_000));
+  if (state.kind === "running")
     return (
       <span className="inline-flex items-center gap-1.5 text-foreground">
         <span className="size-1.5 bg-foreground motion-safe:animate-pulse" />
-        {translateText("common:status.running")}
+        {state.text}
       </span>
     );
-  if (!routine.enabled) return translateText("common:status.paused");
-  return routine.nextRunAt ? when(routine.nextRunAt) : "—";
+  if (state.kind !== "next") return state.text;
+  const setting = scheduleSetting(routine.schedule, routine.timezone);
+  // Its own provider: the list is also drawn where no app shell wraps it.
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span>{state.text}</span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="end" className="block">
+          <span className="block tabular-nums">{fullTime(state.at)}</span>
+          {setting ? <span className="block">{setting}</span> : null}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 /**
@@ -230,6 +276,7 @@ export function RoutineList({
   ] as const);
   const [, setNav] = useRoutineNav();
   const { routines, loaded, error } = useRoutines();
+  const captainOn = useRoutinesStatus()?.captainOn ?? true;
   return (
     <div className="space-y-2">
       <div
@@ -280,23 +327,23 @@ export function RoutineList({
                   }
                   aria-current={routine.id === selected ? "true" : undefined}
                   className={cn(
-                    "grid w-full grid-cols-[1fr_auto_5.5rem] items-center gap-4 px-2 py-2 text-left duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60 aria-[current]:bg-muted",
+                    "grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-0.5 px-2 py-2 text-left duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60 aria-[current]:bg-muted",
                     !routine.enabled && "text-muted-foreground",
                   )}
                 >
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">
-                      {routine.name}
-                    </span>
-                    <span className="block text-xs text-muted-foreground tabular-nums">
-                      {describeSchedule(routine.schedule)}
-                    </span>
+                  <span className="truncate text-sm font-medium">
+                    {routine.name}
                   </span>
                   <span className={routine.enabled ? undefined : "opacity-40"}>
                     <History runs={routine.runs} length={bare ? 7 : 14} />
                   </span>
-                  <span className="text-right text-xs text-muted-foreground tabular-nums">
-                    <NextRun routine={routine} />
+                  <span className="truncate text-xs text-muted-foreground tabular-nums">
+                    {describeSchedule(
+                      localSchedule(routine.schedule, routine.timezone),
+                    )}
+                  </span>
+                  <span className="text-right text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+                    <NextRun routine={routine} captainOn={captainOn} />
                   </span>
                 </button>
               </li>
@@ -645,9 +692,7 @@ export function RoutineDetail({
           </DropdownMenu>
         </div>
         <p className="text-xs text-muted-foreground tabular-nums">
-          {[describeSchedule(routine.schedule), routine.timezone]
-            .filter(Boolean)
-            .join(" · ")}
+          {describeScheduleFor(routine.schedule, routine.timezone)}
         </p>
       </div>
 

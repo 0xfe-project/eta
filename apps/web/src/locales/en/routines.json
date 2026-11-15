@@ -68,5 +68,33 @@
     "noModel": "Captain has no model. Choose one in Captain's settings; until then each time that comes is recorded as skipped.",
     "noCaptain": "Captain is not set up yet. Until it is, each time that comes is recorded as skipped.",
     "turnOn": "Turn Captain on"
+  },
+  "next": {
+    "upcoming": "Next · {{when}}",
+    "inMinutes": "in {{count}} minutes",
+    "inMinutes_one": "in {{count}} minute",
+    "inMinutes_other": "in {{count}} minutes",
+    "inHours": "in {{count}} hours",
+    "inHours_one": "in {{count}} hour",
+    "inHours_other": "in {{count}} hours",
+    "tomorrow": "tomorrow",
+    "inDays": "in {{count}} days",
+    "inDays_one": "in {{count}} day",
+    "inDays_other": "in {{count}} days",
+    "running": "Running · {{duration}}",
+    "seconds": "{{count}} seconds",
+    "seconds_one": "{{count}} second",
+    "seconds_other": "{{count}} seconds",
+    "minutes": "{{count}} minutes",
+    "minutes_one": "{{count}} minute",
+    "minutes_other": "{{count}} minutes",
+    "paused": "Paused",
+    "captainOff": "Captain is off",
+    "never": "Won't run again",
+    "fullTime": "{{weekday}} {{date}} {{time}}",
+    "setIn": "The routine is set for {{setting}} {{zone}}",
+    "cronIn": "The cron expression runs on {{zone}}",
+    "origin": " ({{setting}} {{zone}})",
+    "originZone": " ({{zone}})"
   }
 }

@@ -5,6 +5,7 @@ import { setWire } from "@/lib/wire";
 import { buildProductHost, routineInfo, routineSections } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
 import { RoutineBoard } from "./routine-board";
+import { viewerTimeZone } from "./routine-format";
 
 const navigation = rstest.hoisted(() => ({
   routine: null as string | null,
@@ -379,5 +380,91 @@ describe("while Captain is off", () => {
     await flush();
     expect(container.textContent).toContain("Captain 还没有配置模型");
     expect(button(container, "打开 Captain")).toBeUndefined();
+  });
+});
+
+describe("a row of the list", () => {
+  const zone = viewerTimeZone();
+  const rows = () => [
+    routineSections(
+      routineInfo({
+        id: "a",
+        name: "下次",
+        timezone: zone,
+        nextRunAt: Date.now() + 20.5 * 3_600_000,
+      }),
+    ),
+    routineSections(
+      routineInfo({
+        id: "b",
+        name: "运行",
+        timezone: zone,
+        schedule: { kind: "hourly", every: 2 },
+        nextRunAt: Date.now() + 3_600_000,
+      }),
+      {
+        runs: [
+          run({
+            id: "x",
+            routineId: "b",
+            status: "running",
+            startedAt: Date.now() - 125_000,
+            finishedAt: null,
+          }),
+        ],
+      },
+    ),
+    routineSections(
+      routineInfo({
+        id: "c",
+        name: "暂停",
+        timezone: zone,
+        enabled: false,
+        nextRunAt: null,
+      }),
+    ),
+    routineSections(
+      routineInfo({ id: "d", name: "结束", timezone: zone, nextRunAt: null }),
+    ),
+  ];
+  const row = (c: ParentNode, name: string) =>
+    [...c.querySelectorAll("li")].find((li) =>
+      li.textContent?.startsWith(name),
+    )!;
+
+  it("puts the name and runs on top, the schedule and the next run below", async () => {
+    const host = buildProductHost({ routines: rows() });
+    host.install();
+    host.hello();
+    const { container } = await mount(<RoutineBoard />);
+    await flush();
+    expect(row(container, "下次").textContent).toBe(
+      "下次每天 08:00下次 · 20 小时后",
+    );
+    expect(row(container, "下次").querySelector('[role="img"]')).not.toBeNull();
+    expect(row(container, "运行").textContent).toBe(
+      "运行每 2 小时运行中 · 2 分钟",
+    );
+    expect(row(container, "暂停").textContent).toBe("暂停每天 08:00已暂停");
+    expect(row(container, "结束").textContent).toBe("结束每天 08:00不会再运行");
+  });
+
+  it("promises no time while Captain is off", async () => {
+    const host = buildProductHost({
+      routines: rows(),
+      routinesStatus: { captainOn: false, reason: "supervisor_off" },
+    });
+    host.install();
+    host.hello();
+    const { container } = await mount(<RoutineBoard />);
+    await flush();
+    expect(row(container, "下次").textContent).toBe(
+      "下次每天 08:00Captain 已关闭",
+    );
+    // A paused one is still paused, and a running one still running.
+    expect(row(container, "暂停").textContent).toContain("已暂停");
+    expect(row(container, "运行").textContent).toContain("运行中");
+    // One that will never run again says so, whether Captain is on or not.
+    expect(row(container, "结束").textContent).toContain("不会再运行");
   });
 });
