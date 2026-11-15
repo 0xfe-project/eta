@@ -144,3 +144,10 @@ export function flowWord(
   if (edge.status === "in_progress") return translate("tasks:flow.running");
   return statusLabel(edge.status);
 }
+
+/**
+ * The part of a queue sentence that is set in bold: up to its colon, full-width in Chinese or ": "
+ * in English; undefined for a sentence with none.
+ */
+export const sentenceLead = (sentence: string): string | undefined =>
+  /^[^：:]+(?:：|: )/.exec(sentence)?.[0];

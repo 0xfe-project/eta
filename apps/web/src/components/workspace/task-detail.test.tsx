@@ -20,7 +20,7 @@ import { TaskPickList } from "./task-picker";
 import { contextRows, sideGroups } from "./task-side";
 import { board, release } from "./task-tree-fixture";
 import { emptyFilter, useTaskView } from "./task-view";
-import { queueSentence } from "./task-words";
+import { queueSentence, sentenceLead } from "./task-words";
 import { Tasks } from "./tasks";
 
 // A task's own page as the design's sections 05–07 have it (where it stands between what it waits
@@ -281,6 +281,21 @@ describe("waiting for prerequisites (05)", () => {
       "前置都好了，在等空位：gpu-box 上已有 2 个在跑",
     );
     expect(queueSentence(tasks[4]!, tasks, "Ada")).toBeUndefined();
+  });
+});
+
+describe("the queue sentence's bold lead", () => {
+  it('ends at the colon, full-width in Chinese and ": " in English', () => {
+    expect(sentenceLead("还不能开始：在等「A」交付。")).toBe("还不能开始：");
+    expect(
+      sentenceLead("Can’t start yet: waiting for “A” to be delivered."),
+    ).toBe("Can’t start yet: ");
+    expect(sentenceLead("waiting for room: gpu-box already runs 2")).toBe(
+      "waiting for room: ",
+    );
+    // A colon inside a word (a time, a URL) is not a lead.
+    expect(sentenceLead("Starts at 12:30")).toBeUndefined();
+    expect(sentenceLead("在等空位")).toBeUndefined();
   });
 });
 

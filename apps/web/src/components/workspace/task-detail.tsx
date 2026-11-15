@@ -32,7 +32,7 @@ import {
   waitSummary,
 } from "./task-plan";
 import { StatusIcon } from "./task-status-icon";
-import { flowWord, queueSentence } from "./task-words";
+import { flowWord, queueSentence, sentenceLead } from "./task-words";
 
 // The parts of a task's own page that say where it stands in the graph: what comes before and
 // after it, why it has not started and what to do about it, why it is stuck, and, for a piece of
@@ -183,8 +183,7 @@ export function QueueReason({
   const remove = useRemoveDependency();
   const sentence = queueSentence(task, all, who, machine);
   if (sentence === undefined) return null;
-  // The lead in bold, up to its colon: full-width in Chinese, ": " in English.
-  const lead = /^[^：:]+(?:：|: )/.exec(sentence)?.[0];
+  const lead = sentenceLead(sentence);
   const own = waitsOf(task).filter(
     (w) => w.state === "waiting" && w.via === null,
   );
