@@ -19,7 +19,6 @@ export {
   type RepairResult,
   type SessionStats,
   setValue,
-  STORAGE_METHODS,
   type StorageBranchScan,
   type StorageService,
   type StorageWrite,

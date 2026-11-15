@@ -67,22 +67,32 @@ export function judgeMention(spent: number): BudgetVerdict {
 }
 
 /**
- * The members an agent named, by name (any case) or by id. Names that are nobody's are returned
+ * The members an agent named, by id or by name (any case). Names that are nobody's are returned
  * so the agent can be told; the agent itself is never woken by its own message.
+ *
+ * A name two members answer to goes to Captain if Captain is one of them, then to the first: a
+ * user agent called "Captain" from before the name was reserved does not take "@Captain".
  */
 export function resolveNamed(
   wanted: readonly string[],
-  members: readonly { id: string; name: string }[],
+  members: readonly {
+    id: string;
+    name: string;
+    systemRole?: "captain" | null | undefined;
+  }[],
   self: string,
 ): { ids: string[]; unknown: string[] } {
   const ids: string[] = [];
   const unknown: string[] = [];
   for (const raw of wanted) {
     const name = raw.trim().replace(/^@/, "");
-    const found = members.find(
-      (member) =>
-        member.id === name || member.name.toLowerCase() === name.toLowerCase(),
+    const named = members.filter(
+      (member) => member.name.toLowerCase() === name.toLowerCase(),
     );
+    const found =
+      members.find((member) => member.id === name) ??
+      named.find((member) => member.systemRole === "captain") ??
+      named[0];
     if (found === undefined) unknown.push(raw);
     else if (found.id !== self && !ids.includes(found.id)) ids.push(found.id);
   }

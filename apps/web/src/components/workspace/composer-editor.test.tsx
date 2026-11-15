@@ -1,13 +1,9 @@
 import type { Draft, FilePart } from "@/lib/composer";
 import { afterEach, describe, expect, it } from "@rstest/core";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { LONG_PASTE, MAX_MESSAGE_CHARS } from "@/lib/composer";
+import { cleanup, mount } from "@/test-render";
 import { ComposerEditor } from "./composer-editor";
-
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
 
 let draft: Draft = [];
 
@@ -16,19 +12,15 @@ async function render(
   onFiles?: (files: File[]) => FilePart[],
 ) {
   draft = value;
-  const container = document.createElement("div");
-  document.body.append(container);
-  await act(async () => {
-    createRoot(container).render(
-      <ComposerEditor
-        value={value}
-        onChange={(next) => (draft = next)}
-        onFiles={onFiles}
-        onKeyDown={() => {}}
-        placeholder="发消息"
-      />,
-    );
-  });
+  const { container } = await mount(
+    <ComposerEditor
+      value={value}
+      onChange={(next) => (draft = next)}
+      onFiles={onFiles}
+      onKeyDown={() => {}}
+      placeholder="发消息"
+    />,
+  );
   const editor = container.querySelector<HTMLElement>("[contenteditable]")!;
   await act(async () => editor.focus());
   return editor;
@@ -54,9 +46,7 @@ async function paste(
 }
 
 describe("pasting into the composer", () => {
-  afterEach(() => {
-    document.body.innerHTML = "";
-  });
+  afterEach(cleanup);
 
   it("folds long text into one block holding all of it", async () => {
     const editor = await render([{ type: "text", text: "看：" }]);

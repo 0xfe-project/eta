@@ -6,6 +6,7 @@ import type {
 import type { Source } from "@/queries/sources";
 import { BUILTIN_PROVIDER_PRESETS } from "@eta/client-contracts";
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { getWire } from "@/lib/wire";
 import { useLlm } from "@/queries/llm";
 import { useProviders } from "@/queries/providers";
@@ -26,6 +27,12 @@ export const logoKey = {
   connector: (id: string) => `connector:${id}`,
   kind: (kind: ProviderKind) => `kind:${kind}`,
 };
+
+/**
+ * Eta's own mark, for Eta Token Plan: models.dev has no entry for it. The blocks of
+ * `public/Eta-Logo.svg` without its background, drawn as a mask like every other logo.
+ */
+const ETA_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="300 300 1400 1400"><path d="M300 300h350v1400H300zM650 650h700v350H650zM1350 300h350v350h-350zM1000 1000h350v700h-350zM1350 1350h350v350h-350z"/></svg>`;
 
 const NONE: Record<string, string> = {};
 
@@ -59,18 +66,29 @@ export function useSourceLogos(): Record<string, string> {
             },
           ],
     ),
-    ...Object.entries(BUILTIN_PROVIDER_PRESETS).map(([kind, preset]) => ({
-      key: logoKey.kind(kind as ProviderKind),
-      ...(kind === "openai-codex"
-        ? { id: "openai" }
-        : { baseUrl: preset.baseUrl }),
-    })),
-    ...(data?.providers ?? []).map((provider) => ({
-      key: logoKey.provider(provider.id),
-      ...(provider.kind === "openai-codex"
-        ? { id: "openai" }
-        : { baseUrl: provider.baseUrl }),
-    })),
+    ...Object.entries(BUILTIN_PROVIDER_PRESETS)
+      .filter(([kind]) => kind !== "eta")
+      .map(([kind, preset]) => ({
+        key: logoKey.kind(kind as ProviderKind),
+        ...(kind === "openai-codex"
+          ? { id: "openai" }
+          : { baseUrl: preset.baseUrl }),
+      })),
+    ...(data?.providers ?? [])
+      .filter((provider) => provider.kind !== "eta")
+      .map((provider) => ({
+        key: logoKey.provider(provider.id),
+        ...(provider.kind === "openai-codex"
+          ? { id: "openai" }
+          : { baseUrl: provider.baseUrl }),
+      })),
+  ];
+  // Eta's own sources draw Eta's mark; the host is not asked for it.
+  const etaKeys = [
+    logoKey.kind("eta"),
+    ...(data?.providers ?? [])
+      .filter((provider) => provider.kind === "eta")
+      .map((provider) => logoKey.provider(provider.id)),
   ];
   const query = useQuery({
     queryKey: ["wire", "providers", "logos", sources],
@@ -91,5 +109,15 @@ export function useSourceLogos(): Record<string, string> {
         )
       ).logos,
   });
-  return query.data ?? NONE;
+  const fetched = query.data ?? NONE;
+  const etaList = etaKeys.join("\n");
+  return useMemo(
+    () => ({
+      ...fetched,
+      ...Object.fromEntries(
+        etaList.split("\n").map((key) => [key, ETA_LOGO_SVG]),
+      ),
+    }),
+    [fetched, etaList],
+  );
 }

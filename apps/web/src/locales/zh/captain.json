@@ -30,11 +30,6 @@
     "approve": "批准",
     "reject": "拒绝"
   },
-  "assignments": {
-    "title": "最近派工",
-    "none": "还没有派工。",
-    "round": "第 {{round}} 轮"
-  },
   "pendingBadge": "待审批 · {{count}}",
   "proposal": {
     "label": "提议的群 {{name}}",
@@ -55,6 +50,16 @@
       "failed": "失败",
       "expired": "已过期"
     }
+  },
+  "agentProposal": {
+    "label": "提议的智能体 {{name}}",
+    "title": "新智能体",
+    "purpose": "职责",
+    "persona": "人格卡",
+    "model": "模型",
+    "runtime": "运行时",
+    "plugins": "插件",
+    "created": "「{{name}}」已就绪，在侧栏可以找到它。"
   },
   "review": {
     "title": "Captain 巡检",

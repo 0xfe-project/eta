@@ -90,10 +90,10 @@ describe("手机上的 header", () => {
       />,
     );
     const controls = [...container.querySelectorAll("button")];
-    expect(controls).toHaveLength(2);
+    expect(controls.map((button) => button.getAttribute("aria-label"))).toEqual(
+      ["返回对话列表", "群信息"],
+    );
     expect(container.querySelector("h1")!.textContent).toBe("发布讨论");
-    // No avatar row and no project chip: those belong to the panel and the chat.
-    expect(container.querySelectorAll("img")).toHaveLength(0);
   });
 });
 

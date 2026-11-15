@@ -2,7 +2,7 @@ import type { RunView } from "@eta/client-contracts";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
 import { setWire } from "@/lib/wire";
-import { productHost, routineInfo, routineSections } from "@/test-product";
+import { buildProductHost, routineInfo, routineSections } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
 import { RoutineBoard } from "./routine-board";
 
@@ -39,10 +39,33 @@ const info = routineInfo({
   nextRunAt: Date.now() + 3_600_000,
 });
 
+const PROVIDERS = {
+  revision: "r1",
+  providers: [
+    {
+      id: "p",
+      name: "P",
+      kind: "openai-compatible" as const,
+      baseUrl: "http://127.0.0.1:1/v1",
+      hasApiKey: true,
+      models: [
+        { id: "m", name: "M" },
+        { id: "n", name: "N" },
+      ],
+    },
+  ],
+};
+
 function open(
   sections = routineSections(info, { runs: [run({ id: "run1" })] }),
+  providers: { revision: string; providers: unknown[] } = PROVIDERS,
 ) {
-  const host = productHost({ routines: [sections] });
+  const host = buildProductHost({ routines: [sections] }, ["providers"]).target(
+    "providers",
+    { config: providers },
+    { eager: true },
+  );
+  host.install();
   for (const action of [
     "update",
     "run",
@@ -97,15 +120,14 @@ afterEach(async () => {
 });
 
 describe("creating and editing a routine", () => {
-  it("creates one with no model of its own, and opens it", async () => {
+  it("creates one on the first usable model, and opens it", async () => {
     navigation.edit = "new";
     const host = open();
     const { container } = await mount(<RoutineBoard />);
     await flush();
-    // The model is optional: the settings' own choice is the default.
-    expect(container.querySelector("#routine-model")?.textContent).toContain(
-      "默认模型",
-    );
+    // A routine names its model: there is no default one, so the first usable model is picked.
+    expect(container.querySelector("#routine-model")?.textContent).toBe("M");
+    expect(container.textContent).not.toContain("默认模型");
     await write(container.querySelector("#routine-name")!, "周报");
     await write(container.querySelector("#routine-brief")!, "整理本周");
     await submit(container.querySelector("form")!);
@@ -114,12 +136,44 @@ describe("creating and editing a routine", () => {
       {
         name: "周报",
         brief: "整理本周",
-        model: null,
+        model: "p:m",
         schedule: { kind: "daily", time: "08:00" },
         timezone: expect.any(String),
       },
     ]);
     expect(navigation.set).toHaveBeenCalledWith({ edit: null, routine: "r1" });
+  });
+
+  it("cannot be created without a model", async () => {
+    navigation.edit = "new";
+    const host = open(undefined, { revision: "r1", providers: [] });
+    const { container } = await mount(<RoutineBoard />);
+    await flush();
+    await write(container.querySelector("#routine-name")!, "周报");
+    await write(container.querySelector("#routine-brief")!, "整理本周");
+    expect(container.textContent).toContain("暂无可用模型");
+    expect(
+      container.querySelector<HTMLButtonElement>('button[type="submit"]')!
+        .disabled,
+    ).toBe(true);
+    await submit(container.querySelector("form")!);
+    await flush();
+    expect(callsOf(host, "create")).toEqual([]);
+  });
+
+  it("says a model removed from the providers is no longer available, and swaps in none", async () => {
+    navigation.edit = "r1";
+    open(
+      routineSections(routineInfo({ ...info, model: "p:gone" }), {
+        runs: [],
+      }),
+    );
+    const { container } = await mount(<RoutineBoard />);
+    await flush();
+    expect(container.querySelector("#routine-model")?.textContent).toBe(
+      "p:gone（已不可用）",
+    );
+    expect(container.textContent).toContain("模型已不可用，请重新选择。");
   });
 
   it("edits one: a new brief is sent with the rest, in the routine's own words", async () => {

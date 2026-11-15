@@ -102,14 +102,12 @@ function useDraft() {
   const machine = () => machines().find((item) => item.id === machineId());
   const machineName = () => machine()?.name ?? primaryMachine()?.name ?? "";
 
-  // The last used model, else the default one, else the first. A runtime starts on its own.
+  // The last used model, else the first usable one. A runtime starts on its own.
   void loadRemembered();
   effect(() => {
     if (model() !== "" || external() || lastModel() === undefined) return;
     const preferred =
-      usable().find((item) => item.id === lastModel()) ??
-      usable().find((item) => item.default) ??
-      usable()[0];
+      usable().find((item) => item.id === lastModel()) ?? usable()[0];
     if (preferred !== undefined) model.set(preferred.id);
   });
 
@@ -157,8 +155,8 @@ function useDraft() {
         ? t("create.agent.wentOffline", { machine: gone.name })
         : undefined,
     );
-    // Agents can be created before any account is connected, not after.
-    const unchosen = !external() && model() === "" && usable().length > 0;
+    // An agent on eta's own loop needs a model: there is no default one to run on.
+    const unchosen = !external() && model() === "";
     modelError.set(unchosen ? t("create.agent.modelRequired") : undefined);
     return (
       trimmed !== "" && machineError() === undefined && !unchosen && !checking()

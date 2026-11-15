@@ -19,6 +19,22 @@ export type ResolvedTheme = "light" | "dark";
 /** Where the choice is kept. Also read by the inline script in index.html. */
 const THEME_STORAGE_KEY = "theme";
 
+/**
+ * The installed app's title bar (and a phone's status bar), so it runs into the app's own top
+ * band instead of sitting on it as a different strip. These are `--surface` from styles.css —
+ * the fill of `.band` and of the header strip — converted to sRGB hex, because a `theme-color`
+ * has to be a plain color: light `oklch(0.985 0 0)` is #fafafa, dark `oklch(0.14 0 0)` is
+ * #090909. Change `--surface` and change these with it.
+ *
+ * index.html carries the same two values in its `theme-color` metas (they have to be there
+ * before any script runs) and manifest.webmanifest carries the light one; theme.test.ts holds
+ * all three to this table.
+ */
+export const TITLE_BAR_COLORS: Record<ResolvedTheme, string> = {
+  light: "#fafafa",
+  dark: "#090909",
+};
+
 const listeners = new Set<() => void>();
 const darkQuery = () =>
   typeof matchMedia === "function"
@@ -54,6 +70,7 @@ export function applyTheme(choice: ThemeChoice): ResolvedTheme {
   root.classList.toggle("dark", resolved === "dark");
   // Form controls, scrollbars and the canvas behind the page follow this, not the class.
   root.style.colorScheme = resolved;
+  applyTitleBarColor(choice);
   // Commit the new colors while transitions are off, then hand them back after the paint.
   void root.offsetHeight;
   if (typeof requestAnimationFrame === "function") {
@@ -62,6 +79,29 @@ export function applyTheme(choice: ThemeChoice): ResolvedTheme {
     still.remove();
   }
   return resolved;
+}
+
+/**
+ * Point the `theme-color` metas at the mode the app shows. index.html has one per system mode
+ * (`media="(prefers-color-scheme: …)"`); following the system, each keeps its own color and the
+ * browser picks. A choice made in the app overrides the system, so both get that mode's color:
+ * whichever query matches, the bar matches the page. The metas stay in place either way, so
+ * going back to "system" is just restoring their colors.
+ */
+function applyTitleBarColor(choice: ThemeChoice): void {
+  if (typeof document === "undefined") return;
+  const metas = document.head.querySelectorAll<HTMLMetaElement>(
+    'meta[name="theme-color"]',
+  );
+  for (const meta of metas) {
+    const own: ResolvedTheme = meta.getAttribute("media")?.includes("dark")
+      ? "dark"
+      : "light";
+    meta.setAttribute(
+      "content",
+      TITLE_BAR_COLORS[choice === "system" ? own : choice],
+    );
+  }
 }
 
 export function setTheme(choice: ThemeChoice): void {

@@ -2,7 +2,7 @@ import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { InteractionView } from "@/queries/inbox";
 import type { SurfaceSeed } from "@/test-inbox";
 import { afterEach, describe, expect, it } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -11,7 +11,6 @@ import {
 } from "@tanstack/react-router";
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { setWire } from "@/lib/wire";
 import { interactionView, surfaceHost } from "@/test-inbox";
 import {
@@ -21,11 +20,8 @@ import {
   routineSections,
   taskDetail,
 } from "@/test-product";
+import { cleanup, flush, mount as render } from "@/test-render";
 import { PendingList } from "./attention";
-
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
 
 const task = (number: number, fields: Partial<BoardTaskDetail> = {}) => ({
   task: taskDetail({
@@ -76,16 +72,11 @@ async function mount(
     }),
     history: createMemoryHistory({ initialEntries: [path] }),
   });
-  const container = document.createElement("div");
-  document.body.append(container);
-  await act(async () => {
-    createRoot(container).render(
-      <QueryClientProvider client={client}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>,
-    );
-    await router.load();
-  });
+  const { container } = await render(
+    <RouterProvider router={router} />,
+    client,
+  );
+  await act(async () => router.load());
   return container;
 }
 
@@ -93,8 +84,8 @@ const headings = (container: HTMLElement) =>
   [...container.querySelectorAll("h2, h3")].map((h) => h.textContent);
 
 describe("what waits for the user", () => {
-  afterEach(() => {
-    document.body.innerHTML = "";
+  afterEach(async () => {
+    await cleanup();
     setWire(undefined);
   });
 
@@ -126,7 +117,7 @@ describe("what waits for the user", () => {
       { tasks: [task(1, { status: "in_review" })], absent: ["routines"] },
     );
     const container = await mount(new QueryClient(), () => <PendingList />);
-    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    await flush(10);
     expect(headings(container)).toEqual(["确认请求1", "任务1"]);
     expect(container.textContent).not.toContain("定时");
     expect(container.textContent).not.toContain("无法加载");

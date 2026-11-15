@@ -1,15 +1,10 @@
 import { afterEach, expect, it } from "@rstest/core";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
+import { cleanup, mount } from "@/test-render";
 import { usePaneWidth } from "./pane";
 
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-
-const cleanup: (() => void)[] = [];
 afterEach(async () => {
-  await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
+  await cleanup();
   localStorage.clear();
 });
 
@@ -25,14 +20,7 @@ function Divider() {
 }
 
 it("grows a right-hand pane when ArrowLeft is pressed on its divider", async () => {
-  const host = document.createElement("div");
-  document.body.append(host);
-  const root = createRoot(host);
-  cleanup.push(() => {
-    root.unmount();
-    host.remove();
-  });
-  await act(async () => root.render(<Divider />));
+  const { container: host } = await mount(<Divider />);
   const divider = host.querySelector<HTMLElement>('[role="separator"]');
   expect(divider?.tabIndex).toBe(0);
 
@@ -65,17 +53,10 @@ function Fallback({ fallback }: { fallback: number }) {
 }
 
 it("follows a moving fallback until a width is chosen, and keeps the width after", async () => {
-  const host = document.createElement("div");
-  document.body.append(host);
-  const root = createRoot(host);
-  cleanup.push(() => {
-    root.unmount();
-    host.remove();
-  });
+  const { container: host, show } = await mount(<Fallback fallback={400} />);
   const divider = () => host.querySelector<HTMLElement>('[role="separator"]');
-  await act(async () => root.render(<Fallback fallback={400} />));
   expect(divider()?.getAttribute("data-sized")).toBe("false");
-  await act(async () => root.render(<Fallback fallback={480} />));
+  await show(<Fallback fallback={480} />);
   expect(divider()?.getAttribute("aria-valuenow")).toBe("480");
 
   await act(async () => {
@@ -84,6 +65,6 @@ it("follows a moving fallback until a width is chosen, and keeps the width after
     );
   });
   expect(divider()?.getAttribute("data-sized")).toBe("true");
-  await act(async () => root.render(<Fallback fallback={400} />));
+  await show(<Fallback fallback={400} />);
   expect(divider()?.getAttribute("aria-valuenow")).toBe("496");
 });

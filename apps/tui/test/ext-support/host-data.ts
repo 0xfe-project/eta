@@ -22,6 +22,7 @@ export interface ConfiguredProvider {
  */
 export async function dataDirWith(options: {
   providers?: ConfiguredProvider[];
+  /** A key config.json had before default models were dropped; the host ignores it now. */
   defaultModel?: string;
   /** Persona card files in the host's home, by id, holding a line of text each. */
   cards?: string[];

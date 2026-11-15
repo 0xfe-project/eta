@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -10,18 +10,13 @@ import {
 } from "@tanstack/react-router";
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
+import { cleanup, mount as render } from "@/test-render";
 import { WorkspacePanel } from "./workspace-panel";
 import { useWorkspaceView, validateWorkspaceSearch } from "./workspace-search";
 import { useWorkspaceStore } from "./workspace-store";
 
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-
-const cleanup: (() => void)[] = [];
 afterEach(async () => {
-  await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
+  await cleanup();
   useWorkspaceStore.getState().setWorkspace((workspace) => ({
     ...workspace,
     selectedAgentId: undefined,
@@ -80,8 +75,8 @@ async function mount(path = "/?group=team&view=memory") {
         path: "/",
         validateSearch: validateWorkspaceSearch,
         component: function Home() {
-          const [, setLinked] = useWorkspaceView();
-          const view = "context";
+          // What the home page does with the URL's `view`.
+          const [view, setLinked] = useWorkspaceView();
           return (
             <WorkspacePanel
               view={view}
@@ -93,22 +88,11 @@ async function mount(path = "/?group=team&view=memory") {
     ]),
     history: createMemoryHistory({ initialEntries: [path] }),
   });
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  cleanup.push(() => {
-    root.unmount();
-    client.clear();
-    container.remove();
-  });
-  await act(async () => {
-    root.render(
-      <QueryClientProvider client={client}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>,
-    );
-    await router.load();
-  });
+  const { container } = await render(
+    <RouterProvider router={router} />,
+    client,
+  );
+  await act(async () => router.load());
   return { container, router };
 }
 
@@ -136,5 +120,10 @@ it("opens 上下文 when a link asks for the tab a group used to call 成员", a
   for (const view of ["members", "group"]) {
     const { container } = await mount(`/?group=team&view=${view}`);
     expect(tabs(container)[0]).toEqual(["上下文", "true"]);
+    await cleanup();
   }
+  // A tab that still exists is the one that opens.
+  const { container } = await mount("/?group=team&view=tasks");
+  expect(tabs(container)[1]).toEqual(["任务", "true"]);
+  expect(tabs(container)[0]).toEqual(["上下文", "false"]);
 });

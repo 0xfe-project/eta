@@ -17,7 +17,7 @@ import {
   RuntimeField,
   ThinkingField,
 } from "./agent-fields";
-import { agentDraft, agentFormSchema } from "./agent-form";
+import { agentDraft, agentFormSchema, agentNameProblem } from "./agent-form";
 import { MachinePicker } from "./machine-picker";
 import { Stepper } from "./stepper";
 import { useAgents } from "./use-agents";
@@ -46,7 +46,7 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
     "machines",
     "validation",
   ] as const);
-  const { select } = useAgents();
+  const { agents, select } = useAgents();
   const lastModel = useWorkspaceStore((s) => s.workspace.lastModel);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
@@ -77,13 +77,11 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
   const machine = machines.find((item) => item.id === machineId);
   const { runtimes, models } = useAgentRuntimeChoices(runtime, machineId);
   const usable = (models ?? []).filter((item) => item.available);
-  // New agents start with the last used model, else the default one, else the first usable one.
-  // An external runtime starts on its own default, which is no choice at all.
+  // New agents start with the last used model, else the first usable one. An external runtime
+  // starts on its own default, which is no choice at all.
   const preferred = external
     ? undefined
-    : (usable.find((item) => item.id === lastModel) ??
-      usable.find((item) => item.default) ??
-      usable[0]);
+    : (usable.find((item) => item.id === lastModel) ?? usable[0]);
   useEffect(() => {
     if (!model && preferred) form.setValue("model", preferred.id);
   }, [form, model, preferred]);
@@ -126,9 +124,10 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
     runtimes,
     translateText,
   ]);
-  // The runtime is here but its model is not: the runtime's own default stands in.
+  // The model picked is no longer offered (the runtime lacks it, or it left the providers while
+  // the wizard was open). Nothing is saved yet, so the pick is let go: an external runtime's own
+  // default stands in, and on eta's own loop the next usable model is picked, or none is.
   const modelGone =
-    external &&
     Boolean(models) &&
     model !== "" &&
     !usable.some((item) => item.id === model);
@@ -145,6 +144,21 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
   const valid = async (at: number) => {
     if (!(await form.trigger([...stepFields[at]]))) return false;
     if (at === 0 && checkingRuntime) return false;
+    // Names tell agents apart (a mention, a group's members): the host refuses a second one, and
+    // Captain's.
+    const name = form.getValues("name");
+    const problem = at === 0 ? agentNameProblem(agents, name) : undefined;
+    if (problem !== undefined) {
+      form.setError("name", {
+        message: translateText(
+          problem === "reserved"
+            ? "validation:nameReserved"
+            : "validation:nameTaken",
+          { name: name.trim() },
+        ),
+      });
+      return false;
+    }
     // It was online when it was chosen; a new agent is not pinned to one that is out of reach.
     if (at === 0 && machine && machine.status !== "online") {
       form.setError("machineId", {
@@ -154,8 +168,8 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
       });
       return false;
     }
-    // Agents can be created before any account is connected, not after.
-    if (at === 0 && !external && !form.getValues("model") && usable.length) {
+    // An agent on eta's own loop needs a model: there is no default one to run on.
+    if (at === 0 && !external && !form.getValues("model")) {
       form.setError("model", {
         message: translateText("validation:modelRequired"),
       });

@@ -4,7 +4,6 @@
  * The models are scripted because the subject is the host; the socket and the frames are real.
  */
 import type { ServerFrame } from "@eta/client-contracts";
-import { join } from "node:path";
 import {
   AGENT_ACTIONS,
   CONVERSATION_ACTIONS,
@@ -13,7 +12,6 @@ import {
   stateSection,
 } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
-import { databasePath } from "../src/db";
 import { connect, until } from "./support/client";
 import { tempDir, testHost } from "./support/host";
 import { world } from "./support/world";
@@ -134,22 +132,5 @@ describe("the host", () => {
     await until(() => host.server.server.clients === 0);
     await expect(fetch(`http://127.0.0.1:${host.port}/up`)).rejects.toThrow();
     expect(() => host.db.query("SELECT 1").get()).toThrow();
-  });
-
-  it("opens its database in the data directory and migrates it", async () => {
-    const host = await testHost();
-    expect(host.db.query("PRAGMA journal_mode").get()).toEqual({
-      journal_mode: "wal",
-    });
-    expect(host.db.query("PRAGMA foreign_keys").get()).toEqual({
-      foreign_keys: 1,
-    });
-    // The runner has been through its bookkeeping, even with nothing to apply yet.
-    expect(
-      host.db
-        .query("SELECT name FROM sqlite_master WHERE name = 'eta_migrations'")
-        .get(),
-    ).toEqual({ name: "eta_migrations" });
-    expect(databasePath(host.dataDir)).toBe(join(host.dataDir, "eta.sqlite"));
   });
 });

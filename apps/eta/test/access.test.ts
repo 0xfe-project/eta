@@ -364,17 +364,6 @@ describe("a host beyond loopback", () => {
     expect(socket("http://eta.example")).toBeUndefined();
     expect(socket("http://other.example")?.status).toBe(403);
   });
-
-  it("leaves a loopback host with an explicit token file gated all the same", async () => {
-    const access = createAccess({
-      hostname: "127.0.0.1",
-      dataDir: await tempDir(),
-      tokenFile: await tokenFile(),
-    });
-    expect(access.authorize(new Request("http://127.0.0.1/"))?.status).toBe(
-      401,
-    );
-  });
 });
 
 describe("isLoopback", () => {

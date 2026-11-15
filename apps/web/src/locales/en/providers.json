@@ -10,16 +10,13 @@
     "signOut": "Sign out"
   },
   "title": "Model services",
-  "defaultModel": {
-    "label": "Default model",
-    "none": "No usable models yet"
-  },
   "list": {
     "label": "Model sources",
     "empty": "No model sources yet. Add one so agents have a model to run on.",
     "modelCount": "{{count}} models",
     "modelCount_one": "{{count}} model",
-    "modelCount_other": "{{count}} models"
+    "modelCount_other": "{{count}} models",
+    "addEta": "Add {{name}}"
   },
   "via": {
     "subscription": "Subscription",
@@ -51,7 +48,8 @@
     "presets": {
       "custom": "OpenAI-compatible API",
       "local": "Local models",
-      "localHint": "Ollama, LM Studio"
+      "localHint": "Ollama, LM Studio",
+      "etaHint": "Eta's own gateway: one key for many models"
     },
     "keyLabel": "{{name}} API key",
     "keyOptional": "API key (optional)",
@@ -71,7 +69,9 @@
     "selected_other": "{{count}} selected",
     "accountReady": "{{name}} is connected, with {{count}} models.",
     "accountReady_one": "{{name}} is connected, with {{count}} model.",
-    "accountReady_other": "{{name}} is connected, with {{count}} models."
+    "accountReady_other": "{{name}} is connected, with {{count}} models.",
+    "recommended": "Recommended",
+    "getEtaKey": "Get a key"
   },
   "detail": {
     "breadcrumb": "Location",
@@ -149,7 +149,6 @@
     "modelsRequired": "Add at least one model.",
     "invalidProviderId": "The name cannot be empty or too long.",
     "invalidConfig": "The base URL is not valid.",
-    "invalidDefaultModel": "The default model is not among the configured models.",
     "invalidNetwork": "The proxy address is not valid.",
     "invalidSavedConfig": "config.json cannot be read. Fix the file first.",
     "readFailed": "Cannot read config.json.",
@@ -164,6 +163,6 @@
     "http": "The model endpoint returned HTTP {{status}}. Check the URL, key, headers and access permissions, then retry.",
     "configChanged": "The config changed elsewhere. Go back to the list and open it again.",
     "unreachable": "Could not reach the model API. Check the URL and the network.",
-    "keyRefused": "The key was refused by the provider."
+    "keyRefused": "Invalid key: the provider refused it."
   }
 }

@@ -324,7 +324,7 @@ describe("the agent's tools", () => {
     expect(requests[0]!.tools).toEqual(
       expect.arrayContaining(["remember", "recall", "forget"]),
     );
-    expect(done.text).toContain("Remembered: Ada likes tea");
+    expect(done.text).toContain("Remembered [m9]: Ada likes tea");
     const [tool] = fake.to("/memory/mcp");
     expect(tool).toMatchObject({
       method: "POST",

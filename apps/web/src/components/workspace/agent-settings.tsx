@@ -38,7 +38,7 @@ function AgentRow({ agent }: { agent: AgentView }) {
     ? { state: "ok", model: undefined }
     : catalog;
   const modelName = external
-    ? (agent.model ?? translateText("runtime.defaultModel"))
+    ? (agent.model ?? translateText("runtime.ownDefault"))
     : availability.state === "not_set"
       ? translateText("models.noneSelected")
       : (availability.model?.name ?? agent.model);
@@ -80,9 +80,13 @@ function AgentRow({ agent }: { agent: AgentView }) {
             {availability.state !== "ok" ? (
               <WarningIcon aria-hidden="true" className="size-3.5 shrink-0" />
             ) : null}
-            <span className="truncate">{modelName}</span>
-            {availability.state === "unavailable" ||
-            availability.state === "delisted" ? (
+            {/* A model it can no longer run on is said in full, with what to do about it. */}
+            <span className="truncate">
+              {availability.state === "unavailable"
+                ? availability.message
+                : modelName}
+            </span>
+            {availability.state === "delisted" ? (
               <span className="sr-only">：{availability.message}</span>
             ) : null}
           </span>

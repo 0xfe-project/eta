@@ -625,7 +625,7 @@ describe("windows", () => {
 });
 
 describe("choosing", () => {
-  it("gives this computer's kind, and the daemon none on Windows", () => {
+  it("gives this computer one, and the daemon none on Windows", () => {
     const original = Object.getOwnPropertyDescriptor(process, "platform");
     try {
       Object.defineProperty(process, "platform", { value: "win32" });

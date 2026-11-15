@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { EmailAccountForm } from "@/components/workspace/email-settings";
 import { ProviderSettings } from "@/components/workspace/provider-settings";
 import { Stepper } from "@/components/workspace/stepper";
+import { useWorkspaceStore } from "@/components/workspace/workspace-store";
 import { markOnboarded } from "@/lib/onboard";
 import { useAgentList, useCreateAgent } from "@/queries/agents";
 import { usePersonas } from "@/queries/personas";
@@ -24,6 +25,7 @@ export function Onboard() {
   const { t: translateText } = useTranslation(["onboard", "common"] as const);
   const navigate = useNavigate();
   const { data: models } = useModels();
+  const lastModel = useWorkspaceStore((s) => s.workspace.lastModel);
   const { agents, loaded, error } = useAgentList();
   const personas = usePersonas();
   const create = useCreateAgent();
@@ -49,7 +51,8 @@ export function Onboard() {
   ];
 
   const usable = (models ?? []).filter((model) => model.available);
-  const defaultModel = usable.find((model) => model.default) ?? usable[0];
+  // The model the agents get: the last one used here, else the first usable one.
+  const model = usable.find((item) => item.id === lastModel) ?? usable[0];
   // One agent per persona is the whole install, so a persona with an agent is done.
   const installed = new Set(
     agents.flatMap((agent) => (agent.persona ? [agent.persona] : [])),
@@ -63,7 +66,7 @@ export function Onboard() {
         await create.mutateAsync({
           name: card.name,
           persona: card.id,
-          model: defaultModel?.id,
+          model: model?.id,
         });
       }
       markOnboarded();

@@ -1,3 +1,4 @@
+import type { TaskDraftStatus } from "@eta/client-contracts";
 import type {
   RunStatus,
   Task,
@@ -6,6 +7,7 @@ import type {
   TaskRun,
   TaskStatus,
 } from "@/queries/tasks";
+import { runningFirst } from "@eta/client-contracts";
 import { AppWindowIcon } from "@phosphor-icons/react/AppWindow";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
@@ -13,6 +15,7 @@ import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { ChatCircleIcon } from "@phosphor-icons/react/ChatCircle";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
+import { CopyIcon } from "@phosphor-icons/react/Copy";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { InfoIcon } from "@phosphor-icons/react/Info";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
@@ -21,7 +24,14 @@ import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
 import { SpinnerIcon } from "@phosphor-icons/react/Spinner";
 import { StopIcon } from "@phosphor-icons/react/Stop";
 import { UserIcon } from "@phosphor-icons/react/User";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Markdown } from "@/components/markdown";
@@ -54,10 +64,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { applyItem, buildMenu } from "@/lib/composer-menu";
 import { translate } from "@/lib/i18n";
 import { mentionedMembers, mentionLabel } from "@/lib/mentions";
+import { longDuration, revealBlock } from "@/lib/run-display";
+import { clock, rowsBetween, runTiming } from "@/lib/run-timing";
 import { cn } from "@/lib/utils";
 import { useAgentList } from "@/queries/agents";
 import { useConversationList } from "@/queries/conversations";
 import { useMachines, useProjects } from "@/queries/projects";
+import { useNow, useSessionLog } from "@/queries/sessions";
 import {
   useCommentTask,
   useConfirmTaskDraft,
@@ -88,6 +101,7 @@ import {
 import { useTaskNav } from "./task-nav";
 import { RunLog } from "./task-run-log";
 import { StatusIcon } from "./task-status-icon";
+import { RunHeader } from "./transcript/run-timeline";
 import { SlashMenu } from "./transcript/slash-menu";
 import { TranscriptDialog } from "./transcript/transcript-dialog";
 import { useGroups } from "./use-groups";
@@ -262,7 +276,10 @@ function TaskList() {
         </Empty>
       ) : (
         statuses.map(({ value, label }) => {
-          const section = tasks.filter((task) => task.status === value);
+          // In the board's order, newest first, but a task that runs before one that waits.
+          const section = runningFirst(
+            tasks.filter((task) => task.status === value),
+          );
           if (!section.length) return null;
           return (
             <section key={value} aria-label={label} className="-mx-2">
@@ -358,6 +375,48 @@ export interface TaskProposal {
   messageId: string;
   title: string;
   description: string;
+  /** Where the agent proposed it goes: started at once, or kept in the backlog. */
+  status: TaskDraftStatus;
+}
+
+/**
+ * The one choice about a draft's status: start it when confirmed, or put it in the backlog until
+ * the user moves it to todo. The other statuses are where a task goes once it has been worked on.
+ */
+function DraftStatusChoice({
+  value,
+  onChange,
+}: {
+  value: TaskDraftStatus;
+  onChange: (status: TaskDraftStatus) => void;
+}) {
+  const { t: translateText } = useTranslation(["tasks"] as const);
+  return (
+    <div
+      role="group"
+      aria-labelledby="task-status-label"
+      className="flex items-center gap-1 text-xs"
+    >
+      {(["todo", "backlog"] as const).map((choice) => (
+        <button
+          key={choice}
+          type="button"
+          aria-pressed={value === choice}
+          onClick={() => onChange(choice)}
+          className={cn(
+            "border px-2 py-1",
+            value === choice
+              ? "border-foreground text-foreground"
+              : "border-border text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {choice === "todo"
+            ? translateText("draft.startNow")
+            : translateText("status.backlog")}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 /**
@@ -380,7 +439,7 @@ export function TaskForm({
   const confirm = useConfirmTaskDraft();
   const [title, setTitle] = useState(proposal.title);
   const [description, setDescription] = useState(proposal.description);
-  const [status, setStatus] = useState<TaskStatus>("todo");
+  const [status, setStatus] = useState<TaskDraftStatus>(proposal.status);
   return (
     <form
       className="space-y-4"
@@ -429,14 +488,17 @@ export function TaskForm({
           onChange={(e) => setDescription(e.target.value)}
         />
       </Field>
-      <Field id="task-status" label={translateText("fields.status")}>
-        <StatusSelect
-          id="task-status"
-          className="w-full"
-          value={status}
-          onChange={setStatus}
-        />
-      </Field>
+      <div className="grid gap-1.5">
+        <span id="task-status-label" className="text-xs leading-none">
+          {translateText("fields.status")}
+        </span>
+        <DraftStatusChoice value={status} onChange={setStatus} />
+        <p className="text-xs text-muted-foreground">
+          {status === "backlog"
+            ? translateText("draft.backlogHint")
+            : translateText("draft.startNowHint")}
+        </p>
+      </div>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={() => onDone()}>
           {translateText("common:actions.cancel")}
@@ -985,16 +1047,44 @@ function useAwayMachine(task: TaskDetail, run: TaskRun | undefined) {
 
 /**
  * A run's log, in a dialog: it is as long as the run was, more than a line of the thread holds. The
- * frame is fixed (see TranscriptDialog), so a short log and a long one open in the same place.
+ * frame is fixed (see TranscriptDialog), so a short log and a long one open in the same place. Its
+ * header is one line — who, how it went, the workspace behind a button — and the run's timing
+ * strip. The session is only read while the dialog is open.
  */
 function RunLogButton({ task, run }: { task: TaskDetail; run: TaskRun }) {
-  const { t: translateText } = useTranslation(["tasks"] as const);
+  const { t: translateText } = useTranslation(["tasks", "common"] as const);
   const who = useRunAgent(task, run);
-  const away = useAwayMachine(task, run);
+  const [open, setOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const log = useSessionLog(open ? run.sessionId : null);
+  const active = isActive(run.status);
+  const now = useNow(open && active);
+  const { rows, streaming } = log;
+  const timing = useMemo(
+    () =>
+      rows === undefined
+        ? undefined
+        : runTiming(rowsBetween(rows, run.startedAt, run.finishedAt), {
+            streaming,
+            ...(now === undefined ? {} : { now }),
+            ...(run.startedAt === null ? {} : { start: run.startedAt }),
+            ...(run.finishedAt === null ? {} : { end: run.finishedAt }),
+          }),
+    [rows, streaming, now, run.startedAt, run.finishedAt],
+  );
   if (run.status === "queued") return null;
+  // The same agent's runs of this task, oldest first: a second one says which it is.
+  const attempts = task.runs.filter(
+    (other) => other.agentId === run.agentId && other.status !== "queued",
+  );
+  const attempt = attempts.length > 1 ? attempts.indexOf(run) + 1 : undefined;
+  const agentId =
+    run.agentId ??
+    (task.createdBy.kind === "agent" ? task.createdBy.agentId : null);
   return (
     <TranscriptDialog
+      open={open}
+      onOpenChange={setOpen}
       trigger={
         <button
           type="button"
@@ -1003,22 +1093,161 @@ function RunLogButton({ task, run }: { task: TaskDetail; run: TaskRun }) {
           {translateText("log.title")}
         </button>
       }
-      title={`#${task.number} · ${who} · ${translateText("log.title")}`}
+      title={translateText("log.title")}
       description={
-        run.workspace ? (
-          <>
-            {translateText("log.workspacePrefix")}
-            {away === undefined ? null : `${away} · `}
-            <code>{run.workspace}</code>
-          </>
-        ) : (
-          <RunStatusText run={run} />
-        )
+        timing === undefined
+          ? undefined
+          : translateText("common:run.summary", {
+              count: timing.steps.length,
+              duration: clock(timing.end - timing.start),
+            })
+      }
+      header={
+        <RunHeader
+          agentId={agentId}
+          name={who}
+          status={<RunProgress run={run} now={now} attempt={attempt} />}
+          actions={<RunWorkspace task={task} run={run} />}
+          timing={timing}
+          onPick={(step) => revealBlock(scrollRef.current, step.blocks)}
+        />
       }
       bodyRef={scrollRef}
     >
-      <RunLog run={run} scrollRef={scrollRef} />
+      <RunLog run={run} log={log} scrollRef={scrollRef} />
     </TranscriptDialog>
+  );
+}
+
+/**
+ * How a run is going, after its agent's name: "运行中 3:12", "完成 · 用时 4 分 08 秒", and which
+ * run of the task it is when there has been more than one.
+ */
+function RunProgress({
+  run,
+  now,
+  attempt,
+}: {
+  run: TaskRun;
+  now: number | undefined;
+  attempt: number | undefined;
+}) {
+  const { t: translateText } = useTranslation(["tasks"] as const);
+  const active = isActive(run.status);
+  const time =
+    run.startedAt === null
+      ? undefined
+      : active
+        ? now === undefined
+          ? undefined
+          : clock(now - run.startedAt)
+        : run.finishedAt === null
+          ? undefined
+          : `· ${translateText("log.header.elapsed", {
+              duration: longDuration(run.finishedAt - run.startedAt),
+            })}`;
+  return (
+    <>
+      <span
+        aria-hidden="true"
+        className={cn(
+          "size-1.5 shrink-0",
+          run.status === "failed"
+            ? "bg-state-error"
+            : run.status === "completed"
+              ? "bg-state-success"
+              : active
+                ? "bg-state-info motion-safe:animate-pulse"
+                : "bg-faint",
+        )}
+      />
+      <span className={cn(run.status === "failed" && "text-state-error")}>
+        {translateText(`log.header.status.${run.status}`)}
+      </span>
+      {time === undefined ? null : (
+        <span className="truncate text-faint tabular-nums">{time}</span>
+      )}
+      {attempt === undefined ? null : (
+        <span className="shrink-0 text-faint max-sm:hidden">
+          · {translateText("log.header.attempt", { count: attempt })}
+        </span>
+      )}
+    </>
+  );
+}
+
+/**
+ * Where a run works, behind a button at the end of its log's header: the branch (of a worktree
+ * on the project's machine), the machine (when it is another one), the path, and a copy of it. On
+ * a phone the button is a "⋯".
+ */
+function RunWorkspace({ task, run }: { task: TaskDetail; run: TaskRun }) {
+  const { t: translateText } = useTranslation(["tasks", "common"] as const);
+  const away = useAwayMachine(task, run);
+  const path = run.workspace;
+  if (path === null) return null;
+  const branch =
+    away === undefined && task.workspace.mode === "worktree"
+      ? task.workspace.branch
+      : null;
+  const label = translateText("log.header.workspace");
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          className="text-muted-foreground"
+          aria-label={label}
+        >
+          <span className="max-sm:hidden">{label}</span>
+          <CaretDownIcon aria-hidden="true" className="size-3 max-sm:hidden" />
+          <DotsThreeIcon aria-hidden="true" className="size-4 sm:hidden" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-[min(26rem,calc(100vw-2rem))]">
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+          {branch === null ? null : (
+            <>
+              <dt className="text-muted-foreground">
+                {translateText("log.header.branch")}
+              </dt>
+              <dd className="font-mono wrap-anywhere">{branch}</dd>
+            </>
+          )}
+          {away === undefined ? null : (
+            <>
+              <dt className="text-muted-foreground">
+                {translateText("log.header.machine")}
+              </dt>
+              <dd className="wrap-anywhere">{away}</dd>
+            </>
+          )}
+          <dt className="text-muted-foreground">
+            {translateText("log.header.path")}
+          </dt>
+          <dd className="font-mono wrap-anywhere">{path}</dd>
+        </dl>
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          className="self-start"
+          onClick={() =>
+            void navigator.clipboard
+              .writeText(path)
+              .then(() => toast(translateText("log.header.pathCopied")))
+              .catch(() =>
+                toast.error(translateText("common:errors.clipboardBlocked")),
+              )
+          }
+        >
+          <CopyIcon aria-hidden="true" />
+          {translateText("log.header.copyPath")}
+        </Button>
+      </PopoverContent>
+    </Popover>
   );
 }
 

@@ -65,33 +65,3 @@ export function isToolAllowed(
   }
   return !matchesToolPattern(server, tool, exclude);
 }
-
-export interface NamedTool {
-  server: string;
-  name: string;
-}
-
-/**
- * Resolves what a model typed to tools, best reading first: the exact tool name, the qualified
- * name, then the same two with hyphens and underscores folded. More than one hit at the best level
- * is returned as is, so the caller can ask which server was meant.
- */
-export function findTools<T extends NamedTool>(
-  requested: string,
-  tools: readonly T[],
-): T[] {
-  const folded = foldName(requested);
-  const levels: Array<(tool: T) => boolean> = [
-    (tool) => tool.name === requested,
-    (tool) => qualifiedToolName(tool.server, tool.name) === requested,
-    (tool) => foldName(tool.name) === folded,
-    (tool) =>
-      foldName(qualifiedToolName(tool.server, tool.name)) === folded ||
-      foldName(`${tool.server}_${tool.name}`) === folded,
-  ];
-  for (const level of levels) {
-    const hits = tools.filter(level);
-    if (hits.length > 0) return hits;
-  }
-  return [];
-}

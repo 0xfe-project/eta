@@ -12,17 +12,13 @@ import type {
   ProvidersView,
 } from "@eta/client-contracts";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { toast } from "sonner";
 import { setWire } from "@/lib/wire";
+import { cleanup, mount } from "@/test-render";
 import { FakeHost } from "@/test-wire";
 import { ProviderSettings } from "./provider-settings";
-
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
 
 rstest.mock("./use-agents", () => ({
   useAgents: () => ({
@@ -54,7 +50,6 @@ const connectors: LlmAccounts["connectors"] = [
 
 interface Setup {
   providers?: ProviderSummary[];
-  defaultModel?: string;
   checks?: Record<string, ProviderCheck>;
   connections?: LlmConnection[];
   models?: LlmModel[];
@@ -66,8 +61,6 @@ interface Setup {
   logos?: (args: unknown) => { logos: Record<string, string> };
 }
 
-const cleanup: (() => void)[] = [];
-
 const settle = () => act(() => new Promise((r) => setTimeout(r, 0)));
 
 /** A host that keeps the config it is told to save, so the page sees its own writes. */
@@ -75,9 +68,6 @@ async function render(setup: Setup = {}) {
   let config: ProvidersView = {
     revision: "r1",
     providers: setup.providers ?? [],
-    ...(setup.defaultModel === undefined
-      ? {}
-      : { defaultModel: setup.defaultModel }),
   };
   let revision = 1;
   const fake = new FakeHost().target(
@@ -145,12 +135,6 @@ async function render(setup: Setup = {}) {
         ),
       }),
     )
-    .handle("providers.setDefault", (args) =>
-      write({
-        ...config,
-        defaultModel: (args as { defaultModel: string }).defaultModel,
-      }),
-    )
     .handle("providers.check", (args) => {
       const id = (args as { id?: string }).id ?? "";
       const check: ProviderCheck = {
@@ -200,21 +184,8 @@ async function render(setup: Setup = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity, retry: false } },
   });
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  await act(async () =>
-    root.render(
-      <QueryClientProvider client={client}>
-        <ProviderSettings />
-      </QueryClientProvider>,
-    ),
-  );
+  await mount(<ProviderSettings />, client);
   await settle();
-  cleanup.push(() => {
-    root.unmount();
-    container.remove();
-  });
   return {
     fake,
     config: () => config,
@@ -304,7 +275,7 @@ async function choose(trigger: HTMLElement, option: RegExp) {
 }
 
 afterEach(async () => {
-  await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
+  await cleanup();
   setWire(undefined);
   document.body.innerHTML = "";
   rstest.clearAllMocks();
@@ -452,18 +423,7 @@ describe("the model sources list", () => {
     const fake = new FakeHost().plugins([]);
     fake.install();
     fake.hello();
-    const client = new QueryClient();
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createRoot(container);
-    await act(async () =>
-      root.render(
-        <QueryClientProvider client={client}>
-          <ProviderSettings />
-        </QueryClientProvider>,
-      ),
-    );
-    cleanup.push(() => root.unmount());
+    await mount(<ProviderSettings />);
     expect(text()).toContain("无法加载模型服务");
     expect(text()).toContain("宿主没有启用模型服务");
   });
@@ -493,7 +453,7 @@ describe("the model sources list", () => {
 });
 
 describe("the default model", () => {
-  it("offers the models of working sources, gateway ones included, and writes the choice", async () => {
+  it("is not offered: an agent names its own model", async () => {
     const page = await render({
       providers: [
         provider({
@@ -501,55 +461,12 @@ describe("the default model", () => {
           name: "DeepSeek",
           models: [{ id: "deepseek-chat" }],
         }),
-        provider({
-          id: "kimi",
-          kind: "kimi-coding",
-          hasApiKey: false,
-          models: [{ id: "kimi-for-coding" }],
-        }),
-      ],
-      defaultModel: "ds:deepseek-chat",
-      connections: [
-        {
-          id: "c1",
-          connector: "codex",
-          label: "dev@example.com",
-          state: "active",
-          createdAt: "2026-10-01T00:00:00Z",
-        },
-      ],
-      models: [
-        {
-          id: "gpt-5",
-          connector: "codex",
-          name: "GPT-5",
-          status: "available",
-          available: true,
-        },
       ],
     });
-    const trigger = find('[role="combobox"]', /默认模型|DeepSeek/);
-    expect(trigger.textContent).toContain("DeepSeek · deepseek-chat");
-    await act(async () =>
-      trigger.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
-      ),
-    );
-    const options = [...document.querySelectorAll('[role="option"]')].map(
-      (option) => option.textContent,
-    );
-    // Kimi has no key: its models are not offered.
-    expect(options).toEqual(["DeepSeek · deepseek-chat", "Codex · GPT-5"]);
-    await act(async () =>
-      find('[role="option"]', /GPT-5/).dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
-      ),
-    );
-    await settle();
-    expect(page.calls("setDefault")).toEqual([
-      { defaultModel: "llm:gpt-5", revision: "r1" },
-    ]);
-    expect(page.config().defaultModel).toBe("llm:gpt-5");
+    expect(document.body.textContent).toContain("DeepSeek");
+    expect(document.body.textContent).not.toContain("默认模型");
+    expect(document.querySelector('[role="combobox"]')).toBeNull();
+    expect(page.calls("setDefault")).toEqual([]);
   });
 });
 
@@ -721,6 +638,107 @@ describe("adding a source", () => {
     // Leaving while it waits cancels the attempt.
     await click(/^取消$/);
     expect(page.calls("loginCancel")).toEqual([{ id: "login-1" }]);
+  });
+});
+
+describe("Eta Token Plan", () => {
+  const gateway: ProviderDiscoverResult = {
+    models: [
+      {
+        id: "claude-sonnet-5",
+        name: "Claude Sonnet 5",
+        api: "openai-completions",
+        contextWindow: 1_000_000,
+        reasoning: true,
+      },
+      { id: "gpt-5.4", api: "openai-completions" },
+    ],
+  };
+  const etaButton = () => find("[role=dialog] button", /Eta Token Plan/);
+
+  it("sits above every group as the recommended source, with Eta's own mark", async () => {
+    await render();
+    await click(/添加来源/);
+    const card = etaButton();
+    expect(card.textContent).toContain("推荐");
+    expect(card.textContent).toContain("Eta 自家网关");
+    const firstGroup = document.querySelector("[role=dialog] section")!;
+    expect(
+      card.compareDocumentPosition(firstGroup) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(card.querySelector("[style*=mask], svg, img")).not.toBeNull();
+  });
+
+  it("connects with one key, lists the gateway's models and saves the chosen ones", async () => {
+    const page = await render({ discover: () => gateway });
+    await click(/添加来源/);
+    await click(/Eta Token Plan/, "[role=dialog] button");
+    expect(find<HTMLAnchorElement>("a", /获取 key/).getAttribute("href")).toBe(
+      "https://eta.0xfe.tech/app/dashboard?tab=keys",
+    );
+    await type(/Eta Token Plan 的 API key/, "sk-eta");
+    await click(/^连接$/);
+    expect(page.calls("discover")).toEqual([
+      { kind: "eta", baseUrl: "https://eta.0xfe.tech/v1", apiKey: "sk-eta" },
+    ]);
+    expect(text()).toContain("已选 2 个");
+    expect(find("li", /Claude Sonnet 5/).textContent).toContain("1M");
+    await click(/^完成$/);
+    expect(page.calls("save")).toEqual([
+      {
+        provider: {
+          id: "eta-token-plan",
+          name: "Eta Token Plan",
+          kind: "eta",
+          baseUrl: "https://eta.0xfe.tech/v1",
+          apiKey: "sk-eta",
+          models: gateway.models,
+        },
+        revision: "r1",
+      },
+    ]);
+    expect(rows()[0]).toMatch(/Eta Token Plan.*API key.*2 个模型.*正常/);
+  });
+
+  it("says a key the gateway refuses (401) is invalid", async () => {
+    const page = await render({
+      discover: () => {
+        throw new Error("discovery_http_401");
+      },
+    });
+    await click(/添加来源/);
+    await click(/Eta Token Plan/, "[role=dialog] button");
+    await type(/Eta Token Plan 的 API key/, "sk-wrong");
+    await click(/^连接$/);
+    expect(find('[role="alert"]', /key/).textContent).toContain("key 无效");
+    expect(page.calls("save")).toEqual([]);
+  });
+
+  it("is where the empty list leads, straight to its key", async () => {
+    await render();
+    expect(text()).toContain("还没有模型来源");
+    await click(/^添加 Eta Token Plan$/);
+    expect(document.querySelector("[role=dialog] section")).toBeNull();
+    await type(/Eta Token Plan 的 API key/, "sk-eta");
+  });
+
+  it("is listed like any other source: name, model count and status", async () => {
+    await render({
+      providers: [
+        provider({
+          id: "eta",
+          kind: "eta",
+          name: "Eta Token Plan",
+          baseUrl: "https://eta.0xfe.tech/v1",
+          models: [{ id: "claude-sonnet-5" }, { id: "gpt-5.4" }, { id: "x" }],
+        }),
+      ],
+      checks: {
+        eta: { state: "invalid_key", checkedAt: "2026-11-13T00:00:00Z" },
+      },
+    });
+    expect(rows()[0]).toMatch(/Eta Token Plan.*API key.*3 个模型.*key 无效/);
   });
 });
 

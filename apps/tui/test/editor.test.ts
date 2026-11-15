@@ -1,23 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { editorLaunch, splitCommandLine } from "../src/ui/editor";
+import { editorLaunch } from "../src/ui/editor";
 
 const noProgram = () => null;
-
-describe("splitCommandLine", () => {
-  it("splits on runs of white space", () => {
-    expect(splitCommandLine("  code   --wait\t-n ")).toEqual([
-      "code",
-      "--wait",
-      "-n",
-    ]);
-  });
-
-  it("keeps quoted parts together, with either quote", () => {
-    expect(
-      splitCommandLine(`"C:\\Program Files\\Ed\\ed.exe" --flag 'a b' c`),
-    ).toEqual(["C:\\Program Files\\Ed\\ed.exe", "--flag", "a b", "c"]);
-  });
-});
 
 describe("editorLaunch", () => {
   const file = "/home/u/.eta/tui.json";
@@ -42,6 +26,31 @@ describe("editorLaunch", () => {
         which: noProgram,
       }),
     ).toEqual({ command: "vim", args: ["-u", "NONE", file] });
+  });
+
+  it("splits the setting on runs of white space", () => {
+    expect(
+      editorLaunch({
+        env: { EDITOR: "  code   --wait\t-n " },
+        platform: "linux",
+        file,
+        which: noProgram,
+      }),
+    ).toEqual({ command: "code", args: ["--wait", "-n", file] });
+  });
+
+  it("keeps quoted parts of the setting together, with either quote, and keeps backslashes", () => {
+    expect(
+      editorLaunch({
+        env: { EDITOR: `"C:\\Program Files\\Ed\\ed.exe" --flag 'a b' c` },
+        platform: "linux",
+        file,
+        which: noProgram,
+      }),
+    ).toEqual({
+      command: "C:\\Program Files\\Ed\\ed.exe",
+      args: ["--flag", "a b", "c", file],
+    });
   });
 
   it("falls back to vi, and to notepad on Windows", () => {

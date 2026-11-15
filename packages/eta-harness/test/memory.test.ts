@@ -27,7 +27,6 @@ import {
   renderMemory,
   renderMemoryBlock,
   scanMemory,
-  scanMemoryPaths,
 } from "../src/memory";
 
 const local: MemoryFile = { path: "/m/MEMORY.md", label: "m" };
@@ -129,9 +128,7 @@ describe("the memory file", () => {
   it("labels a file by the directory that owns it", () => {
     expect(
       memoryFileLabel("/work/eta-agent/.eta/MEMORY.md", "/home/lemon"),
-    ).toBe(
-      `eta-agent~${memoryFileLabel("/work/eta-agent/.eta/MEMORY.md", "/home/lemon").split("~")[1]}`,
-    );
+    ).toMatch(/^eta-agent~[0-9a-z]+$/);
     expect(memoryFileLabel("/home/lemon/.eta/MEMORY.md", "/home/lemon")).toBe(
       "user",
     );
@@ -159,9 +156,6 @@ describe("finding the project's notes", () => {
     ]);
     // Notes go to the nearest file that exists, not the outermost one.
     expect(scan.target.path).toBe("/repo/pkg/.eta/MEMORY.md");
-    expect(
-      await scanMemoryPaths(fs, "/repo/pkg/src", "/home/lemon"),
-    ).toHaveLength(2);
   });
 
   it("treats the opened folder as the project outside a checkout", async () => {

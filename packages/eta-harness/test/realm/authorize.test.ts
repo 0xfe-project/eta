@@ -1,33 +1,49 @@
 import type { AuthorizeRequest } from "../../src/realm/authorize";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { beforeEach, describe, expect, it } from "vitest";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Agent } from "../../src/realm/agent";
-import { MemoryApprovalStore } from "../../src/realm/authorize";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import {
+  defaultApprovalStorePath,
+  FileApprovalStore,
+} from "../../src/realm/authorize";
 
 describe("authorization", () => {
-  const testRoot = join(__dirname, "fixtures", "authorize-test");
-  const selfRoot = join(testRoot, "self");
-  const projectRoot = join(testRoot, "project");
-  const globalRoot = join(testRoot, "global");
+  let testRoot = "";
+  let selfRoot = "";
+  let projectRoot = "";
+  let globalRoot = "";
+
+  // What the agent wrote to its own approvals file, read back by a fresh reader.
+  const approvalStore = {
+    isApproved: (layer: "project" | "global", capability: string) =>
+      new FileApprovalStore(defaultApprovalStorePath(selfRoot)).isApproved(
+        layer,
+        capability,
+      ),
+  };
 
   beforeEach(() => {
-    // Clean up and create fresh directories
-    if (existsSync(testRoot)) {
-      rmSync(testRoot, { recursive: true, force: true });
-    }
+    testRoot = mkdtempSync(join(tmpdir(), "eta-authorize-"));
+    selfRoot = join(testRoot, "self");
+    projectRoot = join(testRoot, "project");
+    globalRoot = join(testRoot, "global");
     mkdirSync(selfRoot, { recursive: true });
     mkdirSync(projectRoot, { recursive: true });
     mkdirSync(globalRoot, { recursive: true });
   });
 
+  afterEach(() => rmSync(testRoot, { recursive: true, force: true }));
+
   it("项目层能力首次调用弹审批，批准后记录", async () => {
     if (process.platform === "win32") return;
-    const approvalStore = new MemoryApprovalStore();
     const authorizeRequests: AuthorizeRequest[] = [];
     const approveNext = true;
 
@@ -35,7 +51,6 @@ describe("authorization", () => {
       root: selfRoot,
       project: projectRoot,
       global: globalRoot,
-      approvalStore,
       hooks: {
         authorize: async (req) => {
           // Parse layer from request name
@@ -82,13 +97,11 @@ eta.define("testCap", function() { return "works"; }, { desc: "test capability" 
   });
 
   it("同一能力第二次调用不弹窗", async () => {
-    const approvalStore = new MemoryApprovalStore();
     const authorizeRequests: AuthorizeRequest[] = [];
 
     const agent = new Agent({
       root: selfRoot,
       project: projectRoot,
-      approvalStore,
       hooks: {
         authorize: async (req) => {
           const parts = req.name.split(".");
@@ -133,12 +146,10 @@ eta.define("testCap2", function() { return "works"; }, { desc: "test" });
   });
 
   it("个人层能力不弹窗", async () => {
-    const approvalStore = new MemoryApprovalStore();
     const authorizeRequests: AuthorizeRequest[] = [];
 
     const agent = new Agent({
       root: selfRoot,
-      approvalStore,
       hooks: {
         authorize: async (req) => {
           authorizeRequests.push({
@@ -172,13 +183,11 @@ eta.define("selfCap", function() { return "self-works"; }, { desc: "test" });
   });
 
   it("全局层能力首次调用弹审批", async () => {
-    const approvalStore = new MemoryApprovalStore();
     const authorizeRequests: AuthorizeRequest[] = [];
 
     const agent = new Agent({
       root: selfRoot,
       global: globalRoot,
-      approvalStore,
       hooks: {
         authorize: async (req) => {
           const parts = req.name.split(".");
@@ -218,55 +227,48 @@ eta.define("globalCap", function() { return "global-works"; }, { desc: "test" })
     expect(approvalStore.isApproved("global", "globalCap")).toBe(true);
   });
 
-  it("拒绝时能力不执行，返回 status: 'blocked'", async () => {
-    const approvalStore = new MemoryApprovalStore();
-
+  it("拒绝时能力不执行，脚本收到拒绝", async () => {
+    const marker = join(testRoot, "ran.txt");
     const agent = new Agent({
       root: selfRoot,
       project: projectRoot,
-      approvalStore,
       hooks: {
-        authorize: async (_req) => {
-          // Deny the authorization
-          return "User explicitly denied this capability";
-        },
+        // Deny the capability itself; the file write inside it would be allowed.
+        authorize: async (req) =>
+          req.name.startsWith("capability.")
+            ? "User explicitly denied this capability"
+            : undefined,
       },
     });
 
-    // Write capability
+    // The capability leaves a mark when its body runs.
     writeFileSync(
       join(projectRoot, "env.js"),
       `
 import eta from "eta";
-eta.define("deniedCap", function() { return "should-not-run"; }, { desc: "test" });
+import { writeFileSync } from "node:fs";
+eta.define("deniedCap", function() { writeFileSync(${JSON.stringify(marker)}, "ran"); return "should-not-run"; }, { desc: "test" });
 `,
     );
 
-    // Try to call - should be blocked
-    let errorThrown = false;
-    try {
-      await agent.run(`
+    await expect(
+      agent.run(`
         import cap from "eta:project:deniedCap";
         export default await cap();
-      `);
-    } catch (err: any) {
-      errorThrown = true;
-      expect(err.message).toContain("denied");
-    }
+      `),
+    ).rejects.toThrow(/denied/);
 
-    expect(errorThrown).toBe(true);
+    expect(existsSync(marker)).toBe(false);
     expect(approvalStore.isApproved("project", "deniedCap")).toBe(false);
   });
 
   it("不同层的同名能力审批独立", async () => {
-    const approvalStore = new MemoryApprovalStore();
     const authorizeRequests: string[] = [];
 
     const agent = new Agent({
       root: selfRoot,
       project: projectRoot,
       global: globalRoot,
-      approvalStore,
       hooks: {
         authorize: async (req) => {
           authorizeRequests.push(req.name);
@@ -291,9 +293,6 @@ import eta from "eta";
 eta.define("sameName", function() { return "global"; }, { desc: "test" });
 `,
     );
-
-    // Reload layers to pick up the new capabilities
-    agent.reload();
 
     // Call project version
     authorizeRequests.length = 0;

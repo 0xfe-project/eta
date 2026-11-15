@@ -80,17 +80,6 @@ describe("the tasks target", () => {
     });
   });
 
-  it("refuses a task made by anybody but an agent", async () => {
-    const w = await world(OFF);
-    const { conversationId } = await seed(w);
-    expect(() =>
-      w.host.product.board.create(
-        { title: "x", conversationId, workspace: "local" },
-        { kind: "user", agentId: null },
-      ),
-    ).toThrow(/only an agent makes a task/);
-  });
-
   it("makes a task, changes it field by field, and keeps a timeline of what happened", async () => {
     const w = await world(OFF);
     w.client.subscribe("tasks");

@@ -437,12 +437,17 @@ export class RoutineRunner {
       stopped: () => Stopped,
     ) => Promise<T>,
   ): Promise<T> {
+    // There is no default model to run on: a routine without one fails here, saying what to do.
+    if (routine.model === null)
+      throw new Error(
+        "This routine has no model. Choose one in the routine's settings.",
+      );
     const cwd = routineHome(this.#dataDir, routine.id);
     await mkdir(cwd, { recursive: true });
     const sessionId = await sessions.create({
       cwd,
       title,
-      ...(routine.model === null ? {} : { model: routine.model }),
+      model: routine.model,
     });
     let timedOut = false;
     let timer: ReturnType<typeof setTimeout> | undefined;

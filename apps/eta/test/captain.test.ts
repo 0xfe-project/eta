@@ -565,9 +565,11 @@ describe("captain controls", () => {
 
     const setting = w.host.product.captain.setSetting("retryLimit", 3);
     expect(setting.value).toBe(3);
-    expect(w.host.product.captain.rollbackSetting("retryLimit", 1).value).toBe(
-      3,
-    );
+    expect(w.host.product.captain.setSetting("retryLimit", 4).value).toBe(4);
+    expect(
+      w.host.product.captain.rollbackSetting("retryLimit", setting.version)
+        .value,
+    ).toBe(3);
 
     const captain = w.host.product.captain.identity()!;
     await expect(
@@ -1093,16 +1095,16 @@ describe("captain controls", () => {
         ),
     );
     w.host.product.captainSupervisor.tick();
-    expect(
-      w.host.product.captain.store
-        .reviews()
-        .find(
-          (review) =>
-            review.kind === "assignment_settled" &&
-            Array.isArray(review.data.assignmentIds) &&
-            review.data.assignmentIds.includes(assigned.assignment.id),
-        ),
-    ).toMatchObject({
+    const reviews = w.host.product.captain.store
+      .reviews()
+      .filter(
+        (review) =>
+          review.kind === "assignment_settled" &&
+          Array.isArray(review.data.assignmentIds) &&
+          review.data.assignmentIds.includes(assigned.assignment.id),
+      );
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0]).toMatchObject({
       kind: "assignment_settled",
       data: {
         assignmentIds: [assigned.assignment.id],
@@ -1110,6 +1112,16 @@ describe("captain controls", () => {
         lastTextHead: "Verified.",
       },
     });
+    // The second tick woke nobody again.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(
+      w
+        .rows(direct.conversationId)
+        .filter(
+          (row) =>
+            row.author === "system" && row.text.includes("<captain-review>"),
+        ),
+    ).toHaveLength(1);
   });
 
   it("groups assignments in one conversation into one review", async () => {

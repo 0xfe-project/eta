@@ -14,7 +14,7 @@ interface SeenThread {
 const isEtaMail = (thread: EmailThreadView) =>
   /^\[eta-mp\]\s*/i.test(thread.subject);
 
-export function newEtaMailThreads(
+function newEtaMailThreads(
   previous: ReadonlyMap<string, SeenThread>,
   threads: readonly EmailThreadView[],
   initialized: boolean,

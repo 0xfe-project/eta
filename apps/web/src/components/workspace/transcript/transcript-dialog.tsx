@@ -15,15 +15,17 @@ import { cn } from "@/lib/utils";
  * that is smaller — so a log that grows while it is read, or a short one opened after a long one,
  * does not move the frame under the reader. On a phone it is the whole screen: a long list in a
  * floating card leaves a thumb's width to read it in. The header stays; the body scrolls.
+ *
+ * The header is what the caller draws (who ran it, how it went, where the time went); the dialog's
+ * name is `title`, for a screen reader only: the button that opened it already said it.
  */
 export function TranscriptDialog({
   trigger,
   open,
   onOpenChange,
   title,
-  meta,
+  header,
   description,
-  quietDescription = false,
   bodyRef,
   bodyClassName,
   onBodyScroll,
@@ -33,13 +35,12 @@ export function TranscriptDialog({
   trigger?: ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  title: ReactNode;
-  /** Beside the title, quieter: when, who. */
-  meta?: ReactNode;
-  /** Under the title; read out as the dialog's description. */
-  description: ReactNode;
-  /** The description is only read out: the title already says it. */
-  quietDescription?: boolean;
+  /** The dialog's accessible name; not shown. */
+  title: string;
+  /** The visible top. The close button sits at its top right: the first line leaves room for it. */
+  header: ReactNode;
+  /** Read out as the dialog's description; not shown. */
+  description?: string | undefined;
   bodyRef?: Ref<HTMLDivElement>;
   bodyClassName?: string;
   onBodyScroll?: (event: React.UIEvent<HTMLDivElement>) => void;
@@ -53,25 +54,20 @@ export function TranscriptDialog({
       {trigger === undefined ? null : (
         <DialogTrigger asChild>{trigger}</DialogTrigger>
       )}
-      <DialogContent className="transcript-dialog flex h-[min(50rem,calc(100dvh-4rem))] w-[min(60rem,calc(100vw-4rem))] max-h-none max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none max-sm:inset-0 max-sm:h-dvh max-sm:w-screen max-sm:translate-x-0 max-sm:translate-y-0">
-        <div className="shrink-0 space-y-0.5 border-b px-3 py-2 pr-11 max-sm:pt-[max(0.5rem,env(safe-area-inset-top))]">
-          <div className="flex items-baseline gap-2">
-            <DialogTitle className="truncate">{title}</DialogTitle>
-            {meta === undefined ? null : (
-              <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                {meta}
-              </span>
-            )}
-          </div>
-          <DialogDescription
-            className={
-              quietDescription
-                ? "sr-only"
-                : "text-muted-foreground wrap-anywhere"
-            }
-          >
-            {description}
-          </DialogDescription>
+      <DialogContent
+        {...(description === undefined
+          ? { "aria-describedby": undefined }
+          : {})}
+        className="transcript-dialog flex h-[min(50rem,calc(100dvh-4rem))] w-[min(60rem,calc(100vw-4rem))] max-h-none max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none max-sm:inset-0 max-sm:h-dvh max-sm:w-screen max-sm:translate-x-0 max-sm:translate-y-0"
+      >
+        <div className="shrink-0 border-b px-3 py-2 max-sm:pt-[max(0.5rem,env(safe-area-inset-top))]">
+          <DialogTitle className="sr-only">{title}</DialogTitle>
+          {description === undefined ? null : (
+            <DialogDescription className="sr-only">
+              {description}
+            </DialogDescription>
+          )}
+          {header}
         </div>
         <div
           ref={bodyRef}

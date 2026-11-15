@@ -4,6 +4,7 @@ import type {
   TaskDraftData,
   TaskFields,
 } from "@eta/client-contracts";
+import { draftStatus } from "@eta/client-contracts";
 import { signal, Text, View } from "nsh";
 import { Input } from "nsh/base";
 import { t } from "../../i18n";
@@ -17,9 +18,14 @@ import { call } from "../../wire/target";
 import { BottomInset } from "./BottomInset";
 import { rememberRows } from "./rows";
 
-/** 03e: the draft edited and confirmed. Confirming creates the task and its executor starts. */
+/**
+ * 03e: the draft edited and confirmed. Confirming creates the task and its executor starts, unless
+ * the agent drafted it into the backlog, where it waits until it is moved to todo.
+ */
 export function DraftScreen(props: { message: MessageView }) {
   const draft = props.message.data as unknown as TaskDraftData;
+  // Confirmed with no status, the host puts it where the draft says: the backlog, or started.
+  const backlog = draftStatus(draft) === "backlog";
   const title = signal(draft.title);
   const description = signal(draft.description);
   const busy = signal(false);
@@ -68,7 +74,7 @@ export function DraftScreen(props: { message: MessageView }) {
             {t("chat.draft.title")}
           </Text>
           <Text class="text-md leading-[20px] text-muted-foreground">
-            {t("chat.draft.subtitle")}
+            {t(backlog ? "chat.draft.subtitleBacklog" : "chat.draft.subtitle")}
           </Text>
         </View>
         <View class="min-h-0 grow basis-0 gap-4 px-4">
@@ -105,7 +111,9 @@ export function DraftScreen(props: { message: MessageView }) {
         </View>
         <View class="shrink-0 flex-row px-4 pt-4 pb-2">
           <Button
-            title={t("chat.draft.submit")}
+            title={t(
+              backlog ? "chat.draft.submitBacklog" : "chat.draft.submit",
+            )}
             variant="primary"
             height={48}
             disabled={busy() || title().trim() === ""}

@@ -40,7 +40,7 @@ describe("tool service", () => {
     dispose();
   });
 
-  it("hot registration: a tool added mid-session is in the very next list()", async () => {
+  it("hot registration: a tool added mid-session runs on the very next execute()", async () => {
     const { tools, dispose } = withTools();
     const call = { turn: 1, toolCallId: "c1" };
     const before = await tools.execute("echo", "x", call);

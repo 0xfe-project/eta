@@ -10,8 +10,10 @@ import { cn } from "@/lib/utils";
  * code of a command that failed). Opening it shows the arguments and the output — the body is
  * where the scrolling lives, so the transcript keeps its shape however much a tool printed.
  *
- * `defaultOpen` is only where it starts: once the reader folds or opens it, that is what it stays,
- * however many frames the call streams after.
+ * Every card starts folded, wherever it is drawn (a reply's process, a task's run log) and whatever
+ * the tool (a script too: it shows once the card is opened), running or done — a card never opens
+ * or closes by itself, so nothing moves under the reader as a run goes on or ends. Only the reader
+ * opens one, and it stays as they left it.
  */
 export function ToolCard({
   tool,
@@ -19,7 +21,6 @@ export function ToolCard({
   meta,
   status,
   statusLabel,
-  defaultOpen = false,
   className,
   children,
 }: {
@@ -30,12 +31,10 @@ export function ToolCard({
   meta?: ReactNode;
   status: "running" | "completed" | "failed";
   statusLabel: string;
-  /** Open on first draw (a script worth watching as it is written); the reader decides after. */
-  defaultOpen?: boolean;
   className?: string;
   children?: ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, setOpen] = useState(false);
   return (
     <details
       className={cn("tool-card", className)}

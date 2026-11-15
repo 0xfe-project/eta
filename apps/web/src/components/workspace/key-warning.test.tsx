@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act } from "react";
-import { createRoot } from "react-dom/client";
+import { QueryClient } from "@tanstack/react-query";
 import { Markdown } from "@/components/markdown";
 import { setWire } from "@/lib/wire";
 import {
@@ -11,6 +9,7 @@ import {
   messageView,
   productHost,
 } from "@/test-product";
+import { cleanup, flush, mount } from "@/test-render";
 import { GroupNotice } from "./group-notice";
 import { PendingStrip } from "./pending-strip";
 
@@ -32,11 +31,6 @@ rstest.mock("./use-groups", () => ({
   useOpenGroup: () => () => undefined,
 }));
 
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-
-const cleanup: (() => void)[] = [];
 async function render(node: React.ReactNode) {
   const client = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity, retry: false } },
@@ -45,23 +39,11 @@ async function render(node: React.ReactNode) {
     agents: [agentView({ id: "a1", name: "乐子人" })],
     conversations: [],
   });
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  await act(async () =>
-    root.render(
-      <QueryClientProvider client={client}>{node}</QueryClientProvider>,
-    ),
-  );
-  cleanup.push(() => {
-    root.unmount();
-    container.remove();
-  });
-  return container;
+  return (await mount(node, client)).container;
 }
 
 afterEach(async () => {
-  await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
+  await cleanup();
   setWire(undefined);
 });
 
@@ -204,24 +186,15 @@ describe("markdown 的结构元素（表格、列表、代码块、流式半截�
       if (text.includes('unique "key"')) found.push(text.slice(0, 240));
       else original(...args);
     };
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createRoot(container);
     // What streaming actually looks like: growing text, re-rendered per chunk.
     const full = "| a | b |\n| --- | --- |\n| 1 | 2 |\n| 3 | 4 |\n";
-    for (let end = 1; end <= full.length; end += 7) {
-      await act(async () =>
-        root.render(<Markdown streaming>{full.slice(0, end)}</Markdown>),
-      );
-    }
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 30));
-    });
+    const { show } = await mount(
+      <Markdown streaming>{full.slice(0, 1)}</Markdown>,
+    );
+    for (let end = 8; end <= full.length; end += 7)
+      await show(<Markdown streaming>{full.slice(0, end)}</Markdown>);
+    await flush(30);
     console.error = original;
-    cleanup.push(() => {
-      root.unmount();
-      container.remove();
-    });
     expect(found).toEqual([]);
   });
 

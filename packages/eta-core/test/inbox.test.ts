@@ -193,16 +193,6 @@ describe("the kernel's inbox", () => {
     off();
     void kernel.dispose();
   });
-
-  it("cancelQueued drops an item before the runner can take it", () => {
-    const kernel = Kernel.create({
-      config: { model: { provider: "p", modelId: "m" } },
-    });
-    const item = kernel.steer("never mind");
-    expect(kernel.cancelQueued(item.entryId)).toBe(true);
-    expect(kernel.inboxDepth).toBe(0);
-    void kernel.dispose();
-  });
 });
 
 describe("what the runner does with each kind", () => {

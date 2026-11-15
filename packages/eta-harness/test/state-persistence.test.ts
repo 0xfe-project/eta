@@ -76,7 +76,7 @@ describe("configuration is durable", () => {
     dispose();
   });
 
-  it("keeps the newest configuration, and a reload reads it back", async () => {
+  it("keeps the newest configuration, last write wins", async () => {
     const { storage, kernel, journaling, dispose } = await session();
     kernel.config.update({ thinkingLevel: "high" });
     kernel.config.update({ thinkingLevel: "max" });
@@ -86,15 +86,7 @@ describe("configuration is durable", () => {
     const restored = await readConfig(storage);
     expect(restored?.thinkingLevel).toBe("max");
     expect(restored?.model).toEqual({ provider: "other", modelId: "model-2" });
-    // And a fresh kernel adopts it, which is what the assembly path will do.
-    const reopened = journaledKernel(await SessionLog.load(storage)).kernel;
-    reopened.config.update(restored!);
-    expect(reopened.config.read("model")).toEqual({
-      provider: "other",
-      modelId: "model-2",
-    });
-    expect(reopened.config.read("thinkingLevel")).toBe("max");
-    void reopened.dispose();
+    // Reading it back on open is openSession's: open-session.test.ts proves it.
     dispose();
   });
 

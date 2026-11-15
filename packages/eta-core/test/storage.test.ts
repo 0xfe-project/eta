@@ -1,45 +1,9 @@
 import type { MessageEntry } from "@eta/core/session";
-import {
-  MemoryStorage,
-  setValue,
-  STORAGE_METHODS,
-  value,
-} from "@eta/core/storage";
+import { MemoryStorage, setValue, value } from "@eta/core/storage";
 import { storageContract } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 
-describe("storageService interface shape", () => {
-  it("exposes exactly the agreed method surface", () => {
-    expect([...STORAGE_METHODS].sort()).toMatchInlineSnapshot(`
-			[
-			  "close",
-			  "commit",
-			  "compactJournal",
-			  "flush",
-			  "getEntries",
-			  "getStats",
-			  "getValue",
-			  "listValues",
-			  "repairTornTail",
-			  "scanBranch",
-			  "scanEntries",
-			  "scanUsage",
-			]
-		`);
-  });
-
-  it("the write vocabulary matches the eta-agent journal's: entry / usage / value", () => {
-    // Every write kind a `{w: [...], t: ...}` line can carry in the kernel.
-    const kinds = ["entry", "usage", "value"];
-    expect(kinds).toMatchInlineSnapshot(`
-			[
-			  "entry",
-			  "usage",
-			  "value",
-			]
-		`);
-  });
-
+describe("storageService maintenance results", () => {
   it("maintenance results are plain data", async () => {
     const storage = new MemoryStorage();
     const compacted = await storage.compactJournal();

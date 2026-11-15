@@ -9,7 +9,6 @@
 import type { AssistantMessage, Context } from "@earendil-works/pi-ai";
 import type { LlmAccounts, LlmModel, LlmQuota } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
-import { entryOf } from "../src/usage/recorder";
 import { connect, until } from "./support/client";
 import { cpaExtraFor, fakeUpstream, MODEL } from "./support/fake-upstream";
 import { testHost } from "./support/host";
@@ -105,19 +104,8 @@ describe.skipIf(process.platform === "win32")(
           expect.objectContaining({ type: "image_generation" }),
         );
         expect(message.usage.output).toBe(4);
-        // ... and that is what the usage table records for whoever asked.
-        const entry = entryOf(
-          { id: "s1", agentId: "a1", conversationId: "c1" } as never,
-          message,
-        );
-        expect(entry).toMatchObject({
-          provider: "llm",
-          model: MODEL,
-          input: 5,
-          output: 4,
-          status: "ok",
-          agentId: "a1",
-        });
+        // What the usage table records it under (recording itself is usage.test.ts's).
+        expect(message).toMatchObject({ provider: "llm", model: MODEL });
 
         // A client that stops cancels the upstream request.
         const before = upstream.cancelled;

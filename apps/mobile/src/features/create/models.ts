@@ -20,8 +20,6 @@ export interface Model {
   name: string;
   /** Not while its provider lacks a key it cannot run without. */
   available: boolean;
-  /** The configured default, else the first one. */
-  default: boolean;
 }
 
 const PRESET_NAMES: Partial<Record<ProviderSummary["kind"], string>> = {
@@ -51,7 +49,6 @@ function modelsOf(view: ProvidersView): Model[] {
         providerName: providerLabel(provider),
         name: model.name ?? model.id,
         available: !keyMissing(provider),
-        default: false,
       }),
     ),
   );
@@ -69,7 +66,6 @@ const gatewayModels = (
         ?.name ?? model.connector,
     name: model.name,
     available: model.available,
-    default: false,
   }));
 
 /** A runtime's models: `runtime:modelId`, under the runtime's name. */
@@ -80,7 +76,6 @@ export const runtimeModelsOf = (info: AgentRuntimeInfo): Model[] =>
     providerName: info.label,
     name: model.name,
     available: info.status === "available",
-    default: model.default,
   }));
 
 /**
@@ -94,15 +89,12 @@ export function useModels(): () => Model[] | null | undefined {
     if (providers.missing()) return null;
     const config = providers.section<ProvidersView>("config");
     if (config === undefined) return undefined;
-    const merged = [
+    return [
       ...modelsOf(config),
       ...gatewayModels(
         llm?.section<LlmModel[]>("models") ?? [],
         llm?.section<LlmAccounts>("accounts"),
       ),
     ];
-    const fallback =
-      merged.find((model) => model.id === config.defaultModel) ?? merged[0];
-    return merged.map((model) => ({ ...model, default: model === fallback }));
   };
 }

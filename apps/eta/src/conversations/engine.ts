@@ -6,7 +6,7 @@ import type {
 } from "@eta/client-contracts";
 import type { KernelModels, KernelTool } from "@eta/core";
 import type { AskObserver } from "@eta/harness";
-import type { SessionMeta, SessionsService } from "@eta/server";
+import type { ManagedSession, SessionMeta, SessionsService } from "@eta/server";
 import type { SshTransport } from "@eta/ssh";
 /**
  * The engine: what a message does.
@@ -36,8 +36,10 @@ import type { SessionHandle, SessionPlace, SessionSettings } from "./places";
 import type { ConversationRecord, ConversationStore } from "./store";
 import type { Timeline } from "./timeline";
 import { homedir } from "node:os";
-import { LinkError } from "@eta/daemon";
+import { kernelOn } from "@eta/core";
+import { lastSeq, LinkError, listen } from "@eta/daemon";
 import { parseModelId } from "@eta/server";
+import { explainRunError, missingModel } from "../agents/model";
 import { isTaskSession } from "../tasks/session-key";
 import { viewOf as attachmentView } from "./attachments";
 import { briefing } from "./briefing";
@@ -284,6 +286,119 @@ export class Engine {
     return conversationTools(this, conversationId, agentId);
   };
 
+  /**
+   * A run on a member's session that no reply started: the runtime began a turn of its own (Claude
+   * Code answering a background task's notification, after the reply that started the task
+   * ended). It is said in the conversation like any reply, in a row of its own that works while
+   * the run does, and that a message can join or the user can stop.
+   *
+   * Only a session on an external runtime: an eta session's runs are all started by somebody.
+   */
+  readonly sessionAttach = (input: ManagedSession): Promise<void> => {
+    const { agentId, conversationId, runtime } = input.meta;
+    if (
+      agentId === undefined ||
+      conversationId === undefined ||
+      runtime === undefined ||
+      isTaskSession(conversationId)
+    )
+      return Promise.resolve();
+    kernelOn(input.session.kernel.ctx)("turn:run-start", () => {
+      // A reply of the engine's is running on it: the run is that reply's.
+      if (this.#closing || this.#running.has(keyOf(conversationId, agentId)))
+        return;
+      this.#unprompted(input, conversationId, agentId);
+    });
+    return Promise.resolve();
+  };
+
+  /**
+   * The row of a run no reply started. It is written at the run's first turn, not its start: a
+   * runtime can open a turn that says and does nothing (two notifications answered in the second
+   * of two turns), and that is no reply. A run that fails before saying anything still gets one.
+   */
+  #unprompted(
+    managed: ManagedSession,
+    conversationId: string,
+    agentId: string,
+  ): void {
+    if (this.#conversations.participant(conversationId, agentId) === undefined)
+      return;
+    const handle = this.#local.handleOf(managed);
+    if (handle === undefined) return;
+    const key = keyOf(conversationId, agentId);
+    const on = kernelOn(managed.session.kernel.ctx);
+    // The run has started: what it writes comes after what the journal holds now.
+    const data = { runFrom: lastSeq(managed), unprompted: true };
+    const heard = listen(managed);
+    let row: MessageView | undefined;
+    const write = (
+      status: "working" | "failed",
+      text = "",
+    ): MessageView | undefined => {
+      try {
+        return this.#timeline.append({
+          conversationId,
+          kind: "message",
+          author: "agent",
+          agentId,
+          status,
+          text,
+          data: status === "failed" ? { ...data, code: "run_failed" } : data,
+        });
+      } catch (error) {
+        this.#warn(
+          `[eta] a run ${agentId} began on its own in ${conversationId} has no row: ${messageOf(error)}`,
+        );
+        return undefined;
+      }
+    };
+    const offStart = on("turn:start", () => {
+      offStart();
+      // A reply of the engine's took the session meanwhile: what the run says is that reply's.
+      if (this.#running.has(key)) return;
+      row = write("working");
+      if (row === undefined) return;
+      this.#running.set(key, { replyId: row.id, handle });
+      this.#changed([conversationId]);
+    });
+    const offEnd = on("turn:run-end", ({ status, error }) => {
+      offStart();
+      offEnd();
+      heard.stop();
+      if (row === undefined) {
+        if (status === "failed" && !this.#running.has(key)) {
+          write("failed", error ?? "The run failed.");
+          this.#changed([conversationId]);
+        }
+        return;
+      }
+      if (this.#running.get(key)?.replyId === row.id) this.#running.delete(key);
+      const said = heard.said();
+      const ended = {
+        ...row.data,
+        ...(said.activity.length === 0 ? {} : { activity: said.activity }),
+      };
+      this.#timeline.finish(
+        row.id,
+        status === "failed"
+          ? {
+              status: "failed",
+              text: error ?? "The run failed.",
+              thinking: said.thinking,
+              data: { ...ended, code: "run_failed" },
+            }
+          : {
+              status: status === "aborted" ? "stopped" : "done",
+              text: said.text,
+              thinking: said.thinking,
+              data: ended,
+            },
+      );
+      this.#changed([conversationId]);
+    });
+  }
+
   /** A session's question turns its reply into one that waits for the user, and back. */
   readonly askObserve = (meta: SessionMeta): AskObserver | undefined => {
     const { agentId, conversationId } = meta;
@@ -331,6 +446,8 @@ export class Engine {
     /** The machine the task's project is on, when the session is made on another one. */
     awayFrom?: MachineRecord | undefined;
   }): Promise<SessionHandle> {
+    const unset = missingModel(input.agent);
+    if (unset !== undefined) throw new Error(unset);
     const place = this.#placeOf(input.machine);
     if (place === undefined)
       throw new Error(`Sessions cannot run on ${input.machine.name} yet.`);
@@ -407,7 +524,7 @@ export class Engine {
      */
     blocks?: readonly (readonly [number, number])[] | undefined;
     /**
-     * Host-only marks merged into the row's `data`, for renderers (e.g. `captainGroupOutcome`). The
+     * Host-only marks merged into the row's `data`, for renderers (e.g. `captainOutcome`). The
      * public conversations.send action never sets it, and it never reaches the prompt.
      */
     data?: Readonly<Record<string, unknown>> | undefined;
@@ -638,7 +755,9 @@ export class Engine {
       .participants(input.conversationId)
       .flatMap((participant) => {
         const agent = this.#agents.get(participant.agentId);
-        return agent === undefined ? [] : [{ id: agent.id, name: agent.name }];
+        return agent === undefined
+          ? []
+          : [{ id: agent.id, name: agent.name, systemRole: agent.systemRole }];
       });
     const { ids, unknown } = resolveNamed(input.names, members, input.agentId);
     if (ids.length === 0) {
@@ -877,6 +996,8 @@ export class Engine {
     const trigger = this.#timeline.get(reply.replyToId ?? "");
     if (trigger === undefined)
       return fail("gone", "The message this reply answers is gone.");
+    const unset = missingModel(agent);
+    if (unset !== undefined) return fail("unavailable", unset);
     this.#setAway(conversation.id, agent.id, away);
 
     let handle: SessionHandle;
@@ -904,7 +1025,7 @@ export class Engine {
           ),
       });
     } catch (error) {
-      return fail("unavailable", messageOf(error));
+      return fail("unavailable", explainRunError(messageOf(error)));
     }
     // A stop that arrived while the session was being made.
     if (this.#timeline.get(replyId)?.status !== "queued") return;
@@ -948,9 +1069,12 @@ export class Engine {
         () => !this.#closing,
         told.images,
       );
-      // What the run did with tools stays on the row, so the page draws it after the run too.
-      const activity =
-        result.activity === undefined ? {} : { activity: result.activity };
+      // What the run did with tools, and the order of its steps, stay on the row, so the page draws
+      // it after the run as it did during it.
+      const activity = {
+        ...(result.activity === undefined ? {} : { activity: result.activity }),
+        ...(result.process === undefined ? {} : { process: result.process }),
+      };
       if (this.#closing && result.status === "aborted") {
         this.#timeline.finish(replyId, {
           status: "failed",
@@ -961,7 +1085,10 @@ export class Engine {
       } else if (result.status === "failed") {
         this.#timeline.finish(replyId, {
           status: "failed",
-          text: result.error ?? "The run failed.",
+          text:
+            result.error === undefined
+              ? "The run failed."
+              : explainRunError(result.error),
           thinking: result.thinking,
           data: { ...reply.data, ...activity, code: "run_failed" },
         });
@@ -982,7 +1109,7 @@ export class Engine {
         status: "failed",
         text: lost
           ? `The link to ${machine.name} failed while this reply was running, so what it did there is unknown. Nothing was run again. (${error.message})`
-          : messageOf(error),
+          : explainRunError(messageOf(error)),
         data: { ...reply.data, code: lost ? "link_lost" : "run_failed" },
       });
     } finally {

@@ -6,10 +6,11 @@ import { useInputActive, useShell, useTheme } from "../../extensions/react";
 import { useMessages } from "../../i18n/react";
 import { LayerFrame } from "../../ui/components/layer-frame";
 import { inkColor } from "../../ui/theme";
+import { useAgents } from "../kit/agents";
 import { usableModels, useModels, useProvidersProblem } from "../kit/models";
 import { ProvidersPanel } from "../providers/providers-panel";
 import { AgentsStep } from "./agents-step";
-import { defaultUsableModel } from "./first-run";
+import { preferredModel } from "./first-run";
 import { setupMessages } from "./messages";
 
 type Step = "accounts" | "agents";
@@ -24,6 +25,7 @@ export function SetupLayer({ handle }: { handle: LayerHandle }) {
   const theme = useTheme();
   const shell = useShell();
   const models = useModels();
+  const agents = useAgents();
   const usable = models === undefined ? [] : usableModels(models);
   const [step, setStep] = useState<Step>();
   const [progress, setProgress] = useState<AgentsProgress>(() => ({
@@ -77,7 +79,7 @@ export function SetupLayer({ handle }: { handle: LayerHandle }) {
               />
             ) : (
               <AgentsStep
-                model={defaultUsableModel(models ?? [])}
+                model={preferredModel(models ?? [], agents)}
                 progress={progress}
                 onProgress={setProgress}
                 onBack={() => setStep("accounts")}

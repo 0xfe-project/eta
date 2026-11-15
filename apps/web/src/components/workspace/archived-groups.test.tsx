@@ -1,10 +1,9 @@
 import type { ConversationSummary } from "@eta/client-contracts";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { setWire } from "@/lib/wire";
 import { conversationView, productHost } from "@/test-product";
+import { button, cleanup, mount } from "@/test-render";
 import { ArchivedGroups, GroupList } from "./groups";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -18,45 +17,21 @@ rstest.mock("./use-groups", () => ({
   useOpenGroup: () => navigation.open,
 }));
 
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-
 const group = (id: string, name: string, archived: boolean) =>
   conversationView({ id, name, archived });
 
-const cleanup: (() => void)[] = [];
 let host: ReturnType<typeof productHost>;
 async function render(node: React.ReactNode) {
-  const client = new QueryClient();
   host = productHost({ conversations: groups.list });
   host.handle("conversations.update", () => ({}));
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  await act(async () =>
-    root.render(
-      <QueryClientProvider client={client}>{node}</QueryClientProvider>,
-    ),
-  );
-  cleanup.push(() => {
-    root.unmount();
-    container.remove();
-  });
-  return container;
+  return (await mount(node)).container;
 }
 
 afterEach(async () => {
-  await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
+  await cleanup();
   navigation.open.mockClear();
   setWire(undefined);
 });
-
-function button(root: ParentNode, label: string) {
-  return [...root.querySelectorAll("button")].find((b) =>
-    b.textContent?.includes(label),
-  );
-}
 
 describe("已归档的对话", () => {
   it("are left out of the sidebar, which has no way to them", async () => {

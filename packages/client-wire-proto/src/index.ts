@@ -71,14 +71,6 @@ export type ClientFrame =
   | UnsubscribeFrame
   | NativeFrame;
 
-/** The op names this side of the pipe has. Pinned: the *shape* is the contract, not the vocabulary. */
-export const CLIENT_OP_NAMES = [
-  "call",
-  "native",
-  "subscribe",
-  "unsubscribe",
-] as const;
-
 // ------------------------------------------------------------------- the server's side
 
 /** What one registration publishes about itself. */

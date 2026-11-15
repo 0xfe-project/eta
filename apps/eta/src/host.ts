@@ -39,6 +39,7 @@ import { llmPlugin } from "./llm/plugin";
 import { openLlm } from "./llm/runtime";
 import { buildsIn, defaultBuilds } from "./machines/builds";
 import { Tailscale } from "./machines/tailscale";
+import { clearMigrationInput, stageMigrationInput } from "./model-backfill";
 import { createProduct } from "./product";
 
 export interface HostOptions {
@@ -72,11 +73,11 @@ export interface HostOptions {
   /** Where the agent's home is, for personas. Defaults to the real one. */
   home?: string;
   /**
-   * MCP for the sessions this host runs (`~/.eta/mcp.json`, the project's `.mcp.json`). `false`
-   * turns it off; an object is a test's tuning (the library's fetch pointed at a fake, and its
-   * manager without timers).
+   * MCP for the sessions this host runs (`~/.eta/mcp.json`, the project's `.mcp.json`) is always
+   * on; this is a test's tuning (the library's fetch pointed at a fake, and its manager without
+   * timers).
    */
-  mcp?: false | McpTuning;
+  mcp?: McpTuning;
   /** What a published site may hold; the defaults are for real use, a test makes them small. */
   artifactLimits?: Partial<SiteLimits> | undefined;
   /**
@@ -161,7 +162,13 @@ export async function startHost(options: HostOptions): Promise<Host> {
 
   const gatewayModels = new GatewayModels();
   try {
-    applyMigrations(db, loadMigrations());
+    // A migration may need the providers config (0050 does); it is staged, then gone.
+    stageMigrationInput(db, join(options.dataDir, "config.json"));
+    try {
+      applyMigrations(db, loadMigrations());
+    } finally {
+      clearMigrationInput(db);
+    }
     const warn = options.warn ?? ((message: string) => console.warn(message));
     const runtimes =
       options.runtimes === false
@@ -228,9 +235,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       agentPromptFor: product.engine.agentPromptFor,
       skillDirsFor: product.skillDirsFor,
       runtimeExtrasFor: product.runtimeExtrasFor,
-      ...(product.mcp === undefined
-        ? {}
-        : { mcpFor: product.mcp.host.sessionMcp }),
+      mcpFor: product.mcp.host.sessionMcp,
       ...product.sessionHooks,
       memoryEnabledFor: product.memoryEnabledFor,
       baseSystemPromptFor: product.baseSystemPromptFor,

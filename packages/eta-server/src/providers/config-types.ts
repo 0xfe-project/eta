@@ -16,7 +16,6 @@ import type {
   ProviderSummary,
 } from "@eta/client-contracts";
 import type { ThinkingLevel } from "@eta/core";
-import { BUILTIN_PROVIDER_PRESETS } from "@eta/client-contracts";
 
 export const MODEL_THINKING_LEVELS = [
   "off",
@@ -29,12 +28,6 @@ export const MODEL_THINKING_LEVELS = [
 ] as const satisfies readonly ThinkingLevel[];
 
 export type ModelInput = "text" | "image";
-
-export function providerPreset(kind: ProviderKind) {
-  return isCustomKind(kind)
-    ? undefined
-    : BUILTIN_PROVIDER_PRESETS[kind as keyof typeof BUILTIN_PROVIDER_PRESETS];
-}
 
 /**
  * Kinds with no built-in endpoint: the user supplies the URL, the key and the model list. Both
@@ -97,8 +90,6 @@ export interface EtaConfig {
     noProxy?: string;
   };
   providers?: EtaProviderConfig[];
-  /** `providerId:modelId`; the first provider's first model when absent. */
-  defaultModel?: string;
 }
 
 /** RFC 7230 token: the only names worth accepting from a settings form. */
@@ -162,13 +153,6 @@ export function effectiveModel(model: EtaModelConfig): EtaModelConfig {
   return { ...model, ...model.overrides };
 }
 
-/** Undefined means the provider did not publish input capabilities. */
-export function modelSupportsVision(
-  model: ModelCapabilities,
-): boolean | undefined {
-  return model.input === undefined ? undefined : model.input.includes("image");
-}
-
 /**
  * The thinking levels a model declares.
  *
@@ -185,44 +169,6 @@ export function modelThinkingLevels(input: EtaModelConfig): ThinkingLevel[] {
   if (efforts.length === 0) return [];
   const off = model.thinkingMode === "both";
   return [...(off ? (["off"] as const) : []), ...efforts];
-}
-
-export function modelDefaultThinking(input: EtaModelConfig): ThinkingLevel {
-  const model = effectiveModel(input);
-  const levels = modelThinkingLevels(model);
-  if (
-    model.defaultThinking !== undefined &&
-    levels.includes(model.defaultThinking)
-  )
-    return model.defaultThinking;
-  if (
-    model.providerDefaultEffort !== undefined &&
-    levels.includes(model.providerDefaultEffort)
-  ) {
-    return model.providerDefaultEffort;
-  }
-  // "off" is the harness's no-parameter setting. The provider adapter only translates it to an
-  // explicit disable when the model actually offers an off switch.
-  return "off";
-}
-
-/** `provider:modelId`, else the first configured model. */
-export function configDefaultModel(
-  config: EtaConfig,
-): { provider: string; modelId: string } | undefined {
-  const first = (config.providers ?? []).flatMap((provider) =>
-    provider.models.map((model) => ({
-      provider: provider.id,
-      modelId: model.id,
-    })),
-  )[0];
-  if (config.defaultModel === undefined) return first;
-  const split = config.defaultModel.indexOf(":");
-  if (split <= 0) return first;
-  return {
-    provider: config.defaultModel.slice(0, split),
-    modelId: config.defaultModel.slice(split + 1),
-  };
 }
 
 /** One provider, as a client sees it: the key becomes `hasApiKey`, the headers stay. */

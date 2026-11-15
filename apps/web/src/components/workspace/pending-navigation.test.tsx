@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -8,10 +8,10 @@ import {
 } from "@tanstack/react-router";
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { setWire } from "@/lib/wire";
 import { surfaceHost } from "@/test-inbox";
 import { routineInfo, routineSections, taskDetail } from "@/test-product";
+import { cleanup, flush, mount as render } from "@/test-render";
 import { PendingList } from "./attention";
 import { useOpenGroup } from "./use-groups";
 import { useShowLinkedView } from "./workspace-search";
@@ -19,10 +19,6 @@ import { useWorkspaceStore } from "./workspace-store";
 
 // The pending list opens what it lists in the mode it is shown in: beside
 // the chat, the side panel's tabs; on its own page, that page.
-
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
 
 async function mount(ui: () => React.ReactNode, path: string) {
   const client = new QueryClient({
@@ -52,16 +48,11 @@ async function mount(ui: () => React.ReactNode, path: string) {
     }),
     history,
   });
-  const container = document.createElement("div");
-  document.body.append(container);
-  await act(async () => {
-    createRoot(container).render(
-      <QueryClientProvider client={client}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>,
-    );
-    await router.load();
-  });
+  const { container } = await render(
+    <RouterProvider router={router} />,
+    client,
+  );
+  await act(async () => router.load());
   return { container, router, history };
 }
 
@@ -89,8 +80,8 @@ describe("pending navigation", () => {
     useWorkspaceStore.setState({ mobilePanel: "chat" });
     surfaceHost();
   });
-  afterEach(() => {
-    document.body.innerHTML = "";
+  afterEach(async () => {
+    await cleanup();
     setWire(undefined);
   });
 
@@ -111,10 +102,10 @@ describe("pending navigation", () => {
       () => <PendingList />,
       "/?view=inbox",
     );
-    await act(async () => {
-      container.querySelector<HTMLAnchorElement>("li a")!.click();
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    });
+    await act(async () =>
+      container.querySelector<HTMLAnchorElement>("li a")!.click(),
+    );
+    await flush(10);
     expect(router.state.location.pathname).toBe("/");
     expect(router.state.location.search).toEqual({ view: "tasks", task: "t1" });
   });
@@ -129,10 +120,8 @@ describe("pending navigation", () => {
     const { history } = await mount(() => <ShowLinkedView />, "/");
     expect(useWorkspaceStore.getState().mobilePanel).toBe("chat");
     // Back and forward to a tab show the panel again.
-    await act(async () => {
-      history.push("/?view=inbox");
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    });
+    await act(async () => history.push("/?view=inbox"));
+    await flush(10);
     expect(useWorkspaceStore.getState().mobilePanel).toBe("workspace");
   });
 
@@ -146,10 +135,8 @@ describe("pending navigation", () => {
       "/?group=g9&view=inbox",
     );
     expect(useWorkspaceStore.getState().mobilePanel).toBe("workspace");
-    await act(async () => {
-      container.querySelector("button")!.click();
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    });
+    await act(async () => container.querySelector("button")!.click());
+    await flush(10);
     expect(router.state.location.search).toEqual({ group: "g1" });
     expect(useWorkspaceStore.getState().mobilePanel).toBe("chat");
   });

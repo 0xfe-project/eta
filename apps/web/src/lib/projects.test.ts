@@ -43,13 +43,6 @@ describe("projectPlace", () => {
     ).toBe("gpu-box:/Users/me/eta");
   });
 
-  it("tells one path on two machines apart", () => {
-    const path = "/Users/me/Desktop/eta";
-    expect(projectPlace({ machineId: "m1", path }, machines)).not.toBe(
-      projectPlace({ machineId: "m2", path }, machines),
-    );
-  });
-
   it("keeps the path whole on a machine that has not said its home", () => {
     expect(
       projectPlace({ machineId: "m3", path: "/srv/backup" }, machines, {

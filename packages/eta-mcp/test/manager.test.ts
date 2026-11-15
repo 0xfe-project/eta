@@ -321,21 +321,20 @@ describe("transports", () => {
     const h = await setup();
     const http = await startFakeHttp({ spec, mode: "sse-only" });
     try {
+      // No pinned type: the URL is tried as streamable HTTP first, answers 404
+      // like a legacy server, and the same URL is then opened as SSE.
       const scope = h.manager.scope({
         owner: "a",
-        sources: [
-          h.source({ old: { url: http.sseUrl.replace("/sse", "/mcp") } }),
-        ],
+        sources: [h.source({ old: { url: http.sseUrl } })],
       });
-      // The streamable endpoint answers 404; the SSE endpoint is a different path, so point at it.
-      const sse = h.manager.scope({
-        owner: "b",
-        sources: [h.source({ old: { url: http.sseUrl, type: "sse" } })],
-      });
-      expect((await sse.connect("old")).ok).toBe(true);
-      const [ping] = sse.tools("old")!;
-      expect(text(await sse.callTool("old", ping!, {}))).toBe("count 1");
-      expect((await scope.connect("old")).ok).toBe(false);
+      expect((await scope.connect("old")).ok).toBe(true);
+      const [ping] = scope.tools("old")!;
+      expect(text(await scope.callTool("old", ping!, {}))).toBe("count 1");
+      const sse = new URL(http.sseUrl).pathname;
+      const tried = http.requests
+        .filter((request) => request.path === sse)
+        .map((request) => request.method);
+      expect(tried.slice(0, 2)).toEqual(["POST", "GET"]);
     } finally {
       await h.manager.closeAll();
       await http.close();

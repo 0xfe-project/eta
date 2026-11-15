@@ -7,6 +7,7 @@ import {
   it,
   rstest,
 } from "@rstest/core";
+import { act } from "react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { setWire } from "@/lib/wire";
 import {
@@ -120,6 +121,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await cleanup();
+  navigation.navigate.mockClear();
   setWire(undefined);
 });
 
@@ -134,17 +136,9 @@ async function section(rail = false) {
 }
 
 describe("Captain 在左栏顶上", () => {
-  it("和其他智能体同一种行：没有外框、没有环，头像是行的大小", async () => {
+  it("和其他智能体同一种行：一个按钮，写着名字和它在做什么", async () => {
     const container = await section();
-    const group = container.querySelector('[data-section="captain"]')!;
-    // No gauge ring around the face: that box was 48px.
-    expect(group.querySelector('[style*="48px"]')).toBeNull();
-    expect(group.querySelector(".border")).toBeNull();
-    const button = group.querySelector("button")!;
-    expect(button.className).toContain("hover:bg-sidebar-accent");
-    expect(button.className).toContain("px-4");
-    expect(button.querySelector(".size-6")).not.toBeNull();
-    expect(button.querySelector(".size-10")).toBeNull();
+    const button = container.querySelector('[data-section="captain"] button')!;
     const text = button.textContent ?? "";
     expect(text).toContain("Captain");
     expect(text).toContain("空闲");
@@ -161,16 +155,19 @@ describe("Captain 在左栏顶上", () => {
 
   it("点了打开 Captain 的会话", async () => {
     const container = await section();
-    const button = container.querySelector('[data-section="captain"] button');
-    expect(button?.getAttribute("type")).toBe("button");
-    expect(container.textContent).toContain("Captain");
+    const button = container.querySelector<HTMLButtonElement>(
+      '[data-section="captain"] button',
+    )!;
+    await act(async () => button.click());
+    expect(navigation.navigate).toHaveBeenCalledWith({
+      to: "/",
+      search: { group: "g-cap" },
+    });
   });
 
-  it("折成图标栏时和其他行一样：头像，名字在下面", async () => {
+  it("折成图标栏时只剩头像和名字，状态不写", async () => {
     const container = await section(true);
     const button = container.querySelector('[data-section="captain"] button');
-    expect(button?.className).toContain("flex-col");
-    expect(button?.querySelector(".size-6")).not.toBeNull();
     expect(button?.textContent).toBe("Captain");
   });
 

@@ -1,7 +1,8 @@
-import type { Hooks } from "../../src/realm/index";
+import type { Effect, Hooks } from "../../src/realm/index";
+import { Buffer } from "node:buffer";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import hostOs, { tmpdir } from "node:os";
 
 import { join } from "node:path";
 
@@ -15,6 +16,9 @@ import {
 } from "../../src/realm/index";
 
 let root = "";
+
+/** The agent's own layer: what `eta.define` in its env.js writes to. */
+const selfEnv = (agent: Agent) => agent.layers.get("self")!;
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "esm-mode-test-"));
@@ -72,11 +76,11 @@ describe("realm", () => {
     });
 
     const result = await realm.evaluate(
-      `import os from "os";\nexport default typeof os.platform;`,
+      `import os from "os";\nexport default os.platform;`,
       { identifier: join(root, "probe.js") },
     );
 
-    expect(result.value).toBe("function");
+    expect(result.value).toBe(hostOs.platform);
   });
 
   it("the node globals are the host's own objects", async () => {
@@ -88,12 +92,13 @@ describe("realm", () => {
       },
     });
 
-    const result = await realm.evaluate(
-      `export default [typeof process, Buffer.isBuffer(Buffer.from("hi"))];`,
-      { identifier: join(root, "probe.js") },
-    );
+    const result = await realm.evaluate(`export default [process, Buffer];`, {
+      identifier: join(root, "probe.js"),
+    });
 
-    expect(result.value).toEqual(["object", true]);
+    const [realmProcess, realmBuffer] = result.value as unknown[];
+    expect(realmProcess).toBe(process);
+    expect(realmBuffer).toBe(Buffer);
   });
 
   it("child_process is a built-in that is not mounted, bare or prefixed", async () => {
@@ -134,13 +139,19 @@ describe("realm", () => {
     expect(result.effects).toHaveLength(1);
     expect(result.effects[0]?.name).toBe("fs.readFile");
     expect(result.effects[0]?.at.line).toBe(3);
+    // 1-based, at the callee: `const text = await |readFile(`.
+    expect(result.effects[0]?.at.column).toBe(
+      "const text = await readFile(".indexOf("readFile") + 1,
+    );
     expect(result.effects[0]?.status).toBe("ok");
   });
 
   it("a failed binding is recorded and still throws into the script", async () => {
+    const effects: Effect[] = [];
     const realm = new Realm({
       name: "test",
       mounts: (r) => mountModules(r, { root }),
+      onEffect: (effect) => effects.push(effect),
     });
     const error = await realm
       .evaluate(
@@ -153,7 +164,7 @@ describe("realm", () => {
 
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toContain("ENOENT");
-    expect(realm.effects.at(-1)?.status).toBe("failed");
+    expect(effects.at(-1)?.status).toBe("failed");
   });
 
   it("a synchronous spin is cut off by the timeout", async () => {
@@ -221,9 +232,11 @@ describe("modules", () => {
   );
 
   it("an unmounted specifier names itself in the error", async () => {
+    const effects: Effect[] = [];
     const realm = new Realm({
       name: "test",
       mounts: (r) => mountModules(r, { root }),
+      onEffect: (effect) => effects.push(effect),
       authorize: (request) =>
         request.name === "packages.install" ? "no installs here" : undefined,
     });
@@ -233,17 +246,16 @@ describe("modules", () => {
       })
       .catch((e: Error) => e);
     expect((error as Error).message).toContain("left-pad");
-    expect(realm.effects.map((effect) => effect.status)).toEqual(["blocked"]);
+    expect(effects.map((effect) => effect.status)).toEqual(["blocked"]);
   });
 });
 
 describe("env.js", () => {
   it("an ability is written as source and comes back on wake", async () => {
     const agent = new Agent({ root });
-    agent.env.add("shout", `(text) => text.toUpperCase()`, {
+    selfEnv(agent).add("shout", `(text) => text.toUpperCase()`, {
       desc: "uppercase",
     });
-    agent.env.save();
 
     const result = await agent.run(
       `import eta from "eta"; const { shout } = eta.modules; export default shout("hi");`,
@@ -256,14 +268,15 @@ describe("env.js", () => {
 
   it("a taken name is refused rather than replaced", () => {
     const agent = new Agent({ root });
-    agent.env.add("shout", `(text) => text.toUpperCase()`);
-    expect(() => agent.env.add("shout", `() => 1`)).toThrow(/already exists/);
+    selfEnv(agent).add("shout", `(text) => text.toUpperCase()`);
+    expect(() => selfEnv(agent).add("shout", `() => 1`)).toThrow(
+      /already exists/,
+    );
   });
 
   it("editing the file re-wakes the realm with the new ability", async () => {
     const agent = new Agent({ root });
-    agent.env.add("one", `() => 1`);
-    agent.env.save();
+    selfEnv(agent).add("one", `() => 1`);
     expect(
       (
         await agent.run(
@@ -274,11 +287,8 @@ describe("env.js", () => {
         )
       ).value,
     ).toBe(1);
-    expect(agent.awake).toBe(true);
 
-    agent.env.add("two", `() => 2`);
-    agent.env.save();
-    expect(agent.awake).toBe(false);
+    selfEnv(agent).add("two", `() => 2`);
 
     const after = await agent.run(
       `import eta from "eta"; const { two } = eta.modules; export default two();`,
@@ -287,20 +297,17 @@ describe("env.js", () => {
       },
     );
     expect(after.value).toBe(2);
-    expect(agent.awake).toBe(true);
   });
 
   it("the hand-written half survives a write", async () => {
     const agent = new Agent({ root });
-    agent.env.add("one", `() => 1`);
-    agent.env.save();
+    selfEnv(agent).add("one", `() => 1`);
     const first = await readFile(join(root, "env.js"), "utf8");
     const withHand = `${first}\nexport const lastError = "boom";\n`;
     await writeFile(join(root, "env.js"), withHand);
 
     const again = new Agent({ root });
-    again.env.add("two", `() => 2`);
-    again.env.save();
+    selfEnv(again).add("two", `() => 2`);
     expect(await readFile(join(root, "env.js"), "utf8")).toContain(
       `export const lastError = "boom";`,
     );
@@ -380,9 +387,11 @@ describe("authorize", () => {
     const target = join(root, "keep.txt");
     await writeFile(target, "still here");
 
+    const effects: Effect[] = [];
     const realm = new Realm({
       name: "test",
       mounts: (r) => mountModules(r, { root }),
+      onEffect: (effect) => effects.push(effect),
       authorize: (request) =>
         request.name === "fs.rm" ? "no deleting files" : undefined,
     });
@@ -395,34 +404,12 @@ describe("authorize", () => {
       .catch((e: Error) => e);
 
     expect((error as Error).message).toContain("no deleting files");
-    expect(realm.effects.at(-1)).toMatchObject({
+    expect(effects.at(-1)).toMatchObject({
       name: "fs.rm",
       status: "blocked",
       detail: "no deleting files",
     });
     expect(await readFile(target, "utf8")).toBe("still here");
-  });
-
-  it("an allowed call runs and keeps the line it was made on", async () => {
-    if (process.platform === "win32") return;
-    await writeFile(join(root, "note.txt"), "hello");
-    const realm = new Realm({
-      name: "test",
-      mounts: (r) => mountModules(r, { root }),
-      authorize: () => undefined,
-    });
-
-    const result = await realm.evaluate(
-      `import { readFile } from "node:fs/promises";\n\nexport default await readFile(${JSON.stringify(join(root, "note.txt"))});`,
-      { identifier: join(root, "probe.js") },
-    );
-
-    expect(result.value).toBe("hello");
-    expect(result.effects[0]).toMatchObject({
-      name: "fs.readFile",
-      status: "ok",
-    });
-    expect(result.effects[0]?.at.line).toBe(3);
   });
 
   it("the authorizer may take its time", async () => {
@@ -456,8 +443,7 @@ describe("kill", () => {
 
   it("an agent comes back after its realm was killed", async () => {
     const agent = new Agent({ root });
-    agent.env.add("one", `() => 1`);
-    agent.env.save();
+    selfEnv(agent).add("one", `() => 1`);
     expect(
       (
         await agent.run(
@@ -524,14 +510,12 @@ describe("waking", () => {
     const agent = new Agent({ root });
 
     await expect(agent.run(`export default 1;`)).rejects.toThrow(/boom/);
-    expect(agent.awake).toBe(false);
 
     // The failed attempt is not remembered as a wake: the next run tries again.
     await expect(agent.run(`export default 2;`)).rejects.toThrow(/boom/);
 
     await writeFile(join(root, "env.js"), `export const fixed = 2;\n`);
     expect((await agent.run(`export default 3;`)).value).toBe(3);
-    expect(agent.awake).toBe(true);
   });
 });
 

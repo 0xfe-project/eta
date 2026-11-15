@@ -117,13 +117,4 @@ describe("forkChain", () => {
     expect(next.parentId).toBe(c.id);
     expect(g.tipId()).not.toBe(next.id);
   });
-
-  it("a fork carries no back-pointer to the source session", () => {
-    const { g, c } = chain4();
-    const fork = forkChain(g, { entryId: c.id });
-    for (const entry of fork.entries) {
-      expect(Object.keys(entry)).not.toContain("parentSessionId");
-      expect(Object.keys(entry)).not.toContain("sourceSessionId");
-    }
-  });
 });

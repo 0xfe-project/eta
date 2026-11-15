@@ -70,31 +70,39 @@ describe("closing one session while another runs", () => {
       modelsFor: () =>
         fakeModels([
           assistantMessage({
-            content: [{ type: "text", text: "first answer" }],
+            content: [{ type: "text", text: "an answer" }],
             stopReason: "stop",
           }),
         ]) as never,
     });
     const session = await sessions.create({ cwd: "/work" });
     session.session.kernel.inject(userMsg("first question"));
-    await session.session.runner.run();
+    const turn = session.session.runner.run();
+    // Closed while its own run is still in flight.
+    expect(session.session.runner.running).toBe(true);
+    expect(await sessions.close(session.meta.id)).toBe(true);
+    await turn;
 
-    // Close it, open it again: the transcript comes back from the journal, not
-    // from a live object.
-    await sessions.close(session.meta.id);
+    // Open it again: the transcript comes back from the journal, not from a live
+    // object, and starts with the question the run had adopted.
     const reopened = await sessions.session(session.meta.id);
     expect(reopened).toBeDefined();
-    expect(reopened!.session.log.transcript()).toHaveLength(2);
-    expect(JSON.stringify(reopened!.session.log.transcript())).toContain(
-      "first answer",
-    );
-    expect(reopened!.session.log.transcript()).toHaveLength(2);
+    expect(reopened).not.toBe(session);
+    const texts = () =>
+      reopened!.session.log
+        .transcript()
+        .map((message) => JSON.stringify(message));
+    expect(texts()[0]).toContain("first question");
     expect(reopened!.meta.cwd).toBe("/work");
 
     // A new turn on the reopened session continues that transcript.
+    const before = texts().length;
     reopened!.session.kernel.inject(userMsg("second question"));
-    await reopened!.session.runner.run();
-    expect(reopened!.session.log.transcript()).toHaveLength(4);
+    expect((await reopened!.session.runner.run()).status).toBe("completed");
+    expect(texts().slice(before)).toEqual([
+      expect.stringContaining("second question"),
+      expect.stringContaining("an answer"),
+    ]);
     await sessions.closeAll();
   });
 });

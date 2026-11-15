@@ -240,7 +240,7 @@ function ModelStep({
     });
   else choices = choicesOfRuntime(runtime.info);
 
-  const rows = modelRows(choices, agent.model, t);
+  const rows = modelRows(choices, agent.model, t, agent.runtime !== "eta");
   return (
     <LayerFrame
       title={t("modelFor", { name: agent.name })}
@@ -258,7 +258,7 @@ function ModelStep({
           onPick(
             model,
             model === null
-              ? t("settingsModel")
+              ? t("runtimeDefaultModel")
               : choice === undefined
                 ? model
                 : choiceText(choice),

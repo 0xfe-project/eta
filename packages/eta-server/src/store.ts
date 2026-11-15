@@ -57,11 +57,6 @@ export type SessionListing =
   | { ok: true; id: string; meta: SessionMeta }
   | { ok: false; id: string; reason: string };
 
-/** What a store starts with: the sessions a restart would have found. */
-export type SessionSeed =
-  | { meta: SessionMeta; storage?: StorageService }
-  | { id: string; broken: string };
-
 export interface SessionStore {
   /** Put a new session in the store, with the metadata the caller chose. */
   create: (meta: SessionMeta) => Promise<StoredSession>;

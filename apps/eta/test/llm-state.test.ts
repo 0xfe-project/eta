@@ -149,7 +149,7 @@ describe("an account's state", () => {
     ).toBe("disabled");
   });
 
-  it("is an API key's last four characters, disabled when it excludes every model", () => {
+  it("is an API key's last four characters, and disabled when the key is", () => {
     const key = keyConnection({
       authIndex: "k1",
       connector: "gemini",

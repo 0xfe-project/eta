@@ -1,6 +1,7 @@
 import type { RoutineSummary } from "@/queries/routines";
 
 import type { Task } from "@/queries/tasks";
+import { runningFirst } from "@eta/client-contracts";
 import { ROUTINES_VISIBLE } from "@/lib/features";
 import { listSeparator, translate } from "@/lib/i18n";
 import { usePendingInteractions } from "@/queries/inbox";
@@ -51,11 +52,15 @@ export function useAttention() {
   const interactions = usePendingInteractions().length;
   const { tasks: board } = useTasks();
   const { routines } = useRoutines();
-  const tasks = board.flatMap((task) => {
-    const reason = taskReason(task);
-    const alert = task.status === "blocked";
-    return reason ? [{ task, reason, alert }] : [];
-  });
+  // The board's order, newest first; within a status, a task that runs before one that waits.
+  const tasks = runningFirst(
+    board.flatMap((task) => {
+      const reason = taskReason(task);
+      const alert = task.status === "blocked";
+      return reason ? [{ task, reason, alert }] : [];
+    }),
+    (item) => item.task,
+  );
   // routine is not offered in this build: a report the reader cannot open is not something waiting
   // for them, and counting it would leave a badge no page can clear.
   const waiting = ROUTINES_VISIBLE

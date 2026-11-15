@@ -476,6 +476,31 @@ const PI_PROVIDERS: Readonly<Record<string, Provider<Api>>> = {
   "zai-coding-cn": zaiCodingCnProvider(),
 };
 
+/**
+ * The Chat Completions fields the catalog says a kind takes, as pi-ai's `compat`, for a kind pi-ai
+ * has no provider of its own for (Eta Token Plan). pi-ai recognises its own providers by their
+ * address and knows their fields; it reads any other address as OpenAI itself, which sends
+ * `store`, the `developer` role and `max_completion_tokens` — fields a gateway may refuse.
+ */
+export function catalogCompat(
+  kind: ProviderKind | undefined,
+): Record<string, unknown> | undefined {
+  if (kind === undefined || isCustomKind(kind) || kind in PI_PROVIDERS)
+    return undefined;
+  const runtime = providerDefinitionForKind(kind)?.runtime;
+  if (runtime?.adapter !== "openai-chat") return undefined;
+  const compat: Record<string, unknown> = {
+    ...(runtime.developerRole === undefined
+      ? {}
+      : { supportsDeveloperRole: runtime.developerRole }),
+    ...(runtime.store === undefined ? {} : { supportsStore: runtime.store }),
+    ...(runtime.maxTokensField === undefined
+      ? {}
+      : { maxTokensField: runtime.maxTokensField }),
+  };
+  return Object.keys(compat).length === 0 ? undefined : compat;
+}
+
 export function providerDefinitionForKind(
   kind?: ProviderKind,
 ): ProviderCatalogEntry | undefined {

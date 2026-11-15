@@ -70,10 +70,15 @@ describe("eta module imports", () => {
         `// eta:by hand\n`,
     );
 
-    // Self layer is empty
+    // Self layer's own env.js imports outward, from the project layer.
     writeFileSync(
       join(selfDir, "env.js"),
-      `// @capabilities []\nimport eta from "eta";\n\n// eta:generated\n\n// eta:by hand\n`,
+      `import shout from "eta:project:shout";\n\n` +
+        `// @capabilities []\n` +
+        `import eta from "eta";\n\n` +
+        `// eta:generated\n\n` +
+        `// eta:by hand\n` +
+        `eta.define("loud", (text) => shout(text) + "!", {});\n`,
     );
 
     const agent = new Agent({
@@ -81,12 +86,11 @@ describe("eta module imports", () => {
       project: projectDir,
     });
 
-    // User code imports from project layer
     const result = await agent.run(
-      `import shout from "eta:project:shout";\nexport default shout("hello from self");`,
+      `import loud from "eta:loud";\nexport default loud("hello from self");`,
     );
 
-    expect(result.value).toBe("HELLO FROM SELF");
+    expect(result.value).toBe("HELLO FROM SELF!");
   });
 
   it("blocks inward resolution: project cannot import from self", async () => {
@@ -123,7 +127,7 @@ describe("eta module imports", () => {
     ).rejects.toThrow(/Layer project cannot import from layer self/);
   });
 
-  it("eta:name resolves by priority: self > project > global", async () => {
+  it("eta:name resolves by priority: project before global", async () => {
     // Global layer defines format
     writeFileSync(
       join(globalDir, "env.js"),
@@ -205,59 +209,26 @@ describe("eta module imports", () => {
     expect(result.value).toBe("from global");
   });
 
-  it("cache key includes layer name to avoid cross-agent pollution", async () => {
-    // Project layer defines shout
-    writeFileSync(
-      join(projectDir, "env.js"),
-      `// @capabilities [{"name":"shout","source":"(text) => \\"PROJECT\\"","meta":{}}]\n` +
-        `import eta from "eta";\n\n` +
-        `// eta:generated\n\n` +
-        `// eta:capability shout\n` +
-        `eta.define("shout", (text) => "PROJECT", {});\n` +
-        `// eta:end\n\n` +
-        `// eta:by hand\n`,
+  it("cache key includes layer name, so one name in two layers stays two modules", async () => {
+    const define = (value: string) =>
+      `// @capabilities [{"name":"shout","source":"(text) => \\"${value}\\"","meta":{}}]\n` +
+      `import eta from "eta";\n\n` +
+      `// eta:generated\n\n` +
+      `// eta:capability shout\n` +
+      `eta.define("shout", (text) => "${value}", {});\n` +
+      `// eta:end\n\n` +
+      `// eta:by hand\n`;
+    writeFileSync(join(projectDir, "env.js"), define("PROJECT"));
+    writeFileSync(join(selfDir, "env.js"), define("SELF"));
+
+    const agent = new Agent({ root: selfDir, project: projectDir });
+    // One realm, one module cache: whichever is linked first must not answer for the other.
+    const result = await agent.run(
+      `import fromProject from "eta:project:shout";\n` +
+        `import nearest from "eta:shout";\n` +
+        `export default [fromProject("x"), nearest("x")];`,
     );
 
-    // Agent 1: self layer empty
-    const self1 = join(tmpdir(), `agent1-${Date.now()}`);
-    mkdirSync(self1, { recursive: true });
-    writeFileSync(
-      join(self1, "env.js"),
-      `// @capabilities []\nimport eta from "eta";\n\n// eta:generated\n\n// eta:by hand\n`,
-    );
-
-    // Agent 2: self layer also defines shout (different implementation)
-    const self2 = join(tmpdir(), `agent2-${Date.now()}`);
-    mkdirSync(self2, { recursive: true });
-    writeFileSync(
-      join(self2, "env.js"),
-      `// @capabilities [{"name":"shout","source":"(text) => \\"SELF2\\"","meta":{}}]\n` +
-        `import eta from "eta";\n\n` +
-        `// eta:generated\n\n` +
-        `// eta:capability shout\n` +
-        `eta.define("shout", (text) => "SELF2", {});\n` +
-        `// eta:end\n\n` +
-        `// eta:by hand\n`,
-    );
-
-    const agent1 = new Agent({ root: self1, project: projectDir });
-    const agent2 = new Agent({ root: self2, project: projectDir });
-
-    // Agent 1: eta:shout resolves to project layer
-    const result1 = await agent1.run(
-      `import shout from "eta:shout";\nexport default shout("test");`,
-    );
-
-    // Agent 2: eta:shout resolves to self layer (priority)
-    const result2 = await agent2.run(
-      `import shout from "eta:shout";\nexport default shout("test");`,
-    );
-
-    expect(result1.value).toBe("PROJECT");
-    expect(result2.value).toBe("SELF2");
-
-    // Clean up
-    rmSync(self1, { recursive: true, force: true });
-    rmSync(self2, { recursive: true, force: true });
+    expect(result.value).toEqual(["PROJECT", "SELF"]);
   });
 });

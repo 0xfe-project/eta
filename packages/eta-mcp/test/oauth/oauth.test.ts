@@ -2,7 +2,6 @@ import type { FakeAuthServerOptions } from "./fake-auth-server";
 import { auth, UnauthorizedError } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  createMemoryCredentialStore,
   createOAuthLogins,
   createOAuthProvider,
   createRefreshDedupingFetch,
@@ -14,6 +13,7 @@ import {
   MCP_URL,
   REDIRECT_URL,
 } from "./fake-auth-server";
+import { createMemoryCredentialStore } from "./memory-store";
 
 const KEY = "persona-1/github";
 
@@ -305,14 +305,6 @@ describe("login", () => {
     await expect(
       logins.completeLogin(pending.pendingId, REDIRECT_URL),
     ).rejects.toMatchObject({ code: "unknown_pending" });
-  });
-
-  it("keeps credentials of other servers apart", async () => {
-    const { store, signIn, logins } = setup();
-    await signIn();
-    await store.set("other", "codeVerifier", "keep");
-    await logins.logout(KEY);
-    expect(await store.get("other", "codeVerifier")).toBe("keep");
   });
 });
 

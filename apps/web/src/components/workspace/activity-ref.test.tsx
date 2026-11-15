@@ -1,6 +1,5 @@
 import type { ActivityRef } from "./activity-ref";
 import { afterEach, describe, expect, it } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -9,15 +8,11 @@ import {
 } from "@tanstack/react-router";
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
+import { cleanup, flush, mount as render } from "@/test-render";
 import { ActivityRefCard } from "./activity-ref";
 
 // A thing a task, a routine or an artifact points at links to it from a card; the right panel's
 // task, routine and artifact blocks draw them.
-
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
 
 const task: ActivityRef = {
   kind: "task",
@@ -48,16 +43,8 @@ async function mount(
     }),
     history: createMemoryHistory({ initialEntries: [path] }),
   });
-  const container = document.createElement("div");
-  document.body.append(container);
-  await act(async () => {
-    createRoot(container).render(
-      <QueryClientProvider client={new QueryClient()}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>,
-    );
-    await router.load();
-  });
+  const { container } = await render(<RouterProvider router={router} />);
+  await act(async () => router.load());
   return { container, router };
 }
 
@@ -84,9 +71,7 @@ const cards = (c: HTMLElement) =>
   }));
 
 describe("activity ref cards", () => {
-  afterEach(() => {
-    document.body.innerHTML = "";
-  });
+  afterEach(cleanup);
 
   it("opens the task beside the chat", async () => {
     const { container } = await mount([task]);
@@ -144,10 +129,10 @@ describe("activity ref cards", () => {
       path: "/tasks",
     });
     expect(cards(container)[0].href).toBe("/tasks?task=t1");
-    await act(async () => {
-      container.querySelector<HTMLAnchorElement>('[role="log"] a')!.click();
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    });
+    await act(async () =>
+      container.querySelector<HTMLAnchorElement>('[role="log"] a')!.click(),
+    );
+    await flush(10);
     expect(router.state.location.pathname).toBe("/tasks");
     expect(router.state.location.search).toEqual({ task: "t1" });
   });

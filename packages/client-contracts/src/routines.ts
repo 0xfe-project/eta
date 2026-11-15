@@ -113,7 +113,10 @@ export interface RoutineInfo {
   name: string;
   /** The conversation a report is posted into, as a system row. Null posts nowhere. */
   conversationId: string | null;
-  /** `provider:modelId`; null means whatever the settings choose. */
+  /**
+   * `provider:modelId`. A routine runs on eta's own loop, which has no default model: the host
+   * refuses one without, and a run of one left from before fails, saying to choose.
+   */
   model: string | null;
   schedule: RoutineSchedule;
   timezone: string;
@@ -170,7 +173,7 @@ export interface RoutineFields {
   schedule: RoutineSchedule;
   /** An IANA zone, for example `Asia/Shanghai`. */
   timezone: string;
-  /** `provider:modelId`; null or omitted means whatever the settings choose. */
+  /** `provider:modelId`. Required on create; an update may leave it out, never clear it. */
   model?: string | null;
   /** Where a sent report is posted. */
   conversationId?: string | null;
@@ -179,7 +182,7 @@ export interface RoutineFields {
 /** Valid requests from a client. The server still validates untrusted JSON at runtime. */
 export interface RoutineArgs {
   /** On the clock from the moment it exists, unless `enabled` is false. */
-  create: RoutineFields & { enabled?: boolean };
+  create: RoutineFields & { model: string; enabled?: boolean };
   /** A `brief` that differs from the newest version is written as the next one. */
   update: { routineId: string } & Partial<RoutineFields> & {
       enabled?: boolean;

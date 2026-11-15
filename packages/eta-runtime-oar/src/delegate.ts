@@ -23,6 +23,11 @@
  * - **`/compact`** is the runtime's own (`Session.compact`), between turns only. It holds the
  *   runtime's input while it works, so a run that starts meanwhile waits for it. A session not
  *   open yet is opened just for that: its host tools need a run to serve them.
+ * - **A turn the runtime opens itself** (Claude Code answering a background task's
+ *   notification, after the run that started the task ended) is a run too: the delegate watches
+ *   the runtime between runs, and the first sign of such a turn asks the host for a run
+ *   (`wake`). That run follows the turn from where it began, so its words reach the transcript
+ *   and the host's tools have a run to serve them, as for a turn eta prompted.
  */
 import type {
   CompactionOutcome,
@@ -78,6 +83,11 @@ export interface OarDelegateOptions {
   mcpServers?: readonly McpServer[] | undefined;
   /** Arguments for the runtime's process, on every open. */
   launchArgs?: readonly string[] | undefined;
+  /**
+   * The runtime began a turn of its own and no run is following it: start a run (its opening may
+   * be empty), now or once the run in flight ends. Without one, such a turn goes unheard.
+   */
+  wake?: ((wanted: () => boolean) => void) | undefined;
   warn: (message: string) => void;
 }
 
@@ -133,6 +143,17 @@ function joined(inputs: readonly Input[]): Input {
 
 const isEmpty = (input: Input): boolean =>
   input.text === "" && input.images.length === 0;
+
+/** The facts that say the root agent is working: one seen between runs is a turn of its own. */
+const TURN_SIGNS: ReadonlySet<Event["kind"]> = new Set([
+  "turn_active",
+  "reasoning",
+  "text_delta",
+  "tool_call_started",
+]);
+
+/** How a turn starts: eta prompts it, or the runtime began it at `seq` and the run follows it. */
+type TurnStart = { prompt: Input } | { adopt: number };
 
 /** The runtime's own id for the model the session is on; undefined means its default. */
 export function modelFor(
@@ -227,6 +248,12 @@ export class OarDelegate implements RunDelegate {
   #calls: HostCalls | undefined;
   /** What was taken for a turn and never reached the runtime: it opens the next prompt. */
   readonly #undelivered: Input[] = [];
+  /** Whether a turn of this delegate's is listening to the runtime: what it hears is that turn's. */
+  #following = false;
+  /** Where a turn the runtime began on its own starts in its stream, until a run follows it. */
+  #adopted: number | undefined;
+  /** Stops watching the runtime between runs. */
+  #unwatch: (() => void) | undefined;
   /** The compaction in flight; it never rejects. */
   #compacting: Promise<RuntimeCompaction> | undefined;
   /** Stops waiting for the compaction in flight. */
@@ -265,25 +292,27 @@ export class OarDelegate implements RunDelegate {
         ...this.#undelivered.splice(0),
         inputOf(context.opening),
       ]);
-      const agentPrompt = opened.prompted
-        ? undefined
-        : this.#options.agentPrompt();
-      if (agentPrompt !== undefined) {
-        input = {
-          ...input,
-          text: `<agent>\n${agentPrompt}\n</agent>\n\n${input.text}`,
-        };
-        opened.prompted = true;
-      }
       for (;;) {
+        // A turn the runtime began itself comes first: a prompt now would find it busy.
+        const adopted = this.#adopted;
+        this.#adopted = undefined;
+        let start: TurnStart;
+        if (adopted !== undefined) start = { adopt: adopted };
+        else if (isEmpty(input)) return { status: "completed" };
+        else {
+          start = { prompt: this.#introduced(opened, input) };
+          input = { text: "", images: [] };
+        }
         const outcome = await this.#turn(
           opened.session,
           translator,
-          input,
+          start,
           context,
         );
         this.#charged = translator.charged;
         if (outcome.kind !== "completed") {
+          // What was not prompted yet waits for the next run.
+          if (!isEmpty(input)) this.#undelivered.unshift(input);
           return outcome.kind === "aborted"
             ? { status: "aborted" }
             : {
@@ -291,18 +320,56 @@ export class OarDelegate implements RunDelegate {
                 error: failureOf(outcome) ?? "the turn failed",
               };
         }
-        if (context.signal.aborted) return { status: "aborted" };
+        if (context.signal.aborted) {
+          if (!isEmpty(input)) this.#undelivered.unshift(input);
+          return { status: "aborted" };
+        }
         // What arrived while the turn ran, and did not reach it, opens the next one.
         input = joined([
+          input,
           ...this.#undelivered.splice(0),
           inputOf(context.take({ followUps: true })),
         ]);
-        if (isEmpty(input)) return { status: "completed" };
       }
     } finally {
       this.#run = undefined;
       this.#calls = undefined;
+      // A turn the runtime began as this run was ending gets a run of its own.
+      if (this.#adopted !== undefined) this.#wake();
     }
+  }
+
+  /** Ask the host for a run to follow the turn the runtime began, while nothing has taken it. */
+  #wake(): void {
+    this.#options.wake?.(() => this.#adopted !== undefined && !this.#disposed);
+  }
+
+  /** The agent's words go with the first prompt a runtime that took no system prompt hears. */
+  #introduced(opened: Opened, input: Input): Input {
+    if (opened.prompted) return input;
+    const agentPrompt = this.#options.agentPrompt();
+    opened.prompted = true;
+    if (agentPrompt === undefined) return input;
+    return {
+      ...input,
+      text: `<agent>\n${agentPrompt}\n</agent>\n\n${input.text}`,
+    };
+  }
+
+  /**
+   * Between runs, the runtime is watched: the first sign of a root turn nobody prompted marks
+   * where it began and asks for a run to follow it. A turn of this delegate's hears its own.
+   */
+  #watch(session: Session): void {
+    this.#unwatch?.();
+    this.#unwatch = session.events((event: Event) => {
+      if (this.#following || this.#adopted !== undefined) return;
+      if (this.#opened?.session !== session) return;
+      if (event.sessionId !== session.id || event.agentPath.length > 0) return;
+      if (!TURN_SIGNS.has(event.kind)) return;
+      this.#adopted = event.seq;
+      this.#wake();
+    });
   }
 
   /**
@@ -384,6 +451,9 @@ export class OarDelegate implements RunDelegate {
     const opened =
       this.#opened ?? (await this.#opening?.catch(() => undefined));
     this.#opened = undefined;
+    this.#unwatch?.();
+    this.#unwatch = undefined;
+    this.#adopted = undefined;
     await opened?.session.dispose().catch(() => undefined);
     await this.#served?.close().catch(() => undefined);
     this.#served = undefined;
@@ -417,12 +487,16 @@ export class OarDelegate implements RunDelegate {
     if (current !== undefined) {
       // Other settings: let this one go and resume its conversation under the new ones.
       this.#opened = undefined;
+      this.#unwatch?.();
+      this.#unwatch = undefined;
+      this.#adopted = undefined;
       this.#resume = current.session.id;
       await current.session.dispose().catch(() => undefined);
     }
     this.#opening = this.#open(context, settings);
     try {
       this.#opened = await this.#opening;
+      this.#watch(this.#opened.session);
       return this.#opened;
     } finally {
       this.#opening = undefined;
@@ -589,25 +663,35 @@ export class OarDelegate implements RunDelegate {
     };
   }
 
-  /** One prompt and the runtime's turn on it, told through the translator. */
+  /**
+   * One runtime turn, told through the translator: one eta prompts, or one the runtime began
+   * itself, heard again from where it began.
+   */
   async #turn(
     session: Session,
     translator: Translator,
-    input: Input,
+    start: TurnStart,
     context: RunDelegateContext,
   ): Promise<TurnOutcome> {
-    const prompt = await this.#deliverable(session, input);
+    const prompt =
+      "prompt" in start
+        ? await this.#deliverable(session, start.prompt)
+        : undefined;
     // The steers in flight, one after another; each ends when its fate is known.
     let steering: Promise<void> = Promise.resolve();
+    this.#following = true;
     const outcome = await new Promise<TurnOutcome>((resolve) => {
       let settled = false;
       const offs: (() => void)[] = [];
       /** Steers the runtime took, until a turn answers for them. */
       const accepted = new Map<string, Input>();
       let ended: TurnOutcome | undefined;
+      /** The seq of the turn's end: only what rides with it (its usage) is still this turn's. */
+      let endedAt: number | undefined;
       const settle = (outcome: TurnOutcome): void => {
         if (settled) return;
         settled = true;
+        this.#following = false;
         for (const off of offs) off();
         // Taken and never answered: the runtime is gone, or the turn was cut short.
         this.#undelivered.push(...accepted.values());
@@ -621,47 +705,57 @@ export class OarDelegate implements RunDelegate {
       offs.push(
         // Observers hear a record in the order they came, and a call's name can be in its frame.
         session.rawEvents((record) => this.#calls?.see(record)),
-        session.events((event: Event) => {
-          if (settled) return;
-          translator.see(event);
-          if (event.agentPath.length > 0) return;
-          if (event.kind === "turn_ended") {
-            // A runtime that names the inputs of a turn can show a steer it took too late for
-            // this one (claude reads them from its stdin): that opens a turn of its own, and
-            // the run lasts until that one ends.
-            if (event.inputIds === undefined) accepted.clear();
-            for (const id of event.inputIds ?? []) accepted.delete(id);
-            ended = event.outcome;
-            if (accepted.size > 0 && ended.kind === "completed") return;
-            // The turn's usage rides in the same frame, right after its end.
-            setTimeout(settle, 0, ended);
-          } else if (event.kind === "exited") {
-            this.#lost(session);
-            settle({
-              kind: "failed",
-              failure: "runtime_exited",
-              reason: `${this.#options.runtime} exited${event.code === null ? "" : ` with code ${event.code}`}${event.reason === undefined ? "" : `: ${event.reason}`}`,
-            });
-          } else if (event.kind === "input_dropped") {
-            const dropped = accepted.get(event.inputId);
-            if (dropped !== undefined) {
-              // It comes back to us, and may have been all a finished turn was waiting for.
-              accepted.delete(event.inputId);
-              this.#undelivered.push(dropped);
-              if (ended !== undefined && accepted.size === 0)
-                setTimeout(settle, 0, ended);
-            } else if (
-              event.inputId === inputId &&
-              event.reason === "runtime_refused"
-            ) {
+        session.events(
+          (event: Event) => {
+            if (settled) return;
+            // Once the turn has ended, what follows is the runtime's next turn, the watcher's to hear.
+            if (endedAt !== undefined && event.seq !== endedAt) return;
+            translator.see(event);
+            if (event.agentPath.length > 0) return;
+            if (event.kind === "turn_ended") {
+              // A runtime that names the inputs of a turn can show a steer it took too late for
+              // this one (claude reads them from its stdin): that opens a turn of its own, and
+              // the run lasts until that one ends.
+              if (event.inputIds === undefined) accepted.clear();
+              for (const id of event.inputIds ?? []) accepted.delete(id);
+              ended = event.outcome;
+              if (accepted.size > 0 && ended.kind === "completed") return;
+              endedAt = event.seq;
+              this.#following = false;
+              // The turn's usage rides in the same frame, right after its end.
+              setTimeout(settle, 0, ended);
+            } else if (event.kind === "exited") {
+              this.#lost(session);
               settle({
                 kind: "failed",
-                failure: event.failure ?? "invalid_request",
-                reason: event.message ?? "the runtime refused the prompt",
+                failure: "runtime_exited",
+                reason: `${this.#options.runtime} exited${event.code === null ? "" : ` with code ${event.code}`}${event.reason === undefined ? "" : `: ${event.reason}`}`,
               });
+            } else if (event.kind === "input_dropped") {
+              const dropped = accepted.get(event.inputId);
+              if (dropped !== undefined) {
+                // It comes back to us, and may have been all a finished turn was waiting for.
+                accepted.delete(event.inputId);
+                this.#undelivered.push(dropped);
+                if (ended !== undefined && accepted.size === 0)
+                  setTimeout(settle, 0, ended);
+              } else if (
+                event.inputId === inputId &&
+                event.reason === "runtime_refused"
+              ) {
+                settle({
+                  kind: "failed",
+                  failure: event.failure ?? "invalid_request",
+                  reason: event.message ?? "the runtime refused the prompt",
+                });
+              }
             }
-          }
-        }),
+          },
+          // A turn the runtime began itself is heard from its first sign, which came before this.
+          "adopt" in start
+            ? { cursor: { sessionId: session.id, afterSeq: start.adopt - 1 } }
+            : undefined,
+        ),
       );
       /** Into the turn, or kept for the next prompt: never neither. */
       const deliver = async (
@@ -707,11 +801,15 @@ export class OarDelegate implements RunDelegate {
         });
       };
       if (context.signal.aborted) {
-        settle({ kind: "aborted" });
+        if (prompt === undefined) abort();
+        else settle({ kind: "aborted" });
         return;
       }
       context.signal.addEventListener("abort", abort, { once: true });
       offs.push(() => context.signal.removeEventListener("abort", abort));
+      // A turn the runtime began is already under way: there is nothing to prompt.
+      if (prompt === undefined || "adopt" in start) return;
+      const input = start.prompt;
       void session
         .prompt(prompt.text, {
           inputId,
@@ -719,12 +817,21 @@ export class OarDelegate implements RunDelegate {
         })
         .then(
           (result) => {
-            if (result.kind === "rejected")
-              settle({
-                kind: "failed",
-                failure: "invalid_request",
-                reason: `${result.code}: ${result.reason}`,
-              });
+            if (result.kind !== "rejected") return;
+            // The runtime began a turn of its own just now: this one follows that turn, and the
+            // prompt waits for its end.
+            if (
+              result.code === "busy" &&
+              session.status().value.kind === "running"
+            ) {
+              this.#undelivered.unshift(input);
+              return;
+            }
+            settle({
+              kind: "failed",
+              failure: "invalid_request",
+              reason: `${result.code}: ${result.reason}`,
+            });
           },
           (error: unknown) =>
             settle({

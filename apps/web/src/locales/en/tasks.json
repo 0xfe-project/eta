@@ -91,7 +91,6 @@
     "loading": "Loading records…",
     "empty": "No records yet.",
     "title": "Execution log",
-    "workspacePrefix": "Workspace ",
     "done": "Done",
     "failed": "Failed",
     "error": "Error",
@@ -102,7 +101,25 @@
     "group_one": "{{name}} · {{count}} call",
     "group_other": "{{name}} · {{count}} calls",
     "earlier": "Load earlier records",
-    "loadingEarlier": "Loading earlier records…"
+    "loadingEarlier": "Loading earlier records…",
+    "header": {
+      "status": {
+        "queued": "Queued",
+        "starting": "Starting",
+        "running": "Running",
+        "completed": "Done",
+        "failed": "Failed",
+        "interrupted": "Stopped"
+      },
+      "elapsed": "took {{duration}}",
+      "attempt": "run {{count}}",
+      "workspace": "Workspace",
+      "branch": "Branch",
+      "machine": "Machine",
+      "path": "Path",
+      "copyPath": "Copy path",
+      "pathCopied": "Path copied"
+    }
   },
   "draft": {
     "title": "Task draft",
@@ -110,7 +127,10 @@
     "editAndCreate": "Edit and confirm",
     "notCreatedHint": "Confirming creates the task; the agent that proposed it runs it in {{workspace}}.",
     "confirmTitle": "Confirm task draft",
-    "confirmDescription": "Edit the content, then confirm; the agent starts right away."
+    "confirmDescription": "Edit the content, then confirm.",
+    "startNow": "Start now",
+    "startNowHint": "Confirming starts the task right away.",
+    "backlogHint": "Confirming puts it in the backlog; it will not run until you move it to To do."
   },
   "card": {
     "title": "Task card",

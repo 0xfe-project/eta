@@ -102,7 +102,9 @@ describe("the first-time setup opening by itself", () => {
     await r.close();
   }, 90_000);
 
-  it("starts on the second step when a model is usable, and creates the ticked cards' agents with the default model", async () => {
+  it("starts on the second step when a model is usable, and creates the ticked cards' agents with the first usable model", async () => {
+    // A `defaultModel` left in config.json from before is ignored: it neither stops the host nor
+    // picks the model.
     const dataDir = await dataDirWith({
       providers: [LOCAL],
       defaultModel: "local:m2",
@@ -138,9 +140,9 @@ describe("the first-time setup opening by itself", () => {
     expect(
       agents.map((agent) => [agent.name, agent.persona, agent.model]),
     ).toEqual([
-      ["Artist", "Artist", "local:m2"],
-      ["Executor", "Executor", "local:m2"],
-      ["Thinker", "Thinker", "local:m2"],
+      ["Artist", "Artist", "local:m1"],
+      ["Executor", "Executor", "local:m1"],
+      ["Thinker", "Thinker", "local:m1"],
     ]);
     await r.close();
   }, 60_000);
@@ -155,7 +157,7 @@ describe("the first-time setup opening by itself", () => {
           wire.call("agents", "create", {
             name: "Exec",
             persona: "Executor",
-            model: "local:m1",
+            model: "local:m2",
           }),
         );
       },
@@ -182,8 +184,8 @@ describe("the first-time setup opening by itself", () => {
       "Thinker",
     ]);
     expect(grouped.Executor?.map((agent) => agent.name)).toEqual(["Exec"]);
-    // No default set in the config: the first usable model.
-    expect(grouped.Thinker?.[0]?.model).toBe("local:m1");
+    // The model last used: the TUI remembers none, so it is the newest eta agent's.
+    expect(grouped.Thinker?.[0]?.model).toBe("local:m2");
     await r.close();
   }, 60_000);
 
@@ -267,7 +269,7 @@ describe("the first-time setup: when it opens", () => {
       host: { dataDir },
       seed: async (host) => {
         await withHostWire(host, (wire) =>
-          wire.call("agents", "create", { name: "Ada" }),
+          wire.call("agents", "create", { name: "Ada", model: "ds:chat" }),
         );
       },
     });
@@ -306,7 +308,7 @@ describe("the first-time setup on a host with the model gateway", () => {
       host: { overrides: { llm: { endpoints: { gemini: google.url } } } },
       seed: async (host) => {
         await withHostWire(host, (wire) =>
-          wire.call("agents", "create", { name: "Ada" }),
+          wire.call("agents", "create", { name: "Ada", model: "llm:any" }),
         );
       },
     });
@@ -324,7 +326,10 @@ describe("the first-time setup on a host with the model gateway", () => {
       host: { overrides: { llm: { endpoints: { gemini: google.url } } } },
       seed: async (host) => {
         await withHostWire(host, async (wire) => {
-          await wire.call("agents", "create", { name: "Ada" });
+          await wire.call("agents", "create", {
+            name: "Ada",
+            model: "llm:any",
+          });
           const { login } = await wire.call<{ login: { id: string } }>(
             "llm",
             "loginStart",

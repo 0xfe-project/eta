@@ -151,8 +151,8 @@ export interface Product {
   readonly skillDirsFor: (meta: SessionMeta) => readonly string[];
   /** What a session on an external runtime gets from the agent's plugins. */
   readonly runtimeExtrasFor: (meta: SessionMeta) => Promise<RuntimeExtras>;
-  /** MCP on this machine (servers, credentials, sign-ins); absent when the host turned it off. */
-  readonly mcp: McpService | undefined;
+  /** MCP on this machine (servers, credentials, sign-ins). */
+  readonly mcp: McpService;
   /** The product's own HTTP routes (artifact pages, enrolling a machine); nothing for any other path. */
   fetch: (request: Request) => Promise<Response | undefined>;
   /** Where `sessions.*` actions for sessions on other machines go. */
@@ -211,10 +211,10 @@ export function createProduct(options: {
   /** What the update button works with, for a test; the host's own by default. */
   upgrade?: Partial<UpgradePluginOptions> | undefined;
   /**
-   * MCP for this machine's sessions and the settings page. `false` turns it off; an object is a
-   * test's tuning (the library's fetch, pointed at a fake authorization server, and its manager).
+   * MCP for this machine's sessions and the settings page is always on; this is a test's tuning
+   * (the library's fetch, pointed at a fake authorization server, and its manager).
    */
-  mcp?: false | McpTuning | undefined;
+  mcp?: McpTuning | undefined;
 }): Product {
   const { db, dataDir, warn } = options;
   const captainOn = options.captain !== false;
@@ -390,20 +390,17 @@ export function createProduct(options: {
   const mirrors = new SessionMirrors(hub, (id) => machines.get(id)?.name);
   const secretKey = loadSecretKey(dataDir);
   const emailCredentials = new EmailCredentials(db, secretKey);
-  const mcp =
-    options.mcp === false
-      ? undefined
-      : new McpService({
-          db,
-          key: secretKey,
-          dataDir,
-          home: options.home ?? homedir(),
-          agents: () => agents.list().map(({ id, name }) => ({ id, name })),
-          publicUrl: options.publicUrl,
-          changed: () => wire?.pushNow("mcp"),
-          warn,
-          ...options.mcp,
-        });
+  const mcp = new McpService({
+    db,
+    key: secretKey,
+    dataDir,
+    home: options.home ?? homedir(),
+    agents: () => agents.list().map(({ id, name }) => ({ id, name })),
+    publicUrl: options.publicUrl,
+    changed: () => wire?.pushNow("mcp"),
+    warn,
+    ...options.mcp,
+  });
   // The plugins agents use: what is on disk, what the user configured and what each may read.
   const plugins = new Plugins({
     db,
@@ -572,10 +569,13 @@ export function createProduct(options: {
   later.taskRunner = taskRunner;
   const captain = new CaptainService({
     dataDir,
+    db,
+    home: options.home ?? homedir(),
     store: captainStore,
     audit: captainAudit,
     agents,
     machines,
+    plugins,
     projects,
     conversations,
     timeline,
@@ -704,6 +704,7 @@ export function createProduct(options: {
     {
       sessionTools: engine.sessionTools,
       askObserve: engine.askObserve,
+      sessionAttach: engine.sessionAttach,
     },
     { sessionTools: runner.sessionTools },
     {
@@ -798,7 +799,7 @@ export function createProduct(options: {
     mcp,
     fetch: async (request) =>
       (await hub.route(request)) ??
-      (await mcp?.route(request)) ??
+      (await mcp.route(request)) ??
       (await artifactRoutes(request)) ??
       upgradeRoutes(request, dataDir),
     remote: router,
@@ -811,7 +812,7 @@ export function createProduct(options: {
       mirrors.detach();
       plugins.close();
       email.stop();
-      await mcp?.close();
+      await mcp.close();
       await web?.close();
     },
     async mount(server) {
@@ -844,7 +845,7 @@ export function createProduct(options: {
         "usage",
         "email",
         "plugins",
-        ...(mcp === undefined ? [] : ["mcp"]),
+        "mcp",
         ...(memory === undefined ? [] : ["memory"]),
       ]);
       let ready!: () => void;
@@ -1006,8 +1007,7 @@ export function createProduct(options: {
           applied("upgrade"),
         ),
       );
-      if (mcp !== undefined)
-        server.mount("mcp", mcpPlugin({ service: mcp }, applied("mcp")));
+      server.mount("mcp", mcpPlugin({ service: mcp }, applied("mcp")));
       if (memory !== undefined)
         server.mount(
           "memory",

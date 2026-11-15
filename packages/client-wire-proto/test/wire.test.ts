@@ -2,21 +2,15 @@
  * The pipe protocol (S8b).
  *
  * The subject is that the protocol has almost no vocabulary: four frames in, five out, and
- * a diff rule that names no field. What can be tested is the codec, the pinned frame names,
- * and — the part with real money attached — the state diff: a section whose revision did not
+ * a diff rule that names no field. What can be tested is the pinned frame names and — the
+ * part with real money attached — the state diff: a section whose revision did not
  * move is not sent, a section that went away is reported by its absence, and a client that
  * holds nothing gets everything.
  */
 
-import type { ClientFrame, ServerFrame, StateSnapshot } from "../src/index";
-import { describe, expect, it } from "vitest";
-import {
-  CLIENT_OP_NAMES,
-  decodeClientFrame,
-  encodeFrame,
-  SERVER_FRAME_TYPES,
-  stateDiff,
-} from "../src/index";
+import type { ServerFrame, StateSnapshot } from "../src/index";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import { SERVER_FRAME_TYPES, stateDiff } from "../src/index";
 
 const message = (text: string) => ({
   role: "user",
@@ -36,71 +30,8 @@ const snapshot = (overrides: Partial<StateSnapshot> = {}): StateSnapshot => ({
   ...overrides,
 });
 
-describe("the codec", () => {
-  it("round-trips a call, with and without a request id", () => {
-    const call: ClientFrame = {
-      op: "call",
-      target: "sessions",
-      action: "prompt",
-      args: { session: "s1" },
-    };
-    expect(decodeClientFrame(JSON.stringify(call))).toEqual(call);
-    const asked: ClientFrame = { ...call, requestId: "7" };
-    expect(decodeClientFrame(JSON.stringify(asked))).toEqual(asked);
-  });
-
-  it("round-trips every server frame", () => {
-    const frames: ServerFrame[] = [
-      {
-        type: "hello",
-        ops: [
-          { name: "sessions.prompt", target: "sessions", action: "prompt" },
-        ],
-        mounted: [],
-        state: {},
-      },
-      { type: "reply", requestId: "7", ok: true, result: { created: "s2" } },
-      {
-        type: "reply",
-        requestId: "8",
-        ok: false,
-        error: "unknown op: sessions.promt",
-      },
-      { type: "state", target: "sessions", version: 2, snapshot: snapshot() },
-      {
-        type: "state",
-        target: "sessions",
-        version: 3,
-        patch: {
-          sections: { metrics: { tokensPerSec: 4 } },
-          revisions: { metrics: "4.0" },
-        },
-      },
-      {
-        type: "event",
-        target: "sessions",
-        name: "message:end",
-        data: { entryId: "e2" },
-      },
-      { type: "error", message: "bad frame" },
-    ];
-    for (const frame of frames)
-      expect(JSON.parse(encodeFrame(frame))).toEqual(frame);
-  });
-
-  it("refuses a body that is not JSON, and leaves the caller to say why", () => {
-    expect(() => decodeClientFrame("not json")).toThrow();
-  });
-});
-
 describe("the vocabulary", () => {
   it("is pinned, because it is almost nothing", () => {
-    expect(CLIENT_OP_NAMES).toEqual([
-      "call",
-      "native",
-      "subscribe",
-      "unsubscribe",
-    ]);
     expect(SERVER_FRAME_TYPES).toEqual([
       "error",
       "event",
@@ -108,9 +39,10 @@ describe("the vocabulary", () => {
       "reply",
       "state",
     ]);
-    // There is no op union here: what can be called is what a running server registered,
-    // and `hello.ops` is where a client finds that out.
-    expect(Object.keys({ CallFrame: 1 })).toHaveLength(1);
+    // The list a client checks frames against is the union the server sends.
+    expectTypeOf<(typeof SERVER_FRAME_TYPES)[number]>().toEqualTypeOf<
+      ServerFrame["type"]
+    >();
   });
 });
 

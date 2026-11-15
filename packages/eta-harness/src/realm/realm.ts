@@ -196,11 +196,6 @@ export class Realm {
     }
   }
 
-  /** Effects recorded since the last {@link takeEffects}. */
-  get effects(): readonly Effect[] {
-    return this.#effects;
-  }
-
   takeEffects(): Effect[] {
     const taken = this.#effects;
     this.#effects = [];

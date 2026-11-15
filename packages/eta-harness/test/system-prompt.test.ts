@@ -7,7 +7,13 @@
  * not concatenated by accident: a persona in the middle, or memory before the
  * task list, would cost real tokens every turn.
  */
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { MemoryStorage } from "@eta/core/storage";
+import { fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
+import { openSession } from "../src/open";
 import {
   DEFAULT_SYSTEM_PROMPT,
   GOAL_CONTINUATION,
@@ -119,22 +125,24 @@ describe("the composer", () => {
     );
   });
 
-  it("ships the base prompt and the builtin personas", () => {
+  it("ships the base prompt and the builtin personas", async () => {
     // The base names no agent: who the agent is arrives in the platform section.
     expect(DEFAULT_SYSTEM_PROMPT).not.toContain("You are Eta");
-    // It describes every tool a session is given by default, by the name it is registered under.
-    for (const tool of [
-      "create_step",
-      "update_step",
-      "list_steps",
-      "get_step",
-      "esmrun",
-      "esmrunandkeep",
-      "list_capabilities",
-      "read_state",
-      "ask_user",
-    ])
-      expect(DEFAULT_SYSTEM_PROMPT).toMatch(new RegExp(`\\b${tool}\\b`));
+    // It describes every tool a fully equipped session is given, by the name it is
+    // registered under — read from the session, not copied here.
+    const session = await openSession({
+      storage: new MemoryStorage(),
+      models: fakeModels([]) as never,
+      ask: true,
+      esm: { root: await mkdtemp(join(tmpdir(), "system-prompt-")) },
+    });
+    const registered = session.kernel.tools.list().map((tool) => tool.name);
+    session.stop();
+    await session.kernel.dispose();
+    expect(registered).toContain("esmrun");
+    expect(registered).toContain("ask_user");
+    for (const tool of registered)
+      expect(DEFAULT_SYSTEM_PROMPT, tool).toMatch(new RegExp(`\\b${tool}\\b`));
     // The tools the realm replaced are gone from it.
     for (const tool of ["bash", "update_state", "check_state", "Agent"])
       expect(DEFAULT_SYSTEM_PROMPT).not.toMatch(new RegExp(`\\b${tool}\\b`));

@@ -43,6 +43,14 @@ export interface SessionRuntimeInput {
   mcpServers?: readonly SessionMcpServer[] | undefined;
   /** Arguments for the runtime's process; a runtime's own way of being told something. */
   launchArgs?: readonly string[] | undefined;
+  /**
+   * The runtime began a turn nobody asked for (Claude Code answering a background task's
+   * notification): start a run for it, now or once the run in flight has ended. The run's
+   * opening is whatever the inbox holds, which may be nothing; the delegate follows the turn.
+   * `wanted` is asked again before a deferred start: a run that began meanwhile may have taken
+   * the turn already.
+   */
+  wake?: ((wanted: () => boolean) => void) | undefined;
 }
 
 /** What a session on an external runtime gets from the host beyond its tools. */

@@ -20,9 +20,6 @@ import { watch } from "node:fs";
 import process from "node:process";
 import { discoverPersonas, resolvePersona, summarize } from "../personas";
 
-/** The actions this target has. One list, so the wire and the plugin cannot disagree. */
-export const PERSONA_ACTIONS = ["reload", "set"] as const;
-
 export interface PersonasPluginOptions {
   manager: SessionManager;
   home: string;

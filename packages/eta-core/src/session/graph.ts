@@ -154,14 +154,6 @@ export class EntryGraph {
     return this.path().reverse();
   }
 
-  /** Whether `ancestorId` is on the single-parent chain above `entryId`. */
-  isAncestorOf(
-    ancestorId: string,
-    entryId: string | null = this.tipEntryId,
-  ): boolean {
-    return this.chain(entryId).some((e) => e.id === ancestorId);
-  }
-
   size(): number {
     return this.entries.size;
   }

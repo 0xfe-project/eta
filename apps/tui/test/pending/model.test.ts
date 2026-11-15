@@ -118,9 +118,27 @@ function state(sections: {
   };
 }
 
+const withRun = (
+  view: BoardTaskView,
+  runStatus: BoardTaskView["runStatus"],
+): BoardTaskView => ({ ...view, runStatus });
+
 describe("what is waiting", () => {
   it("is empty before the inbox and the board arrive", () => {
     expect(pendingItems(state({}))).toEqual([]);
+  });
+
+  it("puts a task that runs before a queued one of its status, whatever their times", () => {
+    const s = state({
+      tasks: [
+        withRun(task("t1", "in_review", 10), "queued"),
+        withRun(task("t2", "in_review", 20), "running"),
+      ],
+    });
+    expect(pendingItems(s).map((item) => item.key)).toEqual([
+      "task:t2",
+      "task:t1",
+    ]);
   });
 });
 
@@ -149,6 +167,17 @@ describe("the panel's conversations", () => {
 describe("the open tasks", () => {
   it("are none, and none closed, before the board arrives", () => {
     expect(openTasks(state({}))).toEqual({ open: [], closed: 0 });
+  });
+
+  it("put a task that runs before a queued one of its status, even one that moved later", () => {
+    const s = state({
+      tasks: [
+        withRun(task("t1", "in_progress", 10), "running"),
+        withRun(task("t2", "in_progress", 30), "queued"),
+        withRun(task("t3", "todo", 20), null),
+      ],
+    });
+    expect(openTasks(s).open.map((t) => t.id)).toEqual(["t1", "t3", "t2"]);
   });
 });
 

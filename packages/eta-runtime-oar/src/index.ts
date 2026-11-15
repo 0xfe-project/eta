@@ -60,6 +60,7 @@ export function createOarRuntimes(
         hostTools: input.hostTools,
         mcpServers: input.mcpServers,
         launchArgs: input.launchArgs,
+        wake: input.wake,
         warn,
       });
       return {

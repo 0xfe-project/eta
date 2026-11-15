@@ -66,13 +66,13 @@ function subscribe(listener: () => void) {
 }
 
 /** Whether the reader left this card open, or `undefined` when they never said. */
-export function foldChoice(id: string): boolean | undefined {
+function foldChoice(id: string): boolean | undefined {
   const choice = choices()[id];
   return choice === undefined ? undefined : choice === 1;
 }
 
 /** Say how the reader left it, dropping what was heard first once past the cap. */
-export function rememberFold(id: string, open: boolean): void {
+function rememberFold(id: string, open: boolean): void {
   const known = choices();
   known[id] = open ? 1 : 0;
   for (const stale of Object.keys(known).slice(0, -KEEP)) delete known[stale];

@@ -5,7 +5,6 @@ import {
   ANTI_SPIN_LIMIT,
   applyGoalEntries,
   GoalService,
-  lastMessageShowsIntent,
   MAX_CONTINUATIONS,
 } from "../src/kernel/goal";
 import { kernelOn } from "../src/types/events";
@@ -199,15 +198,6 @@ describe("replay", () => {
   });
 });
 
-describe("intent detection", () => {
-  it("matches intent phrases case-insensitively", () => {
-    expect(lastMessageShowsIntent("Now let me wire the storage layer.")).toBe(
-      true,
-    );
-    expect(lastMessageShowsIntent("Done. The tests pass.")).toBe(false);
-  });
-});
-
 // Every point below is a line of eta-agent's GoalManager, checked one by one.
 describe("goal fidelity against eta-agent's GoalManager", () => {
   it("blockedReason survives a pause and is cleared by resume", () => {
@@ -311,50 +301,26 @@ describe("goal fidelity against eta-agent's GoalManager", () => {
   });
 
   it("replay ignores unknown payload kinds and applies the known ones in order", () => {
-    const { goal, dispose } = withGoal();
-    applyGoalEntries(goal, [
-      {
-        id: "1",
-        parentId: null,
-        seq: 1,
+    const { goal, events, dispose } = withGoal();
+    const kinds = ["set", "bogus", "pause", "resume", "pause"];
+    applyGoalEntries(
+      goal,
+      kinds.map((kind, index) => ({
+        id: `${index + 1}`,
+        parentId: index === 0 ? null : `${index}`,
+        seq: index + 1,
         timestamp: 0,
         type: "goal",
-        payload: { kind: "set", objective: "a" },
-      },
-      {
-        id: "2",
-        parentId: "1",
-        seq: 2,
-        timestamp: 0,
-        type: "goal",
-        payload: { kind: "pause", reason: "spin" },
-      },
-      {
-        id: "3",
-        parentId: "2",
-        seq: 3,
-        timestamp: 0,
-        type: "goal",
-        payload: { kind: "resume" },
-      },
-      {
-        id: "4",
-        parentId: "3",
-        seq: 4,
-        timestamp: 0,
-        type: "goal",
-        payload: { kind: "achieved" },
-      },
-      {
-        id: "5",
-        parentId: "4",
-        seq: 5,
-        timestamp: 0,
-        type: "goal",
-        payload: { kind: "cleared" },
-      },
-    ]);
-    expect(goal.current).toBeUndefined();
+        payload: { kind, objective: "a" } as GoalEntry["payload"],
+      })),
+    );
+    // The unknown kind left no transition behind, and the known ones ran in
+    // journal order: a resume applied after the last pause would leave the
+    // goal active.
+    expect(
+      events.map((event) => (event.payload as { kind: string }).kind),
+    ).toEqual(["set", "pause", "resume", "pause"]);
+    expect(goal.current?.status).toBe("paused");
     dispose();
   });
 });

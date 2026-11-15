@@ -189,6 +189,13 @@ export class LocalPlace implements SessionPlace {
     this.#sessions = undefined;
   }
 
+  /** A handle on a session this process has open; undefined when the host is not running. */
+  handleOf(managed: ManagedSession): SessionHandle | undefined {
+    return this.#sessions === undefined
+      ? undefined
+      : new LocalHandle(this.#sessions, managed);
+  }
+
   async ensure(input: EnsureInput): Promise<SessionHandle> {
     const sessions = this.#sessions;
     if (sessions === undefined)

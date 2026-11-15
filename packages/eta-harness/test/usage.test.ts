@@ -63,7 +63,7 @@ function setup(script: AssistantMessage[]) {
 }
 
 describe("usage rows", () => {
-  it("records one row per settled assistant message, in the same commit as its entry", async () => {
+  it("records one row per settled assistant message, tied to its entry", async () => {
     const { kernel, runner, log, recorded, dispose } = setup([
       assistantMessage({
         content: [{ type: "text", text: "answer" }],

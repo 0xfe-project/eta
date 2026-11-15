@@ -36,7 +36,8 @@ export interface AgentView {
   /** What answers for it: eta's own loop, or an external runtime on the machine. */
   runtime: AgentRuntime;
   /**
-   * `provider:modelId`; null means whatever the settings choose. On an external runtime it is
+   * `provider:modelId`. On eta's own loop it names a model: the host refuses to save one without,
+   * and one left from before is told to choose when asked to answer. On an external runtime it is
    * `runtime:modelId` in that runtime's names, and null means the runtime's default.
    */
   model: string | null;
@@ -224,6 +225,18 @@ export interface ToolActivity {
   details?: unknown;
 }
 
+/**
+ * One step of a reply's process, in the order the run took it (`data.process`): what it thought,
+ * what it said along the way, and which tool it called (`id` names an entry of `data.activity`).
+ * The text at the end, after the last thought or call, is the reply's answer; the steps before it
+ * are drawn in the process, so a finished reply reads in the order it was written. Long texts are
+ * cut.
+ */
+export type ProcessStep =
+  | { type: "thinking"; text: string }
+  | { type: "text"; text: string }
+  | { type: "tool"; id: string };
+
 /** One row of a conversation's timeline. */
 export interface MessageView {
   id: string;
@@ -253,7 +266,8 @@ export interface MessageView {
    * `ConversationArgs["send"]["blocks"]` pairs it sent, verbatim); a system row has the `event`
    * it records (`steward` with `from`/`to`, `wake_budget`); a failed reply has the `code` it
    * failed with (`restart`, `run_failed`, `unavailable`, `gone`) and, like any reply that ran,
-   * the `activity` of its tool calls (`ToolActivity[]`, absent when it made none); a
+   * the `activity` of its tool calls (`ToolActivity[]`, absent when it made none) and the
+   * `process` they were steps of (`ProcessStep[]`, absent from rows written before it); a
    * `task_draft` row has `TaskDraftData` and a `task_card` row has `TaskCardData`.
    */
   data: Record<string, unknown>;

@@ -166,10 +166,11 @@ export class RemotePlace implements SessionPlace {
         `${machine.name} is ${machine.status === "online" ? "starting" : machine.status}, so ${agent.name} cannot answer there now`,
       );
     }
-    // The settings name eta's own models; an agent on an external runtime has the runtime's.
+    // The settings name eta's own levels; an agent on an external runtime has the runtime's. The
+    // model is the agent's, or none: the engine stops an eta agent without one before this.
     const external = agent.runtime !== "eta";
     const defaults: Settings = external ? {} : await this.#deps.defaults();
-    const model = agent.model ?? defaults.model;
+    const model = agent.model ?? undefined;
     const thinkingLevel = agent.thinkingLevel ?? defaults.thinkingLevel;
     // With no model chosen a session runs on the kernel's placeholder, which only a model layer
     // that answers to anything (a test's) resolves; the daemon is told about it the same way.

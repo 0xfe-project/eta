@@ -8,9 +8,7 @@ import {
   draftText,
   draftWithBlocks,
   isBlank,
-  isLongMessage,
   isLongPaste,
-  LONG_MESSAGE,
   LONG_PASTE,
   pasteBlocksOf,
 } from "./composer";
@@ -22,17 +20,6 @@ describe("long pastes", () => {
     expect(isLongPaste("字".repeat(LONG_PASTE.chars + 1))).toBe(true);
     expect(isLongPaste("x\n".repeat(LONG_PASTE.lines - 1))).toBe(false);
     expect(isLongPaste("x\n".repeat(LONG_PASTE.lines))).toBe(true);
-  });
-
-  // A paste is judged by a lower bar than a message's own words: four lines of someone else's log
-  // is a chip, four lines of a reply is a reply.
-  it("folds a paste sooner than a reply", () => {
-    const four = "行\n".repeat(4);
-    expect(isLongPaste(four)).toBe(true);
-    expect(isLongMessage(four)).toBe(false);
-    expect(isLongMessage("行\n".repeat(LONG_MESSAGE.lines))).toBe(true);
-    expect(isLongMessage("字".repeat(LONG_MESSAGE.chars))).toBe(false);
-    expect(isLongMessage("字".repeat(LONG_MESSAGE.chars + 1))).toBe(true);
   });
 });
 

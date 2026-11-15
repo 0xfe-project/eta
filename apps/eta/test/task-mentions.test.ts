@@ -161,9 +161,11 @@ describe("a mention on a task", () => {
     await until(
       () => runsOf(r.w, r.task.id).length === 3 && ended(r.w, r.task.id),
     );
-    expect(runsOf(r.w, r.task.id).map((run) => run.agent_id)).toEqual(
-      expect.arrayContaining([null, null, r.bea.id]),
-    );
+    // Two runs are the executor's (the claim and the mention), one is Bea's: Ada is not woken
+    // as a mentioned agent besides.
+    const agents = runsOf(r.w, r.task.id).map((run) => run.agent_id);
+    expect(agents.filter((agent) => agent === null)).toHaveLength(2);
+    expect(agents.filter((agent) => agent !== null)).toEqual([r.bea.id]);
   });
 
   it("posts what the mentioned agent said last when it stops without comment_task", async () => {

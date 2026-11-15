@@ -6,11 +6,10 @@ import {
   it,
   rstest,
 } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { setWire } from "@/lib/wire";
 import { agentView, machineView } from "@/test-product";
+import { cleanup, mount } from "@/test-render";
 import { FakeHost } from "@/test-wire";
 import { AgentEditor } from "./agent-editor";
 import { useWorkspaceStore } from "./workspace-store";
@@ -32,21 +31,18 @@ const providers = {
   ],
 };
 
-const api = rstest.hoisted(() => ({ select: rstest.fn() }));
+const api = rstest.hoisted(() => ({
+  select: rstest.fn(),
+  agents: [] as { id: string; name: string }[],
+}));
 rstest.mock("./use-agents", () => ({
-  useAgents: () => ({ agents: [], select: api.select }),
+  useAgents: () => ({ agents: api.agents, select: api.select }),
 }));
 rstest.mock("./agent-identity", () => ({ AgentAvatar: () => <span /> }));
 rstest.mock("sonner", () => ({
   toast: { success: () => {}, error: () => {} },
 }));
 
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-const container = document.createElement("div");
-document.body.append(container);
-const root = createRoot(container);
 const settle = () =>
   act(() => new Promise((resolve) => setTimeout(resolve, 20)));
 
@@ -160,19 +156,14 @@ beforeEach(async () => {
     .install();
   host.hello();
   api.select.mockReset();
-  await act(async () =>
-    root.render(
-      <QueryClientProvider client={new QueryClient()}>
-        <AgentEditor />
-      </QueryClientProvider>,
-    ),
-  );
+  api.agents = [];
+  await mount(<AgentEditor />);
 });
 afterEach(async () => {
   await act(async () =>
     useWorkspaceStore.getState().setAgentEditor({ open: false, agentId: null }),
   );
-  await act(async () => root.render(null));
+  await cleanup();
   setWire(undefined);
 });
 
@@ -216,6 +207,20 @@ describe("creating an agent step by step", () => {
     expect(dialog()).toBeNull();
   });
 
+  it("stops at the name when another agent already answers to it", async () => {
+    api.agents = [{ id: "a1", name: "审查" }];
+    await open();
+    await type("agent-name", " 审查 ");
+    await click("下一步");
+    // Said where the name is typed, before anything is sent: the host refuses it too.
+    expect(step()).toContain("名称与模型");
+    expect(alerts()).toContain("已有名为「审查」的智能体。");
+    expect(created).toEqual([]);
+    await type("agent-name", "审查二");
+    await click("下一步");
+    expect(step()).toContain("指令");
+  });
+
   it("creates an agent on an external runtime, with one of its own models", async () => {
     await open();
     await type("agent-name", "Claude");
@@ -248,6 +253,47 @@ describe("creating an agent step by step", () => {
         plugins: [],
       },
     ]);
+  });
+
+  it("starts on the last used model", async () => {
+    await act(async () =>
+      useWorkspaceStore
+        .getState()
+        .setWorkspace((state) => ({ ...state, lastModel: "c:m2" })),
+    );
+    await open();
+    await type("agent-name", "审查");
+    await click("下一步");
+    await click("创建");
+    expect(created).toMatchObject([{ runtime: "eta", model: "c:m2" }]);
+    await act(async () =>
+      useWorkspaceStore
+        .getState()
+        .setWorkspace((state) => ({ ...state, lastModel: undefined })),
+    );
+  });
+
+  it("will not create an agent on eta's own loop without a model, even with none to choose", async () => {
+    host.set("providers", { config: { revision: "r2", providers: [] } });
+    await open();
+    await type("agent-name", "审查");
+    await click("下一步");
+    expect(step()).toContain("名称与模型");
+    // Said, with the way to get a model.
+    expect(alerts()).toEqual(["请选择模型。前往模型服务"]);
+    expect(created).toEqual([]);
+  });
+
+  it("lets an agent on an external runtime run its own default", async () => {
+    await open();
+    await type("agent-name", "Claude");
+    await press(document.getElementById("agent-runtime")!);
+    await press(
+      options().find((option) => option.textContent?.includes("Claude Code"))!,
+    );
+    await click("下一步");
+    await click("创建");
+    expect(created).toMatchObject([{ runtime: "claude", model: null }]);
   });
 
   it("keeps everything after a failure and creates once on retry", async () => {
@@ -344,7 +390,7 @@ describe("choosing where a new agent runs", () => {
     list = fleet,
     answer: (args: { machineId?: string }) => unknown = onEach,
   ) {
-    await act(async () => root.render(null));
+    await cleanup();
     setWire(undefined);
     host = new FakeHost()
       .target("providers", { config: providers }, { eager: true })
@@ -363,13 +409,7 @@ describe("choosing where a new agent runs", () => {
       )
       .install();
     host.hello();
-    await act(async () =>
-      root.render(
-        <QueryClientProvider client={new QueryClient()}>
-          <AgentEditor />
-        </QueryClientProvider>,
-      ),
-    );
+    await mount(<AgentEditor />);
     await open();
   }
 

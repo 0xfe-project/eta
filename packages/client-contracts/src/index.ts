@@ -26,6 +26,7 @@ export * from "./plugins";
 export * from "./product";
 export * from "./providers";
 export * from "./routines";
+export * from "./task-order";
 export * from "./tasks";
 export type * from "./types";
 export { SERVICE_PROTOCOL } from "./types";

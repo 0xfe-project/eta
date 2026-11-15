@@ -14,6 +14,7 @@ import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
+import { PRINT_LISTENER } from "../src/artifacts/print";
 import { until } from "./support/client";
 import { call, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";
@@ -78,7 +79,9 @@ describe("publish_artifact", () => {
     const [first] = await r.play("Ada", [
       publish({ path: "dist", title: "Report" }),
     ]);
-    expect(first).toContain('Published "Report" version 1 (2 files)');
+    expect(first).toMatch(
+      /^Published "Report" as artifact \S+, version 1 \(2 files\)/,
+    );
     await until(() => list(r.w).length === 1);
     const artifact = list(r.w)[0]!;
     expect(artifact).toMatchObject({
@@ -112,6 +115,61 @@ describe("publish_artifact", () => {
     await until(() => list(r.w)[0]?.versions.length === 2);
     expect(list(r.w)).toHaveLength(1);
     expect(list(r.w)[0]!.versions.map((v) => v.number)).toEqual([2, 1]);
+  });
+
+  it("says the artifact's id, and publishing with that id is version 2 of the same artifact", async () => {
+    const r = await room();
+    await r.write({ "site/index.html": "v1" });
+    const [first] = await r.play("Ada", [
+      publish({ path: "site", title: "Design" }),
+    ]);
+    await until(() => list(r.w).length === 1);
+    const { id } = list(r.w)[0]!;
+    expect(first).toBe(
+      `Published "Design" as artifact ${id}, version 1 (1 files). The user can preview, share ` +
+        `and download it. To revise it, publish again with artifactId "${id}".`,
+    );
+    // What the model read is all it has: the id is taken from the text, not from the list.
+    const said = /as artifact (\S+),/.exec(first!)![1]!;
+    await r.write({ "site/index.html": "v2" });
+    const [second] = await r.play("Ada", [
+      publish({ path: "site", title: "Design", artifactId: said }),
+    ]);
+    expect(second).toContain(`as artifact ${id}, version 2`);
+    await until(() => list(r.w)[0]?.versions.length === 2);
+    expect(list(r.w)).toHaveLength(1);
+  });
+
+  it("takes the title of an artifact the agent published here in place of a lost id", async () => {
+    const r = await room();
+    await r.write({ "site/index.html": "x" });
+    await r.play("Ada", [
+      publish({ path: "site", title: "Plan" }),
+      publish({ path: "site", title: "Twin" }),
+      publish({ path: "site", title: "Twin" }),
+    ]);
+    await until(() => list(r.w).length === 3);
+    const plan = list(r.w).find((a) => a.title === "Plan")!;
+    const results = await r.play("Ada", [
+      publish({ path: "site", title: "Plan", artifactId: "Plan" }),
+      publish({ path: "site", title: "Twin", artifactId: "Twin" }),
+      publish({ path: "site", title: "x", artifactId: "Nothing" }),
+    ]);
+    expect(results[0]).toContain(`as artifact ${plan.id}, version 2`);
+    expect(results[1]).toMatch(
+      /^several artifacts you published here are titled "Twin"; name one by id: "Twin" \S+; "Twin" \S+$/,
+    );
+    expect(results[2]).toContain(
+      "no such artifact: Nothing. You published here: ",
+    );
+    expect(results[2]).toContain(`"Plan" ${plan.id}`);
+    // Another agent's title is not its own.
+    const [bobs] = await r.play("Bob", [
+      publish({ path: "site", title: "Plan", artifactId: "Plan" }),
+    ]);
+    expect(bobs).toBe("no such artifact: Plan");
+    await until(() => list(r.w).length === 3);
+    expect(list(r.w).find((a) => a.id === plan.id)!.versions).toHaveLength(2);
   });
 
   it("lets only the agent that published an artifact add a version", async () => {
@@ -334,7 +392,7 @@ describe("publish_artifact from a task's session", () => {
   it("goes on its own task's timeline without being told, from the conversation the task is in", async () => {
     const r = await tasks();
     const { task, results } = await r.run([site]);
-    expect(results[0]).toContain('Published "Report" version 1');
+    expect(results[0]).toMatch(/Published "Report" as artifact \S+, version 1/);
     await until(() => list(r.w).length === 1);
     const artifact = list(r.w)[0]!;
     expect(artifact).toMatchObject({
@@ -358,7 +416,7 @@ describe("publish_artifact from a task's session", () => {
     const { task, results } = await r.run((made) => [
       publish({ path: "site", title: "Report", taskId: `#${made.number}` }),
     ]);
-    expect(results[0]).toContain('Published "Report" version 1');
+    expect(results[0]).toMatch(/Published "Report" as artifact \S+, version 1/);
     await until(() => list(r.w).length === 1);
     expect(list(r.w)[0]).toMatchObject({
       taskId: task.id,
@@ -373,7 +431,7 @@ describe("publish_artifact from a task's session", () => {
     const { task, results } = await r.run([
       publish({ path: "site", title: "Theirs", taskId: other.id }),
     ]);
-    expect(results[0]).toContain('Published "Theirs" version 1');
+    expect(results[0]).toMatch(/Published "Theirs" as artifact \S+, version 1/);
     await until(() => list(r.w).length === 1);
     expect(list(r.w)[0]).toMatchObject({
       taskId: other.id,
@@ -411,7 +469,7 @@ describe("publish_artifact from a task's session", () => {
     const { task, results } = await r.run([site], () => {
       r.w.host.db.run("DELETE FROM conversation WHERE id = ?", [r.group.id]);
     });
-    expect(results[0]).toContain('Published "Report" version 1');
+    expect(results[0]).toMatch(/Published "Report" as artifact \S+, version 1/);
     await until(() => list(r.w).length === 1);
     const artifact = list(r.w)[0]!;
     expect(artifact).toMatchObject({ taskId: task.id, conversationId: null });
@@ -431,7 +489,9 @@ describe("publish_artifact from a task's session", () => {
     const results = await r.mention(task.id, [
       publish({ path: "site", title: "From Bea" }),
     ]);
-    expect(results[0]).toContain('Published "From Bea" version 1');
+    expect(results[0]).toMatch(
+      /Published "From Bea" as artifact \S+, version 1/,
+    );
     await until(() => list(r.w).length === 1);
     expect(list(r.w)[0]).toMatchObject({
       taskId: task.id,
@@ -479,7 +539,9 @@ describe("publish_artifact from a task's session", () => {
     const second = await r.run([
       publish({ path: "site", title: "Report", artifactId }),
     ]);
-    expect(second.results[0]).toContain('Published "Report" version 2');
+    expect(second.results[0]).toMatch(
+      /Published "Report" as artifact \S+, version 2/,
+    );
     await until(() => list(r.w)[0]!.versions.length === 2);
     expect(list(r.w)[0]).toMatchObject({ taskId: first.task.id });
     expect(r.timeline(first.task.id)).toHaveLength(2);
@@ -543,6 +605,31 @@ describe("the artifacts target and its pages", () => {
       p.base + url.replace("index.html", "%2e%2e/archive.zip"),
     );
     expect(out.status).toBe(404);
+  });
+
+  it("ends each previewed page with the print listener, and touches nothing else", async () => {
+    const p = await published();
+    const { url } = await p.preview();
+    const page = await fetch(p.base + url);
+    const published_ = await readFile(join(p.project.path, "site/index.html"));
+    // The published bytes, then the listener: no decoding, so any page encoding survives.
+    expect(Buffer.from(await page.arrayBuffer())).toEqual(
+      Buffer.concat([published_, Buffer.from(PRINT_LISTENER)]),
+    );
+    expect(page.headers.get("content-length")).toBe(
+      String(published_.length + PRINT_LISTENER.length),
+    );
+    expect(page.headers.get("content-security-policy")).toMatch(/^sandbox /);
+    // Not a page: as published.
+    const css = await fetch(new URL("css/site.css", p.base + url));
+    expect(await css.text()).toBe("h1{}");
+    // A share stays the published bytes.
+    const { url: shared } = (await p.w.client.call("artifacts", "share", {
+      artifactId: p.artifact.id,
+      version: 1,
+    })) as { url: string };
+    const public_ = await fetch(`${p.base}${shared}files/index.html`);
+    expect(Buffer.from(await public_.arrayBuffer())).toEqual(published_);
   });
 
   it("opens nothing for a capability that is altered, expired, forged or for another version", async () => {
@@ -666,7 +753,9 @@ describe("the artifacts target and its pages", () => {
     it("opens at the root of the site, where a router finds its first route", async () => {
       const a = await app(true);
       expect(a.url).toMatch(/^\/preview\/[^/]+\/files\/$/);
-      expect(await (await fetch(a.base + a.url)).text()).toBe(INDEX);
+      expect(await (await fetch(a.base + a.url)).text()).toBe(
+        INDEX + PRINT_LISTENER,
+      );
     });
 
     it("answers a navigation with index.html, pointed back at the root of the site", async () => {
@@ -689,7 +778,9 @@ describe("the artifacts target and its pages", () => {
         ).text(),
       ).toContain('<base href="../../../">');
       // One level down there is nothing to correct.
-      expect(await (await fetch(`${a.base}${a.url}users`)).text()).toBe(INDEX);
+      expect(await (await fetch(`${a.base}${a.url}users`)).text()).toBe(
+        INDEX + PRINT_LISTENER,
+      );
       // Without an extension it counts as a navigation, whatever it accepts.
       expect(
         (
@@ -711,7 +802,7 @@ describe("the artifacts target and its pages", () => {
         "1",
       );
       expect(await (await fetch(`${a.base}${a.url}about/`)).text()).toBe(
-        "the about page",
+        `the about page${PRINT_LISTENER}`,
       );
       for (const name of ["assets/gone.js", "site.css", "logo.png"]) {
         const missing = await fetch(`${a.base}${a.url}${name}`, {
@@ -742,7 +833,10 @@ describe("the artifacts target and its pages", () => {
       });
       expect(deep.status).toBe(200);
       expect(deep.headers.get("cache-control")).toBe("no-store");
-      expect(await deep.text()).toContain('<base href="../">');
+      const shared = await deep.text();
+      expect(shared).toContain('<base href="../">');
+      // A share is the bytes that were published: its shell has no print button to answer.
+      expect(shared).not.toContain(PRINT_LISTENER);
     });
 
     it("changes nothing without `spa`", async () => {
@@ -756,7 +850,7 @@ describe("the artifacts target and its pages", () => {
         new TextDecoder().decode(
           await (await fetch(a.base + a.url)).arrayBuffer(),
         ),
-      ).toBe(INDEX);
+      ).toBe(INDEX + PRINT_LISTENER);
     });
 
     it("refuses root paths in index.html, and says how to fix them", async () => {

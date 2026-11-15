@@ -70,22 +70,6 @@ describe("task store semantics", () => {
     dispose();
   });
 
-  it("load guard drops malformed rows and reports them; ids never reused across restore", () => {
-    const { tasks, dispose } = withTasks();
-    const r = tasks.restore([
-      { id: "t1", content: "ok", status: "pending" },
-      { id: "t2", content: "bad status", status: "done" },
-      { content: "no id", status: "pending" },
-    ]);
-    expect(r.kept).toBe(1);
-    expect(r.dropped).toEqual(["t2", "unknown"]);
-    expect(tasks.list().length).toBe(1);
-    const fresh = tasks.create("fresh");
-    expect(fresh.task.id).toBe("t2");
-    expect(tasks.list().map((t) => t.id)).toEqual(["t1", "t2"]);
-    dispose();
-  });
-
   it("restore with a non-array is a total drop", () => {
     const { tasks, dispose } = withTasks();
     expect(tasks.restore("junk")).toEqual({ kept: 0, dropped: ["root"] });
@@ -210,9 +194,12 @@ describe("task store fidelity against eta-agent's TaskStore", () => {
         dependsOn: ["t1", 7],
         blocks: [],
       },
+      { id: "t5", content: "bad status", status: "done" },
+      { content: "no id", status: "pending" },
     ]);
     expect(result.kept).toBe(2);
-    expect(result.dropped).toEqual(["t2"]);
+    expect(result.dropped).toEqual(["t2", "t5", "unknown"]);
+    expect(tasks.list().map((t) => t.id)).toEqual(["t1", "t3"]);
     expect(tasks.get("t3")?.dependsOn).toEqual(["t1"]);
     // Auto-ids continue past the highest restored id.
     expect(tasks.create("next").task.id).toBe("t4");

@@ -4,7 +4,8 @@ import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
 import { CopyIcon } from "@phosphor-icons/react/Copy";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/DownloadSimple";
 import { GlobeIcon } from "@phosphor-icons/react/Globe";
-import { useEffect, useState } from "react";
+import { PrinterIcon } from "@phosphor-icons/react/Printer";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
@@ -41,6 +42,17 @@ const FRAMED_KINDS = new Set(["site"]);
 const opensInFrame = (version: ArtifactVersion): boolean =>
   version.viewer === "iframe" && FRAMED_KINDS.has(version.kind);
 
+/**
+ * The host ends every page it previews with a listener for this message, and the page prints
+ * itself as it is now: the frame is an opaque origin, so its `print()` is out of the app's reach.
+ */
+const PRINT_MESSAGE = { type: "eta:print" } as const;
+
+/** A phone or tablet: printing from a frame there is hit and miss, so the button is not offered. */
+const printsUnreliably = (): boolean =>
+  typeof matchMedia === "function" &&
+  matchMedia("(hover: none) and (pointer: coarse)").matches;
+
 function ArtifactDialog({
   id,
   version,
@@ -69,6 +81,8 @@ function ArtifactDialog({
     if (open && shown !== undefined) ask({ artifactId: id, version: shown });
   }, [open, id, shown, ask]);
   const failed = error ?? (framed ? previewError : null);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const [printable] = useState(() => !printsUnreliably());
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[calc(100dvh-1rem)] max-w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden p-0 sm:h-[calc(100dvh-4rem)] sm:max-w-[min(96rem,calc(100%-4rem))]">
@@ -114,6 +128,25 @@ function ArtifactDialog({
               )}
               <span className="flex-1 sm:hidden" />
               <ShareControl id={id} version={current} />
+              {framed && printable ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={preview === undefined}
+                  title={translateText("print.hint")}
+                  onClick={() =>
+                    frameRef.current?.contentWindow?.postMessage(
+                      PRINT_MESSAGE,
+                      "*",
+                    )
+                  }
+                >
+                  <PrinterIcon aria-hidden="true" />
+                  <span className="max-sm:sr-only">
+                    {translateText("print.action")}
+                  </span>
+                </Button>
+              ) : null}
               {framed ? (
                 <Button
                   variant="ghost"
@@ -178,6 +211,7 @@ function ArtifactDialog({
             </Empty>
           ) : current && preview && artifact ? (
             <iframe
+              ref={frameRef}
               key={`${current.number}:${preview.url}`}
               title={artifact.title}
               src={preview.url}

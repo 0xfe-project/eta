@@ -142,7 +142,8 @@
     "hoursAgo_one": "{{count}} hour ago",
     "hoursAgo_other": "{{count}} hours ago",
     "hours_one": "{{count}} hour",
-    "hours_other": "{{count}} hours"
+    "hours_other": "{{count}} hours",
+    "durationHoursMinutes": "{{hours}}h {{minutes}}m"
   },
   "format": {
     "namedValue": "{{name}}: {{value}}",
@@ -175,5 +176,26 @@
   },
   "desktop": {
     "tooOld": "This host needs the eta desktop app {{min}} or later; this one is {{current}}. Some things may not work until you update the app."
+  },
+  "run": {
+    "kinds": {
+      "model": "Generation",
+      "shell": "Commands",
+      "read": "Read / search",
+      "edit": "Edit / write",
+      "tool": "Tools",
+      "other": "Other"
+    },
+    "summary": "{{count}} steps, {{duration}}",
+    "summary_one": "{{count}} step, {{duration}}",
+    "summary_other": "{{count}} steps, {{duration}}",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "steps": "Steps",
+    "startsAt": "starts at {{time}}",
+    "took": "took {{duration}}",
+    "running": "in progress",
+    "step": "{{name}}, {{kind}}, {{detail}}, starts at {{start}}, {{took}}",
+    "stepPlain": "{{name}}, {{kind}}, starts at {{start}}, {{took}}"
   }
 }

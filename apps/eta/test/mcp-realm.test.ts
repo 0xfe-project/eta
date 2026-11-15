@@ -1,7 +1,7 @@
 /**
  * MCP reaches a session's realm on the host: a server declared in the project's `.mcp.json` is
  * `import "mcp:<server>"` and `eta.mcp` in a session opened there, and a session with no server
- * declared is told MCP is not connected. A host started with MCP off has none of it.
+ * declared is told MCP is not connected.
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -54,13 +54,5 @@ describe("mCP in a host's sessions", () => {
     await expect(
       session.esm!.agent.run(`import x from "mcp:echo"; export default x;`),
     ).rejects.toThrow(/MCP not connected on this machine/);
-  });
-
-  it("a host started with MCP off has none of it", async () => {
-    const host = await testHost({ mcp: false });
-    expect(host.product.mcp).toBeUndefined();
-    expect(host.server.mounted().map((plugin) => plugin.name)).not.toContain(
-      "mcp",
-    );
   });
 });

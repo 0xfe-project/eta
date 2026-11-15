@@ -571,11 +571,10 @@ describe("卡片的右键菜单", () => {
   const updates = (host: { calls: { action: string; args: unknown }[] }) =>
     host.calls.filter((call) => call.action === "update");
 
-  it("卡片上没有 ⋯，那一行也不再给它留位置", async () => {
+  it("卡片上没有 ⋯：菜单在右键里", async () => {
     const { container } = await tree([group("g1", "装配", "p-eta")]);
     const section = groupsSection(container)!;
     expect(section.querySelector("[data-sidebar=menu-action]")).toBeNull();
-    expect(section.querySelector(".pr-6")).toBeNull();
   });
 
   for (const open of [true, false]) {

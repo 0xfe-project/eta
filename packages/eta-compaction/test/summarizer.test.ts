@@ -214,30 +214,19 @@ describe("the cut", () => {
 
   it("never cuts between a tool call and its result", async () => {
     const messages = longHistory();
-    // A tool pair right at the boundary: whatever the cut does, both halves end
-    // up on the same side.
-    messages.push(call("c1"), result("c1"));
+    // A tool result large enough on its own to fill the keep budget: walking
+    // back from the end, the budget runs out inside it, so a cut that ignored
+    // tool pairs would keep the result and summarize away its call.
+    const toolCall = call("c1");
+    const toolResult = result("c1", "y".repeat(4_000));
+    messages.push(toolCall, toolResult);
     messages.push(user("the last question"), answer("the last answer"));
     const { ask } = asker(["notes"]);
     const outcome = await etaCompaction().summarize(request(messages, ask));
 
-    const summarized = messages.slice(
-      0,
-      messages.length - outcome!.retainedTail.length,
-    );
-    const calls = summarized.filter(
-      (message) =>
-        message.role === "assistant" &&
-        (message as { content: { type: string }[] }).content.some(
-          (block) => block.type === "toolCall",
-        ),
-    );
-    const results = summarized.filter(
-      (message) => message.role === "toolResult",
-    );
-    // Any tool call that made it into the summarized prefix has its result there.
-    expect(results.length).toBeGreaterThanOrEqual(0);
-    expect(results.length === 0 || calls.length > 0).toBe(true);
+    const kept = outcome!.retainedTail;
+    expect(kept.length).toBeGreaterThan(0);
+    expect(kept.includes(toolResult)).toBe(kept.includes(toolCall));
   });
 
   it("drops tool noise from the prefix, in whole pairs", () => {
@@ -388,11 +377,12 @@ describe("folding a history the window cannot hold", () => {
   });
 
   it("stops folding at the limit and digests the rest, labeled untrusted", async () => {
-    // The limit is checked before a piece is asked, so a limit of two allows one
-    // summary and digests everything after it (eta-agent's loop shape).
-    const messages = longHistory(40, 2_000);
-    const { ask, calls } = asker(["piece 1", "piece 2"]);
-    const outcome = await etaCompaction({ foldLimit: 2 }).summarize(
+    // The limit is checked before a piece is asked, so the last of the
+    // SUMMARY_FOLD_LIMIT pieces is digested instead of asked (eta-agent's loop
+    // shape), along with everything after it.
+    const messages = longHistory(200, 2_000);
+    const { ask, calls } = asker([]);
+    const outcome = await etaCompaction().summarize(
       request(messages, ask, {
         contextWindow: 4_000,
         settings: {
@@ -403,8 +393,8 @@ describe("folding a history the window cannot hold", () => {
       }),
     );
 
-    expect(calls).toHaveLength(1);
-    expect(outcome?.summary).toContain("piece 1");
+    expect(calls).toHaveLength(SUMMARY_FOLD_LIMIT - 1);
+    expect(outcome?.summary).toContain(`piece ${SUMMARY_FOLD_LIMIT - 1}`);
     expect(outcome?.summary).toContain(UNTRUSTED_SUMMARY_NOTE);
     // The digest carries raw context, so the history is not lost to the limit.
     expect(outcome?.summary.length).toBeGreaterThan(

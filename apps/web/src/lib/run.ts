@@ -1,5 +1,6 @@
 import type {
   AgentMessage,
+  ProcessStep,
   ToolActivity,
   ViewMessageRow,
 } from "@eta/client-contracts";
@@ -63,6 +64,62 @@ export function savedTools(data: Record<string, unknown>): ToolBlock[] {
         ]
       : [],
   );
+}
+
+/**
+ * A reply as its process and its answer: the answer is the text at the end, after the last thought
+ * or tool call; everything before it — the words between calls included — is the process, in the
+ * order it happened. One rule for a reply at work and a finished one, so the end of a run moves
+ * nothing: while the last thing written is text, that text is the answer and the process is folded.
+ */
+export function splitReply(blocks: readonly RunBlock[]): {
+  steps: RunBlock[];
+  answer: RunBlock[];
+} {
+  let end = blocks.length;
+  while (end > 0 && blocks[end - 1]!.type === "text") end -= 1;
+  return { steps: blocks.slice(0, end), answer: blocks.slice(end) };
+}
+
+/**
+ * The process a finished reply kept on its row, as the blocks its run drew: its thoughts, its words
+ * and its calls in order (`data.process`, the calls themselves from `data.activity`), without the
+ * answer at the end, which is the row's text. A row written before the order was kept has only its
+ * last thought and its calls.
+ */
+export function savedSteps(message: {
+  thinking: string;
+  data: Record<string, unknown>;
+}): RunBlock[] {
+  const tools = savedTools(message.data);
+  const saved = message.data.process;
+  if (!Array.isArray(saved))
+    return [
+      ...(message.thinking === ""
+        ? []
+        : [
+            {
+              type: "thinking" as const,
+              id: "thinking",
+              text: message.thinking,
+            },
+          ]),
+      ...tools,
+    ];
+  const byId = new Map(tools.map((tool) => [tool.id, tool]));
+  const blocks = saved.flatMap(
+    (step: Partial<ProcessStep> | null, at): RunBlock[] => {
+      if (step?.type === "tool") {
+        const tool = byId.get(String(step.id));
+        return tool === undefined ? [] : [tool];
+      }
+      return (step?.type === "thinking" || step?.type === "text") &&
+        typeof step.text === "string"
+        ? [{ type: step.type, id: `step${at}`, text: step.text }]
+        : [];
+    },
+  );
+  return splitReply(blocks).steps;
 }
 
 /** Where a reply's run starts in its session (`data.runFrom`), when its row says. */

@@ -7,11 +7,10 @@ import {
   it,
   rstest,
 } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { setWire } from "@/lib/wire";
 import { agentView, machineView } from "@/test-product";
+import { cleanup, flush, mount } from "@/test-render";
 import { FakeHost } from "@/test-wire";
 import { AgentEditor } from "./agent-editor";
 import { useWorkspaceStore } from "./workspace-store";
@@ -42,14 +41,7 @@ let host: FakeHost;
 const updates = () =>
   host.calls.filter((call) => call.action === "update").map((c) => c.args);
 
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-const container = document.createElement("div");
-document.body.append(container);
-const root = createRoot(container);
-const settle = () =>
-  act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+const settle = () => flush(20);
 
 const buttons = () => [
   ...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
@@ -113,13 +105,7 @@ beforeEach(async () => {
     .handle("agents.update", () => ({}))
     .install();
   host.hello();
-  await act(async () =>
-    root.render(
-      <QueryClientProvider client={new QueryClient()}>
-        <AgentEditor />
-      </QueryClientProvider>,
-    ),
-  );
+  await mount(<AgentEditor />);
   await act(async () =>
     useWorkspaceStore.getState().setAgentEditor({ open: true, agentId: "a1" }),
   );
@@ -129,7 +115,7 @@ afterEach(async () => {
   await act(async () =>
     useWorkspaceStore.getState().setAgentEditor({ open: false, agentId: null }),
   );
-  await act(async () => root.render(null));
+  await cleanup();
   setWire(undefined);
 });
 
@@ -232,6 +218,55 @@ describe("picking a model", () => {
   });
 });
 
+describe("an agent's model on eta's own loop", () => {
+  const reopen = async (model: string | null) => {
+    await act(async () =>
+      useWorkspaceStore
+        .getState()
+        .setAgentEditor({ open: false, agentId: null }),
+    );
+    host.set("agents", {
+      list: [agentView({ id: "a1", name: "审查", model })],
+    });
+    await settle();
+    await act(async () =>
+      useWorkspaceStore
+        .getState()
+        .setAgentEditor({ open: true, agentId: "a1" }),
+    );
+    await settle();
+  };
+
+  it("offers no default to fall back to, and will not save without a model", async () => {
+    await reopen(null);
+    const trigger = document.getElementById("agent-model")!;
+    expect(trigger.textContent).toBe("选择模型");
+    await click(trigger as HTMLButtonElement);
+    const offered = [
+      ...document.querySelectorAll<HTMLElement>('[role="option"]'),
+    ].map((option) => option.textContent);
+    expect(offered).toEqual(["M1", "M2"]);
+    await act(async () =>
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      ),
+    );
+    await settle();
+    await type("agent-name", "审查二");
+    await save();
+    expect(dialogText()).toContain("请选择模型。");
+    expect(updates()).toEqual([]);
+  });
+
+  it("says a model removed from the providers is no longer available, and swaps in none", async () => {
+    await reopen("c:gone");
+    expect(document.getElementById("agent-model")!.textContent).toBe(
+      "c:gone（已不可用）",
+    );
+    expect(dialogText()).toContain("模型已不可用，请重新选择。");
+  });
+});
+
 describe("an agent's machine and its runtimes", () => {
   // The host's own runtimes; another machine is asked over its link, and the daemon here is off.
   const runtimes = [
@@ -258,7 +293,7 @@ describe("an agent's machine and its runtimes", () => {
       return { runtimes };
     },
   ) {
-    await act(async () => root.render(null));
+    await cleanup();
     setWire(undefined);
     host = new FakeHost()
       .target("providers", { config: providers }, { eager: true })
@@ -311,13 +346,7 @@ describe("an agent's machine and its runtimes", () => {
       .handle("agents.update", () => ({}))
       .install();
     host.hello();
-    await act(async () =>
-      root.render(
-        <QueryClientProvider client={new QueryClient()}>
-          <AgentEditor />
-        </QueryClientProvider>,
-      ),
-    );
+    await mount(<AgentEditor />);
     await settle();
   }
 
@@ -465,6 +494,7 @@ describe("the plugins tab", () => {
     agent: Partial<AgentView>,
     plugins: PluginView[],
   ): Promise<void> {
+    await cleanup();
     host = new FakeHost()
       .target(
         "agents",
@@ -489,13 +519,7 @@ describe("the plugins tab", () => {
       ]);
     host.install();
     host.hello();
-    await act(async () => {
-      root.render(
-        <QueryClientProvider client={new QueryClient()}>
-          <AgentEditor />
-        </QueryClientProvider>,
-      );
-    });
+    await mount(<AgentEditor />);
     useWorkspaceStore.setState((state) => ({
       ...state,
       agentEditor: { open: true, agentId: "a" },

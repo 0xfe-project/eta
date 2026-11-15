@@ -2,7 +2,7 @@ import type { AgentRuntimeInfo } from "@eta/client-contracts";
 import type { UseFormReturn } from "react-hook-form";
 import type { AgentForm } from "./agent-form";
 import type { Model } from "@/queries/providers";
-import { useWatch } from "react-hook-form";
+import { useFormState, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,82 +11,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatLocale } from "@/lib/i18n";
 import { THINKING_LEVELS } from "@/lib/thinking";
 import { usePersonas } from "@/queries/personas";
-import { modelGroups } from "@/queries/providers";
 import { DESCRIPTION_MAX } from "./agent-form";
-import { Select, SelectGroup, SelectOption } from "./select-field";
+import { ModelSelect } from "./model-select";
+import { Select, SelectOption } from "./select-field";
 
 type Form = UseFormReturn<AgentForm>;
-
-/** Models grouped by service; unusable ones stay visible but disabled. */
-export function ModelSelect({
-  value,
-  models,
-  invalid,
-  defaultLabel,
-  ...props
-}: Omit<React.ComponentProps<typeof Select>, "children"> & {
-  value: string;
-  /**
-   * Undefined while they load. Null when they cannot be listed (the machine is out of reach): the
-   * chosen one then shows as it is, since there is no list to say it is gone.
-   */
-  models: Model[] | null | undefined;
-  invalid?: boolean;
-  /** Offers "no model of its own" (the empty value) under this name, instead of asking to pick. */
-  defaultLabel?: string;
-}) {
-  const { t: translateText } = useTranslation([
-    "agents",
-    "common",
-    "providers",
-  ] as const);
-  const loading = models === undefined;
-  const groups = modelGroups(models ?? []);
-  const known = (models ?? []).some((model) => model.id === value);
-  return (
-    <Select
-      className="w-full"
-      aria-invalid={invalid}
-      value={value}
-      {...props}
-      disabled={loading || props.disabled}
-    >
-      <SelectOption value="" disabled={defaultLabel === undefined}>
-        {defaultLabel ??
-          (loading
-            ? translateText("models.loading")
-            : translateText("models.select"))}
-      </SelectOption>
-      {value && !known ? (
-        <SelectOption value={value} disabled>
-          {loading
-            ? translateText("models.loading")
-            : models === null
-              ? value
-              : translateText("models.deletedOption", { modelName: value })}
-        </SelectOption>
-      ) : null}
-      {groups.map(({ provider, label, models }) => (
-        <SelectGroup key={provider} label={label}>
-          {models.map((model) => (
-            <SelectOption
-              key={model.id}
-              value={model.id}
-              disabled={!model.available && model.id !== value}
-            >
-              {model.name}
-              {model.available
-                ? model.delisted
-                  ? translateText("providers:models.delistedSuffix")
-                  : ""
-                : translateText("common:status.unavailableSuffix")}
-            </SelectOption>
-          ))}
-        </SelectGroup>
-      ))}
-    </Select>
-  );
-}
 
 export function NameField({
   form,
@@ -100,7 +29,10 @@ export function NameField({
     "common",
     "providers",
   ] as const);
-  const error = form.formState.errors.name;
+  // useFormState, not form.formState: the React Compiler memoises this component on `form`, which
+  // is the same object every render, so an error read off it would never show.
+  const error = useFormState({ control: form.control, name: "name" }).errors
+    .name;
   return (
     <div className="space-y-1.5">
       <Label htmlFor="agent-name">{translateText("common:labels.name")}</Label>
@@ -241,7 +173,8 @@ export function ModelField({
     "common",
     "providers",
   ] as const);
-  const error = form.formState.errors.model;
+  const error = useFormState({ control: form.control, name: "model" }).errors
+    .model;
   // useWatch, not form.watch: the React Compiler memoises these components on their props, and
   // `form` is the same object every render. A read the compiler cannot see never invalidates that
   // memo, so the component kept its old render and the trigger kept its old label.
@@ -249,6 +182,13 @@ export function ModelField({
   // Only once they have loaded can there be none.
   const noModels =
     !external && models?.some((model) => model.available) === false;
+  // The model it names was removed from the providers since: said, never swapped for another.
+  const gone =
+    !external &&
+    Boolean(chosenModel) &&
+    Array.isArray(models) &&
+    !models.some((model) => model.id === chosenModel);
+  const hint = Boolean(error) || noModels || gone;
   return (
     <div className="space-y-1.5">
       <Label htmlFor="agent-model">
@@ -260,9 +200,9 @@ export function ModelField({
         models={models}
         invalid={Boolean(error)}
         {...(external
-          ? { defaultLabel: translateText("agents:runtime.defaultModel") }
+          ? { defaultLabel: translateText("agents:runtime.ownDefault") }
           : {})}
-        aria-describedby={error || noModels ? "agent-model-hint" : undefined}
+        aria-describedby={hint ? "agent-model-hint" : undefined}
         onValueChange={(value) =>
           form.setValue("model", value, {
             shouldDirty: true,
@@ -270,15 +210,22 @@ export function ModelField({
           })
         }
       />
-      {error || noModels ? (
+      {hint ? (
         <p
           id="agent-model-hint"
           role={error ? "alert" : undefined}
           className={
-            error ? "text-xs text-destructive" : "text-xs text-muted-foreground"
+            error
+              ? "text-xs text-destructive"
+              : gone
+                ? "text-xs text-state-warning"
+                : "text-xs text-muted-foreground"
           }
         >
-          {error?.message ?? translateText("models.noneAvailable")}
+          {error?.message ??
+            (gone
+              ? translateText("models.gone")
+              : translateText("models.noneAvailable"))}
           {noModels ? (
             <Button
               type="button"
@@ -345,7 +292,8 @@ export function InstructionsField({
     "common",
     "providers",
   ] as const);
-  const error = form.formState.errors.description;
+  const error = useFormState({ control: form.control, name: "description" })
+    .errors.description;
   const description = useWatch({ control: form.control, name: "description" });
   const length = (description ?? "").length;
   return (
@@ -435,6 +383,7 @@ function PersonaSelect({
 export function PersonaField({ form }: { form: Form }) {
   const { t: translateText } = useTranslation(["agents", "common"] as const);
   const persona = useWatch({ control: form.control, name: "persona" });
+  const { errors } = useFormState({ control: form.control, name: "persona" });
   return (
     <div className="space-y-1.5">
       <Label htmlFor="agent-persona">
@@ -445,7 +394,7 @@ export function PersonaField({ form }: { form: Form }) {
         onChange={(next) =>
           form.setValue("persona", next, { shouldDirty: true })
         }
-        invalid={Boolean(form.formState.errors.persona)}
+        invalid={Boolean(errors.persona)}
       />
     </div>
   );

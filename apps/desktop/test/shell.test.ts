@@ -303,7 +303,7 @@ describe("a host already running here", () => {
     expect(view()).toMatchObject({ screen: "page", page: LOCAL_PAGE });
   });
 
-  it("is not stopped by going remote: it is not the app's", async () => {
+  it("going remote from it hands over to stopHost like any local host", async () => {
     const { log, shell, startHost } = rig({ saved: { mode: "local" } });
     startHost.mockImplementationOnce(async () => ({
       ready: true as const,
@@ -312,7 +312,8 @@ describe("a host already running here", () => {
     }));
     await shell.boot();
     await shell.choose({ mode: "remote", address: REMOTE.address, token: "x" });
-    // `stopHost` is called, and stops nothing: the app holds no process for a host it found.
+    // `stopHost` is called. That it stops nothing — the app holds no process for a host it found —
+    // is `stopLocalHost`'s in index.ts, which this rig does not run.
     expect(log).toContain("stopHost");
   });
 });

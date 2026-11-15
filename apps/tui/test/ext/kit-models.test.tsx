@@ -1,6 +1,6 @@
 /**
  * The model list a picker shows: the configured providers' models and the gateway's, which of
- * them can be used, and which one is the default. The rules are the web page's
+ * them can be used, in the config's order. No model is marked as a default. The rules are the web page's
  * (`apps/web/src/queries/providers.ts`); `useModels` is checked against a real host.
  */
 import type {
@@ -24,15 +24,8 @@ function provider(
   };
 }
 
-function view(
-  providers: ProviderSummary[],
-  defaultModel?: string,
-): ProvidersView {
-  return {
-    providers,
-    revision: "r1",
-    ...(defaultModel === undefined ? {} : { defaultModel }),
-  };
+function view(providers: ProviderSummary[]): ProvidersView {
+  return { providers, revision: "r1" };
 }
 
 function gatewayModel(
@@ -57,8 +50,6 @@ const ACCOUNTS: LlmAccounts = {
 };
 
 const ids = (models: Model[] | undefined) => models?.map((m) => m.id);
-const defaults = (models: Model[] | undefined) =>
-  models?.filter((m) => m.default).map((m) => m.id);
 
 describe("providerLabel and keyMissing", () => {
   it.each([
@@ -89,23 +80,17 @@ describe("buildModels", () => {
     ).toBeUndefined();
   });
 
-  it.each([
-    ["the configured default", "b:m1", "b:m1"],
-    ["the first when the default is gone", "zz:gone", "a:m1"],
-    ["the first when none is set", undefined, "a:m1"],
-  ] as const)("the default is %s", (_what, defaultModel, expected) => {
+  it("lists the models in the config's order, none of them a default", () => {
     const models = buildModels({
-      providers: view(
-        [
-          provider({ id: "a", kind: "openai-compatible" }),
-          provider({ id: "b", kind: "openai-compatible" }),
-        ],
-        defaultModel,
-      ),
+      providers: view([
+        provider({ id: "a", kind: "openai-compatible" }),
+        provider({ id: "b", kind: "openai-compatible" }),
+      ]),
       llm: undefined,
       locale: "en",
     });
-    expect(defaults(models)).toEqual([expected]);
+    expect(ids(models)).toEqual(["a:m1", "b:m1"]);
+    expect(models?.some((model) => "default" in model)).toBe(false);
   });
 
   it("appends the gateway's models as llm:<id> under their connector's name", () => {
@@ -159,24 +144,5 @@ describe("buildModels", () => {
     expect(zh?.[1]?.unavailableReason).toBe(
       "额度已用尽，恢复后会自动继续使用。",
     );
-  });
-
-  it("makes a gateway model the default when the config names it, else keeps the first", () => {
-    const llm = { accounts: ACCOUNTS, models: [gatewayModel({ id: "gpt-5" })] };
-    const named = buildModels({
-      providers: view(
-        [provider({ id: "a", kind: "openai-compatible" })],
-        "llm:gpt-5",
-      ),
-      llm,
-      locale: "en",
-    });
-    expect(defaults(named)).toEqual(["llm:gpt-5"]);
-    const onlyGateway = buildModels({
-      providers: view([]),
-      llm,
-      locale: "en",
-    });
-    expect(defaults(onlyGateway)).toEqual(["llm:gpt-5"]);
   });
 });

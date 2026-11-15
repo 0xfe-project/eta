@@ -45,17 +45,6 @@ describe("workspace store persistence", () => {
     }
   });
 
-  it("remembers the chat's rail switched on across a reload", async () => {
-    localStorage.setItem(
-      key,
-      JSON.stringify({ ...saved, transcriptRail: true }),
-    );
-    await useWorkspaceStore.persist.rehydrate();
-    expect(useWorkspaceStore.getState().workspace).toMatchObject({
-      transcriptRail: true,
-    });
-  });
-
   it("remembers the chat's content width across a reload", async () => {
     localStorage.setItem(
       key,

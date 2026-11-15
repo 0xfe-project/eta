@@ -1,5 +1,5 @@
 import type { MessageStatus, MessageView } from "@eta/client-contracts";
-import { isCaptainGroupOutcome } from "@eta/client-contracts";
+import { isCaptainOutcome } from "@eta/client-contracts";
 
 // A conversation's timeline, as rows the page has seen: the newest window the host publishes,
 // older pages fetched on demand, and what our own `send` and `stop` calls answered with. A row
@@ -54,7 +54,7 @@ export function taskRowsByTurn(messages: readonly MessageView[]): {
   const rows: MessageView[] = [];
   const under = new Map<string, MessageView[]>();
   for (const row of messages) {
-    if (isCaptainGroupOutcome(row)) continue;
+    if (isCaptainOutcome(row)) continue;
     const turn =
       row.kind === "task_draft" || row.kind === "task_card"
         ? row.data.turnMessageId

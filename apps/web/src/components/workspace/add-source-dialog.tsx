@@ -6,7 +6,10 @@ import type {
   UnsupportedModel,
 } from "@eta/client-contracts";
 import type { ReactNode } from "react";
-import { BUILTIN_PROVIDER_PRESETS } from "@eta/client-contracts";
+import {
+  BUILTIN_PROVIDER_PRESETS,
+  ETA_TOKEN_PLAN_KEYS_URL,
+} from "@eta/client-contracts";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -48,7 +51,7 @@ type SourcePreset =
   | { id: string; group: "subscription" | "key"; connector: string }
   | {
       id: string;
-      group: "key" | "custom";
+      group: "recommended" | "key" | "custom";
       kind: ProviderKind;
       baseUrl: string;
       /** The address and protocol are the person's: the custom endpoint and the local server. */
@@ -64,7 +67,16 @@ const keyPreset = (kind: keyof typeof BUILTIN_PROVIDER_PRESETS) => ({
   baseUrl: BUILTIN_PROVIDER_PRESETS[kind].baseUrl,
 });
 
+/** Eta's own gateway: one key, on top of every group. */
+const ETA_PRESET: SourcePreset = {
+  id: "eta",
+  group: "recommended",
+  kind: "eta",
+  baseUrl: BUILTIN_PROVIDER_PRESETS.eta.baseUrl,
+};
+
 const SOURCE_PRESETS: readonly SourcePreset[] = [
+  ETA_PRESET,
   { id: "codex", group: "subscription", connector: "codex" },
   { id: "xai", group: "subscription", connector: "xai" },
   keyPreset("deepseek"),
@@ -91,6 +103,16 @@ const SOURCE_PRESETS: readonly SourcePreset[] = [
 ];
 
 const GROUPS = ["subscription", "key", "custom"] as const;
+
+const presetLogo = (
+  preset: SourcePreset,
+  logos: Readonly<Record<string, string>>,
+) =>
+  "connector" in preset
+    ? logos[logoKey.connector(preset.connector)]
+    : preset.custom === undefined
+      ? logos[logoKey.kind(preset.kind)]
+      : undefined;
 
 function presetName(
   preset: SourcePreset,
@@ -184,8 +206,31 @@ function PresetGrid({ onPick }: { onPick: (preset: SourcePreset) => void }) {
       !("connector" in preset) ||
       llm.connectors.some((connector) => connector.id === preset.connector),
   );
+  const recommended = offered.filter(
+    (preset) => preset.group === "recommended",
+  );
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
+      {recommended.map((preset) => {
+        const name = presetName(preset, llm.connectors);
+        return (
+          <button
+            key={preset.id}
+            type="button"
+            className="flex min-w-0 items-center gap-2.5 border p-2.5 text-left text-xs duration-[60ms] ease-linear hover:bg-overlay-hover focus-visible:outline-2 focus-visible:outline-ring"
+            onClick={() => onPick(preset)}
+          >
+            <SourceLogo name={name} svg={presetLogo(preset, logos)} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-medium">{name}</span>
+              <span className="block truncate text-[11px] text-muted-foreground">
+                {translateText("add.presets.etaHint")}
+              </span>
+            </span>
+            <Tag>{translateText("add.recommended")}</Tag>
+          </button>
+        );
+      })}
       {GROUPS.map((group) => {
         const presets = offered.filter((preset) => preset.group === group);
         if (presets.length === 0) return null;
@@ -208,16 +253,7 @@ function PresetGrid({ onPick }: { onPick: (preset: SourcePreset) => void }) {
                     className="flex min-w-0 items-center gap-2 border p-2 text-left text-xs duration-[60ms] ease-linear hover:bg-overlay-hover focus-visible:outline-2 focus-visible:outline-ring"
                     onClick={() => onPick(preset)}
                   >
-                    <SourceLogo
-                      name={name}
-                      svg={
-                        "connector" in preset
-                          ? logos[logoKey.connector(preset.connector)]
-                          : preset.custom === undefined
-                            ? logos[logoKey.kind(preset.kind)]
-                            : undefined
-                      }
-                    />
+                    <SourceLogo name={name} svg={presetLogo(preset, logos)} />
                     <span className="min-w-0">
                       <span className="block truncate">{name}</span>
                       {"custom" in preset && preset.custom === "local" ? (
@@ -363,9 +399,12 @@ function AccountReady({ connector }: { connector: LlmConnector }) {
 export function AddSourceDialog({
   open,
   onOpenChange,
+  initialPreset,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Opens on this preset's connect step (the empty list's way to Eta Token Plan). */
+  initialPreset?: string;
 }) {
   const { t: translateText } = useTranslation(["providers", "common"] as const);
   const formId = useId();
@@ -373,10 +412,15 @@ export function AddSourceDialog({
   const llm = useLlm();
   const save = useSaveProvider();
   const check = useCheckProviders();
-  const [step, setStep] = useState(0);
-  const [preset, setPreset] = useState<SourcePreset>();
-  const [baseUrl, setBaseUrl] = useState("");
-  const [kind, setKind] = useState<ProviderKind>("openai-compatible");
+  const found = SOURCE_PRESETS.find((entry) => entry.id === initialPreset);
+  const initial =
+    found === undefined || "connector" in found ? undefined : found;
+  const [step, setStep] = useState(initial === undefined ? 0 : 1);
+  const [preset, setPreset] = useState<SourcePreset | undefined>(initial);
+  const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? "");
+  const [kind, setKind] = useState<ProviderKind>(
+    initial?.kind ?? "openai-compatible",
+  );
   const [apiKey, setApiKey] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string>();
@@ -583,6 +627,16 @@ export function AddSourceDialog({
               setError(undefined);
             }}
           />
+          {kind === "eta" ? (
+            <a
+              href={ETA_TOKEN_PLAN_KEYS_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="justify-self-start text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            >
+              {translateText("add.getEtaKey")}
+            </a>
+          ) : null}
         </div>
         {error === undefined ? null : (
           <p role="alert" className="text-xs text-destructive">

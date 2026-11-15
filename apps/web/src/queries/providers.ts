@@ -114,8 +114,6 @@ export interface Model {
   contextWindow?: number | undefined;
   /** Whether chats may use it: not while its provider lacks a key it cannot run without. */
   available: boolean;
-  /** The model a new chat starts on: the configured default, else the first one. */
-  default: boolean;
   /** Why it cannot be used, when the gateway says (an expired login, an exhausted quota). */
   unavailableReason?: string | undefined;
   /** Its provider's catalog no longer lists it: it may stop working. */
@@ -123,7 +121,7 @@ export interface Model {
 }
 
 export function modelsOf(view: ProvidersView): Model[] {
-  const models = view.providers.flatMap((provider) => {
+  return view.providers.flatMap((provider) => {
     const providerName = providerLabel(provider);
     const missing = keyMissing(provider);
     return provider.models.map(
@@ -134,14 +132,10 @@ export function modelsOf(view: ProvidersView): Model[] {
         name: model.name ?? model.id,
         contextWindow: model.contextWindow,
         available: !missing,
-        default: false,
         ...(model.delisted === true ? { delisted: true } : {}),
       }),
     );
   });
-  const fallback =
-    models.find((model) => model.id === view.defaultModel) ?? models[0];
-  return models.map((model) => ({ ...model, default: model === fallback }));
 }
 
 /**
@@ -184,7 +178,6 @@ function gatewayModels(
     name: model.name,
     contextWindow: model.contextWindow,
     available: model.available,
-    default: false,
     unavailableReason:
       model.reason === undefined ? undefined : llmProblemText(model.reason),
   }));
@@ -204,11 +197,7 @@ export function useModels(): { data: Model[] | undefined; isError: boolean } {
     const names = new Map(
       llm.connectors.map((connector) => [connector.id, connector.name]),
     );
-    const merged = [...configured, ...gatewayModels(llm.models, names)];
-    // The default is the configured one, else the first model there is.
-    const fallback =
-      merged.find((model) => model.id === data.defaultModel) ?? merged[0];
-    return merged.map((model) => ({ ...model, default: model === fallback }));
+    return [...configured, ...gatewayModels(llm.models, names)];
   }, [data, llm.models, llm.connectors]);
   return { data: models, isError: error !== undefined };
 }
@@ -301,7 +290,6 @@ const ERROR_TEXT = {
   models_required: "modelsRequired",
   invalid_provider_id: "invalidProviderId",
   invalid_config: "invalidConfig",
-  invalid_default_model: "invalidDefaultModel",
   invalid_network: "invalidNetwork",
   invalid_saved_config: "invalidSavedConfig",
   read_failed: "readFailed",
@@ -375,31 +363,6 @@ export function useDeleteProvider() {
   return useMutation({
     mutationKey: ["wire", TARGET, "delete"],
     mutationFn: (id: string) => write("delete", { id }),
-  });
-}
-
-/**
- * Make a model the one new agents start on. A gateway model (`llm:…`) is taken as given: its
- * accounts, not the config, say which exist.
- */
-export function useSetDefaultModel() {
-  return useMutation({
-    mutationKey: ["wire", TARGET, "setDefault"],
-    mutationFn: async (defaultModel: string) => {
-      try {
-        return await getWire().call<{ revision: string }>(
-          TARGET,
-          "setDefault",
-          { defaultModel, revision: currentRevision() },
-        );
-      } catch (error) {
-        if (isConfigChanged(error))
-          await getWire()
-            .call(TARGET, "reload")
-            .catch(() => undefined);
-        throw error;
-      }
-    },
   });
 }
 

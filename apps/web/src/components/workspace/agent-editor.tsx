@@ -7,7 +7,7 @@ import { ScrollIcon } from "@phosphor-icons/react/Scroll";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/SlidersHorizontal";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
 import { useEffect, useState } from "react";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm, useFormState, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
@@ -44,7 +44,7 @@ import {
   RuntimeField,
   ThinkingField,
 } from "./agent-fields";
-import { agentDraft, agentFormSchema } from "./agent-form";
+import { agentDraft, agentFormSchema, agentNameProblem } from "./agent-form";
 import { AgentAvatar } from "./agent-identity";
 import { AgentPluginsField } from "./agent-plugins";
 import { CreateAgentWizard } from "./create-agent-wizard";
@@ -162,6 +162,7 @@ function AgentEditorForm({
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const updateAgent = useUpdateAgent();
+  const { agents } = useAgents();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [tab, setTab] = useState<Tab>("general");
   const form = useForm<AgentForm>({
@@ -197,24 +198,35 @@ function AgentEditorForm({
     if (target) setTab(target.value);
     setFocus({ field });
   };
-  const errors = form.formState.errors;
+  // From useFormState, not form.formState: the React Compiler memoises on `form`, which never
+  // changes, so a read off it would stay what it was at the first render.
+  const { errors, isDirty } = useFormState({ control: form.control });
   const runtime = useWatch({ control: form.control, name: "runtime" });
   const machineId = useWatch({ control: form.control, name: "machineId" });
   const { runtimes, models } = useAgentRuntimeChoices(runtime, machineId);
 
   const save = form.handleSubmit(
     (values) => {
-      // Agents can be created before any account is connected, not after. An external runtime
-      // runs its own default when none is chosen.
-      if (
-        values.runtime === "eta" &&
-        !values.model &&
-        models?.some((model) => model.available)
-      ) {
+      // An agent on eta's own loop runs on the model it names; there is no default to fall back
+      // to. An external runtime runs its own default when none is chosen.
+      if (values.runtime === "eta" && !values.model) {
         form.setError("model", {
           message: translateText("validation:modelRequired"),
         });
         showError("model");
+        return;
+      }
+      const problem = agentNameProblem(agents, values.name, agent.id);
+      if (problem !== undefined) {
+        form.setError("name", {
+          message: translateText(
+            problem === "reserved"
+              ? "validation:nameReserved"
+              : "validation:nameTaken",
+            { name: values.name.trim() },
+          ),
+        });
+        showError("name");
         return;
       }
       if (values.model && values.runtime === "eta") {
@@ -291,10 +303,7 @@ function AgentEditorForm({
           <Button type="button" variant="outline" onClick={onDone}>
             {translateText("common:actions.cancel")}
           </Button>
-          <Button
-            type="submit"
-            disabled={updateAgent.isPending || !form.formState.isDirty}
-          >
+          <Button type="submit" disabled={updateAgent.isPending || !isDirty}>
             {translateText("common:actions.save")}
           </Button>
         </div>

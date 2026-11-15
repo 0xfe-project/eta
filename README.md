@@ -16,8 +16,8 @@
   <a href="#tldr">TL;DR</a> ·
   <a href="#what-it-is">What it is</a> ·
   <a href="#the-part-where-we-disagree">The part where we disagree</a> ·
-  <a href="#run-it">Run it</a> ·
-  <a href="#manual">Manual</a> ·
+  <a href="#install">Install</a> ·
+  <a href="#documentation">Documentation</a> ·
   <a href="#license">License</a>
 </p>
 
@@ -86,197 +86,76 @@ smile and trust the dashboard.
 
 **OpenCode** If the runtime ignores your plan, that isn't autonomy, it's an argument you keep losing.
 
-## Run it
+## Install
+
+There are two ways to run eta. **We recommend installing the host** on a computer that stays on — a
+home server, a desktop, a small VPS. Your agents keep working while your laptop is closed, and you
+reach the same eta from any browser or your phone.
+
+### Recommended: install the host
+
+eta is one file, `eta-host`. It serves the web app, keeps everything in `~/.eta`, and needs nothing
+else running. Builds for Linux x64, macOS (Apple silicon) and Windows x64 are on
+[Releases](https://github.com/0xfe-project/eta/releases/latest).
+
+On Linux:
 
 ```sh
-git clone https://github.com/0xfe-project/eta.git
-cd eta
-bun run setup     # install dependencies
-bun run dev       # host + web
+curl -LO https://github.com/0xfe-project/eta/releases/latest/download/eta-host-linux-x64
+chmod +x eta-host-linux-x64
+mkdir -p ~/.local/share/eta/host
+mv eta-host-linux-x64 ~/.local/share/eta/host/eta-host
+~/.local/share/eta/host/eta-host install-service --host tailscale
 ```
 
-Open http://127.0.0.1:3000, add a model service in Settings — an API key, or a subscription account by
-device code — then create an agent and a conversation. Data lands in `$HOME/.eta`, the same directory a
-production install uses, so nothing you set up here is throwaway.
+That starts eta now and at every login, listening on your tailnet; leave out `--host` to keep it on this
+machine only. On a headless box, `loginctl enable-linger` keeps it running without a login. Open
+`http://<this machine>:8787`. Anything other than localhost turns on a token by itself: the first visit
+is `http://<this machine>:8787/?token=<token>`, with the token from `~/.eta/access-token`.
 
-`bun run check` runs the same checks CI and the pre-commit hook run.
+On macOS, use `eta-host-darwin-arm64` the same way, and clear the download flag before the first run
+(`xattr -d com.apple.quarantine eta-host-darwin-arm64`): the build is not signed yet.
 
-If that sounds like your kind of tool: clone it, inspect it, and make it yours.
+On Windows, download `eta-host-windows-x64.exe` and run `eta-host-windows-x64.exe install-service` in an
+Administrator terminal. It runs as a Windows service under your account and asks for your password once,
+which it hands to Windows without storing it.
 
-## Manual
+To try it without installing anything, run the file directly (`./eta-host-linux-x64`): eta runs in that
+terminal until you stop it.
 
-Everything below is the reference: what the process is, what the flags are, how to run it on a server,
-how to add a machine, where the data lives.
+### Experimental: the desktop app
 
-### Layout
+Prefer to just open an app? Download the desktop installer for your system from
+[Releases](https://github.com/0xfe-project/eta/releases), open it, choose **Run on this computer**, and
+it sets everything up by itself.
 
-```text
-apps/
-  eta/       host: one Bun process — WebSocket pipe, cordis plugins, SQLite (main node)
-  daemon/    eta-daemon: a slim node on another machine, dials back to the main node, runs sessions only
-  web/       React UI, reads and writes over that same WebSocket
-  tui/       eta: terminal UI, a client of the host over that same WebSocket
-packages/
-  eta-*        kernel, harness, server floor, SSH and git plugins of upstream eta
-  client-wire-proto, client-contracts   wire frames and product target types
-docs/architecture/   design notes
-```
+> The desktop app is experimental. eta runs only while the app is open and the computer is awake, and
+> other devices can't reach it. For an assistant that is always there, install the host on a server
+> instead — the app can connect to that host too (**Connect to an existing host**).
 
-Architecture notes:
+## First steps
 
-- [Overview](docs/architecture/overview.md): processes, layers, code layout
-- [Wire protocol and targets](docs/architecture/wire-protocol.md): WebSocket pipe, frames, targets and actions
-- [Product model](docs/architecture/product-model.md): agents, machines, projects, conversations, the lead agent, wake-up rules
-- [Data](docs/architecture/data.md): SQLite and migrations, session files, data directory layout
-- [Phone app](docs/architecture/mobile.md): the Native Shell client, connecting, scanning, packaging
-- [Machines and daemon](docs/architecture/machines.md): pairing, epochs, model and tool proxying, remote sessions
-- [Access control](docs/architecture/access.md): origin checks, token gate, capability routing
-- [LLM gateway](docs/architecture/llm-gateway.md): subscription accounts (Codex, Grok) and Gemini keys, CLIProxyAPI run as a child process of the host
-- [Memory](docs/architecture/memory.md): what is stored, how it is queried per conversation
-- [Web](docs/architecture/web.md): `web_fetch` and `web_search`, in the host process; SSRF guard, paging, the SearXNG it runs
-- [Tasks](docs/architecture/tasks.md): an agent proposes, the user confirms, the same agent executes in a fresh session
-- [Tasks, artifacts and routines](docs/architecture/tasks-artifacts-routines.md)
-- [TUI](docs/architecture/tui.md): the terminal interface `eta`, its connection, settings files and how to add a command or a screen; [commands](docs/tui/commands.md)
+Settings → Model services → Add a source: sign in with a ChatGPT or Grok subscription, or paste an API
+key. Then create an agent and start a conversation.
 
-UI conventions live in [DESIGN.md](DESIGN.md) and [apps/web/AGENTS.md](apps/web/AGENTS.md).
+## Updating
 
-### Environment and setup
+Settings → Update, or `eta-host upgrade`. It verifies the download, waits for working agents, backs up
+the database to `~/.eta/backups`, restarts the service, and goes back to the old version on its own if
+the new one does not start. The machines you added follow on their next connect.
 
-Needs Bun 1.4.3 (`bun check` is what every package type-checks with) and uv (Python 3.13, fetched by
-uv from `.python-version`). The LLM gateway's CLIProxyAPI binary comes with `bun install`. Nothing else
-to install and no service to stand up.
+## More machines
 
-```sh
-bun run setup     # bun install + uv sync
-bun run dev       # host and web dev server
-bun run check     # everything CI runs
-```
+Sessions can run on other computers too. Settings → Machines → Add a machine gives you a command to run
+there; it shows a fingerprint, and the machine joins once you approve it. See
+[Self-hosting](docs/self-hosting.md#more-machines-the-daemon).
 
-`bun run dev` starts the host and vite together:
+## Documentation
 
-- Web: http://127.0.0.1:3000 (`ETA_WEB_PORT` changes the port)
-- host: http://127.0.0.1:8787 (`ETA_PORT` changes the port), data in `~/.eta/` — the same directory an
-  installed instance uses; vite proxies `/ws` to it and the host allow-lists vite's origin
-
-In the web UI, add a model service under Settings → Model services first (an API key, or a device-code
-link for a Codex or Grok subscription, or a Google AI Studio key), then create agents and conversations.
-
-`bun run check` is `dprint check`, `bun run lint:repo` (root eslint) and
-`turbo run build typecheck lint test knip`. `bun run format` formats with dprint. CI and the pre-commit
-hook run the same set, through turbo's remote cache.
-
-### Running in production
-
-On a Linux or macOS computer, from a checkout, as your own user service:
-
-```sh
-bun run host:install -- --host tailscale --port 8790
-```
-
-This builds the web, stages the compiled host the way the desktop app carries it (page, migrations,
-CLIProxyAPI and the daemon for every platform), puts it in `~/.local/share/eta/host`, and runs
-`eta-host install-service <flags>`: a systemd user unit (`io.eta.host`) or launchd agent that starts at
-login and restarts on failure, with the PATH you installed from (so agents find git, gh, Claude Code,
-Codex). Running it again after `git pull` is one way to upgrade; the daemons follow on their next connect.
-On a headless Linux box, `loginctl enable-linger` keeps user services up without a login.
-`~/.local/share/eta/host/eta-host uninstall-service` removes the service; the data stays in `~/.eta`.
-
-On Windows a downloaded `eta-host.exe` runs as a real Windows service, started at boot: run
-`eta-host install-service <flags>` in an Administrator terminal. It asks for your Windows password once,
-because the service runs as you (so agents can read your Claude, Codex and gh logins), and hands it to
-Windows without storing it. [docs/release.md](docs/release.md) has the details.
-
-`--host tailscale` listens on the tailnet address only, which is what other machines join over.
-
-A tagged version is that same `eta-host` as one file on GitHub Releases, for Linux x64, macOS arm64 and
-Windows x64:
-[docs/release.md](docs/release.md) says how to cut one and how to fetch it. An installed file upgrades
-itself with no checkout:
-
-```sh
-~/.local/share/eta/host/eta-host upgrade            # the latest full release; --check only says
-~/.local/share/eta/host/eta-host upgrade 0.2.0-rc.1 # a pre-release has to be named
-```
-
-It checks the download, waits for working agents (`--force` does not), backs up the database to
-`~/.eta/backups`, restarts the service, and goes back on its own if the new build does not hold. A
-process of its own does this, so it outlives the terminal and the host. Settings has the same thing
-as a button.
-
-Releases come from the repository the build was released from, so a fork's builds follow the fork.
-`--repo <owner>/<name>` or Settings names another one, a private one included, with `gh`'s login,
-`GH_TOKEN`, or a token saved in Settings. That choice decides whose code the host runs: see [docs/release.md](docs/release.md).
-[docs/release.md](docs/release.md) has the details.
-
-Or run the host by hand:
-
-```sh
-bun run --cwd apps/web build
-HOME=/var/lib/eta bun apps/eta/src/main.ts --web-dir apps/web/dist --host 0.0.0.0 --port 8787
-```
-
-The data directory is always `$HOME/.eta`; there is no switch. To move it, move `HOME` (in systemd,
-`Environment=HOME=/var/lib/eta`).
-
-Host flags (`apps/eta/src/main.ts`):
-
-| flag                  | meaning                                                                                                                                                                                                                                                                             |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--port <n>`          | port, default `8787` (`0` picks any free port)                                                                                                                                                                                                                                      |
-| `--host <addr>`       | interface to bind, default `127.0.0.1`; `tailscale` is this computer's tailnet address. **Binding anything other than loopback turns the token gate on**                                                                                                                            |
-| `--web-dir <dir>`     | built web (with `index.html`). A compiled host defaults to the page inside it; otherwise without it the host serves the pipe only, no pages                                                                                                                                         |
-| `--token-file <path>` | turn the token gate on with an explicit token file (created if missing, mode 0600). Binding a non-loopback address without this uses `<data directory>/access-token`                                                                                                                |
-| `--allow-origin <o>`  | extra page origin allowed to open the WebSocket, repeatable. Set it when you sit behind a reverse proxy that rewrites `Host`                                                                                                                                                        |
-| `--no-llm`            | don't load the LLM gateway (no subscription accounts, no Gemini keys)                                                                                                                                                                                                               |
-| `--searxng-url <url>` | the SearXNG `web_search` asks (`ETA_SEARXNG_URL` counts too). Without it the host runs the prebuilt SearXNG as a child process on first search, on linux-x64 (glibc 2.35+), darwin-arm64 and win32-x64; elsewhere agents get `web_fetch` only (see [Web](docs/architecture/web.md)) |
-| `--no-web`            | don't give agents `web_fetch` and `web_search`                                                                                                                                                                                                                                      |
-
-First visit to a gated host: open `http://host:8787/?token=<token>` once in the browser, then the
-cookie takes over; scripts use `Authorization: Bearer <token>`. `/up` is the health check and needs no
-token. Details in [Access control](docs/architecture/access.md).
-
-### Behind a reverse proxy
-
-Set `ETA_ALLOW_ORIGIN=https://your.domain`, and give the host `--allow-origin https://your.domain` when
-the proxy rewrites `Host`. The proxy has to upgrade WebSocket for `/ws` and `/machines/connect`. `/up`
-is the health check and needs no token.
-
-Run it under systemd with `HOME=/var/lib/eta` and everything — database, sessions, artifacts, memory —
-lives in that one directory.
-
-### daemon: run sessions on another machine
-
-The daemon is a single file from `bun build --compile`; it holds no web, no database and no model
-configuration — model calls and product tools all go back to the main node.
-
-```sh
-bun run --cwd apps/daemon build           # produces apps/daemon/out/eta-daemon
-```
-
-1. In the main node: Settings → Machines, add a machine, and get a command (the install code is valid
-   for 24 hours and works once).
-2. On that machine run `eta-daemon setup <main node address> <install code>`. It generates a key
-   locally and shows the fingerprint, then waits for approval.
-3. Check the fingerprint matches in Settings, then approve.
-4. `eta-daemon run` starts it; `eta-daemon install-service` registers a systemd user service (Linux) or
-   a launchd agent (macOS).
-
-The daemon only dials out to the main node, which therefore has to be reachable from it (a reverse
-proxy has to upgrade `/machines/connect`). Its data directory is `~/.eta/daemon`, the same root as the
-host, decided by `$HOME` — no switch. How it works: [Machines and daemon](docs/architecture/machines.md).
-
-### Memory
-
-Memory is a SQLite file in the data directory, next to the sessions and the artifacts, and it is
-queried per conversation. There is no separate service to run and nothing to configure: it comes with
-the install, it travels with `$HOME/.eta`, and a row you delete stays deleted. See
-[Memory](docs/architecture/memory.md).
-
-### Access
-
-Origin checks on the pipe, a token gate that comes up automatically on a non-loopback bind, and
-capability routing so a daemon sees only what it needs. The full story is in
-[Access control](docs/architecture/access.md).
+- [Self-hosting](docs/self-hosting.md): flags, the token, reverse proxies, more machines, upgrades
+- [Development](docs/development.md): the layout, working from a checkout, checks
+- [Release](docs/release.md): how versions are built and published, checksums
+- [Architecture](docs/architecture/overview.md): processes, the wire protocol, data, access control
 
 ## License
 

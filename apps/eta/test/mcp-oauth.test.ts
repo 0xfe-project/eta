@@ -107,7 +107,10 @@ async function setUp(options: { publicUrl?: string } = {}) {
   });
   await client.hello();
   client.subscribe("mcp");
-  const created = (await client.call("agents", "create", { name: "Ada" })) as {
+  const created = (await client.call("agents", "create", {
+    name: "Ada",
+    model: "fake:fake-model",
+  })) as {
     agent: { id: string };
   };
   const agentId = created.agent.id;

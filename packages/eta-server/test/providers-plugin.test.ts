@@ -205,7 +205,7 @@ describe("the config over the wire", () => {
     await h.unload();
   });
 
-  it("sets the default, deletes a provider, and refuses a default nobody serves", async () => {
+  it("deletes a provider, and has no default model to set", async () => {
     const h = await harness();
     await h.load();
     await until(() => h.config() !== undefined);
@@ -215,27 +215,17 @@ describe("the config over the wire", () => {
     });
     const revision = h.config()?.revision;
 
-    const bad = await callResult(h, "setDefault", {
-      revision,
-      defaultModel: "a:nope",
-    });
-    expect(bad.ok).toBe(false);
-    expect(bad.error).toContain("invalid_default_model");
-
-    const good = await callResult(h, "setDefault", {
+    // There is no default model: the action is gone, not refused.
+    const gone = await callResult(h, "setDefault", {
       revision,
       defaultModel: "a:m1",
     });
-    expect(good.ok).toBe(true);
-    expect(h.config()?.defaultModel).toBe("a:m1");
+    expect(gone.ok).toBe(false);
+    expect(h.config()).not.toHaveProperty("defaultModel");
 
-    const removed = await callResult(h, "delete", {
-      revision: h.config()?.revision,
-      id: "a",
-    });
+    const removed = await callResult(h, "delete", { revision, id: "a" });
     expect(removed.ok).toBe(true);
     expect(h.config()?.providers).toEqual([]);
-    expect(h.config()?.defaultModel).toBeUndefined();
     await h.unload();
   });
 
@@ -443,32 +433,6 @@ describe("refreshing a provider's model list", () => {
     ).rejects.toThrow(/no such provider/);
     await (fiber as unknown as { dispose: () => Promise<void> }).dispose();
   });
-});
-
-describe("subscription login belongs to the native llm plugin", () => {
-  it.each(["codexLogin", "codexAnswer", "codexStatus", "codexCancel"])(
-    "does not register providers.%s",
-    async (action) => {
-      const root = await mkdtemp(join(tmpdir(), "eta-provider-no-login-"));
-      roots.push(root);
-      const ctx = new Context();
-      const wire = new WireService(ctx);
-      const store = new ProviderConfigStore({
-        path: join(root, "config.json"),
-      });
-      const fiber = ctx.plugin(
-        providersPlugin({ store }) as never,
-        undefined as never,
-      );
-      await until(() => wire.descriptors().length > 0);
-      await expect(
-        wire.dispatch({ op: "call", target: "providers", action, args: {} }, {
-          reply: () => undefined,
-        } as never),
-      ).rejects.toThrow(`unknown op: providers.${action}`);
-      await (fiber as unknown as { dispose: () => Promise<void> }).dispose();
-    },
-  );
 });
 
 describe("unsaved model discovery", () => {

@@ -378,14 +378,8 @@ export async function listProviderModels(
       const found = facts.get(model.id);
       if (found === undefined) return model;
       // The provider's own answer and the built-in catalog win; models.dev fills the gaps.
-      return {
-        ...(found.name === undefined ? {} : { name: found.name }),
-        ...(found.contextWindow === undefined
-          ? {}
-          : { contextWindow: found.contextWindow }),
-        ...(found.input === undefined ? {} : { input: found.input }),
-        ...model,
-      };
+      const { id: _id, ...listed } = found;
+      return { ...listed, ...model };
     }),
   };
 }

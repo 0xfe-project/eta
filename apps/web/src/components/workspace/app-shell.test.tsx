@@ -5,9 +5,8 @@ import type {
   EmailAccountView,
 } from "@eta/client-contracts";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { setWire } from "@/lib/wire";
@@ -20,7 +19,7 @@ import {
   projectView,
   taskDetail,
 } from "@/test-product";
-import { flush } from "@/test-render";
+import { cleanup, flush, mount } from "@/test-render";
 import { agentStatusLabels } from "./agent-status";
 import { Sidebar, SidebarShell } from "./app-shell";
 import { GroupList } from "./groups";
@@ -77,11 +76,6 @@ rstest.mock("@tanstack/react-router", () => ({
   useNavigate: () => () => undefined,
 }));
 
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-
-const cleanup: (() => void)[] = [];
 /**
  * The sidebar, in a provider of its own. `open` is the provider's default: what a first visit
  * starts with. Without it the provider reads the cookie, which is how a reload is replayed.
@@ -147,23 +141,14 @@ async function render(
   host.target("captain", { identity: captainIdentity });
   host.install();
   host.hello();
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  await act(async () =>
-    root.render(
-      <QueryClientProvider client={client}>
-        <SidebarProvider defaultOpen={open}>
-          <TooltipProvider>{node}</TooltipProvider>
-        </SidebarProvider>
-      </QueryClientProvider>,
-    ),
-  );
-  cleanup.push(() => {
-    root.unmount();
-    container.remove();
-  });
-  return container;
+  return (
+    await mount(
+      <SidebarProvider defaultOpen={open}>
+        <TooltipProvider>{node}</TooltipProvider>
+      </SidebarProvider>,
+      client,
+    )
+  ).container;
 }
 
 /**
@@ -197,27 +182,18 @@ async function mountAt(
   );
   host.install();
   host.hello();
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  await act(async () =>
-    root.render(
-      <QueryClientProvider client={client}>
-        <SidebarProvider defaultOpen={open}>
-          <TooltipProvider>{node}</TooltipProvider>
-        </SidebarProvider>
-      </QueryClientProvider>,
-    ),
-  );
-  cleanup.push(() => {
-    root.unmount();
-    container.remove();
-  });
-  return container;
+  return (
+    await mount(
+      <SidebarProvider defaultOpen={open}>
+        <TooltipProvider>{node}</TooltipProvider>
+      </SidebarProvider>,
+      client,
+    )
+  ).container;
 }
 
 afterEach(async () => {
-  await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
+  await cleanup();
   state.openAgent.mockClear();
   state.pathname = "/";
   tasks = [];
@@ -548,12 +524,14 @@ describe("折叠成图标栏", () => {
   });
 
   it("右缘只留 sidebar-rule，默认 border-r 不再从窗顶画到底", async () => {
-    // The component's default edge is full height. Stacked on `sidebar-rule` (the 1px line that
-    // starts under the band) it reads as one thick rule. The shell zeros that edge; the rule stays.
+    // The component's default edge is full height. Stacked on `sidebar-rule` it reads as one thick
+    // rule. The shell zeros that edge; the rule stays — and only the folded rail marks its edge,
+    // the one place the shell keeps the rule's top out of the window's lights.
     for (const open of [true, false]) {
       const container = await render(<Sidebar />, { open });
       const edge = container.querySelector('[data-slot="sidebar-container"]')!;
       expect(edge.className).toContain("sidebar-rule");
+      expect(edge.getAttribute("data-rail-edge")).toBe(open ? null : "true");
       expect(edge.className).toContain("group-data-[side=left]:border-r-0");
       expect(edge.className).not.toContain("group-data-[side=left]:border-r ");
       expect(edge.className).not.toMatch(/group-data-\[side=left\]:border-r$/);
@@ -577,16 +555,13 @@ describe("折叠成图标栏", () => {
     expect(root(again).getAttribute("data-state")).toBe("expanded");
   });
 
-  it("卡片是小字名称，点它还是进那个群或智能体", async () => {
+  it("卡片写着群或智能体的名称，点它还是进那个群或智能体", async () => {
     lists();
     const container = await render(<Sidebar />, { open: false });
     const name = container.querySelector('[data-slot="conversation-name"]')!;
     expect(name.textContent).toBe("装配");
-    expect(name.className).toContain("text-[10px]");
-    expect(name.className).toContain("truncate");
     const agentName = container.querySelector('[data-slot="agent-name"]')!;
     expect(agentName.textContent).toBe("乐子人");
-    expect(agentName.className).toContain("text-[10px]");
     // The whole card is still the target: a rail card is one button, not a heading beside one.
     const agents = container.querySelector(
       '[aria-labelledby="sidebar-agents"]',

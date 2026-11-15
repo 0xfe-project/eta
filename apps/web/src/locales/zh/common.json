@@ -142,7 +142,8 @@
     "hoursAgo_one": "{{count}} 小时前",
     "hoursAgo_other": "{{count}} 小时前",
     "hours_one": "{{count}} 小时",
-    "hours_other": "{{count}} 小时"
+    "hours_other": "{{count}} 小时",
+    "durationHoursMinutes": "{{hours}} 小时 {{minutes}} 分"
   },
   "format": {
     "namedValue": "{{name}}：{{value}}",
@@ -175,5 +176,26 @@
   },
   "desktop": {
     "tooOld": "这个 host 需要 eta 桌面端 {{min}} 或更新的版本，当前是 {{current}}。部分功能可能无法使用，请更新桌面端。"
+  },
+  "run": {
+    "kinds": {
+      "model": "生成",
+      "shell": "命令",
+      "read": "读取 / 搜索",
+      "edit": "编辑 / 写入",
+      "tool": "工具",
+      "other": "其他"
+    },
+    "summary": "{{count}} 步，用时 {{duration}}",
+    "expand": "展开",
+    "collapse": "收起",
+    "steps": "每一步",
+    "startsAt": "{{time}} 开始",
+    "took": "用时 {{duration}}",
+    "running": "进行中",
+    "step": "{{name}}，{{kind}}，{{detail}}，{{start}} 开始，{{took}}",
+    "summary_one": "{{count}} 步，用时 {{duration}}",
+    "summary_other": "{{count}} 步，用时 {{duration}}",
+    "stepPlain": "{{name}}，{{kind}}，{{start}} 开始，{{took}}"
   }
 }

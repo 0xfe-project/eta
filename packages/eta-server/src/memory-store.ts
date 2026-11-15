@@ -5,17 +5,11 @@
  * starts as bare memory (REFACTOR.md §5b), so the seam is exercised before the
  * filesystem is involved. Each session gets its *own* storage instance — that is
  * the isolation the server is for, and it is tested rather than assumed.
- *
- * It can be seeded with what a restart would have found, including an unreadable
- * session, which is how `list()`'s reason path is exercised without a file to
- * corrupt.
  */
 
-import type { StorageService } from "@eta/core/storage";
 import type {
   SessionListing,
   SessionMeta,
-  SessionSeed,
   SessionStore,
   StoredSession,
 } from "./store";
@@ -25,19 +19,6 @@ export class MemorySessionStore implements SessionStore {
   private readonly sessions = new Map<string, StoredSession>();
   private readonly broken = new Map<string, string>();
   private closed = false;
-
-  constructor(options: { sessions?: SessionSeed[] } = {}) {
-    for (const seed of options.sessions ?? []) {
-      if ("broken" in seed) {
-        this.broken.set(seed.id, seed.broken);
-        continue;
-      }
-      this.sessions.set(seed.meta.id, {
-        meta: seed.meta,
-        storage: seed.storage ?? new MemoryStorage(),
-      });
-    }
-  }
 
   async create(meta: SessionMeta): Promise<StoredSession> {
     if (this.closed) throw new Error("the session store is closed");
@@ -105,6 +86,3 @@ export class MemorySessionStore implements SessionStore {
     this.closed = true;
   }
 }
-
-/** The storage a session writes to — exposed so a caller can hand the real one. */
-export type SessionStorageFactory = (meta: SessionMeta) => StorageService;

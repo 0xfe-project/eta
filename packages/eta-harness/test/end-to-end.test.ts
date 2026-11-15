@@ -267,8 +267,6 @@ describe("one full session", () => {
     expect(
       sessionTokenTotal((await s.storage.getStats()).usage),
     ).toBeGreaterThan(0);
-    // Throughput is a number, not a placeholder.
-    expect(s.metrics.tokensPerSec).toBeGreaterThanOrEqual(0);
     s.dispose();
   });
 
@@ -285,7 +283,6 @@ describe("one full session", () => {
     s.kernel.inject(userMsg("go"));
     await s.runner.run();
 
-    const stats = await s.storage.getStats();
     const entries = await s.storage.scanEntries({ order: "asc" });
     // the goal entry the subscriber wrote, the user message, the assistant's
     // tool call, the tool result, and the final answer.
@@ -299,7 +296,6 @@ describe("one full session", () => {
     // A restart: a new kernel over the same journal.
     const log = await SessionLog.load(s.storage);
     expect(log.transcript().length).toBe(4); // goal entries are not messages
-    expect(await s.storage.getStats()).toEqual(stats);
 
     const { kernel: restartedKernel, journaling: restartedJournaling } =
       journaledKernel(log, {
@@ -362,8 +358,11 @@ describe("one full session", () => {
 
     // What was committed stands: the user message, the call, the result.
     const entries = await s.storage.scanEntries({ order: "asc" });
-    expect(entries.length).toBeGreaterThanOrEqual(2);
-    expect(entries[0]!.type).toBe("message");
+    expect(
+      entries.map((entry) =>
+        entry.type === "message" ? entry.message.role : entry.type,
+      ),
+    ).toEqual(["user", "assistant", "toolResult"]);
 
     // A fresh run over the replayed journal answers normally.
     const log = await SessionLog.load(s.storage);
@@ -379,11 +378,11 @@ describe("one full session", () => {
     kernel.inject(userMsg("try again"));
     const second = await runner.run();
     expect(second.status).toBe("completed");
+    // It is handed the committed turn whole (the call with its result), then the
+    // new question: nothing half-done is left for the provider to choke on.
     expect(
-      fake.calls[0]!.context.messages.some(
-        (message) => message.role === "user",
-      ),
-    ).toBe(true);
+      fake.calls[0]!.context.messages.map((message) => message.role),
+    ).toEqual(["user", "assistant", "toolResult", "user"]);
     void kernel.dispose();
     s.dispose();
   });

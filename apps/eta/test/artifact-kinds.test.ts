@@ -218,7 +218,7 @@ describe("the migration to kinds", () => {
     return { before: all.slice(0, at), rest: all.slice(at) };
   };
 
-  it("makes every version already published a plain site, which opens as before", async () => {
+  it("makes every version already published a plain site, previewed at its index.html", async () => {
     const db = await database();
     const { before, rest } = split();
     applyMigrations(db, before);
@@ -229,14 +229,12 @@ describe("the migration to kinds", () => {
     `);
     applyMigrations(db, rest);
 
-    const { artifacts, get } = await bench(KINDS, db);
+    const { artifacts } = await bench(KINDS, db);
     expect(artifacts.view("a")!.versions[0]).toMatchObject({
       kind: "site",
       viewer: "iframe",
     });
     expect(artifacts.preview("a", 1).url).toMatch(/\/files\/index\.html$/);
-    // Its bytes were never written here; the point is that it is asked for like any site.
-    expect((await get(artifacts.preview("a", 1).url)).status).toBe(404);
   });
 
   it("makes the same columns on a fresh database", async () => {

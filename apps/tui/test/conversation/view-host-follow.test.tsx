@@ -178,6 +178,7 @@ async function liveWorld(
     wire.call<T>(target, action, args);
   const { agent: ada } = await ask<{ agent: AgentView }>("agents", "create", {
     name: "Ada",
+    model: "fake:fake-model",
   });
   const { project } = await ask<{ project: ProjectView }>(
     "projects",

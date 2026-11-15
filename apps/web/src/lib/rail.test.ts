@@ -34,10 +34,14 @@ describe("右边缘的编号", () => {
   });
 
   it("窗口越界时不越界", () => {
-    const rows = railRows(4, 0);
-    expect(rows.every((row) => row.index === undefined || row.index >= 0)).toBe(
-      true,
+    // The window around the first entry reaches past both ends of four: every entry, once, no gap.
+    expect(railRows(4, 0)).toEqual(
+      [0, 1, 2, 3].map((index) => ({ index, skipped: 0 })),
     );
+    // A focus that is not on the list is read as the last entry, not as a row past the end.
+    const last = numbers(100, -1);
+    expect(last.at(-1)).toBe(99);
+    expect(last).toEqual(expect.arrayContaining([96, 97, 98, 99]));
   });
 
   it("悬停提示只取前 44 字", () => {

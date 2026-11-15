@@ -28,19 +28,14 @@ export function preview(text: string | undefined): string {
 }
 
 /** The rows the rail shows for `total` entries while entry `focus` is on screen. */
-export function railRows(
-  total: number,
-  focus: number,
-  anchors = RAIL_ANCHORS,
-  span = RAIL_WINDOW,
-): RailRow[] {
+export function railRows(total: number, focus: number): RailRow[] {
   if (total < 2) return [];
   const at = focus >= 0 && focus < total ? focus : total - 1;
   const picked = new Set<number>([0, total - 1]);
-  for (let step = 1; step < anchors - 1; step += 1) {
-    picked.add(Math.round((step * (total - 1)) / (anchors - 1)));
+  for (let step = 1; step < RAIL_ANCHORS - 1; step += 1) {
+    picked.add(Math.round((step * (total - 1)) / (RAIL_ANCHORS - 1)));
   }
-  for (let index = at - span; index <= at + span; index += 1) {
+  for (let index = at - RAIL_WINDOW; index <= at + RAIL_WINDOW; index += 1) {
     if (index >= 0 && index < total) picked.add(index);
   }
   const rows: RailRow[] = [];

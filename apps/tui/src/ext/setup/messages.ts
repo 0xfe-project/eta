@@ -14,7 +14,7 @@ export const setupMessages = defineMessages({
     agentsIntro:
       "One agent per persona card, on the model {model}. Cards that already have an agent are skipped.",
     agentsIntroNoModel:
-      "One agent per persona card, on the settings' model. Cards that already have an agent are skipped.",
+      "No usable model, and an agent needs one: press ← to go back and connect an account.",
     noCards: "This host has no persona cards. Press Enter to finish.",
     built: "already created",
     creating: "Creating {name}…",
@@ -36,7 +36,7 @@ export const setupMessages = defineMessages({
     agentsIntro:
       "每张 persona 卡建一个智能体，用模型 {model}。已有智能体的卡会跳过。",
     agentsIntroNoModel:
-      "每张 persona 卡建一个智能体，用设定里的模型。已有智能体的卡会跳过。",
+      "还没有可用的模型，而智能体必须选一个：按 ← 回去连接一个账户。",
     noCards: "这台 host 没有 persona 卡。按 Enter 完成。",
     built: "已建",
     creating: "正在建 {name}…",

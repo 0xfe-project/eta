@@ -158,6 +158,49 @@ describe("an artifact's dialog", () => {
     expect(document.body.textContent).not.toContain("/share/tok/");
   });
 
+  it("asks the frame to print itself, with the one message its page listens for", async () => {
+    open();
+    const { container } = await mount(
+      <ArtifactButton id={id}>季度报告</ArtifactButton>,
+    );
+    await click(container.querySelector("button"));
+    await flush();
+    const sent: [unknown, unknown][] = [];
+    frame()!.contentWindow!.postMessage = ((
+      message: unknown,
+      target: unknown,
+    ) => sent.push([message, target])) as Window["postMessage"];
+    const print = [...document.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("导出 PDF"),
+    );
+    expect(print?.getAttribute("title")).toContain("另存为 PDF");
+    await click(print);
+    // An opaque origin has no name to address it by, hence "*"; the message carries nothing.
+    expect(sent).toEqual([[{ type: "eta:print" }, "*"]]);
+  });
+
+  it("offers no print button on a touch screen", async () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes("pointer: coarse"),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    try {
+      open();
+      const { container } = await mount(
+        <ArtifactButton id={id}>季度报告</ArtifactButton>,
+      );
+      await click(container.querySelector("button"));
+      await flush();
+      expect(frame()).not.toBeNull();
+      expect(document.body.textContent).not.toContain("导出 PDF");
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+
   it.each([
     ["a kind this app does not know", { kind: "react" }],
     ["a kind that opens only as a download", { viewer: "download" as const }],
@@ -181,6 +224,7 @@ describe("an artifact's dialog", () => {
     expect(host.calls.filter((c) => c.action === "preview")).toEqual([]);
     expect(document.body.textContent).toContain("这个版本不能在这里打开");
     expect(document.body.textContent).not.toContain("新窗口");
+    expect(document.body.textContent).not.toContain("导出 PDF");
     const downloads = [...document.querySelectorAll("a")].filter(
       (a) => a.getAttribute("href") === `/artifacts/${id}/1/archive.zip`,
     );

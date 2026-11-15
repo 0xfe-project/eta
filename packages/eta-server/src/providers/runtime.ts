@@ -38,7 +38,7 @@ import { createModels, createProvider } from "@earendil-works/pi-ai";
 import { opencodeProvider } from "@earendil-works/pi-ai/providers/opencode";
 import { opencodeGoProvider } from "@earendil-works/pi-ai/providers/opencode-go";
 import { attributionHeaders } from "./attribution";
-import { providerDefinitionForKind } from "./catalog";
+import { catalogCompat, providerDefinitionForKind } from "./catalog";
 import {
   effectiveModel,
   MODEL_THINKING_LEVELS,
@@ -172,7 +172,10 @@ function runtimeModel(
   const compat =
     provider.kind === undefined
       ? undefined
-      : opencodeCompat(provider.kind, model.id, api);
+      : (opencodeCompat(provider.kind, model.id, api) ??
+        (api === "openai-completions"
+          ? catalogCompat(provider.kind)
+          : undefined));
   return {
     id: model.id,
     name: model.name ?? model.id,

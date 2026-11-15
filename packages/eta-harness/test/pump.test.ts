@@ -84,7 +84,7 @@ describe("runPump", () => {
     dispose();
   });
 
-  it("does not start a second run while one is in flight", async () => {
+  it("takes a burst of injects without seeing any message twice", async () => {
     const { kernel, runner, fake, waker, dispose } = setup(
       [answer("one"), answer("two")],
       true,
@@ -108,7 +108,14 @@ describe("runPump", () => {
   it("reports a pumped run that fails, and keeps accepting work", async () => {
     const failures: unknown[] = [];
     const kernel = Kernel.create();
-    const fake = fakeModels([]); // a provider with nothing left to say
+    const fake = fakeModels([answer("after the failure")]);
+    const scripted = fake.streamSimple;
+    let calls = 0;
+    fake.streamSimple = (...args) => {
+      calls += 1;
+      if (calls === 1) throw new Error("provider down");
+      return scripted(...args);
+    };
     const runner = new Runner(kernel, { models: fake });
     const waker = new RunPump(kernel, runner, {
       onRunEnd: (error) => failures.push(error),
@@ -117,8 +124,14 @@ describe("runPump", () => {
     kernel.inject(userMsg("go"));
     await settle();
     expect(failures).toHaveLength(1);
-    // The pump is still live: the next inject gets its own attempt.
-    expect(waker.running).toBe(false);
+    // The pump is still live: the next inject gets its own run.
+    kernel.inject(userMsg("again"));
+    await settle();
+    expect(calls).toBe(2);
+    expect(failures).toHaveLength(1);
+    expect(JSON.stringify(runner.getTranscript())).toContain(
+      "after the failure",
+    );
     waker.stop();
     void kernel.dispose();
   });

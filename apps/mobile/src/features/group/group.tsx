@@ -11,6 +11,7 @@ import type {
 } from "@eta/client-contracts";
 import type { JSX } from "nsh";
 import type { IconName } from "../../ui/icons";
+import { runningFirst } from "@eta/client-contracts";
 import { computed, Scroll, signal, Text, View } from "nsh";
 import {
   agents,
@@ -299,10 +300,13 @@ export function GroupInfoScreen(props: { id: string }) {
 
   const groupTasks = () =>
     boardTasks().filter((task) => task.conversationId === props.id);
+  // Latest first; within a status, a task that runs before one that waits in the queue.
   const openTasks = computed(() =>
-    groupTasks()
-      .filter((task) => !CLOSED.has(task.status))
-      .sort((a, b) => b.updatedAt - a.updatedAt),
+    runningFirst(
+      groupTasks()
+        .filter((task) => !CLOSED.has(task.status))
+        .sort((a, b) => b.updatedAt - a.updatedAt),
+    ),
   );
   const artifacts = () =>
     (artifactList.section<ArtifactView[]>("list") ?? []).filter(

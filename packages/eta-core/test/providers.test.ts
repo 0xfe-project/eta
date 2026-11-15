@@ -1,11 +1,7 @@
 import type { AssistantMessage, Model } from "@earendil-works/pi-ai";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import {
-  piAiModels,
-  THINKING_LEVELS,
-  thinkingLevelsFor,
-} from "../src/kernel/providers";
+import { THINKING_LEVELS, thinkingLevelsFor } from "../src/kernel/providers";
 
 describe("models seam", () => {
   it("accepts a scripted fake and replays it in order, recording calls", async () => {
@@ -111,27 +107,6 @@ describe("models seam", () => {
     for await (const event of stream) types.push(event.type);
     expect(types).toEqual(["start", "error"]);
     await expect(stream.result()).resolves.toEqual(settled);
-  });
-
-  it("piAiModels delegates to the injected collection (pi-ai's own shape)", async () => {
-    const settled: AssistantMessage = assistantMessage();
-    const collection = {
-      getModel: () => ({ id: "m" }) as unknown as Model<"openai-completions">,
-      streamSimple: () => {
-        throw new Error("not used");
-      },
-      async completeSimple() {
-        return settled;
-      },
-    };
-    const seam = piAiModels(collection);
-    expect(seam.getModel("p", "m")).toBeDefined();
-    const out = await seam.completeSimple(
-      {} as unknown as Model<"openai-completions">,
-      { messages: [] },
-      { reasoning: "low" },
-    );
-    expect(out).toBe(settled);
   });
 });
 

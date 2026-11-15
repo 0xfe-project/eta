@@ -38,7 +38,10 @@ describe("resolveAssignee", () => {
     applyMigrations(db, loadMigrations());
     const agents = new AgentStore(db);
     const ada = agents.create({ name: "Ada" });
+    agents.create({ name: "ADA" });
+    // Exact spelling first: the case-folded names would be two agents.
     expect(resolveAssignee("Ada", agents)).toBe(ada.id);
+    expect(() => resolveAssignee("ada", agents)).toThrow(/more than one agent/);
   });
 
   it("resolves an agent by name case-insensitively as a fallback", () => {

@@ -9,7 +9,7 @@ const CHECK_EVERY = 5 * 60_000;
 
 let offered = false;
 
-export async function checkForUpdate() {
+async function checkForUpdate() {
   if (offered || document.visibilityState !== "visible") return;
   const response = await fetch("/version", { cache: "no-store" }).catch(
     () => null,

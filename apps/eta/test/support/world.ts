@@ -64,6 +64,10 @@ export async function world(
   options: Partial<HostOptions> = {},
 ): Promise<World> {
   const host = await testHost(options);
+  // Captain is made without a model and, like any agent on eta's own loop, has none to fall back
+  // to: the user picks one. A test's Captain runs on the scripted layer, which answers to any.
+  if (host.product.captain.identity()?.model === null)
+    await host.product.captain.setModel("fake:fake-model");
   const client = await connect(`ws://127.0.0.1:${host.port}/ws`);
   await client.hello();
   // What `hello` carries is a snapshot; the lists stay current for a client that subscribes.
@@ -95,8 +99,13 @@ export async function world(
     host,
     client,
     async agent(name, fields = {}) {
+      // An agent on eta's own loop names a model (the host refuses one without); the scripted
+      // model layer answers to any.
       const { agent } = await call<{ agent: AgentView }>("agents", "create", {
         name,
+        ...((fields.runtime ?? "eta") === "eta" && fields.model === undefined
+          ? { model: "fake:fake-model" }
+          : {}),
         ...fields,
       });
       return agent;

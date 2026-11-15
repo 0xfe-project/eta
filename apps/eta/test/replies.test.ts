@@ -316,8 +316,12 @@ describe("a run that fails", () => {
     const { group } = await ada(w);
     const sent = await w.send(group.id, "hi");
     const failed = await w.settled(group.id, sent.replies[0]!.id);
-    expect(failed.status).toBe("failed");
-    expect(failed.text).toBeTruthy();
+    expect(failed).toMatchObject({
+      status: "failed",
+      data: { code: "run_failed" },
+    });
+    // The model layer's own words, not a stock line.
+    expect(failed.text).toMatch(/the provider fell over/);
   });
 });
 

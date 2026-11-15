@@ -38,21 +38,6 @@ function isUpdateEvent(
   );
 }
 
-/**
- * Drain a stream through the observer and return the settled message.
- *
- * The lifecycle is strict on purpose: a working stream opens with `start`, and
- * a terminal event before it means the provider broke its contract — better to
- * fail loudly than to record half a message.
- */
-export async function consumeAssistantStream(
-  stream: AssistantMessageEventStream,
-  observer: AssistantStreamObserver,
-): Promise<SettledAssistantMessage> {
-  // The strict observer cannot return STOP_STREAM, so the stream always settles.
-  return (await consumeInterruptibleStream(stream, observer))!;
-}
-
 /** Returned by an interruptible observer's `update` to stop reading the stream. */
 export const STOP_STREAM = Symbol("stop-stream");
 
@@ -92,10 +77,16 @@ export interface InterruptibleStreamObserver
 }
 
 /**
- * Like `consumeAssistantStream`, but the observer can stop the read: the frame
- * that returned `STOP_STREAM` is the last one consumed, `end` is never called,
- * and the result is `undefined`. The stream is abandoned, not awaited — whoever
- * stops it owns aborting the request behind it.
+ * Drain a stream through the observer and return the settled message.
+ *
+ * The lifecycle is strict on purpose: a working stream opens with `start`, and
+ * a terminal event before it means the provider broke its contract — better to
+ * fail loudly than to record half a message.
+ *
+ * The observer can stop the read: the frame that returned `STOP_STREAM` is the
+ * last one consumed, `end` is never called, and the result is `undefined`. The
+ * stream is abandoned, not awaited — whoever stops it owns aborting the
+ * request behind it.
  */
 export async function consumeInterruptibleStream(
   stream: AssistantMessageEventStream,

@@ -30,11 +30,6 @@
     "approve": "Approve",
     "reject": "Reject"
   },
-  "assignments": {
-    "title": "Recent assignments",
-    "none": "No assignments yet.",
-    "round": "Round {{round}}"
-  },
   "pendingBadge": "Awaiting approval · {{count}}",
   "proposal": {
     "label": "Proposed group {{name}}",
@@ -55,6 +50,16 @@
       "failed": "Failed",
       "expired": "Expired"
     }
+  },
+  "agentProposal": {
+    "label": "Proposed agent {{name}}",
+    "title": "New agent",
+    "purpose": "Purpose",
+    "persona": "Persona",
+    "model": "Model",
+    "runtime": "Runtime",
+    "plugins": "Plugins",
+    "created": "{{name}} is ready; it is in the sidebar."
   },
   "review": {
     "title": "Captain review",

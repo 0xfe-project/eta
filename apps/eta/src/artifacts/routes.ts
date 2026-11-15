@@ -1,7 +1,7 @@
 /**
  * The artifacts over HTTP, next to the socket:
  *
- *   GET /preview/<capability>/files/<path>   the app's own sandboxed iframe
+ *   GET /preview/<capability>/files/<path>   the app's own sandboxed iframe (pages can print, `print.ts`)
  *   GET /share/<token>/                      a public page around it (title, download)
  *   GET /share/<token>/files/<path>          the version, public
  *   GET /share/<token>/archive.zip           its ZIP, public
@@ -24,6 +24,7 @@
 import type { ArtifactViewer } from "@eta/client-contracts";
 import type { ArtifactService } from "./service";
 import type { VersionRecord } from "./store";
+import { withPrintListener } from "./print";
 
 const SANDBOX =
   "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads";
@@ -128,6 +129,7 @@ export function createArtifactRoutes(
     version: VersionRecord,
     segments: string[],
     cache: string,
+    printable: boolean,
   ): Promise<Response> => {
     const path = relativePath(segments);
     const kind = artifacts.kindOf(version);
@@ -141,7 +143,10 @@ export function createArtifactRoutes(
       version,
       JSON.parse(version.manifest),
     );
-    return seal(response, cache);
+    return seal(
+      printable ? await withPrintListener(response) : response,
+      cache,
+    );
   };
 
   return async (request) => {
@@ -168,6 +173,8 @@ export function createArtifactRoutes(
         opened.version,
         parts.slice(4),
         "private, max-age=3600",
+        // Only the app's dialog has a print button: a share stays the bytes that were published.
+        true,
       );
     }
 
@@ -203,7 +210,7 @@ export function createArtifactRoutes(
         );
       }
       if (rest[0] !== "files") return notFound();
-      return page(request, opened.version, rest.slice(1), "no-store");
+      return page(request, opened.version, rest.slice(1), "no-store", false);
     }
 
     // /artifacts/<id>/<version>/archive.zip: the app's own, behind the access check upstream.

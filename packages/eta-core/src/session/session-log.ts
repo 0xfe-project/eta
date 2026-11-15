@@ -24,10 +24,8 @@ import type {
   NewEntry,
 } from "../types/entries";
 import type { AgentMessage } from "../types/messages";
-import type { ForkedChain, ForkOptions } from "./fork";
 import type { MergeOptions, RollbackResult } from "./merge";
 import { setValue, value } from "../storage/types";
-import { forkChain } from "./fork";
 import { EntryGraph } from "./graph";
 import { mergeTip, rollback } from "./merge";
 
@@ -115,17 +113,6 @@ export class SessionLog {
     this.staged.push(entry);
     await this.commit();
     return entry;
-  }
-
-  /** The chain a destination adopts when it forks from this journal. */
-  forkAt(
-    entryId?: string,
-    options: Omit<ForkOptions, "entryId"> = {},
-  ): ForkedChain {
-    return forkChain(this.graph, {
-      ...options,
-      ...(entryId === undefined ? {} : { entryId }),
-    });
   }
 
   /** Entries whose parent the journal does not hold; their branch ends there. */

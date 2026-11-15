@@ -112,3 +112,20 @@ describe("the message Captain is told how its group proposal ended", () => {
     expect(split.rows.map((r) => r.id)).toEqual(["t1", "t2"]);
   });
 });
+
+describe("the message Captain is told how its agent proposal ended", () => {
+  it("is not on the timeline either: the agent card shows the outcome", () => {
+    const outcome = messageView({
+      id: "outcome",
+      conversationId: "c",
+      seq: 2,
+      author: "system",
+      text: "Your proposed agent …",
+      data: {
+        captainAgentOutcome: { operationId: "o1", status: "applied" },
+      },
+    });
+    const split = taskRowsByTurn([reply("t1", 1), outcome, reply("t2", 3)]);
+    expect(split.rows.map((r) => r.id)).toEqual(["t1", "t2"]);
+  });
+});

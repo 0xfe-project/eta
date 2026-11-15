@@ -10,10 +10,20 @@ import { world } from "./support/world";
 describe("switching the steward", () => {
   it("leaves the old steward in place and tells the new one only what it has not seen", async () => {
     let turn = 0;
-    const { models, requests } = scriptedModels((request) => {
+    const { models, requests: all } = scriptedModels((request) => {
+      // A session's memory extraction at the end of a run asks the model too, as nobody in
+      // particular and whenever it gets round to it: only an agent's own turns are counted.
+      if (request.agent === undefined) return say("{}");
       turn += 1;
       return say(`${request.agent} answer ${turn}`);
     });
+    const requests = {
+      at: (index: number) =>
+        all.filter((request) => request.agent !== undefined).at(index),
+      get length() {
+        return all.filter((request) => request.agent !== undefined).length;
+      },
+    };
     const w = await world({ models });
     const ada = await w.agent("Ada");
     const bob = await w.agent("Bob");

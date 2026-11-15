@@ -8,7 +8,7 @@
  */
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
-import { createEventRing, matchesFilter } from "../src/ring";
+import { createEventRing } from "../src/ring";
 import { WireService } from "../src/wire-service";
 
 const event = (name: string, data: unknown = null) =>
@@ -45,12 +45,6 @@ describe("the ring", () => {
     expect(ring.tail("TOOL")).toHaveLength(2);
     expect(ring.tail("  ")).toHaveLength(4);
     expect(ring.tail("nothing-like-this")).toEqual([]);
-  });
-
-  it("matches a filter the way the ring does", () => {
-    expect(matchesFilter("tool:start", undefined)).toBe(true);
-    expect(matchesFilter("tool:start", "tool")).toBe(true);
-    expect(matchesFilter("message:update", "tool")).toBe(false);
   });
 });
 

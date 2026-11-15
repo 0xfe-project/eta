@@ -10,7 +10,7 @@
 
 import { Buffer } from "node:buffer";
 import { describe, expect, it } from "vitest";
-import { detectSupportedImageMimeType, encodeBase64 } from "../src/tools/image";
+import { detectSupportedImageMimeType } from "../src/tools/image";
 
 /** One-pixel PNG (the smallest thing a provider will take). */
 const tinyPng = (): Uint8Array =>
@@ -114,18 +114,5 @@ describe("image detection", () => {
       0,
     ]);
     expect(detectSupportedImageMimeType(animated)).toBeUndefined();
-  });
-
-  it("encodes base64 the way the platform does", () => {
-    for (const bytes of [
-      new Uint8Array(),
-      Uint8Array.from([0]),
-      Uint8Array.from([0, 1]),
-      Uint8Array.from([0, 1, 2]),
-      Uint8Array.from([0, 1, 2, 253, 254, 255]),
-      tinyPng(),
-    ]) {
-      expect(encodeBase64(bytes)).toBe(Buffer.from(bytes).toString("base64"));
-    }
   });
 });

@@ -1,12 +1,12 @@
 import type { RefObject } from "react";
 import type { LogBlock, ToolGroup } from "@/lib/run";
+import type { SessionLog } from "@/queries/sessions";
 import type { TaskRun } from "@/queries/tasks";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Markdown } from "@/components/markdown";
 import { Loading } from "@/components/states";
 import { groupBlocks } from "@/lib/run";
-import { useSessionLog } from "@/queries/sessions";
 import { isActive } from "./task-format";
 import { ImageStrip } from "./transcript/image-strip";
 import { ThinkingBlock } from "./transcript/thinking-block";
@@ -23,13 +23,15 @@ import { ToolDetailCard } from "./transcript/tool-detail";
  */
 export function RunLog({
   run,
+  log,
   scrollRef,
 }: {
   run: TaskRun;
+  /** The run's session, read by the dialog (its header times the run from the same rows). */
+  log: SessionLog;
   scrollRef?: RefObject<HTMLDivElement | null>;
 }) {
   const { t: translateText } = useTranslation(["tasks", "chat"] as const);
-  const log = useSessionLog(run.sessionId);
   const { blocks } = log;
   const items = useMemo(
     () => (blocks === undefined ? undefined : groupBlocks(blocks)),
@@ -84,7 +86,7 @@ export function RunLog({
         className="run-log space-y-2 border-l pl-3 text-xs"
       >
         {items.map((item) => (
-          <li key={item.id} className="min-w-0">
+          <li key={item.id} data-block={item.id} className="min-w-0">
             {item.type === "thinking" ? (
               <ThinkingBlock text={item.text} />
             ) : item.type === "text" ? (
@@ -121,7 +123,7 @@ export function RunLog({
             ) : item.type === "group" ? (
               <Group group={item} statusLabel={statusLabels}>
                 {item.tools.map((tool) => (
-                  <li key={tool.id} className="min-w-0">
+                  <li key={tool.id} data-block={tool.id} className="min-w-0">
                     {card(tool)}
                   </li>
                 ))}

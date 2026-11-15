@@ -1,4 +1,5 @@
 import type { ConversationSummary } from "@eta/client-contracts";
+import { runningFirst } from "@eta/client-contracts";
 import { useTranslation } from "react-i18next";
 import { ROUTINES_VISIBLE } from "@/lib/features";
 import { useArtifacts } from "@/queries/artifacts";
@@ -76,8 +77,11 @@ export function GroupPanel({
   const groupArtifacts = artifacts.filter(
     (artifact) => artifact.conversationId === group.id,
   );
-  // The last move made on them, latest first.
-  const listed = [...tasks].sort((a, b) => b.updatedAt - a.updatedAt);
+  // The last move made on them, latest first; within a status, a task that runs comes before one
+  // that waits in the queue however recently that one moved.
+  const listed = runningFirst(
+    [...tasks].sort((a, b) => b.updatedAt - a.updatedAt),
+  );
 
   return (
     // `WorkspacePanel` scrolls this. No scroll container of its own: one with nothing to scroll,

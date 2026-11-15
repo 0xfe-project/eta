@@ -6,7 +6,14 @@
  * already running — the user has an explicit op for that (`sessions.modelSet`), and a second
  * invisible way for a session's model to change under them is not a feature.
  */
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
@@ -36,14 +43,12 @@ describe("the settings file", () => {
     await store.save({
       cwd: "/work/eta",
       persona: "Executor",
-      model: "fake:fake-model",
       thinkingLevel: "high",
       keepRecentTokens: 12_000,
     });
     expect(await store.read()).toEqual({
       cwd: "/work/eta",
       persona: "Executor",
-      model: "fake:fake-model",
       thinkingLevel: "high",
       keepRecentTokens: 12_000,
     });
@@ -59,19 +64,24 @@ describe("the settings file", () => {
     const store = new SettingsStore({ path });
     await store.save({
       cwd: "/work/eta",
-      model: "fake:fake-model",
       thinkingLevel: "high",
     });
     // A patch is a patch: what it does not mention stays.
     const merged = await store.save({ persona: "Executor" });
     expect(merged).toMatchObject({
       cwd: "/work/eta",
-      model: "fake:fake-model",
       thinkingLevel: "high",
       persona: "Executor",
     });
-    // A key this file does not own is not written.
-    await store.save({ providers: [{ id: "sneaky" }], theme: "dark" });
+    // A key this file does not own is not written. Nor is a model: there is no default model.
+    await store.save({
+      providers: [{ id: "sneaky" }],
+      theme: "dark",
+      model: "fake:fake-model",
+    });
+    expect(JSON.parse(await readFile(path, "utf8"))).not.toHaveProperty(
+      "model",
+    );
     expect(JSON.parse(await readFile(path, "utf8"))).not.toHaveProperty(
       "providers",
     );
@@ -93,10 +103,15 @@ describe("the settings file", () => {
     const path = join(root, "settings.json");
     const store = new SettingsStore({ path });
     await store.save({ cwd: "/a" });
-    // The temp file is not left behind, and what is there parses.
-    const raw = await readFile(path, "utf8");
-    expect(() => JSON.parse(raw) as unknown).not.toThrow();
-    const { readdir } = await import("node:fs/promises");
+    const before = (await stat(path)).ino;
+    await store.save({ cwd: "/b" });
+    // A new file is renamed over the old one: a write in place would keep the inode, and a
+    // reader in between could see it half-written.
+    expect((await stat(path)).ino).not.toBe(before);
+    expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({
+      cwd: "/b",
+    });
+    // The temp file is not left behind.
     expect(
       (await readdir(root)).filter((name) => name.endsWith(".tmp")),
     ).toEqual([]);
@@ -141,12 +156,11 @@ describe("what a new session inherits", () => {
       settings: async () => ({
         cwd: "/work/eta",
         persona: "Executor",
-        model: "fake:fake-model",
         thinkingLevel: "high",
         keepRecentTokens: 9_000,
       }),
     });
-    const created = await sessions.create({});
+    const created = await sessions.create({ model: "fake:fake-model" });
     expect(created.meta).toMatchObject({
       cwd: "/work/eta",
       persona: "Executor",

@@ -1,4 +1,5 @@
 import type { Task, TaskStatus } from "@/queries/tasks";
+import { runningFirst } from "@eta/client-contracts";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
@@ -103,7 +104,8 @@ function BoardView({ tasks }: { tasks: readonly Task[] }) {
   return (
     <div className="flex h-full gap-3 overflow-x-auto px-4 py-4 sm:px-6">
       {columns.map((status) => {
-        const group = tasks.filter((t) => t.status === status);
+        // Newest first, as the board sends them, but a task that runs before one that waits.
+        const group = runningFirst(tasks.filter((t) => t.status === status));
         const label = statusLabel(status);
         return (
           <section
@@ -152,8 +154,10 @@ function BoardView({ tasks }: { tasks: readonly Task[] }) {
 
 // --- task ---------------------------------------------------------------------------
 
-/** Wide enough for the document (~680px) and the properties (~280px) side by side. */
-const propertiesRail = "@4xl";
+// The properties rail sits beside the document from `@4xl` up: wide enough for the document
+// (~680px) and the properties (~280px) side by side. The variant is spelled out in each class
+// rather than built from a constant: Tailwind only generates classes it finds written whole in the
+// source, and an interpolated one rendered only while some test happened to spell it out.
 
 /**
  * One task as a document: the number, title, description and activity in a
@@ -218,7 +222,7 @@ function TaskPage({ id }: { id: string }) {
           aria-expanded={propertiesOpen}
           aria-controls="task-properties"
           title={propertiesLabel}
-          className={`${propertiesRail}:hidden`}
+          className="@4xl:hidden"
           onClick={() => setPropertiesOpen((open) => !open)}
         >
           <SidebarSimpleIcon aria-hidden="true" />
@@ -253,7 +257,7 @@ function TaskPage({ id }: { id: string }) {
         ref={mainRef}
         id="main"
         tabIndex={-1}
-        className={`grid min-h-0 w-full flex-1 grid-cols-1 overflow-hidden outline-none ${propertiesRail}:grid-cols-[minmax(0,1fr)_17.5rem]`}
+        className="grid min-h-0 w-full flex-1 grid-cols-1 overflow-hidden outline-none @4xl:grid-cols-[minmax(0,1fr)_17.5rem]"
       >
         <div className="min-h-0 overflow-y-auto">
           <div className="mx-auto w-full max-w-[42.5rem] space-y-6 px-4 pt-4 pb-6 sm:px-8">
@@ -283,7 +287,7 @@ function TaskPage({ id }: { id: string }) {
           <button
             type="button"
             aria-label={propertiesLabel}
-            className={`fixed inset-0 z-20 bg-black/20 ${propertiesRail}:hidden`}
+            className="fixed inset-0 z-20 bg-black/20 @4xl:hidden"
             onClick={() => setPropertiesOpen(false)}
           />
         ) : null}

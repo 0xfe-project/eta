@@ -102,21 +102,6 @@ async function until(
 }
 
 describe("what the plugin puts on the pipe", () => {
-  it("registers its actions, and they show up as descriptors", async () => {
-    const h = await harness();
-    await h.load();
-    // The descriptor list is the plugin's own action list, not a second copy of it.
-    expect(
-      h.wire
-        .descriptors()
-        .map((op) => op.name)
-        .sort(),
-    ).toEqual(
-      [...SESSION_ACTIONS].map((action) => `sessions.${action}`).sort(),
-    );
-    await h.unload();
-  });
-
   it("registers the sidebar as an eager state target", async () => {
     const h = await harness();
     await h.load();

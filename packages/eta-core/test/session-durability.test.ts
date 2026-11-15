@@ -196,51 +196,6 @@ describe("rollback is durable", () => {
   });
 });
 
-describe("fork reads the journal", () => {
-  it("returns the prefix chain for a destination to adopt, writing nothing", async () => {
-    const { log, storage, root, main } = await withBranches();
-    const before = (await storage.scanEntries({})).length;
-    const fork = log.forkAt(main.id);
-    expect(fork.tipId).toBe(main.id);
-    expect(fork.entries.map((entry) => entry.id)).toEqual([main.id, root.id]);
-    expect((await storage.scanEntries({})).length).toBe(before);
-  });
-
-  it("the adopted chain carries on as its own history", async () => {
-    const { log, main, side } = await withBranches();
-    const fork = log.forkAt(main.id);
-    const dest = SessionLog.create(new MemoryStorage());
-    for (const entry of [...fork.entries].reverse()) dest.record(entry);
-    await dest.commit();
-    expect(dest.graph.tipId()).toBe(main.id);
-    expect(textsOf(dest)).toEqual(["shared history", "main work"]);
-
-    const next = dest.recordMessage(userMsg("fork work"));
-    await dest.commit();
-    expect(next.parentId).toBe(main.id);
-    // The source journal is untouched by the fork: the same tip, and the side
-    // branch it holds is still off the path (that is why it can be merged).
-    expect(textsOf(log)).toEqual(["shared history", "main work"]);
-    expect(log.graph.has(side.id)).toBe(true);
-  });
-
-  it("defaults to the current tip, and both fork positions work", async () => {
-    const { log, main, root } = await withBranches();
-    expect(log.forkAt().tipId).toBe(log.graph.tipId());
-    // "at" keeps the selected entry; "before" stops at its parent but still
-    // copies the history behind it.
-    expect(
-      log.forkAt(main.id, { position: "at" }).entries.map((entry) => entry.id),
-    ).toEqual([main.id, root.id]);
-    expect(
-      log
-        .forkAt(main.id, { position: "before" })
-        .entries.map((entry) => entry.id),
-    ).toEqual([root.id]);
-    expect(log.forkAt(root.id, { position: "before" }).entries).toEqual([]);
-  });
-});
-
 describe("the tip value", () => {
   it("names the newest entry when nothing was rolled back", async () => {
     const { log, storage } = await withBranches();
@@ -251,17 +206,27 @@ describe("the tip value", () => {
 
   it("is written once per movement, not once per commit", async () => {
     const { log, storage } = await withBranches();
-    // A commit that does not move the tip writes no new row.
-    await storage.commit([
-      setValue(value<string>("session.name"), "still here"),
-    ]);
-    const before = await storage.scanEntries({});
-    log.recordMessage(userMsg("one more"));
+    const tipWrites: unknown[] = [];
+    const commit = storage.commit.bind(storage);
+    storage.commit = async (writes) => {
+      for (const write of writes) {
+        if (
+          write.kind === "value" &&
+          write.op === "set" &&
+          write.namespace === SESSION_TIP.namespace &&
+          write.key === SESSION_TIP.key
+        )
+          tipWrites.push(write.value);
+      }
+      return commit(writes);
+    };
+    // A commit that does not move the tip writes no tip row.
+    await log.commit([setValue(value<string>("session.name"), "still here")]);
+    expect(tipWrites).toEqual([]);
+    // One that does writes exactly one.
+    const next = log.recordMessage(userMsg("one more"));
     await log.commit();
-    expect((await storage.scanEntries({})).length).toBe(before.length + 1);
-    expect((await storage.getValue(SESSION_TIP))?.value).toBe(
-      log.graph.tipId(),
-    );
+    expect(tipWrites).toEqual([next.id]);
   });
 
   it("a fresh journal with no entries has no tip value", async () => {

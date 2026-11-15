@@ -1,5 +1,5 @@
 // What decides whether the first-time setup opens by itself, and the facts it reads off the wire.
-// The default model and the "one agent per card" rule follow apps/web/src/pages/onboard.tsx.
+// The preselected model and the "one agent per card" rule follow apps/web/src/pages/onboard.tsx.
 
 import type {
   AgentView,
@@ -32,12 +32,24 @@ export function needsSetup(facts: SetupFacts): boolean {
   return usableModels(facts.models).length === 0 || facts.agents.length === 0;
 }
 
-/** The model new agents get: the usable default, else the first usable one. */
-export function defaultUsableModel(
+/**
+ * The model new agents get: the last one used, else the first usable one. The TUI keeps no memory
+ * of its own, so "last used" is the model of the newest agent on eta's own loop that names a
+ * usable one.
+ */
+export function preferredModel(
   models: readonly Model[],
+  agents: readonly AgentView[] = [],
 ): Model | undefined {
   const usable = usableModels(models);
-  return usable.find((model) => model.default) ?? usable[0];
+  const newest = [...agents]
+    .filter((agent) => agent.runtime === "eta" && agent.model !== null)
+    .sort((a, b) => b.createdAt - a.createdAt);
+  for (const agent of newest) {
+    const used = usable.find((model) => model.id === agent.model);
+    if (used !== undefined) return used;
+  }
+  return usable[0];
 }
 
 /** The cards that already have an agent wearing them. */

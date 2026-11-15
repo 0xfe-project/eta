@@ -115,6 +115,58 @@ export function machineView(
     ?.find((machine) => machine.id === id);
 }
 
+/** Every status the browser was shown for the machine, oldest first, from frame `from` on. */
+function statusesShown(
+  client: Client,
+  id: string,
+  from = 0,
+): MachineView["status"][] {
+  const shown: MachineView["status"][] = [];
+  for (const frame of client.frames.slice(from)) {
+    const sections =
+      frame.type === "hello"
+        ? frame.state.machines?.sections
+        : frame.type === "state" && frame.target === "machines"
+          ? (frame.snapshot?.sections ?? frame.patch?.sections)
+          : undefined;
+    const list = sections?.list as MachineView[] | undefined;
+    const machine = list?.find((each) => each.id === id);
+    if (machine !== undefined) shown.push(machine.status);
+  }
+  return shown;
+}
+
+/**
+ * Cut the daemon's link and wait until it is back on a new connection, the browser having been
+ * shown the machine offline and then online again.
+ *
+ * "Offline" is read from the frames the browser received, not from what it shows now: the test
+ * daemon dials again after about 20ms, so the machine can be online again before a poll of the
+ * current view comes round, and a wait for that view to say "offline" then never ends.
+ */
+export async function dropLink(
+  host: Host,
+  client: Client,
+  daemon: TestDaemon,
+): Promise<void> {
+  const hub = host.product.hub;
+  const before = hub.link(daemon.machineId);
+  if (before === undefined) throw new Error("the daemon is not linked");
+  const from = client.frames.length;
+  daemon.link.drop();
+  await until(() =>
+    statusesShown(client, daemon.machineId, from).includes("offline"),
+  );
+  await until(() => {
+    const link = hub.link(daemon.machineId);
+    return link !== undefined && link.epoch !== before.epoch;
+  });
+  await until(() => {
+    const shown = statusesShown(client, daemon.machineId, from);
+    return shown.lastIndexOf("online") > shown.indexOf("offline");
+  });
+}
+
 /** Approve a daemon the way the user does, from its fingerprint, and wait until it is online. */
 export async function approve(
   client: Client,

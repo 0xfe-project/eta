@@ -274,7 +274,18 @@ describe("the form", () => {
     host([plugin()]);
     const { container } = await mount(<PluginSettings />);
     await open(container);
-    const trigger = document.querySelector('[role="combobox"]');
-    expect(trigger?.textContent).toContain("明文");
+    const trigger = document.querySelector('[role="combobox"]')!;
+    expect(trigger.textContent).toBe("明文（会进上下文）");
+    await click(trigger);
+    await flush();
+    expect(
+      [...document.querySelectorAll('[role="option"]')].map(
+        (option) => option.textContent,
+      ),
+    ).toEqual([
+      "不可读（只给插件进程）",
+      "临时文件（内容不进上下文）",
+      "明文（会进上下文）",
+    ]);
   });
 });

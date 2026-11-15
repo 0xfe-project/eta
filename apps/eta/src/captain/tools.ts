@@ -13,12 +13,13 @@ import type { TaskStore } from "../tasks/store";
 import type { CaptainMemory } from "./memory";
 import type { CaptainService } from "./service";
 import { readFile } from "node:fs/promises";
+import { AGENT_RUNTIMES } from "@eta/client-contracts";
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
 import { interactionId } from "../inbox/store";
 import { isTaskSession } from "../tasks/session-key";
+import { GroupConflictError } from "./propose-group";
 import { redactJson, redactText, redactValue } from "./redact";
-import { GroupConflictError } from "./service";
 
 export interface CaptainToolDeps {
   service: CaptainService;
@@ -353,6 +354,12 @@ export function captainSessionTools(
       },
     });
 
+    /** Where a proposal's card goes: this conversation, or Captain's direct chat from a task. */
+    const proposalOrigin = async (): Promise<string> =>
+      meta.conversationId === undefined || isTaskSession(meta.conversationId)
+        ? (await deps.service.direct()).conversationId
+        : meta.conversationId;
+
     const proposeGroup = defineTool({
       name: "propose_group",
       description: [
@@ -387,16 +394,11 @@ export function captainSessionTools(
       }),
       execute: async (args) => {
         try {
-          const origin =
-            meta.conversationId === undefined ||
-            isTaskSession(meta.conversationId)
-              ? (await deps.service.direct()).conversationId
-              : meta.conversationId;
-          const { operation } = await deps.service.proposeGroup({
-            ...args,
-            originConversationId: origin,
-            captainAgentId: captain.agentId,
-          });
+          const { operation } = await deps.service.proposals.propose(
+            deps.service.propose.group,
+            args,
+            await proposalOrigin(),
+          );
           return text(
             `Proposed group "${args.name.trim()}" (operation ${operation.id}). It is waiting for the user's confirmation. Propose anything else that is needed, then end this turn; a message here will tell you the outcome.`,
             { operationId: operation.id, status: operation.status },
@@ -406,6 +408,73 @@ export function captainSessionTools(
             return toolError(
               `Conflict: ${error.message}. Use that group with assign_in_group, or propose a different name.`,
             );
+          return toolError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    });
+
+    const listPersonaCards = defineTool({
+      name: "list_persona_cards",
+      description:
+        "List the persona cards an agent you propose can wear: the id to name one, and one line saying what it is. A card is never written, edited or invented — a new agent wears one of these exactly as it is.",
+      parameters: Type.Object({}),
+      async execute() {
+        try {
+          return text(json(await deps.service.listPersonaCards()));
+        } catch (error) {
+          return toolError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    });
+
+    const proposeAgent = defineTool({
+      name: "propose_agent",
+      description: [
+        "Propose a new agent. Nothing is created yet: the proposal appears as a card in this conversation, and only the user's confirmation creates the agent, its workspace and its first instructions and persona versions. Every proposal needs that confirmation.",
+        "Before proposing, call list_persona_cards and pick the single card that fits the work best: persona must be one of those ids. Never write a card and never invent one — the agent wears the card you name.",
+        "model has no default: ask the user which model the agent should run with ask_user, offering the configured models, and propose the one they choose.",
+        "name must not be the name of an agent that already exists. purpose is one sentence: what the agent is responsible for, and when it should be retired. instructions is what it is told to do, and cannot be empty.",
+        "Several agents can be proposed in one turn; each gets its own card. Do not wait for the decision: once everything is proposed, end your turn. When the user decides, you are told the outcome in that conversation as a message that starts your next turn. Only a proposal you made is reported back — an agent the user creates in the agent dialog is not yours to track.",
+      ].join(" "),
+      parameters: Type.Object({
+        name: Type.String({
+          description: "The agent's name; it must be unique.",
+        }),
+        purpose: Type.String({
+          description:
+            "One sentence: what it is responsible for, and when it should retire.",
+        }),
+        instructions: Type.String({
+          description: "What the agent is told to do. It cannot be empty.",
+        }),
+        persona: Type.String({
+          description: "An id from list_persona_cards.",
+        }),
+        model: Type.String({
+          description:
+            "provider:modelId, chosen by the user. There is no default.",
+        }),
+        runtime: Type.Optional(
+          Type.Union(AGENT_RUNTIMES.map((runtime) => Type.Literal(runtime))),
+        ),
+        plugins: Type.Optional(Type.Array(Type.String())),
+      }),
+      execute: async (args) => {
+        try {
+          const { operation } = await deps.service.proposals.propose(
+            deps.service.propose.agent,
+            args,
+            await proposalOrigin(),
+          );
+          return text(
+            `Proposed agent "${args.name.trim()}" (operation ${operation.id}). It is waiting for the user's confirmation on its card in this conversation.`,
+            { operationId: operation.id, status: operation.status },
+          );
+        } catch (error) {
           return toolError(
             error instanceof Error ? error.message : String(error),
           );
@@ -958,6 +1027,8 @@ export function captainSessionTools(
       readAttachment,
       assign,
       proposeGroup,
+      listPersonaCards,
+      proposeAgent,
       controlTask,
       updateTask,
       answerInbox,

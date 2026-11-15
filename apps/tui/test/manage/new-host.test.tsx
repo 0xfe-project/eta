@@ -17,6 +17,16 @@ import { askedStarting, enter, manageWorld, statusLine, tabBar } from "./world";
 
 const TITLE = "New conversation";
 
+/**
+ * `/new` lists the most recently updated project first. Two projects made in one millisecond tie,
+ * and which leads is then the host's order (by name, and the names are random temp directories):
+ * a test that needs one to be newer waits for the clock to move first.
+ */
+async function nextMillisecond(): Promise<void> {
+  const now = Date.now();
+  while (Date.now() === now) await new Promise((r) => setTimeout(r, 1));
+}
+
 /** Whether the layer's title line shows; the home screen's `/new` hint carries the same words. */
 function showsLayer(screen: string): boolean {
   return screen
@@ -110,7 +120,9 @@ describe("/new, first step", () => {
     const w = await manageWorld();
     const ada = await w.agent("Ada");
     const older = await w.project(ada.id);
+    await nextMillisecond();
     const newer = await w.project(ada.id);
+    await nextMillisecond();
     const archived = await w.project(ada.id);
     await w.raw.call("projects", "update", {
       projectId: archived.id,
@@ -137,6 +149,7 @@ describe("/new, first step", () => {
     const w = await manageWorld();
     const ada = await w.agent("Ada");
     await w.project(ada.id);
+    await nextMillisecond();
     const newer = await w.project(ada.id);
     const r = await w.showHome();
     await w.agentsArrived(1);

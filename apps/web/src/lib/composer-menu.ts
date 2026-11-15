@@ -245,17 +245,3 @@ export function applyItem(
     return { text: "", command: { name: item.value, args: "" } };
   return { text: `${text.slice(0, menu.start)}${item.value}` };
 }
-
-/**
- * A command line split into the verb and its arguments: `/goal ship it` is the `goal` command
- * with `ship it`. eta-old did this so a command could carry a payload; without it every command
- * is a button and nothing else.
- */
-export function splitCommand(
-  line: string,
-): { name: string; args: string } | null {
-  if (!line.startsWith("/") || line.startsWith("//")) return null;
-  const [head, ...rest] = line.slice(1).split(/\s+/);
-  if (head === undefined || head.length === 0) return null;
-  return { name: `/${head.toLowerCase()}`, args: rest.join(" ").trim() };
-}

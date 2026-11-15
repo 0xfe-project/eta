@@ -108,7 +108,10 @@ async function opened(options: { declare?: boolean; agent?: boolean } = {}) {
   });
   const host = await observeHost(r.host);
   if (options.agent ?? true) {
-    await host.client.call("agents", "create", { name: "Ada" });
+    await host.client.call("agents", "create", {
+      name: "Ada",
+      model: "fake:fake-model",
+    });
     if (options.declare ?? true)
       await host.until(() => servers(host).length === 2);
   }

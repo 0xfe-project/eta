@@ -54,7 +54,6 @@ export function ToolDetailCard({
       meta={<ToolMeta block={block} shape={shape} />}
       status={block.status}
       statusLabel={statusLabel}
-      defaultOpen={isScript(block)}
     >
       <ToolBody
         block={block}

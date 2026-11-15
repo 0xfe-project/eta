@@ -8,18 +8,19 @@
  * A group of the same name in the same project stops it at both points.
  */
 import type {
-  CaptainGroupProposalRowData,
+  CaptainGroupProposal,
   CaptainOperationView,
 } from "@eta/client-contracts";
-import type { GroupProposalInput } from "../src/captain/service";
+import type { GroupProposalInput } from "../src/captain/propose-group";
 import type { Request } from "./support/models";
 import type { World } from "./support/world";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { isCaptainGroupOutcome } from "@eta/client-contracts";
+import { captainProposalOf, isCaptainOutcome } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
 import { agentHome } from "../src/agents/store";
-import { GroupConflictError } from "../src/captain/service";
+import { GroupConflictError } from "../src/captain/propose-group";
+import { Timeline } from "../src/conversations/timeline";
 import { until } from "./support/client";
 import { approve, startDaemon } from "./support/daemon";
 import { tempDir } from "./support/host";
@@ -63,14 +64,16 @@ async function setup(models?: ReturnType<typeof scriptedModels>["models"]) {
   await w.watch(captain);
   const captainId = w.host.product.captain.identity()!.agentId;
   const propose = (fields: Partial<GroupProposalInput>) =>
-    w.host.product.captain.proposeGroup({
-      name: "Clone",
-      memberIds: [ada.id],
-      stewardId: ada.id,
-      ...fields,
-      originConversationId: captain,
-      captainAgentId: captainId,
-    });
+    w.host.product.captain.proposals.propose(
+      w.host.product.captain.propose.group,
+      {
+        name: "Clone",
+        memberIds: [ada.id],
+        stewardId: ada.id,
+        ...fields,
+      },
+      captain,
+    );
   return { w, ada, captain, captainId, propose };
 }
 
@@ -107,14 +110,12 @@ function captainScript(proposal: () => Record<string, unknown>) {
 const cardOf = (w: World, conversationId: string) =>
   w
     .rows(conversationId)
-    .find(
-      (row) =>
-        (row.data as { event?: string }).event === "captain_group_proposal",
-    )?.data as unknown as CaptainGroupProposalRowData | undefined;
+    .map(captainProposalOf<CaptainGroupProposal>)
+    .find((card) => card?.kind === "create_group");
 
 /** The message that told Captain how its proposal ended, as the conversation shows it. */
 const outcomeOf = (w: World, conversationId: string) =>
-  w.rows(conversationId).find(isCaptainGroupOutcome);
+  w.rows(conversationId).find(isCaptainOutcome);
 
 describe("propose_group is Captain's", () => {
   it("is offered to Captain's session and to no other agent's", async () => {
@@ -242,8 +243,9 @@ describe("a group Captain proposes", () => {
     expect(outcomeOf(w, captain)).toMatchObject({
       author: "system",
       data: {
-        captainGroupOutcome: {
+        captainOutcome: {
           operationId: card.operationId,
+          kind: "create_group",
           status: "applied",
         },
       },
@@ -271,7 +273,11 @@ describe("a group Captain proposes", () => {
     expect(script.told[0]).toContain("rejected");
     await until(() => outcomeOf(w, captain) !== undefined);
     expect(outcomeOf(w, captain)?.data).toMatchObject({
-      captainGroupOutcome: { operationId, status: "rejected" },
+      captainOutcome: {
+        operationId,
+        kind: "create_group",
+        status: "rejected",
+      },
     });
     await expect(decide(w, operationId, "approve")).rejects.toThrow(/rejected/);
   });
@@ -488,5 +494,96 @@ describe("a new directory", () => {
     await expect(
       propose({ path: join(daemon.dataDir, "other"), machineId }),
     ).rejects.toThrow(/cannot be checked/);
+  });
+});
+
+describe("a group proposal written before proposals shared one mechanism", () => {
+  /**
+   * What the host wrote for a proposal before: a `create_group` operation whose payload is the
+   * proposal, and a card row of the event `captain_group_proposal`. Production has these in every
+   * state; a pending one must still be confirmable.
+   */
+  async function legacy(w: World, captain: string, adaId: string) {
+    const project = await w.project({ stewardId: adaId, name: "old repo" });
+    const machineId = w.host.db
+      .query<{ id: string }, []>(
+        "SELECT id FROM machine WHERE kind = 'primary'",
+      )
+      .get()!.id;
+    const messageId = crypto.randomUUID();
+    const proposal = {
+      originConversationId: captain,
+      messageId,
+      name: "Old plans",
+      goal: "Ship it.",
+      memberIds: [adaId],
+      stewardId: adaId,
+      projectId: project.id,
+      machineId,
+      path: project.path,
+      projectName: "old repo",
+    };
+    const operation = w.host.product.captain.store.createOperation({
+      kind: "create_group",
+      actorAgentId: w.host.product.captain.identity()!.agentId,
+      requiresApproval: true,
+      payload: { ...proposal },
+    });
+    new Timeline(w.host.db).append({
+      id: messageId,
+      conversationId: captain,
+      kind: "system",
+      author: "system",
+      text: `Captain proposed the group "Old plans". It is made when the user confirms it.`,
+      data: {
+        event: "captain_group_proposal",
+        operationId: operation.id,
+        proposal,
+      },
+    });
+    return { operation, proposal, project };
+  }
+
+  it("is still read as a card, and is made when the user confirms it", async () => {
+    const { w, ada, captain } = await setup();
+    const { operation, proposal, project } = await legacy(w, captain, ada.id);
+    const row = new Timeline(w.host.db)
+      .after(captain, 0)
+      .find((message) => message.id === proposal.messageId)!;
+    expect(captainProposalOf(row)).toEqual({
+      kind: "create_group",
+      operationId: operation.id,
+      proposal,
+    });
+
+    const decided = await decide(w, operation.id, "approve");
+    expect(decided.status).toBe("applied");
+    const result = decided.result as {
+      conversationId: string;
+      projectId: string;
+    };
+    expect(result.projectId).toBe(project.id);
+    expect(
+      one<{ name: string; goal: string }>(
+        w,
+        "SELECT name, goal FROM conversation WHERE id = ?",
+        result.conversationId,
+      ),
+    ).toEqual({ name: "Old plans", goal: "Ship it." });
+    // Captain is told as for any proposal, opening as a group's outcome always has.
+    await until(() => outcomeOf(w, captain) !== undefined);
+    expect(outcomeOf(w, captain)?.text).toMatch(
+      new RegExp(
+        `^Your proposed group "Old plans" \\(operation ${operation.id}\\) was confirmed by the user and created\\.`,
+      ),
+    );
+  });
+
+  it("can still be rejected", async () => {
+    const { w, ada, captain } = await setup();
+    const { operation } = await legacy(w, captain, ada.id);
+    const start = counts(w);
+    expect((await decide(w, operation.id, "reject")).status).toBe("rejected");
+    expect(counts(w)).toEqual(start);
   });
 });

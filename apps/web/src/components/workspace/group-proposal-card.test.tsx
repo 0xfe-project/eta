@@ -182,11 +182,8 @@ describe("a group Captain proposes", () => {
       const { container } = await show(proposed(), [operation({ status })]);
       const mark = container.querySelector("[data-tone]");
       expect(mark?.getAttribute("data-tone")).toBe(tone);
-      expect(mark?.querySelector('[aria-hidden="true"]')?.className).toContain(
-        "size-1.5",
-      );
-      expect(container.innerHTML).not.toContain("state-warning");
-      expect(container.innerHTML).not.toContain("task-fold-waiting");
+      // One mark on the card, and nothing else carries a tone.
+      expect(container.querySelectorAll("[data-tone]")).toHaveLength(1);
       await cleanup();
       setWire(undefined);
     }
@@ -199,11 +196,50 @@ describe("a group Captain proposes", () => {
   });
 });
 
+describe("a proposal row of either event", () => {
+  it("draws the same card from the shared event and from the group's own older one", async () => {
+    const shared = await show(
+      row({
+        event: "captain_proposal",
+        kind: "create_group",
+        operationId: "op1",
+        proposal,
+      }),
+      [operation({})],
+    );
+    const fromShared = shared.container.textContent;
+    await cleanup();
+    setWire(undefined);
+    // Rows written before every kind shared one event.
+    const older = await show(proposed(), [operation({})]);
+    expect(older.container.textContent).toBe(fromShared);
+    expect(fromShared).toContain("small-repo");
+  });
+
+  it("shows the row's own text for a kind this page does not know", async () => {
+    const { container } = await show(
+      messageView({
+        id: "row2",
+        conversationId: "c1",
+        kind: "system",
+        author: "system",
+        text: 'Captain proposed the thing "Widget".',
+        data: {
+          event: "captain_proposal",
+          kind: "create_thing",
+          operationId: "op2",
+          proposal: { name: "Widget" },
+        },
+      }),
+    );
+    expect(container.textContent).toBe('Captain proposed the thing "Widget".');
+    expect(container.querySelector("button")).toBeNull();
+  });
+});
+
 describe("a group Captain made", () => {
   it("opens with the line that says so", async () => {
     const { container } = await show(row({ event: "captain_created" }));
-    expect(container.querySelector(".system-message")?.textContent).toBe(
-      "由 Captain 创建",
-    );
+    expect(container.textContent).toBe("由 Captain 创建");
   });
 });

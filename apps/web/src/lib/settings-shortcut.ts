@@ -31,7 +31,7 @@ const phoneWidth = () =>
  * vetoes it. An input method does: while it is composing, that ⌘ was the user picking a candidate,
  * not asking for settings.
  */
-export function settingsIntent(
+function settingsIntent(
   event: Pick<
     KeyboardEvent,
     | "key"

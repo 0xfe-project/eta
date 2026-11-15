@@ -62,11 +62,12 @@ afterEach(async () => {
 });
 
 describe("email settings", () => {
-  it("matches the provider settings empty state", async () => {
+  it("says there is no account yet, lists nothing, and offers to bind one", async () => {
     host([]);
     const view = await mount(<EmailSettings />);
-    const empty = view.container.querySelector("p.border-dashed");
-    expect(empty?.textContent).toBe("还没有邮箱账号。绑一个，才能收发邮件。");
+    expect(view.container.textContent).toContain(
+      "还没有邮箱账号。绑一个，才能收发邮件。",
+    );
     expect(view.container.querySelector("ul")).toBeNull();
     expect(
       [...view.container.querySelectorAll("button")].some(
