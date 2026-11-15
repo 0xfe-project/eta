@@ -330,7 +330,9 @@
     "showColumn": "Open the {{name}} column",
     "hideColumn": "Fold the {{name}} column",
     "prevColumn": "Previous column",
-    "nextColumn": "Next column"
+    "nextColumn": "Next column",
+    "dealHere": "Deal with it",
+    "dealOnParent": "Deal with it on #{{number}}"
   },
   "lines": {
     "waitDelivered": "Waits for “{{title}}” to be delivered",
@@ -368,7 +370,7 @@
     "allDone": "All done",
     "empty": "No subtasks yet",
     "addStep": "Add a step at the end",
-    "addStepHint": "Ask in this work's conversation for a subtask that waits for the last step",
+    "addStepHint": "A new subtask that waits for every task of the last step",
     "critical": "Critical path",
     "connect": "Drag a task's right edge onto another to make that one wait for it",
     "connectFrom": "Draw a dependency from #{{number}}",
@@ -387,7 +389,8 @@
       "inReview": "In review (lets the next go)",
       "inProgress": "In progress",
       "waiting": "Waiting for others"
-    }
+    },
+    "addSubtask": "Subtask"
   },
   "pick": {
     "search": "Search by title or number",
@@ -486,7 +489,11 @@
     "startNow": "Don’t wait, start now",
     "replace": "Wait for another task…",
     "cancel": "Cancel this task",
-    "why": "See why #{{number}} was cancelled"
+    "why": "See why #{{number}} was cancelled",
+    "allCancelled": "All of its subtasks were cancelled; nothing is left to do. Split out new subtasks, or cancel this piece of work.",
+    "inherited": "“{{title}}”, which it belongs to, waits for a cancelled task; decide on #{{number}}.",
+    "splitOne": "Split out a subtask",
+    "goParent": "Deal with it on #{{number}}"
   },
   "progress": {
     "title": "Progress",

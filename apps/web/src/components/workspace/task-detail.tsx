@@ -23,6 +23,7 @@ import { useTaskNav } from "./task-nav";
 import { useNewTask } from "./task-new-store";
 import { TaskPicker } from "./task-picker";
 import {
+  blockedReason,
   childrenOf,
   isWaiting,
   planOf,
@@ -275,10 +276,70 @@ export function BlockedBanner({
   const add = useAddDependency();
   const remove = useRemoveDependency();
   const update = useUpdateTask();
+  const openNew = useNewTask((s) => s.open);
   if (task.status !== "blocked") return null;
   const cancelled = waitsOf(task).filter((w) => w.state === "cancelled");
-  if (cancelled.length === 0) return null;
   const own = cancelled.filter((w) => w.via === null).map((w) => w.taskId);
+  const inherited = cancelled.find((w) => w.via !== null);
+  const cancelButton = (
+    <Button
+      variant="outline"
+      size="xs"
+      disabled={update.isPending}
+      onClick={() =>
+        update.mutate(
+          { taskId: task.id, status: "cancelled" },
+          { onError: showError },
+        )
+      }
+    >
+      {t("stuck.cancel")}
+    </Button>
+  );
+  // A piece of work whose subtasks were all cancelled, or a subtask held by its parent's cancelled
+  // prerequisite: nothing of its own to change, so the ways on are elsewhere.
+  if (own.length === 0) {
+    const parentOwner =
+      inherited === undefined
+        ? undefined
+        : all.find((x) => x.number === inherited.via);
+    const allCancelled =
+      inherited === undefined &&
+      blockedReason(task, all).kind === "allCancelled";
+    if (!allCancelled && parentOwner === undefined) return null;
+    return (
+      <StuckFrame title={t("stuck.title")}>
+        <p>
+          {allCancelled
+            ? t("stuck.allCancelled")
+            : t("stuck.inherited", {
+                title: parentOwner!.title,
+                number: parentOwner!.number,
+              })}
+        </p>
+        <div role="group" className="flex flex-wrap gap-1.5">
+          {allCancelled ? (
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() => openNew({ parentId: task.id })}
+            >
+              {t("stuck.splitOne")}
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() => void setNav({ task: parentOwner!.id })}
+            >
+              {t("stuck.goParent", { number: parentOwner!.number })}
+            </Button>
+          )}
+          {cancelButton}
+        </div>
+      </StuckFrame>
+    );
+  }
   const first = cancelled[0]!;
   const when = all.find((x) => x.id === first.taskId)?.updatedAt;
   const busy = add.isPending || remove.isPending || update.isPending;
@@ -320,7 +381,7 @@ export function BlockedBanner({
           mode="dependsOn"
           subject={{ id: task.id, parentId: task.parentId ?? null }}
           projectId={task.projectId ?? undefined}
-          exclude={own}
+          exclude={[...own, ...(task.dependsOn ?? []).map((e) => e.taskId)]}
           onPick={(other, requireDone) => {
             const already = (task.dependsOn ?? []).find(
               (e) => e.taskId === other.id,
@@ -364,6 +425,30 @@ export function BlockedBanner({
           {t("stuck.why", { number: first.number })}
         </Button>
       </div>
+    </section>
+  );
+}
+
+/** The red frame of a stuck task, with its heading. */
+function StuckFrame({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      role="alert"
+      aria-label={title}
+      data-stuck
+      className="space-y-2 border border-l-4 border-state-error bg-state-error/8 px-3 py-2.5 text-sm"
+    >
+      <p className="flex items-center gap-2 font-medium text-state-error-ink">
+        <WarningIcon aria-hidden="true" className="size-4 shrink-0" />
+        {title}
+      </p>
+      {children}
     </section>
   );
 }

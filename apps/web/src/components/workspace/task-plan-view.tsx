@@ -683,6 +683,7 @@ export function PlanGroup({
   const [, setNav] = useTaskNav();
   const plan = planOf(tasks);
   const left = stepsLeft(plan);
+  const openNew = useNewTask((s) => s.open);
   return (
     <section
       aria-label={parent ? parent.title : t("list.loose")}
@@ -707,6 +708,15 @@ export function PlanGroup({
                   ? t("plan.allDone")
                   : t("plan.left", { count: left })}
               </span>
+              <Button
+                variant="ghost"
+                size="xs"
+                className="ml-auto"
+                onClick={() => openNew({ parentId: parent.id })}
+              >
+                <PlusIcon aria-hidden="true" />
+                {t("plan.addSubtask")}
+              </Button>
             </>
           ) : (
             <span className="text-muted-foreground">{t("list.loose")}</span>
