@@ -28,11 +28,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { hasCapability, host } from "@/lib/native";
 import {
   busyLabels,
   phaseKeys,
   useCancelUpgrade,
+  useSetPrerelease,
   useSetToken,
   useSetUpstream,
   useStartUpgrade,
@@ -263,6 +265,7 @@ function HostUpdate() {
   const status = useUpgradeWatch()?.status ?? null;
   const start = useStartUpgrade();
   const cancel = useCancelUpgrade();
+  const setPrerelease = useSetPrerelease();
   const [confirming, setConfirming] = useState(false);
   const [changing, setChanging] = useState(false);
   const [settingToken, setSettingToken] = useState(false);
@@ -276,8 +279,18 @@ function HostUpdate() {
         onRetry={() => void check.refetch()}
       />
     );
-  const { available, blocked, busy, error, latest, token, upstream, version } =
-    check.data;
+  const {
+    available,
+    blocked,
+    busy,
+    error,
+    heldOnPrerelease,
+    latest,
+    prerelease,
+    token,
+    upstream,
+    version,
+  } = check.data;
   const notes = tokenNotes(token, translateText);
   const { address, connection } = host();
   const remote = connection === "remote" ? address : undefined;
@@ -308,7 +321,13 @@ function HostUpdate() {
         </dt>
         <dd className="break-all">{version}</dd>
         <dt className="text-muted-foreground">
-          {translateText("update.latest")}
+          {translateText(
+            prerelease
+              ? "update.latestWithPrerelease"
+              : heldOnPrerelease
+                ? "update.latestFull"
+                : "update.latest",
+          )}
         </dt>
         <dd className="flex items-center gap-1">
           {latest ?? translateText("update.unknown")}
@@ -322,6 +341,23 @@ function HostUpdate() {
           >
             <ArrowsClockwiseIcon aria-hidden="true" />
           </Button>
+        </dd>
+        <dt id="update-prerelease" className="text-muted-foreground">
+          {translateText("update.prerelease")}
+        </dt>
+        <dd className="space-y-1">
+          {/* The host's setting: on a remote host, that host's. */}
+          <Switch
+            aria-labelledby="update-prerelease"
+            checked={prerelease}
+            disabled={running || setPrerelease.isPending}
+            onCheckedChange={(on) =>
+              setPrerelease.mutate({ prerelease: on }, { onError: showError })
+            }
+          />
+          <p className="text-xs text-muted-foreground">
+            {translateText("update.prereleaseHint")}
+          </p>
         </dd>
         <dt className="text-muted-foreground">
           {translateText("update.upstream")}
@@ -408,6 +444,10 @@ function HostUpdate() {
         <Button disabled={start.isPending} onClick={() => setConfirming(true)}>
           {translateText("update.install", { version: latest })}
         </Button>
+      ) : heldOnPrerelease ? (
+        <p className="text-sm text-muted-foreground">
+          {translateText("update.heldOnPrerelease", { version })}
+        </p>
       ) : (
         error === null && (
           <p className="text-sm text-muted-foreground">

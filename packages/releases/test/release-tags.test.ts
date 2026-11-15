@@ -119,3 +119,114 @@ describe("the latest release", () => {
     );
   });
 });
+
+describe("the full-release channel", () => {
+  it("does not take GitHub's latest when its tag has a -", async () => {
+    // Someone unmarked a pre-release by hand: GitHub calls it the latest, and it is not.
+    const api = fakeApi(
+      [
+        { tag_name: "v0.4.0-rc.1" },
+        { tag_name: "desktop-v0.3.0" },
+        { tag_name: "v0.3.0" },
+      ],
+      "v0.4.0-rc.1",
+    );
+    await expect(api.releases.latest()).resolves.toMatchObject({
+      version: "0.3.0",
+    });
+    expect(api.asked).toEqual([
+      "/repo/releases/latest",
+      "/repo/releases?per_page=100",
+    ]);
+  });
+
+  it("does not take GitHub's latest when it is marked a pre-release", async () => {
+    const api = fakeApi(
+      [{ tag_name: "v0.4.0", prerelease: true }, { tag_name: "v0.3.0" }],
+      "v0.4.0",
+    );
+    await expect(api.releases.latest()).resolves.toMatchObject({
+      version: "0.3.0",
+    });
+  });
+
+  it("ignores pre-releases, drafts and the desktop app's releases", async () => {
+    const api = fakeApi([
+      { tag_name: "desktop-v9.0.0" },
+      { tag_name: "v0.5.0", draft: true },
+      { tag_name: "v0.4.0-beta.2", prerelease: true },
+      { tag_name: "v0.3.1" },
+      { tag_name: "v0.3.0" },
+    ]);
+    await expect(
+      api.releases.latest({ prerelease: false }),
+    ).resolves.toMatchObject({
+      version: "0.3.1",
+    });
+  });
+});
+
+describe("the pre-release channel", () => {
+  const mixed = [
+    { tag_name: "desktop-v9.0.0" },
+    { tag_name: "desktop-v9.1.0-rc.1", prerelease: true },
+    { tag_name: "v0.5.0", draft: true },
+    { tag_name: "v0.5.0-rc.1", draft: true, prerelease: true },
+    { tag_name: "v0.4.0-beta.2", prerelease: true },
+    { tag_name: "v0.4.0-beta.10", prerelease: true },
+    { tag_name: "v0.3.1" },
+    { tag_name: "v0.3.0" },
+  ];
+
+  it("takes the highest published v*, pre-release or not, from the list", async () => {
+    const api = fakeApi(mixed, "v0.3.1");
+    await expect(
+      api.releases.latest({ prerelease: true }),
+    ).resolves.toMatchObject({ version: "0.4.0-beta.10" });
+    // GitHub's latest is never a pre-release: the list is the only place to look.
+    expect(api.asked).toEqual(["/repo/releases?per_page=100"]);
+  });
+
+  it("goes to the full release once it is out, above its own candidates", async () => {
+    const api = fakeApi(
+      [
+        { tag_name: "v0.4.0" },
+        { tag_name: "desktop-v1.0.0" },
+        ...mixed,
+        { tag_name: "v0.4.0-rc.1", prerelease: true },
+      ],
+      "v0.4.0",
+    );
+    await expect(
+      api.releases.latest({ prerelease: true }),
+    ).resolves.toMatchObject({ version: "0.4.0" });
+  });
+
+  it("takes a full release that is the highest", async () => {
+    const api = fakeApi([
+      { tag_name: "v0.3.0-rc.2", prerelease: true },
+      { tag_name: "v0.3.1" },
+    ]);
+    await expect(
+      api.releases.latest({ prerelease: true }),
+    ).resolves.toMatchObject({ version: "0.3.1" });
+  });
+
+  it("does not exist where there are only drafts and desktop releases", async () => {
+    const api = fakeApi([
+      { tag_name: "desktop-v0.1.0" },
+      { tag_name: "v0.2.0-rc.1", draft: true, prerelease: true },
+    ]);
+    await expect(api.releases.latest({ prerelease: true })).rejects.toThrow(
+      "has no host release (a v* tag)",
+    );
+  });
+
+  it("is picked by newestHost too", () => {
+    const listed = mixed.map((release) => ({ ...release, assets: [] }));
+    expect(newestHost(listed, { prerelease: true })?.tag_name).toBe(
+      "v0.4.0-beta.10",
+    );
+    expect(newestHost(listed)?.tag_name).toBe("v0.3.1");
+  });
+});

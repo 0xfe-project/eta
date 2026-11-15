@@ -81,6 +81,21 @@ export const versionOrder = (
 ): -1 | 0 | 1 | undefined =>
   isReleaseVersion(than) ? Bun.semver.order(version, than) : undefined;
 
+/**
+ * Whether this build waits on a pre-release for a full release: it is a pre-release, pre-releases
+ * are off, and `latest` (the newest full release) is not newer. Turning the switch off never goes
+ * back to an older full release; it only stops offering pre-releases.
+ */
+export const heldOnPrerelease = (
+  version: string,
+  latest: string,
+  prerelease: boolean,
+): boolean =>
+  !prerelease &&
+  isReleaseVersion(version) &&
+  version.includes("-") &&
+  Bun.semver.order(latest, version) <= 0;
+
 /** Told as an upgrade moves, for whoever watches it from outside this process. */
 interface UpgradeReport {
   /** The release is found. */
@@ -103,6 +118,8 @@ export class UpgradeFailure extends Error {
 export interface UpgradeOptions {
   /** The version asked for, without a `v`; the latest full release if not. */
   wanted: string | undefined;
+  /** With no `wanted`: the latest pre-release counts too (`--prerelease`, or the saved switch). */
+  prerelease?: boolean;
   /** Say whether there is something newer and stop there. */
   check: boolean;
   /** Restart over working agents instead of waiting. */
@@ -348,9 +365,10 @@ export async function upgradeHost(options: UpgradeOptions): Promise<void> {
 
   if (options.upstream !== undefined)
     log(`Taking releases from ${options.upstream}.`);
+  const prerelease = options.prerelease === true;
   const release =
     wanted === undefined
-      ? await releases.latest()
+      ? await releases.latest({ prerelease })
       : await releases.byVersion(wanted);
   const { version } = release;
   options.report?.target(version);
@@ -359,6 +377,12 @@ export async function upgradeHost(options: UpgradeOptions): Promise<void> {
 
   if (version === from) {
     log(`eta-host ${from} is up to date.`);
+    return;
+  }
+  if (wanted === undefined && heldOnPrerelease(from, version, prerelease)) {
+    log(
+      `This is the pre-release ${from}, and pre-releases are off: the latest full release, ${version}, is not newer. There is an upgrade once a newer full release is out (or with --prerelease).`,
+    );
     return;
   }
   if (check) {

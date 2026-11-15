@@ -521,6 +521,7 @@ export const UPGRADE_ACTIONS = [
   "cancel",
   "setUpstream",
   "setToken",
+  "setPrerelease",
 ] as const;
 export type UpgradeAction = (typeof UPGRADE_ACTIONS)[number];
 
@@ -607,9 +608,16 @@ export interface UpgradeTokenView {
 export interface UpgradeCheckView {
   /** This build. */
   version: string;
-  /** The latest full release; null when it could not be found out. */
+  /** The latest release on the channel (`prerelease`); null when it could not be found out. */
   latest: string | null;
   available: boolean;
+  /** Whether pre-releases count as upgrades too: the `upgrade.prerelease` setting. */
+  prerelease: boolean;
+  /**
+   * This build is a pre-release, pre-releases are off, and no full release is newer: nothing is
+   * offered until one is. Turning the switch off never goes back to an older full release.
+   */
+  heldOnPrerelease: boolean;
   blocked: UpgradeBlock | null;
   /** What a restart would stop right now. */
   busy: UpgradeBusy[];
@@ -627,6 +635,8 @@ export interface UpgradeArgs {
   setUpstream: { upstream?: string };
   /** Save a token for the upstream's host; without `token`, forget the one saved. */
   setToken: { token?: string };
+  /** Let upgrades go to pre-releases, or only to full releases. */
+  setPrerelease: { prerelease: boolean };
 }
 
 export interface UpgradeResults {
@@ -635,6 +645,7 @@ export interface UpgradeResults {
   cancel: { cancelled: boolean };
   setUpstream: UpgradeUpstreamView;
   setToken: { saved: string | null };
+  setPrerelease: { prerelease: boolean };
 }
 
 /* ------------------------------------------------------------------ projects */

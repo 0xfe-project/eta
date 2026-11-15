@@ -135,6 +135,16 @@ export function useSetToken() {
   );
 }
 
+export function useSetPrerelease() {
+  const client = useQueryClient();
+  return useWireMutation<
+    UpgradeArgs["setPrerelease"],
+    UpgradeResults["setPrerelease"]
+  >("upgrade", "setPrerelease", {
+    onSuccess: () => void client.invalidateQueries({ queryKey: CHECK_KEY }),
+  });
+}
+
 export function useCancelUpgrade() {
   const client = useQueryClient();
   return useWireMutation<UpgradeArgs["cancel"], UpgradeResults["cancel"]>(

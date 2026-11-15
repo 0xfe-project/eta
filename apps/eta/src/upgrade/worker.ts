@@ -49,6 +49,11 @@ export interface WorkerRequest {
   wanted?: string | undefined;
   /** `--repo`, for this upgrade alone. */
   repo?: string | undefined;
+  /**
+   * `--prerelease`, for this upgrade alone. Not the saved switch: the worker reads that from the
+   * data directory itself (`savedPrerelease`), as the environment is not passed on (`PASSED_ENV`).
+   */
+  prerelease?: boolean | undefined;
   force: boolean;
   waitMinutes: number;
   runner?: DetachedRunner;
@@ -56,7 +61,16 @@ export interface WorkerRequest {
 
 /** Start the worker, or find the one running; its id. */
 export async function startWorker(request: WorkerRequest): Promise<string> {
-  const { dataDir, force, from, program, repo, waitMinutes, wanted } = request;
+  const {
+    dataDir,
+    force,
+    from,
+    prerelease,
+    program,
+    repo,
+    waitMinutes,
+    wanted,
+  } = request;
   const running = readStatus(dataDir);
   if (running?.state === "running") return running.id;
   const id = randomUUID();
@@ -69,6 +83,7 @@ export async function startWorker(request: WorkerRequest): Promise<string> {
         "upgrade",
         ...(wanted === undefined ? [] : [wanted]),
         ...(repo === undefined ? [] : ["--repo", repo]),
+        ...(prerelease === true ? ["--prerelease"] : []),
         ...(force ? ["--force"] : []),
         "--wait",
         String(waitMinutes),

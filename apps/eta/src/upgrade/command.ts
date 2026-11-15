@@ -16,7 +16,12 @@ import { parseFailure } from "../cli";
 import { COMPILED } from "../resources";
 import { listenForStop } from "../stop";
 import { VERSION } from "../version";
-import { BACKUPS_KEPT, savedToken, savedUpstream } from "./database";
+import {
+  BACKUPS_KEPT,
+  savedPrerelease,
+  savedToken,
+  savedUpstream,
+} from "./database";
 import { findHostService, sameFile } from "./service";
 import { readStatus, StatusWriter } from "./status";
 import { isReleaseVersion, UpgradeFailure, upgradeHost } from "./upgrade";
@@ -24,12 +29,14 @@ import { cancelWorker, followWorker, startWorker } from "./worker";
 
 const WAIT_MINUTES = 10;
 
-const USAGE = `Usage: eta-host upgrade [version] [--repo <repository>] [--check] [--force] [--wait <minutes>]
+const USAGE = `Usage: eta-host upgrade [version] [--repo <repository>] [--prerelease] [--check] [--force] [--wait <minutes>]
        eta-host upgrade --status | --cancel
 
-Replace this file with a release, the latest full one unless given a version; a pre-release has to
-be named (0.2.0-rc.1). The download is checked against SHA256SUMS and run once before anything
-changes, and a release older than this build is refused.
+Replace this file with a release: the one named (0.2.0, 0.2.0-rc.1), or else the latest full
+release, pre-releases included when they are on under Settings, Update, or with --prerelease. A
+pre-release build waits for a newer full release rather than going back to an older one. The
+download is checked against SHA256SUMS and run once before anything changes, and a release older
+than this build is refused.
 
 If the service (io.eta.host) runs this file, the work is handed to a process of its own,
 io.eta.host-upgrade, which the service manager runs (a systemd user unit, a launchd job, a Windows
@@ -40,6 +47,7 @@ the old build and the database go back and the service is started again.
 Otherwise only the file is replaced and restarting is up to you.
 
   --check             say whether there is something newer and change nothing
+  --prerelease        count pre-releases (v0.3.0-rc.1) as the latest too, this once
   --force             do not wait for agents: the restart stops the ones running. An agent running
                       this counts as one of them
   --wait <minutes>    how long to wait for them, default ${WAIT_MINUTES}; then give up, changing nothing
@@ -86,6 +94,7 @@ async function handOver(
   options: UpgradeOptions,
   waitMinutes: number,
   repo: string | undefined,
+  prerelease: boolean,
 ): Promise<number> {
   const { dataDir, execPath, force, version, wanted } = options;
   const id = await startWorker({
@@ -94,6 +103,7 @@ async function handOver(
     from: version,
     wanted,
     repo,
+    prerelease,
     force,
     waitMinutes,
   });
@@ -150,6 +160,30 @@ function showStatus(dataDir: string): number {
   return 0;
 }
 
+/**
+ * Where releases come from and which ones count, read from `dataDir` by this command and by its
+ * worker alike. The worker started from the page's button is given no version and no
+ * `--prerelease`: it reads the switch here, so its target is the one `check()` showed the page.
+ */
+export function releaseSource(
+  dataDir: string,
+  flags: { repo?: string | undefined; prerelease?: boolean | undefined } = {},
+): Pick<UpgradeOptions, "releases" | "upstream" | "prerelease"> {
+  const chosen = chooseUpstream({
+    flag: flags.repo,
+    saved: savedUpstream(dataDir),
+  });
+  const releases = new Releases({
+    upstream: chosen.text,
+    saved: savedToken(dataDir),
+  });
+  return {
+    releases,
+    upstream: chosen.source === "build" ? undefined : releases.upstream.label,
+    prerelease: flags.prerelease === true || savedPrerelease(dataDir),
+  };
+}
+
 export async function upgradeCommand(args: string[]): Promise<number> {
   let parsed;
   try {
@@ -160,6 +194,7 @@ export async function upgradeCommand(args: string[]): Promise<number> {
         force: { type: "boolean", default: false },
         wait: { type: "string", default: String(WAIT_MINUTES) },
         repo: { type: "string" },
+        prerelease: { type: "boolean", default: false },
         status: { type: "boolean", default: false },
         cancel: { type: "boolean", default: false },
         // What `worker.ts` runs. Not in the usage.
@@ -211,15 +246,11 @@ export async function upgradeCommand(args: string[]): Promise<number> {
   }
 
   try {
-    const chosen = chooseUpstream({
-      flag: values.repo,
-      saved: savedUpstream(dataDir),
-    });
-    const releases = new Releases({
-      upstream: chosen.text,
-      saved: savedToken(dataDir),
-    });
     const options = {
+      ...releaseSource(dataDir, {
+        repo: values.repo,
+        prerelease: values.prerelease,
+      }),
       wanted,
       check: values.check === true,
       force: values.force === true,
@@ -227,8 +258,6 @@ export async function upgradeCommand(args: string[]): Promise<number> {
       version: VERSION,
       execPath: values.target ?? process.execPath,
       dataDir,
-      releases,
-      upstream: chosen.source === "build" ? undefined : releases.upstream.label,
       findService: findHostService,
       log: (line: string) => console.log(line),
     };
@@ -245,7 +274,12 @@ export async function upgradeCommand(args: string[]): Promise<number> {
           throw new Error(
             `the service runs ${service.program}, not this file. Run that one's upgrade.`,
           );
-        return await handOver(options, minutes, values.repo);
+        return await handOver(
+          options,
+          minutes,
+          values.repo,
+          values.prerelease === true,
+        );
       }
     }
     await upgradeHost(options);

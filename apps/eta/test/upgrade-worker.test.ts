@@ -12,12 +12,18 @@ import { existsSync, realpathSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { savedToken, savedUpstream } from "../src/upgrade/database";
+import { releaseSource } from "../src/upgrade/command";
+import {
+  savedPrerelease,
+  savedToken,
+  savedUpstream,
+} from "../src/upgrade/database";
 import {
   announceUpgrade,
   readStatus,
   StatusWriter,
 } from "../src/upgrade/status";
+import { upgradeHost } from "../src/upgrade/upgrade";
 import { cancelWorker, followWorker, startWorker } from "../src/upgrade/worker";
 import { connect } from "./support/client";
 import { tempDir, testHost } from "./support/host";
@@ -147,6 +153,18 @@ describe("starting the worker", () => {
     const { runner, started } = recorder();
     await startWorker(request(dir, runner));
     expect(started[0]?.argv).not.toContain("--repo");
+  });
+
+  it("hands on --prerelease only when it was given, leaving the switch to the worker", async () => {
+    const dir = await tempDir();
+    const { runner, started } = recorder();
+    await startWorker(request(dir, runner));
+    expect(started[0]?.argv).not.toContain("--prerelease");
+    expect(started[0]?.passEnv).not.toContain("ETA_PRERELEASE");
+
+    const other = await tempDir();
+    await startWorker({ ...request(other, runner), prerelease: true });
+    expect(started[1]?.argv).toContain("--prerelease");
   });
 
   it("asks for a unit of its own, with no token on the command line", async () => {
@@ -306,6 +324,8 @@ describe("the update button's target", () => {
       available: true,
       blocked: null,
       busy: [busy],
+      prerelease: false,
+      heldOnPrerelease: false,
       upstream: {
         label: "0xfe-project/eta",
         source: "build",
@@ -314,6 +334,156 @@ describe("the update button's target", () => {
       },
       token: { host: "github.com", from: null, saved: null },
       error: null,
+    });
+  });
+
+  describe("the pre-release switch", () => {
+    /** Answers `latest` by channel, remembering which it was asked for. */
+    const channels = (full: string, pre: string) => {
+      const asked: (boolean | undefined)[] = [];
+      return {
+        asked,
+        releases: {
+          latest: (channel?: { prerelease?: boolean | undefined }) => {
+            asked.push(channel?.prerelease);
+            return Promise.resolve({
+              version: channel?.prerelease === true ? pre : full,
+              assets: [],
+            });
+          },
+        },
+      };
+    };
+
+    it("is saved beside the upstream, for the worker to read too", async () => {
+      const dataDir = await tempDir();
+      const { asked, releases } = channels("1.1.0", "1.2.0-rc.1");
+      const { socket } = await client({
+        dataDir,
+        upgrade: { ...options, releases },
+      });
+      expect(await socket.call("upgrade", "check", {})).toMatchObject({
+        latest: "1.1.0",
+        prerelease: false,
+      });
+      expect(savedPrerelease(dataDir)).toBe(false);
+
+      expect(
+        await socket.call("upgrade", "setPrerelease", { prerelease: true }),
+      ).toEqual({ prerelease: true });
+      expect(savedPrerelease(dataDir)).toBe(true);
+      expect(await socket.call("upgrade", "check", {})).toMatchObject({
+        latest: "1.2.0-rc.1",
+        available: true,
+        prerelease: true,
+      });
+
+      expect(
+        await socket.call("upgrade", "setPrerelease", { prerelease: false }),
+      ).toEqual({ prerelease: false });
+      expect(savedPrerelease(dataDir)).toBe(false);
+      expect(asked).toEqual([false, true]);
+    });
+
+    it("does not offer an older full release to a pre-release build that turned it off", async () => {
+      const { releases } = channels("0.2.0", "0.3.0-beta.1");
+      const { socket } = await client({
+        upgrade: { ...options, version: "0.3.0-beta.1", releases },
+      });
+      expect(await socket.call("upgrade", "check", {})).toMatchObject({
+        version: "0.3.0-beta.1",
+        latest: "0.2.0",
+        available: false,
+        prerelease: false,
+        heldOnPrerelease: true,
+        error: null,
+      });
+
+      // Its own full release is an upgrade like any other.
+      const out = await client({
+        upgrade: {
+          ...options,
+          version: "0.3.0-beta.1",
+          releases: channels("0.3.0", "0.3.0").releases,
+        },
+      });
+      expect(await out.socket.call("upgrade", "check", {})).toMatchObject({
+        latest: "0.3.0",
+        available: true,
+        heldOnPrerelease: false,
+      });
+    });
+
+    it("gives the worker the target the page showed", async () => {
+      // One repository, as GitHub would list it, with the desktop app's and a draft mixed in.
+      const listed = [
+        { tag_name: "desktop-v2.0.0", prerelease: false },
+        { tag_name: "v1.3.0", draft: true },
+        { tag_name: "v1.2.0-beta.2", prerelease: true },
+        { tag_name: "v1.1.0", prerelease: false },
+      ];
+      const api = Bun.serve({
+        port: 0,
+        fetch(request) {
+          const { pathname } = new URL(request.url);
+          if (pathname === "/repo/releases/latest")
+            return Response.json({ ...listed[0], assets: [] });
+          if (pathname === "/repo/releases")
+            return Response.json(
+              listed.map((release) => ({ ...release, assets: [] })),
+            );
+          return new Response("not found", { status: 404 });
+        },
+      });
+      try {
+        const dataDir = await tempDir();
+        const { releases: _, ...real } = options;
+        const { socket } = await client({ dataDir, upgrade: real });
+        await socket.call("upgrade", "setUpstream", {
+          upstream: `http://127.0.0.1:${api.port}/repo`,
+        });
+
+        // What the worker does with no version: everything from the data directory.
+        const workerTarget = async (): Promise<string | undefined> => {
+          let target: string | undefined;
+          await upgradeHost({
+            ...releaseSource(dataDir),
+            wanted: undefined,
+            check: true,
+            force: false,
+            waitMs: 0,
+            version: "1.0.0",
+            execPath: exe,
+            dataDir,
+            findService: () => Promise.resolve(undefined),
+            log: quiet,
+            report: {
+              target: (version) => {
+                target = version;
+              },
+              phase: quiet,
+              cancelled: quiet,
+            },
+          });
+          return target;
+        };
+
+        for (const prerelease of [false, true]) {
+          await socket.call("upgrade", "setPrerelease", { prerelease });
+          const page = (await socket.call("upgrade", "check", {})) as {
+            latest: string;
+          };
+          expect(page.latest).toBe(prerelease ? "1.2.0-beta.2" : "1.1.0");
+          expect(await workerTarget()).toBe(page.latest);
+        }
+        // `--prerelease` is for once, over the switch.
+        await socket.call("upgrade", "setPrerelease", { prerelease: false });
+        expect(releaseSource(dataDir, { prerelease: true }).prerelease).toBe(
+          true,
+        );
+      } finally {
+        await api.stop(true);
+      }
     });
   });
 

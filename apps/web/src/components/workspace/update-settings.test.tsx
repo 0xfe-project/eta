@@ -30,6 +30,8 @@ const checked: UpgradeCheckView = {
   version: "1.0.0",
   latest: "1.1.0",
   available: true,
+  prerelease: false,
+  heldOnPrerelease: false,
   blocked: null,
   busy: [],
   upstream: {
@@ -57,17 +59,24 @@ async function open(
     return checked.upstream;
   });
   const setToken = rstest.fn((_args: unknown) => ({ saved: "github.com" }));
+  let prerelease = check.prerelease ?? false;
+  const setPrerelease = rstest.fn((args: unknown) => {
+    ({ prerelease } = args as UpgradeArgs["setPrerelease"]);
+    return { prerelease };
+  });
+  const checks = rstest.fn(() => ({ ...checked, ...check, prerelease }));
   const host = buildProductHost({}, ["upgrade"])
-    .handle("upgrade.check", () => ({ ...checked, ...check }))
+    .handle("upgrade.check", checks)
     .handle("upgrade.start", start)
     .handle("upgrade.cancel", cancel)
     .handle("upgrade.setUpstream", setUpstream)
-    .handle("upgrade.setToken", setToken);
+    .handle("upgrade.setToken", setToken)
+    .handle("upgrade.setPrerelease", setPrerelease);
   host.install();
   host.hello();
   await mount(<UpdateSettings />);
   await flush();
-  return { start, cancel, setUpstream, setToken };
+  return { start, cancel, setUpstream, setToken, setPrerelease, checks };
 }
 
 const running = (
@@ -138,6 +147,51 @@ describe("Settings → 更新", () => {
     await open({ available: false, latest: "1.0.0" });
     expect(text()).toContain("已是最新");
     expect(button("更新到 1.0.0")).toBeUndefined();
+  });
+
+  describe("pre-releases", () => {
+    const toggle = () =>
+      document.querySelector<HTMLButtonElement>('[role="switch"]')!;
+
+    it("are off until switched on, and the check is asked again", async () => {
+      const { setPrerelease, checks } = await open();
+      expect(text()).toContain("预发布版本");
+      expect(toggle().getAttribute("aria-checked")).toBe("false");
+      expect(text()).not.toContain("最新版本（含预发布）");
+      const before = checks.mock.calls.length;
+
+      await click(toggle());
+      await flush();
+      expect(setPrerelease).toHaveBeenCalledWith({ prerelease: true });
+      expect(checks.mock.calls.length).toBeGreaterThan(before);
+      expect(toggle().getAttribute("aria-checked")).toBe("true");
+      expect(text()).toContain("最新版本（含预发布）");
+
+      await click(toggle());
+      await flush();
+      expect(setPrerelease).toHaveBeenLastCalledWith({ prerelease: false });
+      expect(toggle().getAttribute("aria-checked")).toBe("false");
+    });
+
+    it("say why a pre-release build is offered nothing once they are off", async () => {
+      await open({
+        version: "0.3.0-beta.1",
+        latest: "0.2.0",
+        available: false,
+        heldOnPrerelease: true,
+      });
+      expect(text()).toContain(
+        "你在预发布版本 0.3.0-beta.1 上。预发布已关闭，正式版发布后会提示更新。",
+      );
+      expect(text()).toContain("最新正式版");
+      expect(text()).not.toContain("已是最新");
+      expect(button("更新到 0.2.0")).toBeUndefined();
+    });
+
+    it("cannot be switched while an upgrade runs", async () => {
+      await open({}, running("downloading"));
+      expect(toggle().disabled).toBe(true);
+    });
   });
 
   it.each([

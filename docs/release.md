@@ -7,7 +7,7 @@ The host and the desktop app are released separately, each with its own version 
 | `v*`         | `.github/workflows/release.yml`         | `eta-host`, one file each for Linux, macOS, Windows |
 | `desktop-v*` | `.github/workflows/release-desktop.yml` | Desktop app installers, see "Desktop app" below     |
 
-GitHub's Latest is always the host: desktop releases are published with `--latest=false`. `eta-host upgrade` and the settings page button also don't look at who Latest is, they only take `v*` tags (`apps/eta/src/upgrade/releases.ts`), so even if a desktop Release is manually marked Latest, the host still picks up the newest host.
+GitHub's Latest is always the host: desktop releases are published with `--latest=false`. `eta-host upgrade` and the settings page button also don't look at who Latest is, they only take `v*` tags (`packages/releases/src/releases.ts`), so even if a desktop Release is manually marked Latest, the host still picks up the newest host.
 
 ## Tagging
 
@@ -21,8 +21,17 @@ git push origin v0.2.0
 
 - The version is the tag minus the `v`. Both the host and the daemon it ships are this version; `version` in `package.json` plays no part.
 - This section and the ones below are all about the host. For the desktop app, tag `desktop-v*`; see "Desktop app".
-- A `-` makes it a prerelease, e.g. `v0.2.0-rc.1`; the Release is marked Pre-release and doesn't count as the latest version.
+- A `-` makes it a prerelease, e.g. `v0.2.0-rc.1`; the Release is marked Pre-release and doesn't count as the latest version. Hosts with "Pre-releases" switched on under Settings → Update (or `eta-host upgrade --prerelease`) are offered it; see "Pre-releases" below.
 - The tag must be `vX.Y.Z` or `vX.Y.Z-suffix`; any other form won't publish.
+
+### Pre-releases
+
+Hosts that switched pre-releases on upgrade to them, so a pre-release tag is a release like any other for the database of whoever installed it. Two rules:
+
+- **Pre-release tags are cut from `main` only**, like full releases.
+- **A migration that is in any `v*` tag, pre-release tags included, is never renamed or edited. To change it, add a new migration.** `upgrade.ts` holds the new build's `--migrations` against the ids the database has already run and refuses the upgrade when the database has one the build does not carry; `--force` does not get past that. A renamed migration therefore leaves every host that installed the beta unable to upgrade, ever. A migration whose content changed passes that check, but it does not run again, so the database quietly stops matching the code.
+
+Known gap: `upgrade-cross.yml` only tests full release → new version (`from` is the highest earlier full release). Pre-release → pre-release (rc.1 → rc.2) and pre-release → its full release (rc → 0.3.0) are not covered by any workflow; run `upgrade-cross.yml` by hand with `-f from=<rc>` when it matters.
 
 Pipeline order:
 
@@ -246,14 +255,21 @@ When something goes wrong, check these:
 An installed `eta-host` can upgrade itself; no checkout required:
 
 ```sh
-eta-host upgrade              # latest stable release
-eta-host upgrade 0.2.0-rc.1   # specific version; prereleases can only be installed this way
+eta-host upgrade              # latest stable release, or the latest pre-release when switched on in settings
+eta-host upgrade --prerelease # latest release or pre-release, this once
+eta-host upgrade 0.2.0-rc.1   # specific version, pre-release or not
 eta-host upgrade --check      # only report whether a new version is available; change nothing
 eta-host upgrade --status     # result of the last upgrade, or the stage currently in progress
 eta-host upgrade --cancel     # cancel the in-progress upgrade; cannot cancel if the service has already stopped
 ```
 
-The “Updates” section in settings does the same thing, but only upgrades to the latest stable release.
+The “Updates” section in settings does the same thing, but never to a version you name: it upgrades to the latest stable release, or with "Pre-releases" switched on, to the highest published `v*` including pre-releases (`-alpha`, `-beta`, `-rc`, …). A full release is higher than its own pre-releases, so `0.3.0` replaces `0.3.0-rc.1`. The switch is the host's setting `upgrade.prerelease`, next to `upgrade.upstream` and `upgrade.token`; from a window connected to a remote host it is that host's. `eta-host upgrade` without a version and the worker the button starts read the same setting from `~/.eta` (`savedPrerelease`), so the button upgrades to what the page showed.
+
+Pre-releases are looked for among the newest 100 releases of the repository (one page of the API); a `v*` further back is not seen.
+
+Switching pre-releases off never goes back: on a pre-release build with nothing newer among the full releases, the page and `eta-host upgrade` say so and offer nothing until a newer full release is out.
+
+The desktop app's first download of a host and the `upgrade-cross.yml` baseline only ever take full releases.
 
 The first version with `upgrade` must be installed with `bun run host:install` or by manually replacing files; earlier versions do not have this command.
 

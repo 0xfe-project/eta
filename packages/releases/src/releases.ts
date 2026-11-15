@@ -195,17 +195,34 @@ const isHostRelease = (release: ListedRelease): boolean =>
   release.prerelease !== true &&
   !release.tag_name.includes("-");
 
+/**
+ * Published and a host's tag, pre-release or not: what the pre-release channel picks from. Not
+ * `isHostRelease`, which leaves the pre-releases out.
+ */
+const isPublishedHost = (release: ListedRelease): boolean =>
+  isHostTag(release.tag_name) && release.draft !== true;
+
+/** Which releases an upgrade may go to. */
+export interface ReleaseChannel {
+  /** Pre-releases (`v0.3.0-rc.1`) too, not only full releases. */
+  prerelease?: boolean | undefined;
+}
+
 const describe = (release: ListedRelease): Release => ({
   version: release.tag_name.replace(/^v/, ""),
   assets: release.assets.map(({ name, url }) => ({ name, url })),
 });
 
-/** The highest published host release that is not a pre-release, among `releases`. */
+/**
+ * The highest published host release among `releases`: not a pre-release, unless `prerelease`.
+ * Semver puts `0.3.0` above `0.3.0-rc.1`, so a full release overtakes its own candidates.
+ */
 export function newestHost<T extends ListedRelease>(
   releases: T[],
+  { prerelease = false }: ReleaseChannel = {},
 ): T | undefined {
   return releases
-    .filter(isHostRelease)
+    .filter(prerelease ? isPublishedHost : isHostRelease)
     .sort((a, b) => Bun.semver.order(a.tag_name.slice(1), b.tag_name.slice(1)))
     .at(-1);
 }
@@ -230,21 +247,33 @@ export class Releases {
 
   /**
    * The newest published host release that is not a pre-release. What GitHub calls the latest
-   * release is that, unless it is the desktop app's; then it is the highest `v*` among the newest
-   * releases.
+   * release is that, unless it is the desktop app's, or has a `-` in its tag (a pre-release someone
+   * unmarked by hand, which a full-release user must not be put on); then it is the highest
+   * full `v*` among the newest releases.
+   *
+   * With `prerelease`, the highest published `v*` among the newest releases, pre-release or not.
+   * GitHub's latest never is a pre-release, so that is always the list.
+   *
+   * The list is one page (`LIST_PAGE`, the newest 100 releases of any kind): a `v*` further back
+   * than that is not seen.
    */
-  async latest(): Promise<Release> {
-    const what = "the latest release";
-    const answer = await this.#getApi("releases/latest");
-    if (answer.ok) {
-      const release = (await answer.json()) as ListedRelease;
-      if (isHostTag(release.tag_name) && release.draft !== true)
-        return describe(release);
-    } else if (answer.status !== 404) throw await this.#refused(what, answer);
-    // No latest at all, or one that is not a host: either way, the list says.
+  async latest({ prerelease = false }: ReleaseChannel = {}): Promise<Release> {
+    const what = prerelease
+      ? "the latest release or pre-release"
+      : "the latest release";
+    if (!prerelease) {
+      const answer = await this.#getApi("releases/latest");
+      if (answer.ok) {
+        const release = (await answer.json()) as ListedRelease;
+        if (isHostRelease(release)) return describe(release);
+      } else if (answer.status !== 404) throw await this.#refused(what, answer);
+    }
+    // No latest at all, or one that is not a full host release: either way, the list says.
     const listed = await this.#getApi(`releases?per_page=${LIST_PAGE}`);
     if (!listed.ok) throw await this.#refused(what, listed);
-    const newest = newestHost((await listed.json()) as ListedRelease[]);
+    const newest = newestHost((await listed.json()) as ListedRelease[], {
+      prerelease,
+    });
     if (newest === undefined)
       throw new ReleaseError(
         "none",
