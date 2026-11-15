@@ -68,5 +68,33 @@
     "noModel": "Captain 还没有配置模型。请在 Captain 的设置里选一个；在此之前每次到点都记为「已跳过」。",
     "noCaptain": "Captain 还没有初始化。在此之前每次到点都记为「已跳过」。",
     "turnOn": "打开 Captain"
+  },
+  "next": {
+    "upcoming": "下次 · {{when}}",
+    "inMinutes": "{{count}} 分钟后",
+    "inMinutes_one": "{{count}} 分钟后",
+    "inMinutes_other": "{{count}} 分钟后",
+    "inHours": "{{count}} 小时后",
+    "inHours_one": "{{count}} 小时后",
+    "inHours_other": "{{count}} 小时后",
+    "tomorrow": "明天",
+    "inDays": "{{count}} 天后",
+    "inDays_one": "{{count}} 天后",
+    "inDays_other": "{{count}} 天后",
+    "running": "运行中 · {{duration}}",
+    "seconds": "{{count}} 秒",
+    "seconds_one": "{{count}} 秒",
+    "seconds_other": "{{count}} 秒",
+    "minutes": "{{count}} 分钟",
+    "minutes_one": "{{count}} 分钟",
+    "minutes_other": "{{count}} 分钟",
+    "paused": "已暂停",
+    "captainOff": "Captain 已关闭",
+    "never": "不会再运行",
+    "fullTime": "{{date}} 周{{weekday}} {{time}}",
+    "setIn": "定时任务按{{zone}} {{setting}} 设定",
+    "cronIn": "cron 表达式按{{zone}}计算",
+    "origin": "（{{zone}} {{setting}}）",
+    "originZone": "（按{{zone}}）"
   }
 }
