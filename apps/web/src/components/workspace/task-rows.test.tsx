@@ -161,6 +161,8 @@ describe("a task an agent proposes", () => {
     // What the user decides on: the agent that proposed it will run it, in a worktree of its own.
     expect(container.textContent).toContain("确认后创建任务");
     expect(container.textContent).toContain("独立 worktree");
+    // A draft that does not say where it goes (an older one) starts once confirmed.
+    expect(container.textContent).not.toContain("确认后放入积压");
     expect(link(container)).toBeNull();
 
     const open = [...container.querySelectorAll("button")].find((b) =>
@@ -196,6 +198,57 @@ describe("a task an agent proposes", () => {
     expect(link(container)?.getAttribute("href")).toBe("/?view=tasks&task=t9");
     expect(container.textContent).not.toContain("确认后创建任务");
     expect(container.textContent).toContain("待办");
+  });
+
+  it("says a backlog draft will wait, and lets the user switch it to start now, or keep it waiting", async () => {
+    const backlog = {
+      ...draft,
+      data: { ...draft.data, status: "backlog" },
+    } satisfies MessageView;
+    const { container, host } = await chat([backlog], (fake) => {
+      fake.handle("tasks.confirmDraft", () => ({
+        task: taskDetail({ id: "t9", number: 9, title: "整理发布说明" }),
+        message: card({ status: "backlog" }),
+      }));
+    });
+    // The folded line says where it goes, and the card says it will not run on its own.
+    expect(foldOf(container, "整理发布说明")?.textContent).toContain("积压");
+    expect(container.textContent).toContain("确认后放入积压，不会立即执行");
+
+    const open = [...container.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("编辑并确认"),
+    )!;
+    await act(async () => open.click());
+    const choice = (label: string) =>
+      [...document.querySelectorAll<HTMLButtonElement>("[aria-pressed]")].find(
+        (b) => b.textContent === label,
+      )!;
+    expect(choice("积压").getAttribute("aria-pressed")).toBe("true");
+    const submit = () =>
+      document.querySelector<HTMLButtonElement>(
+        '[role="dialog"] button[type="submit"]',
+      )!;
+    // Kept in the backlog it is only made, not started.
+    expect(submit().textContent).toBe("创建");
+    await act(async () => choice("立即执行").click());
+    expect(choice("立即执行").getAttribute("aria-pressed")).toBe("true");
+    expect(submit().textContent).toBe("确认并开始");
+    await act(async () => choice("积压").click());
+    await act(async () => {
+      submit().form!.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      );
+    });
+    await flush();
+    expect(host.calls.find((c) => c.action === "confirmDraft")?.args).toEqual({
+      conversationId: CONV,
+      messageId: backlog.id,
+      edits: {
+        title: "整理发布说明",
+        description: "## 目标\n\n列出变更",
+        status: "backlog",
+      },
+    });
   });
 
   it("refreshes the card when the task moves, and marks it when the task is deleted", async () => {

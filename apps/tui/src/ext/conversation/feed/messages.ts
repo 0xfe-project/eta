@@ -16,6 +16,8 @@ export const feedMessages = defineMessages({
     wakeBudget:
       "This message has used its {budget} wake-ups; later @mentions stay in the conversation and wake nobody until you write again.",
     taskDraft: "Task draft: {title}",
+    taskDraftBacklog:
+      "Task draft: {title} (goes to the backlog when confirmed; does not run yet)",
     taskCard: "Task #{number}: {title}",
     nameSeparator: ", ",
   },
@@ -33,6 +35,7 @@ export const feedMessages = defineMessages({
     wakeBudget:
       "这条消息已经用完 {budget} 次唤醒；之后的 @ 只记入对话，等你再发言才会唤醒。",
     taskDraft: "任务草稿：{title}",
+    taskDraftBacklog: "任务草稿：{title}（确认后放入积压，不会立即执行）",
     taskCard: "任务 #{number}：{title}",
     nameSeparator: "、",
   },

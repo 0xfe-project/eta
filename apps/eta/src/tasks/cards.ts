@@ -4,6 +4,7 @@ import type {
   TaskArtifactRef,
   TaskCardData,
   TaskDraftData,
+  TaskDraftStatus,
   TaskWorkspaceMode,
 } from "@eta/client-contracts";
 /**
@@ -27,6 +28,7 @@ import type { AgentStore } from "../agents/store";
 import type { ConversationStore } from "../conversations/store";
 import type { Timeline } from "../conversations/timeline";
 import type { TaskRecord, TaskStore } from "./store";
+import { draftStatus } from "@eta/client-contracts";
 import { resolveAssignee } from "./assignee";
 
 /** What the agent says about the work it proposes. */
@@ -39,6 +41,11 @@ export interface DraftInput {
   source?: string | undefined;
   /** Where the executor works: a worktree of its own, or the project's directory. */
   workspace: TaskWorkspaceMode;
+  /**
+   * Where the task lands when confirmed: `todo` (the default) starts it, `backlog` keeps it on the
+   * board until the user moves it to todo.
+   */
+  status?: TaskDraftStatus | undefined;
   /**
    * The branch (or `#number` of another task, resolved to its `eta/task-<number>` branch) the
    * worktree starts at; the board resolves it before making the task. Absent is the project
@@ -136,6 +143,7 @@ export class TaskCards {
         `Source: conversation “${conversation.name}”, ${source}.`,
       ].join("\n\n"),
       workspace: input.draft.workspace,
+      status: draftStatus(input.draft),
       ...(input.draft.base === undefined ? {} : { base: input.draft.base }),
       ...(assignee === undefined ? {} : { assignee }),
       ...(input.draft.captainAssignmentId === undefined
@@ -191,7 +199,9 @@ export class TaskCards {
       const task = tasks.create({
         title,
         description: input.fields.description ?? draft.description,
-        status: input.fields.status,
+        // What the user chose on the way, else what the draft proposed; a draft from before drafts
+        // said so is `todo`, as every draft was then.
+        status: input.fields.status ?? draftStatus(draft),
         // The agent that proposed it executes it, unless the draft says it is for someone else.
         createdByAgent: row.agentId ?? undefined,
         assigneeAgent: assignee,

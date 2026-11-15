@@ -29,7 +29,10 @@ import type { TaskBoard } from "./board";
 import type { TaskRunner } from "./runner";
 import type { RunRecord } from "./runs";
 import type { TaskRecord } from "./store";
-import { TASK_WORKSPACE_MODES } from "@eta/client-contracts";
+import {
+  TASK_DRAFT_STATUSES,
+  TASK_WORKSPACE_MODES,
+} from "@eta/client-contracts";
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
 import { taskOfKey } from "./session-key";
@@ -240,7 +243,9 @@ function conversationTools(
       "board's proposal. The user edits and confirms it, then you do it yourself in a fresh " +
       "session that cannot see this conversation — so write the goal and acceptance for a reader " +
       "who knows nothing else, and put what you have established in `decided`. This is how work " +
-      "leaves a conversation: `create_task` is for when the user named a task themselves.",
+      "leaves a conversation: `create_task` is for when the user named a task themselves. " +
+      "By default a confirmed draft starts at once; give `status: backlog` for work to plan now " +
+      "and leave for the user to start, which puts it on the board without running it.",
     parameters: Type.Object({
       title: Type.String({
         description: "A short title for this piece of work",
@@ -258,6 +263,17 @@ function conversationTools(
             "The messages it came from, as plain text, e.g. messages 12–18. Defaults to the message " +
             "that woke you through the present.",
         }),
+      ),
+      status: Type.Optional(
+        Type.Union(
+          TASK_DRAFT_STATUSES.map((status) => Type.Literal(status)),
+          {
+            description:
+              "Where the task goes once the user confirms it: `todo` (the default) starts it at " +
+              "once; `backlog` only puts it on the board, for work that is planned now and waits " +
+              "for the user to start it by moving it to todo. The user can change it on the card.",
+          },
+        ),
       ),
       workspace: workspaceParameter,
       base: Type.Optional(
@@ -307,8 +323,9 @@ function conversationTools(
                 }),
           },
         });
+        const later = args.status === "backlog";
         return text(
-          `Drafted "${args.title}" for the user to confirm; it will run in ${workspace === "worktree" ? "a git worktree" : "the project directory"}${base === undefined ? "" : ` based on ${base}`}${assignee === undefined ? "" : `, executed by ${assignee}`}.`,
+          `Drafted "${args.title}" for the user to confirm${later ? "; once confirmed it waits in the backlog until the user starts it, and" : ";"} it will run in ${workspace === "worktree" ? "a git worktree" : "the project directory"}${base === undefined ? "" : ` based on ${base}`}${assignee === undefined ? "" : `, executed by ${assignee}`}.`,
           { messageId: row.id },
         );
       } catch (error) {

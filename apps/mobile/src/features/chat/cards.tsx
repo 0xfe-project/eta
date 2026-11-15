@@ -9,6 +9,7 @@ import type { TextKey } from "../../i18n";
 import type { IconName } from "../../ui/icons";
 import type { Chat } from "./conversation";
 import type { ArtifactRef } from "./run";
+import { draftStatus } from "@eta/client-contracts";
 import { Text, View } from "nsh";
 import { t } from "../../i18n";
 import { go } from "../../nav/links";
@@ -71,7 +72,11 @@ export function DraftCard(props: { message: MessageView; chat: Chat }) {
           {draft().title}
         </Text>
         <Text class="text-sm leading-4 text-foreground">
-          {t("chat.draft.waiting")}
+          {t(
+            draftStatus(draft()) === "backlog"
+              ? "chat.draft.waitingBacklog"
+              : "chat.draft.waiting",
+          )}
         </Text>
       </View>
       <If when={expanded()}>
@@ -87,6 +92,11 @@ export function DraftCard(props: { message: MessageView; chat: Chat }) {
                 : "chat.draft.hintLocal",
             )}
           </Text>
+          <If when={draftStatus(draft()) === "backlog"}>
+            <Text class="text-sm leading-[18px] text-muted-foreground">
+              {t("chat.draft.backlogHint")}
+            </Text>
+          </If>
         </View>
       </If>
       <View class="flex-row px-[10px] pb-[10px]">

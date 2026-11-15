@@ -1,3 +1,4 @@
+import type { TaskDraftStatus } from "@eta/client-contracts";
 import type {
   RunStatus,
   Task,
@@ -374,6 +375,48 @@ export interface TaskProposal {
   messageId: string;
   title: string;
   description: string;
+  /** Where the agent proposed it goes: started at once, or kept in the backlog. */
+  status: TaskDraftStatus;
+}
+
+/**
+ * The one choice about a draft's status: start it when confirmed, or put it in the backlog until
+ * the user moves it to todo. The other statuses are where a task goes once it has been worked on.
+ */
+function DraftStatusChoice({
+  value,
+  onChange,
+}: {
+  value: TaskDraftStatus;
+  onChange: (status: TaskDraftStatus) => void;
+}) {
+  const { t: translateText } = useTranslation(["tasks"] as const);
+  return (
+    <div
+      role="group"
+      aria-labelledby="task-status-label"
+      className="flex items-center gap-1 text-xs"
+    >
+      {(["todo", "backlog"] as const).map((choice) => (
+        <button
+          key={choice}
+          type="button"
+          aria-pressed={value === choice}
+          onClick={() => onChange(choice)}
+          className={cn(
+            "border px-2 py-1",
+            value === choice
+              ? "border-foreground text-foreground"
+              : "border-border text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {choice === "todo"
+            ? translateText("draft.startNow")
+            : translateText("status.backlog")}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 /**
@@ -396,7 +439,7 @@ export function TaskForm({
   const confirm = useConfirmTaskDraft();
   const [title, setTitle] = useState(proposal.title);
   const [description, setDescription] = useState(proposal.description);
-  const [status, setStatus] = useState<TaskStatus>("todo");
+  const [status, setStatus] = useState<TaskDraftStatus>(proposal.status);
   return (
     <form
       className="space-y-4"
@@ -445,14 +488,17 @@ export function TaskForm({
           onChange={(e) => setDescription(e.target.value)}
         />
       </Field>
-      <Field id="task-status" label={translateText("fields.status")}>
-        <StatusSelect
-          id="task-status"
-          className="w-full"
-          value={status}
-          onChange={setStatus}
-        />
-      </Field>
+      <div className="grid gap-1.5">
+        <span id="task-status-label" className="text-xs leading-none">
+          {translateText("fields.status")}
+        </span>
+        <DraftStatusChoice value={status} onChange={setStatus} />
+        <p className="text-xs text-muted-foreground">
+          {status === "backlog"
+            ? translateText("draft.backlogHint")
+            : translateText("draft.startNowHint")}
+        </p>
+      </div>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={() => onDone()}>
           {translateText("common:actions.cancel")}

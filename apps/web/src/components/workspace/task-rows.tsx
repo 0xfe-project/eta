@@ -3,6 +3,7 @@ import type {
   TaskCardData,
   TaskDraftData,
 } from "@eta/client-contracts";
+import { draftStatus } from "@eta/client-contracts";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -119,15 +120,24 @@ export function TaskDraftRow({ message }: { message: MessageView }) {
   const [open, fold] = useFold(message.id, false);
   const [form, setForm] = useState(false);
   const draft = message.data as unknown as TaskDraftData;
+  // A draft written before drafts said where they go is one that starts, as they all did then.
+  const backlog = draftStatus(draft) === "backlog";
   return (
     <details className="task-fold" {...foldable(open, fold)}>
       <TaskFoldHead
         label={translateText("draft.title")}
         title={draft.title}
         marker={
-          <span className="task-fold-waiting">
-            {translateText("draft.awaitingConfirm")}
-          </span>
+          <>
+            {backlog ? (
+              <span className="task-fold-backlog">
+                {translateText("status.backlog")}
+              </span>
+            ) : null}
+            <span className="task-fold-waiting">
+              {translateText("draft.awaitingConfirm")}
+            </span>
+          </>
         }
       >
         {/* On the folded line rather than behind it, so a reader who has already decided is not made
@@ -152,6 +162,7 @@ export function TaskDraftRow({ message }: { message: MessageView }) {
               branch: null,
             }),
           })}
+          {backlog ? ` ${translateText("draft.backlogHint")}` : null}
         </p>
       </div>
       <Dialog open={form} onOpenChange={setForm}>
@@ -168,6 +179,7 @@ export function TaskDraftRow({ message }: { message: MessageView }) {
               messageId: message.id,
               title: draft.title,
               description: draft.description,
+              status: draftStatus(draft),
             }}
             onDone={() => setForm(false)}
           />
