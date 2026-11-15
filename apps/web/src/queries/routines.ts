@@ -5,6 +5,7 @@ import type {
   RoutineResults,
   RoutineSchedule,
   RoutineSections,
+  RoutinesStatus,
   RoutineSummary,
   RunListing,
   RunStatus,
@@ -19,8 +20,8 @@ import {
 } from "@/queries/wire";
 
 // Routines on the wire: the `routines` target (an eager `list`, each routine with its latest runs)
-// and one `routines.<id>` target per routine (`info`, `briefs`, `runs` in full, `handoff`).
-// Nothing polls: a run that ends, a brief being revised and the clock's next time arrive as state.
+// and `status`, whether Captain is on to run them) and one `routines.<id>` target per routine
+// (`info`, `briefs`, `runs` in full). A run's handoff never reaches a client. Nothing polls: a run that ends, a brief being revised and the clock's next time arrive as state.
 
 export type {
   RunListing as ListedRun,
@@ -32,6 +33,11 @@ export type {
 export type BriefVersion = BriefView;
 /** A routine with everything its own page shows. */
 export type Routine = RoutineInfo & Omit<RoutineSections, "info">;
+
+/** Whether Captain is on to run routines; undefined until the host has said. */
+export function useRoutinesStatus(): RoutinesStatus | undefined {
+  return useTarget("routines")?.sections.status as RoutinesStatus | undefined;
+}
 
 export function useRoutines() {
   const { items, loaded, error } = useListTarget<RoutineSummary>("routines");
@@ -47,7 +53,6 @@ export function useRoutine(id: string | null) {
   const info = state?.sections.info as RoutineInfo | undefined;
   const briefs = state?.sections.briefs as BriefView[] | undefined;
   const runs = state?.sections.runs as RunView[] | undefined;
-  const handoff = state?.sections.handoff as Routine["handoff"] | undefined;
   const routine = useMemo<Routine | undefined>(
     () =>
       missing ||
@@ -55,8 +60,8 @@ export function useRoutine(id: string | null) {
       briefs === undefined ||
       runs === undefined
         ? undefined
-        : { ...info, briefs, runs, handoff: handoff ?? null },
-    [missing, info, briefs, runs, handoff],
+        : { ...info, briefs, runs },
+    [missing, info, briefs, runs],
   );
   return { routine, missing, error };
 }

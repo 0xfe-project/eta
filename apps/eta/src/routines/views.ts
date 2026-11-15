@@ -5,7 +5,6 @@
 import type {
   BriefView,
   FeedbackView,
-  HandoffView,
   RoutineInfo,
   RoutineSummary,
   RunListing,
@@ -46,8 +45,6 @@ export function infoOf(deps: ViewDeps, routine: RoutineRecord): RoutineInfo {
   return {
     id: routine.id,
     name: routine.name,
-    conversationId: routine.conversationId,
-    model: routine.model,
     schedule: routine.schedule,
     timezone: routine.timezone,
     enabled: routine.enabled,
@@ -83,7 +80,7 @@ export function runsOf(deps: ViewDeps, routineId: string): RunView[] {
   return deps.store.runs(routineId, DETAILED_RUNS).map((run) => ({
     ...listingOf(run),
     report: run.report,
-    handoff: run.handoff,
+    // Not the handoff: it is the next run's alone (`tools.ts`), and no view carries it.
     error: run.error,
     seenAt: run.seenAt,
     feedback: deps.store.feedbackOn(run.id).map(feedbackViewOf),
@@ -104,13 +101,6 @@ export function briefViewOf(deps: ViewDeps, brief: BriefRecord): BriefView {
 
 export function briefsOf(deps: ViewDeps, routineId: string): BriefView[] {
   return deps.store.briefs(routineId).map((brief) => briefViewOf(deps, brief));
-}
-
-export function handoffOf(
-  deps: ViewDeps,
-  routineId: string,
-): HandoffView | null {
-  return deps.store.handoff(routineId) ?? null;
 }
 
 /** When the clock runs the routine next; null when its schedule has no further time. */

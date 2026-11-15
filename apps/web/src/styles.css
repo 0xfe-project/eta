@@ -672,6 +672,14 @@
     max-width: 90%;
   }
 
+  /* A system line that carries words the user chose (a routine's name, its report's title): the
+   * same frame, but those words are shown as written. Uppercasing turned "Release 周报" into
+   * "RELEASE 周报"; the tracking that suits capitals goes with it. */
+  .system-message.as-written {
+    text-transform: none;
+    letter-spacing: 0.02em;
+  }
+
   /* Captain review: one supervisor observation set, not a raw control prompt. A neutral card like
    * a task's; severity is the small state square on each item's label (see `StateMark`). */
   .captain-review {

@@ -1,10 +1,13 @@
 /**
- * Routines: agents that run on a schedule and leave a report.
+ * Routines: work Captain does on a schedule, and the reports it leaves.
  *
- * Two kinds of target. `routines` is eager and publishes one `list` section, a summary of every
- * routine with its latest runs; every routine is a target of its own (`routines.<id>`) with the
- * brief versions, the runs in full and the handoff the next run will read. A run is one short
- * session; `RunListing.sessionId` names it, and its transcript is the upstream `sessions.<id>`.
+ * Two kinds of target. `routines` is eager and publishes the `list` section, a summary of every
+ * routine with its latest runs, and `status`, whether Captain is on to run them; every routine is
+ * a target of its own (`routines.<id>`) with the brief versions and the runs in full. A run is one
+ * new Captain session; `RunListing.sessionId` names it.
+ *
+ * What a run leaves for the next one (its handoff) is Captain's private note to itself. It is in
+ * no view here and never reaches a client: the next run's prompt is the only thing that reads it.
  *
  * Times are epoch milliseconds. A schedule is one of the four shapes the page offers, read in the
  * routine's own time zone; the next run is computed from it, never stored.
@@ -46,9 +49,10 @@ export type HourlyStep = (typeof HOURLY_STEPS)[number];
 
 /**
  * Where a run stands. It ends `sent` (it reported), `no_news` (it looked and had nothing new) or
- * `failed` (`error` says why).
+ * `failed` (`error` says why). `skipped` never ran: its time came while Captain was off, and
+ * `error` says so.
  */
-export type RunStatus = "running" | "sent" | "no_news" | "failed";
+export type RunStatus = "running" | "sent" | "no_news" | "failed" | "skipped";
 
 /** Who started a run: the clock, or a person who pressed "run now". */
 export type RunTrigger = "schedule" | "user";
@@ -79,11 +83,9 @@ export interface FeedbackView {
   revisionFailed: boolean;
 }
 
-/** A run with everything it left. */
+/** A run with what it left for the user. Its handoff to the next run is not here, on purpose. */
 export interface RunView extends RunListing {
   report: string | null;
-  /** What it told the next run. */
-  handoff: string | null;
   error: string | null;
   /** When the user last looked at it; null while it waits for them. */
   seenAt: number | null;
@@ -100,24 +102,10 @@ export interface BriefView {
   feedback: string | null;
 }
 
-/** What the most recent run that left one told the next. */
-export interface HandoffView {
-  text: string;
-  runId: string;
-  writtenAt: number;
-}
-
 /** What identifies and schedules a routine (the `info` section; the list rows add the runs). */
 export interface RoutineInfo {
   id: string;
   name: string;
-  /** The conversation a report is posted into, as a system row. Null posts nowhere. */
-  conversationId: string | null;
-  /**
-   * `provider:modelId`. A routine runs on eta's own loop, which has no default model: the host
-   * refuses one without, and a run of one left from before fails, saying to choose.
-   */
-  model: string | null;
   schedule: RoutineSchedule;
   timezone: string;
   enabled: boolean;
@@ -140,8 +128,22 @@ export interface RoutineSummary extends RoutineInfo {
 
 /* ------------------------------------------------------------------ sections */
 
+/**
+ * Why Captain cannot run routines now: its supervisor is switched off, or it has no model (or no
+ * Captain exists yet). While it is off, a time that comes is recorded as a `skipped` run.
+ */
+export type RoutinesPausedReason = "supervisor_off" | "no_model" | "no_captain";
+
+/** Whether routines run: they are Captain's, so they run when Captain does. */
+export interface RoutinesStatus {
+  captainOn: boolean;
+  /** Null while Captain is on. */
+  reason: RoutinesPausedReason | null;
+}
+
 export interface RoutinesSections {
   list: RoutineSummary[];
+  status: RoutinesStatus;
 }
 /** `routines.<id>`: registered for every routine, from startup or from its creation. */
 export interface RoutineSections {
@@ -150,7 +152,6 @@ export interface RoutineSections {
   briefs: BriefView[];
   /** Newest first, with their reports and feedback. */
   runs: RunView[];
-  handoff: HandoffView | null;
 }
 
 /* ------------------------------------------------------------------ actions */
@@ -173,23 +174,19 @@ export interface RoutineFields {
   schedule: RoutineSchedule;
   /** An IANA zone, for example `Asia/Shanghai`. */
   timezone: string;
-  /** `provider:modelId`. Required on create; an update may leave it out, never clear it. */
-  model?: string | null;
-  /** Where a sent report is posted. */
-  conversationId?: string | null;
 }
 
 /** Valid requests from a client. The server still validates untrusted JSON at runtime. */
 export interface RoutineArgs {
   /** On the clock from the moment it exists, unless `enabled` is false. */
-  create: RoutineFields & { model: string; enabled?: boolean };
+  create: RoutineFields & { enabled?: boolean };
   /** A `brief` that differs from the newest version is written as the next one. */
   update: { routineId: string } & Partial<RoutineFields> & {
       enabled?: boolean;
     };
   /** Refused while a run is going. Its working directory is left on disk. */
   delete: { routineId: string };
-  /** Starts a run now, paused or not. Refused while one is going. */
+  /** Starts a run now, paused or not. Refused while one is going, or while Captain is off. */
   run: { routineId: string };
   /** The user looked at the finished runs: clears the unseen counts. */
   seen: { routineId: string };

@@ -11,14 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { listSeparator, translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { useConversationList } from "@/queries/conversations";
-import { useModels } from "@/queries/providers";
 import { useCreateRoutine, useUpdateRoutine } from "@/queries/routines";
 import { wireErrorMessage } from "@/queries/wire";
-import { ModelSelect } from "./model-select";
 import { occurrences, when } from "./routine-format";
 import { Select, SelectOption } from "./select-field";
-import { useWorkspaceStore } from "./workspace-store";
 
 const KINDS = [
   {
@@ -97,12 +93,7 @@ function ScheduleFields({
   schedule: Schedule;
   onChange: (schedule: Schedule) => void;
 }) {
-  const { t: translateText } = useTranslation([
-    "routines",
-    "agents",
-    "common",
-    "providers",
-  ] as const);
+  const { t: translateText } = useTranslation(["routines", "common"] as const);
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Select
@@ -215,7 +206,10 @@ function Field({
   );
 }
 
-/** Creates a routine, or edits one; editing the brief adds a version. */
+/**
+ * Creates a routine, or edits one; editing the brief adds a version. A routine is Captain's: there
+ * is no agent or model to choose, and where its reports go is written in the brief.
+ */
 export function RoutineForm({
   routine,
   onDone,
@@ -223,43 +217,11 @@ export function RoutineForm({
   routine: Routine | null;
   onDone: (id?: string) => void;
 }) {
-  const { t: translateText } = useTranslation([
-    "routines",
-    "agents",
-    "common",
-    "providers",
-  ] as const);
-  const { data: models } = useModels();
-  const setSettings = useWorkspaceStore((s) => s.setSettings);
-  const lastModel = useWorkspaceStore((s) => s.workspace.lastModel);
-  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
-  const noModels =
-    models !== undefined && !models.some((item) => item.available);
+  const { t: translateText } = useTranslation(["routines", "common"] as const);
   const create = useCreateRoutine();
   const update = useUpdateRoutine();
-  // The group a new routine belongs to: the one you have open. Read from the cached snapshot so
-  // this form works the same in the panel, the full-window page and a test.
-  const { conversations } = useConversationList();
-  const selectedGroupId = useWorkspaceStore((s) => s.workspace.selectedGroupId);
-  const group =
-    conversations.find((candidate) => candidate.id === selectedGroupId) ?? null;
   const [name, setName] = useState(routine?.name ?? "");
   const [brief, setBrief] = useState(routine?.briefs[0]?.text ?? "");
-  // A routine runs on eta's own loop, which has no default model: it names one. A new routine
-  // starts on the last used model, else the first usable one; one saved without a model (from
-  // before) waits for a choice.
-  const usable = (models ?? []).filter((item) => item.available);
-  const [picked, setModel] = useState(routine?.model ?? "");
-  const model =
-    picked ||
-    (routine === null
-      ? ((usable.find((item) => item.id === lastModel) ?? usable[0])?.id ?? "")
-      : "");
-  // Chosen once, then removed from the providers: said, never swapped for another.
-  const modelGone =
-    model !== "" &&
-    models !== undefined &&
-    !models.some((item) => item.id === model);
   const [schedule, setSchedule] = useState<Schedule>(
     routine?.schedule ?? { kind: "daily", time: "08:00" },
   );
@@ -268,7 +230,7 @@ export function RoutineForm({
   );
   const zones = ZONES.includes(timezone) ? ZONES : [timezone, ...ZONES];
   const preview = nextRuns(schedule, timezone);
-  const ready = name.trim() && brief.trim() && model;
+  const ready = name.trim() && brief.trim();
 
   return (
     <form
@@ -279,22 +241,15 @@ export function RoutineForm({
         const fields = {
           name: name.trim(),
           brief: brief.trim(),
-          model,
           schedule,
           timezone,
         };
-        setWorkspace((state) => ({ ...state, lastModel: model }));
         const onError = (error: Error) => toast.error(wireErrorMessage(error));
         if (routine === null)
-          create.mutate(
-            {
-              ...fields,
-              // The conversation whose folder and members it runs with. Omitted when there is
-              // none open: "no conversation" is a state the list shows, not something to guess at.
-              ...(group === null ? {} : { conversationId: group.id }),
-            },
-            { onSuccess: (result) => onDone(result.routine.id), onError },
-          );
+          create.mutate(fields, {
+            onSuccess: (result) => onDone(result.routine.id),
+            onError,
+          });
         else
           update.mutate(
             { routineId: routine.id, ...fields },
@@ -339,6 +294,9 @@ export function RoutineForm({
           onChange={(e) => setBrief(e.target.value)}
         />
       </Field>
+      <p className="text-xs text-muted-foreground">
+        {translateText("fields.runByCaptain")}
+      </p>
       <Field
         label={translateText("fields.scheduleLabel")}
         hint={
@@ -356,7 +314,7 @@ export function RoutineForm({
       >
         <ScheduleFields schedule={schedule} onChange={setSchedule} />
       </Field>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Field label={translateText("schedule.timeZoneLabel")}>
           <Select
             aria-label={translateText("schedule.timeZoneLabel")}
@@ -370,44 +328,6 @@ export function RoutineForm({
               </SelectOption>
             ))}
           </Select>
-        </Field>
-        <Field
-          id="routine-model"
-          label={translateText("common:entities.model")}
-          hint={
-            noModels ? (
-              <span id="routine-model-hint">
-                {translateText("agents:models.noneAvailable")}
-                <Button
-                  type="button"
-                  variant="link"
-                  size="xs"
-                  className="h-auto px-1"
-                  onClick={() =>
-                    setSettings({ open: true, section: "providers" })
-                  }
-                >
-                  {translateText("providers:actions.openSettings")}
-                </Button>
-              </span>
-            ) : modelGone ? (
-              <span id="routine-model-hint" className="text-state-warning">
-                {translateText("agents:models.gone")}
-              </span>
-            ) : undefined
-          }
-        >
-          <ModelSelect
-            id="routine-model"
-            aria-label={translateText("common:entities.model")}
-            aria-describedby={
-              noModels || modelGone ? "routine-model-hint" : undefined
-            }
-            value={model}
-            models={models}
-            invalid={modelGone}
-            onValueChange={(value) => setModel(value)}
-          />
         </Field>
       </div>
       <div className="flex justify-end gap-2">

@@ -29,7 +29,16 @@ function split() {
   const all = loadMigrations();
   const at = all.findIndex((migration) => migration.id === FILL);
   expect(at).toBeGreaterThan(0);
-  return { before: all.slice(0, at), rest: all.slice(at) };
+  // Up to the migration that takes the model off routines (they run on Captain's since 0053), so
+  // what 0050 wrote onto a routine can still be read.
+  const until = all.findIndex(
+    (migration) => migration.id === "0053-routines-run-by-captain",
+  );
+  return {
+    before: all.slice(0, at),
+    rest: all.slice(at, until),
+    after: all.slice(until),
+  };
 }
 
 /** A database as the release before this one left it, with agents and routines of every kind. */
@@ -46,10 +55,12 @@ function seeded(db: Database): void {
   `);
 }
 
-function models(db: Database): Record<string, string | null> {
+function models(db: Database, routines = true): Record<string, string | null> {
   const rows = db
     .query<{ id: string; model: string | null }, []>(
-      "SELECT id, model FROM agent UNION ALL SELECT id, model FROM routine ORDER BY id",
+      routines
+        ? "SELECT id, model FROM agent UNION ALL SELECT id, model FROM routine ORDER BY id"
+        : "SELECT id, model FROM agent ORDER BY id",
     )
     .all();
   return Object.fromEntries(rows.map((row) => [row.id, row.model]));
@@ -156,12 +167,16 @@ describe("the upgrade's migration", () => {
       JSON.stringify({ defaultModel: "a:m2", providers: PROVIDERS }),
     );
     const host = await testHost({ dataDir });
-    expect(models(host.db)).toMatchObject({
+    // The routines kept, without a model of their own: they run on Captain's now.
+    expect(models(host.db, false)).toMatchObject({
       unset: "a:m2",
       empty: "a:m2",
       claude: null,
-      "r-unset": "a:m2",
     });
+    expect(host.db.query("SELECT id FROM routine ORDER BY id").all()).toEqual([
+      { id: "r-chosen" },
+      { id: "r-unset" },
+    ]);
   });
 });
 

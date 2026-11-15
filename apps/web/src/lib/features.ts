@@ -1,8 +1,7 @@
 /**
- * Routines (routines) is a host feature this build of the page does not offer. The plugin stays
- * mounted and its data still arrives on the wire; what is off is every way in — the sidebar and
- * the phone's bottom bar, the pending list and its counts, the context panel, a tool result's card,
- * a run's report, and the page itself: `/routines` redirects to the conversation list, which is
- * where a link from somewhere else now lands. Set this to `true` to open them all again.
+ * Routines (routines) are on: they are Captain's, run on a schedule, and every way in is open — the
+ * sidebar and the phone's bottom bar, the pending list and its counts, a tool result's card, a
+ * run's report, and the page itself. Setting this to `false` closes them all again: `/routines`
+ * then redirects to the conversation list. The host runs routines either way.
  */
-export const ROUTINES_VISIBLE = false;
+export const ROUTINES_VISIBLE = true;

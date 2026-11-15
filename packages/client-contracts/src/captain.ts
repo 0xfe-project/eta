@@ -1,5 +1,6 @@
 import type { CallFrame } from "@eta/client-wire-proto";
 import type { AgentRuntime, MessageView } from "./product";
+import type { RoutineSchedule } from "./routines";
 import type { BoardTaskDetail, BoardTaskStatus } from "./tasks";
 
 export const CAPTAIN_ACTIONS = [
@@ -151,6 +152,30 @@ export interface CaptainAgentProposal {
 export interface CaptainAgentResult {
   agentId: string;
   projectId: string;
+  name: string;
+}
+
+/**
+ * A routine Captain proposed: the payload of a `create_routine` operation. Nothing exists until the
+ * user confirms it; then the routine is made, enabled, with this brief as its version 1. It runs as
+ * Captain, so it names no agent and no model.
+ */
+export interface CaptainRoutineProposal {
+  /** Where Captain proposed it: the card is there. */
+  originConversationId: string;
+  /** The card's row in that conversation. */
+  messageId: string;
+  name: string;
+  brief: string;
+  schedule: RoutineSchedule;
+  timezone: string;
+  /** The schedule as a person reads it, in English: "every Mon at 09:00". */
+  scheduleText: string;
+}
+
+/** What a confirmed `create_routine` made. */
+export interface CaptainRoutineResult {
+  routineId: string;
   name: string;
 }
 

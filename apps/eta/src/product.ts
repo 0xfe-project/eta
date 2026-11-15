@@ -7,7 +7,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
  * then. Between the two, the replies a dead process left in flight are failed, so nothing a client
  * is ever shown says `working` without something working.
  */
-import type { AgentRuntimeInfo } from "@eta/client-contracts";
+import type { AgentRuntimeInfo, RoutinesStatus } from "@eta/client-contracts";
 import type {
   AssembledServer,
   RemoteSessions,
@@ -87,6 +87,8 @@ import { ProjectStore } from "./projects/store";
 import { routinesPlugin } from "./routines/plugin";
 import { INTERRUPTED, RoutineRunner } from "./routines/runner";
 import { Scheduler } from "./routines/scheduler";
+import { RoutineService } from "./routines/service";
+import { isRoutineSession } from "./routines/session-key";
 import { RoutineStore } from "./routines/store";
 import { loadSecretKey } from "./secret";
 import { combineSessionHooks } from "./session-hooks";
@@ -136,6 +138,12 @@ export interface Product {
   readonly captainSupervisor: CaptainSupervisor;
   /** The routines' clock; `tick()` makes it look. */
   readonly scheduler: Scheduler;
+  /** The routines: their rows and rules (`service.store`), and the runs Captain does. */
+  readonly routines: {
+    readonly store: RoutineStore;
+    readonly runner: RoutineRunner;
+    readonly service: RoutineService;
+  };
   /** Every feature's per-session hooks, combined into the one set the session manager takes. */
   readonly sessionHooks: Required<SessionHooks>;
   /** Whether long-term/project memory is enabled for a session. */
@@ -264,6 +272,8 @@ export function createProduct(options: {
     // Captain's identity, pauses, operations, settings and assignment summaries are product
     // state too. A mutation from the sidebar must not wait for the next board event to redraw.
     wire.pushNow("captain");
+    // Whether routines run follows Captain's switch and model (`routines.status`).
+    wire.pushNow("routines");
     const ids =
       touched === "all"
         ? conversations.list().map((c) => c.id)
@@ -280,16 +290,65 @@ export function createProduct(options: {
     wire?.pushNow("routines");
     wire?.pushNow(`routines.${routineId}`);
   };
+  // Routines are Captain's: a run is a new Captain session, and with Captain off nothing runs.
+  // Captain and the engine are made further down; they are read from here when a run needs them.
+  const made: { captain?: CaptainService; engine?: Engine } = {};
+  const routineStatus = (): RoutinesStatus => {
+    const identity = captainOn ? made.captain?.identity() : undefined;
+    if (identity === undefined)
+      return { captainOn: false, reason: "no_captain" };
+    if (made.captain?.settings().supervisorEnabled !== true)
+      return { captainOn: false, reason: "supervisor_off" };
+    if (identity.model === null)
+      return { captainOn: false, reason: "no_model" };
+    return { captainOn: true, reason: null };
+  };
   const runner = new RoutineRunner({
     store: routines,
-    timeline,
     dataDir,
     now,
     timeoutMs: options.routines?.timeoutMs,
     reviseTimeoutMs: options.routines?.reviseTimeoutMs,
     changed: routinesChanged,
-    posted: (conversationId) => changed([conversationId]),
     warn,
+    captain: {
+      status: routineStatus,
+      model: () => made.captain?.identity()?.model ?? undefined,
+      is: (agentId) =>
+        agentId !== undefined && made.captain?.identity()?.agentId === agentId,
+      open: async (input) => {
+        const identity = made.captain?.identity();
+        const agent =
+          identity === undefined ? undefined : agents.get(identity.agentId);
+        if (agent === undefined) throw new Error("Captain is not set up");
+        return await made.engine!.openRunSession({
+          key: input.key,
+          existing: null,
+          title: input.title,
+          agent,
+          machine: machines.primary()!,
+          cwd: input.cwd,
+          created: input.created,
+        });
+      },
+      // The report is on the routines page; Captain's chat gets a line that says so and links to
+      // it. Its title, never its body's neighbour the handoff.
+      reported: async (routine, run) => {
+        const { conversationId } = await made.captain!.direct();
+        timeline.system(
+          conversationId,
+          `Routine "${routine.name}" reported: ${run.title ?? "(untitled)"}`,
+          {
+            event: "routine_report",
+            routineId: routine.id,
+            routineName: routine.name,
+            runId: run.id,
+            title: run.title,
+          },
+        );
+        changed([conversationId]);
+      },
+    },
   });
   // The task board's rows. A task's session is held in `task:<id>` (`tasks/session-key.ts`), which
   // its runs share; what counts it, asks about it or remembers it knows it by the conversation the
@@ -297,6 +356,9 @@ export function createProduct(options: {
   const taskRows = new TaskStore(db);
   const runRows = new TaskRunStore(db);
   const originOf = (meta: SessionMeta): SessionMeta => {
+    // A routine run is held in no conversation, and is counted and asked from none.
+    if (isRoutineSession(meta.conversationId))
+      return { ...meta, conversationId: undefined };
     const taskId = taskOfKey(
       meta.conversationId,
       (runId) => runRows.get(runId)?.taskId,
@@ -319,12 +381,18 @@ export function createProduct(options: {
       warn(`[eta] could not record a generation: ${String(error)}`);
     }
   };
-  const scheduler = new Scheduler({
+  const scheduler: Scheduler = new Scheduler({
     store: routines,
-    fire: (routineId) => runner.start(routineId, "schedule") !== undefined,
+    fire: (routineId) => runner.fire(routineId),
     now,
     timer: options.routines?.timer ?? true,
     warn,
+  });
+  const routineService = new RoutineService({
+    store: routines,
+    scheduler,
+    now,
+    changed: routinesChanged,
   });
 
   // Other machines. What the primary does for them needs the server (its models) and the
@@ -590,7 +658,10 @@ export function createProduct(options: {
     changed,
     warn,
     checkDirectory: (machine, path) => checkDirectory(machine, hub, path),
+    routines: routineService,
   });
+  made.captain = captain;
+  made.engine = engine;
   inbox.onOpened((interaction) => captain.inboxOpened(interaction));
   inbox.onSettled((interaction, sourceInteractionId) =>
     captain.inboxSettled(interaction, sourceInteractionId),
@@ -788,6 +859,7 @@ export function createProduct(options: {
     captain,
     captainSupervisor,
     scheduler,
+    routines: { store: routines, runner, service: routineService },
     sessionHooks,
     memoryEnabledFor: (meta) => captain.memoryEnabled(meta),
     baseSystemPromptFor: () => captain.basePrompt(),
@@ -949,9 +1021,9 @@ export function createProduct(options: {
         routinesPlugin(
           {
             store: routines,
+            service: routineService,
             runner,
             scheduler,
-            conversations,
             now,
             changed: routinesChanged,
           },

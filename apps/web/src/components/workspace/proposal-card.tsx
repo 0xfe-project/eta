@@ -5,6 +5,7 @@ import type {
 } from "@eta/client-contracts";
 import type { Icon } from "@phosphor-icons/react";
 import type { ComponentType, ReactNode } from "react";
+import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { UsersThreeIcon } from "@phosphor-icons/react/UsersThree";
 import { useTranslation } from "react-i18next";
@@ -14,6 +15,7 @@ import { useCaptain, useCaptainActions } from "@/queries/captain";
 import { wireErrorMessage } from "@/queries/wire";
 import { AgentProposalDetails, AgentReady } from "./agent-proposal-card";
 import { GroupProposalDetails, OpenGroup } from "./group-proposal-card";
+import { RoutineProposalDetails, RoutineReady } from "./routine-proposal-card";
 import { StateMark } from "./state-mark";
 
 /**
@@ -51,6 +53,13 @@ const CARDS: Record<string, AnyCardKind> = {
     label: "agentProposal.label",
     Details: AgentProposalDetails,
     Done: AgentReady,
+  }),
+  create_routine: card({
+    icon: ClockIcon,
+    title: "routineProposal.title",
+    label: "routineProposal.label",
+    Details: RoutineProposalDetails,
+    Done: RoutineReady,
   }),
 };
 

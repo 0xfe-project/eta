@@ -103,7 +103,6 @@ const ROUTINES = [
   {
     id: "weekly",
     name: "Weekly summary",
-    conversationId: "artifacts",
     nextRunAt: minutesAgo(-2000),
     runs: [],
   } as unknown as RoutineSummary,

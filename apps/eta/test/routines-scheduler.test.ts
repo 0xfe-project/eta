@@ -54,8 +54,6 @@ function setup(
     store.create({
       name,
       brief: "b",
-      conversationId: null,
-      model: null,
       schedule,
       timezone,
       enabled: true,
@@ -161,8 +159,6 @@ describe("firing on time", () => {
       store.create({
         name,
         brief: "b",
-        conversationId: null,
-        model: null,
         schedule: { kind: "daily", time: "09:00" },
         timezone: "UTC",
         enabled: true,

@@ -4,10 +4,7 @@
  */
 import type { Database } from "bun:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { ConversationStore } from "../src/conversations/store";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
-import { MachineStore } from "../src/machines/store";
-import { ProjectStore } from "../src/projects/store";
 import { RoutineStore, titleOf } from "../src/routines/store";
 
 const open: Database[] = [];
@@ -26,8 +23,6 @@ function setup() {
     store.create({
       name,
       brief: "Summarise the news.",
-      conversationId: null,
-      model: null,
       schedule: { kind: "daily", time: "07:30" },
       timezone: "UTC",
       enabled: true,
@@ -46,24 +41,17 @@ describe("a routine and its brief", () => {
     ]);
     expect(first).toMatchObject({
       enabled: true,
-      model: null,
-      conversationId: null,
       schedule: { kind: "daily", time: "07:30" },
     });
     expect(store.enabled().map((r) => r.id)).toEqual([first.id, second.id]);
   });
 
-  it("changes what was sent, clears with null, and leaves the rest", () => {
+  it("changes what was sent and leaves the rest", () => {
     const { store, routine } = setup();
     const made = routine();
-    const paused = store.update(made.id, { enabled: false, model: "a:b" })!;
-    expect(paused).toMatchObject({
-      enabled: false,
-      model: "a:b",
-      name: "Digest",
-    });
+    const paused = store.update(made.id, { enabled: false })!;
+    expect(paused).toMatchObject({ enabled: false, name: "Digest" });
     expect(store.enabled()).toEqual([]);
-    expect(store.update(made.id, { model: null })!.model).toBeNull();
     expect(store.update("missing", { name: "x" })).toBeUndefined();
   });
 
@@ -93,37 +81,6 @@ describe("a routine and its brief", () => {
       "Summarise the news.",
     ]);
     expect(store.restoreBrief(id, 9)).toBeUndefined();
-  });
-
-  it("a conversation that goes takes the link with it and leaves the routine", () => {
-    const { db, store } = setup();
-    const machine = new MachineStore(db).ensurePrimary({
-      name: "box",
-      home: "/h",
-      os: "linux",
-    });
-    const project = new ProjectStore(db).create({
-      machineId: machine.id,
-      path: "/work",
-      name: "w",
-    });
-    const conversation = new ConversationStore(db).create({
-      projectId: project.id,
-      kind: "group",
-      name: "room",
-      agentIds: [],
-    });
-    const linked = store.create({
-      name: "Linked",
-      brief: "b",
-      conversationId: conversation.id,
-      model: null,
-      schedule: { kind: "daily", time: "07:30" },
-      timezone: "UTC",
-      enabled: true,
-    });
-    db.query("DELETE FROM conversation WHERE id = ?").run(conversation.id);
-    expect(store.get(linked.id)!.conversationId).toBeNull();
   });
 
   it("removing it takes its briefs, runs and feedback", () => {
@@ -265,12 +222,32 @@ describe("runs", () => {
     const three = store.startRun(id, "user")!;
     store.finishRun(three.id, { status: "failed", error: "nope" });
     tick();
+    // A skipped time leaves nothing for the next run either.
+    store.skipRun(id, "schedule", "Captain is off");
+    tick();
     const four = store.startRun(id, "user")!;
     store.finishRun(four.id, { status: "no_news" });
     expect(store.handoff(id)).toMatchObject({
       text: "second note",
       runId: two.id,
     });
+  });
+
+  it("a skipped time is a finished run that says why, takes no slot, and waits for nobody", () => {
+    const { store, routine } = setup();
+    const { id } = routine();
+    const going = store.startRun(id, "user")!;
+    const skipped = store.skipRun(id, "schedule", "Captain is off");
+    expect(skipped).toMatchObject({
+      status: "skipped",
+      startedBy: "schedule",
+      error: "Captain is off",
+      report: null,
+      handoff: null,
+    });
+    expect(skipped.finishedAt).toBe(skipped.startedAt);
+    expect(store.runningRun(id)!.id).toBe(going.id);
+    expect(store.unseen(id)).toEqual({ reports: 0, failures: 0 });
   });
 
   it("settles what a dead process left running, and only that", () => {
@@ -319,7 +296,7 @@ describe("runs", () => {
     expect(store.unseen(id)).toEqual({ reports: 1, failures: 0 });
   });
 
-  it("searches reports, handoffs, titles and feedback, literally, among finished runs", () => {
+  it("searches reports, titles and feedback, literally, among finished runs, and never a handoff", () => {
     const { store, routine, tick } = setup();
     const { id } = routine();
     const other = routine("Other");
@@ -328,6 +305,12 @@ describe("runs", () => {
     tick();
     const b = store.startRun(id, "user")!;
     store.finishRun(b.id, { status: "no_news", handoff: "watch the_budget" });
+    tick();
+    const b2 = store.startRun(id, "user")!;
+    store.finishRun(b2.id, {
+      status: "sent",
+      report: "# Budget\n\nthe_budget moved",
+    });
     tick();
     const c = store.startRun(id, "user")!;
     store.finishRun(c.id, { status: "sent", report: "# Weather\n\nrain" });
@@ -348,9 +331,12 @@ describe("runs", () => {
     expect(ids("umbrellas")).toEqual([c.id]);
     expect(ids("5%")).toEqual([a.id]);
     // `_` and `%` are not wildcards.
-    expect(ids("the_budget")).toEqual([b.id]);
+    // Found by its report, not by the other run's handoff: a handoff is no search's to read.
+    expect(ids("the_budget")).toEqual([b2.id]);
+    expect(ids("watch")).toEqual([]);
     expect(ids("the?budget")).toEqual([]);
     expect(ids("%")).toEqual([a.id]);
+    void b;
     expect(store.searchRuns(id, "e", 2)).toHaveLength(2);
   });
 });

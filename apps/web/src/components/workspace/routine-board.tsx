@@ -9,6 +9,7 @@ import { PageHeader } from "./app-shell";
 import { RoutineForm } from "./routine-form";
 import { useRoutineNav } from "./routine-nav";
 import {
+  CaptainOffNotice,
   RoutineDetail,
   RoutineList,
   RoutineMissing,
@@ -72,6 +73,7 @@ export function RoutineBoard() {
           </span>
         </Button>
       </PageHeader>
+      <CaptainOffNotice className="mx-auto mt-3 w-[calc(100%-1rem)] max-w-content sm:w-[calc(100%-2rem)]" />
       <main
         id="main"
         className="mx-auto flex min-h-0 w-full max-w-content flex-1"

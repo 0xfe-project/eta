@@ -86,15 +86,16 @@ describe("pending navigation", () => {
   });
 
   it("opens a task beside the chat", async () => {
-    // The panel has a tasks tab. 定时 is off in this build, so the routine the
-    // host holds is not a row here — and would have no page to open if it were.
+    // The panel has a tasks tab; a routine has a page of its own.
     const { container } = await mount(() => <PendingList />, "/?view=inbox");
-    expect(links(container)).toEqual(["/?view=tasks&task=t1"]);
+    expect(links(container)[0]).toBe("/?view=tasks&task=t1");
+    expect(links(container)[1]).toMatch(/^\/routines\?routine=/);
   });
 
   it("opens them on their own pages", async () => {
     const { container } = await mount(() => <PendingList />, "/tasks");
-    expect(links(container)).toEqual(["/tasks?task=t1"]);
+    expect(links(container)[0]).toBe("/tasks?task=t1");
+    expect(links(container)[1]).toMatch(/^\/routines\?routine=/);
   });
 
   it("stays beside the chat when a row is followed", async () => {

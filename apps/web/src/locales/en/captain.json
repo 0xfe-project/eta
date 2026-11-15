@@ -89,5 +89,13 @@
       "waiting": "Waiting for user",
       "other": "Observation"
     }
+  },
+  "routineProposal": {
+    "label": "Routine proposal {{name}}",
+    "title": "New routine",
+    "schedule": "When",
+    "timezone": "Time zone",
+    "brief": "Brief",
+    "open": "Open {{name}} on the routines page"
   }
 }

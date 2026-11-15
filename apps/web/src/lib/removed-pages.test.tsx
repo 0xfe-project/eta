@@ -39,8 +39,6 @@ describe("removed pages", () => {
     "/workspace/routines",
     "/workspace/inbox",
     "/workspace/memory",
-    // 定时 is off in this build: the page it kept is not served.
-    "/routines",
     // A path that never was one.
     "/nope",
   ])("%s redirects to the conversation list", async (path) => {
@@ -49,5 +47,6 @@ describe("removed pages", () => {
 
   it("keeps the pages that remain", async () => {
     expect(await open("/tasks")).toBe("/tasks");
+    expect(await open("/routines")).toBe("/routines");
   });
 });
