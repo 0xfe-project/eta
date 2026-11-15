@@ -1,14 +1,9 @@
-import type {
-  AgentRuntime,
-  AgentView,
-  ProjectView,
-} from "@eta/client-contracts";
+import type { AgentView, ProjectView } from "@eta/client-contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Empty, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +15,7 @@ import { folderName, projectPlace } from "@/lib/projects";
 import { useConversationActions } from "@/queries/conversations";
 import { useCreateProject, useMachines } from "@/queries/projects";
 import { wireErrorMessage } from "@/queries/wire";
-import { AgentAvatar } from "./agent-identity";
+import { AGENT_SEARCH_FROM, AgentPickRow } from "./agent-pick-row";
 import { DirectoryPicker, Tag } from "./directory-picker";
 import { useReturnFocus } from "./return-focus";
 import { Stepper } from "./stepper";
@@ -41,16 +36,6 @@ interface Selection {
   members: string[];
   stewardId: string | undefined;
 }
-
-/** With more agents than this, the list gets a search. */
-const SEARCH_FROM = 8;
-
-const RUNTIME_NAMES: Record<Exclude<AgentRuntime, "eta">, string> = {
-  claude: "Claude Code",
-  codex: "Codex",
-  opencode: "OpenCode",
-  pi: "Pi",
-};
 
 /**
  * Starting a conversation, in two steps: where, then who.
@@ -354,7 +339,7 @@ function MembersStep({
           <Tag>{translateText("chat:new.newProject")}</Tag>
         ) : null}
       </div>
-      {agents.length > SEARCH_FROM ? (
+      {agents.length > AGENT_SEARCH_FROM ? (
         <Input
           aria-label={translateText("chat:new.picker.filter")}
           placeholder={translateText("chat:new.picker.filter")}
@@ -389,28 +374,13 @@ function MembersStep({
               const steward = selection.stewardId === agent.id;
               const away = machineName(agent);
               return (
-                <li
+                <AgentPickRow
                   key={agent.id}
-                  data-member={member}
-                  className="flex min-h-9 items-center hover:bg-muted data-[member=true]:bg-muted pointer-coarse:min-h-11"
+                  agent={agent}
+                  checked={member}
+                  onToggle={() => onToggle(agent.id)}
+                  away={away}
                 >
-                  <label className="flex min-h-9 min-w-0 flex-1 cursor-pointer items-center gap-2 px-2 text-sm pointer-coarse:min-h-11">
-                    <Checkbox
-                      checked={member}
-                      onCheckedChange={() => onToggle(agent.id)}
-                    />
-                    <AgentAvatar
-                      agent={{ id: agent.id }}
-                      className="size-4 shrink-0"
-                    />
-                    <span className="truncate">{agent.name}</span>
-                    <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                      {agent.runtime === "eta"
-                        ? translateText("agents:runtime.eta")
-                        : RUNTIME_NAMES[agent.runtime]}
-                    </span>
-                    {away === undefined ? null : <Tag warn>{away}</Tag>}
-                  </label>
                   {member ? (
                     <Button
                       size="xs"
@@ -428,7 +398,7 @@ function MembersStep({
                       )}
                     </Button>
                   ) : null}
-                </li>
+                </AgentPickRow>
               );
             })}
           </ul>

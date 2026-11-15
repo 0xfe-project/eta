@@ -301,6 +301,63 @@ describe("conversations", () => {
     );
   });
 
+  it("take several members in at once, all or none", async () => {
+    const w = await world();
+    const ada = await w.agent("Ada");
+    const bob = await w.agent("Bob");
+    const cy = await w.agent("Cy");
+    const dee = await w.agent("Dee");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id]);
+    // Who is in it, read back by inviting a member again (which changes nothing).
+    const members = async (): Promise<string[]> => {
+      const { conversation } = (await w.client.call("conversations", "invite", {
+        conversationId: group.id,
+        agentId: ada.id,
+      })) as { conversation: ConversationSummary };
+      return conversation.participants.map((p) => p.agentId).sort();
+    };
+
+    // One missing agent keeps the whole group out, and the error names it.
+    await expect(
+      w.client.call("conversations", "invite", {
+        conversationId: group.id,
+        agentIds: [bob.id, "ghost", cy.id],
+      }),
+    ).rejects.toThrow(/no such agent: ghost/);
+    expect(await members()).toEqual([ada.id]);
+
+    // Both fields at once, or an empty list, is refused.
+    await expect(
+      w.client.call("conversations", "invite", {
+        conversationId: group.id,
+        agentId: bob.id,
+        agentIds: [cy.id],
+      } as never),
+    ).rejects.toThrow(/agentId or agentIds/);
+    await expect(
+      w.client.call("conversations", "invite", {
+        conversationId: group.id,
+        agentIds: [],
+      }),
+    ).rejects.toThrow(/needs agentIds/);
+    expect(await members()).toEqual([ada.id]);
+
+    // A whole group goes in; one already a member is no change, as when invited alone.
+    await w.client.call("conversations", "invite", {
+      conversationId: group.id,
+      agentIds: [ada.id, bob.id, cy.id],
+    });
+    expect(await members()).toEqual([ada.id, bob.id, cy.id].sort());
+
+    // The single agentId still works as before.
+    await w.client.call("conversations", "invite", {
+      conversationId: group.id,
+      agentId: dee.id,
+    });
+    expect(await members()).toEqual([ada.id, bob.id, cy.id, dee.id].sort());
+  });
+
   it("take members in and out, and the removed member stops answering", async () => {
     const { models } = scriptedModels(hangingOnBob);
     const w = await world({ models });

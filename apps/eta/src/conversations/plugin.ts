@@ -126,10 +126,22 @@ export function conversationsPlugin(
           const conversation = existing(args.string("conversationId"));
           if (conversation.kind === "direct")
             throw new Error("a private chat is the agent and the user");
-          conversations.addParticipant(
-            conversation.id,
-            agent(args.string("agentId")),
-          );
+          // One agent (`agentId`) or a group of them (`agentIds`), never both. A group goes in
+          // as one: every agent is checked first and the rows land in one transaction, so a
+          // missing one leaves the conversation as it was. One already a member is no change,
+          // the same as inviting it alone twice.
+          const single = args.optionalString("agentId");
+          const many = args.optionalStrings("agentIds");
+          if (single !== undefined && many !== undefined)
+            throw new Error(
+              "conversations.invite takes agentId or agentIds, not both",
+            );
+          const agentIds = many ?? [args.string("agentId")];
+          if (agentIds.length === 0)
+            throw new Error("conversations.invite needs agentIds");
+          // Which one is missing is the error: `no such agent: <id>`.
+          for (const id of agentIds) agent(id);
+          conversations.addParticipants(conversation.id, agentIds);
           deps.changed([conversation.id]);
           return { result: { conversation: summary(conversation) } };
         }),
