@@ -6,7 +6,7 @@
 import type { Database } from "bun:sqlite";
 import type { Plugins } from "../src/plugins/service";
 import { afterEach, describe, expect, it } from "vitest";
-import { writeAgent } from "../src/agents/create";
+import { createAgent } from "../src/agents/create";
 import { ensureHome, homeOf, isAgentHome } from "../src/agents/home";
 import { agentHome, AgentStore } from "../src/agents/store";
 import { openDirect } from "../src/conversations/direct";
@@ -41,12 +41,12 @@ async function stores(options: { primary?: boolean } = {}) {
 }
 
 describe("homeOf", () => {
-  it("finds the project writeAgent made, and nothing for an agent without one", async () => {
+  it("finds the project createAgent made, and nothing for an agent without one", async () => {
     const d = await stores();
-    const { agent, project } = await writeAgent(
+    const { agent, project } = await createAgent(
       d,
       { name: "Ada", model: "fake:m" },
-      { actorAgentId: null },
+      null,
     );
     expect(homeOf(d, agent)?.id).toBe(project.id);
     const bare = d.agents.create({ name: "Bare" });
@@ -79,10 +79,10 @@ describe("ensureHome", () => {
 
   it("returns the one that is there", async () => {
     const d = await stores();
-    const { agent, project } = await writeAgent(
+    const { agent, project } = await createAgent(
       d,
-      { name: "Ada" },
-      { actorAgentId: null },
+      { name: "Ada", model: "fake:m" },
+      null,
     );
     expect(ensureHome(d, agent).id).toBe(project.id);
   });
@@ -101,10 +101,10 @@ describe("isAgentHome", () => {
 describe("openDirect", () => {
   async function setup() {
     const d = await stores();
-    const { agent, project } = await writeAgent(
+    const { agent, project } = await createAgent(
       d,
-      { name: "Ada" },
-      { actorAgentId: null },
+      { name: "Ada", model: "fake:m" },
+      null,
     );
     const told: string[] = [];
     const deps = {

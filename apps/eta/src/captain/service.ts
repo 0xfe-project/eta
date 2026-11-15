@@ -31,7 +31,7 @@ import type { CaptainMemory } from "./memory";
 import type { AgentProposalDeps } from "./propose-agent";
 import type { CaptainReviewRecord, CaptainStore } from "./store";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/harness";
-import { writeAgent } from "../agents/create";
+import { createCaptainIdentity } from "../agents/create";
 import { ensureHome, homeOf } from "../agents/home";
 import { checkModel } from "../agents/model";
 import { agentHome } from "../agents/store";
@@ -188,25 +188,14 @@ export class CaptainService {
 
   /**
    * The Captain agent, its workspace project and its first prompt versions, written the way every
-   * agent is (`writeAgent`): one transaction, the directory taken back on failure.
-   *
-   * Not `createAgent`: its rules are for the agents users and Captain add, and Captain's identity
-   * breaks every one of them on purpose. It has no model until the user picks one (`setModel`), it
-   * carries the captain system role, and it is always called "Captain" — a user agent of that name
-   * must not stop the host from starting, so the name is not checked against the others.
+   * agent is: one transaction, the directory taken back on failure. `createCaptainIdentity` says
+   * which of `createAgent`'s rules Captain's identity skips, and why.
    */
   async #create(): Promise<{ agent: AgentRecord; first: boolean }> {
-    const { agent } = await writeAgent(
+    const { agent } = await createCaptainIdentity(
       this.#agentDeps(),
+      { instructions: CAPTAIN_INSTRUCTIONS },
       {
-        name: "Captain",
-        instructions: CAPTAIN_INSTRUCTIONS,
-        runtime: "eta",
-        systemRole: "captain",
-        machineId: null,
-      },
-      {
-        actorAgentId: null,
         // The base prompt every session starts from is Captain's to manage, so it begins here.
         within: () =>
           this.#deps.store.appendPromptVersion({
@@ -217,6 +206,10 @@ export class CaptainService {
           }),
       },
     );
+    // Recorded once the transaction has committed, not inside it: the audit is a line appended to
+    // `captain/operations.jsonl`, a file, not a database row the rollback could take back; and
+    // `within` runs synchronously inside the transaction while `record` is asynchronous, so it
+    // could not be awaited there. A crash between the two loses the audit line, not Captain.
     await this.#deps.audit.record({
       action: "captain.ensure",
       actorAgentId: null,

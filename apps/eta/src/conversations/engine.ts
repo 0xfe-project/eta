@@ -755,7 +755,9 @@ export class Engine {
       .participants(input.conversationId)
       .flatMap((participant) => {
         const agent = this.#agents.get(participant.agentId);
-        return agent === undefined ? [] : [{ id: agent.id, name: agent.name }];
+        return agent === undefined
+          ? []
+          : [{ id: agent.id, name: agent.name, systemRole: agent.systemRole }];
       });
     const { ids, unknown } = resolveNamed(input.names, members, input.agentId);
     if (ids.length === 0) {

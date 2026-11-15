@@ -60,17 +60,25 @@ export function agentDraft({
 }
 
 /**
- * Another agent that already answers to `name`, compared without case, as the host compares it: a
- * second agent of a name is refused, so the form says so before it is sent.
+ * Why `name` cannot be given to an agent, as the host would refuse it: Captain's own name
+ * (`reserved`), or another agent's (`taken`), compared without case. `except` is the agent being
+ * edited: keeping the name it has is never refused, so a user agent called "Captain" from before
+ * the name was reserved can still be saved.
  */
-export function agentNameTaken(
+export function agentNameProblem(
   agents: readonly { id: string; name: string }[],
   name: string,
   except?: string,
-): boolean {
+): "reserved" | "taken" | undefined {
   const wanted = name.trim().toLowerCase();
+  const own = agents.find((agent) => agent.id === except);
+  if (own !== undefined && own.name.trim().toLowerCase() === wanted)
+    return undefined;
+  if (wanted === "captain") return "reserved";
   return agents.some(
     (agent) =>
       agent.id !== except && agent.name.trim().toLowerCase() === wanted,
-  );
+  )
+    ? "taken"
+    : undefined;
 }

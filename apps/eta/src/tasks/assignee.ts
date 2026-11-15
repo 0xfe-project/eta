@@ -15,8 +15,12 @@ const listed = (agents: readonly AgentRecord[]): string =>
     : `the agents are: ${agents.map((a) => `${a.name} (${a.id})`).join(", ")}`;
 
 /**
- * The registry id of the agent `assignee` names: an id first, then a name (exactly, else ignoring
- * case) that only one agent has. Absent or blank is no assignee.
+ * The registry id of the agent `assignee` names: an id first, then Captain if it is Captain's name
+ * (ignoring case), then a name (exactly, else ignoring case) that only one agent has. Absent or
+ * blank is no assignee.
+ *
+ * Captain first, because a user agent called "Captain" from before the name was reserved
+ * (`checkAgentName`) is not who "Captain" means.
  */
 export function resolveAssignee(
   assignee: string | undefined,
@@ -27,6 +31,12 @@ export function resolveAssignee(
   const byId = agents.get(wanted);
   if (byId !== undefined) return byId.id;
   const all = agents.list();
+  const captain = all.find((a) => a.systemRole === "captain");
+  if (
+    captain !== undefined &&
+    captain.name.trim().toLowerCase() === wanted.toLowerCase()
+  )
+    return captain.id;
   let named = all.filter((a) => a.name.trim() === wanted);
   if (named.length === 0) {
     const folded = wanted.toLowerCase();
