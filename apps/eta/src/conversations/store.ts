@@ -276,6 +276,16 @@ export class ConversationStore {
     );
   }
 
+  /** Add several members at once, all or none; how many were new. */
+  addParticipants(conversationId: string, agentIds: readonly string[]): number {
+    let added = 0;
+    this.#db.transaction(() => {
+      for (const agentId of agentIds)
+        if (this.addParticipant(conversationId, agentId)) added += 1;
+    })();
+    return added;
+  }
+
   removeParticipant(conversationId: string, agentId: string): boolean {
     return (
       this.#db

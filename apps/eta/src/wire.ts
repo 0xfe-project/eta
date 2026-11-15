@@ -140,6 +140,11 @@ export class Args {
     return value as string[];
   }
 
+  /** A list of strings if one was sent; `undefined` when the field is absent. */
+  optionalStrings(key: string): string[] | undefined {
+    return this.#values[key] === undefined ? undefined : this.strings(key);
+  }
+
   /** A list of `[start, end]` integer pairs; absent is empty. */
   integerPairs(key: string): [number, number][] {
     const value = this.#values[key];

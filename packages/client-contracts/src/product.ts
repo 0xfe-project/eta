@@ -758,7 +758,10 @@ export interface ConversationArgs {
     decided?: string;
     archived?: boolean;
   };
-  invite: { conversationId: string; agentId: string };
+  /** One agent, or several at once (all join or none do); never both fields. */
+  invite:
+    | { conversationId: string; agentId: string; agentIds?: never }
+    | { conversationId: string; agentIds: string[]; agentId?: never };
   /** Takes a member out. Not for a direct chat, which is the agent and the user. */
   remove: { conversationId: string; agentId: string };
   /** Null makes the conversation follow its project again. */

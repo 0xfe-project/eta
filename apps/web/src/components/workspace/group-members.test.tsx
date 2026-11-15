@@ -164,15 +164,18 @@ describe("成员和群的管理", () => {
         b.textContent?.includes("邀请"),
       ),
     );
+    // Only the agent not in it yet is offered.
+    expect(dialog().querySelectorAll("li")).toHaveLength(1);
+    await click(dialog().querySelector('li [role="checkbox"]'));
     await click(
-      [...dialog().querySelectorAll("button")].find((b) =>
-        b.textContent?.includes("新来的"),
+      [...dialog().querySelectorAll("button")].find(
+        (b) => b.textContent === "邀请 1 位",
       ),
     );
     await flush();
     expect(host.calls.find((c) => c.action === "invite")?.args).toEqual({
       conversationId: "members-1",
-      agentId: "a3",
+      agentIds: ["a3"],
     });
   });
 

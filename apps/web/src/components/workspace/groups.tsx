@@ -52,6 +52,7 @@ import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar, AgentStatus, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels, memberStatusLabel } from "./agent-status";
 import { InspectButton } from "./inspect-button";
+import { InviteDialog } from "./invite-dialog";
 import { MemberRing } from "./member-ring";
 import { MemberStats } from "./member-stats";
 import { MemberTasksButton, MemberTasksPanel } from "./member-tasks";
@@ -326,7 +327,7 @@ export function GroupMembers() {
   // The conversation's own facts (goal, decisions) live on its target, not in the list.
   const { info } = useConversation(group?.id);
   const { agents, openEditor } = useAgents();
-  const { update, invite: invite_, remove } = useConversationActions();
+  const { update, remove } = useConversationActions();
   const [edit, setEdit] = useState(false);
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
@@ -656,39 +657,14 @@ export function GroupMembers() {
           </form>
         </DialogContent>
       </Dialog>
-      <Dialog open={invite} onOpenChange={setInvite}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {translateText("groups.members.inviteTitle")}
-            </DialogTitle>
-            <DialogDescription>
-              {translateText("groups.members.inviteDescription")}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid max-h-80 gap-1 overflow-y-auto">
-            {agents
-              .filter((a) => !members.some((p) => p.agentId === a.id))
-              .map((a) => (
-                <Button
-                  key={a.id}
-                  variant="ghost"
-                  className="justify-start"
-                  disabled={invite_.isPending}
-                  onClick={() =>
-                    invite_.mutate(
-                      { conversationId: group.id, agentId: a.id },
-                      { onError, onSuccess: () => setInvite(false) },
-                    )
-                  }
-                >
-                  <AgentAvatar agent={a} className="size-6" />
-                  {a.name}
-                </Button>
-              ))}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <InviteDialog
+        open={invite}
+        onOpenChange={setInvite}
+        conversationId={group.id}
+        candidates={agents.filter(
+          (a) => !members.some((p) => p.agentId === a.id),
+        )}
+      />
     </section>
   );
 }
