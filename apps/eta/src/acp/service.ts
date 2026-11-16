@@ -75,7 +75,10 @@ export class AcpService {
   /** What each daemon last said, by machine id; only the ones asked for. */
   readonly #remote = new Map<string, AcpMachineList>();
   /**
-   * Each daemon's fetch generation. A fetch writes what it hears only while its generation is
+   * Each daemon's fetch generation: an invariant, not a fix for an order seen today (one link
+   * answers in completion order, and the daemon's settled list reads the file after its looks).
+   * It keeps holding if that changes: a retry, a second channel, a list built from the looks.
+   * A fetch writes what it hears only while its generation is
    * still the latest: a change, a newer fetch or the machine going offline makes every answer
    * still on its way stale, so a slow look can never put back a list from before a save.
    */
@@ -241,7 +244,10 @@ export class AcpService {
       return list;
     };
     const now = await ask(false);
-    // The looks it started run behind; their answers arrive as the next list.
+    // The looks it started run behind; their answers arrive as the next list. Each fetch asks
+    // for its own settled list, so the latest fetch always brings the looks in: a newer fetch
+    // that drops this one's answer asks again itself. (Something that refreshes on a timer
+    // faster than a look takes would starve them: let the settled answer land first.)
     if (now.agents !== undefined) void ask(true);
     return now;
   }
