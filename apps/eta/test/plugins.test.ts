@@ -199,7 +199,7 @@ describe("a plugin in settings", () => {
     await until(() => views(w).length === 2);
     expect(view(w, "a").reports).toEqual([]);
     expect(view(w, "a-b").reports).toEqual([
-      "mcp.json: server c skipped: its name a-b-c is taken by server b-c of plugin a",
+      "mcp.json: server c: its name a-b-c is also that of server b-c of plugin a; an agent with both enabled skips this one",
     ]);
   });
 

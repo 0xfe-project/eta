@@ -35,7 +35,6 @@ export {
 export {
   type ActivePlugin,
   claimServerNames,
-  clashReport,
   pluginDataDir,
   type PluginServersInput,
   type ResolvedServer,

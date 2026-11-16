@@ -37,7 +37,6 @@ import {
 } from "@eta/client-contracts/plugin-fields";
 import {
   claimServerNames,
-  clashReport,
   pluginChunks,
   resolvePluginServers,
   runtimeExtras,
@@ -234,8 +233,10 @@ export class Plugins {
   }
 
   /**
-   * What each plugin loses to another's server names. An agent's plugins are claimed in name order
-   * (`rows.enabled`), so the later by name is the one left out, here and in its sessions.
+   * What each plugin loses to another's server names, among the installed plugins. An agent's
+   * plugins are claimed in name order (`rows.enabled`), so the later by name is the one left out,
+   * but only in the sessions of an agent that has both enabled: the report says that, since one
+   * installed plugin that nobody enables takes nothing from anyone.
    */
   #clashes(): Map<string, string[]> {
     const loaded = this.registry
@@ -252,7 +253,7 @@ export class Plugins {
     for (const clash of claimServerNames(loaded).clashes)
       reports.set(clash.plugin, [
         ...(reports.get(clash.plugin) ?? []),
-        clashReport(clash),
+        `mcp.json: server ${clash.server}: its name ${clash.name} is also that of server ${clash.takenBy.server} of plugin ${clash.takenBy.plugin}; an agent with both enabled skips this one`,
       ]);
     return reports;
   }

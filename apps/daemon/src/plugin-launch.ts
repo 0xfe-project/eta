@@ -132,7 +132,7 @@ export interface ServerNameClash {
   takenBy: { plugin: string; server: string };
 }
 
-export const clashReport = (clash: ServerNameClash): string =>
+const clashReport = (clash: ServerNameClash): string =>
   `mcp.json: server ${clash.server} skipped: its name ${clash.name} is taken by server ${clash.takenBy.server} of plugin ${clash.takenBy.plugin}`;
 
 /**
