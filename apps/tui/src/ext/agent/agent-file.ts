@@ -8,7 +8,7 @@ import type {
   ThinkingLevel,
 } from "@eta/client-contracts";
 import type { Scalar, YAMLError } from "yaml";
-import { AGENT_RUNTIMES } from "@eta/client-contracts";
+import { isAgentRuntime } from "@eta/client-contracts";
 import { Document, isMap, isScalar, LineCounter, parseDocument } from "yaml";
 
 /** The keys of the file, in the order it lists them. */
@@ -112,7 +112,7 @@ function isAgentKey(key: string): key is AgentKey {
 }
 
 function isRuntime(value: string): value is AgentRuntime {
-  return (AGENT_RUNTIMES as readonly string[]).includes(value);
+  return isAgentRuntime(value);
 }
 
 function isThinkingLevel(value: string): value is ThinkingLevel {

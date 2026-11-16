@@ -1,0 +1,34 @@
+{
+  "name": "@eta/runtime-acp",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ACP (Agent Client Protocol) agents as runtimes an eta session can run on: one stdio child per session.",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./test/support.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "bun --bun vitest --run --passWithNoTests",
+    "typecheck": "bun check",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "2.7.0",
+    "@botiverse/oar": "0.86.0",
+    "@eta/client-contracts": "*",
+    "@eta/core": "*",
+    "@eta/server": "*",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@eta/harness": "*",
+    "@types/node": "22.19.19",
+    "bun-types": "1.4.2",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}

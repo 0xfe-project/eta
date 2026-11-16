@@ -73,7 +73,7 @@ export function agentFileGuide(input: {
     "",
     t("guideName"),
     t("guidePersona", { list: list(choices.personas.map(named), "personas") }),
-    t("guideRuntime", { list: AGENT_RUNTIMES.join(", ") }),
+    t("guideRuntime", { list: [...AGENT_RUNTIMES, "acp.<id>"].join(", ") }),
     t("guideModel"),
     t("guideEtaModels", { list: list(choices.models, "models") }),
     ...runtimeLines,

@@ -336,7 +336,23 @@ export const AGENT_RUNTIMES = [
   "opencode",
   "pi",
 ] as const;
-export type AgentRuntime = (typeof AGENT_RUNTIMES)[number];
+/** The built-in runtimes: eta's own loop and the four reached through oar. */
+export type BuiltinAgentRuntime = (typeof AGENT_RUNTIMES)[number];
+/**
+ * A runtime id. Beyond the built-in ones, every ACP agent the host's `acp.json` lists is a
+ * runtime of its own, `acp.<id>`.
+ */
+export type AgentRuntime = BuiltinAgentRuntime | `acp.${string}`;
+
+const ACP_RUNTIME = /^acp\.[a-z0-9][a-z0-9-]*$/;
+
+/** Whether a string names a runtime: a built-in one, or `acp.<slug>`. */
+export function isAgentRuntime(value: string): value is AgentRuntime {
+  return (
+    (AGENT_RUNTIMES as readonly string[]).includes(value) ||
+    ACP_RUNTIME.test(value)
+  );
+}
 
 /** A model an external runtime can run, in its own names. */
 export interface AgentRuntimeModel {
@@ -351,6 +367,7 @@ export interface AgentRuntimeModel {
 
 /** An external runtime, as a machine has it. */
 export interface AgentRuntimeInfo {
+  /** `claude`, `codex`, ... or `acp.<id>`. */
   id: Exclude<AgentRuntime, "eta">;
   label: string;
   /** Installed and signed in; installed and not signed in; not installed; or asking failed. */

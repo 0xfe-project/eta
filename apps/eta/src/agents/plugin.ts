@@ -27,7 +27,7 @@ import type { Plugins } from "../plugins/service";
 import type { ProjectStore } from "../projects/store";
 import type { AgentCreateDeps } from "./create";
 import type { AgentRecord, AgentStore } from "./store";
-import { AGENT_RUNTIMES } from "@eta/client-contracts";
+import { isAgentRuntime } from "@eta/client-contracts";
 import { THINKING_LEVELS } from "@eta/core";
 import { openDirect } from "../conversations/direct";
 import { summaryOf } from "../conversations/views";
@@ -291,7 +291,7 @@ function fieldsOf(
   )
     throw new TypeError("plugins must be a list of names");
   const runtime = args.optionalString("runtime");
-  if (runtime !== undefined && !AGENT_RUNTIMES.includes(runtime as never))
+  if (runtime !== undefined && !isAgentRuntime(runtime))
     throw new Error(`unknown runtime: ${runtime}`);
   const name = create ? args.string("name") : args.optionalString("name");
   if (name !== undefined && name.trim() === "")
@@ -307,7 +307,7 @@ function fieldsOf(
     ...(name === undefined ? {} : { name: name.trim() }),
     ...(instructions === undefined ? {} : { instructions }),
     ...(persona === undefined ? {} : { persona }),
-    ...(runtime === undefined ? {} : { runtime: runtime as AgentRuntime }),
+    ...(runtime === undefined ? {} : { runtime }),
     ...(model === undefined ? {} : { model: model === "" ? null : model }),
     ...(level === undefined
       ? {}

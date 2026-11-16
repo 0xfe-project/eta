@@ -169,12 +169,16 @@ export {
   type EventRing,
 } from "./ring";
 export type {
+  ListedRuntimes,
   RuntimeCompaction,
   RuntimeExtras,
+  RuntimeListing,
   SessionRuntime,
+  SessionRuntimeAsk,
   SessionRuntimeInput,
   SessionRuntimes,
 } from "./runtimes";
+export { composeRuntimes } from "./runtimes";
 export {
   branchMessages,
   firstHit,

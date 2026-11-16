@@ -10,10 +10,13 @@
  * host that supplies none simply cannot open such a session, and says so.
  */
 import type {
+  AgentRuntimeInfo,
   RuntimeCompaction,
   SessionMcpServer,
 } from "@eta/client-contracts";
 import type { KernelConfig, KernelModels, RunDelegate } from "@eta/core";
+import type { AskPayload } from "@eta/core/session";
+import type { AskResponse } from "@eta/harness";
 
 export type { RuntimeCompaction };
 
@@ -51,7 +54,22 @@ export interface SessionRuntimeInput {
    * the turn already.
    */
   wake?: ((wanted: () => boolean) => void) | undefined;
+  /**
+   * Ask the user something through the session's own ask channel (a permission a runtime wants
+   * before it acts). The question is an ordinary one of the session's: it shows where the
+   * session's questions show, and it is answered the same way. Bound late, like `wake`: the
+   * runtime exists before the session does, and a question asked before the session is assembled,
+   * or on a host with no ask channel, settles as `none` (nobody answered).
+   */
+  ask?: SessionRuntimeAsk | undefined;
+  /** What the host says about this session beyond the above, in the runtime's own terms. */
+  settings?: Readonly<Record<string, unknown>> | undefined;
 }
+
+export type SessionRuntimeAsk = (
+  payload: AskPayload,
+  options?: { timeoutMs?: number; signal?: AbortSignal },
+) => Promise<AskResponse>;
 
 /** What a session on an external runtime gets from the host beyond its tools. */
 export interface RuntimeExtras {
@@ -59,6 +77,8 @@ export interface RuntimeExtras {
   skills?: string | undefined;
   mcpServers?: readonly SessionMcpServer[] | undefined;
   launchArgs?: readonly string[] | undefined;
+  /** Opaque values for the runtime (`SessionRuntimeInput.settings`). */
+  settings?: Readonly<Record<string, unknown>> | undefined;
 }
 
 export interface SessionRuntime {
@@ -81,4 +101,45 @@ export interface SessionRuntime {
 export interface SessionRuntimes {
   /** The runtime for one session; `undefined` when this host does not run that one. */
   open: (input: SessionRuntimeInput) => SessionRuntime | undefined;
+}
+
+/** Which runtimes a set has on this machine, and their models: what a settings screen reads. */
+export interface RuntimeListing {
+  list: (fresh?: boolean) => Promise<AgentRuntimeInfo[]>;
+}
+
+/** Runtimes that can also say what they are: what a host and a daemon are given. */
+export interface ListedRuntimes extends SessionRuntimes {
+  readonly catalog: RuntimeListing;
+}
+
+/**
+ * Several sets of runtimes as one. A session's runtime is asked of each in turn, and the first
+ * that answers takes it (`open` already answers `undefined` for "not mine"); the catalog is every
+ * set's, one after another. A set whose listing fails is left out of the answer rather than
+ * failing the others.
+ */
+export function composeRuntimes(
+  parts: readonly (SessionRuntimes & { catalog?: RuntimeListing })[],
+): ListedRuntimes {
+  return {
+    open: (input) => {
+      for (const part of parts) {
+        const runtime = part.open(input);
+        if (runtime !== undefined) return runtime;
+      }
+      return undefined;
+    },
+    catalog: {
+      list: async (fresh = false) =>
+        (
+          await Promise.all(
+            parts.map(
+              async (part) =>
+                (await part.catalog?.list(fresh).catch(() => [])) ?? [],
+            ),
+          )
+        ).flat(),
+    },
+  };
 }

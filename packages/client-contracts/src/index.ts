@@ -11,6 +11,7 @@ import type {
   ViewDiagnostics,
 } from "./types";
 
+export * from "./acp";
 export * from "./artifacts";
 export * from "./captain";
 export type * from "./data";
