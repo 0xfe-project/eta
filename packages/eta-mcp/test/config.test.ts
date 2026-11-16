@@ -83,6 +83,38 @@ describe("resolveServers", () => {
     expect(servers.get("b")?.source).toBe("base");
     expect(issues).toEqual(['server "a": "user" overrides "base"']);
   });
+
+  it("lists what was replaced, with the source that won in the end", () => {
+    const { servers, overridden } = resolveServers([
+      {
+        name: "plugin:p",
+        servers: {
+          "p-a": {
+            url: "https://plugin",
+            auth: "oauth",
+            headers: { "x-plugin": "1" },
+          },
+        },
+      },
+      { name: "~/.eta/mcp.json", servers: { "p-a": { url: "https://user" } } },
+      { name: ".mcp.json", servers: { "p-a": { command: "local" } } },
+    ]);
+    // Replaced whole: none of the plugin's url, headers or auth reach the winner.
+    expect(servers.get("p-a")).toMatchObject({
+      command: "local",
+      source: ".mcp.json",
+    });
+    expect(servers.get("p-a")?.url).toBeUndefined();
+    expect(servers.get("p-a")?.headers).toBeUndefined();
+    expect(servers.get("p-a")?.auth).toBeUndefined();
+    expect(
+      overridden.map(({ definition, by }) => [definition.source, by]),
+    ).toEqual([
+      ["plugin:p", ".mcp.json"],
+      ["~/.eta/mcp.json", ".mcp.json"],
+    ]);
+    expect(overridden[0]?.definition.url).toBe("https://plugin");
+  });
 });
 
 describe("computeServerHash", () => {

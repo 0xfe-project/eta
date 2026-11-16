@@ -129,6 +129,41 @@ function LoginDialog({
   );
 }
 
+/**
+ * A plugin's server another source declares again by name: replaced whole, so it never connects
+ * and has nothing to act on. Muted, but kept readable, and the reason is said in words.
+ */
+function OverriddenRow({
+  server,
+  by,
+}: {
+  server: McpServerView;
+  by: { source: string; name: string };
+}) {
+  const { t: translateText } = useTranslation(["mcp", "common"] as const);
+  return (
+    <li className="flex items-start gap-3 px-3 py-2 text-sm text-muted-foreground">
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
+          <span className="line-through decoration-muted-foreground/70">
+            {server.server}
+          </span>
+          <span className="text-xs font-normal">
+            {translateText(`transport.${server.transport}`)} ·{" "}
+            {server.lifecycle}
+          </span>
+          <Badge variant="secondary">
+            {translateText("override.by", { source: by.source })}
+          </Badge>
+        </p>
+        <p className="text-xs">
+          {translateText("override.detail", { source: by.source })}
+        </p>
+      </div>
+    </li>
+  );
+}
+
 function ServerRow({ server }: { server: McpServerView }) {
   const { t: translateText } = useTranslation(["mcp", "common"] as const);
   const connect = useConnectMcp();
@@ -184,6 +219,13 @@ function ServerRow({ server }: { server: McpServerView }) {
         </p>
         <p className="text-xs text-muted-foreground">
           {translateText("summary.tools", { count: server.toolCount })}
+          {server.overrides === null ? null : (
+            <>
+              {" · "}
+              {translateText("override.replaces")}{" "}
+              <span className="font-mono">{server.overrides}</span>
+            </>
+          )}
         </p>
         {server.error === null ? null : (
           <p className="text-xs break-words text-destructive">{server.error}</p>
@@ -309,12 +351,20 @@ function AgentServers({
           <ul aria-label={`${name} ${source}`} className="divide-y">
             {servers
               .filter((server) => server.source === source)
-              .map((server) => (
-                <ServerRow
-                  key={`${server.source}\0${server.server}`}
-                  server={server}
-                />
-              ))}
+              .map((server) =>
+                server.overriddenBy === null ? (
+                  <ServerRow
+                    key={`${server.source}\0${server.server}`}
+                    server={server}
+                  />
+                ) : (
+                  <OverriddenRow
+                    key={`${server.source}\0${server.server}`}
+                    server={server}
+                    by={server.overriddenBy}
+                  />
+                ),
+              )}
           </ul>
         </div>
       ))}

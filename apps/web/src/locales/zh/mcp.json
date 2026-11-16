@@ -1,6 +1,6 @@
 {
   "title": "MCP 服务器",
-  "description": "智能体经 MCP 使用的工具，来自 ~/.eta/mcp.json 和项目里的 .mcp.json。服务器在第一次用到时才启动。",
+  "description": "智能体经 MCP 使用的工具，来自插件、~/.eta/mcp.json 和项目里的 .mcp.json，后面的会替换前面的同名服务器。项目里的 .mcp.json 只在该项目的会话里生效。服务器在第一次用到时才启动。",
   "empty": {
     "title": "没有 MCP 服务器",
     "description": "在 ~/.eta/mcp.json 或项目的 .mcp.json 里添加。"
@@ -21,6 +21,11 @@
   "auth": {
     "signedIn": "已登录",
     "needsLogin": "未登录"
+  },
+  "override": {
+    "by": "被 {{source}} 覆盖",
+    "detail": "这个插件服务器不会启动，用的是 {{source}} 里的同名服务器。",
+    "replaces": "覆盖了"
   },
   "summary": {
     "tools": "{{count}} 个工具",

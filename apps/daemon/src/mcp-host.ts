@@ -14,8 +14,8 @@
  *
  * OAuth: `authProviderFor` is the caller's. On the primary it reads the credential table; on a
  * daemon it reads the same rows over the link (`./mcp-auth`), so a daemon keeps no credentials.
- * Without one an `auth: "oauth"` server reports that it needs sign-in. A plugin's remote server is
- * `auth: "oauth"` unless its extension sends `Authorization`.
+ * Without one an `auth: "oauth"` server reports that it needs sign-in. A plugin's remote server's
+ * `auth` is its extension's, else `"oauth"` unless the extension sends `Authorization` (`authOf`).
  */
 import type {
   AuthProviderFor,

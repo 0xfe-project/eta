@@ -16,8 +16,20 @@ import type {
 import { createHash } from "node:crypto";
 import process from "node:process";
 
+/**
+ * A server a later source replaced. It is replaced whole: none of its settings (`url`, `headers`,
+ * `auth`, ...) reach the server that won, and nothing connects to it.
+ */
+export interface OverriddenServer {
+  definition: McpServerDefinition;
+  /** The source of the server that won in the end, e.g. `~/.eta/mcp.json`. */
+  by: string;
+}
+
 export interface ResolvedServers {
   servers: Map<string, McpServerDefinition>;
+  /** Every definition a later source replaced, in the order they were replaced. */
+  overridden: OverriddenServer[];
   /** Entries that were skipped or partly ignored, as sentences for a log or a status page. */
   issues: string[];
 }
@@ -312,10 +324,12 @@ export function resolveServers(
 ): ResolvedServers {
   const servers = new Map<string, McpServerDefinition>();
   const issues: string[] = [];
+  const replacedAll: McpServerDefinition[] = [];
   for (const source of sources) {
     for (const [name, entry] of Object.entries(source.servers)) {
       const replaced = servers.get(name);
       if (replaced) {
+        replacedAll.push(replaced);
         issues.push(
           `server "${name}": "${source.name}" overrides "${replaced.source}"`,
         );
@@ -328,7 +342,11 @@ export function resolveServers(
       });
     }
   }
-  return { servers, issues };
+  const overridden = replacedAll.map((definition) => ({
+    definition,
+    by: servers.get(definition.name)!.source,
+  }));
+  return { servers, overridden, issues };
 }
 
 export const DEFAULT_LIFECYCLE: McpLifecycle = "lazy";

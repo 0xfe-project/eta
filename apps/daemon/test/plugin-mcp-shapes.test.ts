@@ -17,6 +17,7 @@ import {
   runtimeExtras,
   serversConfig,
   toMcpEntries,
+  toSessionServers,
 } from "../src";
 
 const dirs: string[] = [];
@@ -257,6 +258,84 @@ describe("what eta's own loop is given", () => {
     );
     expect(entries["p-remote"]).not.toHaveProperty("auth");
     expect(entries["p-remote"]?.headers).toEqual({ AUTHORIZATION: "Token k" });
+  });
+});
+
+describe("the extension's auth", () => {
+  const servers = {
+    plain: { type: "streamable-http", url: "https://plain.example.com/mcp" },
+    keyed: { type: "streamable-http", url: "https://keyed.example.com/mcp" },
+    local: { type: "stdio", command: "node" },
+  };
+  const resolve = async (
+    loaded: Awaited<ReturnType<typeof plugin>>,
+    values: Record<string, string> = {},
+  ) =>
+    resolvePluginServers(
+      [{ plugin: loaded, config: serversConfig(loaded, values) }],
+      await temp(),
+      () => undefined,
+    );
+
+  it("is what eta's own loop gets when declared, Authorization or not", async () => {
+    const loaded = await plugin("p", servers, {
+      config: { key: { type: "string", secret: true } },
+      mcp: {
+        plain: { auth: false },
+        keyed: {
+          headers: { Authorization: "Bearer {key}" },
+          auth: "oauth",
+        },
+      },
+    });
+    expect(loaded.reports).toEqual([]);
+    const entries = toMcpEntries(await resolve(loaded, { key: "k" }));
+    expect(entries["p-plain"]).toStrictEqual({
+      type: "streamable-http",
+      url: "https://plain.example.com/mcp",
+      auth: false,
+    });
+    expect(entries["p-keyed"]).toStrictEqual({
+      type: "streamable-http",
+      url: "https://keyed.example.com/mcp",
+      headers: { Authorization: "Bearer k" },
+      auth: "oauth",
+    });
+  });
+
+  it("does not change what an external runtime is given", async () => {
+    const declared = await plugin("p", servers, {
+      mcp: { plain: { auth: false }, keyed: { auth: "oauth" } },
+    });
+    const bare = await plugin("p", servers);
+    const shape = async (loaded: Awaited<ReturnType<typeof plugin>>) =>
+      toSessionServers(await resolve(loaded), () => undefined).filter(
+        (server) => server.name !== "p-local",
+      );
+    expect(await shape(declared)).toStrictEqual(await shape(bare));
+  });
+
+  it("is ignored and reported on a stdio server", async () => {
+    const loaded = await plugin("p", servers, {
+      mcp: { local: { auth: false } },
+    });
+    expect(loaded.reports).toEqual([
+      "extension: mcp.local.auth is for remote servers; ignored",
+    ]);
+    expect(loaded.servers.map((server) => server.name)).toContain("local");
+    expect(toMcpEntries(await resolve(loaded))["p-local"]).not.toHaveProperty(
+      "auth",
+    );
+  });
+
+  it("leaves a server with any other value out, and says so", async () => {
+    const loaded = await plugin("p", servers, {
+      mcp: { plain: { auth: "bearer" } },
+    });
+    expect(loaded.reports).toEqual([
+      'mcp.json: server plain skipped: its auth must be false or "oauth"',
+    ]);
+    expect(loaded.servers.map((server) => server.name)).not.toContain("plain");
   });
 });
 

@@ -268,8 +268,13 @@ describe("signing in to an OAuth MCP server", () => {
 });
 
 describe("a plugin's remote server", () => {
-  /** A host with a plugin whose `mcp.json` names the fake's endpoint and nothing about auth. */
-  async function withPlugin() {
+  /**
+   * A host with a plugin whose `mcp.json` names the fake's endpoint and nothing about auth; its
+   * extension and the user's `~/.eta/mcp.json` are what a test gives.
+   */
+  async function withPlugin(
+    options: { extension?: unknown; userServers?: unknown } = {},
+  ) {
     const dataDir = await tempDir();
     const root = join(dataDir, "plugins", "remote-plugin");
     await mkdir(root, { recursive: true });
@@ -278,8 +283,18 @@ describe("a plugin's remote server", () => {
       JSON.stringify({
         $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
         name: "remote-plugin",
+        ...(options.extension === undefined
+          ? {}
+          : { extensions: { "tech.0xfe.eta": options.extension } }),
       }),
     );
+    if (options.userServers !== undefined) {
+      await mkdir(join(dataDir, ".eta"), { recursive: true });
+      await writeFile(
+        join(dataDir, ".eta", "mcp.json"),
+        JSON.stringify({ mcpServers: options.userServers }),
+      );
+    }
     await writeFile(
       join(root, "mcp.json"),
       JSON.stringify({
@@ -318,12 +333,13 @@ describe("a plugin's remote server", () => {
       agentId: agent.id,
       plugins: ["remote-plugin"],
     });
-    const remote = () =>
-      (client.section<McpServerView[]>("mcp", "list") ?? []).find(
+    const views = () =>
+      (client.section<McpServerView[]>("mcp", "list") ?? []).filter(
         (view) =>
           view.agentId === agent.id && view.server === "remote-plugin-remote",
       );
-    return { host, client, auth, agentId: agent.id, remote };
+    const remote = () => views()[0];
+    return { host, client, auth, agentId: agent.id, remote, views };
   }
 
   it("is listed under the plugin, asks for a login only once the server does, and is called after it", async () => {
@@ -368,5 +384,66 @@ describe("a plugin's remote server", () => {
       export default await whoami({});
     `);
     expect(result.value).toEqual({ token: expect.stringMatching(/^access-/) });
+  }, 30_000);
+
+  it("declared auth: false, fails on a 401 with no sign-in, and stays failed", async () => {
+    const s = await withPlugin({
+      extension: { mcp: { remote: { auth: false } } },
+    });
+    await until(() => s.remote() !== undefined);
+    expect(s.remote()).toMatchObject({
+      source: "plugin:remote-plugin",
+      state: "not-connected",
+      auth: "none",
+    });
+    const tried = (await s.client.call("mcp", "connect", {
+      agentId: s.agentId,
+      server: "remote-plugin-remote",
+    })) as { ok: boolean; message: string | null };
+    expect(tried.ok).toBe(false);
+    expect(tried.message).toContain("HTTP 401");
+    await until(() => s.remote()?.state === "failed");
+    expect(s.remote()).toMatchObject({ auth: "none" });
+    expect(s.remote()?.error).toContain("auth: false");
+    // A refreshed list, and another attempt, are still a failure and never a sign-in.
+    await s.client.call("mcp", "reconnect", {
+      agentId: s.agentId,
+      server: "remote-plugin-remote",
+    });
+    await until(() => s.remote()?.state === "failed");
+    expect(s.remote()).toMatchObject({ auth: "none" });
+    await expect(
+      s.client.call("mcp", "login", {
+        agentId: s.agentId,
+        server: "remote-plugin-remote",
+        redirectOrigin: ORIGIN,
+      }),
+    ).rejects.toThrow(/does not sign in with OAuth/);
+    expect(s.auth.registrations()).toBe(0);
+  }, 30_000);
+
+  it("is listed under its plugin as overridden when the user's file declares it again", async () => {
+    const s = await withPlugin({
+      userServers: {
+        "remote-plugin-remote": { url: "https://user.example.com/mcp" },
+      },
+    });
+    await until(() => s.views().length === 2);
+    const bySource = (source: string) =>
+      s.views().find((view) => view.source === source);
+    expect(bySource("plugin:remote-plugin")).toMatchObject({
+      state: "not-connected",
+      toolCount: 0,
+      auth: "none",
+      overriddenBy: { source: "~/.eta/mcp.json", name: "remote-plugin-remote" },
+      overrides: null,
+    });
+    // Replaced whole: the plugin's implied OAuth is not the user's server's.
+    const used = bySource("~/.eta/mcp.json");
+    expect(used).toMatchObject({
+      overriddenBy: null,
+      overrides: "plugin:remote-plugin",
+    });
+    expect(used?.auth).toBe("none");
   }, 30_000);
 });

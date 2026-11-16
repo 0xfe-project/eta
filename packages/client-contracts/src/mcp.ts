@@ -2,7 +2,7 @@
  * The `mcp` target: the MCP servers of every agent on the primary, as the settings page sees them.
  *
  * One section, `list`: for each agent and each source its servers come from (the user's
- * `~/.eta/mcp.json`, a project's `.mcp.json`), the server's name, how it is reached, whether it is
+ * a plugin, the user's `~/.eta/mcp.json`, a project's `.mcp.json`), the server's name, how it is reached, whether it is
  * connected, how many tools it has, its last error and, for an OAuth server, whether anyone has
  * signed in. Credentials never leave the host: a sign-in is a URL to open and a redirect URL to
  * hand back.
@@ -34,7 +34,7 @@ export interface McpServerView {
   agentId: string;
   agentName: string;
   server: string;
-  /** Where the server is declared: `~/.eta/mcp.json` or `.mcp.json`. */
+  /** Where the server is declared: `plugin:<plugin>`, `~/.eta/mcp.json` or `.mcp.json`. */
   source: string;
   transport: McpTransport;
   lifecycle: McpLifecycleKind;
@@ -43,6 +43,14 @@ export interface McpServerView {
   /** The last error, while there is one. */
   error: string | null;
   auth: McpAuthState;
+  /**
+   * Set on a plugin's server that a later source declares again by name: it is replaced whole
+   * (none of its url, headers or auth is used), never connects and has nothing to act on. `source`
+   * is where the server that is used comes from, `name` its name.
+   */
+  overriddenBy: { source: string; name: string } | null;
+  /** On the server that is used instead of a plugin's: that plugin's source, `plugin:<plugin>`. */
+  overrides: string | null;
 }
 
 export interface McpSections {

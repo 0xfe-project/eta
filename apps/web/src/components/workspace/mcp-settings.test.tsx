@@ -61,6 +61,8 @@ const server = (
   toolCount: 0,
   error: null,
   auth: "none",
+  overriddenBy: null,
+  overrides: null,
   ...fields,
 });
 
@@ -129,6 +131,62 @@ describe("MCP 服务器设置", () => {
     // A server with no sign-in has no sign-in controls.
     expect(label("登录 github")).toBeNull();
     expect(label("退出登录 github")).toBeNull();
+  });
+
+  it("keeps an overridden plugin server under its plugin, says what replaced it, and offers nothing on it", async () => {
+    host([
+      server({
+        server: "notion-mcp",
+        source: "plugin:notion",
+        transport: "http",
+        overriddenBy: { source: "~/.eta/mcp.json", name: "notion-mcp" },
+      }),
+      server({
+        server: "notion-mcp",
+        source: "~/.eta/mcp.json",
+        state: "connected",
+        toolCount: 12,
+        overrides: "plugin:notion",
+      }),
+    ]);
+    await mount(<McpSettings />);
+    await flush();
+    const plugin = document.querySelector(
+      'ul[aria-label="Ada plugin:notion"]',
+    )!;
+    expect(plugin.textContent).toContain("被 ~/.eta/mcp.json 覆盖");
+    expect(plugin.textContent).toContain(
+      "这个插件服务器不会启动，用的是 ~/.eta/mcp.json 里的同名服务器。",
+    );
+    expect(plugin.querySelectorAll("button")).toHaveLength(0);
+    const user = document.querySelector(
+      'ul[aria-label="Ada ~/.eta/mcp.json"]',
+    )!;
+    expect(user.textContent).toContain("12 个工具 · 覆盖了 plugin:notion");
+    // Only the server that is used can be connected.
+    expect(
+      document.querySelectorAll('button[aria-label="重新连接 notion-mcp"]'),
+    ).toHaveLength(1);
+  });
+
+  it("shows a server that failed with a 401 and has no sign-in as failed, with no sign-in button", async () => {
+    host([
+      server({
+        server: "linear-api",
+        source: "plugin:linear",
+        transport: "http",
+        state: "failed",
+        error:
+          "HTTP 401: the server rejected the request; it is declared auth: false, so eta does not try to sign in",
+      }),
+    ]);
+    await mount(<McpSettings />);
+    await flush();
+    expect(text()).toContain("失败");
+    expect(text()).toContain("HTTP 401");
+    expect(text()).not.toContain("未登录");
+    expect(label("登录 linear-api")).toBeNull();
+    expect(label("连接 linear-api")).not.toBeNull();
   });
 
   it("says when there are no servers", async () => {

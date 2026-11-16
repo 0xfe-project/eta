@@ -117,6 +117,8 @@ export type ResolvedServer = {
       url: string;
       /** The file's headers, with the extension's over them whatever their case. */
       headers: Record<string, string>;
+      /** What the extension declares (`mcp.<server>.auth`); left out, `toMcpEntries` infers it. */
+      auth?: false | "oauth";
     }
 );
 
@@ -258,6 +260,7 @@ export function resolvePluginServers(
         continue;
       }
       const given = config[server.name]?.headers ?? {};
+      const auth = plugin.bindings[server.name]?.auth;
       const fixed = Object.entries(server.config.headers).filter(
         ([name]) =>
           !Object.keys(given).some(
@@ -271,6 +274,7 @@ export function resolvePluginServers(
         type: server.config.type,
         url: server.config.url,
         headers: { ...Object.fromEntries(fixed), ...given },
+        ...(auth === undefined ? {} : { auth }),
       });
     }
   }
@@ -325,9 +329,21 @@ const hasAuthorization = (headers: Record<string, string>): boolean =>
   Object.keys(headers).some((name) => name.toLowerCase() === "authorization");
 
 /**
+ * A remote server's `auth` on eta's own loop: what the extension declares, else OAuth unless it is
+ * already sent an `Authorization` header. The one place this is decided.
+ */
+function authOf(server: {
+  headers: Record<string, string>;
+  auth?: false | "oauth";
+}): false | "oauth" | undefined {
+  if (server.auth !== undefined) return server.auth;
+  return hasAuthorization(server.headers) ? undefined : "oauth";
+}
+
+/**
  * The shape eta's own loop takes (`@eta/mcp`'s `McpServerEntry`), by name. A stdio server keeps
- * its working directory, sse is taken as it is, and a remote server signs in with OAuth unless it
- * is already sent an `Authorization` header: one that needs no sign-in never asks.
+ * its working directory, sse is taken as it is, and a remote server's sign-in is `authOf`'s: one
+ * that needs no sign-in never asks, and one declared `auth: false` never does.
  */
 export function toMcpEntries(
   servers: readonly ResolvedServer[],
@@ -345,6 +361,7 @@ export function toMcpEntries(
             cwd: server.cwd,
           },
         ];
+      const auth = authOf(server);
       return [
         server.name,
         {
@@ -353,9 +370,7 @@ export function toMcpEntries(
           ...(Object.keys(server.headers).length === 0
             ? {}
             : { headers: server.headers }),
-          ...(hasAuthorization(server.headers)
-            ? {}
-            : { auth: "oauth" as const }),
+          ...(auth === undefined ? {} : { auth }),
         },
       ];
     }),

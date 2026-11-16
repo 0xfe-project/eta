@@ -25,12 +25,15 @@ import {
   createOAuthLogins,
   createOAuthProvider,
   createRefreshDedupingFetch,
+  lifecycleOf,
   LoginError,
 } from "@eta/mcp";
 import { CredentialRows } from "./credentials";
 import { MCP_CALLBACK_PATH } from "./path";
 
 const CALLBACK_PATH = MCP_CALLBACK_PATH;
+/** The prefix of a plugin's source (`McpHost`). */
+const PLUGIN = "plugin:";
 
 function page(status: number, title: string, detail: string): Response {
   const escape = (text: string): string =>
@@ -133,11 +136,18 @@ export class McpService {
       agent: { id: string; name: string },
       scope: McpScope,
     ): void => {
+      const replaced = scope
+        .overridden()
+        .filter(({ definition }) => definition.source.startsWith(PLUGIN));
       for (const status of scope.status()) {
         const key = `${agent.id}\0${status.source}\0${status.name}`;
         if (views.has(key)) continue;
         const definition = scope.definition(status.name);
         views.set(key, {
+          overriddenBy: null,
+          overrides:
+            replaced.find(({ definition }) => definition.name === status.name)
+              ?.definition.source ?? null,
           agentId: agent.id,
           agentName: agent.name,
           server: status.name,
@@ -148,6 +158,25 @@ export class McpService {
           toolCount: status.toolCount,
           error: status.error ?? null,
           auth: this.#authOf(definition, status.source, status.state),
+        });
+      }
+      // A plugin's server another source replaced: shown where it was declared, and by what.
+      for (const { definition, by } of replaced) {
+        const key = `${agent.id}\0${definition.source}\0${definition.name}`;
+        if (views.has(key)) continue;
+        views.set(key, {
+          agentId: agent.id,
+          agentName: agent.name,
+          server: definition.name,
+          source: definition.source,
+          transport: transportOf(definition),
+          lifecycle: lifecycleOf(definition),
+          state: "not-connected",
+          toolCount: 0,
+          error: null,
+          auth: "none",
+          overriddenBy: { source: by, name: definition.name },
+          overrides: null,
         });
       }
     };
@@ -169,7 +198,8 @@ export class McpService {
   /**
    * A server the user declared `auth: "oauth"` needs a login until it has one. A plugin's remote
    * server is OAuth only because nothing says it is not, so it asks for a login only when the
-   * server did (`needs-auth`): one that needs none shows no button.
+   * server did (`needs-auth`): one that needs none shows no button. Anything not `"oauth"`
+   * (`auth: false` included) never shows one.
    */
   #authOf(
     definition: ReturnType<McpScope["definition"]>,
@@ -181,7 +211,7 @@ export class McpService {
     if (state === "needs-auth") return "needs_login";
     if (this.credentials.has(mcpServerKey(definition.url), "tokens"))
       return "signed_in";
-    return source.startsWith("plugin:") ? "none" : "needs_login";
+    return source.startsWith(PLUGIN) ? "none" : "needs_login";
   }
 
   #scopeOf(agentId: string, server: string): McpScope {

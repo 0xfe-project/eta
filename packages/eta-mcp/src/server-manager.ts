@@ -564,6 +564,13 @@ export class ServerManager {
         await this.openClient(connection, make, options);
         return;
       } catch (error) {
+        // `auth: false` says no sign-in will help: a 401 is a failure, kept in the backoff like
+        // any other, and never `needs-auth`, which is what offers a sign-in.
+        if (isUnauthorized(error) && definition.auth === false)
+          throw new Error(
+            "HTTP 401: the server rejected the request; it is declared auth: false, so eta does not try to sign in",
+            { cause: error },
+          );
         if (isUnauthorized(error)) {
           connection.status = "needs-auth";
           connection.authMessage =

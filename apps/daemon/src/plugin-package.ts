@@ -90,6 +90,11 @@ interface PluginServerBinding {
   env: Record<string, string>;
   /** Header name to template (`Bearer {api_key}`). */
   headers: Record<string, string>;
+  /**
+   * A remote server's sign-in on eta's own loop: `false` never signs in (a 401 is an error),
+   * `"oauth"` always may. Left out, it is inferred (`toMcpEntries`). Ignored on stdio.
+   */
+  auth?: false | "oauth";
 }
 
 export interface PluginPackage {
@@ -461,9 +466,22 @@ function parseExtension(
         broken.add(server);
         continue;
       }
-      const { env = {}, headers = {} } =
-        binding as Partial<PluginServerBinding>;
-      bindings[server] = { env, headers };
+      const {
+        env = {},
+        headers = {},
+        auth,
+      } = binding as Partial<PluginServerBinding>;
+      const stdio =
+        servers.find((entry) => entry.name === server)?.config.type === "stdio";
+      if (auth !== undefined && stdio)
+        reports.push(
+          `extension: mcp.${server}.auth is for remote servers; ignored`,
+        );
+      bindings[server] = {
+        env,
+        headers,
+        ...(auth === undefined || stdio ? {} : { auth }),
+      };
     }
   }
   return {
@@ -482,9 +500,15 @@ function bindingProblem(
 ): string | undefined {
   if (!isPlain(binding)) return "its binding is not an object";
   const extra = Object.keys(binding).find(
-    (key) => key !== "env" && key !== "headers",
+    (key) => key !== "env" && key !== "headers" && key !== "auth",
   );
   if (extra !== undefined) return `its binding has an unknown key ${extra}`;
+  if (
+    binding.auth !== undefined &&
+    binding.auth !== false &&
+    binding.auth !== "oauth"
+  )
+    return 'its auth must be false or "oauth"';
   const env = binding.env ?? {};
   const headers = binding.headers ?? {};
   if (!isStringMap(env) || !isStringMap(headers))
