@@ -45,6 +45,7 @@ import {
   MAX_MESSAGE_CHARS,
   pasteBlocksOf,
   plainDraft,
+  withTextAbove,
 } from "@/lib/composer";
 import { buildMenu, hashAt, mentionAt } from "@/lib/composer-menu";
 import { translate } from "@/lib/i18n";
@@ -446,7 +447,7 @@ function TurnCards({
   sessionId,
   runFrom,
   taskRows,
-  onPrompt,
+  onDraft,
 }: {
   /** The tool calls a finished reply kept on its row. */
   saved: readonly ToolBlock[];
@@ -456,8 +457,8 @@ function TurnCards({
   runFrom?: number | undefined;
   /** The task rows this turn wrote, and which are drawn here rather than on the timeline. */
   taskRows: readonly MessageView[] | undefined;
-  /** A widget's `sendPrompt`: the text goes to the conversation as the user's. */
-  onPrompt: (text: string) => void;
+  /** A widget's `sendPrompt`: the text goes into the message box, for the user to send. */
+  onDraft: (text: string) => void;
 }) {
   const live = useRunBlocks(sessionId, runFrom);
   const blocks = withRealmCalls(sessionId === undefined ? saved : live);
@@ -478,7 +479,7 @@ function TurnCards({
   return (
     <div className="turn-tasks">
       {widgets.map(({ id, ...widget }) => (
-        <WidgetFrame key={id} {...widget} onPrompt={onPrompt} />
+        <WidgetFrame key={id} {...widget} onDraft={onDraft} />
       ))}
       {published.map(({ id, ref }) => (
         <ActivityRefCard key={id} value={ref} variant="framed" />
@@ -721,7 +722,7 @@ interface TurnActions {
   onChoose: (question: Question, selections: string[]) => void;
   onAbort: (question: Question) => void;
   onResend: (text: string, agentId?: string) => void;
-  onPrompt: (text: string) => void;
+  onDraft: (text: string) => void;
 }
 
 /**
@@ -1070,7 +1071,7 @@ const Turn = memo(
           sessionId={running ? sessionId : undefined}
           runFrom={runFromOf(message.data)}
           taskRows={taskRowsOf}
-          onPrompt={(text) => actions.current.onPrompt(text)}
+          onDraft={(text) => actions.current.onDraft(text)}
         />
         <div className="message-footer">
           <time dateTime={new Date(message.createdAt).toISOString()}>
@@ -1298,17 +1299,22 @@ export function ChatPanel({
   );
   // The rows call the latest handlers without taking them as props, which
   // change on every render and would undo the rows' memo.
-  // A widget's `sendPrompt` is a message the user sends, queued like one typed in the box.
-  const onPrompt = (text: string) => onSend(text, "queue");
+  // A widget's `sendPrompt` only fills the box: sending is the user's own Enter. Its scripts run
+  // without a click and again each time the conversation opens, and a message from the user
+  // decides who wakes, so a widget must not be able to send one.
+  const onDraft = (text: string) => {
+    setDraft(withTextAbove(draft, text));
+    formRef.current?.querySelector<HTMLElement>("[contenteditable]")?.focus();
+  };
   const actionsRef = useRef<TurnActions>({
     onStop,
     onChoose,
     onAbort,
     onResend,
-    onPrompt,
+    onDraft,
   });
   useLayoutEffect(() => {
-    actionsRef.current = { onStop, onChoose, onAbort, onResend, onPrompt };
+    actionsRef.current = { onStop, onChoose, onAbort, onResend, onDraft };
   });
   const transcript = useTranscriptScroll({
     groupId,
@@ -1854,17 +1860,7 @@ export function ChatPanel({
             agents={agents}
             // Back above the draft, blank line between: pulling one in must never swallow the
             // half sentence someone was writing, and two pulls land newest-first.
-            onPullBack={(text) =>
-              setDraft(
-                draft.length === 0
-                  ? [{ type: "text", text }]
-                  : [
-                      { type: "text", text },
-                      { type: "text", text: "\n\n" },
-                      ...draft,
-                    ],
-              )
-            }
+            onPullBack={(text) => setDraft(withTextAbove(draft, text))}
           />
         </div>
         <div className="input-outer">
