@@ -8,6 +8,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
  * is ever shown says `working` without something working.
  */
 import type { AgentRuntimeInfo, RoutinesStatus } from "@eta/client-contracts";
+import type { McpHostOptions } from "@eta/daemon";
 import type {
   AssembledServer,
   RemoteSessions,
@@ -22,7 +23,6 @@ import type { DaemonBuilds } from "./machines/builds";
 import type { SshRunner } from "./machines/install";
 import type { MachineRecord } from "./machines/store";
 import type { Tailscale } from "./machines/tailscale";
-import type { McpHostOptions } from "./mcp/host";
 import type { SessionHooks } from "./session-hooks";
 import type { UpgradePluginOptions } from "./upgrade/plugin";
 import type { WebOptions } from "./web/service";
@@ -408,6 +408,7 @@ export function createProduct(options: {
     hooks?: Required<SessionHooks>;
     inbox?: Inbox;
     plugins?: Plugins;
+    mcp?: McpService;
   } = {};
   const hub = new MachineHub({
     machines,
@@ -457,6 +458,11 @@ export function createProduct(options: {
         models: () => running?.models,
         hooks: () => later.hooks,
         approvals: () => later.inbox?.approvals() ?? [],
+        // MCP's credentials are made below, before any link is up.
+        mcpCredential: async (raw) => {
+          if (later.mcp === undefined) throw new Error("the host is starting");
+          return await later.mcp.relay(raw);
+        },
         generated,
         warn,
       }),
@@ -471,12 +477,13 @@ export function createProduct(options: {
     home: options.home ?? homedir(),
     agents: () => agents.list().map(({ id, name }) => ({ id, name })),
     // Read when a session opens or the settings page asks; the plugins are made just below.
-    pluginSources: (agentId) => later.plugins?.mcpSourcesFor(agentId) ?? [],
+    pluginSources: ({ agentId }) => later.plugins?.mcpSourcesFor(agentId) ?? [],
     publicUrl: options.publicUrl,
     changed: () => wire?.pushNow("mcp"),
     warn,
     ...options.mcp,
   });
+  later.mcp = mcp;
   // The plugins agents use: what is on disk, what the user configured and what each may read.
   const plugins = new Plugins({
     db,

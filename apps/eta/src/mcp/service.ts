@@ -11,12 +11,16 @@
  * the user's browser can open, and it is what the page already trusts. A client registered for
  * another redirect is registered again at the next login.
  */
-import type { McpAuthState, McpServerView } from "@eta/client-contracts";
+import type {
+  McpAuthState,
+  McpCredentialCall,
+  McpServerView,
+} from "@eta/client-contracts";
+import type { McpHostOptions } from "@eta/daemon";
 import type { AuthProviderFor, McpScope, OAuthLogins } from "@eta/mcp";
 import type { Database } from "bun:sqlite";
 import type { Buffer } from "node:buffer";
-import type { McpHostOptions } from "./host";
-import { createHash } from "node:crypto";
+import { McpHost, mcpServerKey, parseCredentialCall } from "@eta/daemon";
 import {
   createOAuthLogins,
   createOAuthProvider,
@@ -24,7 +28,6 @@ import {
   LoginError,
 } from "@eta/mcp";
 import { CredentialRows } from "./credentials";
-import { McpHost } from "./host";
 import { MCP_CALLBACK_PATH } from "./path";
 
 const CALLBACK_PATH = MCP_CALLBACK_PATH;
@@ -68,12 +71,6 @@ function originOf(text: string | undefined): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-export function mcpServerKey(url: string): string {
-  const identity = new URL(url);
-  identity.hash = "";
-  return createHash("sha256").update(identity.href).digest("hex");
 }
 
 export interface McpServiceOptions {
@@ -309,6 +306,28 @@ export class McpService {
       await this.credentials.delete(serverKey, kind);
     await this.host.manager.servers.close(agentId, server);
     this.#options.changed();
+  }
+
+  /**
+   * A daemon's read, write or removal of a server's OAuth state (`mcp.credential`). The rows are
+   * the ones a login here writes, so a session on any machine uses the same sign-in, and a token
+   * a daemon refreshes is what the next session reads. Only `tokens`, `clientInformation` and
+   * `discoveryState`, under a URL's hash: `parseCredentialCall` refuses anything else.
+   */
+  async relay(raw: unknown): Promise<unknown> {
+    const call: McpCredentialCall = parseCredentialCall(raw);
+    if (call.op === "get")
+      return (await this.credentials.get(call.serverKey, call.kind)) ?? null;
+    if (call.op === "set")
+      await this.credentials.set(
+        call.serverKey,
+        call.kind,
+        call.value as never,
+      );
+    else await this.credentials.delete(call.serverKey, call.kind);
+    // A token saved or dropped changes what the settings page says.
+    this.#options.changed();
+    return null;
   }
 
   async route(request: Request): Promise<Response | undefined> {

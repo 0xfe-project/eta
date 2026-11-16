@@ -3,8 +3,11 @@ export interface PlatformPromptInfo {
   cwd: string;
   /** Host-owned persona directory home; supplied explicitly, including for remote sessions. */
   home: string;
-  /** The eta config file the GUI edits: providers, models, headers. */
-  configPath: string;
+  /**
+   * The eta config file the GUI edits: providers, models, headers. Absent on a daemon, whose
+   * providers are the primary's: the line is left out.
+   */
+  configPath?: string | undefined;
   /** The session's own directory, when the session is persisted. */
   sessionDir?: string;
   /** Where a note for this project would be written. */
@@ -72,7 +75,7 @@ export function renderPlatformBlock(info: PlatformPromptInfo): string {
     "<platform>",
     "eta is the app running this session. Its own files are readable, and the ones that describe you are yours to change:",
     "",
-    configLine(info.configPath),
+    ...(info.configPath === undefined ? [] : [configLine(info.configPath)]),
   ];
   if (info.sessionDir !== undefined) lines.push(sessionLine(info.sessionDir));
   lines.push(

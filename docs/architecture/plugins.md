@@ -91,7 +91,7 @@ When config or files change, the session's stamp changes with it (`<name>@<conte
 
 When a session is opened on a daemon, `RemotePlace` first uses `machine.pluginHave` to ask which content hashes it lacks, then sends files in chunks with `machine.pluginPut` (each batch no larger than one frame, symlinks followed, anything outside the plugin root skipped); the daemon places them in `<dataDir>/plugins/store/<hash>/` only after verifying the hashes.
 
-`machine.open` includes `plugins` (hashes and the values for each server) and `redactions`. These live only in daemon memory, are injected when the server starts, and are never written to disk. The daemon has no MCP for the built-in kernel yet, so such a session there gets no server values, but `redactions` still contains secrets.
+`machine.open` includes `plugins` (hashes and the values for each server) and `redactions`. These live only in daemon memory, are injected when the server starts, and are never written to disk. The values are sent whatever runtime the agent is on: an external runtime and eta's own loop (through the daemon's `McpHost`, see [MCP](mcp.md)) both start the servers on the daemon's machine.
 
 ## Agent reads config
 

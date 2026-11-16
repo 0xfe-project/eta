@@ -40,6 +40,19 @@ describe("the platform briefing", () => {
     expect(text).toContain("hand-editing it is not a supported operation");
   });
 
+  it("leaves the config line out on a machine with no config of its own (a daemon)", () => {
+    const { configPath: _, ...daemon } = base;
+    const text = renderPlatformBlock({
+      ...daemon,
+      sessionDir: "/home/lemon/.eta-daemon/sessions/eta-1",
+      memoryExists: false,
+      realm: true,
+    });
+    expect(text).not.toContain("Config:");
+    expect(text).toContain("/home/lemon/.eta-daemon/sessions/eta-1");
+    expect(text).toContain("`esmrun`");
+  });
+
   it("says how a persona card is written, and that it needs no restart", () => {
     const text = renderPlatformBlock({ ...base, memoryExists: true });
     expect(text).toContain("<id>.persona.md");

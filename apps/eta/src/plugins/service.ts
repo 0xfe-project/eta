@@ -38,11 +38,10 @@ import {
 import {
   claimServerNames,
   pluginChunks,
-  resolvePluginServers,
+  pluginMcpSources,
   runtimeExtras,
   serversConfig,
   serverSupported,
-  toMcpEntries,
 } from "@eta/daemon";
 import { PluginRegistry } from "./registry";
 import { PluginRows } from "./store";
@@ -214,7 +213,7 @@ export class Plugins {
     if (this.#agents.get(agentId)?.runtime !== "eta") return [];
     const active = this.active(agentId);
     if (active.length === 0) return [];
-    const resolved = resolvePluginServers(
+    return pluginMcpSources(
       active.map((entry) => ({
         plugin: entry.plugin!,
         config: serversConfig(entry.plugin!, this.rows.values(entry.name)),
@@ -222,14 +221,6 @@ export class Plugins {
       this.#dataDir,
       this.#warn,
     );
-    return active.flatMap((entry) => {
-      const servers = toMcpEntries(
-        resolved.filter((server) => server.plugin === entry.name),
-      );
-      return Object.keys(servers).length === 0
-        ? []
-        : [{ name: `plugin:${entry.name}`, servers }];
-    });
   }
 
   /**
@@ -287,13 +278,10 @@ export class Plugins {
 
   /**
    * The agent's plugins on a daemon's machine: the files it does not keep yet are sent, and the
-   * open says what its servers get. A plugin that cannot be sent is left out and reported.
+   * open says what its servers get (their environment and headers, whatever runtime the agent is
+   * on). A plugin that cannot be sent is left out and reported.
    */
-  async openOn(
-    link: MachineLink,
-    agentId: string,
-    external: boolean,
-  ): Promise<OpenedPlugin[]> {
+  async openOn(link: MachineLink, agentId: string): Promise<OpenedPlugin[]> {
     const active = this.active(agentId);
     if (active.length === 0) return [];
     const { missing } = await link.machine("pluginHave", {
@@ -312,10 +300,8 @@ export class Plugins {
       opened.push({
         name: entry.name,
         hash: entry.hash!,
-        // Only a runtime starts servers; eta's own loop has no use for the values yet.
-        servers: external
-          ? serversConfig(entry.plugin!, this.rows.values(entry.name))
-          : {},
+        // An external runtime and eta's own loop both start the servers on the machine.
+        servers: serversConfig(entry.plugin!, this.rows.values(entry.name)),
       });
     }
     return opened;
