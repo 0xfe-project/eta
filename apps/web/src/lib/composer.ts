@@ -53,6 +53,16 @@ export function plainDraft(text: string): Draft {
   return text ? [{ type: "text", text }] : [];
 }
 
+/**
+ * Text put into the box from outside it (a held message pulled back, a widget's `sendPrompt`):
+ * above what is there, a blank line between, so the half sentence someone was writing is kept.
+ */
+export function withTextAbove(draft: Draft, text: string): Draft {
+  return draft.length === 0
+    ? [{ type: "text", text }]
+    : [{ type: "text", text }, { type: "text", text: "\n\n" }, ...draft];
+}
+
 /** The draft's text, blocks of pasted text included: what is sent. Files are not text. */
 export function draftText(draft: Draft) {
   return draft.map((p) => (p.type === "file" ? "" : p.text)).join("");

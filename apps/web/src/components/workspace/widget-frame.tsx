@@ -17,25 +17,26 @@ const MIN_CODE = 20;
  * A widget the agent drew, beside its answer (`show_widget`). One frame for its whole life: the
  * code is sent to it as it streams and again, final, when the call is done, which is when its
  * scripts run. It is as tall as what it draws, follows the app's theme, and a `sendPrompt` in it
- * sends that text to the conversation.
+ * puts that text in the message box. Nothing it does sends a message: its scripts run with no
+ * click behind them, and again each time the conversation is opened.
  */
 export function WidgetFrame({
   title,
   code,
   streaming,
-  onPrompt,
+  onDraft,
 }: {
   title: string;
   code: string;
   streaming: boolean;
-  onPrompt: (text: string) => void;
+  onDraft: (text: string) => void;
 }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [ready, setReady] = useState(false);
   const [height, setHeight] = useState(0);
-  const promptRef = useRef(onPrompt);
+  const draftRef = useRef(onDraft);
   useEffect(() => {
-    promptRef.current = onPrompt;
+    draftRef.current = onDraft;
   });
 
   useEffect(() => {
@@ -67,8 +68,8 @@ export function WidgetFrame({
         typeof message.height === "number"
       )
         setHeight(message.height);
-      else if (message.kind === "prompt" && typeof message.text === "string")
-        promptRef.current(message.text);
+      else if (message.kind === "draft" && typeof message.text === "string")
+        draftRef.current(message.text);
     };
     window.addEventListener("message", onMessage);
     // The app switches theme by the root's class.

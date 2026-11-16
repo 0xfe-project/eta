@@ -5,7 +5,7 @@
  *
  * The shell holds what the guidelines promise (`apps/eta/src/widget/guidelines.ts`): the colour
  * variables (filled from the app's own theme by message), the SVG classes, the fade new elements
- * come in with, `sendPrompt`, and a policy that lets scripts load only from the two CDNs and
+ * come in with, `sendPrompt` (which only fills the message box), and a policy that lets scripts load only from the two CDNs and
  * nothing at all leave the frame.
  */
 import morphdom from "morphdom/dist/morphdom-umd.min.js?raw";
@@ -112,7 +112,8 @@ const RUNTIME = `(() => {
       }
     }
   }
-  window.sendPrompt = (text) => post({ kind: "prompt", text: String(text) });
+  // Fills the message box; the user sends it. A widget never speaks for the user.
+  window.sendPrompt = (text) => post({ kind: "draft", text: String(text) });
   addEventListener("message", (event) => {
     if (event.source !== parent || event.data?.type !== TYPE) return;
     const message = event.data;

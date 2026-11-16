@@ -63,8 +63,9 @@ Write all text in the user's language.
   exact version, e.g. https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js,
   https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js. Nothing else loads: no fetch, no
   remote images or fonts (inline SVG and data: URLs work), no localStorage.
-- \`sendPrompt(text)\` sends text to the conversation as if the user typed it. Use it for a button
-  that asks the next question ("Break down the slowest step"); never call it on load.
+- \`sendPrompt(text)\` puts text in the user's message box; nothing is sent until the user presses
+  send themselves. Use it for a button that drafts the next question ("Break down the slowest
+  step"); never call it on load.
 - Everything else (clicks, sliders, animation) stays inside the widget; you are not told about it.
 `;
 
