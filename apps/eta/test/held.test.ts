@@ -276,4 +276,58 @@ describe("插入当前这一轮（steerHeld）", () => {
     // Delivered long ago: it is a message, and nothing is said again.
     expect(steered).toMatchObject({ steered: false, reason: "taken" });
   });
+
+  it("没有可以插入的回复（那一轮正在停下）：返回 idle，消息原样排着，什么都没发", async () => {
+    const first = gate();
+    const { models, requests } = scriptedModels(async (request) => {
+      // Deaf to the abort: the reply stays `stopping` until the gate opens.
+      if (request.index === 0) await first.opened;
+      return say("done");
+    });
+    const w = await world({ models });
+    const { group } = await ada(w);
+
+    const one = await w.send(group.id, "write the report");
+    await w.settled(group.id, one.replies[0]!.id, ["working"]);
+    await until(() => requests.length === 1);
+    const two = await w.send(group.id, "and the summary");
+    await until(() => w.held(group.id).length === 1);
+    await w.client.call("conversations", "stop", {
+      conversationId: group.id,
+      messageId: one.replies[0]!.id,
+    });
+    await w.settled(group.id, one.replies[0]!.id, ["stopping"]);
+
+    const steered = await steerHeld(w, group.id, two.message.id);
+    expect(steered).toMatchObject({
+      steered: false,
+      reason: "idle",
+      joined: [],
+      dropped: [],
+    });
+    expect(w.held(group.id).map((row) => row.id)).toEqual([two.message.id]);
+    expect(requests).toHaveLength(1);
+    first.open();
+  });
+
+  it("别的会话的消息：是一次错误的调用，不说成被读走了", async () => {
+    const first = gate();
+    const { models } = scriptedModels(async (request) => {
+      if (request.index === 0) await first.opened;
+      return say("done");
+    });
+    const w = await world({ models });
+    const { project, agent, group } = await ada(w);
+    const other = await w.group(project.id, [agent.id]);
+    const one = await w.send(group.id, "write the report");
+    await w.settled(group.id, one.replies[0]!.id, ["working"]);
+    const two = await w.send(group.id, "and the summary");
+    await until(() => w.held(group.id).length === 1);
+
+    await expect(steerHeld(w, other.id, two.message.id)).rejects.toThrow(
+      /in this conversation/,
+    );
+    expect(w.held(group.id).map((row) => row.id)).toEqual([two.message.id]);
+    first.open();
+  });
 });

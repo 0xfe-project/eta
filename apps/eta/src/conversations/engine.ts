@@ -511,11 +511,10 @@ export class Engine {
     const conversation = this.#requireConversation(conversationId);
     const row = this.#timeline.get(messageId);
     const none = { conversationId, joined: [], replies: [], dropped: [] };
-    if (
-      row === undefined ||
-      row.conversationId !== conversationId ||
-      row.data.held === undefined
-    )
+    // Another conversation's message is a wrong call, not one a lane got to first.
+    if (row !== undefined && row.conversationId !== conversationId)
+      throw new Error(`no message ${messageId} in this conversation`);
+    if (row === undefined || row.data.held === undefined)
       return { ...none, steered: false, reason: "taken" };
     const waitingFor = Array.isArray(row.data.woke)
       ? (row.data.woke as string[])

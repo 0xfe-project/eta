@@ -1,6 +1,6 @@
 import type { AgentView, MessageView } from "@eta/client-contracts";
 import type { KeyboardEvent } from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -62,6 +62,10 @@ export function HeldMessages({
     steering: boolean;
   } | null>(null);
 
+  // State lags a render behind: two clicks before it lands would both get through, and the
+  // second would only be told the first one took it.
+  const inFlight = useRef(new Set<string>());
+
   const namesOf = (message: MessageView) =>
     waitingNames(
       message,
@@ -71,6 +75,8 @@ export function HeldMessages({
     );
 
   const take = async (messageId: string) => {
+    if (inFlight.current.has(messageId)) return false;
+    inFlight.current.add(messageId);
     setBusy({ id: messageId, steering: false });
     try {
       const answer = await recall.mutateAsync({ conversationId, messageId });
@@ -79,11 +85,14 @@ export function HeldMessages({
       // No answer is not a win: recalling again is free, a duplicated message is not.
       return false;
     } finally {
+      inFlight.current.delete(messageId);
       setBusy(null);
     }
   };
 
   const steer = async (message: MessageView) => {
+    if (inFlight.current.has(message.id)) return;
+    inFlight.current.add(message.id);
     const names = namesOf(message);
     setBusy({ id: message.id, steering: true });
     try {
@@ -109,6 +118,7 @@ export function HeldMessages({
         }),
       );
     } finally {
+      inFlight.current.delete(message.id);
       setBusy(null);
     }
   };

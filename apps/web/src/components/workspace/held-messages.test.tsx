@@ -181,6 +181,31 @@ describe("排队中的消息", () => {
     expect(pulled).toEqual([]);
   });
 
+  it("同一块上飞快连点两次插入：只调一次 steerHeld，也不多弹提示", async () => {
+    const said = rstest.spyOn(toast, "message").mockImplementation(() => 0);
+    let answer!: (result: SteerHeldResult) => void;
+    const { container } = await start([held("再写个摘要")], {
+      steer: () =>
+        new Promise<SteerHeldResult>((resolve) => {
+          answer = resolve;
+        }),
+    });
+    await flush();
+    const button = container.querySelector("[data-slot=held-steer]")!;
+    // Both clicks inside one act: the second lands before the disabled state renders.
+    await act(async () => {
+      button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flush();
+    answer(steered({}));
+    await flush();
+    expect(host.calls.filter((one) => one.action === "steerHeld")).toHaveLength(
+      1,
+    );
+    expect(said).not.toHaveBeenCalled();
+  });
+
   it("拉回编辑：先召回，召回了才把文本放回输入框", async () => {
     const { container } = await start([held("再写个摘要")]);
     await flush();

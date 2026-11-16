@@ -236,7 +236,9 @@ function waitingFor(row: MessageView): string {
  */
 function HeldBand(props: { chat: Chat; onPullBack: (text: string) => void }) {
   const busy = signal<{ id: string; steering: boolean } | undefined>(undefined);
+  // A second press before the first is answered does nothing: the host would only say it was taken.
   const take = async (messageId: string): Promise<boolean> => {
+    if (busy()?.id === messageId) return false;
     busy.set({ id: messageId, steering: false });
     try {
       const answer = await call<{ recalled: boolean }>(
@@ -257,6 +259,7 @@ function HeldBand(props: { chat: Chat; onPullBack: (text: string) => void }) {
     }
   };
   const steer = async (row: MessageView): Promise<void> => {
+    if (busy()?.id === row.id) return;
     const names = waitingFor(row);
     busy.set({ id: row.id, steering: true });
     try {
