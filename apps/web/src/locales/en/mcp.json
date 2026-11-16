@@ -1,6 +1,6 @@
 {
   "title": "MCP servers",
-  "description": "The tools agents reach through MCP, from ~/.eta/mcp.json and project .mcp.json files. Servers start on first use.",
+  "description": "The tools agents reach through MCP, from their plugins, ~/.eta/mcp.json and project .mcp.json files; a later one replaces an earlier server of the same name. A project’s .mcp.json only applies in sessions in that project. Servers start on first use.",
   "empty": {
     "title": "No MCP servers",
     "description": "Add servers to ~/.eta/mcp.json or a project’s .mcp.json."
@@ -21,6 +21,11 @@
   "auth": {
     "signedIn": "Signed in",
     "needsLogin": "Not signed in"
+  },
+  "override": {
+    "by": "Overridden by {{source}}",
+    "detail": "This plugin server is not started: the server of the same name in {{source}} is used instead.",
+    "replaces": "replaces"
   },
   "summary": {
     "tools": "{{count}} tools",

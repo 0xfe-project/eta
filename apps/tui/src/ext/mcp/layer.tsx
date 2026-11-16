@@ -45,8 +45,14 @@ const keyOf = (ref: McpServerRef) => JSON.stringify([ref.agentId, ref.server]);
 export function McpLayer({ handle }: { handle: LayerHandle }) {
   const all = useTarget("mcp")?.sections.list as McpServerView[] | undefined;
   const agents = useTarget("agents")?.sections.list as AgentView[] | undefined;
+  // A plugin's server another source replaced has nothing to open: the one used is listed.
   const servers =
-    all === undefined ? undefined : withoutCaptainRows(all, agents);
+    all === undefined
+      ? undefined
+      : withoutCaptainRows(
+          all.filter((view) => view.overriddenBy === null),
+          agents,
+        );
   const [opened, setOpened] = useState<McpServerRef>();
   if (opened !== undefined)
     return (

@@ -9,6 +9,7 @@
  * never start a server. Only `callTool`, `connect` and `warmUp` do.
  */
 
+import type { OverriddenServer } from "./config";
 import type { MetadataCache } from "./metadata-cache";
 import type { ObservedOutputs } from "./output-shape";
 import type { SearchEntry } from "./search-ranking";
@@ -122,6 +123,7 @@ export class McpScope {
   private readonly hooks: McpHooks;
   private definitions = new Map<string, McpServerDefinition>();
   private issuesFound: string[] = [];
+  private overriddenFound: OverriddenServer[] = [];
   private readonly listeners = new Set<() => void>();
 
   constructor(host: ScopeHost, options: ScopeOptions) {
@@ -140,8 +142,14 @@ export class McpScope {
     );
     this.definitions = resolved.servers;
     this.issuesFound = resolved.issues;
+    this.overriddenFound = resolved.overridden;
     for (const name of gone) void this.host.manager.close(this.owner, name);
     this.emit();
+  }
+
+  /** The servers a later source replaced by name; they are not connected and not listed. */
+  overridden(): readonly OverriddenServer[] {
+    return this.overriddenFound;
   }
 
   /** Problems found while merging the sources (overrides, malformed entries). */

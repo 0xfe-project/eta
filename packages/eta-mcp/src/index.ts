@@ -7,7 +7,8 @@
  * - Hooks (`elicit`, `onToolCall`) and `authProviderFor` are injected by the caller.
  */
 
-export { parseMcpServers, resolveServers } from "./config";
+export { lifecycleOf, parseMcpServers, resolveServers } from "./config";
+export type { OverriddenServer } from "./config";
 export { DeliveryError } from "./delivery";
 
 export { describeServerTools } from "./describe";

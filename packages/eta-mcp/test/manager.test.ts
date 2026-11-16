@@ -378,6 +378,39 @@ describe("transports", () => {
     }
   });
 
+  it("takes a 401 from an auth: false server as a failure, never needs-auth", async () => {
+    const h = await setup();
+    const http = await startFakeHttp({ spec, bearer: "secret" });
+    try {
+      const scope = h.manager.scope({
+        owner: "a",
+        sources: [h.source({ plain: { url: http.url, auth: false } })],
+      });
+      const denied = await scope.connect("plain");
+      expect(denied.ok).toBe(false);
+      expect(denied).not.toMatchObject({ error: "needs_auth" });
+      const failed = scope.status().find((status) => status.name === "plain");
+      expect(failed).toMatchObject({ state: "failed" });
+      expect(failed?.error).toContain("HTTP 401");
+      expect(failed?.error).toContain("auth: false");
+
+      // Held in the backoff: a second call does not reach the server again.
+      const sent = http.requests.length;
+      expect((await scope.connect("plain")).ok).toBe(false);
+      expect(http.requests.length).toBe(sent);
+      expect(scope.status()[0]?.state).toBe("failed");
+
+      // Still a failure, not needs-auth, once the backoff lets it try again.
+      h.advance(60 * 60_000);
+      expect((await scope.connect("plain")).ok).toBe(false);
+      expect(http.requests.length).toBeGreaterThan(sent);
+      expect(scope.status()[0]?.state).toBe("failed");
+    } finally {
+      await h.manager.closeAll();
+      await http.close();
+    }
+  });
+
   it("asks authProviderFor for auth: oauth and reports needs-auth without one", async () => {
     const asked: string[] = [];
     const h = await setup({
