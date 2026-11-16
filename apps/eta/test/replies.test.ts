@@ -9,6 +9,7 @@ import type {
 } from "@eta/client-contracts";
 import type { World } from "./support/world";
 import { describe, expect, it } from "vitest";
+import { holdNextDelivery, uploadNote } from "./support/briefing";
 import { until } from "./support/client";
 import { tempDir } from "./support/host";
 import { call, gate, HANG, say, scriptedModels } from "./support/models";
@@ -64,6 +65,55 @@ describe("a message that arrives while the agent is answering", () => {
     // The model's second request carried the steered words.
     expect(requests).toHaveLength(2);
     expect(requests[1]!.transcript.join("\n")).toContain("make it shorter");
+  });
+
+  it("steer into a turn that ends while it is being briefed gets a reply of its own, answered once", async () => {
+    const first = gate();
+    const { models, requests } = scriptedModels(async (request) => {
+      if (request.index === 0) {
+        await first.opened;
+        return say("on it");
+      }
+      return say("the shorter one");
+    });
+    const w = await world({ models });
+    const { agent, group } = await ada(w);
+
+    const sent = await w.send(group.id, "write the report");
+    const reply = sent.replies[0]!;
+    await w.settled(group.id, reply.id, ["working"]);
+    await until(() => requests.length === 1);
+
+    // The steer is joinable when it is sent, and is held in its briefing (its file is being put
+    // where the session can read it) while the turn ends.
+    const hold = holdNextDelivery();
+    const note = await uploadNote(w.client, group.id);
+    const steering = w.send(group.id, "make it shorter", {
+      mode: "steer",
+      attachments: [note],
+    });
+    await hold.reached;
+    first.open();
+    expect((await w.settled(group.id, reply.id)).text).toBe("on it");
+    hold.release();
+    const steered = await steering;
+
+    // Not joined: answered as a reply of its own, which is written back.
+    expect(steered.joined).toEqual([]);
+    expect(steered.replies).toHaveLength(1);
+    expect(steered.message.data).toMatchObject({
+      joined: [],
+      woke: [agent.id],
+    });
+    const own = await w.settled(group.id, steered.replies[0]!.id);
+    expect(own).toMatchObject({ status: "done", text: "the shorter one" });
+    // Sent once: one request carried the words, and it is the one this reply answers.
+    expect(requests).toHaveLength(2);
+    expect(
+      requests.filter((request) =>
+        request.transcript.join("\n").includes("make it shorter"),
+      ),
+    ).toHaveLength(1);
   });
 
   it("steer with nothing running is just a message", async () => {

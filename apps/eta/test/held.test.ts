@@ -6,6 +6,7 @@
 import type { SteerHeldResult } from "@eta/client-contracts";
 import type { World } from "./support/world";
 import { describe, expect, it } from "vitest";
+import { holdNextDelivery, uploadNote } from "./support/briefing";
 import { until } from "./support/client";
 import { gate, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";
@@ -220,6 +221,61 @@ describe("插入当前这一轮（steerHeld）", () => {
       w.rows(group.id).filter((row) => row.text === "and the summary"),
     ).toHaveLength(1);
     expect(requests).toHaveLength(2);
+  });
+
+  it("插入时这一轮刚好结束：退回成一条独立的回复，答案写得回来，只发一次", async () => {
+    const first = gate();
+    const { models, requests } = scriptedModels(async (request) => {
+      if (request.index === 0) {
+        await first.opened;
+        return say("on it");
+      }
+      return say("the summary");
+    });
+    const w = await world({ models });
+    const { agent, group } = await ada(w);
+
+    const one = await w.send(group.id, "write the report");
+    await w.settled(group.id, one.replies[0]!.id, ["working"]);
+    await until(() => requests.length === 1);
+    const note = await uploadNote(w.client, group.id);
+    const two = await w.send(group.id, "and the summary", {
+      attachments: [note],
+    });
+    await until(() => w.held(group.id).length === 1);
+
+    // Joinable when the click lands; the turn ends while the briefing puts the file in place.
+    const hold = holdNextDelivery();
+    const steering = steerHeld(w, group.id, two.message.id);
+    await hold.reached;
+    first.open();
+    expect((await w.settled(group.id, one.replies[0]!.id)).text).toBe("on it");
+    hold.release();
+    const steered = await steering;
+
+    expect(steered).toMatchObject({
+      steered: false,
+      reason: "ended",
+      joined: [],
+      dropped: [two.replies[0]!.id],
+    });
+    expect(steered.replies).toHaveLength(1);
+    expect(steered.message?.data).toMatchObject({
+      joined: [],
+      woke: [agent.id],
+    });
+    const own = await w.settled(group.id, steered.replies[0]!.id);
+    expect(own).toMatchObject({ status: "done", text: "the summary" });
+    // One copy of the words, read by the model once.
+    expect(
+      w.rows(group.id).filter((row) => row.text === "and the summary"),
+    ).toHaveLength(1);
+    expect(requests).toHaveLength(2);
+    expect(
+      requests.filter((request) =>
+        request.transcript.join("\n").includes("and the summary"),
+      ),
+    ).toHaveLength(1);
   });
 
   it("好几个智能体在回复：和 /steer 一样，并入每一个正在进行的回复", async () => {

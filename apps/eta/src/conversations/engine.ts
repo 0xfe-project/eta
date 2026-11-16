@@ -794,6 +794,14 @@ export class Engine {
       running.handle,
       machine,
     );
+    // The briefing waits (on files, on the model), and the turn may end meanwhile. A steer into a
+    // session with no turn starts a run nobody waits for, so its answer would reach no reply:
+    // fail here instead, before anything is sent, and the caller gives it a reply of its own.
+    if (
+      this.#running.get(keyOf(conversation.id, agentId)) !== running ||
+      !running.handle.running
+    )
+      throw new Error("the turn ended before the message could join it");
     await running.handle.steer(told.text, told.images);
     this.#conversations.setSeen(conversation.id, agentId, told.seen);
   }
