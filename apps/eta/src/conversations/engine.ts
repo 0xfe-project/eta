@@ -3,6 +3,7 @@ import type {
   MessageView,
   PromptImage,
   SendResult,
+  SteerHeldResult,
 } from "@eta/client-contracts";
 import type { KernelModels, KernelTool } from "@eta/core";
 import type { AskObserver } from "@eta/harness";
@@ -491,6 +492,78 @@ export class Engine {
     const recalled = this.#timeline.recall(messageId);
     if (recalled) this.#changed([conversationId]);
     return recalled;
+  }
+
+  /**
+   * Put a held message into the turns in flight, as if it had been sent with `steer`. One step on
+   * the host rather than a recall and a send from the client: the check that it is still held and
+   * taking it out of the queue are one transaction (`Timeline.steerOut`), so a lane that read it
+   * first makes this a no-op instead of a second copy of the words.
+   *
+   * The agents it joins are the ones it was waiting for (`data.woke`) that have a turn to join.
+   * None of them (a turn being stopped, a lane between replies) leaves it held. A join that fails
+   * because the turn ended under it gets a reply of its own, as `send` does.
+   */
+  async steerHeld(
+    conversationId: string,
+    messageId: string,
+  ): Promise<SteerHeldResult> {
+    const conversation = this.#requireConversation(conversationId);
+    const row = this.#timeline.get(messageId);
+    const none = { conversationId, joined: [], replies: [], dropped: [] };
+    if (
+      row === undefined ||
+      row.conversationId !== conversationId ||
+      row.data.held === undefined
+    )
+      return { ...none, steered: false, reason: "taken" };
+    const waitingFor = Array.isArray(row.data.woke)
+      ? (row.data.woke as string[])
+      : [];
+    const joining = waitingFor.filter((agentId) =>
+      this.#joinable(conversationId, agentId),
+    );
+    if (joining.length === 0)
+      return { ...none, steered: false, reason: "idle" };
+    const out = this.#timeline.steerOut(messageId, joining);
+    if (out === undefined) return { ...none, steered: false, reason: "taken" };
+    this.#changed([conversationId]);
+
+    const joined: string[] = [];
+    const replies: MessageView[] = [];
+    for (const agentId of joining) {
+      try {
+        await this.#join(conversation, agentId, out.message);
+        joined.push(agentId);
+      } catch (error) {
+        this.#warn(`[eta] could not steer ${agentId}: ${String(error)}`);
+        replies.push(
+          this.#timeline.queueReply(conversationId, agentId, out.message),
+        );
+      }
+    }
+    if (joined.length !== joining.length) {
+      this.#timeline.setData(messageId, {
+        ...out.message.data,
+        woke: [
+          ...(out.message.data.woke as string[]),
+          ...replies.map((reply) => reply.agentId!),
+        ],
+        joined,
+      });
+    }
+    for (const reply of replies)
+      this.#schedule(conversationId, reply.agentId!, reply.id);
+    this.#changed([conversationId]);
+    return {
+      conversationId,
+      steered: joined.length > 0,
+      ...(joined.length > 0 ? {} : { reason: "ended" as const }),
+      joined,
+      message: this.#timeline.get(messageId)!,
+      replies: replies.map((reply) => this.#timeline.get(reply.id)!),
+      dropped: out.dropped,
+    };
   }
 
   async send(input: {

@@ -722,6 +722,7 @@ export type ProjectCall = {
 export const CONVERSATION_ACTIONS = [
   "create",
   "recall",
+  "steerHeld",
   "update",
   "invite",
   "remove",
@@ -751,6 +752,12 @@ export interface ConversationArgs {
    * picked it up, and the words are in the conversation now.
    */
   recall: { conversationId: string; messageId: string };
+  /**
+   * Put a message that is still waiting for a lane into the turns in flight instead, as `send`
+   * with `mode: "steer"` would have. Taking it out of the queue and joining are one step on the
+   * host: a message a lane already took is not sent again (`steered: false`, `reason: "taken"`).
+   */
+  steerHeld: { conversationId: string; messageId: string };
   update: {
     conversationId: string;
     name?: string;
@@ -847,6 +854,27 @@ export interface SendResult {
   nobody: boolean;
 }
 
+/** What `steerHeld` did. */
+export interface SteerHeldResult {
+  conversationId: string;
+  /** It joined at least one turn in flight (`joined`). */
+  steered: boolean;
+  /**
+   * Why it did not: `taken`, a lane read it first (or it was recalled) and nothing was sent again;
+   * `idle`, none of the agents it waits for has a turn to join, so it is still waiting; `ended`,
+   * the turns ended as it joined, so it is answered as a message of its own (`replies`).
+   */
+  reason?: "taken" | "idle" | "ended";
+  /** Agents whose turn in flight it joined. */
+  joined: string[];
+  /** The message as it now reads, a message of the conversation; absent when nothing changed. */
+  message?: MessageView;
+  /** Replies it got because a join failed. */
+  replies: MessageView[];
+  /** The replies that were queued for it and went, since the turn it joined answers it. */
+  dropped: string[];
+}
+
 export interface HistoryResult {
   conversationId: string;
   messages: MessageView[];
@@ -860,6 +888,8 @@ export interface ConversationResults {
   remove: { conversation: ConversationSummary };
   setSteward: { conversation: ConversationSummary };
   send: SendResult;
+  recall: { conversationId: string; recalled: boolean };
+  steerHeld: SteerHeldResult;
   stop: { stopped: MessageView[] };
   read: { conversation: ConversationSummary };
   history: HistoryResult;

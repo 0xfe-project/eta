@@ -382,9 +382,23 @@
   },
   "queue": {
     "followUp": "Queued",
-    "pullBackAction": "Pull back",
+    "afterTurn": "sent when {{names}} finishes this turn",
+    "afterPrevious": "after the one above",
+    "them": "them",
+    "separator": ", ",
+    "label": "Queued message: {{text}}",
+    "steerAction": "Insert into this turn",
+    "steerActionSeveral": "Insert into the replies",
+    "steer": "Insert into this turn: {{text}}",
+    "steering": "Inserting into {{names}}'s turn…",
+    "steerTaken": "{{names}} already read this one",
+    "steerIdle": "{{names}} has no reply to insert into; it stays queued",
+    "steerEnded": "{{names}} just finished; this goes out as the next message",
+    "steerFailed": "Could not insert it: {{reason}}",
+    "pullBackAction": "Pull back to edit",
     "pullBack": "Pull back into the box: {{text}}",
-    "drop": "Drop this one: {{text}}"
+    "dropAction": "Delete",
+    "drop": "Delete this one: {{text}}"
   },
   "images": {
     "open": "Open image {{index}} of {{count}}",
