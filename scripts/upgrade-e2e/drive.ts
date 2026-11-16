@@ -7,8 +7,9 @@
  *
  * With ETA_E2E_FROM and ETA_E2E_TO it runs the upgrade between two real releases instead, over the
  * seed `chooseSeed` picks: `<builds>/<version>/` holds each, and `<builds>/99.0.0/` a build that
- * cannot hold (`bad-host.ts`). ETA_E2E_REAL=1 takes the upgrade from the build's real upstream, with
- * whatever token it finds, instead of `fake-releases.ts`; there is no bad build there.
+ * cannot hold (`bad-host.ts`), a release only while its own scenario runs. ETA_E2E_REAL=1 takes
+ * the upgrade from the build's real upstream, with whatever token it finds, instead of
+ * `fake-releases.ts`; there is no bad build there.
  *
  * It runs as a user with a real home and a GUI session or a service logon, and it owns `~/.eta`
  * there: not for a computer anyone uses. On Windows it needs an Administrator's terminal and
@@ -24,6 +25,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -66,6 +68,12 @@ const FROM = process.env.ETA_E2E_FROM;
 const TO = process.env.ETA_E2E_TO;
 const REAL = process.env.ETA_E2E_REAL === "1";
 const BAD = "99.0.0";
+/**
+ * Where the build that does not hold waits outside its own scenario. Listed, it would be the
+ * highest release there is, and that is what every upgrade without a version takes: the latest
+ * full release, or with pre-releases on the highest of all.
+ */
+const BAD_AWAY = join(BUILDS, `.${BAD}`);
 
 let failures = 0;
 let checks = 0;
@@ -426,19 +434,39 @@ const finished = (): Promise<boolean> =>
     240,
   );
 
-/** The page's button: the same call, from the same place, on the service's own rights. */
-async function pressButton(force = false): Promise<void> {
+interface Check {
+  blocked: string | null;
+  latest: string | null;
+  prerelease?: boolean;
+}
+
+/**
+ * The page's button: the same call, from the same place, on the service's own rights. With
+ * `prerelease`, the switch under Settings → Update is turned on first, as a person going to a
+ * pre-release has to: the latest release is never one, so the button would not offer it.
+ */
+async function pressButton({
+  force = false,
+  prerelease = false,
+} = {}): Promise<string | null> {
   const client = await connect(`ws://127.0.0.1:${PORT}/ws`, {
     origin: `http://127.0.0.1:${PORT}`,
   });
   await client.hello();
-  const check = (await client.call("upgrade", "check")) as {
-    blocked: string | null;
-    latest: string | null;
-  };
+  let check = (await client.call("upgrade", "check")) as Check;
+  // A build from before the switch has none, and takes the latest release as it comes.
+  if (prerelease && check.prerelease !== undefined) {
+    want(
+      "pre-releases are on",
+      await client.call("upgrade", "setPrerelease", { prerelease: true }),
+      { prerelease: true },
+    );
+    check = (await client.call("upgrade", "check")) as Check;
+  }
   want("the page may update", check.blocked, null);
   await client.call("upgrade", "start", { force });
   client.close();
+  return check.latest;
 }
 
 const pinLatest = (version: string): void =>
@@ -549,7 +577,8 @@ const CROSS: Record<string, () => Promise<void>> = {
       await serviceKnowsReleases();
       pinLatest(TO!);
     }
-    await pressButton();
+    const offered = await pressButton({ prerelease: TO!.includes("-") });
+    want("the page offers it", offered, TO);
     await finished();
     want("it ended", ended(), "done");
     await waitFor("/up", up);
@@ -559,7 +588,10 @@ const CROSS: Record<string, () => Promise<void>> = {
   "a build that does not hold goes back, with the seed": async () => {
     if (REAL) return;
     const manifest = await seeded(FROM!);
-    const { code, out } = await eta(["upgrade", BAD]);
+    renameSync(BAD_AWAY, join(BUILDS, BAD));
+    const { code, out } = await eta(["upgrade", BAD]).finally(() =>
+      renameSync(join(BUILDS, BAD), BAD_AWAY),
+    );
     console.log(out.replace(/^/gm, "    | "));
     want("exit", code, 1);
     has("it says so", out, "did not hold");
@@ -1104,6 +1136,7 @@ const model = spawn(
   { stdio: "ignore" },
 );
 await sleep(1000);
+if (existsSync(join(BUILDS, BAD))) renameSync(join(BUILDS, BAD), BAD_AWAY);
 
 try {
   const chosen = FROM !== undefined && TO !== undefined ? CROSS : SCENARIOS;
@@ -1124,6 +1157,7 @@ try {
   server.kill();
   model.kill();
   rmSync(join(BUILDS, "latest"), { force: true });
+  if (existsSync(BAD_AWAY)) renameSync(BAD_AWAY, join(BUILDS, BAD));
 }
 
 writeFileSync("upgrade-e2e-results.json", JSON.stringify(results, null, 2));

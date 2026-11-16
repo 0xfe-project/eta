@@ -129,11 +129,38 @@ export function restoreSeed(seed: string, dataDir: string, home: string): void {
   }
 }
 
+/**
+ * What a host makes for itself when it starts, out of what it is checked on: a later build makes
+ * agents with a system role (Captain) and their direct conversations, which no seed has. The
+ * agents are told by `system_role`, not by name, so a person's agent called Captain is still the
+ * seed's. Temporary views of the same names come first in every query of this connection, the
+ * manifest's own included; nothing is written to the database.
+ */
+function leaveOutSystemData(db: Database): void {
+  const columns = db
+    .query<{ name: string }, []>("PRAGMA table_info(agent)")
+    .all();
+  if (!columns.some(({ name }) => name === "system_role")) return;
+  const system = "SELECT id FROM main.agent WHERE system_role IS NOT NULL";
+  db.exec(`
+    CREATE TEMP VIEW agent AS
+      SELECT * FROM main.agent WHERE system_role IS NULL;
+    CREATE TEMP VIEW conversation AS
+      SELECT * FROM main.conversation AS c
+      WHERE NOT (c.kind = 'direct' AND EXISTS (
+        SELECT 1 FROM main.participant AS p
+        WHERE p.conversation_id = c.id AND p.agent_id IN (${system})));
+    CREATE TEMP VIEW participant AS
+      SELECT * FROM main.participant WHERE agent_id NOT IN (${system});
+  `);
+}
+
 /** Everything that is no longer as the seed left it; nothing, when it is all there. */
 export function seedProblems(manifest: Manifest, dataDir: string): string[] {
   const problems: string[] = [];
   const db = new Database(join(dataDir, "eta.sqlite"), { readonly: true });
   try {
+    leaveOutSystemData(db);
     const present = new Set(tables(db));
     for (const [table, seeded] of Object.entries(manifest.counts)) {
       if (!present.has(table)) problems.push(`table ${table} is gone`);
