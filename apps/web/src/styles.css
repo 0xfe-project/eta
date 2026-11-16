@@ -676,6 +676,7 @@
   /* Copy, on the message it copies: invisible until the message is hovered, because a row of
    * buttons nobody is pressing is a row of noise. Copied keeps it up for its beat. */
   .message:hover .message-copy-btn,
+  .message-copy-btn:focus-visible,
   .message-copy-btn[data-copied="true"] {
     opacity: 1;
   }
@@ -686,6 +687,12 @@
     background: transparent;
     opacity: 0;
     cursor: pointer;
+  }
+  /* A screen with no hover has no way to reveal it: there it stays, just as faint. */
+  @media (hover: none), (pointer: coarse) {
+    .message-copy-btn {
+      opacity: 1;
+    }
   }
 
   .system-message {
