@@ -6,6 +6,7 @@ import { agentName, useAgentList } from "@/queries/agents";
 import { reviewItemsOf } from "./captain-review-model";
 import { when } from "./routine-format";
 import { StateMark } from "./state-mark";
+import { CopyMessage } from "./transcript/copy-message";
 
 type ReviewTone = "attention" | "danger" | "neutral" | "success";
 type ReviewLabel =
@@ -70,6 +71,8 @@ export function CaptainReview({ message }: { message: MessageView }) {
         >
           {when(message.createdAt)}
         </time>
+        {/* The review as the platform wrote it, which is what gets pasted into a fix. */}
+        <CopyMessage text={message.text} />
       </header>
 
       {reviews.length === 0 ? (
