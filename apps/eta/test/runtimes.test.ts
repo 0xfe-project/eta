@@ -23,7 +23,7 @@ import { scriptedRuntime } from "@botiverse/oar/testing";
 import { createOarRuntimes } from "@eta/runtime-oar";
 import { describe, expect, it } from "vitest";
 import { until } from "./support/client";
-import { scriptedModels } from "./support/models";
+import { say, scriptedModels } from "./support/models";
 import { remoteWorld, sessionOf } from "./support/remote";
 import { world } from "./support/world";
 
@@ -376,6 +376,126 @@ describe("eta's tools, called by an agent on Claude Code", () => {
       artifactId,
     );
     expect(versions).toEqual([1, 2]);
+  });
+});
+
+describe("eta's tools, on eta and on Claude Code", () => {
+  /** What eta's model is given of a tool, as JSON: what reaches a provider. */
+  interface Definition {
+    name: string;
+    description: string;
+    parameters: unknown;
+  }
+
+  it("are defined once: the MCP listing is what the eta runtime gives its model, field by field", async () => {
+    const etaTools: Definition[] = [];
+    const { models } = scriptedModels(() => say("ok"));
+    const stream = models.streamSimple.bind(models);
+    models.streamSimple = (model, context, options) => {
+      if (etaTools.length === 0)
+        for (const tool of context.tools ?? [])
+          etaTools.push(
+            JSON.parse(
+              JSON.stringify({
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.parameters,
+              }),
+            ) as Definition,
+          );
+      return stream(model, context, options);
+    };
+    let served: Definition[] = [];
+    const w = await world({
+      models,
+      runtimes: createOarRuntimes({
+        registry: createRuntimeRegistry([
+          scriptedRuntime({
+            id: "claude",
+            turn: async (turn) => {
+              const server = turn.options.mcpServers?.find(
+                (entry) => entry.name === "eta",
+              );
+              if (server === undefined || !("url" in server))
+                throw new Error("the session was not given eta's tools");
+              const response = await fetch(server.url, {
+                method: "POST",
+                headers: {
+                  ...server.headers,
+                  "content-type": "application/json",
+                  accept: "application/json, text/event-stream",
+                },
+                body: JSON.stringify({
+                  jsonrpc: "2.0",
+                  id: 1,
+                  method: "tools/list",
+                }),
+              });
+              const reply = (await response.json()) as {
+                result: {
+                  tools: {
+                    name: string;
+                    description?: string;
+                    inputSchema: unknown;
+                  }[];
+                };
+              };
+              served = reply.result.tools.map((tool) => ({
+                name: tool.name,
+                description: tool.description ?? "",
+                parameters: tool.inputSchema,
+              }));
+              turn.say("ok");
+            },
+          }),
+        ]),
+      }),
+    });
+    for (const agent of [
+      await w.agent("Ada", { model: "fake:model" }),
+      await w.agent("Cody", { runtime: "claude", model: "claude:sonnet" }),
+    ]) {
+      const chat = await direct(w, agent);
+      await w.settled(chat, (await w.send(chat, "hello")).replies[0]!.id);
+    }
+
+    const byName = new Map(etaTools.map((tool) => [tool.name, tool]));
+    // Claude Code is offered only the host's tools; every one of them is one eta's model has too.
+    expect(served.length).toBeGreaterThan(0);
+    expect(served.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(["draft_task", "create_task", "list_tasks"]),
+    );
+    for (const tool of served) {
+      const eta = byName.get(tool.name);
+      expect(eta, tool.name).toBeDefined();
+      expect(tool.description, tool.name).toBe(eta!.description);
+      const ours = eta!.parameters as { properties?: Record<string, unknown> };
+      const theirs = tool.parameters as {
+        properties?: Record<string, unknown>;
+      };
+      // Field by field first, so a difference names the parameter; then the whole schema.
+      expect(Object.keys(theirs.properties ?? {}), tool.name).toEqual(
+        Object.keys(ours.properties ?? {}),
+      );
+      for (const [field, schema] of Object.entries(ours.properties ?? {}))
+        expect(theirs.properties?.[field], `${tool.name}.${field}`).toEqual(
+          schema,
+        );
+      expect(tool.parameters, tool.name).toEqual(eta!.parameters);
+    }
+    // The parameters #177 found stale on Claude Code are there, on both sides.
+    for (const name of ["draft_task", "create_task"]) {
+      const properties = Object.keys(
+        (
+          served.find((tool) => tool.name === name)!.parameters as {
+            properties: Record<string, unknown>;
+          }
+        ).properties,
+      );
+      expect(properties, name).toEqual(
+        expect.arrayContaining(["status", "parent", "dependsOn"]),
+      );
+    }
   });
 });
 

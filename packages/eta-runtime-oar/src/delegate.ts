@@ -47,6 +47,7 @@ import type {
   AgentMessage,
   DelegatedRunResult,
   KernelConfig,
+  KernelTool,
   RunDelegate,
   RunDelegateContext,
 } from "@eta/core";
@@ -190,6 +191,35 @@ function compactionOf(
   }
 }
 
+/**
+ * A session tool as an MCP tool definition: the name, description and parameters the eta runtime
+ * gives its model, unchanged. The definition exists once, on the host; this only carries it.
+ */
+function hostToolDefinition(tool: KernelTool): Omit<HostTool, "handler"> {
+  return {
+    name: tool.name,
+    ...(tool.description === undefined
+      ? {}
+      : { description: tool.description }),
+    inputSchema: ((tool as { parameters?: Record<string, unknown> })
+      .parameters ?? {
+      type: "object",
+      properties: {},
+    }) as Record<string, unknown>,
+  };
+}
+
+/** What tells one served tool set from another: everything the runtime is shown of it. */
+function signatureOf(tools: readonly HostTool[]): string {
+  return JSON.stringify(
+    tools.map(({ name, description, inputSchema }) => [
+      name,
+      description,
+      inputSchema,
+    ]),
+  );
+}
+
 /** A session tool's result as an MCP tool answer, and the details that answer cannot carry. */
 function hostResultOf(
   name: string,
@@ -238,6 +268,8 @@ export class OarDelegate implements RunDelegate {
   #opening: Promise<Opened> | undefined;
   #resume: string | undefined;
   #served: ServedMcpTools | undefined;
+  /** What `#served` lists, to tell a changed tool set from the same one. */
+  #servedSignature: string | undefined;
   /** The names of the tools served: the only ones told back as the host's. */
   #hostTools: ReadonlySet<string> = new Set();
   /** The runtime session's running total charged to messages so far. */
@@ -275,6 +307,8 @@ export class OarDelegate implements RunDelegate {
       if (context.signal.aborted) return { status: "aborted" };
       const settings = this.#settings(context.config());
       const opened = await this.#ensure(context, settings);
+      // The host's tools as they are now: a set that changed since the last run is served anew.
+      if (this.#served !== undefined) await this.#serve(context);
       this.#calls = new HostCalls(this.#options.runtime, this.#hostTools);
       const translator = new Translator(
         context,
@@ -584,25 +618,48 @@ export class OarDelegate implements RunDelegate {
     };
   }
 
-  /** The host's tools, served once for the life of this delegate. */
+  /**
+   * The host's tools, as the runtime is offered them: one server for the life of this delegate,
+   * its list assembled again on every call. When the list differs from what is served (a tool
+   * came or went, a description or a schema changed) the server takes the new one and sends
+   * `notifications/tools/list_changed`, so the runtime lists again.
+   *
+   * What a runtime does with that is its own business. Claude Code (2.1.325, measured in #177)
+   * lists again at once, so a tool it has not loaded yet, or a tool that is new, comes in the new
+   * version; a tool it already loaded with ToolSearch keeps the definition of that first load for
+   * the rest of the conversation, resumes included, because it is recorded in its transcript.
+   *
+   * A runtime opened when the session had no host tools was given no server, so it hears of
+   * tools that come later only when it is opened again.
+   */
   async #serve(
     context: RunDelegateContext,
   ): Promise<ServedMcpTools | undefined> {
-    if (this.#served !== undefined) return this.#served;
+    const tools = this.#listed(context);
+    const signature = signatureOf(tools);
+    if (this.#served !== undefined) {
+      if (signature !== this.#servedSignature) {
+        this.#served.setTools(tools);
+        this.#servedSignature = signature;
+        this.#hostTools = new Set(tools.map((tool) => tool.name));
+      }
+      return this.#served;
+    }
+    if (tools.length === 0) return undefined;
+    this.#hostTools = new Set(tools.map((tool) => tool.name));
+    this.#served = await serveMcpTools({ name: HOST_SERVER, tools });
+    this.#servedSignature = signature;
+    return this.#served;
+  }
+
+  /** The host's tools for the runtime, read from the session now. */
+  #listed(context: RunDelegateContext): HostTool[] {
     const names = new Set(this.#options.hostTools());
-    const tools: HostTool[] = context
+    return context
       .tools()
       .filter((tool) => names.has(tool.name))
       .map((tool) => ({
-        name: tool.name,
-        ...(tool.description === undefined
-          ? {}
-          : { description: tool.description }),
-        inputSchema: ((tool as { parameters?: Record<string, unknown> })
-          .parameters ?? {
-          type: "object",
-          properties: {},
-        }) as Record<string, unknown>,
+        ...hostToolDefinition(tool),
         handler: async (input) => {
           const run = this.#run;
           const calls = this.#calls;
@@ -619,10 +676,6 @@ export class OarDelegate implements RunDelegate {
           return result;
         },
       }));
-    if (tools.length === 0) return undefined;
-    this.#hostTools = new Set(tools.map((tool) => tool.name));
-    this.#served = await serveMcpTools({ name: HOST_SERVER, tools });
-    return this.#served;
   }
 
   #imageDir(): string {
