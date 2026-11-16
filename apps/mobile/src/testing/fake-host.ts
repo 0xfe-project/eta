@@ -141,7 +141,9 @@ export class FakeHost {
 
   socket(refused: RefusedBy | undefined): WireSocket {
     let onClose: (why?: RefusedBy) => void = () => undefined;
-    if (refused !== undefined) setTimeout(onClose, 200, refused);
+    // `onClose` is reassigned below once the app listens: read it when the timer fires.
+    // eslint-disable-next-line e18e/prefer-timer-args
+    if (refused !== undefined) setTimeout(() => onClose(refused), 200);
     else {
       setTimeout(() => {
         const ops = [...this.ops.keys()].map((name) => {
