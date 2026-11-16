@@ -1,14 +1,16 @@
 import type { ConversationSummary } from "@eta/client-contracts";
 import { runningFirst } from "@eta/client-contracts";
 import { useTranslation } from "react-i18next";
-import { useArtifacts } from "@/queries/artifacts";
 import { useCaptain } from "@/queries/captain";
 import { useConversation } from "@/queries/conversations";
 import { useTasks } from "@/queries/tasks";
 import { ActivityRefCard } from "./activity-ref";
+import { recentArtifacts, useGroupArtifacts } from "./artifact-filter";
+import { ArtifactRow } from "./artifact-list";
 import { CaptainModel, CaptainOperations } from "./captain-operations";
 import { GroupMembers } from "./groups";
 import { Section } from "./panel-section";
+import { useWorkspaceView } from "./workspace-search";
 
 /**
  * Context: what this conversation is made of, for the panel beside it, ordered by
@@ -34,10 +36,13 @@ import { Section } from "./panel-section";
 /** What tasks leave out: a closed task needs nothing more, and the task tab still holds it. */
 const closed = new Set<string>(["done", "cancelled"]);
 
+/** How many artifacts the context tab lists; the Artifacts tab holds the rest. */
+const RECENT = 5;
+
 /**
- * Tasks and artifacts as rows, edge to edge: the rule between two runs into the panel's own edges. One
- * height for both, a few rows on a normal window and less on a short one, so that members under them
- * stays in reach; a short list just ends. `overscroll-y-auto` undoes the panes' global
+ * Tasks as rows, edge to edge: the rule between two runs into the panel's own edges. One
+ * height, a few rows on a normal window and less on a short one, so that members under it
+ * stay in reach; a short list just ends. `overscroll-y-auto` undoes the panes' global
  * `overscroll-behavior: none`, or a list at its end, or with nothing to scroll, would keep the
  * wheel and the finger from the panel around it.
  */
@@ -57,9 +62,10 @@ export function GroupPanel({
     "tasks",
   ] as const);
   const { tasks: board } = useTasks();
-  const { artifacts } = useArtifacts();
+  const { artifacts: groupArtifacts } = useGroupArtifacts(group?.id);
   const { info } = useConversation(group?.id);
   const captain = useCaptain();
+  const [, setView] = useWorkspaceView();
   if (group === undefined) return null;
   // Captain's conversation is a conversation, so this panel is its panel too — but what it is
   // working on is not a list of tasks of its own: it is the operations it is running for everyone
@@ -67,9 +73,6 @@ export function GroupPanel({
   const isCaptain = captain.identity?.conversationId === group.id;
   const groupTasks = board.filter((task) => task.conversationId === group.id);
   const tasks = groupTasks.filter((task) => !closed.has(task.status));
-  const groupArtifacts = artifacts.filter(
-    (artifact) => artifact.conversationId === group.id,
-  );
   // The last move made on them, latest first; within a status, a task that runs comes before one
   // that waits in the queue however recently that one moved.
   const listed = runningFirst(
@@ -128,20 +131,33 @@ export function GroupPanel({
             {translateText("artifacts:empty.title")}
           </p>
         ) : (
-          <ul className={listClass}>
-            {groupArtifacts.map((artifact) => (
-              <li key={artifact.id}>
-                <ActivityRefCard
-                  value={{
-                    kind: "artifact",
-                    id: artifact.id,
-                    title: artifact.title,
-                    number: artifact.versions[0]?.number ?? 0,
-                  }}
-                />
-              </li>
-            ))}
-          </ul>
+          // No height cap and no scroll of its own: a few rows, then the way to all of them.
+          <>
+            <ul className="-mx-3 divide-y divide-border">
+              {recentArtifacts(groupArtifacts, RECENT).map((artifact) => (
+                <li key={artifact.id}>
+                  <ArtifactRow artifact={artifact} />
+                </li>
+              ))}
+            </ul>
+            {groupArtifacts.length > RECENT ? (
+              <div className="-mx-3 -mb-2 flex items-center justify-between gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
+                <span className="tabular-nums">
+                  {translateText("artifacts:list.recent", {
+                    total: groupArtifacts.length,
+                    shown: RECENT,
+                  })}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void setView("artifacts")}
+                  className="shrink-0 text-foreground hover:underline focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
+                >
+                  {translateText("artifacts:list.viewAll")}
+                </button>
+              </div>
+            ) : null}
+          </>
         )}
       </Section>
 

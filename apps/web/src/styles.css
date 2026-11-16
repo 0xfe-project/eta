@@ -294,6 +294,7 @@
   --color-overlay: var(--overlay);
   --color-overlay-hover: var(--overlay-hover);
   --color-faint: var(--faint);
+  --color-highlight: var(--highlight);
   --color-run-model: var(--run-model);
   --color-run-shell: var(--run-shell);
   --color-run-read: var(--run-read);
@@ -367,6 +368,8 @@
   --overlay-hover: oklch(0.145 0 0 / 6%);
   /* Text that is there but not asking to be read: timestamps, counts, "—". */
   --faint: oklch(0.64 0 0);
+  /* A search match marked in text. */
+  --highlight: oklch(0.93 0.09 95);
   --state-error: oklch(0.577 0.245 27.325);
   --state-warning: oklch(0.62 0.18 75);
   --state-success: oklch(0.527 0.154 150.069);
@@ -422,6 +425,7 @@
   --overlay: oklch(0.98 0 0 / 5%);
   --overlay-hover: oklch(0.98 0 0 / 10%);
   --faint: oklch(0.98 0 0 / 38%);
+  --highlight: oklch(0.45 0.08 95);
   --state-error: oklch(0.68 0.19 25);
   --state-warning: oklch(0.72 0.16 75);
   --state-success: oklch(0.65 0.16 150);
