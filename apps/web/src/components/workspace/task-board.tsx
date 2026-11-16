@@ -20,10 +20,22 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { useAgentList } from "@/queries/agents";
-import { useTask, useTasks } from "@/queries/tasks";
+import {
+  useAllTasks,
+  useArchivedTasks,
+  useTask,
+  useTasks,
+} from "@/queries/tasks";
 import { PageHeader } from "./app-shell";
 import { BackToTop } from "./back-to-top";
 import { when } from "./routine-format";
+import {
+  ArchivedBanner,
+  ArchiveDialog,
+  ArchivedMatches,
+  ArchivedToggle,
+  ArchivedView,
+} from "./task-archive";
 import { BoardView } from "./task-board-view";
 import {
   BlockedBanner,
@@ -60,6 +72,7 @@ import {
   TaskProperties,
   Timeline,
 } from "./tasks";
+import { useArchiveAction } from "./use-archive-action";
 
 // The tasks page: every task as a board to drag across the statuses, a list grouped by the piece
 // of work each belongs to, or a plan of the steps the work falls into; or one open task in its
@@ -92,7 +105,9 @@ function TaskPage({ id }: { id: string }) {
   const [cancelling, setCancelling] = useState(false);
   // Opened from the header, only while the rail does not fit.
   const [propertiesOpen, setPropertiesOpen] = useState(false);
-  const { tasks: all } = useTasks();
+  // Archived ones too: a subtask, a parent or a dependency put away is still part of this one.
+  const { tasks: all } = useAllTasks();
+  const archive = useArchiveAction(task, all);
   const phone = useIsMobile();
   // A piece of work opens on its plan; its overview is the page every task has.
   const [mode, setMode] = useState<"overview" | "plan">("plan");
@@ -179,6 +194,9 @@ function TaskPage({ id }: { id: string }) {
                 {translateText("statusMenu.cancelTree")}
               </DropdownMenuItem>
             ) : null}
+            <DropdownMenuItem onSelect={archive.run}>
+              {archive.label}
+            </DropdownMenuItem>
             <DropdownMenuItem
               variant="destructive"
               onSelect={() => setDeleting(true)}
@@ -187,6 +205,7 @@ function TaskPage({ id }: { id: string }) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <ArchiveDialog action={archive} />
         <CancelTreeDialog
           task={task}
           open={cancelling}
@@ -206,6 +225,7 @@ function TaskPage({ id }: { id: string }) {
           tabIndex={-1}
           className="min-h-0 flex-1 overflow-y-auto px-4 py-4 outline-none sm:px-6"
         >
+          <ArchivedBanner task={task} className="mb-3" />
           <p className="mb-3 text-xs text-muted-foreground tabular-nums">
             {`#${task.number} · `}
             {stepsLeft(
@@ -235,6 +255,7 @@ function TaskPage({ id }: { id: string }) {
         >
           <div className="min-h-0 overflow-y-auto">
             <div className="mx-auto w-full max-w-[42.5rem] space-y-6 px-4 pt-4 pb-6 sm:px-8">
+              <ArchivedBanner task={task} />
               <p className="text-xs text-muted-foreground tabular-nums">
                 <span>#{task.number}</span>
                 {isParent ? ` · ${translateText("detail.parent")}` : null}
@@ -321,6 +342,7 @@ function Filters({ tasks }: { tasks: readonly Task[] }) {
       <ExecutorFilter tasks={tasks} />
       <ParentFilter tasks={tasks} />
       <ClearFilter />
+      <ArchivedToggle />
     </>
   );
 }
@@ -366,6 +388,10 @@ export function TaskBoard() {
   ] as const);
   const [nav] = useTaskNav();
   const { tasks, loaded, error } = useTasks();
+  const archived = useArchivedTasks();
+  // The done column says how many more of its kind are put away.
+  const archivedDone = archived.filter((t) => t.status === "done").length;
+  const showArchived = nav.archived === true;
   const view = useTaskView((s) => s.view);
   const setView = useTaskView((s) => s.setView);
   const grouping = useTaskView((s) => s.grouping);
@@ -399,12 +425,16 @@ export function TaskBoard() {
             </>
           }
         >
-          {phone ? null : <Filters tasks={tasks} />}
-          {view === "list" && !phone ? <GroupingMenu /> : null}
-          <ViewSwitch value={view} onChange={setView} />
+          {phone ? null : showArchived ? (
+            <ArchivedToggle />
+          ) : (
+            <Filters tasks={tasks} />
+          )}
+          {view === "list" && !phone && !showArchived ? <GroupingMenu /> : null}
+          {showArchived ? null : <ViewSwitch value={view} onChange={setView} />}
           <NewTask />
         </PageHeader>
-        {phone ? (
+        {phone && !showArchived ? (
           <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b px-2 py-1">
             <Filters tasks={tasks} />
           </div>
@@ -414,42 +444,59 @@ export function TaskBoard() {
         <section
           role={id ? undefined : "main"}
           id={id ? undefined : "main"}
-          data-view={view}
-          className="min-h-0 flex-1 overflow-hidden"
+          data-view={showArchived ? "archived" : view}
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
         >
-          {error ? (
-            <div className="mx-auto max-w-md py-16">
-              <LoadError
-                what={translateText("navigation:sections.tasks")}
-                error={error}
-              />
-            </div>
-          ) : !loaded ? (
-            <Loading rows={6} className="mx-auto max-w-content py-3" />
-          ) : tasks.length === 0 ? (
-            <div className="mx-auto max-w-md py-16">
-              <Empty icon={ListChecksIcon} title={translateText("empty.title")}>
-                {translateText("empty.description")}
-              </Empty>
-            </div>
-          ) : shown.length === 0 ? (
-            <div className="mx-auto max-w-md py-16">
-              <Empty
-                icon={ListChecksIcon}
-                title={translateText("views.noMatch")}
-              />
-            </div>
-          ) : view === "list" ? (
-            <ListView
-              tasks={shown}
-              all={tasks}
-              grouping={grouping}
-              phone={phone}
-            />
-          ) : view === "plan" ? (
-            <PlanView tasks={shown} all={tasks} phone={phone} />
+          {showArchived ? (
+            <ArchivedView />
           ) : (
-            <BoardView tasks={shown} all={tasks} phone={phone} />
+            <>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                {error ? (
+                  <div className="mx-auto max-w-md py-16">
+                    <LoadError
+                      what={translateText("navigation:sections.tasks")}
+                      error={error}
+                    />
+                  </div>
+                ) : !loaded ? (
+                  <Loading rows={6} className="mx-auto max-w-content py-3" />
+                ) : tasks.length === 0 && filter.q.trim() === "" ? (
+                  <div className="mx-auto max-w-md py-16">
+                    <Empty
+                      icon={ListChecksIcon}
+                      title={translateText("empty.title")}
+                    >
+                      {translateText("empty.description")}
+                    </Empty>
+                  </div>
+                ) : shown.length === 0 ? (
+                  <div className="mx-auto max-w-md py-16">
+                    <Empty
+                      icon={ListChecksIcon}
+                      title={translateText("views.noMatch")}
+                    />
+                  </div>
+                ) : view === "list" ? (
+                  <ListView
+                    tasks={shown}
+                    all={tasks}
+                    grouping={grouping}
+                    phone={phone}
+                  />
+                ) : view === "plan" ? (
+                  <PlanView tasks={shown} all={tasks} phone={phone} />
+                ) : (
+                  <BoardView
+                    tasks={shown}
+                    all={tasks}
+                    phone={phone}
+                    archivedDone={filtered ? 0 : archivedDone}
+                  />
+                )}
+              </div>
+              <ArchivedMatches q={filter.q} onBoard={shown.length} />
+            </>
           )}
         </section>
       </div>

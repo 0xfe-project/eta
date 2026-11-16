@@ -31,7 +31,7 @@ function ancestorsOf(task: Task, all: readonly Task[]): Task[] {
 }
 
 /** Every task under it, at any depth. */
-function descendantsOf(id: string, all: readonly Task[]): Task[] {
+export function descendantsOf(id: string, all: readonly Task[]): Task[] {
   const out: Task[] = [];
   const seen = new Set([id]);
   const walk = (at: string) => {

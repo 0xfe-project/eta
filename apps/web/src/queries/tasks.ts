@@ -4,6 +4,7 @@ import type {
   BoardTaskView,
   TaskActivityView,
   TaskArgs,
+  TaskBoardSettings,
   TaskResults,
   TaskRunStatus,
   TaskRunView,
@@ -29,10 +30,72 @@ export type RunStatus = TaskRunStatus;
 /** A task with its history, as its own page needs it. */
 export type TaskDetail = BoardTaskDetail & { activity: TaskActivityView[] };
 
-/** Every task, most recently moved first (the order the host keeps). */
+/**
+ * The board: every task not archived, most recently moved first (the order the host keeps). What
+ * shows tasks to work on reads this; what finds a task it was given (a card, a `#N`, a parent)
+ * reads `useAllTasks`.
+ */
 export function useTasks() {
   const { items, loaded, error } = useListTarget<BoardTaskView>("tasks");
   return { tasks: items, loaded, error };
+}
+
+const NO_TASKS: readonly BoardTaskView[] = [];
+
+/** The archived tasks, the one archived last first. Empty from a host that has none to say. */
+export function useArchivedTasks() {
+  const archived = useTarget("tasks")?.sections.archived as
+    | readonly BoardTaskView[]
+    | undefined;
+  return archived ?? NO_TASKS;
+}
+
+/** Every task, archived or not: for finding a task by id or number, and for what counts them all. */
+export function useAllTasks() {
+  const { tasks, loaded, error } = useTasks();
+  const archived = useArchivedTasks();
+  const all = useMemo(
+    () => (archived.length === 0 ? tasks : [...tasks, ...archived]),
+    [tasks, archived],
+  );
+  return { tasks: all, loaded, error };
+}
+
+/** Whether a task is archived: put away from the board, still itself everywhere else. */
+export const isArchived = (task: Pick<BoardTaskView, "archivedAt">): boolean =>
+  task.archivedAt !== null && task.archivedAt !== undefined;
+
+const DEFAULT_SETTINGS: TaskBoardSettings = { archiveAfterDays: 7 };
+
+/** The board's settings: how soon a quiet done task is archived. */
+export function useBoardSettings(): TaskBoardSettings {
+  const settings = useTarget("tasks")?.sections.settings as
+    | TaskBoardSettings
+    | undefined;
+  return settings ?? DEFAULT_SETTINGS;
+}
+
+export function useSetBoardSettings() {
+  return useWireMutation<TaskArgs["setSettings"], TaskResults["setSettings"]>(
+    "tasks",
+    "setSettings",
+  );
+}
+
+/** Put a task away (with its subtasks); `stopRuns` stops what runs first. */
+export function useArchiveTask() {
+  return useWireMutation<TaskArgs["archive"], TaskResults["archive"]>(
+    "tasks",
+    "archive",
+  );
+}
+
+/** Bring tasks back to the board. */
+export function useUnarchiveTasks() {
+  return useWireMutation<TaskArgs["unarchive"], TaskResults["unarchive"]>(
+    "tasks",
+    "unarchive",
+  );
 }
 
 /**

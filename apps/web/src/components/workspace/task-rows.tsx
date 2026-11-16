@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { foldable, useFold } from "@/lib/fold";
 import { cn } from "@/lib/utils";
-import { useTasks } from "@/queries/tasks";
+import { useAllTasks } from "@/queries/tasks";
 import { muted } from "./activity-card";
 import { ArtifactButton } from "./artifact-dialog";
 import { ProgressBar } from "./task-bits";
@@ -140,7 +140,8 @@ export function TaskCardRow({ message }: { message: MessageView }) {
   ] as const);
   const sectionLink = useSectionLink();
   const [open, fold] = useFold(message.id, true);
-  const { tasks: all } = useTasks();
+  // A card stays itself once its task is archived: it is found among all of them.
+  const { tasks: all } = useAllTasks();
   const card = message.data as unknown as TaskCardData;
   if (card.deleted)
     return (

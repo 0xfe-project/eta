@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { agentName, useAgentList } from "@/queries/agents";
 import { useUpdateTask } from "@/queries/tasks";
 import { wireErrorMessage } from "@/queries/wire";
+import { ArchivedMore } from "./task-archive";
 import {
   BlockedActions,
   ProgressBar,
@@ -316,6 +317,7 @@ function Column({
   onFold,
   className,
   hideHead = false,
+  archived = 0,
 }: {
   status: TaskStatus;
   tasks: readonly Task[];
@@ -324,6 +326,8 @@ function Column({
   onFold?: ((folded: boolean) => void) | undefined;
   className?: string;
   hideHead?: boolean;
+  /** How many more of this column's tasks are archived: said under its cards. */
+  archived?: number;
 }) {
   const { t } = useTranslation(["tasks"] as const);
   const update = useUpdateTask();
@@ -418,6 +422,7 @@ function Column({
             <ParentCard key={task.id} task={task} all={all} />
           ),
         )}
+        <ArchivedMore count={archived} />
       </ul>
     </section>
   );
@@ -427,9 +432,11 @@ function Column({
 function WideBoard({
   tasks,
   all,
+  archivedDone,
 }: {
   tasks: readonly Task[];
   all: readonly Task[];
+  archivedDone: number;
 }) {
   const [unfolded, setUnfolded] = useState<ReadonlySet<TaskStatus>>(
     () => new Set(),
@@ -451,6 +458,7 @@ function WideBoard({
           all={all}
           folded={false}
           className="w-60 min-w-52 flex-1"
+          archived={status === "done" ? archivedDone : 0}
         />
       ))}
       {aside.map((status) => (
@@ -472,9 +480,11 @@ function WideBoard({
 function PhoneBoard({
   tasks,
   all,
+  archivedDone,
 }: {
   tasks: readonly Task[];
   all: readonly Task[];
+  archivedDone: number;
 }) {
   const { t } = useTranslation(["tasks"] as const);
   const columns = [...main, ...aside];
@@ -550,6 +560,7 @@ function PhoneBoard({
               folded={false}
               hideHead
               className="h-full border-t-0"
+              archived={s === "done" ? archivedDone : 0}
             />
           </div>
         ))}
@@ -562,14 +573,17 @@ export function BoardView({
   tasks,
   all,
   phone,
+  archivedDone = 0,
 }: {
   tasks: readonly Task[];
   all: readonly Task[];
   phone: boolean;
+  /** How many done tasks are archived, said at the foot of the done column. */
+  archivedDone?: number;
 }) {
   return phone ? (
-    <PhoneBoard tasks={tasks} all={all} />
+    <PhoneBoard tasks={tasks} all={all} archivedDone={archivedDone} />
   ) : (
-    <WideBoard tasks={tasks} all={all} />
+    <WideBoard tasks={tasks} all={all} archivedDone={archivedDone} />
   );
 }
