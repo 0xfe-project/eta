@@ -6,9 +6,6 @@
     "test": {
       "passThroughEnv": ["CI"]
     },
-    "lint": {
-      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "$TURBO_ROOT$/eslint.config.js"]
-    },
     "build": {
       "inputs": [
         "$TURBO_DEFAULT$",

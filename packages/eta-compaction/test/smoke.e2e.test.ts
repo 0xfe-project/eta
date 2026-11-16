@@ -3,7 +3,7 @@
  *
  * Skipped unless a configuration file is named, like the other smoke tests:
  *
- *   ETA_SMOKE_CONFIG=~/.eta/config.json bun run test test/smoke-compaction.e2e.test.ts
+ *   ETA_SMOKE_CONFIG=~/.eta/config.json bun run test test/smoke.e2e.test.ts
  *
  * What it proves that the scripted tests cannot: a real model reads a real
  * conversation and writes notes in the format the next reader depends on, the
@@ -12,7 +12,6 @@
  */
 
 import type { AssistantMessage } from "@eta/core";
-import { etaCompaction } from "@eta/compaction";
 import { kernelOn } from "@eta/core";
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";
@@ -21,8 +20,9 @@ import {
   realModels,
   selectProvider,
 } from "@eta/core/testing";
+import { openSession, RunPump } from "@eta/harness";
 import { describe, expect, it } from "vitest";
-import { openSession, RunPump } from "../src/index";
+import { etaCompaction } from "../src/index";
 
 const configPath = process.env.ETA_SMOKE_CONFIG;
 const modelSelector = process.env.ETA_SMOKE_MODEL;

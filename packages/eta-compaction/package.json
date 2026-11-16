@@ -13,7 +13,7 @@
   "scripts": {
     "test": "vitest --run --passWithNoTests",
     "typecheck": "tsc --noEmit",
-    "smoke": "bun run --cwd ../eta-harness smoke",
+    "smoke": "ETA_SMOKE_CONFIG=\"${ETA_SMOKE_CONFIG:-$HOME/.eta/config.json}\" vitest --run test/smoke.e2e.test.ts",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
   },
   "dependencies": {
@@ -21,6 +21,7 @@
     "@eta/harness": "*"
   },
   "devDependencies": {
+    "@earendil-works/pi-ai": "0.85.1",
     "@types/node": "22.19.19",
     "typescript": "5.9.3",
     "vitest": "4.1.9"

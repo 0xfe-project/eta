@@ -10,15 +10,15 @@
 
 import type { AssistantMessage, Model, Usage } from "@earendil-works/pi-ai";
 import type { AgentMessage, CompactionSummarizer, Kernel } from "@eta/core";
-import type { CompactionEntrySource } from "../src/index";
-import { etaCompaction } from "@eta/compaction";
+import type { CompactionEntrySource } from "@eta/harness";
 import { DEFAULT_COMPACTION_SETTINGS, kernelOn, Runner } from "@eta/core";
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
+import { CompactionService } from "@eta/harness";
+import { journaledKernel } from "@eta/harness/testing";
 import { describe, expect, it } from "vitest";
-import { CompactionService } from "../src/index";
-import { journaledKernel } from "../src/testing";
+import { etaCompaction } from "../src/index";
 
 /**
  * What a session assembler does: build the harness's compaction service over the

@@ -15,8 +15,17 @@
     "githubActionsRemoteBaseRefFallback": true
   },
   "tasks": {
+    // Does nothing (no package has the script); its hash stands for the package's
+    // files and, through ^transit, every workspace it depends on. The libraries are
+    // read from source, so a task that reads them depends on it: through build, so
+    // do typecheck and test.
+    "transit": {
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
+      "dependsOn": ["^transit"]
+    },
     "build": {
       "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
+      "dependsOn": ["transit"],
       "outputs": ["dist/**", "out/**", "lib/**"]
     },
     "typecheck": {
@@ -24,8 +33,13 @@
       "dependsOn": ["build"],
       "outputs": []
     },
+    // ESLint reads one file at a time, without types.
     "lint": {
-      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!**/*.md",
+        "$TURBO_ROOT$/eslint.config.js"
+      ],
       "outputs": []
     },
     // The LLM gateway's tests (and the host's, which load it) need its library built.
@@ -34,31 +48,14 @@
       "dependsOn": ["build", "^build"],
       "outputs": []
     },
-    // Root-level ESLint for files outside the workspaces (each workspace lints
-    // itself).
+    // The root package's files are the whole repository; ESLint lints those outside
+    // the workspaces (each workspace lints itself), knip all of it.
     "//#lint:repo": {
-      "inputs": [
-        "*.{js,mjs,ts,json,jsonc}",
-        "deploy/**/*.{js,mjs,ts,json,jsonc}"
-      ],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!apps/**", "!packages/**"],
       "outputs": []
     },
-    // Knip checks the TypeScript/JavaScript workspaces and root configs.
     "//#knip": {
-      "inputs": [
-        "package.json",
-        "bun.lock",
-        "knip.config.ts",
-        "eslint.config.js",
-        "apps/*/{package,tsconfig}.json",
-        "apps/*/{src,test,tests,.storybook}/**/*.{ts,tsx,js,mjs,css}",
-        "apps/*/*.{ts,js,mjs}",
-        "packages/*/package.json",
-        "packages/*/{src,test,tests}/**/*.{ts,tsx,js,mjs}",
-        "packages/*/*.{ts,js,mjs}",
-        "apps/*/public/**/*.js",
-        "!**/*.gen.ts"
-      ],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
       "outputs": []
     },
     "dev": {

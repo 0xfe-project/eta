@@ -9,9 +9,6 @@
     },
     "lint": {
       "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "$TURBO_ROOT$/ruff.toml"]
-    },
-    "test": {
-      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"]
     }
   }
 }
