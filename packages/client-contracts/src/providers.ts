@@ -36,7 +36,16 @@ export const BUILTIN_PROVIDER_PRESETS = {
     name: "OpenCode Go",
     baseUrl: "https://opencode.ai/inference/go/openai/v1",
   },
+  // Command Code's provider API: Chat Completions, Responses and Anthropic Messages behind one
+  // key. eta speaks the first two; its Claude models (Messages only) are listed as unsupported.
+  commandcode: {
+    name: "Command Code",
+    baseUrl: "https://api.commandcode.ai/provider/v1",
+  },
 } as const;
+
+/** Where a Command Code key is made: its Studio, the same key its CLI uses. */
+export const COMMAND_CODE_KEYS_URL = "https://commandcode.ai/settings/keys";
 
 /** Where an Eta Token Plan key is made. */
 export const ETA_TOKEN_PLAN_KEYS_URL =

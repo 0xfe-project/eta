@@ -48,6 +48,7 @@ describe("a missing key", () => {
     expect(keyMissing({ kind: "deepseek", hasApiKey: true })).toBe(false);
     expect(keyMissing({ kind: "opencode", hasApiKey: false })).toBe(true);
     expect(keyMissing({ kind: "opencode-go", hasApiKey: false })).toBe(true);
+    expect(keyMissing({ kind: "commandcode", hasApiKey: false })).toBe(true);
   });
 
   it("claims nothing for custom endpoints, which may be open, or for Codex, which signs in", () => {

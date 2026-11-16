@@ -8,6 +8,7 @@ import type {
 import type { ReactNode } from "react";
 import {
   BUILTIN_PROVIDER_PRESETS,
+  COMMAND_CODE_KEYS_URL,
   ETA_TOKEN_PLAN_KEYS_URL,
 } from "@eta/client-contracts";
 import { useId, useState } from "react";
@@ -86,6 +87,7 @@ const SOURCE_PRESETS: readonly SourcePreset[] = [
   { id: "gemini", group: "key", connector: "gemini" },
   keyPreset("opencode"),
   keyPreset("opencode-go"),
+  keyPreset("commandcode"),
   {
     id: "custom",
     group: "custom",
@@ -636,6 +638,21 @@ export function AddSourceDialog({
             >
               {translateText("add.getEtaKey")}
             </a>
+          ) : null}
+          {kind === "commandcode" ? (
+            <>
+              <a
+                href={COMMAND_CODE_KEYS_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="justify-self-start text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              >
+                {translateText("add.commandCode.getKey")}
+              </a>
+              <p className="text-[11px] text-muted-foreground">
+                {translateText("add.commandCode.plans")}
+              </p>
+            </>
           ) : null}
         </div>
         {error === undefined ? null : (
