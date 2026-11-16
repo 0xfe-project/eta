@@ -74,6 +74,12 @@ export class AcpService {
   readonly #admin: AcpAdmin | undefined;
   /** What each daemon last said, by machine id; only the ones asked for. */
   readonly #remote = new Map<string, AcpMachineList>();
+  /**
+   * Each daemon's fetch generation. A fetch writes what it hears only while its generation is
+   * still the latest: a change, a newer fetch or the machine going offline makes every answer
+   * still on its way stale, so a slow look can never put back a list from before a save.
+   */
+  readonly #generations = new Map<string, number>();
 
   constructor(options: AcpServiceOptions) {
     this.#options = options;
@@ -100,8 +106,9 @@ export class AcpService {
     }
     for (const [machineId, list] of this.#remote) {
       if (this.#options.link(machineId) === undefined) {
-        // Gone offline: what it said is no longer what it has.
+        // Gone offline: what it said is no longer what it has, nor what is still on its way.
         this.#remote.delete(machineId);
+        this.#nextGeneration(machineId);
         continue;
       }
       out[machineId] = list;
@@ -140,6 +147,8 @@ export class AcpService {
     if (previousId !== undefined && previousId !== agent.id)
       this.#unused(place.machine, previousId, `rename ${previousId}`);
     if (place.kind === "local") return place.admin.save(agent, previousId);
+    // What is asked of the list until the change lands is from before it.
+    this.#nextGeneration(place.machine.id);
     const view = await place.link.daemon(
       "acpSave",
       { agent, ...(previousId === undefined ? {} : { previousId }) },
@@ -156,6 +165,7 @@ export class AcpService {
       place.admin.delete(id);
       return;
     }
+    this.#nextGeneration(place.machine.id);
     await place.link.daemon("acpDelete", { id });
     void this.#fetch(place);
   }
@@ -206,6 +216,7 @@ export class AcpService {
     place: Extract<Place, { kind: "daemon" }>,
   ): Promise<AcpMachineList> {
     const id = place.machine.id;
+    const generation = this.#nextGeneration(id);
     const ask = async (settled: boolean): Promise<AcpMachineList> => {
       let list: AcpMachineList;
       try {
@@ -218,8 +229,12 @@ export class AcpService {
       } catch (error) {
         list = { error: messageOf(error) };
       }
-      // Still the same machine's link: one that dropped meanwhile says nothing.
-      if (this.#options.link(id) === place.link) {
+      // Only the latest fetch, on the same link, may write: a later fetch, a change or a link
+      // that dropped meanwhile makes this answer old.
+      if (
+        this.#generations.get(id) === generation &&
+        this.#options.link(id) === place.link
+      ) {
         this.#remote.set(id, list);
         this.#options.changed();
       }
@@ -229,6 +244,12 @@ export class AcpService {
     // The looks it started run behind; their answers arrive as the next list.
     if (now.agents !== undefined) void ask(true);
     return now;
+  }
+
+  #nextGeneration(machineId: string): number {
+    const next = (this.#generations.get(machineId) ?? 0) + 1;
+    this.#generations.set(machineId, next);
+    return next;
   }
 
   /** Refuse when an agent still runs on `acp.<id>` on this machine. */
