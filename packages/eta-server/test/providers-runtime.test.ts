@@ -9,7 +9,9 @@
  * streams), only the network is scripted.
  */
 
+import type { ProviderKind } from "@eta/client-contracts";
 import type { EtaProviderConfig } from "../src/providers/config-types";
+import { MODEL_SOURCES } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
 import {
   providerModelCatalog,
@@ -385,5 +387,82 @@ describe("discovery on its own", () => {
         })
       ).error,
     ).toContain("no data array");
+  });
+});
+
+describe("every kind's request settings", () => {
+  // The golden table: what each kind's model is sent with, as it was before the definition moved
+  // into MODEL_SOURCES. A wrong field in an entry (compat, api, the session header, the thinking
+  // off switch) fails here, and so does a kind added without a row.
+  const GATEWAY = {
+    supportsDeveloperRole: false,
+    supportsStore: false,
+    maxTokensField: "max_tokens",
+  };
+  const golden: Record<
+    ProviderKind,
+    {
+      api?: string;
+      compat?: object;
+      sessionHeader?: string;
+      off: string | null;
+    }
+  > = {
+    eta: { compat: GATEWAY, off: "none" },
+    "openai-codex": { off: "none" },
+    deepseek: { off: "none" },
+    "kimi-coding": { off: "none" },
+    "zai-coding-cn": { off: null },
+    zai: { off: null },
+    opencode: {
+      compat: GATEWAY,
+      sessionHeader: "x-opencode-session",
+      off: "none",
+    },
+    "opencode-go": {
+      compat: GATEWAY,
+      sessionHeader: "x-opencode-session",
+      off: "none",
+    },
+    commandcode: { compat: GATEWAY, off: "none" },
+    "openai-compatible": { off: "none" },
+    "openai-responses": { api: "openai-responses", off: "none" },
+  };
+
+  it("has a row for every kind", () => {
+    expect(Object.keys(golden).sort()).toEqual(
+      Object.keys(MODEL_SOURCES).sort(),
+    );
+  });
+
+  it.each(Object.entries(golden))("%s", async (kind, expected) => {
+    const provider = await buildProvider({
+      id: "p",
+      kind: kind as ProviderKind,
+      baseUrl: "https://endpoint.test/v1",
+      apiKey: "sk",
+      // An id pi-ai does not know: a gateway's model falls back to its kind's settings.
+      models: [
+        {
+          id: "eta-golden-model",
+          reasoning: true,
+          thinkingMode: "both",
+          reasoningEfforts: ["low", "high"],
+        },
+      ],
+    });
+    const model = provider.getModels()[0] as unknown as Record<string, unknown>;
+    expect(model.api).toBe(expected.api ?? "openai-completions");
+    expect(model.compat).toEqual({
+      ...expected.compat,
+      supportsStrictMode: false,
+    });
+    expect(model.sessionHeader).toBe(expected.sessionHeader);
+    expect(model.thinkingLevelMap).toMatchObject({
+      off: expected.off,
+      low: "low",
+      high: "high",
+      medium: null,
+    });
   });
 });
