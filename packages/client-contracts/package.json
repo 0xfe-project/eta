@@ -10,7 +10,8 @@
     "./connect-link": "./src/connect-link.ts",
     "./desktop": "./src/desktop.ts",
     "./plugin-fields": "./src/plugin-fields.ts",
-    "./tool-shape": "./src/tool-shape.ts"
+    "./tool-shape": "./src/tool-shape.ts",
+    "./wire": "./src/wire.ts"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",

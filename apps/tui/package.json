@@ -17,7 +17,6 @@
   },
   "dependencies": {
     "@eta/client-contracts": "*",
-    "@eta/client-wire-proto": "*",
     "@inkjs/ui": "2.0.0",
     "ink": "8.0.0",
     "lowlight": "3.3.0",

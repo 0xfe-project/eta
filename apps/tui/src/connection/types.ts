@@ -2,68 +2,23 @@
  * The connection as the interface sees it: the wire to the host, and the controller that decides
  * which host that is and walks through finding, starting, losing and regaining it.
  */
-import type { MountedPlugin, UpgradeBusy } from "@eta/client-contracts";
+import type { UpgradeBusy } from "@eta/client-contracts";
+import type { Wire, WireState } from "@eta/client-contracts/wire";
 import type { StoreApi } from "zustand/vanilla";
 import type { ConnectionSetting, SaveProblem } from "../config/types";
 
-/** What the client holds for one target. */
-export interface TargetState {
-  sections: Record<string, unknown>;
-  revisions: Record<string, string>;
-  /**
-   * 0: the copy is not being kept up to date (it came with `hello`, or its last user has left).
-   * Above 0: the copy last came from the state frames of a subscription that is still held. It
-   * follows the host while the connection is open; between a drop and the next `hello` it may
-   * lag behind the host.
-   */
-  version: number;
-}
-
-/**
- * `connecting`: the first attempt. `open`: the host said hello. `reconnecting`: the connection
- * dropped (or the first attempt failed) and another one is coming.
- */
-export type WireStatus = "connecting" | "open" | "reconnecting";
-
-export interface WireState {
-  status: WireStatus;
-  /** `hello.ops`: the name of everything callable, `target.action`. */
-  ops: string[];
-  /** `hello.mounted`. */
-  mounted: MountedPlugin[];
-  /** Per target: what the client holds. Only targets with users, and the eager ones. */
-  targets: Record<string, TargetState>;
-  /** The targets the host answered `target:missing` for. Cleared by state for it and by a new connection. */
-  missing: Record<string, true>;
-  /** The last frame the host could not read at all. */
-  error: string | undefined;
-}
-
-export interface WireEvent {
-  name: string;
-  data: unknown;
-}
+export type {
+  TargetState,
+  WireEvent,
+  WireState,
+  WireStatus,
+} from "@eta/client-contracts/wire";
 
 /** One connection to one host's `/ws`, kept open across drops until it is closed. */
-export interface WireClient {
-  readonly store: StoreApi<WireState>;
-  /** Whether the host registered `target.action`, as of the last hello. */
-  can: (op: string) => boolean;
-  /**
-   * Call `target.action` and wait for the reply. Without a connection it rejects at once; a call
-   * the connection dropped under rejects too and is not sent again.
-   */
-  call: <T = unknown>(
-    target: string,
-    action: string,
-    args?: unknown,
-    options?: { timeoutMs?: number },
-  ) => Promise<T>;
-  /** Want a target's state; it is subscribed again after every reconnect. Returns the release, which works once. */
-  subscribe: (target: string) => () => void;
-  /** Listen to a subscribed target's events. Returns the release. */
-  onEvent: (target: string, listener: (event: WireEvent) => void) => () => void;
-}
+export type WireClient = Pick<
+  Wire<StoreApi<WireState>>,
+  "store" | "can" | "call" | "subscribe" | "onEvent"
+>;
 
 /** Why the controller stopped trying and asks the user what to do. */
 export type UnreachableReason =

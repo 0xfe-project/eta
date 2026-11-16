@@ -21,7 +21,7 @@ Vite + React + React Compiler. The UI reads and writes only through one host Web
 
 ## Data layer
 
-`src/lib/wire.ts` is the page's only connection: it speaks the wire protocol from `@eta/client-wire-proto`, handles `hello`, `reply`, `state`, and `event`, reconnects with increasing intervals after disconnection, resubscribes to targets still in use on reconnect, and calls that get no reply end with an error. Connection state and each target's section / revision live in a zustand store. Types come from `@eta/client-contracts`. See [Wire protocol and target](../../docs/architecture/wire-protocol.md) for the protocol.
+`src/lib/wire.ts` is the page's only connection: the client shared with the TUI and the phone (`@eta/client-contracts/wire`) over the browser's WebSocket. It handles `hello`, `reply`, `state`, and `event`, reconnects with increasing intervals after disconnection, resubscribes to targets still in use on reconnect, and calls that get no reply end with an error. Connection state and each target's section / revision live in a zustand store. Types come from `@eta/client-contracts`. See [Wire protocol and target](../../docs/architecture/wire-protocol.md) for the protocol.
 
 `src/queries/wire.ts` wires it into hooks (`useTarget`, `useConnectionLost`, and a mutation for calls); one `src/queries/<target>.ts` per target (agents, machines, projects, conversations, sessions, providers, inbox, tasks, artifacts, routines, memory, usage, personas), with signatures close to react-query conventions. Reads are host-pushed state; no polling.
 
