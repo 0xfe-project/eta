@@ -40,6 +40,7 @@ import { BoardView } from "./task-board-view";
 import {
   BlockedBanner,
   FlowBar,
+  JoinBaseHint,
   ProgressCard,
   QueueReason,
   SubtaskList,
@@ -278,6 +279,7 @@ function TaskPage({ id }: { id: string }) {
               ) : (
                 <>
                   <FlowBar task={task} phone={phone} />
+                  <JoinBaseHint task={task} />
                   <QueueReason task={task} all={all} />
                 </>
               )}

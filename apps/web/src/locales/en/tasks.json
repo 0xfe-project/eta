@@ -493,6 +493,10 @@
     "done": "Done",
     "running": "Running"
   },
+  "join": {
+    "startsAtHead": "It will start from the project’s current HEAD: the changes of the parallel step before it are not brought in automatically.",
+    "stepStartsAtHead": "Step {{step}} will start from the project’s current HEAD: the changes made side by side in step {{before}} are not brought in automatically."
+  },
   "stuck": {
     "title": "This task is stuck and needs your decision",
     "body": "“{{title}}” (#{{number}}), which it waits for, was cancelled ({{when}}), so {{who}} won’t start it. It stays blocked until you decide.",

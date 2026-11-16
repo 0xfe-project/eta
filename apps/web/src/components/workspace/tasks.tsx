@@ -99,7 +99,12 @@ import { Folded } from "./folded";
 import { MemoryPauseToggle } from "./memory-pause-toggle";
 import { when } from "./routine-format";
 import { ArchivedBanner, ArchiveDialog, ArchiveLine } from "./task-archive";
-import { BlockedBanner, FlowBar, QueueReason } from "./task-detail";
+import {
+  BlockedBanner,
+  FlowBar,
+  JoinBaseHint,
+  QueueReason,
+} from "./task-detail";
 import { useTaskDraft } from "./task-draft";
 import {
   actorName,
@@ -2313,6 +2318,7 @@ function TaskView({ task }: { task: TaskDetail }) {
         {task.subtasks == null ? (
           <>
             <FlowBar task={task} phone />
+            <JoinBaseHint task={task} />
             <QueueReason task={task} all={all} />
           </>
         ) : null}

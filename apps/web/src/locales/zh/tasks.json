@@ -493,6 +493,10 @@
     "done": "已完成",
     "running": "运行中"
   },
+  "join": {
+    "startsAtHead": "它会从项目当前的 HEAD 开始，前面并行那一步的改动不会自动带进来。",
+    "stepStartsAtHead": "第 {{step}} 步会从项目当前的 HEAD 开始，第 {{before}} 步并行的改动不会自动带进来。"
+  },
   "stuck": {
     "title": "这个任务卡住了，需要你决定",
     "body": "它等的「{{title}}」（#{{number}}）被取消了（{{when}}），所以 {{who}} 不会自动开始它。在你决定之前，它会一直留在「受阻」。",

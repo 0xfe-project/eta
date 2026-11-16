@@ -586,3 +586,96 @@ describe("the side panel (10)", () => {
     expect(rows.some(([n]) => n === 9)).toBe(false);
   });
 });
+
+describe("a join in a worktree project starts at HEAD (#135)", () => {
+  const HINT =
+    "它会从项目当前的 HEAD 开始，前面并行那一步的改动不会自动带进来。";
+  const worktree = {
+    workspace: {
+      mode: "worktree" as const,
+      base: null,
+      path: null,
+      branch: null,
+    },
+  };
+  const hintOf = (root: ParentNode) =>
+    [...root.querySelectorAll("[data-join-hint]")].map((p) => p.textContent);
+
+  it("says so beside the flow of a worktree task that waits for two", async () => {
+    // #9 waits for #8 and #7, side by side in the step before it.
+    host(tree(), { t9: worktree });
+    const container = await page("t9");
+    expect(hintOf(container)).toEqual([HINT]);
+    // Under the flow bar, before the queue sentence.
+    const hint = container.querySelector("[data-join-hint]")!;
+    expect(hint.previousElementSibling?.hasAttribute("data-flow")).toBe(true);
+  });
+
+  it("says nothing for one prerequisite, a local workspace, a base of its own or a made worktree", async () => {
+    for (const [id, extra] of [
+      ["t3", worktree],
+      ["t9", {}],
+      ["t9", { workspace: { ...worktree.workspace, base: "main" } }],
+      [
+        "t9",
+        { workspace: { ...worktree.workspace, path: "/w/t9", branch: "b" } },
+      ],
+    ] as const) {
+      host(tree(), { [id]: extra });
+      const container = await page(id);
+      expect(container.querySelector("[data-flow]")).not.toBeNull();
+      expect(hintOf(container)).toEqual([]);
+      await cleanup();
+    }
+  });
+
+  /** The tree with the piece of work #4 (and so its subtasks) in `mode`. */
+  const treeIn = (mode: "local" | "worktree") =>
+    tree().map((t) => ({ ...t, workspaceMode: mode }));
+
+  const openForm = async (
+    mode: "local" | "worktree",
+    preset: Parameters<ReturnType<typeof useNewTask.getState>["open"]>[0],
+  ) => {
+    host(treeIn(mode));
+    await mount(<NewTaskDialog />);
+    await act(async () => useNewTask.getState().open(preset));
+    await flush();
+    return document.querySelector<HTMLElement>('[role="dialog"]')!;
+  };
+
+  it("says so in the form once a worktree task waits for two, not for one or in local", async () => {
+    for (const mode of ["worktree", "local"] as const) {
+      const dialog = await openForm(mode, { parentId: "t4" });
+      await click(buttonIn(dialog, "添加"));
+      await flush();
+      await pick("跑回归测试");
+      expect(hintOf(dialog)).toEqual([]);
+      await click(buttonIn(dialog, "添加"));
+      await flush();
+      await pick("打包桌面安装包");
+      expect(hintOf(dialog)).toEqual(mode === "worktree" ? [HINT] : []);
+      await cleanup();
+      useNewTask.setState({ preset: undefined });
+    }
+  });
+
+  it("names the step after a parallel one in the split's preview, in a worktree project only", async () => {
+    for (const mode of ["worktree", "local"] as const) {
+      const dialog = await openForm(mode, { parentId: "t4", split: true });
+      await type(
+        dialog.querySelector('textarea[aria-label="拆成子任务"]')!,
+        "整理变更日志\n→ 更新用户文档\n→ 跑回归测试\n打包\n→ 发布公告",
+      );
+      expect(hintOf(dialog)).toEqual(
+        mode === "worktree"
+          ? [
+              "第 4 步会从项目当前的 HEAD 开始，第 3 步并行的改动不会自动带进来。",
+            ]
+          : [],
+      );
+      await cleanup();
+      useNewTask.setState({ preset: undefined });
+    }
+  });
+});
