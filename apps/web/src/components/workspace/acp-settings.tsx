@@ -1,9 +1,9 @@
-import type { AcpDraft, AcpDraftProblems } from "./acp-form";
 import type {
   AcpAgentConfig,
   AcpAgentView,
   AcpTestResult,
-} from "@/queries/acp";
+} from "@eta/client-contracts";
+import type { AcpDraft, AcpDraftProblems } from "./acp-form";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { useId, useState } from "react";
@@ -174,9 +174,8 @@ function AgentDialog({
     save
       .mutateAsync({
         agent: config,
-        ...(agent !== undefined && agent.id !== config.id
-          ? { previousId: agent.id }
-          : {}),
+        // An edit names the agent it changes; without it the host takes it as a new one.
+        ...(agent === undefined ? {} : { previousId: agent.id }),
       })
       .then(
         (saved) => {

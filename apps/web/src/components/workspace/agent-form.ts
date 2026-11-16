@@ -9,11 +9,6 @@ import { formatLocale, translate } from "@/lib/i18n";
 
 export const DESCRIPTION_MAX = 10_000;
 
-/**
- * What can answer for an agent: eta's own loop, an oar runtime (Claude Code, Codex, OpenCode, Pi),
- * or an external ACP agent configured on the host, `acp.<id>`. The ACP ones come only from the
- * host's list (`agents.runtimes`); none is named here.
- */
 // One schema for create and edit; new agent settings become new fields here.
 export const agentFormSchema = z.object({
   name: z
@@ -29,7 +24,8 @@ export const agentFormSchema = z.object({
   }),
   // Which persona card the agent wears; "" is the project's default, which is a card too.
   persona: z.string().max(200),
-  // What answers for it: eta's own loop, or an external runtime on the machine.
+  // What answers for it: eta's own loop, an oar runtime, or an ACP agent on the host (`acp.<id>`).
+  // The ACP ones come only from the host's list (`agents.runtimes`); none is named here.
   runtime: z.custom<AgentRuntime>(
     (value) => typeof value === "string" && isAgentRuntime(value),
   ),
@@ -62,8 +58,7 @@ export function agentDraft({
     name,
     instructions: description,
     persona,
-    // An `acp.<id>` until the contract's own type takes it (#167).
-    runtime: runtime as AgentRuntime,
+    runtime,
     model: model || null,
     thinkingLevel: (thinkingLevel || null) as ThinkingLevel | null,
     machineId: machineId || null,

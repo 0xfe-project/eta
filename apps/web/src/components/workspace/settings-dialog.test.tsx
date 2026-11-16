@@ -12,9 +12,12 @@ import { useWorkspaceStore } from "./workspace-store";
 // reachable through `?settings=<section>`, the section still renders, and the saved data behind
 // it still applies.
 
-/** The product's plugins and the inbox (the approval list's own target), mounted. */
-function host(approvals: string[] = ["bash"]): FakeHost {
-  const fake = buildProductHost({}, ["inbox"]).target(
+/** The product's plugins, the inbox (the approval list's own target) and `acp`, mounted. */
+function host(
+  approvals: string[] = ["bash"],
+  plugins: string[] = ["inbox", "acp"],
+): FakeHost {
+  const fake = buildProductHost({}, plugins).target(
     "inbox",
     { list: [], approvals: { tools: approvals } },
     { eager: true },
@@ -80,6 +83,17 @@ describe("设置左侧那一列", () => {
       ),
     );
     expect(rail().join("")).not.toContain("需先确认的工具");
+  });
+
+  it("host 没有 acp 插件时不列「外部 Agent」", async () => {
+    host(["bash"], ["inbox"]);
+    useWorkspaceStore
+      .getState()
+      .setSettings({ open: true, section: "appearance" });
+    await mount(<Dialog />);
+    await flush();
+    expect(rail()).not.toContain(labelsOf("acp")[0]);
+    expect(rail()).toContain(labelsOf("mcp")[0]);
   });
 
   it("?settings=approvals 仍能打开那一面，并把参数从地址里去掉", async () => {

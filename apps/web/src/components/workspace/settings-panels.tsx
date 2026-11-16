@@ -9,6 +9,7 @@ import { elementPickerDefault, setElementPicker } from "@/lib/element-picker";
 import { translate } from "@/lib/i18n";
 import { host } from "@/lib/native";
 import { cn } from "@/lib/utils";
+import { useWireState } from "@/queries/wire";
 import { AcpSettings } from "./acp-settings";
 import { AgentSettings } from "./agent-settings";
 import { ApprovalSettings } from "./approval-settings";
@@ -247,6 +248,11 @@ export function SettingsPanels({
 }) {
   const { t: translateText } = useTranslation(["settings", "common"] as const);
   const attention = useSettingsAttention();
+  // External agents come with the host's `acp` plugin; a host without it has nothing to list there.
+  // `?settings=acp` still opens the panel, which says it cannot load.
+  const acp = useWireState((state) =>
+    state.mounted.some((plugin) => plugin.name === "acp"),
+  );
   return (
     <div className={cn("settings-layout", className)}>
       <SettingsNav
@@ -258,6 +264,7 @@ export function SettingsPanels({
             (section) =>
               section.value !== "host" || host().connection !== undefined,
           )
+          .filter((section) => section.value !== "acp" || acp)
           .map((section) => ({
             ...section,
             attention: attention[section.value],

@@ -1,9 +1,8 @@
-import type { AcpAgentConfig } from "@/queries/acp";
+import type { AcpAgentConfig } from "@eta/client-contracts";
+import { ACP_AGENT_ID } from "@eta/client-contracts";
 
 // The external-agent form as text, and back: what the user types (args and env one per line) and
 // the config the host stores. Checked here as the host checks it; the host still has the last word.
-
-const ACP_ID = /^[a-z0-9][a-z0-9-]*$/;
 
 export interface AcpDraft {
   label: string;
@@ -50,12 +49,12 @@ export function acpSlug(label: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-/** Lines, each kept as typed past its surrounding blanks; blank lines dropped. */
+/** Lines, each kept exactly as typed (an argument may start or end with a space); blank lines dropped. */
 function parseAcpArgs(text: string): string[] {
   return text
     .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line !== "");
+    .map((line) => line.replace(/\r$/, ""))
+    .filter((line) => line.trim() !== "");
 }
 
 export type EnvParse =
@@ -102,7 +101,7 @@ export function checkAcpDraft(
   if (draft.label.trim() === "")
     problems.label = { key: "errors.labelRequired" };
   if (id === "") problems.id = { key: "errors.idRequired" };
-  else if (!ACP_ID.test(id)) problems.id = { key: "errors.idFormat" };
+  else if (!ACP_AGENT_ID.test(id)) problems.id = { key: "errors.idFormat" };
   else if (taken.includes(id)) problems.id = { key: "errors.idTaken" };
   if (draft.command.trim() === "")
     problems.command = { key: "errors.commandRequired" };

@@ -1,4 +1,4 @@
-import type { AcpAgentView } from "@/queries/acp";
+import type { AcpAgentView } from "@eta/client-contracts";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
 import { setWire } from "@/lib/wire";
@@ -156,7 +156,7 @@ describe("Settings → External agents", () => {
     expect(value("ID")).toBe("my-demo-agent");
     expect(text()).toContain("acp.my-demo-agent");
     await fill("命令", " npx ");
-    await fill("参数", "-y\n\n@example/agent \n--acp");
+    await fill("参数", "-y\n  \n@example/agent\n--acp");
     await fill("环境变量", "API_KEY=a=b\n# a comment\nDEBUG=1");
     await fill("工作目录", "  ");
     await submit();
@@ -237,7 +237,7 @@ describe("Settings → External agents", () => {
     expect(value("命令")).toBe("nope");
   });
 
-  it("edits an agent, sending the old id when the id changes", async () => {
+  it("edits an agent, always naming the one it changes, renamed or not", async () => {
     const fake = host([
       view({
         id: "demo",
@@ -272,13 +272,12 @@ describe("Settings → External agents", () => {
     await submit();
     expect(fake.calls.at(-1)).toMatchObject({
       action: "save",
+      // An edit always names the agent it changes: without it the host takes it as a new one.
       args: {
         agent: { id: "demo", label: "Demo Two", cwd: "/srv", autoAllow: true },
+        previousId: "demo",
       },
     });
-    expect(
-      (fake.calls.at(-1)!.args as Record<string, unknown>).previousId,
-    ).toBeUndefined();
 
     await click(labelled("编辑 Demo"));
     await fill("ID", "demo-renamed");
@@ -315,6 +314,9 @@ describe("Settings → External agents", () => {
     expect(toasts.error).toHaveBeenCalledWith("still used by: Ada, Bob");
 
     refuse = false;
+    // The refusal's render re-enables the button; a click before it lands on a disabled one.
+    await flush();
+    expect(labelled("删除 Demo")?.hasAttribute("disabled")).toBe(false);
     await click(labelled("删除 Demo"));
     await click(
       byText(

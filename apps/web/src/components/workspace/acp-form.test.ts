@@ -52,6 +52,14 @@ describe("checkAcpDraft", () => {
       config,
     });
   });
+  it("keeps an argument's own spaces and drops blank lines", () => {
+    const draft = {
+      ...acpDraftOf({ id: "a", label: "A", command: "a", args: [], env: {} }),
+      args: "--prefix= x \n   \n\n--y\r",
+    };
+    const result = checkAcpDraft(draft, []);
+    expect(result.ok && result.config.args).toEqual(["--prefix= x ", "--y"]);
+  });
   it("refuses an id taken by another agent", () => {
     const draft = acpDraftOf({
       id: "demo",
