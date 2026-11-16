@@ -962,9 +962,14 @@ const Turn = memo(
           <Message
             role="user"
             footer={
-              <time dateTime={new Date(message.createdAt).toISOString()}>
-                {when(message.createdAt)}
-              </time>
+              <>
+                {/* On your own side the line is right-aligned, so the button sits inside the
+                    time, nearer the text it copies. */}
+                <CopyMessage text={message.text} />
+                <time dateTime={new Date(message.createdAt).toISOString()}>
+                  {when(message.createdAt)}
+                </time>
+              </>
             }
           >
             <UserText
@@ -1955,7 +1960,8 @@ export function ChatPanel({
 }
 
 /**
- * Copy what the agent said, from under the message.
+ * Copy what was said, as it was written, from under the message: a reply's Markdown, or the
+ * user's own text with its mentions and attachment references as typed (images are not text).
  *
  * The whole point of the footer is that it is out of the way until you want it: the button is
  * 10px mono in the same dim line as the time, and it says "copied" for a beat rather than
