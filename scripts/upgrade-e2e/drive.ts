@@ -448,14 +448,15 @@ interface Check {
 async function pressButton({
   force = false,
   prerelease = false,
-} = {}): Promise<string | null> {
+} = {}): Promise<{ latest: string | null; switched: boolean }> {
   const client = await connect(`ws://127.0.0.1:${PORT}/ws`, {
     origin: `http://127.0.0.1:${PORT}`,
   });
   await client.hello();
   let check = (await client.call("upgrade", "check")) as Check;
   // A build from before the switch has none, and takes the latest release as it comes.
-  if (prerelease && check.prerelease !== undefined) {
+  const switched = prerelease && check.prerelease !== undefined;
+  if (switched) {
     want(
       "pre-releases are on",
       await client.call("upgrade", "setPrerelease", { prerelease: true }),
@@ -466,7 +467,22 @@ async function pressButton({
   want("the page may update", check.blocked, null);
   await client.call("upgrade", "start", { force });
   client.close();
-  return check.latest;
+  return { latest: check.latest, switched };
+}
+
+/**
+ * The switch `pressButton` turned on, as the build upgraded to sees it, then off again: the seed
+ * check compares every setting, and this one is the test's, not the seed's.
+ */
+async function prereleaseKeptThenOff(): Promise<void> {
+  const client = await connect(`ws://127.0.0.1:${PORT}/ws`, {
+    origin: `http://127.0.0.1:${PORT}`,
+  });
+  await client.hello();
+  const check = (await client.call("upgrade", "check")) as Check;
+  want("pre-releases are still on", check.prerelease, true);
+  await client.call("upgrade", "setPrerelease", { prerelease: false });
+  client.close();
 }
 
 const pinLatest = (version: string): void =>
@@ -577,11 +593,14 @@ const CROSS: Record<string, () => Promise<void>> = {
       await serviceKnowsReleases();
       pinLatest(TO!);
     }
-    const offered = await pressButton({ prerelease: TO!.includes("-") });
-    want("the page offers it", offered, TO);
+    const { latest, switched } = await pressButton({
+      prerelease: TO!.includes("-"),
+    });
+    want("the page offers it", latest, TO);
     await finished();
     want("it ended", ended(), "done");
     await waitFor("/up", up);
+    if (switched) await prereleaseKeptThenOff();
     await seedHolds(manifest, TO!);
   },
 
