@@ -132,6 +132,12 @@ export function RuntimeField({
                 {runtime.status === "available"
                   ? ""
                   : translateText(`agents:runtime.status.${runtime.status}`)}
+                {/* Why it cannot be picked, in the runtime's own words: a sign-in, a path. */}
+                {runtime.status !== "available" && runtime.detail ? (
+                  <span className="block text-xs text-muted-foreground">
+                    {runtime.detail}
+                  </span>
+                ) : null}
               </SelectOption>
             ))}
           </>

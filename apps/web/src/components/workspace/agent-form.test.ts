@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
-import { agentNameProblem } from "./agent-form";
+import { agentDraft, agentFormSchema, agentNameProblem } from "./agent-form";
 
 const agents = [
   { id: "cap", name: "Captain" },
@@ -23,5 +23,47 @@ describe("agentNameProblem", () => {
   it("lets an agent keep the name it has", () => {
     expect(agentNameProblem(agents, "ADA", "ada")).toBeUndefined();
     expect(agentNameProblem(agents, "captain", "old")).toBeUndefined();
+  });
+});
+
+describe("an agent's runtime", () => {
+  const form = (runtime: string) => ({
+    name: "Demo",
+    description: "",
+    persona: "",
+    runtime,
+    model: "",
+    thinkingLevel: "",
+    machineId: "",
+    plugins: [],
+  });
+  it("takes eta, the built-in runtimes, and any ACP agent the host names", () => {
+    for (const runtime of [
+      "eta",
+      "claude",
+      "codex",
+      "opencode",
+      "pi",
+      "acp.demo",
+      "acp.my-agent2",
+    ])
+      expect(agentFormSchema.safeParse(form(runtime)).success).toBe(true);
+  });
+  it("refuses what no runtime is called", () => {
+    for (const runtime of [
+      "",
+      "gemini",
+      "acp.",
+      "acp.Demo",
+      "acp.-x",
+      "acp.a_b",
+    ])
+      expect(agentFormSchema.safeParse(form(runtime)).success).toBe(false);
+  });
+  it("sends an ACP runtime as it is, and no model as the runtime's own default", () => {
+    expect(agentDraft(agentFormSchema.parse(form("acp.demo")))).toMatchObject({
+      runtime: "acp.demo",
+      model: null,
+    });
   });
 });

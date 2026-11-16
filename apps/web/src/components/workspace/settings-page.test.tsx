@@ -131,6 +131,7 @@ describe("设置整页", () => {
         "providers",
         "machines",
         "mcp",
+        "acp",
         "plugins",
         "email",
         "archived",

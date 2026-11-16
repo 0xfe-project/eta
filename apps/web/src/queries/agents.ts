@@ -1,7 +1,6 @@
 import type {
   AgentArgs,
   AgentResults,
-  AgentRuntime,
   AgentRuntimeInfo,
   AgentView,
   MachineView,
@@ -131,7 +130,7 @@ function runtimeModelsOf(info: AgentRuntimeInfo): Model[] {
  * for the primary itself whether it is named or not, so naming it asks nothing new.
  */
 export function useAgentRuntimeChoices(
-  runtime: AgentRuntime,
+  runtime: string,
   machineId: string,
 ): {
   runtimes: AgentRuntimeInfo[] | null | undefined;

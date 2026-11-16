@@ -9,6 +9,7 @@ import { elementPickerDefault, setElementPicker } from "@/lib/element-picker";
 import { translate } from "@/lib/i18n";
 import { host } from "@/lib/native";
 import { cn } from "@/lib/utils";
+import { AcpSettings } from "./acp-settings";
 import { AgentSettings } from "./agent-settings";
 import { ApprovalSettings } from "./approval-settings";
 import { EmailSettings } from "./email-settings";
@@ -213,6 +214,8 @@ function SectionContent({ section }: { section: SettingsSection }) {
     <MachineSettings />
   ) : section === "mcp" ? (
     <McpSettings />
+  ) : section === "acp" ? (
+    <AcpSettings />
   ) : section === "plugins" ? (
     <Suspense fallback={<Loading rows={3} />}>
       <PluginSettings />

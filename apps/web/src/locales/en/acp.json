@@ -1,0 +1,65 @@
+{
+  "title": "External agents",
+  "description": "ACP agents an agent can run on, kept in ~/.eta/acp.json. Each one is offered as the runtime acp.<id> when you create or edit an agent.",
+  "empty": {
+    "title": "No external agents",
+    "description": "Add an agent that speaks the Agent Client Protocol (ACP) by the command that starts it."
+  },
+  "status": {
+    "available": "Ready",
+    "unauthenticated": "Not signed in",
+    "missing": "Not installed",
+    "error": "Error"
+  },
+  "list": {
+    "autoAllow": "Auto-allow"
+  },
+  "actions": {
+    "add": "Add agent",
+    "test": "Test",
+    "testing": "Testing…"
+  },
+  "form": {
+    "addTitle": "Add external agent",
+    "editTitle": "Edit {{label}}",
+    "description": "eta starts the command and talks ACP to it over stdio.",
+    "label": "Name",
+    "labelPlaceholder": "My agent",
+    "id": "ID",
+    "idHint": "Agents choose it as the runtime {{runtime}}.",
+    "command": "Command",
+    "args": "Arguments",
+    "argsHint": "One per line.",
+    "env": "Environment variables",
+    "envHint": "One KEY=VALUE per line.",
+    "cwd": "Working directory",
+    "cwdPlaceholder": "The session's directory",
+    "autoAllow": "Allow without asking",
+    "autoAllowHint": "Off: every permission request the agent makes asks you first."
+  },
+  "errors": {
+    "labelRequired": "Give it a name.",
+    "idRequired": "Give it an ID.",
+    "idFormat": "Lower-case letters, digits and dashes, starting with a letter or digit.",
+    "idTaken": "Another external agent already has this ID.",
+    "commandRequired": "Enter the command that starts it.",
+    "env": {
+      "noEquals": "Line {{line}}: write it as KEY=VALUE.",
+      "emptyKey": "Line {{line}}: the name before = is empty.",
+      "duplicate": "Line {{line}}: this variable is already set above."
+    }
+  },
+  "test": {
+    "ok": "{{label}} answered: {{agent}}",
+    "failed": "{{label}}: {{status}}"
+  },
+  "delete": {
+    "title": "Delete {{label}}?",
+    "description": "Agents can no longer choose {{runtime}}. The host refuses while an agent still runs on it."
+  },
+  "feedback": {
+    "saved": "Saved {{label}}",
+    "saveFailed": "Not saved: {{message}}",
+    "deleted": "Deleted {{label}}"
+  }
+}
