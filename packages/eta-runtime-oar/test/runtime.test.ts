@@ -1097,6 +1097,146 @@ async function callServed(
   };
 }
 
+interface Served {
+  url: string;
+  headers?: Readonly<Record<string, string>>;
+}
+
+/** The tools a served MCP server lists now. */
+async function listServed(
+  server: Served,
+): Promise<{ name: string; description?: string; inputSchema: unknown }[]> {
+  const response = await fetch(server.url, {
+    method: "POST",
+    headers: {
+      ...server.headers,
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+  });
+  const reply = (await response.json()) as {
+    result: {
+      tools: { name: string; description?: string; inputSchema: unknown }[];
+    };
+  };
+  return reply.result.tools;
+}
+
+/** Listen on the server's event stream, as a runtime does for notifications; what it hears. */
+async function listenServed(
+  server: Served,
+): Promise<{ heard: string[]; close: () => void }> {
+  const controller = new AbortController();
+  const response = await fetch(server.url, {
+    headers: { ...server.headers, accept: "text/event-stream" },
+    signal: controller.signal,
+  });
+  const heard: string[] = [];
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  void (async () => {
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read().catch(() => ({
+        value: undefined,
+        done: true,
+      }));
+      if (done) return;
+      buffer += decoder.decode(value, { stream: true });
+      for (
+        let end = buffer.indexOf("\n\n");
+        end >= 0;
+        end = buffer.indexOf("\n\n")
+      ) {
+        const data = /^data: (.*)$/m.exec(buffer.slice(0, end))?.[1];
+        buffer = buffer.slice(end + 2);
+        if (data !== undefined)
+          heard.push((JSON.parse(data) as { method: string }).method);
+      }
+    }
+  })();
+  return { heard, close: () => controller.abort() };
+}
+
+describe("the host's tools, served to the runtime", () => {
+  /** A host tool whose definition can change under a running session. */
+  function changing(name: string) {
+    const state = {
+      description: `the ${name} tool`,
+      parameters: {
+        type: "object",
+        properties: { title: { type: "string" } },
+      } as Record<string, unknown>,
+    };
+    const tool = {
+      name,
+      get description() {
+        return state.description;
+      },
+      get parameters() {
+        return state.parameters;
+      },
+      execute: () => ({ content: [{ type: "text", text: "done" }] }),
+    } as unknown as KernelTool;
+    return { tool, state };
+  }
+
+  it("are listed anew, with list_changed, when their definitions change between runs", async () => {
+    const draft = changing("draft_task");
+    const { manager, turns, opened } = setup((turn) => turn.say("ok"), {
+      sessionTools: () => [draft.tool, hostTool("list_tasks")],
+    });
+    const managed = await manager.create({ cwd: "/work", runtime: "claude" });
+    await run(managed, "one");
+    const server = turns[0]!.options.mcpServers![0] as Served;
+    expect((await listServed(server)).map((tool) => tool.name)).toEqual([
+      "draft_task",
+      "list_tasks",
+    ]);
+    const stream = await listenServed(server);
+
+    // Nothing changed: nothing is said.
+    await run(managed, "two");
+    await tick();
+    expect(stream.heard).toEqual([]);
+
+    // A parameter is added on the host: the next run serves it and tells the runtime.
+    draft.state.parameters = {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        dependsOn: { type: "array", items: { type: "number" } },
+      },
+    };
+    await run(managed, "three");
+    await tick();
+    expect(stream.heard).toEqual(["notifications/tools/list_changed"]);
+    expect(
+      (await listServed(server)).find((tool) => tool.name === "draft_task"),
+    ).toEqual({
+      name: "draft_task",
+      description: "the draft_task tool",
+      inputSchema: draft.state.parameters,
+    });
+
+    // A description counts as much as a schema.
+    draft.state.description = "the draft_task tool, now with dependencies";
+    await run(managed, "four");
+    await tick();
+    expect(stream.heard).toHaveLength(2);
+    expect(
+      (await listServed(server)).find((tool) => tool.name === "draft_task")
+        ?.description,
+    ).toBe("the draft_task tool, now with dependencies");
+
+    // One runtime session and one server throughout: the list changed, nothing reopened.
+    expect(opened).toHaveLength(1);
+    stream.close();
+    await manager.closeAll();
+  });
+});
+
 describe("a turn the runtime opens itself", () => {
   /**
    * Claude Code's background subagents: the turn that starts one ends, and when the subagent
