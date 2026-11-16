@@ -54,7 +54,7 @@ export function UpdateStatusBar({
     >
       <div className="text-[11px] leading-4 text-muted-foreground">{title}</div>
       <div className="text-[13px] leading-5 font-medium break-all">
-        {version}
+        <span data-version>{version}</span>
         {target !== undefined && (
           <>
             <span className="mx-1.5 text-faint">→</span>
