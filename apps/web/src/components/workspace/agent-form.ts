@@ -1,5 +1,9 @@
-import type { AgentFields, ThinkingLevel } from "@eta/client-contracts";
-import { AGENT_RUNTIMES } from "@eta/client-contracts";
+import type {
+  AgentFields,
+  AgentRuntime,
+  ThinkingLevel,
+} from "@eta/client-contracts";
+import { isAgentRuntime } from "@eta/client-contracts";
 import { z } from "zod";
 import { formatLocale, translate } from "@/lib/i18n";
 
@@ -21,7 +25,9 @@ export const agentFormSchema = z.object({
   // Which persona card the agent wears; "" is the project's default, which is a card too.
   persona: z.string().max(200),
   // What answers for it: eta's own loop, or an external runtime on the machine.
-  runtime: z.enum(AGENT_RUNTIMES),
+  runtime: z.custom<AgentRuntime>(
+    (value) => typeof value === "string" && isAgentRuntime(value),
+  ),
   // "" until a model is chosen; on an external runtime, "" is the runtime's default.
   model: z.string(),
   // "" leaves it to the model's own default.

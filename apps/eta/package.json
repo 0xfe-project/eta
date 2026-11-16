@@ -27,6 +27,7 @@
     "@eta/harness": "*",
     "@eta/mcp": "*",
     "@eta/releases": "*",
+    "@eta/runtime-acp": "*",
     "@eta/runtime-oar": "*",
     "@eta/server": "*",
     "@eta/ssh": "*",

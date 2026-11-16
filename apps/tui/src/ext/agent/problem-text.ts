@@ -32,7 +32,7 @@ export function fileProblemText(problem: FileProblem, locale: Locale): string {
     case "unknown-runtime":
       return t("unknownRuntime", {
         value: problem.value,
-        choices: AGENT_RUNTIMES.join(", "),
+        choices: [...AGENT_RUNTIMES, "acp.<id>"].join(", "),
       });
     case "unknown-thinking-level":
       return t("unknownThinkingLevel", {

@@ -9,6 +9,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
  */
 import type { AgentRuntimeInfo, RoutinesStatus } from "@eta/client-contracts";
 import type { McpHostOptions } from "@eta/daemon";
+import type { AcpRuntimes } from "@eta/runtime-acp";
 import type {
   AssembledServer,
   RemoteSessions,
@@ -29,6 +30,8 @@ import type { WebOptions } from "./web/service";
 import { homedir, hostname, platform } from "node:os";
 import { join } from "node:path";
 import { peerAddressOf, redactionMiddleware } from "@eta/server";
+import { acpPlugin } from "./acp/plugin";
+import { AcpService } from "./acp/service";
 import { agentsPlugin } from "./agents/plugin";
 import { AgentStore } from "./agents/store";
 import { approvalMiddleware } from "./approval-middleware";
@@ -210,6 +213,8 @@ export function createProduct(options: {
   web?: Omit<WebOptions, "warn"> | undefined;
   /** The external runtimes the primary machine has, with their models, for the agent editor. */
   runtimes?: ((fresh: boolean) => Promise<AgentRuntimeInfo[]>) | undefined;
+  /** The ACP agents this host runs (`~/.eta/acp.json`), for the `acp` target; absent has none. */
+  acp?: AcpRuntimes | undefined;
   /**
    * Tailscale on this host: discovery of the tailnet's nodes, the address new machines dial, and
    * letting the user's own nodes in without a fingerprint. Absent means the tailnet is not used.
@@ -947,6 +952,7 @@ export function createProduct(options: {
         "email",
         "plugins",
         "mcp",
+        ...(options.acp === undefined ? [] : ["acp"]),
         ...(memory === undefined ? [] : ["memory"]),
       ]);
       let ready!: () => void;
@@ -1118,6 +1124,20 @@ export function createProduct(options: {
         ),
       );
       server.mount("mcp", mcpPlugin({ service: mcp }, applied("mcp")));
+      if (options.acp !== undefined)
+        server.mount(
+          "acp",
+          acpPlugin(
+            {
+              service: new AcpService({
+                acp: options.acp,
+                agents: () => agents.list(),
+                changed: () => wire?.pushNow("acp"),
+              }),
+            },
+            applied("acp"),
+          ),
+        );
       if (memory !== undefined)
         server.mount(
           "memory",

@@ -1,5 +1,9 @@
-import type { OarRuntimes } from "@eta/runtime-oar";
-import type { AssembledServer, AssembleOptions } from "@eta/server";
+import type { AcpRuntimes } from "@eta/runtime-acp";
+import type {
+  AssembledServer,
+  AssembleOptions,
+  ListedRuntimes,
+} from "@eta/server";
 /**
  * The host: the upstream server floor, plus what a product around it needs.
  *
@@ -24,8 +28,9 @@ import type { WebOptions } from "./web/service";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { etaCompaction } from "@eta/compaction";
+import { createAcpRuntimes } from "@eta/runtime-acp";
 import { createOarRuntimes } from "@eta/runtime-oar";
-import { assembleServer } from "@eta/server";
+import { assembleServer, composeRuntimes } from "@eta/server";
 import { createAccess } from "./access";
 import {
   applyMigrations,
@@ -104,7 +109,13 @@ export interface HostOptions {
    * The external agent runtimes (Claude Code, Codex, OpenCode, Pi) agents may run on: oar's, on
    * this machine, by default. A test hands in scripted ones; `false` runs none.
    */
-  runtimes?: OarRuntimes | false;
+  runtimes?: ListedRuntimes | false;
+  /**
+   * The ACP agents agents may run on, each a runtime `acp.<id>`: the ones `acp.json` in the data
+   * directory lists, by default (`~/.eta/acp.json` on an installed host). They are offered
+   * beside `runtimes`; `false` offers none.
+   */
+  acp?: AcpRuntimes | false;
   /**
    * Tailscale on this host (discovering machines, letting the user's own nodes in): `true` reads
    * it through the `tailscale` command; a test hands in one with a scripted command. Off by
@@ -170,10 +181,26 @@ export async function startHost(options: HostOptions): Promise<Host> {
       clearMigrationInput(db);
     }
     const warn = options.warn ?? ((message: string) => console.warn(message));
-    const runtimes =
+    const acp =
+      options.acp === false
+        ? undefined
+        : (options.acp ??
+          createAcpRuntimes({
+            configPath: join(options.dataDir, "acp.json"),
+            warn,
+          }));
+    const others =
       options.runtimes === false
         ? undefined
         : (options.runtimes ?? createOarRuntimes({ warn }));
+    // Each set answers for its own ids; the catalog is one after the other.
+    const runtimes =
+      others === undefined && acp === undefined
+        ? undefined
+        : composeRuntimes([
+            ...(others === undefined ? [] : [others]),
+            ...(acp === undefined ? [] : [acp]),
+          ]);
     product = createProduct({
       db,
       dataDir: options.dataDir,
@@ -193,6 +220,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       ...(runtimes === undefined
         ? {}
         : { runtimes: async (fresh) => await runtimes.catalog.list(fresh) }),
+      ...(acp === undefined ? {} : { acp }),
       ...(options.tailscale === undefined || options.tailscale === false
         ? {}
         : {
@@ -240,7 +268,8 @@ export async function startHost(options: HostOptions): Promise<Host> {
       memoryEnabledFor: product.memoryEnabledFor,
       baseSystemPromptFor: product.baseSystemPromptFor,
       generated: product.generated,
-      // An agent on an external runtime has its sessions' runs taken by it (`@eta/runtime-oar`).
+      // An agent on an external runtime has its sessions' runs taken by it (`@eta/runtime-oar`,
+      // `@eta/runtime-acp`).
       ...(runtimes === undefined ? {} : { runtimes }),
       ...(options.models === undefined ? {} : { models: options.models }),
       ...(options.llm !== undefined && options.llm !== false

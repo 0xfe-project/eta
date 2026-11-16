@@ -28,8 +28,12 @@ import type { CallFrame, ServerFrame } from "@eta/client-wire-proto";
 import type { KernelTool, PersonaCard, ThinkingLevel } from "@eta/core";
 import type { AskObserver } from "@eta/harness";
 import type { McpManagerOptions } from "@eta/mcp";
-import type { OarRuntimes } from "@eta/runtime-oar";
-import type { SessionMeta, SessionsService, Socket } from "@eta/server";
+import type {
+  ListedRuntimes,
+  SessionMeta,
+  SessionsService,
+  Socket,
+} from "@eta/server";
 import type { Peer } from "./link/peer";
 import type { ActivePlugin } from "./plugin-launch";
 import { Buffer } from "node:buffer";
@@ -41,8 +45,10 @@ import process from "node:process";
 import { LINK_PROTOCOL } from "@eta/client-contracts";
 import { kernelOn } from "@eta/core";
 import { createRefreshDedupingFetch } from "@eta/mcp";
+import { createAcpRuntimes } from "@eta/runtime-acp";
 import { createOarRuntimes } from "@eta/runtime-oar";
 import {
+  composeRuntimes,
   createConnection,
   discoverPersonas,
   FileSessionStore,
@@ -84,8 +90,12 @@ export interface DaemonNodeOptions {
         wanted: DaemonServiceParams["upgrade"],
       ) => Promise<DaemonServiceResults["upgrade"]>)
     | undefined;
-  /** The external runtimes; oar's by default (a test hands in scripted ones). */
-  runtimes?: OarRuntimes | undefined;
+  /**
+   * The external runtimes. By default oar's, and the ACP agents this machine's own
+   * `~/.eta/acp.json` lists: an agent process runs where its session is, so what can run here is
+   * what is configured here. (A test hands in scripted ones.)
+   */
+  runtimes?: ListedRuntimes | undefined;
   /** The fetch of MCP's HTTP transports and token requests (a test reaches a fake server). */
   mcpFetch?: McpManagerOptions["fetch"] | undefined;
   /** Overrides of the MCP library's manager, for a test. */
@@ -132,7 +142,7 @@ export class DaemonNode {
   readonly #manager: SessionManager;
   readonly #store: FileSessionStore;
   readonly #catalog = new ModelCatalog();
-  readonly #runtimes: OarRuntimes;
+  readonly #runtimes: ListedRuntimes;
   /** MCP for the sessions on eta's own loop; its OAuth credentials are the primary's. */
   readonly #mcp: McpHost;
   /** The plugins the primary sent, by contents. */
@@ -163,7 +173,15 @@ export class DaemonNode {
     });
     const home = options.home ?? homedir();
     this.#plugins = new PluginStore(join(options.dataDir, "plugins", "store"));
-    this.#runtimes = options.runtimes ?? createOarRuntimes({ warn });
+    this.#runtimes =
+      options.runtimes ??
+      composeRuntimes([
+        createOarRuntimes({ warn }),
+        createAcpRuntimes({
+          configPath: join(home, ".eta", "acp.json"),
+          warn,
+        }),
+      ]);
     this.#mcp = new McpHost({
       dataDir: options.dataDir,
       home,

@@ -13,7 +13,7 @@ import type { TaskStore } from "../tasks/store";
 import type { CaptainMemory } from "./memory";
 import type { CaptainService } from "./service";
 import { readFile } from "node:fs/promises";
-import { AGENT_RUNTIMES } from "@eta/client-contracts";
+import { AGENT_RUNTIMES, isAgentRuntime } from "@eta/client-contracts";
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
 import { interactionId } from "../inbox/store";
@@ -486,15 +486,20 @@ export function captainSessionTools(
             "provider:modelId, chosen by the user. There is no default.",
         }),
         runtime: Type.Optional(
-          Type.Union(AGENT_RUNTIMES.map((runtime) => Type.Literal(runtime))),
+          Type.String({
+            description: `One of ${AGENT_RUNTIMES.join(", ")}, or acp.<id> for an ACP agent the host lists.`,
+          }),
         ),
         plugins: Type.Optional(Type.Array(Type.String())),
       }),
       execute: async (args) => {
         try {
+          const { runtime, ...rest } = args;
+          if (runtime !== undefined && !isAgentRuntime(runtime))
+            throw new Error(`unknown runtime: ${runtime}`);
           const { operation } = await deps.service.proposals.propose(
             deps.service.propose.agent,
-            args,
+            { ...rest, ...(runtime === undefined ? {} : { runtime }) },
             await proposalOrigin(),
           );
           return text(
