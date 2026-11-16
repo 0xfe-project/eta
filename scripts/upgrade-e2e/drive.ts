@@ -11,11 +11,28 @@
  * the upgrade from the build's real upstream, with whatever token it finds, instead of
  * `fake-releases.ts`; there is no bad build there.
  *
+ * Two workflows run it, and they prove different things:
+ *
+ * - `upgrade-e2e.yml` ("Upgrade end to end"), the `upgrade` jobs on a pull request: SCENARIOS,
+ *   between the 0.9.x hosts `build.ts` makes from the pull request's own code. It proves the
+ *   machinery (swap, restart, migration, backup, rollback, the button, `--cancel`) on launchd and a
+ *   Windows service. It is NOT a test across versions: no published build, no seed, no release
+ *   candidate, no Linux. A green check there says nothing about data coming through from the last
+ *   release.
+ * - `upgrade-cross.yml` ("Upgrade across versions"): CROSS, ETA_E2E_FROM to ETA_E2E_TO, two
+ *   published releases with the seed. release.yml runs it on Linux before publishing; for a change
+ *   to the upgrade or a migration, run it by hand against the branch:
+ *
+ *     gh workflow run upgrade-cross.yml --ref <branch> -f from=0.3.0 -f to=<latest rc> -f platforms=linux
+ *
+ *   Its runs are not among the pull request's checks: `gh run list --workflow upgrade-cross.yml`.
+ *
  * It runs as a user with a real home and a GUI session or a service logon, and it owns `~/.eta`
  * there: not for a computer anyone uses. On Windows it needs an Administrator's terminal and
  * ETA_E2E_PASSWORD, the password of this account.
  */
 import type { Buffer } from "node:buffer";
+import type { Check } from "./button";
 import { spawn } from "node:child_process";
 import {
   appendFileSync,
@@ -35,6 +52,7 @@ import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Database } from "bun:sqlite";
 import { connect, until } from "../../apps/eta/test/support/client";
+import { hasPrereleaseSwitch } from "./button";
 import {
   chooseSeed,
   MODEL_PORT,
@@ -434,28 +452,31 @@ const finished = (): Promise<boolean> =>
     240,
   );
 
-interface Check {
-  blocked: string | null;
-  latest: string | null;
-  prerelease?: boolean;
-}
-
 /**
  * The page's button: the same call, from the same place, on the service's own rights. With
  * `prerelease`, the switch under Settings → Update is turned on first, as a person going to a
- * pre-release has to: the latest release is never one, so the button would not offer it.
+ * pre-release has to: the latest release is never one, so the button would not offer it. With
+ * `offers`, the page has to show that version before the button is pressed: pressed on anything
+ * else, it would upgrade to the wrong build and only the end state would say so.
  */
 async function pressButton({
   force = false,
   prerelease = false,
-} = {}): Promise<{ latest: string | null; switched: boolean }> {
+  offers,
+}: {
+  force?: boolean;
+  prerelease?: boolean;
+  offers?: string;
+} = {}): Promise<{
+  switched: boolean;
+}> {
   const client = await connect(`ws://127.0.0.1:${PORT}/ws`, {
     origin: `http://127.0.0.1:${PORT}`,
   });
   await client.hello();
   let check = (await client.call("upgrade", "check")) as Check;
   // A build from before the switch has none, and takes the latest release as it comes.
-  const switched = prerelease && check.prerelease !== undefined;
+  const switched = prerelease && hasPrereleaseSwitch(check);
   if (switched) {
     want(
       "pre-releases are on",
@@ -465,9 +486,16 @@ async function pressButton({
     check = (await client.call("upgrade", "check")) as Check;
   }
   want("the page may update", check.blocked, null);
+  if (offers !== undefined) {
+    want("the page offers it", check.latest, offers);
+    if (check.latest !== offers) {
+      client.close();
+      throw new Error(`the button was not pressed: it offers ${check.latest}`);
+    }
+  }
   await client.call("upgrade", "start", { force });
   client.close();
-  return { latest: check.latest, switched };
+  return { switched };
 }
 
 /**
@@ -593,10 +621,10 @@ const CROSS: Record<string, () => Promise<void>> = {
       await serviceKnowsReleases();
       pinLatest(TO!);
     }
-    const { latest, switched } = await pressButton({
+    const { switched } = await pressButton({
       prerelease: TO!.includes("-"),
+      offers: TO!,
     });
-    want("the page offers it", latest, TO);
     await finished();
     want("it ended", ended(), "done");
     await waitFor("/up", up);

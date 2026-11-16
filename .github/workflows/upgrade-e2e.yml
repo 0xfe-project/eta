@@ -1,7 +1,28 @@
 # `eta-host upgrade` from a real build to a real build, on each platform's real service manager:
 # launchd on macOS, a Windows service on Windows.
 #
-# It runs for what can break it. Between two real releases, see upgrade-cross.yml.
+# NOT A TEST ACROSS VERSIONS. The two `upgrade` jobs a pull request shows come from here, and what
+# they upgrade between are hosts built from the pull request itself and stamped 0.9.0 to 0.9.4
+# (scripts/upgrade-e2e/build.ts), some of them made to break. A green run proves that
+# this code's upgrade machinery works on launchd and on a Windows service: it swaps the file,
+# restarts the service, runs the migration, keeps a backup, rolls back a build that does not hold,
+# and the page's button and `--cancel` do what they say. It does not prove that a person's data
+# comes through from the last release: no published build is run, no `test/upgrade-seed` is read,
+# no release candidate is the target, and Linux is not run at all.
+#
+# That is upgrade-cross.yml ("Upgrade across versions"): a published build holding the seed, up to
+# another, on systemd, launchd or a Windows service. release.yml runs it on Linux before publishing
+# a tag; for a pull request that changes the upgrade or a migration, run it by hand against the
+# branch, with releases that exist:
+#
+#   gh workflow run upgrade-cross.yml --ref <branch> -f from=0.3.0 -f to=0.4.0-rc.2 -f platforms=linux
+#
+# (platforms: linux, macos, windows or all; macOS and Windows cost ten and two times as much). Its
+# runs are listed apart from the pull request's checks: `gh run list --workflow upgrade-cross.yml`.
+# For #144, for example, they were 43801834485 (Linux), 43802029578 (macOS) and 43802032299
+# (Windows), on f47b4176.
+#
+# It runs for what can break it, and by hand (workflow_dispatch) on any branch.
 name: Upgrade end to end
 
 on:
