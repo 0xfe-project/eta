@@ -296,6 +296,66 @@ describe("creating an agent step by step", () => {
     expect(created).toMatchObject([{ runtime: "claude", model: null }]);
   });
 
+  it("offers the host's ACP agents by their label, and creates one on its own default", async () => {
+    // The host's list is the only source: one ACP agent ready with no models, one not signed in.
+    host.handle("agents.runtimes", () => ({
+      runtimes: [
+        ...runtimes,
+        {
+          id: "acp.demo",
+          label: "Demo agent",
+          status: "available",
+          models: [],
+        },
+        {
+          id: "acp.off",
+          label: "Off agent",
+          status: "unauthenticated",
+          detail: "run `off login` first",
+          models: [],
+        },
+      ],
+    }));
+    await open();
+    await type("agent-name", "Demo");
+    await press(document.getElementById("agent-runtime")!);
+    const off = options().find((option) =>
+      option.textContent?.includes("Off agent"),
+    )!;
+    // Not signed in: said, with the agent's own reason, and not to be picked.
+    expect(off.textContent).toContain("未登录");
+    expect(off.textContent).toContain("run `off login` first");
+    expect(off.getAttribute("aria-disabled")).toBe("true");
+    const demo = options().find((option) =>
+      option.textContent?.includes("Demo agent"),
+    )!;
+    expect(demo.getAttribute("aria-disabled")).not.toBe("true");
+    await press(demo);
+    expect(document.getElementById("agent-runtime")!.textContent).toBe(
+      "Demo agent",
+    );
+    // No models of its own, and none needed: the agent runs its default.
+    expect(document.getElementById("agent-model")!.textContent).toContain(
+      "运行时默认模型",
+    );
+    await click("下一步");
+    expect(step()).toContain("指令");
+    expect(alerts()).toEqual([]);
+    await click("创建");
+    expect(created).toEqual([
+      {
+        name: "Demo",
+        instructions: "",
+        persona: "",
+        runtime: "acp.demo",
+        model: null,
+        thinkingLevel: null,
+        machineId: null,
+        plugins: [],
+      },
+    ]);
+  });
+
   it("keeps everything after a failure and creates once on retry", async () => {
     let finish!: (agent: unknown) => void;
     answer = async () => {

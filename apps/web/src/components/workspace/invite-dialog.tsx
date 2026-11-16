@@ -16,7 +16,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { useConversationActions } from "@/queries/conversations";
 import { wireErrorMessage } from "@/queries/wire";
-import { AGENT_SEARCH_FROM, AgentPickRow } from "./agent-pick-row";
+import { AGENT_SEARCH_FROM } from "./agent-pick";
+import { AgentPickRow } from "./agent-pick-row";
 import { moveRow } from "./use-directory-browser";
 
 type Candidate = Pick<AgentView, "id" | "name" | "runtime">;

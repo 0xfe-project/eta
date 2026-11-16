@@ -9,6 +9,11 @@ import { formatLocale, translate } from "@/lib/i18n";
 
 export const DESCRIPTION_MAX = 10_000;
 
+/**
+ * What can answer for an agent: eta's own loop, an oar runtime (Claude Code, Codex, OpenCode, Pi),
+ * or an external ACP agent configured on the host, `acp.<id>`. The ACP ones come only from the
+ * host's list (`agents.runtimes`); none is named here.
+ */
 // One schema for create and edit; new agent settings become new fields here.
 export const agentFormSchema = z.object({
   name: z
@@ -57,7 +62,8 @@ export function agentDraft({
     name,
     instructions: description,
     persona,
-    runtime,
+    // An `acp.<id>` until the contract's own type takes it (#167).
+    runtime: runtime as AgentRuntime,
     model: model || null,
     thinkingLevel: (thinkingLevel || null) as ThinkingLevel | null,
     machineId: machineId || null,

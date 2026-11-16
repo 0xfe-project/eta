@@ -71,6 +71,7 @@ describe("设置左侧那一列", () => {
         "providers",
         "machines",
         "mcp",
+        "acp",
         "plugins",
         "email",
         "archived",

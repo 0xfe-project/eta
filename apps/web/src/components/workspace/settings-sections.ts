@@ -11,6 +11,7 @@ import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { PuzzlePieceIcon } from "@phosphor-icons/react/PuzzlePiece";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { ShieldCheckIcon } from "@phosphor-icons/react/ShieldCheck";
+import { TerminalWindowIcon } from "@phosphor-icons/react/TerminalWindow";
 import { translate } from "@/lib/i18n";
 import { usePlugins } from "@/queries/plugins";
 import { useNeedsAttention } from "@/queries/providers";
@@ -56,6 +57,13 @@ export const settingsSections: {
       return translate("mcp:title");
     },
     icon: PlugIcon,
+  },
+  {
+    value: "acp",
+    get label() {
+      return translate("acp:title");
+    },
+    icon: TerminalWindowIcon,
   },
   {
     value: "plugins",

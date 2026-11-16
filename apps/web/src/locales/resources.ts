@@ -1,3 +1,4 @@
+import enAcp from "./en/acp.json";
 import enAgents from "./en/agents.json";
 import enArtifacts from "./en/artifacts.json";
 import enCaptain from "./en/captain.json";
@@ -16,6 +17,7 @@ import enRoutines from "./en/routines.json";
 import enSettings from "./en/settings.json";
 import enTasks from "./en/tasks.json";
 import enValidation from "./en/validation.json";
+import zhAcp from "./zh/acp.json";
 import zhAgents from "./zh/agents.json";
 import zhArtifacts from "./zh/artifacts.json";
 import zhCaptain from "./zh/captain.json";
@@ -38,6 +40,7 @@ import zhValidation from "./zh/validation.json";
 // English is the source of truth for compile-time translation key checking.
 export const en = {
   common: enCommon,
+  acp: enAcp,
   agents: enAgents,
   artifacts: enArtifacts,
   captain: enCaptain,
@@ -59,6 +62,7 @@ export const en = {
 
 export const zh = {
   common: zhCommon,
+  acp: zhAcp,
   agents: zhAgents,
   artifacts: zhArtifacts,
   captain: zhCaptain,
@@ -82,6 +86,7 @@ export const resources = { en, zh } as const;
 
 export const namespaces = [
   "common",
+  "acp",
   "agents",
   "artifacts",
   "captain",
