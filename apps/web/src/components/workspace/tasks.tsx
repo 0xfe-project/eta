@@ -177,7 +177,7 @@ export function RunState({ task }: { task: Task }) {
   return null;
 }
 
-export function Comments({ count }: { count: number }) {
+function Comments({ count }: { count: number }) {
   const { t: translateText } = useTranslation([
     "tasks",
     "common",

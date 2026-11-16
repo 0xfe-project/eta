@@ -116,16 +116,26 @@ describe("task board", () => {
     useWorkspaceStore.setState({ workspace: {} });
   });
 
-  it("opens on the board, with nothing to switch to", async () => {
+  it("opens on the board, with the list and the plan to switch to", async () => {
     board();
     const { container } = await mount(<TaskBoard />);
     await flush();
     const main = container.querySelector('[role="main"]#main')!;
     // A column for every status, empty or not.
     expect(main.querySelector('section[aria-label="进行中"]')).not.toBeNull();
-    expect(container.querySelector('[role="tablist"]')).toBeNull();
-    expect(container.querySelector('[aria-label="列表"]')).toBeNull();
-    expect(container.querySelector('[aria-label="看板"]')).toBeNull();
+    const views = container.querySelector(
+      '[role="radiogroup"][aria-label="视图"]',
+    )!;
+    expect(
+      [...views.querySelectorAll('[role="radio"]')].map((b) => [
+        b.textContent,
+        b.getAttribute("aria-checked"),
+      ]),
+    ).toEqual([
+      ["看板", "true"],
+      ["列表", "false"],
+      ["计划", "false"],
+    ]);
   });
 
   it("opens on the board in a browser that saved the list", async () => {
@@ -176,16 +186,23 @@ describe("task board", () => {
       label: s.getAttribute("aria-label"),
       cards: [...s.querySelectorAll("li")].map((li) => li.textContent),
     }));
+    // The way work moves; the backlog and the cancelled folded away on the right.
     expect(columns.map((c) => c.label)).toEqual([
-      "积压",
       "待办",
       "进行中",
-      "受阻",
       "待验收",
+      "受阻",
       "已完成",
+      "积压",
+      "已取消",
     ]);
-    expect(columns[1]!.cards[0]).toContain("#1");
-    expect(columns[1]!.cards[0]).toContain("测试任务");
+    expect(
+      [...main.querySelectorAll("section[data-folded]")].map((s) =>
+        s.getAttribute("aria-label"),
+      ),
+    ).toEqual(["积压", "已取消"]);
+    expect(columns[0]!.cards[0]).toContain("#1");
+    expect(columns[0]!.cards[0]).toContain("测试任务");
     expect(container.textContent).toContain("2");
   });
 
@@ -200,16 +217,21 @@ describe("task board", () => {
     expect(card.textContent).toContain("正在运行");
   });
 
-  it("has no way to make a task: tasks are proposed by agents", async () => {
+  it("makes a new task in a conversation: tasks are proposed by agents", async () => {
     const host = board();
     const { container } = await mount(<TaskBoard />);
     await flush();
-    expect(container.textContent).not.toContain("新建");
-    expect(
-      [...container.querySelectorAll("button")].filter((b) =>
-        /新建|创建/.test(`${b.textContent}${b.getAttribute("aria-label")}`),
+    await click(
+      [...container.querySelectorAll("button")].find(
+        (b) => b.textContent === "新建",
       ),
-    ).toHaveLength(0);
+    );
+    await click(
+      [...document.querySelectorAll("button")].find(
+        (b) => b.textContent === "开一个对话",
+      ),
+    );
+    expect(useWorkspaceStore.getState().newConversation.open).toBe(true);
     expect(host.calls.filter((c) => c.action === "create")).toHaveLength(0);
   });
 

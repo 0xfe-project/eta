@@ -1,274 +1,61 @@
-import type { Task, TaskStatus } from "@/queries/tasks";
-import { runningFirst } from "@eta/client-contracts";
+import type { ListGrouping } from "./task-view";
+import type { Task } from "@/queries/tasks";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
-import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { SidebarSimpleIcon } from "@phosphor-icons/react/SidebarSimple";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { useAgentList } from "@/queries/agents";
-import { useTask, useTasks, useUpdateTask } from "@/queries/tasks";
-import { wireErrorMessage } from "@/queries/wire";
+import { useTask, useTasks } from "@/queries/tasks";
 import { PageHeader } from "./app-shell";
 import { BackToTop } from "./back-to-top";
 import { when } from "./routine-format";
-import {
-  actorName,
-  ago,
-  canCancelTree,
-  createdBy,
-  statusLabel,
-  statusTone,
-} from "./task-format";
-import { BlockedExits, DependencyBadge, SubtaskCount } from "./task-graph";
+import { BoardView } from "./task-board-view";
+import { canCancelTree, createdBy } from "./task-format";
+import { ListView } from "./task-list-view";
 import { useTaskNav } from "./task-nav";
-import { StatusIcon } from "./task-status-icon";
+import { childrenOf, filterTasks, planOf, stepsLeft } from "./task-plan";
+import { PlanGroup, PlanView } from "./task-plan-view";
 import { CancelTreeDialog } from "./task-status-select";
 import {
+  ClearFilter,
+  ExecutorFilter,
+  NewTask,
+  ParentFilter,
+  TaskSearch,
+  ViewSwitch,
+} from "./task-toolbar";
+import { listGroupings, useTaskView } from "./task-view";
+import {
   CommentBox,
-  Comments,
   DeleteTaskDialog,
   Description,
   EditableTitle,
   LiveRuns,
   Question,
-  RunState,
   TaskMissing,
   TaskProperties,
   Timeline,
 } from "./tasks";
 
-// The task board as a full-window page: every task on a board to drag across
-// the statuses, or one open task in its place. The task lays itself out by its
-// own width (container queries), not the window's.
-
-const showError = (error: Error) => toast.error(wireErrorMessage(error));
-
-/** The board reads left to right the way work moves. */
-const flow: TaskStatus[] = [
-  "backlog",
-  "todo",
-  "in_progress",
-  "blocked",
-  "in_review",
-  "done",
-  "cancelled",
-];
-
-// --- board --------------------------------------------------------------------------
-
-const dragType = "application/x-eta-task";
-
-/**
- * How a column lays out its tasks: a subtask whose parent is in the same column sits under it,
- * folded until the parent is opened, two levels deep at most; a deeper one sits on the second
- * level and says the rest of the way in its breadcrumb, and one whose parent is in another column
- * stands on its own and says whose it is.
- */
-interface Placed {
-  task: Task;
-  /** The column's subtasks of it, placed the same way. */
-  children: Placed[];
-  /** The tasks between it and where it is drawn: its parent in another column, or the levels skipped. */
-  crumb: Task[];
-}
-
-function place(column: readonly Task[], all: readonly Task[]): Placed[] {
-  const here = new Set(column.map((t) => t.id));
-  const byId = new Map(all.map((t) => [t.id, t]));
-  const childrenOf = (id: string) => column.filter((t) => t.parentId === id);
-  const below = (task: Task, depth: number): Placed[] => {
-    const direct = childrenOf(task.id);
-    if (depth < 2)
-      return direct.map((child) => ({
-        task: child,
-        children: below(child, depth + 1),
-        crumb: [],
-      }));
-    // Deeper than the board indents: flattened onto this level, each with the way down.
-    const out: Placed[] = [];
-    const walk = (t: Task, path: Task[]) => {
-      for (const child of childrenOf(t.id)) {
-        out.push({ task: child, children: [], crumb: path });
-        walk(child, [...path, child]);
-      }
-    };
-    for (const child of direct) {
-      out.push({ task: child, children: [], crumb: [] });
-      walk(child, [child]);
-    }
-    return out;
-  };
-  return column
-    .filter((t) => t.parentId == null || !here.has(t.parentId))
-    .map((task) => {
-      const parent =
-        task.parentId == null ? undefined : byId.get(task.parentId);
-      return {
-        task,
-        children: below(task, 1),
-        crumb: parent === undefined ? [] : [parent],
-      };
-    });
-}
-
-function Card({
-  task,
-  crumb = [],
-  nested = [],
-}: {
-  task: Task;
-  crumb?: Task[];
-  nested?: Placed[];
-}) {
-  const { t } = useTranslation(["tasks", "common", "navigation"] as const);
-  const [, setNav] = useTaskNav();
-  const { agents } = useAgentList();
-  const [unfolded, setUnfolded] = useState(false);
-  return (
-    <li>
-      <button
-        type="button"
-        draggable
-        onDragStart={(e) => {
-          e.dataTransfer.setData(dragType, task.id);
-          e.dataTransfer.effectAllowed = "move";
-        }}
-        onClick={() => void setNav({ task: task.id })}
-        className="block w-full space-y-1.5 border bg-card p-2.5 text-left duration-[60ms] ease-linear outline-none hover:border-foreground/30 focus-visible:ring-1 focus-visible:ring-ring active:cursor-grabbing"
-      >
-        {crumb.length > 0 ? (
-          <span className="block truncate text-xs text-muted-foreground">
-            {crumb.map((up) => `#${up.number} ${up.title}`).join(" › ")} ›
-          </span>
-        ) : null}
-        <span className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
-          #{task.number}
-          <span className="ml-auto flex items-center gap-2">
-            <RunState task={task} />
-            <Comments count={task.comments} />
-            <StatusIcon status={task.status} className="size-3.5" />
-          </span>
-        </span>
-        <span className="line-clamp-3 text-sm wrap-anywhere">{task.title}</span>
-        <DependencyBadge task={task} />
-        <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground tabular-nums">
-          <span className="truncate">{actorName(task.createdBy, agents)}</span>
-          <span className="shrink-0">{ago(task.updatedAt)}</span>
-        </span>
-      </button>
-      <BlockedExits task={task} />
-      {task.subtasks == null ? null : (
-        <button
-          type="button"
-          aria-expanded={unfolded}
-          aria-label={t(unfolded ? "graph.collapse" : "graph.expand", {
-            number: task.number,
-          })}
-          disabled={nested.length === 0}
-          onClick={() => setUnfolded((open) => !open)}
-          className="flex w-full items-center gap-1 border-x border-b bg-card px-2.5 py-1 text-xs text-muted-foreground duration-[60ms] ease-linear outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring disabled:hover:text-muted-foreground"
-        >
-          {nested.length === 0 ? null : unfolded ? (
-            <CaretDownIcon aria-hidden="true" className="size-3" />
-          ) : (
-            <CaretRightIcon aria-hidden="true" className="size-3" />
-          )}
-          <SubtaskCount task={task} />
-        </button>
-      )}
-      {unfolded && nested.length > 0 ? (
-        <ul className="mt-1.5 ml-3 space-y-1.5 border-l pl-1.5">
-          {nested.map((child) => (
-            <Card
-              key={child.task.id}
-              task={child.task}
-              crumb={child.crumb}
-              nested={child.children}
-            />
-          ))}
-        </ul>
-      ) : null}
-    </li>
-  );
-}
-
-function BoardView({ tasks }: { tasks: readonly Task[] }) {
-  useTranslation(["tasks", "common", "navigation"] as const);
-  const update = useUpdateTask();
-  const [over, setOver] = useState<TaskStatus | null>(null);
-  const columns = flow.filter(
-    (status) =>
-      status !== "cancelled" || tasks.some((t) => t.status === status),
-  );
-  return (
-    <div className="flex h-full gap-3 overflow-x-auto px-4 py-4 sm:px-6">
-      {columns.map((status) => {
-        // Newest first, as the board sends them, but a task that runs before one that waits.
-        const group = runningFirst(tasks.filter((t) => t.status === status));
-        const label = statusLabel(status);
-        return (
-          <section
-            key={status}
-            aria-label={label}
-            onDragOver={(e) => {
-              if (!e.dataTransfer.types.includes(dragType)) return;
-              e.preventDefault();
-              setOver(status);
-            }}
-            onDragLeave={(e) => {
-              if (!e.currentTarget.contains(e.relatedTarget as Node))
-                setOver(null);
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              setOver(null);
-              const id = e.dataTransfer.getData(dragType);
-              const task = tasks.find((t) => t.id === id);
-              if (task && task.status !== status)
-                update.mutate({ taskId: id, status }, { onError: showError });
-            }}
-            className={cn(
-              "flex w-72 shrink-0 flex-col border-t-2 bg-muted/50 outline-offset-[-1px] duration-[60ms] ease-linear",
-              statusTone(status).border,
-              over === status && "bg-muted outline outline-foreground/30",
-            )}
-          >
-            <div className="flex h-9 shrink-0 items-center gap-2 pr-1 pl-2.5 text-xs font-medium">
-              <StatusIcon status={status} className="size-3.5" />
-              {label}
-              <span className="text-muted-foreground tabular-nums">
-                {group.length}
-              </span>
-            </div>
-            <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-1.5 pb-1.5">
-              {place(group, tasks).map((placed) => (
-                <Card
-                  key={placed.task.id}
-                  task={placed.task}
-                  crumb={placed.crumb}
-                  nested={placed.children}
-                />
-              ))}
-            </ul>
-          </section>
-        );
-      })}
-    </div>
-  );
-}
+// The tasks page: every task as a board to drag across the statuses, a list grouped by the piece
+// of work each belongs to, or a plan of the steps the work falls into; or one open task in its
+// place. The three views share one bar and one filter. The task lays itself out by its own width
+// (container queries), not the window's.
 
 // --- task ---------------------------------------------------------------------------
 
@@ -296,6 +83,10 @@ function TaskPage({ id }: { id: string }) {
   const [cancelling, setCancelling] = useState(false);
   // Opened from the header, only while the rail does not fit.
   const [propertiesOpen, setPropertiesOpen] = useState(false);
+  const { tasks: all } = useTasks();
+  const phone = useIsMobile();
+  // A piece of work opens on its plan; its overview is the page every task has.
+  const [mode, setMode] = useState<"overview" | "plan">("plan");
   const back = () => void setNav({ task: null });
   // The list goes inert as the task opens; take focus so it doesn't fall to
   // <body>. Each branch below has its own <main>, so again once loaded.
@@ -331,9 +122,19 @@ function TaskPage({ id }: { id: string }) {
       </>
     );
   const propertiesLabel = translateText("details.propertiesTab");
+  const children = childrenOf(task.id, all);
+  const isParent = children.length > 0;
+  const showPlan = isParent && mode === "plan";
   return (
     <>
       <PageHeader title={crumbs}>
+        {isParent ? (
+          <ViewSwitch
+            value={mode}
+            options={["overview", "plan"]}
+            onChange={(v) => setMode(v as "overview" | "plan")}
+          />
+        ) : null}
         <Button
           variant="ghost"
           size="icon-sm"
@@ -341,7 +142,7 @@ function TaskPage({ id }: { id: string }) {
           aria-expanded={propertiesOpen}
           aria-controls="task-properties"
           title={propertiesLabel}
-          className="@4xl:hidden"
+          className={cn("@4xl:hidden", showPlan && "hidden")}
           onClick={() => setPropertiesOpen((open) => !open)}
         >
           <SidebarSimpleIcon aria-hidden="true" />
@@ -382,71 +183,145 @@ function TaskPage({ id }: { id: string }) {
           onDeleted={back}
         />
       </PageHeader>
-      <main
-        ref={mainRef}
-        id="main"
-        tabIndex={-1}
-        className="grid min-h-0 w-full flex-1 grid-cols-1 overflow-hidden outline-none @4xl:grid-cols-[minmax(0,1fr)_17.5rem]"
-      >
-        <div className="min-h-0 overflow-y-auto">
-          <div className="mx-auto w-full max-w-[42.5rem] space-y-6 px-4 pt-4 pb-6 sm:px-8">
-            <p className="text-xs text-muted-foreground tabular-nums">
-              <span>#{task.number}</span>
-              {" · "}
-              {createdBy(task, agents)}
-            </p>
-            <EditableTitle task={task} className="text-xl" />
-            <Question task={task} />
-            <Description key={task.description} task={task} className="" />
-            <section aria-labelledby="task-activity" className="space-y-3">
-              <h2 id="task-activity" className="text-sm font-semibold">
-                {translateText("details.activityTab")}
-              </h2>
-              <Timeline task={task} />
-              <CommentBox
-                task={task}
-                className="sticky bottom-0 z-10 -mx-4 bg-background px-4 pt-2 pb-4 sm:-mx-8 sm:px-8"
-                top={<LiveRuns task={task} className="space-y-1 pb-1.5" />}
-              />
-            </section>
-          </div>
-          <BackToTop className="mx-auto max-w-[42.5rem] px-4 sm:px-8" />
-        </div>
-        {propertiesOpen ? (
-          <button
-            type="button"
-            aria-label={propertiesLabel}
-            className="fixed inset-0 z-20 bg-black/20 @4xl:hidden"
-            onClick={() => setPropertiesOpen(false)}
-          />
-        ) : null}
-        <aside
-          id="task-properties"
-          aria-label={propertiesLabel}
-          // Narrow: `hidden` takes it out of the one-column grid until the
-          // header opens it over the document. Wide (`@4xl`): `@4xl:block`
-          // wins over that, so the rail stays in the second column.
-          className={cn(
-            "overflow-y-auto border-l bg-background px-4 py-5 text-xs",
-            "@4xl:static @4xl:z-auto @4xl:block @4xl:w-auto @4xl:shadow-none",
-            propertiesOpen
-              ? "fixed top-12 right-0 bottom-0 z-30 block w-[17.5rem] shadow-md"
-              : "hidden",
-          )}
+      {showPlan ? (
+        <main
+          ref={mainRef}
+          id="main"
+          tabIndex={-1}
+          className="min-h-0 flex-1 overflow-y-auto px-4 py-4 outline-none sm:px-6"
         >
-          <TaskProperties task={task}>
-            <dt className="text-xs leading-8 text-muted-foreground">
-              {translateText("fields.updatedAt")}
-            </dt>
-            <dd className="leading-8 tabular-nums">{when(task.updatedAt)}</dd>
-          </TaskProperties>
-        </aside>
-      </main>
+          <p className="mb-3 text-xs text-muted-foreground tabular-nums">
+            {`#${task.number} · `}
+            {stepsLeft(
+              planOf(children.filter((c) => c.status !== "cancelled")),
+            ) === 0
+              ? translateText("plan.allDone")
+              : translateText("plan.left", {
+                  count: stepsLeft(
+                    planOf(children.filter((c) => c.status !== "cancelled")),
+                  ),
+                })}
+          </p>
+          <PlanGroup
+            parent={all.find((x) => x.id === task.id) ?? task}
+            tasks={children.filter((c) => c.status !== "cancelled")}
+            all={all}
+            phone={phone}
+            head={false}
+          />
+        </main>
+      ) : (
+        <main
+          ref={mainRef}
+          id="main"
+          tabIndex={-1}
+          className="grid min-h-0 w-full flex-1 grid-cols-1 overflow-hidden outline-none @4xl:grid-cols-[minmax(0,1fr)_17.5rem]"
+        >
+          <div className="min-h-0 overflow-y-auto">
+            <div className="mx-auto w-full max-w-[42.5rem] space-y-6 px-4 pt-4 pb-6 sm:px-8">
+              <p className="text-xs text-muted-foreground tabular-nums">
+                <span>#{task.number}</span>
+                {" · "}
+                {createdBy(task, agents)}
+              </p>
+              <EditableTitle task={task} className="text-xl" />
+              <Question task={task} />
+              <Description key={task.description} task={task} className="" />
+              <section aria-labelledby="task-activity" className="space-y-3">
+                <h2 id="task-activity" className="text-sm font-semibold">
+                  {translateText("details.activityTab")}
+                </h2>
+                <Timeline task={task} />
+                <CommentBox
+                  task={task}
+                  className="sticky bottom-0 z-10 -mx-4 bg-background px-4 pt-2 pb-4 sm:-mx-8 sm:px-8"
+                  top={<LiveRuns task={task} className="space-y-1 pb-1.5" />}
+                />
+              </section>
+            </div>
+            <BackToTop className="mx-auto max-w-[42.5rem] px-4 sm:px-8" />
+          </div>
+          {propertiesOpen ? (
+            <button
+              type="button"
+              aria-label={propertiesLabel}
+              className="fixed inset-0 z-20 bg-black/20 @4xl:hidden"
+              onClick={() => setPropertiesOpen(false)}
+            />
+          ) : null}
+          <aside
+            id="task-properties"
+            aria-label={propertiesLabel}
+            // Narrow: `hidden` takes it out of the one-column grid until the
+            // header opens it over the document. Wide (`@4xl`): `@4xl:block`
+            // wins over that, so the rail stays in the second column.
+            className={cn(
+              "overflow-y-auto border-l bg-background px-4 py-5 text-xs",
+              "@4xl:static @4xl:z-auto @4xl:block @4xl:w-auto @4xl:shadow-none",
+              propertiesOpen
+                ? "fixed top-12 right-0 bottom-0 z-30 block w-[17.5rem] shadow-md"
+                : "hidden",
+            )}
+          >
+            <TaskProperties task={task}>
+              <dt className="text-xs leading-8 text-muted-foreground">
+                {translateText("fields.updatedAt")}
+              </dt>
+              <dd className="leading-8 tabular-nums">{when(task.updatedAt)}</dd>
+            </TaskProperties>
+          </aside>
+        </main>
+      )}
     </>
   );
 }
 
 // --- page ---------------------------------------------------------------------------
+
+/** The bar's filters: in the header on a wide page, a row of their own under it on a phone. */
+function Filters({ tasks }: { tasks: readonly Task[] }) {
+  return (
+    <>
+      <TaskSearch />
+      <ExecutorFilter tasks={tasks} />
+      <ParentFilter tasks={tasks} />
+      <ClearFilter />
+    </>
+  );
+}
+
+/** The list's grouping: by the piece of work, by status, or none. */
+function GroupingMenu() {
+  const { t } = useTranslation(["tasks"] as const);
+  const grouping = useTaskView((s) => s.grouping);
+  const setGrouping = useTaskView((s) => s.setGrouping);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 px-2 text-xs font-normal text-muted-foreground"
+        >
+          {t("list.grouping", { name: t(`list.groupBy.${grouping}`) })}
+          <CaretDownIcon aria-hidden="true" className="size-3" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuRadioGroup
+          value={grouping}
+          onValueChange={(v) => setGrouping(v as ListGrouping)}
+        >
+          {listGroupings.map((g) => (
+            <DropdownMenuRadioItem key={g} value={g}>
+              {t(`list.groupBy.${g}`)}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export function TaskBoard() {
   const { t: translateText } = useTranslation([
@@ -456,6 +331,13 @@ export function TaskBoard() {
   ] as const);
   const [nav] = useTaskNav();
   const { tasks, loaded, error } = useTasks();
+  const view = useTaskView((s) => s.view);
+  const setView = useTaskView((s) => s.setView);
+  const grouping = useTaskView((s) => s.grouping);
+  const filter = useTaskView((s) => s.filter);
+  const phone = useIsMobile();
+  const shown = useMemo(() => filterTasks(tasks, filter), [tasks, filter]);
+  const filtered = shown.length !== tasks.length;
   const id = nav.task ?? null;
   // An open task takes the page; the board stays behind it, laid out but
   // unseen, so going back finds it scrolled as it was left.
@@ -474,17 +356,30 @@ export function TaskBoard() {
               {translateText("navigation:sections.tasks")}
               {loaded ? (
                 <span className="font-normal text-muted-foreground tabular-nums">
-                  {tasks.length}
+                  {filtered
+                    ? `${shown.length} / ${tasks.length}`
+                    : tasks.length}
                 </span>
               ) : null}
             </>
           }
-        />
+        >
+          {phone ? null : <Filters tasks={tasks} />}
+          {view === "list" && !phone ? <GroupingMenu /> : null}
+          <ViewSwitch value={view} onChange={setView} />
+          <NewTask />
+        </PageHeader>
+        {phone ? (
+          <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b px-2 py-1">
+            <Filters tasks={tasks} />
+          </div>
+        ) : null}
         {/* The page's main until a task takes the page; the same element
             either way, so the board keeps its place behind the task. */}
         <section
           role={id ? undefined : "main"}
           id={id ? undefined : "main"}
+          data-view={view}
           className="min-h-0 flex-1 overflow-hidden"
         >
           {error ? (
@@ -502,8 +397,24 @@ export function TaskBoard() {
                 {translateText("empty.description")}
               </Empty>
             </div>
+          ) : shown.length === 0 ? (
+            <div className="mx-auto max-w-md py-16">
+              <Empty
+                icon={ListChecksIcon}
+                title={translateText("views.noMatch")}
+              />
+            </div>
+          ) : view === "list" ? (
+            <ListView
+              tasks={shown}
+              all={tasks}
+              grouping={grouping}
+              phone={phone}
+            />
+          ) : view === "plan" ? (
+            <PlanView tasks={shown} all={tasks} phone={phone} />
           ) : (
-            <BoardView tasks={tasks} />
+            <BoardView tasks={shown} all={tasks} phone={phone} />
           )}
         </section>
       </div>

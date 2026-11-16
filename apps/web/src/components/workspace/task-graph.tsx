@@ -15,7 +15,6 @@ import {
   useAddDependency,
   useRemoveDependency,
   useSetParent,
-  useUpdateTask,
 } from "@/queries/tasks";
 import { wireErrorMessage } from "@/queries/wire";
 import { numbersLabel } from "./task-format";
@@ -90,62 +89,6 @@ export function DependencyBadge({
         </span>
       ) : null}
     </span>
-  );
-}
-
-/**
- * The way out of a block a cancelled dependency made: stop waiting for it, or cancel this task.
- * Shown on a blocked card whose task waits for something cancelled; the host undoes its own block
- * once nothing it waits for is cancelled.
- */
-export function BlockedExits({ task }: { task: Task }) {
-  const { t } = useTranslation(["tasks"] as const);
-  const remove = useRemoveDependency();
-  const update = useUpdateTask();
-  const { cancelled } = open(task);
-  if (task.status !== "blocked" || cancelled.length === 0) return null;
-  // Only the task's own edges can be removed here; an inherited one is its parent's to remove.
-  const busy = remove.isPending || update.isPending;
-  return (
-    <div
-      role="group"
-      aria-label={t("graph.blockedHint")}
-      className="flex flex-wrap gap-1 border-x border-b bg-card px-2 pb-2"
-    >
-      {cancelled
-        .filter((edge) => edge.via === null)
-        .map((edge) => (
-          <Button
-            key={edge.taskId}
-            variant="outline"
-            size="xs"
-            disabled={busy}
-            onClick={() =>
-              remove.mutate(
-                { taskId: task.id, dependsOn: edge.taskId },
-                { onError: showError },
-              )
-            }
-          >
-            <LinkBreakIcon aria-hidden="true" />
-            {t("graph.removeShort", { number: edge.number })}
-          </Button>
-        ))}
-      <Button
-        variant="ghost"
-        size="xs"
-        disabled={busy}
-        onClick={() =>
-          update.mutate(
-            { taskId: task.id, status: "cancelled" },
-            { onError: showError },
-          )
-        }
-      >
-        <XIcon aria-hidden="true" />
-        {t("graph.cancelTask")}
-      </Button>
-    </div>
   );
 }
 

@@ -80,32 +80,31 @@ describe("dependencies on the board", () => {
     host();
     const { container } = await mount(<TaskBoard />);
     await flush();
-    expect(card(container, "等别人的任务").textContent).toContain("等待 #2");
-    expect(card(container, "等别人的任务").textContent).not.toContain("#1");
-    expect(card(container, "老任务").textContent).not.toContain("等待");
+    // By its title, from a host that sends only the task's own edges.
+    const waiting = card(container, "等别人的任务");
+    expect(waiting.querySelector("[data-wait]")!.textContent).toBe(
+      "等 T2 交付",
+    );
+    expect(waiting.textContent).not.toContain("T1");
+    expect(card(container, "老任务").querySelector("[data-wait]")).toBeNull();
     expect(card(container, "老任务").querySelector("[role=group]")).toBeNull();
   });
 
-  it("offers a blocked card the way out: remove the cancelled dependency, or cancel", async () => {
+  it("offers a blocked card the way out: stop waiting and start, or wait for another", async () => {
     const h = host();
     const { container } = await mount(<TaskBoard />);
     await flush();
     const blocked = card(container, "被卡住的任务");
-    expect(blocked.textContent).toContain("依赖 #5 已取消");
+    expect(blocked.textContent).toContain("它等的「T5」被取消了");
     const buttons = [...blocked.querySelectorAll("[role=group] button")];
     expect(buttons.map((b) => b.textContent)).toEqual([
-      "去掉依赖 #5",
-      "取消本任务",
+      "不等了，直接开始",
+      "换一个前置…",
     ]);
     await click(buttons[0]!);
     expect(h.calls.find((c) => c.action === "removeDependency")?.args).toEqual({
       taskId: "t4",
       dependsOn: "t5",
-    });
-    await click(buttons[1]!);
-    expect(h.calls.find((c) => c.action === "update")?.args).toEqual({
-      taskId: "t4",
-      status: "cancelled",
     });
   });
 
@@ -143,18 +142,23 @@ describe("dependencies on the board", () => {
     const column = (label: string) =>
       container.querySelector(`section[aria-label="${label}"]`)!;
     const going = column("进行中");
-    // One card at the top of the column: the subtask is folded under its parent.
-    expect(going.querySelectorAll(":scope > ul > li")).toHaveLength(1);
-    expect(going.textContent).toContain("子任务 0/2");
-    expect(going.textContent).not.toContain("子任务甲");
+    // The parent and its subtask each have a card; the subtask says whose step it is.
+    expect(going.querySelectorAll(":scope > ul > li")).toHaveLength(2);
+    expect(going.textContent).toContain("#10 · 2 个子任务");
+    expect(going.querySelector('li[data-task="11"]')!.textContent).toContain(
+      "阶段一 › 第 1 步",
+    );
     const toggle = going.querySelector<HTMLButtonElement>(
       'button[aria-expanded="false"]',
     )!;
     expect(toggle.getAttribute("aria-label")).toBe("展开 #10 的子任务");
     await click(toggle);
-    expect(going.textContent).toContain("子任务甲");
-    // In review, away from its parent: on its own, saying whose it is.
-    expect(column("待验收").textContent).toContain("#10 阶段一 ›");
+    expect(
+      going.querySelector('li[data-task="10"] ul[aria-label="子任务"]')!
+        .textContent,
+    ).toContain("子任务乙");
+    // In review, away from its parent: its card says whose it is.
+    expect(column("待验收").textContent).toContain("阶段一 › 第 1 步");
   });
 
   it("says the graph's history in the reader's language, and an old entry in its own words", async () => {
@@ -261,6 +265,12 @@ describe("dependencies on the board", () => {
     navigation.task = "p1";
     const { container } = await mount(<TaskBoard />);
     await flush();
+    // A piece of work opens on its plan; its overview is a click away.
+    await click(
+      [...container.querySelectorAll('[role="radio"]')].find(
+        (b) => b.textContent === "概览",
+      ),
+    );
     const main = container.querySelector("main")!;
     expect(main.textContent).toContain("父任务不单独运行，状态由子任务推出");
     expect(main.textContent).not.toContain("还没运行过");
