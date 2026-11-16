@@ -52,7 +52,7 @@ export function useTargetMissing(target: string | undefined): boolean {
  * Why a plugin's targets will not come: the host does not have the plugin, or it failed to load.
  * Undefined while the connection is still being made, and when all is well.
  */
-function usePluginError(name: string): Error | undefined {
+export function usePluginError(name: string): Error | undefined {
   const failure = useWireState((state) => {
     if (state.status !== "open") return undefined;
     const plugin = state.mounted.find((entry) => entry.name === name);

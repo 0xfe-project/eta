@@ -16,9 +16,10 @@
  * - The host's tools reach the agent as an MCP server on this machine (`eta`), where the agent
  *   takes HTTP MCP servers; a call runs through the session's own middleware chain. The
  *   session's plugin MCP servers go along in the same list.
- * - `session/request_permission` is answered here: by the agent's `autoAllow`, or by the user
- *   through the session's ask channel. A turn that is cancelled answers every one still waiting
- *   as `cancelled`.
+ * - `session/request_permission` is answered here, always with yes (the agent's own allow option,
+ *   this once): nobody is asked and nothing reaches the Inbox. A request outside a turn, or after
+ *   the turn was cancelled, is answered `cancelled`.
+ * - The process starts in the session's working directory.
  */
 import type {
   AgentCapabilities,
@@ -41,7 +42,6 @@ import type {
   RunDelegate,
   RunDelegateContext,
 } from "@eta/core";
-import type { SessionRuntimeAsk } from "@eta/server";
 import type { AcpChoices } from "./models";
 import { serveMcpTools } from "@botiverse/oar";
 import { toToolResultMessage } from "@eta/core";
@@ -59,7 +59,6 @@ export interface AcpDelegateOptions {
   resume: string | undefined;
   agentPrompt: () => string | undefined;
   remember: (nativeSession: string) => void;
-  ask: SessionRuntimeAsk | undefined;
   mcpServers: readonly SessionMcpServer[] | undefined;
   /** The host's tools this session is offered, by name; read when the agent's session opens. */
   hostTools: () => readonly string[];
@@ -196,7 +195,7 @@ export class AcpDelegate implements RunDelegate {
   #running = false;
   #disposed = false;
   #translator: Translator | undefined;
-  /** Aborts the questions a turn is waiting on. */
+  /** Aborted when the turn ends or is cancelled: a permission request after that is refused. */
   #permissions: AbortController | undefined;
   /** The agent's running cost that the transcript has been charged. */
   #charged = 0;
@@ -382,11 +381,11 @@ export class AcpDelegate implements RunDelegate {
         command: agent.command,
         args: agent.args,
         env: agent.env,
-        cwd: agent.cwd ?? this.#options.cwd,
+        cwd: this.#options.cwd,
       },
       {
         update: (notification) => this.#update(notification),
-        permission: async (request) => await this.#permission(request),
+        permission: async (request) => this.#permission(request),
       },
       { warn: this.#options.warn, label: this.#options.runtime },
     );
@@ -654,9 +653,7 @@ export class AcpDelegate implements RunDelegate {
     this.#translator?.see(update);
   }
 
-  async #permission(
-    request: RequestPermissionRequest,
-  ): Promise<RequestPermissionResponse> {
+  #permission(request: RequestPermissionRequest): RequestPermissionResponse {
     const translator = this.#translator;
     const signal = this.#permissions?.signal;
     const opened = this.#opened;
@@ -668,65 +665,12 @@ export class AcpDelegate implements RunDelegate {
       opened === undefined
     )
       return CANCELLED;
-    // The call is in the transcript before anyone is asked about it.
+    // The call is in the transcript before the agent hears the answer.
     translator.call({ ...request.toolCall, status: undefined });
-    const selected = (option: PermissionOption): RequestPermissionResponse => ({
-      outcome: { outcome: "selected", optionId: option.optionId },
-    });
-    if (opened.agent.autoAllow === true) {
-      // This once: the agent is not told to stop asking on the user's behalf.
-      const allow = optionFor(request.options, ["allow_once", "allow_always"]);
-      return allow === undefined ? CANCELLED : selected(allow);
-    }
-    const refused = (): RequestPermissionResponse => {
-      const reject = optionFor(request.options, ["reject_once"]);
-      return reject === undefined ? CANCELLED : selected(reject);
-    };
-    const ask = this.#options.ask;
-    if (ask === undefined) return refused();
-    const names = [...new Set(request.options.map((option) => option.name))];
-    const answer = await ask(
-      {
-        questionId: `acp-permission:${request.toolCall.toolCallId}`,
-        question: questionOf(opened.agent.label, request),
-        options: names,
-      },
-      { signal },
-    );
-    if (signal.aborted) return CANCELLED;
-    const said =
-      answer.kind === "selection"
-        ? answer.selections
-        : answer.kind === "freeform"
-          ? [answer.text]
-          : [];
-    for (const word of said) {
-      const wanted = word.trim().toLowerCase();
-      const option =
-        request.options.find((item) => item.name === word) ??
-        request.options.find((item) => item.name.toLowerCase() === wanted) ??
-        (["allow", "yes", "approve"].includes(wanted)
-          ? optionFor(request.options, ["allow_once"])
-          : ["deny", "no", "reject"].includes(wanted)
-            ? optionFor(request.options, ["reject_once"])
-            : undefined);
-      if (option !== undefined) return selected(option);
-    }
-    // Nobody answered, or not in the agent's terms: that is not a yes.
-    return refused();
+    // Yes, this once: the agent is not told to stop asking.
+    const allow = optionFor(request.options, ["allow_once", "allow_always"]);
+    return allow === undefined
+      ? CANCELLED
+      : { outcome: { outcome: "selected", optionId: allow.optionId } };
   }
-}
-
-function questionOf(label: string, request: RequestPermissionRequest): string {
-  const call = request.toolCall;
-  const what = call.title ?? call.name ?? "use a tool";
-  let input = "";
-  if (call.rawInput !== undefined && call.rawInput !== null) {
-    const raw =
-      typeof call.rawInput === "string"
-        ? call.rawInput
-        : JSON.stringify(call.rawInput);
-    input = `\n${raw.length > 600 ? `${raw.slice(0, 600)}…` : raw}`;
-  }
-  return `${label} asks permission: ${what}${call.kind == null ? "" : ` (${call.kind})`}${input}`;
 }

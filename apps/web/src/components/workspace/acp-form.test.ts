@@ -44,12 +44,33 @@ describe("checkAcpDraft", () => {
       command: "demo",
       args: ["--acp", "-v"],
       env: { A: "1" },
-      cwd: "/srv",
-      autoAllow: true,
     };
     expect(checkAcpDraft(acpDraftOf(config), [])).toEqual({
       ok: true,
       config,
+    });
+  });
+  it("has no working directory or auto-allow: what an older file held is not carried", () => {
+    const older = {
+      id: "demo",
+      label: "Demo",
+      command: "demo",
+      args: [],
+      env: {},
+      cwd: "/srv",
+      autoAllow: true,
+    };
+    const draft = acpDraftOf(older);
+    expect(Object.keys(draft).sort()).toEqual([
+      "args",
+      "command",
+      "env",
+      "id",
+      "label",
+    ]);
+    expect(checkAcpDraft(draft, [])).toEqual({
+      ok: true,
+      config: { id: "demo", label: "Demo", command: "demo", args: [], env: {} },
     });
   });
   it("refuses an id taken by another agent", () => {

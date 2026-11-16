@@ -1,9 +1,11 @@
 /**
- * ACP (Agent Client Protocol) agents as runtimes: what the host's `~/.eta/acp.json` holds, and
+ * ACP (Agent Client Protocol) agents as runtimes: what each machine's `~/.eta/acp.json` holds, and
  * what the `acp` wire target says about it.
  *
- * Every configured agent is a runtime of its own, `acp.<id>`: an agent picks it like `claude` or
- * `codex`, and the host starts the configured command as a stdio child that speaks ACP.
+ * Every configured agent is a runtime of its own, `acp.<id>`, on the machine whose file lists it:
+ * an agent picks it like `claude` or `codex`, and that machine starts the configured command as a
+ * stdio child that speaks ACP, in the session's working directory. Its permission requests are
+ * all answered yes. The same id on two machines is two separate agents.
  */
 
 /** One ACP agent, as the user configured it. */
@@ -15,13 +17,9 @@ export interface AcpAgentConfig {
   command: string;
   args: string[];
   env: Record<string, string>;
-  /** Where the process starts; the session's working directory when absent. */
-  cwd?: string;
-  /** Answer the agent's permission requests without asking the user. Off when absent. */
-  autoAllow?: boolean;
 }
 
-/** One item of `acp.list`: the configuration, and what this host found when it looked. */
+/** One agent in a machine's list: the configuration, and what that machine found when it looked. */
 export interface AcpAgentView extends AcpAgentConfig {
   runtime: `acp.${string}`;
   /** As `AgentRuntimeInfo.status`. */
@@ -42,7 +40,20 @@ export interface AcpTestResult {
   authMethods?: string[];
 }
 
-export const ACP_ACTIONS = ["list", "save", "delete", "test"] as const;
+/**
+ * One machine's agents in the `acp` target's `machines` section, by machine id: the list, or why
+ * its file cannot be read whole (then nothing on that machine can be changed). A daemon is there
+ * once it was asked for (`acp.refresh`) while online.
+ */
+export type AcpMachineList =
+  | { agents: AcpAgentView[]; error?: undefined }
+  | { error: string; agents?: undefined };
+
+/**
+ * The `acp` target's calls. Each takes a `machineId` (the primary when absent); a daemon that is
+ * not online is an error, never the primary instead.
+ */
+export const ACP_ACTIONS = ["refresh", "save", "delete", "test"] as const;
 export type AcpAction = (typeof ACP_ACTIONS)[number];
 
 /** What an ACP agent's id has to look like. */

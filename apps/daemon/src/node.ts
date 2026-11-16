@@ -28,6 +28,7 @@ import type { CallFrame, ServerFrame } from "@eta/client-wire-proto";
 import type { KernelTool, PersonaCard, ThinkingLevel } from "@eta/core";
 import type { AskObserver } from "@eta/harness";
 import type { McpManagerOptions } from "@eta/mcp";
+import type { AcpRuntimes } from "@eta/runtime-acp";
 import type {
   ListedRuntimes,
   SessionMeta,
@@ -45,7 +46,7 @@ import process from "node:process";
 import { LINK_PROTOCOL } from "@eta/client-contracts";
 import { kernelOn } from "@eta/core";
 import { createRefreshDedupingFetch } from "@eta/mcp";
-import { createAcpRuntimes } from "@eta/runtime-acp";
+import { AcpAdmin, createAcpRuntimes } from "@eta/runtime-acp";
 import { createOarRuntimes } from "@eta/runtime-oar";
 import {
   composeRuntimes,
@@ -96,6 +97,11 @@ export interface DaemonNodeOptions {
    * what is configured here. (A test hands in scripted ones.)
    */
   runtimes?: ListedRuntimes | undefined;
+  /**
+   * The ACP agents the settings page edits on this machine (`acp*` calls). By default the ones
+   * the default runtimes run; with `runtimes` handed in, none unless given here too.
+   */
+  acp?: AcpRuntimes | undefined;
   /** The fetch of MCP's HTTP transports and token requests (a test reaches a fake server). */
   mcpFetch?: McpManagerOptions["fetch"] | undefined;
   /** Overrides of the MCP library's manager, for a test. */
@@ -143,6 +149,8 @@ export class DaemonNode {
   readonly #store: FileSessionStore;
   readonly #catalog = new ModelCatalog();
   readonly #runtimes: ListedRuntimes;
+  /** This machine's `~/.eta/acp.json`, as the primary's settings page edits it. */
+  readonly #acp: AcpAdmin | undefined;
   /** MCP for the sessions on eta's own loop; its OAuth credentials are the primary's. */
   readonly #mcp: McpHost;
   /** The plugins the primary sent, by contents. */
@@ -173,15 +181,18 @@ export class DaemonNode {
     });
     const home = options.home ?? homedir();
     this.#plugins = new PluginStore(join(options.dataDir, "plugins", "store"));
+    const acp =
+      options.acp ??
+      (options.runtimes === undefined
+        ? createAcpRuntimes({
+            configPath: join(home, ".eta", "acp.json"),
+            warn,
+          })
+        : undefined);
+    this.#acp = acp === undefined ? undefined : new AcpAdmin({ acp });
     this.#runtimes =
       options.runtimes ??
-      composeRuntimes([
-        createOarRuntimes({ warn }),
-        createAcpRuntimes({
-          configPath: join(home, ".eta", "acp.json"),
-          warn,
-        }),
-      ]);
+      composeRuntimes([createOarRuntimes({ warn }), ...(acp ? [acp] : [])]);
     this.#mcp = new McpHost({
       dataDir: options.dataDir,
       home,
@@ -398,6 +409,28 @@ export class DaemonNode {
       const { fresh } = (raw ?? {}) as DaemonServiceParams["runtimes"];
       return { runtimes: await this.#runtimes.catalog.list(fresh === true) };
     });
+    // The settings page's ACP agents, this machine's own. Agents (and so who still runs on an id)
+    // are the primary's: it checks that before it asks for a rename or a delete.
+    peer.handle("acpList", async (raw) => {
+      const { settled } = (raw ?? {}) as DaemonServiceParams["acpList"];
+      const admin = this.#acpAdmin();
+      return {
+        agents: settled === true ? await admin.settled() : admin.list(),
+      };
+    });
+    peer.handle("acpSave", (raw) => {
+      const { agent, previousId } = raw as DaemonServiceParams["acpSave"];
+      return this.#acpAdmin().save(agent, previousId);
+    });
+    peer.handle("acpDelete", (raw) => {
+      const { id } = raw as DaemonServiceParams["acpDelete"];
+      this.#acpAdmin().delete(id);
+      return {};
+    });
+    peer.handle("acpTest", async (raw) => {
+      const { agent } = raw as DaemonServiceParams["acpTest"];
+      return await this.#acpAdmin().test(agent);
+    });
     // What the questions did while nobody was listening.
     this.#reports.attach(peer);
     return {
@@ -516,6 +549,12 @@ export class DaemonNode {
           )(argsOf(call)),
         })),
     );
+  }
+
+  #acpAdmin(): AcpAdmin {
+    if (this.#acp === undefined)
+      throw new Error("this daemon runs no ACP agents");
+    return this.#acp;
   }
 
   #service(): SessionsService {

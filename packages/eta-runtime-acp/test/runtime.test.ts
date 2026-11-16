@@ -3,15 +3,18 @@
  * the fake agent as a real stdio child speaking the protocol through the same SDK.
  *
  * What these pin: a prompt's updates land in the journal as eta turns while they stream; a tool
- * call becomes a call and its result; a permission request reaches the session's ask channel and
- * the answer goes back to the agent (and is not asked with `autoAllow`); a cancel ends the turn
- * and answers what was waiting as cancelled; a process that died is replaced and the agent's
+ * call becomes a call and its result; a permission request is answered yes at once, and nobody
+ * is asked; the process starts in the session's directory; a cancel ends the turn; a process that died is replaced and the agent's
  * session picked up again, three ways; and the model the session is on is set on the agent.
  */
 import type { AcpAgentConfig } from "@eta/client-contracts";
 import type { AgentMessage, KernelTool } from "@eta/core";
 import type { AskObserver } from "@eta/harness";
 import type { ManagedSession, SessionManagerOptions } from "@eta/server";
+import { realpathSync } from "node:fs";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import process from "node:process";
 import { kernelOn } from "@eta/core";
 import { MemorySessionStore, SessionManager } from "@eta/server";
@@ -310,26 +313,14 @@ describe("the host's tools", () => {
 });
 
 describe("a permission request", () => {
-  it("asks the user through the session's ask channel, and allows on their word", async () => {
+  it("is allowed at once, this once, and nobody is asked", async () => {
     const { manager, agent, asked } = setup();
     const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
-    const running = run(managed, "write it");
-    await until(() => asked.length > 0, "the question");
-    expect(asked[0]).toMatchObject({
-      action: "asked",
-      questionId: "acp-permission:t-write",
-    });
-    expect(asked[0]!.question).toContain("Fake Agent asks permission");
-    expect(asked[0]!.question).toContain("Write out.txt");
-    expect(managed.session.ask!.pendingAsks()[0]).toMatchObject({
-      questionId: "acp-permission:t-write",
-      options: ["Allow", "Always allow", "Reject"],
-    });
-    managed.session.ask!.answer("acp-permission:t-write", {
-      kind: "selection",
-      selections: ["Allow"],
-    });
-    expect((await running).status).toBe("completed");
+    expect((await run(managed, "write it")).status).toBe("completed");
+    // Not the session's ask channel, so not the Inbox either.
+    expect(asked).toEqual([]);
+    expect(managed.session.ask!.pendingAsks()).toEqual([]);
+    // The agent's "allow once", not its "always".
     expect(
       agent.log().find((entry) => entry.method === "permission"),
     ).toMatchObject({ outcome: "yes" });
@@ -345,67 +336,33 @@ describe("a permission request", () => {
     expect(transcript(managed).at(-1)).toBe("assistant: Written.");
   });
 
-  it("rejects on their word, and on no word at all", async () => {
-    const { manager, agent, asked } = setup();
-    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
-    const first = run(managed, "write it");
-    await until(() => asked.length > 0, "the question");
-    managed.session.ask!.answer("acp-permission:t-write", {
-      kind: "selection",
-      selections: ["Reject"],
-    });
-    expect((await first).status).toBe("completed");
-    expect(transcript(managed).at(-1)).toBe("assistant: Not written.");
-    expect(
-      managed.session.journaling
-        .transcript()
-        .find((message) => message.role === "toolResult"),
-    ).toMatchObject({ isError: true });
-    // Dismissed: nobody said yes.
-    const second = run(managed, "write it again");
-    await until(
-      () => asked.filter((entry) => entry.action === "asked").length > 1,
-      "the second question",
-    );
-    managed.session.ask!.abort("acp-permission:t-write");
-    expect((await second).status).toBe("completed");
-    expect(
-      agent
-        .log()
-        .filter((entry) => entry.method === "permission")
-        .map((entry) => entry.outcome),
-    ).toEqual(["no", "no"]);
-  });
-
-  it("is not asked of the user when the agent is set to allow", async () => {
-    const { manager, agent, asked } = setup({ autoAllow: true });
+  it("is allowed whatever an older acp.json says about asking", async () => {
+    // `autoAllow: false` from a file written before the field went: read past, not obeyed.
+    const { manager, agent, asked } = setup({
+      autoAllow: false,
+    } as Partial<AcpAgentConfig>);
     const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
     expect((await run(managed, "write it")).status).toBe("completed");
     expect(asked).toEqual([]);
-    // This once: not the agent's "always".
     expect(
       agent.log().find((entry) => entry.method === "permission"),
     ).toMatchObject({ outcome: "yes" });
   });
+});
 
-  it("is answered cancelled when the turn is cancelled while it waits", async () => {
-    const { manager, agent, asked } = setup();
-    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
-    const running = run(managed, "write it");
-    await until(() => asked.length > 0, "the question");
-    managed.session.runner.abort();
-    expect((await running).status).toBe("aborted");
+describe("where the agent's process starts", () => {
+  it("is the session's directory, whatever an older acp.json says", async () => {
+    const { manager, agent } = setup({
+      cwd: "/nonexistent-old-cwd",
+    } as Partial<AcpAgentConfig>);
+    const dir = await mkdtemp(join(tmpdir(), "eta-acp-cwd-"));
+    const managed = await manager.create({ cwd: dir, runtime: "acp.fake" });
+    expect((await run(managed, "hello")).status).toBe("completed");
+    const started = agent.log().find((entry) => entry.method === "started");
+    expect(realpathSync(started!.cwd as string)).toBe(realpathSync(dir));
     expect(
-      agent.log().find((entry) => entry.method === "permission"),
-    ).toMatchObject({ outcome: "cancelled" });
-    expect(asked.map((entry) => entry.action)).toEqual(["asked", "canceled"]);
-    expect(managed.session.ask!.pendingAsks()).toEqual([]);
-    // The call nobody answered is closed in the transcript.
-    expect(
-      managed.session.journaling
-        .transcript()
-        .filter((message) => message.role === "toolResult"),
-    ).toHaveLength(1);
+      agent.log().find((entry) => entry.method === "session/new"),
+    ).toMatchObject({ cwd: dir });
   });
 });
 

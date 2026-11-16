@@ -395,7 +395,7 @@ const app = acp
     return { stopReason: "end_turn" };
   });
 
-log({ method: "started", caps });
+log({ method: "started", caps, cwd: process.cwd() });
 const connection = app.connect(
   acp.ndJsonStream(
     Writable.toWeb(process.stdout) as WritableStream<Uint8Array>,

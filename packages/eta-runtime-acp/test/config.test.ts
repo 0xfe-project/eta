@@ -26,13 +26,22 @@ const agent: AcpAgentConfig = {
 
 describe("an ACP agent's configuration", () => {
   it("holds up, or says in words why not", () => {
+    expect(checkAcpAgent(agent)).toEqual(agent);
+    // What is left out is filled in.
+    expect(checkAcpAgent({ id: "x", command: " run " })).toEqual({
+      id: "x",
+      label: "x",
+      command: "run",
+      args: [],
+      env: {},
+    });
+    // `cwd` and `autoAllow` are gone: an older file's are read past, whatever they hold.
     expect(
       checkAcpAgent({ ...agent, cwd: " /work ", autoAllow: true }),
-    ).toEqual({ ...agent, cwd: "/work", autoAllow: true });
-    // What is left out is filled in; `autoAllow: false` is the default and is not written.
-    expect(
-      checkAcpAgent({ id: "x", command: " run ", autoAllow: false }),
-    ).toEqual({ id: "x", label: "x", command: "run", args: [], env: {} });
+    ).toEqual(agent);
+    expect(checkAcpAgent({ ...agent, cwd: 42, autoAllow: "yes" })).toEqual(
+      agent,
+    );
     expect(() => checkAcpAgent({ ...agent, id: "Gemini" })).toThrow(
       /id "Gemini" is not valid/,
     );
