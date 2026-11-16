@@ -1,6 +1,6 @@
 # TOBEREFR：暂存的插件与被拆掉的接入点
 
-这里的包等 ESM 重构（ESMMODE.md / ESMMODE-IMPL.md）稳定后再改写。它们不在 workspace 里
+这里的包等 ESM 重构稳定后再改写。它们不在 workspace 里
 （`package.json` 只收 `apps/*`、`packages/*`），knip 也忽略这个目录，所以不参与构建、类型检查和测试。
 
 为了让整仓编译，apps 里接这些包的地方已经删掉。被删的文件都可以从拆接入点之前的提交找回：
@@ -15,12 +15,12 @@ git checkout 2d4d160d -- <path> # 取回原文件
 | 包                  | 原来做什么                                                       | 改写方向（待定）                                                      |
 | ------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------- |
 | `eta-plugin-akhook` | 工具调用前后的规则（akhook.yml）、审批中间件、prompt_submit 钩子 | 审批并入 `binding()` 内的 authorize（#186、#285）；规则层看是否还需要 |
-| `eta-plugin-git`    | git 工具插件                                                     | 未定                                                                  |
-| `eta-plugin-ssh`    | SSH 执行环境插件                                                 | `ExecutionEnv` 已删除（#382），多半整包作废                           |
 
 `packages/eta-mcp` 已经移回 workspace（#33）：MCP 不再是静态工具，而是 realm 模块，见下面「MCP 已接回的部分」。代理工具、直接工具和 output guard 已删除。
 
 `packages/eta-ssh` 已经移回 workspace，只保留 transport（`LocalTransport`、SSH transport），task worktree 和远程机器仍要靠它跑 `sh`。`SshEnvironment`（`src/env.ts`）已删除。
+
+原来暂存在这里的 git 工具插件和 SSH 执行环境插件已经整包删除（#163）：`ExecutionEnv` 没了（#382），它们没有可接回的地方。
 
 ## apps/daemon 被删的接入点
 

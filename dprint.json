@@ -20,7 +20,7 @@
     "**/.turbo",
     "**/.nsh",
     "**/*.gen.ts",
-    "packages/eta-plugin-akhook/presets",
+    "packages/TOBEREFR/eta-plugin-akhook/presets",
     "**/*-lock.json",
     "bun.lock",
     "**/uv.lock",

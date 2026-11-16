@@ -8,7 +8,7 @@
  *   from the provider and sends each event back. Keys and Codex tokens never leave this process,
  *   and usage is counted here.
  * - **Product tools** (`tool.call`). The real tool runs on the primary for that session. (It used
- *   to get an SSH environment over the link to read the machine's files; that went to TOBEREFR.)
+ *   to get an SSH environment over the link to read the machine's files; that environment is deleted.)
  * - **The approval list** (`tool.gate`): does the user want to be asked before this tool runs?
  * - **Questions** (`ask.observe`): a session on the daemon asked, was answered or gave up; the
  *   conversation and the inbox hear it exactly as they hear a local session's.
