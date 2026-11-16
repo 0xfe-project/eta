@@ -24,6 +24,8 @@ import { isAuthError } from "./delegate";
 import { choicesOf, modelsOf } from "./models";
 import { AcpProcess, AcpStartError, messageOf, methods } from "./process";
 
+/** What an agent's view says before anything answered: its command is there, nothing more. */
+export const NOT_CHECKED = "Checking…";
 const SIGN_IN = "Sign in from a terminal on this machine first.";
 
 interface Probe {
@@ -68,6 +70,7 @@ export class AcpCatalog {
   readonly #config: AcpConfigFile;
   readonly #ttlMs: number;
   readonly #timeoutMs: number;
+  readonly #warn: (message: string) => void;
   readonly #entries = new Map<string, Entry>();
   readonly #inflight = new Map<string, Promise<Entry>>();
 
@@ -75,6 +78,7 @@ export class AcpCatalog {
     this.#config = options.config;
     this.#ttlMs = options.ttlMs ?? 5 * 60_000;
     this.#timeoutMs = options.timeoutMs ?? 20_000;
+    this.#warn = options.warn ?? (() => undefined);
   }
 
   /** The models last seen for an agent; none before anything was seen. */
@@ -87,7 +91,12 @@ export class AcpCatalog {
     const entry = this.#entries.get(id);
     const models = modelsOf(choices);
     if (entry === undefined) {
-      const agent = this.#config.get(id);
+      let agent: AcpAgentConfig | undefined;
+      try {
+        agent = this.#config.get(id);
+      } catch {
+        return;
+      }
       if (agent === undefined) return;
       this.#entries.set(id, {
         key: JSON.stringify(agent),
@@ -121,7 +130,7 @@ export class AcpCatalog {
 
   /**
    * Every configured agent as it is known now, without asking. One nobody has looked at yet says
-   * only whether its command is there.
+   * only whether its command is there, and that it has not been checked yet.
    */
   snapshot(): AcpAgentView[] {
     return this.#config.read().map((agent) => {
@@ -131,15 +140,27 @@ export class AcpCatalog {
       return viewOf(
         agent,
         commandExists(agent)
-          ? { status: "available", models: [] }
+          ? { status: "available", detail: NOT_CHECKED, models: [] }
           : { status: "missing", detail: "is not installed", models: [] },
       );
     });
   }
 
-  /** Every configured agent as a runtime, asked again where the answer is old. */
+  /**
+   * Every configured agent as a runtime, asked again where the answer is old. A file that cannot
+   * be read lists none here, so the built-in runtimes still list; the settings page shows why.
+   */
   async list(fresh = false): Promise<AgentRuntimeInfo[]> {
-    return (await this.views(fresh)).map(({ view, models }) => ({
+    let views: Awaited<ReturnType<AcpCatalog["views"]>>;
+    try {
+      views = await this.views(fresh);
+    } catch (error) {
+      this.#warn(
+        `[eta-runtime-acp] ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return [];
+    }
+    return views.map(({ view, models }) => ({
       id: view.runtime,
       label: view.label,
       status: view.status,

@@ -33,7 +33,7 @@ export function acpPlugin(deps: AcpPluginDeps, applied: () => void) {
         wire.handle("acp", "save", async (call) => {
           const args = new Args(call);
           return {
-            result: await service.save(
+            result: service.save(
               agentOf(call),
               args.optionalString("previousId"),
             ),

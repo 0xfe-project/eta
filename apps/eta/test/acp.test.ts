@@ -61,15 +61,21 @@ describe("an ACP agent, from the settings page to a reply", () => {
     expect(list(w)).toEqual([]);
 
     const saved = await save(w, fake.config);
+    // `save` does not wait for the look: the agent says it is being checked.
     expect(saved).toEqual({
+      ...fake.config,
+      runtime: "acp.fake",
+      status: "available",
+      detail: "Checking…",
+    });
+    // Whoever watches the list is told, with what the look found once it is done.
+    await until(() => list(w)[0]?.version === "0.0.1");
+    expect(list(w)[0]).toEqual({
       ...fake.config,
       runtime: "acp.fake",
       status: "available",
       version: "0.0.1",
     });
-    // Whoever watches the list is told, and the file is the user's own to read.
-    await until(() => list(w).length === 1);
-    expect(list(w)[0]).toEqual(saved);
     expect(
       JSON.parse(readFileSync(join(w.host.dataDir, "acp.json"), "utf8")),
     ).toEqual({ agents: [fake.config] });
@@ -260,6 +266,102 @@ describe("the acp target", () => {
     await expect(test({ ...config, id: "" })).rejects.toThrow(/is not valid/);
     expect(list(w)).toEqual([]);
   });
+});
+
+describe("an acp.json that cannot be read whole", () => {
+  const fileOf = (w: World) => join(w.host.dataDir, "acp.json");
+  const listError = (w: World) =>
+    w.client.section<{ message: string }>("acp", "error")?.message;
+
+  it("refuses save, rename and delete without writing a byte, and the list says why", async () => {
+    const w = await host();
+    const one = fakeAgent("one").config;
+    const two = fakeAgent("two").config;
+    // Two agents, and the trailing comma a hand-edit leaves.
+    const text = `{ "agents": [${JSON.stringify(one)}, ${JSON.stringify(two)},] }`;
+    writeFileSync(fileOf(w), text);
+    w.client.subscribe("acp");
+    await until(() => listError(w) !== undefined);
+    expect(listError(w)).toContain(fileOf(w));
+    expect(listError(w)).toContain("is not valid JSON");
+    expect(w.client.section("acp", "list")).toBeUndefined();
+
+    await expect(save(w, fakeAgent("three").config)).rejects.toThrow(
+      /is not valid JSON/,
+    );
+    await expect(save(w, { ...one, label: "Changed" }, "one")).rejects.toThrow(
+      /is not valid JSON/,
+    );
+    await expect(save(w, { ...one, id: "moved" }, "one")).rejects.toThrow(
+      /is not valid JSON/,
+    );
+    await expect(w.client.call("acp", "delete", { id: "two" })).rejects.toThrow(
+      /is not valid JSON/,
+    );
+    expect(readFileSync(fileOf(w), "utf8")).toBe(text);
+
+    // Listing runtimes still answers (the built-in ones are not held up); the file's agents
+    // are not among them.
+    const { runtimes } = (await w.client.call("agents", "runtimes", {})) as {
+      runtimes: AgentRuntimeInfo[];
+    };
+    expect(runtimes.some((runtime) => runtime.id.startsWith("acp."))).toBe(
+      false,
+    );
+  });
+
+  it("keeps a bad agent: saving the good one beside it is refused", async () => {
+    const w = await host();
+    const good = fakeAgent("good").config;
+    const text = JSON.stringify({
+      agents: [{ id: "Bad Id", command: "x" }, good],
+    });
+    writeFileSync(fileOf(w), text);
+    await expect(save(w, { ...good, label: "Better" }, "good")).rejects.toThrow(
+      /agent 1 \("Bad Id"\): the id "Bad Id" is not valid/,
+    );
+    expect(readFileSync(fileOf(w), "utf8")).toBe(text);
+  });
+
+  it("creates the file when there is none, and reads again once it is fixed", async () => {
+    const w = await host();
+    const one = fakeAgent("one").config;
+    await save(w, one);
+    expect(JSON.parse(readFileSync(fileOf(w), "utf8"))).toEqual({
+      agents: [one],
+    });
+    writeFileSync(fileOf(w), `{ "agents": [${JSON.stringify(one)},] }`);
+    await expect(save(w, fakeAgent("two").config)).rejects.toThrow(/JSON/);
+    writeFileSync(fileOf(w), JSON.stringify({ agents: [one] }));
+    const two = fakeAgent("two").config;
+    await save(w, two);
+    expect(await w.client.call("acp", "delete", { id: "one" })).toEqual({});
+    expect(JSON.parse(readFileSync(fileOf(w), "utf8"))).toEqual({
+      agents: [two],
+    });
+  });
+});
+
+describe("saving an agent that is slow to answer", () => {
+  it("returns at once, and the look arrives later as the list", async () => {
+    const w = await host();
+    // `initialize` takes 3s here; the acceptance probe ran it at 45s by hand.
+    const slow = fakeAgent("slow", {
+      env: { FAKE_ACP_INIT_DELAY_MS: "3000" },
+    }).config;
+    w.client.subscribe("acp");
+    await until(() => w.client.section("acp", "list") !== undefined);
+    const started = Date.now();
+    const saved = await save(w, slow);
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(saved).toMatchObject({ status: "available", detail: "Checking…" });
+    expect(
+      JSON.parse(readFileSync(join(w.host.dataDir, "acp.json"), "utf8")),
+    ).toEqual({ agents: [slow] });
+    await until(() => list(w)[0]?.version === "0.0.1", 15_000);
+    expect(list(w)[0]).toMatchObject({ status: "available" });
+    expect(list(w)[0]!.detail).toBeUndefined();
+  }, 30_000);
 });
 
 describe("an ACP agent on a daemon", () => {

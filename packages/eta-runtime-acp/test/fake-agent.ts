@@ -8,6 +8,7 @@
  * - `FAKE_ACP_CAPS`: `resume` (default), `load`, or `none`: how a session can be picked up.
  * - `FAKE_ACP_AUTH=1`: `session/new` answers that a sign-in is needed.
  * - `FAKE_ACP_SYSTEM_PROMPT=1`: it takes a system prompt.
+ * - `FAKE_ACP_INIT_DELAY_MS`: how long `initialize` waits before it answers (none by default).
  */
 import {
   appendFileSync,
@@ -83,26 +84,35 @@ const sleep = async (ms: number) =>
 
 const app = acp
   .agent({ name: "fake-agent" })
-  .onRequest(methods.agent.initialize, ({ params }) => ({
-    protocolVersion: Math.min(params.protocolVersion, acp.PROTOCOL_VERSION),
-    agentCapabilities: {
-      loadSession: caps === "load",
-      promptCapabilities: { image: true },
-      mcpCapabilities: { http: true },
-      sessionCapabilities: {
-        ...(caps === "resume" ? { resume: {} } : {}),
-        close: {},
-        ...(process.env.FAKE_ACP_SYSTEM_PROMPT === "1"
-          ? { systemPrompt: {} }
-          : {}),
+  .onRequest(methods.agent.initialize, async ({ params }) => {
+    await sleep(Number(process.env.FAKE_ACP_INIT_DELAY_MS ?? 0));
+    return {
+      protocolVersion: Math.min(params.protocolVersion, acp.PROTOCOL_VERSION),
+      agentCapabilities: {
+        loadSession: caps === "load",
+        promptCapabilities: { image: true },
+        mcpCapabilities: { http: true },
+        sessionCapabilities: {
+          ...(caps === "resume" ? { resume: {} } : {}),
+          close: {},
+          ...(process.env.FAKE_ACP_SYSTEM_PROMPT === "1"
+            ? { systemPrompt: {} }
+            : {}),
+        },
       },
-    },
-    agentInfo: { name: "fake-agent", title: "Fake Agent", version: "0.0.1" },
-    authMethods:
-      process.env.FAKE_ACP_AUTH === "1"
-        ? [{ id: "login", name: "Fake login", description: "Run `fake login`" }]
-        : [],
-  }))
+      agentInfo: { name: "fake-agent", title: "Fake Agent", version: "0.0.1" },
+      authMethods:
+        process.env.FAKE_ACP_AUTH === "1"
+          ? [
+              {
+                id: "login",
+                name: "Fake login",
+                description: "Run `fake login`",
+              },
+            ]
+          : [],
+    };
+  })
   .onRequest(methods.agent.session.new, ({ params }) => {
     if (process.env.FAKE_ACP_AUTH === "1")
       throw new acp.RequestError(-32000, "Authentication required");

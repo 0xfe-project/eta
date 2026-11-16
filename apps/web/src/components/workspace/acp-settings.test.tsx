@@ -141,6 +141,24 @@ describe("Settings → External agents", () => {
     expect(byText("添加 Agent")).toBeUndefined();
   });
 
+  it("shows a file the host cannot read as an error with its path, not an empty list, and offers no edits", async () => {
+    const fake = buildProductHost({}, ["acp"]).target("acp", {
+      error: {
+        message:
+          "/home/me/.eta/acp.json is not valid JSON: Unexpected comma. Fix the file by hand; nothing is changed until it reads.",
+      },
+    });
+    fake.install();
+    fake.hello();
+    await mount(<AcpSettings />);
+    await flush();
+    expect(document.querySelector("[role=alert]")?.textContent).toContain(
+      "/home/me/.eta/acp.json is not valid JSON",
+    );
+    expect(text()).not.toContain("还没有外部 Agent");
+    expect(byText("添加 Agent")).toBeUndefined();
+  });
+
   it("adds an agent: the id follows the name, args and env one per line, and the list refreshes", async () => {
     const fake = host([]);
     fake.handle("acp.save", (args) => {
