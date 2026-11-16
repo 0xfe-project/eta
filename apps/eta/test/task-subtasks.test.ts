@@ -15,6 +15,7 @@ import type { World } from "./support/world";
 import { describe, expect, it } from "vitest";
 import { TaskGraph } from "../src/tasks/graph";
 import { until } from "./support/client";
+import { tempDir } from "./support/host";
 import { call, gate, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";
 
@@ -137,6 +138,7 @@ const numberOf = (request: Request): number =>
 
 async function room(
   split?: (request: Request) => ReturnType<typeof call> | undefined,
+  options: { dataDir?: string } = {},
 ) {
   const held = new Map<number, ReturnType<typeof gate>>();
   const briefed: number[] = [];
@@ -150,7 +152,7 @@ async function room(
     await held.get(number)?.opened;
     return call("finish_task", { summary: `#${number} done.` });
   });
-  const w = await world({ models });
+  const w = await world({ models, ...options });
   const ada = await w.agent("Ada");
   const project = await w.project({ stewardId: ada.id });
   const bo = await w.agent("Bo");
@@ -180,7 +182,7 @@ async function room(
     held.set(number, g);
     return g;
   };
-  return { w, make, hold, briefed, bo };
+  return { w, make, hold, briefed, bo, models };
 }
 
 const taskOf = (w: World, id: string): BoardTaskDetail =>
@@ -438,6 +440,68 @@ describe("a parent on the board", () => {
       kind: "parent",
       data: { to: null },
     });
+  });
+});
+
+describe("a parent's stored status", () => {
+  const USER = { kind: "user", agentId: null } as const;
+
+  it("moves in the same write as its subtask: when the parent's write fails, neither moves", async () => {
+    const r = await room();
+    const board = r.w.host.product.board;
+    const stage = r.make("Stage", { status: "backlog" });
+    const a = r.make("A", { parent: stage.id, status: "backlog" });
+    r.make("B", { parent: stage.id, status: "backlog" });
+    // The parent's write fails, the way a process dying between the two writes would leave it.
+    r.w.host.db.exec(
+      `CREATE TRIGGER crash BEFORE UPDATE OF status ON task WHEN NEW.id = '${stage.id}'
+       BEGIN SELECT RAISE(ABORT, 'simulated crash'); END`,
+    );
+    expect(() => board.update(a.id, { status: "done" }, USER)).toThrow(
+      /simulated crash/,
+    );
+    // Nothing of it stayed: the subtask did not move without its parent.
+    expect(statusOf(r.w, a.id)).toBe("backlog");
+    expect(statusOf(r.w, stage.id)).toBe(
+      board.graph().derive(stage.id)!.status,
+    );
+    r.w.host.db.exec("DROP TRIGGER crash");
+    board.update(a.id, { status: "done" }, USER);
+    expect(statusOf(r.w, a.id)).toBe("done");
+    expect(statusOf(r.w, stage.id)).toBe("in_progress");
+  });
+
+  it("is made again from its subtasks as the host starts, and what waits for it goes on", async () => {
+    const dataDir = await tempDir();
+    const r = await room(undefined, { dataDir });
+    const board = r.w.host.product.board;
+    const stage = r.make("Stage", { status: "backlog" });
+    const a = r.make("A", { parent: stage.id, status: "backlog" });
+    const b = r.make("B", { parent: stage.id, status: "backlog" });
+    for (const id of [a.id, b.id]) board.update(id, { status: "done" }, USER);
+    expect(statusOf(r.w, stage.id)).toBe("done");
+    // The stored copy is wrong, as a write that never landed would leave it, and a task waits on it.
+    r.w.host.db
+      .query("UPDATE task SET status = 'in_progress' WHERE id = ?")
+      .run(stage.id);
+    const next = r.make("Next", {
+      dependsOn: [{ task: stage.id, requireDone: true }],
+    });
+    await until(() => runsOf(r.w, next.id)[0]?.queueReason === "waiting_deps");
+
+    // The process dies: what the next one finds is a copy of the file.
+    const copy = await tempDir();
+    r.w.host.db.exec(`VACUUM INTO '${copy}/eta.sqlite'`);
+    const later = await world({ dataDir: copy, models: r.models });
+    const after = later.host.product.board;
+    expect(after.detail(stage.id)!.status).toBe("done");
+    expect(after.activity(stage.id).at(-1)).toMatchObject({
+      kind: "status",
+      actor: { kind: "system" },
+      data: { from: "in_progress", to: "done", reason: "recomputed" },
+    });
+    // What waited for the stage reads the corrected status, and starts.
+    await until(() => after.detail(next.id)!.status === "in_review");
   });
 });
 
