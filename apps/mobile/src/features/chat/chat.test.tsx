@@ -3,7 +3,8 @@ import { expect, open, test } from "nsh/test";
 const HOST = JSON.stringify({ address: "fake", token: "" });
 
 const NAMES: Record<string, string> = {
-  wire: "wire 重连",
+  // The fixture names it in English now; either spelling opens it.
+  wire: "/^wire (重连|reconnect)$/",
   board: "任务看板改版",
   artifacts: "产物版本",
   "dm-xiaoman": "小满",
@@ -111,19 +112,29 @@ test("03h: a direct chat draws its steps inline and streams its words", async ()
 
 test("03a: a sent message queued behind a run can be pulled back or dropped", async () => {
   const app = await chat("wire", "chat-queue");
-  await app.waitFor("text:回滚也要有测试");
+  await app.waitFor("text:The rollback needs tests too");
   expect(app.texts()).toContain("等待中 · 前面还有 1 条");
-  expect(app.texts()).toContain("在「官网改版」回复中 · 等待中");
+  expect(app.texts()).toContain("在「Website redesign」回复中 · 等待中");
   await app.press("text:拉回");
+  // Nothing to put back in front of: the box was empty.
   await app.waitUntil(
-    () => app.value("id:composer-input") === "回滚也要有测试",
+    () => app.value("id:composer-input") === "The rollback needs tests too",
   );
-  expect(app.shows("text:排队")).toBe(false);
+  expect(app.shows("text:/^排队中/")).toBe(false);
+});
+
+test("03a: a queued message reads in two lines and can be inserted into the turn in flight", async () => {
+  const app = await chat("wire", "chat-queue");
+  await app.waitFor("text:The rollback needs tests too");
+  await app.waitFor("text:/这一轮结束后发出/");
+  await app.press("text:插入这一轮");
+  await app.waitFor("text:/已并入 .* 正在进行的回复/");
+  expect(app.shows("text:插入这一轮")).toBe(false);
 });
 
 test("03a: a long press on send offers both modes, and sending works from the box", async () => {
   const app = await chat("wire", "chat-queue");
-  await app.waitFor("text:回滚也要有测试");
+  await app.waitFor("text:The rollback needs tests too");
   await app.type("id:composer-input", "先别跑生产，等我回复");
   await app.longPress("id:composer-submit");
   await app.waitFor("text:当前回复结束后发送");

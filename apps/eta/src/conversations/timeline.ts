@@ -374,6 +374,44 @@ export class Timeline {
   }
 
   /**
+   * A held message joins the turns in flight of `joining` instead of waiting for them to end: it
+   * stops being held, becomes a message of the conversation where it was written, and the replies
+   * those agents had queued for it go (the turn it joins is its answer). One transaction, and only
+   * while it is still held: undefined when a lane already took it, so it can never be said twice.
+   * `dropped` is the ids of the replies that went.
+   */
+  steerOut(
+    id: string,
+    joining: readonly string[],
+  ): { message: MessageView; dropped: string[] } | undefined {
+    return this.#db.transaction(() => {
+      const held = this.#db
+        .query<Row, [string]>(
+          "SELECT * FROM message WHERE id = ? AND json_extract(data, '$.held') IS NOT NULL",
+        )
+        .get(id);
+      if (held === null) return undefined;
+      const view = viewOf(held);
+      const dropped = this.repliesTo(id)
+        .filter(
+          (reply) =>
+            reply.status === "queued" && joining.includes(reply.agentId ?? ""),
+        )
+        .map((reply) => reply.id);
+      for (const reply of dropped)
+        this.#db.query("DELETE FROM message WHERE id = ?").run(reply);
+      const { held: _held, ...data } = view.data;
+      const woke = Array.isArray(data.woke) ? (data.woke as string[]) : [];
+      const message = this.setData(id, {
+        ...data,
+        woke: woke.filter((agentId) => !joining.includes(agentId)),
+        joined: [...joining],
+      })!;
+      return { message, dropped };
+    })();
+  }
+
+  /**
    * Nothing is running in a process that has just started, so nothing is going to pick a held
    * message up: it stops waiting and becomes a message. Its reply was failed by the restart, which
    * is what says why it never got an answer.

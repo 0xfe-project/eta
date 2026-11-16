@@ -212,12 +212,33 @@ export function useConversationActions() {
      */
     recall: useWireMutation<
       ConversationArgs["recall"],
-      { conversationId: string; recalled: boolean }
+      ConversationResults["recall"]
     >("conversations", "recall", {
       // The message and the reply that was waiting on it are gone from the host. Forgetting them
       // here is what keeps the transcript from leaving a row with nothing in it.
       onSuccess: (result, args) => {
         if (result.recalled) forgetRows(args.conversationId, [args.messageId]);
+      },
+    }),
+    /**
+     * Put a message that is still waiting for a lane into the turns in flight, as `/steer` would
+     * have. The host takes it out of the queue and joins in one step; `steered: false` with
+     * `reason: "taken"` means a lane read it first and nothing was sent again.
+     */
+    steerHeld: useWireMutation<
+      ConversationArgs["steerHeld"],
+      ConversationResults["steerHeld"]
+    >("conversations", "steerHeld", {
+      // The message is in the conversation now and the reply it was waiting for is gone: say so
+      // before the next window does, so the block and the turn do not both show it.
+      onSuccess: (result, args) => {
+        if (result.dropped.length > 0)
+          forgetRows(args.conversationId, result.dropped);
+        if (result.message !== undefined)
+          rememberRows(args.conversationId, [
+            result.message,
+            ...result.replies,
+          ]);
       },
     }),
     read: useWireMutation<

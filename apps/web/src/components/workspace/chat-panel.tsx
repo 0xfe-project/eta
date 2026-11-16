@@ -1840,11 +1840,12 @@ export function ChatPanel({
       <footer className="input-area">
         {/* Its own strip above the frame, not a row inside it: the frame is one thing — a notice,
             the box, the toolbar — and a message that has not been sent yet is not part of it. */}
-        <div className="mx-auto w-full max-w-(--chat-width) px-1 pb-1.5">
-          {/* What is waiting behind the run in flight, over the box that would send it. */}
+        <div className="mx-auto w-full max-w-(--chat-width) pb-1.5">
+          {/* What is waiting behind the run in flight, over the box that would send it, as wide as it. */}
           <HeldMessages
             conversationId={groupId ?? ""}
             held={held}
+            agents={agents}
             // Back above the draft, blank line between: pulling one in must never swallow the
             // half sentence someone was writing, and two pulls land newest-first.
             onPullBack={(text) =>

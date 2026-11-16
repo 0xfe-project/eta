@@ -13,6 +13,7 @@ import type {
   InteractionView,
   MessageView,
   SendResult,
+  SteerHeldResult,
   TaskCardData,
   ToolActivity,
   ViewMessageRow,
@@ -801,7 +802,7 @@ export function installChat(host: FakeHost): void {
       wire.held = [
         row("wire", 6, {
           text: "The rollback needs tests too",
-          data: { held: true },
+          data: { held: true, woke: ["agent-ache"], joined: [] },
         }),
       ];
   }
@@ -1096,6 +1097,47 @@ export function installChat(host: FakeHost): void {
       );
       conversation.publish();
       return { conversationId, recalled };
+    },
+  );
+
+  host.on(
+    "conversations.steerHeld",
+    ({
+      conversationId,
+      messageId,
+    }: {
+      conversationId: string;
+      messageId: string;
+    }): SteerHeldResult => {
+      const conversation = conversationOf(conversationId);
+      const none = { conversationId, joined: [], replies: [], dropped: [] };
+      const held = conversation.held.find((item) => item.id === messageId);
+      if (held === undefined)
+        return { ...none, steered: false, reason: "taken" };
+      const waiting = Array.isArray(held.data.woke)
+        ? (held.data.woke as string[])
+        : [];
+      const joined = waiting.filter(
+        (agentId) => conversation.active(agentId) !== undefined,
+      );
+      if (joined.length === 0)
+        return { ...none, steered: false, reason: "idle" };
+      const { held: _held, ...data } = held.data;
+      const message: MessageView = {
+        ...held,
+        revision: held.revision + 1,
+        data: {
+          ...data,
+          woke: waiting.filter((agentId) => !joined.includes(agentId)),
+          joined,
+        },
+      };
+      conversation.held = conversation.held.filter(
+        (item) => item.id !== messageId,
+      );
+      conversation.rows.push(message);
+      conversation.publish();
+      return { ...none, steered: true, joined, message };
     },
   );
 

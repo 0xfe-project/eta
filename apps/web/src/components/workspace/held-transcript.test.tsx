@@ -159,7 +159,7 @@ const onScreen = (c: HTMLElement) =>
     el.getAttribute("data-mid"),
   );
 const chips = (c: HTMLElement) => [
-  ...c.querySelectorAll("[data-slot=held-chip]"),
+  ...c.querySelectorAll("[data-slot=held-message]"),
 ];
 const log = (c: HTMLElement) => c.querySelector('[role="log"]')!.textContent!;
 const count = (text: string, part: string) => text.split(part).length - 1;
@@ -295,5 +295,58 @@ describe("一条道接手了", () => {
     await flush();
     expect(onScreen(c)).toEqual([message.id, running.id, waiting.id]);
     expect(chips(c)).toHaveLength(1);
+  });
+
+  it("拉回不吞掉正在写的草稿：拉回的放在前面，空一行", async () => {
+    const message = heldRow({ id: "held-1", text: "再写个摘要" });
+    const { container: c } = await start({
+      rows: [waitingReply(message)],
+      held: [message],
+    });
+    await flush();
+    await type("我还在写");
+    await click(c.querySelector("[data-slot=held-pull]"));
+    await flush();
+    expect(
+      useOutbox
+        .getState()
+        .drafts[CONV]?.map((part) => (part.type === "text" ? part.text : ""))
+        .join(""),
+    ).toBe("再写个摘要\n\n我还在写");
+  });
+
+  it("插入当前这一轮：一步交给 host，块消失，消息上屏并写明并入了谁的回复", async () => {
+    const message = row({ text: "做点事", rootMessageId: "on-screen" });
+    const running = waitingReply(message, AGENT, { status: "working" });
+    const held = heldRow({ id: "held-1", text: "另外 Safari 也测一下" });
+    const queued = waitingReply(held);
+    const { container: c } = await start({
+      rows: [message, running, queued],
+      held: [held],
+    });
+    const joinedRow: MessageView = {
+      ...held,
+      data: { woke: [], joined: [AGENT] },
+    };
+    host.handle("conversations.steerHeld", () => ({
+      conversationId: CONV,
+      steered: true,
+      joined: [AGENT],
+      message: joinedRow,
+      replies: [],
+      dropped: [queued.id],
+    }));
+    await flush();
+    await click(c.querySelector("[data-slot=held-steer]"));
+    await flush();
+    expect(
+      host.calls.find((call) => call.action === "steerHeld")?.args,
+    ).toEqual({ conversationId: CONV, messageId: "held-1" });
+    expect(sends).toHaveLength(0);
+    await push([message, running, joinedRow]);
+    expect(chips(c)).toHaveLength(0);
+    expect(onScreen(c)).toEqual([message.id, running.id, held.id]);
+    expect(count(log(c), "另外 Safari 也测一下")).toBe(1);
+    expect(log(c)).toContain("已并入 研究员 正在进行的回复");
   });
 });

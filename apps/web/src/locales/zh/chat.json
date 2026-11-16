@@ -381,10 +381,24 @@
     }
   },
   "queue": {
-    "followUp": "排队",
-    "pullBackAction": "拉回",
+    "followUp": "排队中",
+    "afterTurn": "{{names}} 这一轮结束后发出",
+    "afterPrevious": "接在上一条后面",
+    "them": "它们",
+    "separator": "、",
+    "label": "排队中的消息：{{text}}",
+    "steerAction": "插入当前这一轮",
+    "steerActionSeveral": "插入当前回复",
+    "steer": "插入当前这一轮：{{text}}",
+    "steering": "正在插入 {{names}} 这一轮…",
+    "steerTaken": "{{names}} 已经读到这条了",
+    "steerIdle": "{{names}} 现在没有可以插入的回复，这条仍在排队",
+    "steerEnded": "{{names}} 这一轮刚好结束，这条作为下一条发出",
+    "steerFailed": "没能插入：{{reason}}",
+    "pullBackAction": "拉回编辑",
     "pullBack": "拉回输入框：{{text}}",
-    "drop": "丢掉这条：{{text}}"
+    "dropAction": "删除",
+    "drop": "删除这条：{{text}}"
   },
   "images": {
     "open": "查看第 {{index}} 张图（共 {{count}} 张）",
