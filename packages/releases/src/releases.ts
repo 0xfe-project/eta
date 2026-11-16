@@ -93,6 +93,10 @@ export interface Release {
   /** The tag without its `v`. */
   version: string;
   assets: ReleaseAsset[];
+  /** What the release says about itself (its Markdown body), when it says anything. */
+  notes?: string;
+  /** Its page on the website, where the notes are in full. */
+  page?: string;
 }
 
 /** What `gh` had to say when it gave no token. */
@@ -183,6 +187,8 @@ export interface ListedRelease {
   draft?: boolean;
   prerelease?: boolean;
   assets: { name: string; url: string }[];
+  body?: string | null;
+  html_url?: string;
 }
 
 const reason = (error: unknown): string =>
@@ -208,10 +214,17 @@ export interface ReleaseChannel {
   prerelease?: boolean | undefined;
 }
 
-const describe = (release: ListedRelease): Release => ({
-  version: release.tag_name.replace(/^v/, ""),
-  assets: release.assets.map(({ name, url }) => ({ name, url })),
-});
+const describe = (release: ListedRelease): Release => {
+  const notes = release.body?.trim() ?? "";
+  return {
+    version: release.tag_name.replace(/^v/, ""),
+    assets: release.assets.map(({ name, url }) => ({ name, url })),
+    ...(notes === "" ? {} : { notes }),
+    ...(typeof release.html_url === "string" && release.html_url !== ""
+      ? { page: release.html_url }
+      : {}),
+  };
+};
 
 /**
  * The highest published host release among `releases`: not a pre-release, unless `prerelease`.

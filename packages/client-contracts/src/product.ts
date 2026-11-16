@@ -605,6 +605,14 @@ export interface UpgradeTokenView {
   saved: string | null;
 }
 
+/** What a newer release says it brings: its notes as written (Markdown), and its page. */
+export interface UpgradeNotesView {
+  /** The start of the release's body; a long one is cut, the page has it all. */
+  text: string;
+  /** Its page on the website; null where the server gives none. */
+  url: string | null;
+}
+
 export interface UpgradeCheckView {
   /** This build. */
   version: string;
@@ -623,6 +631,8 @@ export interface UpgradeCheckView {
   busy: UpgradeBusy[];
   upstream: UpgradeUpstreamView;
   token: UpgradeTokenView;
+  /** The notes of `latest`, only when it is an upgrade (`available`) and says anything. */
+  notes: UpgradeNotesView | null;
   error: string | null;
 }
 

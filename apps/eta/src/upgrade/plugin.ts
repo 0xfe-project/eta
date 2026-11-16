@@ -110,6 +110,9 @@ function currentUpstream({ settings }: UpgradePluginOptions): {
   };
 }
 
+/** How much of a release's notes goes to the page: the start is what it shows. */
+const NOTES_CHARS = 4000;
+
 /** The switch under Settings → Update: what the worker reads too (`savedPrerelease`). */
 const prereleaseOn = ({ settings }: UpgradePluginOptions): boolean =>
   settings.get(PRERELEASE_SETTING) === true;
@@ -141,7 +144,8 @@ async function check(options: UpgradePluginOptions): Promise<UpgradeCheckView> {
     const releases =
       options.releases ??
       new Releases({ upstream: text, token: () => Promise.resolve(found) });
-    const latest = (await releases.latest({ prerelease })).version;
+    const release = await releases.latest({ prerelease });
+    const latest = release.version;
     const order = versionOrder(latest, version);
     const available = latest !== version && (order === undefined || order > 0);
     return {
@@ -155,6 +159,13 @@ async function check(options: UpgradePluginOptions): Promise<UpgradeCheckView> {
       busy: options.busy(),
       upstream,
       token,
+      notes:
+        available && release.notes !== undefined
+          ? {
+              text: release.notes.slice(0, NOTES_CHARS),
+              url: release.page ?? null,
+            }
+          : null,
       error: null,
     };
   } catch (error) {
@@ -168,6 +179,7 @@ async function check(options: UpgradePluginOptions): Promise<UpgradeCheckView> {
       busy: options.busy(),
       upstream,
       token,
+      notes: null,
       error: error instanceof Error ? error.message : String(error),
     };
   }

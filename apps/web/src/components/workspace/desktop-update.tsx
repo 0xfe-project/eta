@@ -1,5 +1,7 @@
 import type { UpgradeBusy } from "@eta/client-contracts";
 import type { ShellUpdateView } from "@eta/client-contracts/desktop";
+import type { ReactNode } from "react";
+import type { UpdateTone } from "./update-status";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -15,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { host, shellUpdate, shellUpdateAction } from "@/lib/native";
 import { busyLabels, useUpgradeCheck } from "@/queries/upgrade";
+import { UpdateNotice, UpdateStatusBar } from "./update-status";
 
 // Settings → Update, the desktop app's own part: its version and its update, apart from the host's.
 // Every step is a press here; the app neither checks nor installs by itself
@@ -63,63 +66,118 @@ export function DesktopUpdate() {
     });
   };
 
+  const target =
+    view.state === "available" ||
+    view.state === "downloading" ||
+    view.state === "ready" ||
+    view.state === "applying"
+      ? view.version
+      : undefined;
+  const checkButton = (
+    <Button
+      variant="ghost"
+      size="xs"
+      className="h-5 px-1 font-normal text-muted-foreground"
+      disabled={asking}
+      onClick={() => act("check")}
+    >
+      {translateText("desktopUpdate.check")}
+    </Button>
+  );
+  const bar: { tone: UpdateTone; state: string; actions?: ReactNode } =
+    view.state === "checking"
+      ? { tone: "info", state: translateText("desktopUpdate.checking") }
+      : view.state === "available"
+        ? {
+            tone: "info",
+            state: translateText("desktopUpdate.state.available"),
+            actions: (
+              <>
+                <Button
+                  size="xs"
+                  disabled={asking}
+                  onClick={() => act("download")}
+                >
+                  {translateText("desktopUpdate.download", {
+                    version: view.version,
+                  })}
+                </Button>
+                {checkButton}
+              </>
+            ),
+          }
+        : view.state === "downloading"
+          ? {
+              tone: "info",
+              state:
+                view.progress === undefined
+                  ? translateText("desktopUpdate.downloading", {
+                      version: view.version,
+                    })
+                  : translateText("desktopUpdate.downloadingPercent", {
+                      version: view.version,
+                      percent: Math.round(view.progress),
+                    }),
+            }
+          : view.state === "ready"
+            ? {
+                tone: "info",
+                state: translateText("desktopUpdate.state.ready"),
+                actions: (
+                  <Button
+                    size="xs"
+                    disabled={asking}
+                    onClick={() => setConfirming(true)}
+                  >
+                    {translateText("desktopUpdate.restart", {
+                      version: view.version,
+                    })}
+                  </Button>
+                ),
+              }
+            : view.state === "applying"
+              ? {
+                  tone: "info",
+                  state: translateText("desktopUpdate.applying", {
+                    version: view.version,
+                  }),
+                }
+              : view.state === "failed"
+                ? {
+                    tone: "error",
+                    state: translateText("desktopUpdate.state.failed"),
+                    actions: checkButton,
+                  }
+                : view.state === "current"
+                  ? {
+                      tone: "success",
+                      state: translateText("desktopUpdate.upToDate"),
+                      actions: checkButton,
+                    }
+                  : {
+                      tone: "muted",
+                      state: translateText("desktopUpdate.state.idle"),
+                      actions: checkButton,
+                    };
+
   return (
-    <div className="space-y-2">
-      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
-        <dt className="text-muted-foreground">
-          {translateText("desktopUpdate.version")}
-        </dt>
-        <dd className="break-all">{view.current}</dd>
-      </dl>
-      {view.state === "checking" ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {translateText("desktopUpdate.checking")}
-        </p>
-      ) : view.state === "available" ? (
-        <Button disabled={asking} onClick={() => act("download")}>
-          {translateText("desktopUpdate.download", { version: view.version })}
-        </Button>
-      ) : view.state === "downloading" ? (
-        <p role="status" className="text-sm">
-          {view.progress === undefined
-            ? translateText("desktopUpdate.downloading", {
-                version: view.version,
-              })
-            : translateText("desktopUpdate.downloadingPercent", {
-                version: view.version,
-                percent: Math.round(view.progress),
-              })}
-        </p>
-      ) : view.state === "ready" ? (
-        <Button disabled={asking} onClick={() => setConfirming(true)}>
-          {translateText("desktopUpdate.restart", { version: view.version })}
-        </Button>
-      ) : view.state === "applying" ? (
-        <p role="status" className="text-sm">
-          {translateText("desktopUpdate.applying", { version: view.version })}
-        </p>
-      ) : (
-        <div className="space-y-1">
-          {view.state === "current" && (
-            <p className="text-sm text-muted-foreground">
-              {translateText("desktopUpdate.upToDate")}
-            </p>
-          )}
-          {view.state === "failed" && (
-            <p className="text-sm break-words text-destructive">
-              {translateText(`desktopUpdate.failed.${view.during}`, {
-                error: view.error,
-              })}
-            </p>
-          )}
-          <Button
-            variant="outline"
-            disabled={asking}
-            onClick={() => act("check")}
-          >
-            {translateText("desktopUpdate.check")}
-          </Button>
-        </div>
+    <div>
+      <UpdateStatusBar
+        title={translateText("desktopUpdate.title")}
+        version={view.current}
+        target={target}
+        tone={bar.tone}
+        state={bar.state}
+        actions={bar.actions}
+      />
+      {view.state === "failed" && (
+        <UpdateNotice tone="error">
+          <p>
+            {translateText(`desktopUpdate.failed.${view.during}`, {
+              error: view.error,
+            })}
+          </p>
+        </UpdateNotice>
       )}
 
       <AlertDialog open={confirming} onOpenChange={setConfirming}>

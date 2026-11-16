@@ -36,14 +36,6 @@
     "accountsNeedAttention": "有账号需要处理"
   },
   "update": {
-    "remoteHost": "连接的 host",
-    "version": "当前版本",
-    "latest": "最新版本",
-    "latestFull": "最新正式版",
-    "latestWithPrerelease": "最新版本（含预发布）",
-    "prerelease": "预发布版本",
-    "prereleaseHint": "也提供 -alpha、-beta、-rc 等预发布版本，可能不稳定。关掉后不会退回旧版本。",
-    "heldOnPrerelease": "你在预发布版本 {{version}} 上。预发布已关闭，正式版发布后会提示更新。",
     "upstream": "更新来源",
     "upstreamFrom": {
       "build": "默认",
@@ -73,7 +65,6 @@
     "tokenInput": "令牌",
     "tokenHint": "要能读这个仓库的 Releases：fine-grained token 给 Contents 只读，classic token 给 repo。服务器环境变量里的 token 优先于这里。",
     "tokenRemove": "删除",
-    "unknown": "查不到",
     "upToDate": "已是最新",
     "install": "更新到 {{version}}",
     "recheck": "重新检查",
@@ -120,7 +111,49 @@
     "busyTask": "任务 #{{number}} {{name}}",
     "busyRoutine": "定时 {{name}}",
     "busyReply": "{{name}} 里的回复",
-    "hostHeading": "host"
+    "title": {
+      "server": "eta host · 这台服务器",
+      "computer": "eta host · 这台电脑",
+      "remote": "eta host · 连接的 {{host}}"
+    },
+    "state": {
+      "available": "有新版本",
+      "held": "预发布版本 · 正式版发布后会提示",
+      "running": "正在更新 · {{phase}}",
+      "blocked": "不能在这里更新",
+      "checkFailed": "查不到最新版本",
+      "lastFailed": "上次更新没有成功"
+    },
+    "retry": "重试",
+    "tryAgain": "再试一次",
+    "checkFailedNext": "检查服务器的网络，或者在「高级」里换更新来源、设置访问令牌。",
+    "notes": "更新内容",
+    "notesFull": "查看完整说明",
+    "steps": {
+      "starting": "准备",
+      "downloading": "下载",
+      "waiting": "等智能体",
+      "backingUp": "备份数据库",
+      "restarting": "重启",
+      "verifying": "检查新版本"
+    },
+    "channel": "接收哪些版本",
+    "channelLabel": "更新通道",
+    "channelFull": "只要正式版",
+    "channelPrerelease": "也要预发布",
+    "channelHint": "预发布（-rc、-beta 等）更早拿到新功能，可能不稳定。切回正式版不会退回旧版本。",
+    "source": "从哪里下载",
+    "advanced": "高级",
+    "tokenWhen": "公开仓库不用令牌；私有仓库才要。",
+    "checked": {
+      "justNow": "刚刚检查过",
+      "minutes": "{{count}} 分钟前检查过",
+      "minutes_one": "{{count}} 分钟前检查过",
+      "minutes_other": "{{count}} 分钟前检查过",
+      "hours": "{{count}} 小时前检查过",
+      "hours_one": "{{count}} 小时前检查过",
+      "hours_other": "{{count}} 小时前检查过"
+    }
   },
   "host": {
     "local": "在这台电脑上运行",
@@ -129,8 +162,6 @@
     "change": "更改"
   },
   "desktopUpdate": {
-    "heading": "桌面端",
-    "version": "当前版本",
     "check": "检查更新",
     "checking": "正在检查",
     "upToDate": "已是最新",
@@ -147,6 +178,13 @@
       "check": "检查没有成功：{{error}}",
       "download": "下载没有成功：{{error}}",
       "apply": "没能开始更新，还是当前版本：{{error}}"
+    },
+    "title": "eta 桌面应用 · 这台电脑",
+    "state": {
+      "available": "有新版本",
+      "ready": "已下载，重启后换成新版本",
+      "failed": "没有成功",
+      "idle": "还没检查过"
     }
   }
 }

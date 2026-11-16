@@ -9,6 +9,8 @@ interface Listed {
   tag_name: string;
   draft?: boolean;
   prerelease?: boolean;
+  body?: string | null;
+  html_url?: string;
 }
 
 const servers: ReturnType<typeof Bun.serve>[] = [];
@@ -84,6 +86,26 @@ describe("the latest release", () => {
       version: "0.3.0",
     });
     expect(api.asked).toEqual(["/repo/releases/latest"]);
+  });
+
+  it("carries what it says about itself, and where to read it in full", async () => {
+    const page = "https://github.com/o/r/releases/tag/v0.3.0";
+    const api = fakeApi(
+      [{ tag_name: "v0.3.0", body: "\n- Tasks as a board\n", html_url: page }],
+      "v0.3.0",
+    );
+    await expect(api.releases.latest()).resolves.toEqual({
+      version: "0.3.0",
+      assets: [],
+      notes: "- Tasks as a board",
+      page,
+    });
+    // A release with nothing to say has no notes, not empty ones.
+    const quiet = fakeApi([{ tag_name: "v0.3.0", body: null }], "v0.3.0");
+    expect(await quiet.releases.latest()).toEqual({
+      version: "0.3.0",
+      assets: [],
+    });
   });
 
   it("is not a desktop release that took GitHub's latest", async () => {

@@ -25,6 +25,20 @@ const button = (name: string, nth = 0) =>
   [...document.querySelectorAll("button")].filter(
     (item) => item.textContent === name,
   )[nth];
+/** The host's bar: the state it says, and the colour it says it in. */
+const hostState = () => {
+  const bars = document.querySelectorAll('[role="status"][data-tone]');
+  const bar = bars[bars.length - 1] as HTMLElement;
+  return {
+    words: bar.textContent,
+    tone: bar.dataset.tone,
+    dot: bar.querySelector("[data-dot]")?.className ?? "",
+  };
+};
+const advanced = () =>
+  [...document.querySelectorAll("button")].find(
+    (item) => item.textContent === "高级",
+  )!;
 
 const checked: UpgradeCheckView = {
   version: "1.0.0",
@@ -41,6 +55,7 @@ const checked: UpgradeCheckView = {
     fallback: "0xfe-project/eta",
   },
   token: { host: "github.com", from: "gh", saved: null },
+  notes: null,
   error: null,
 };
 
@@ -104,10 +119,17 @@ describe("Settings → 更新", () => {
     expect(start).toHaveBeenCalledWith({ force: false });
   });
 
-  it("says nothing about where the host is in a browser or on this computer", async () => {
+  it("says it is this server in a browser", async () => {
+    await open();
+    expect(text()).toContain("eta host · 这台服务器");
+    expect(text()).not.toContain("连接的");
+  });
+
+  it("says it is this computer in the app on a local host", async () => {
     window.__ETA_HOST__ = { native: true, connection: "local" };
     await open();
-    expect(text()).not.toContain("连接的 host");
+    expect(text()).toContain("eta host · 这台电脑");
+    expect(text()).not.toContain("连接的");
     await click(button("更新到 1.1.0")!);
     expect(text()).toContain("服务器会重启");
   });
@@ -119,8 +141,7 @@ describe("Settings → 更新", () => {
       address: "https://mac.ts.net",
     };
     const { start } = await open();
-    expect(text()).toContain("连接的 host");
-    expect(text()).toContain("https://mac.ts.net");
+    expect(text()).toContain("eta host · 连接的 https://mac.ts.net");
     await click(button("更新到 1.1.0")!);
     expect(text()).toContain("这台电脑上的东西不变");
     await click(button("更新")!);
@@ -150,27 +171,29 @@ describe("Settings → 更新", () => {
   });
 
   describe("pre-releases", () => {
-    const toggle = () =>
-      document.querySelector<HTMLButtonElement>('[role="switch"]')!;
+    const choice = (name: string) => button(name)!;
 
-    it("are off until switched on, and the check is asked again", async () => {
+    it("are a choice of two, and choosing asks the check again", async () => {
       const { setPrerelease, checks } = await open();
-      expect(text()).toContain("预发布版本");
-      expect(toggle().getAttribute("aria-checked")).toBe("false");
-      expect(text()).not.toContain("最新版本（含预发布）");
+      expect(text()).toContain("接收哪些版本");
+      expect(choice("只要正式版").getAttribute("aria-pressed")).toBe("true");
+      expect(choice("也要预发布").getAttribute("aria-pressed")).toBe("false");
       const before = checks.mock.calls.length;
 
-      await click(toggle());
+      await click(choice("也要预发布"));
       await flush();
       expect(setPrerelease).toHaveBeenCalledWith({ prerelease: true });
       expect(checks.mock.calls.length).toBeGreaterThan(before);
-      expect(toggle().getAttribute("aria-checked")).toBe("true");
-      expect(text()).toContain("最新版本（含预发布）");
+      expect(choice("也要预发布").getAttribute("aria-pressed")).toBe("true");
 
-      await click(toggle());
+      // The one already chosen asks nothing.
+      await click(choice("也要预发布"));
+      expect(setPrerelease).toHaveBeenCalledTimes(1);
+
+      await click(choice("只要正式版"));
       await flush();
       expect(setPrerelease).toHaveBeenLastCalledWith({ prerelease: false });
-      expect(toggle().getAttribute("aria-checked")).toBe("false");
+      expect(choice("只要正式版").getAttribute("aria-pressed")).toBe("true");
     });
 
     it("say why a pre-release build is offered nothing once they are off", async () => {
@@ -180,17 +203,17 @@ describe("Settings → 更新", () => {
         available: false,
         heldOnPrerelease: true,
       });
-      expect(text()).toContain(
-        "你在预发布版本 0.3.0-beta.1 上。预发布已关闭，正式版发布后会提示更新。",
-      );
-      expect(text()).toContain("最新正式版");
+      expect(text()).toContain("0.3.0-beta.1");
+      expect(hostState().words).toBe("预发布版本 · 正式版发布后会提示");
+      expect(hostState().tone).toBe("warning");
       expect(text()).not.toContain("已是最新");
       expect(button("更新到 0.2.0")).toBeUndefined();
     });
 
     it("cannot be switched while an upgrade runs", async () => {
       await open({}, running("downloading"));
-      expect(toggle().disabled).toBe(true);
+      expect(choice("只要正式版").disabled).toBe(true);
+      expect(choice("也要预发布").disabled).toBe(true);
     });
   });
 
@@ -202,7 +225,7 @@ describe("Settings → 更新", () => {
   ] as const)("says why it cannot: %s", async (blocked, words) => {
     await open({ blocked });
     expect(text()).toContain(words);
-    expect(button("更新到 1.1.0")).toBeUndefined();
+    expect(button("更新到 1.1.0")?.disabled).toBe(true);
   });
 
   it("says when the release could not be found", async () => {
@@ -244,6 +267,7 @@ describe("Settings → 更新", () => {
 
     it("warns whose code this is, and saves what is typed", async () => {
       const { setUpstream } = await open();
+      await click(advanced());
       expect(text()).toContain("0xfe-project/eta");
       expect(text()).toContain("默认");
       await click(button("修改")!);
@@ -268,6 +292,7 @@ describe("Settings → 更新", () => {
 
     it("stays open on what the host refuses", async () => {
       const { setUpstream } = await open();
+      await click(advanced());
       await click(button("修改")!);
       await type("nonsense");
       await click(button("保存")!);
@@ -287,6 +312,7 @@ describe("Settings → 更新", () => {
 
     it("leaves it alone while an upgrade runs", async () => {
       await open({}, running("waiting"));
+      await click(advanced());
       expect(button("修改")?.disabled).toBe(true);
     });
   });
@@ -305,7 +331,9 @@ describe("Settings → 更新", () => {
 
     it("says where it comes from, and saves one", async () => {
       const { setToken } = await open();
+      await click(advanced());
       expect(text()).toContain("gh 的登录");
+      expect(text()).toContain("私有仓库才要");
       await click(button("设置")!);
       expect(text()).toContain("只会发给 github.com");
       expect(document.querySelector("input")?.type).toBe("password");
@@ -320,6 +348,7 @@ describe("Settings → 更新", () => {
       const { setToken } = await open({
         token: { host: "github.com", from: "Settings", saved: "github.com" },
       });
+      await click(advanced());
       expect(text()).toContain("在这里保存");
       await click(button("修改", 1)!);
       expect(document.querySelector("input")?.value).toBe("");
@@ -344,7 +373,9 @@ describe("Settings → 更新", () => {
     });
 
     it("has no row for a server that takes its own", async () => {
+      // The saved token is for another host, which opens the group by itself.
       await open({ token: { host: null, from: null, saved: "github.com" } });
+      expect(text()).toContain("更新来源");
       expect(text()).not.toContain("访问令牌");
     });
   });
@@ -360,7 +391,181 @@ describe("Settings → 更新", () => {
       { ...running("downloading"), state: "failed", error: "checksum" },
     );
     expect(text()).toContain("checksum");
-    expect(button("更新到 1.1.0")).toBeDefined();
+    expect(text()).toContain("journalctl --user -u io.eta.host-upgrade");
+    await click(button("再试一次")!);
+    expect(text()).toContain("服务器会重启");
+  });
+
+  describe("the bar", () => {
+    it.each([
+      [
+        "up to date",
+        { available: false, latest: "1.0.0" },
+        null,
+        "已是最新",
+        "success",
+      ],
+      ["a newer one", {}, null, "有新版本", "info"],
+      [
+        "held on a pre-release",
+        { available: false, heldOnPrerelease: true },
+        null,
+        "预发布版本 · 正式版发布后会提示",
+        "warning",
+      ],
+      ["updating", {}, running("downloading"), "正在更新 · 下载中", "info"],
+      ["blocked", { blocked: "no-service" }, null, "不能在这里更新", "muted"],
+      [
+        "check failed",
+        { latest: null, available: false, error: "no network" },
+        null,
+        "查不到最新版本",
+        "error",
+      ],
+      [
+        "last one failed",
+        { available: false, latest: "1.0.0" },
+        { ...running("verifying"), state: "rolled-back", error: "boom" },
+        "上次更新没有成功",
+        "error",
+      ],
+    ] as const)(
+      "says %s in words and colour",
+      async (_name, check, status, words, tone) => {
+        await open(check, status as UpgradeStatusView | null);
+        expect(hostState().words).toBe(words);
+        expect(hostState().tone).toBe(tone);
+        expect(hostState().dot).toContain(
+          tone === "muted" ? "bg-faint" : `bg-state-${tone}`,
+        );
+      },
+    );
+
+    it("shows where it would go, and when it was checked", async () => {
+      await open();
+      expect(text()).toContain("1.0.0→1.1.0");
+      expect(text()).toContain("刚刚检查过");
+    });
+
+    it("checks again from the bar, and retries a failed check", async () => {
+      const { checks } = await open();
+      const before = checks.mock.calls.length;
+      await click(button("重新检查")!);
+      await flush();
+      expect(checks.mock.calls.length).toBe(before + 1);
+      await cleanup();
+      const failed = await open({ latest: null, available: false, error: "x" });
+      expect(button("重新检查")).toBeUndefined();
+      await click(button("重试")!);
+      await flush();
+      expect(failed.checks.mock.calls.length).toBe(2);
+    });
+
+    it("draws the steps of a running update, the current one marked", async () => {
+      await open({}, running("waiting", [task]));
+      const steps = [...document.querySelectorAll("[data-step]")];
+      expect(steps.map((step) => step.textContent)).toEqual([
+        "准备",
+        "下载",
+        "等智能体",
+        "备份数据库",
+        "重启",
+        "检查新版本",
+      ]);
+      expect(steps.map((step) => step.getAttribute("data-step"))).toEqual([
+        "done",
+        "done",
+        "current",
+        "todo",
+        "todo",
+        "todo",
+      ]);
+      expect(text()).toContain("等待：任务 #45 x");
+    });
+  });
+
+  describe("what's new", () => {
+    const notes = {
+      text: [
+        "## What's Changed",
+        "* feat(tasks): tasks as a board by @someone in https://github.com/o/r/pull/1",
+        "* fix(web): **faster** [settings](https://x)",
+        "* three",
+        "* four",
+        "* five",
+        "* six",
+      ].join("\n"),
+      url: "https://github.com/0xfe-project/eta/releases/tag/v1.1.0",
+    };
+
+    it("is folded under a newer release, and opens to its first points", async () => {
+      await open({ notes });
+      const toggle = button("更新内容tasks as a board")!;
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
+      expect(document.querySelectorAll("li")).toHaveLength(0);
+      await click(toggle);
+      expect(
+        [...document.querySelectorAll("li")].map((item) => item.textContent),
+      ).toEqual([
+        "tasks as a board",
+        "faster settings",
+        "three",
+        "four",
+        "five",
+      ]);
+      expect(
+        document.querySelector<HTMLAnchorElement>(`a[href="${notes.url}"]`)
+          ?.textContent,
+      ).toBe("查看完整说明");
+    });
+
+    it("is not there without notes, or without a newer release", async () => {
+      await open();
+      expect(text()).not.toContain("更新内容");
+      await cleanup();
+      await open({ notes, available: false, latest: "1.0.0" });
+      expect(text()).not.toContain("更新内容");
+      await cleanup();
+      await open({ notes, blocked: null }, running("downloading"));
+      expect(text()).not.toContain("更新内容");
+    });
+  });
+
+  describe("advanced", () => {
+    it("is folded by default", async () => {
+      await open();
+      expect(advanced().getAttribute("aria-expanded")).toBe("false");
+      expect(text()).not.toContain("更新来源");
+      await click(advanced());
+      expect(text()).toContain("更新来源");
+      await click(advanced());
+      expect(text()).not.toContain("更新来源");
+    });
+
+    it.each([
+      [
+        "a source that is not the default",
+        {
+          upstream: {
+            label: "someone/fork",
+            source: "setting",
+            saved: "someone/fork",
+            fallback: "0xfe-project/eta",
+          },
+        },
+      ],
+      [
+        "a saved token not in use",
+        {
+          token: { host: "github.com", from: "GH_TOKEN", saved: "github.com" },
+        },
+      ],
+      ["a check that failed", { latest: null, available: false, error: "x" }],
+    ] as const)("opens by itself for %s", async (_name, check) => {
+      await open(check);
+      expect(advanced().getAttribute("aria-expanded")).toBe("true");
+      expect(text()).toContain("更新来源");
+    });
   });
 });
 
@@ -411,7 +616,8 @@ describe("in a desktop app that updates itself", () => {
 
   it("keeps its own version apart from the host's, and does nothing unasked", async () => {
     const { asked } = await openDesktop("local");
-    expect(text()).toContain("桌面端");
+    expect(text()).toContain("eta 桌面应用 · 这台电脑");
+    expect(text()).toContain("还没检查过");
     expect(text()).toContain("0.2.0");
     expect(text()).toContain("1.0.0");
     expect(asked).toEqual([]);

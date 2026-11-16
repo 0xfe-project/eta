@@ -333,7 +333,40 @@ describe("the update button's target", () => {
         fallback: "0xfe-project/eta",
       },
       token: { host: "github.com", from: null, saved: null },
+      notes: null,
       error: null,
+    });
+  });
+
+  it("brings the notes of a newer release, and only of a newer one", async () => {
+    const releases = (version: string) => ({
+      latest: () =>
+        Promise.resolve({
+          version,
+          assets: [],
+          notes: `- one\n- two\n${"x".repeat(5000)}`,
+          page: `https://github.com/0xfe-project/eta/releases/tag/v${version}`,
+        }),
+    });
+    const newer = await client({
+      upgrade: { ...options, releases: releases("1.1.0") },
+    });
+    const { notes } = (await newer.socket.call("upgrade", "check", {})) as {
+      notes: { text: string; url: string | null } | null;
+    };
+    expect(notes?.url).toBe(
+      "https://github.com/0xfe-project/eta/releases/tag/v1.1.0",
+    );
+    expect(notes?.text.startsWith("- one\n- two\n")).toBe(true);
+    // The page shows the start; the rest is on the release's page.
+    expect(notes?.text.length).toBe(4000);
+
+    const same = await client({
+      upgrade: { ...options, releases: releases("1.0.0") },
+    });
+    expect(await same.socket.call("upgrade", "check", {})).toMatchObject({
+      available: false,
+      notes: null,
     });
   });
 
