@@ -53,6 +53,16 @@ export interface NewTaskInput {
   under?: number | undefined;
 }
 
+/** What the system writes on a parent's status it found stale and made again (`reconcile`). */
+const RECOMPUTED = "recomputed";
+
+/** A parent whose status moved in a write, and the conversations whose cards it touched. */
+interface Moved {
+  id: string;
+  status: BoardTaskStatus;
+  touched: string[];
+}
+
 /** What the system writes on a status it set because a dependency was cancelled. */
 const DEPENDENCY_CANCELLED = "dependency_cancelled";
 
@@ -358,6 +368,7 @@ export class TaskBoard {
     const maker = actor.agentId;
     // The task and what it waits for are one write: a task that would start before its
     // dependencies are in place is the thing they are there to prevent.
+    let moved: Moved[] = [];
     const task = this.#deps.db.transaction(() => {
       const made = this.#deps.tasks.create({
         ...fields,
@@ -375,11 +386,12 @@ export class TaskBoard {
       if (parent !== undefined) this.#setParent(made.id, parent.id, actor);
       for (const edge of dependsOn)
         this.#addEdge(made.id, edge.taskId, edge.requireDone, actor);
+      if (parent !== undefined) moved = this.#deriveIn(parent.id);
       return made;
     })();
     this.#announce(task.id, "created", []);
     for (const edge of dependsOn) this.#announce(edge.taskId, "changed", []);
-    if (parent !== undefined) this.#adopted(parent.id, null);
+    if (parent !== undefined) this.#adopted(parent.id, moved);
     if (workable(task.status)) this.#runs?.start(task.id);
     if (parent !== undefined) this.#graphChanged();
     return this.#detailOf(this.#existing(task.id));
@@ -462,6 +474,12 @@ export class TaskBoard {
         under: entry.under,
       };
     });
+    const parents = new Set<number>(
+      planned.flatMap((entry) =>
+        entry.under === undefined ? [] : [entry.under],
+      ),
+    );
+    let moved: Moved[] = [];
     const made = this.#deps.db.transaction(() => {
       const rows = planned.map((entry) =>
         this.#deps.tasks.create({
@@ -487,23 +505,25 @@ export class TaskBoard {
         for (const at of entry.after)
           this.#addEdge(id, rows[at]!.id, false, actor);
       });
+      // A task of the batch with subtasks of its own takes their status, in this same write, and
+      // so does the parent the batch went under.
+      moved = [
+        ...[...parents].flatMap((index) => this.#deriveIn(rows[index]!.id)),
+        ...(parent === undefined ? [] : this.#deriveIn(parent.id)),
+      ];
       return rows;
     })();
-    const parents = new Set(
-      planned.flatMap((entry) =>
-        entry.under === undefined ? [] : [made[entry.under]!.id],
-      ),
-    );
     for (const task of made) this.#announce(task.id, "created", []);
     for (const entry of planned)
       for (const edge of entry.dependsOn)
         this.#announce(edge.taskId, "changed", []);
-    // Leaves start; a task of the batch with subtasks of its own takes their status instead.
-    for (const task of made) if (parents.has(task.id)) this.#derive(task.id);
-    if (parent !== undefined) this.#adopted(parent.id, null);
-    for (const task of made)
-      if (!parents.has(task.id) && workable(task.status))
+    if (parent !== undefined) this.#adopted(parent.id, []);
+    this.#derived(moved);
+    // Leaves start; a parent does not.
+    made.forEach((task, index) => {
+      if (!parents.has(index) && workable(task.status))
         this.#runs?.start(task.id);
+    });
     this.#graphChanged();
     return made.map((task) => this.#detailOf(this.#existing(task.id)));
   }
@@ -535,11 +555,18 @@ export class TaskBoard {
             .descendantsOf(id)
             .filter((t) => t.status !== "done" && t.status !== "cancelled")
         : [];
-    this.#commit(id, "changed", () => {
-      for (const below of cancelled)
-        this.#deps.tasks.update(below.id, { status: "cancelled" }, actor);
-      this.#deps.tasks.update(id, fields, actor);
-    });
+    // Its parent takes its status again in the same write: a parent's status is a copy of what
+    // its subtasks make, and a copy written apart from them is one a crash in between leaves stale.
+    this.#commit(
+      id,
+      "changed",
+      () => {
+        for (const below of cancelled)
+          this.#deps.tasks.update(below.id, { status: "cancelled" }, actor);
+        this.#deps.tasks.update(id, fields, actor);
+      },
+      [before.parentId],
+    );
     for (const below of cancelled) {
       this.#announce(below.id, "changed", []);
       this.#runs?.stop(
@@ -626,13 +653,18 @@ export class TaskBoard {
       parent === null || parent.trim() === "" ? null : this.#named(parent);
     const before = task.parentId;
     if ((next?.id ?? null) === before) return this.#detailOf(task);
-    this.#commit(task.id, "changed", () => {
-      this.#setParent(task.id, next?.id ?? null, actor);
-    });
+    // Both parents take their status again in the same write.
+    this.#commit(
+      task.id,
+      "changed",
+      () => {
+        this.#setParent(task.id, next?.id ?? null, actor);
+      },
+      [next?.id ?? null, before],
+    );
     for (const other of [before, next?.id ?? null])
       if (other !== null) this.#announce(other, "changed", []);
-    if (next !== null) this.#adopted(next.id, before);
-    else if (before !== null) this.#derive(before);
+    if (next !== null) this.#adopted(next.id, []);
     this.#graphChanged();
     return this.#detailOf(this.#existing(task.id));
   }
@@ -649,21 +681,25 @@ export class TaskBoard {
     const gate = this.graph().gate(taskId);
     if (gate.state !== "broken") return;
     const system: TaskActor = { kind: "system", agentId: null };
-    this.#commit(taskId, "changed", () => {
-      for (const cancelled of gate.cancelled)
-        this.#deps.tasks.record(taskId, "dependency", system, {
-          data: { action: "blocked", ...this.#refOf(cancelled) },
-        });
-      if (task.status !== "blocked")
-        this.#deps.tasks.update(
-          taskId,
-          { status: "blocked", statusReason: DEPENDENCY_CANCELLED },
-          system,
-        );
-    });
+    this.#commit(
+      taskId,
+      "changed",
+      () => {
+        for (const cancelled of gate.cancelled)
+          this.#deps.tasks.record(taskId, "dependency", system, {
+            data: { action: "blocked", ...this.#refOf(cancelled) },
+          });
+        if (task.status !== "blocked")
+          this.#deps.tasks.update(
+            taskId,
+            { status: "blocked", statusReason: DEPENDENCY_CANCELLED },
+            system,
+          );
+      },
+      [task.parentId],
+    );
     // The run ends with no words: the `blocked` entry above says why, in the reader's language.
     this.#runs?.withdraw(taskId);
-    if (task.parentId !== null) this.#derive(task.parentId);
   }
 
   /**
@@ -760,12 +796,16 @@ export class TaskBoard {
             { data: { action: "deleted", ...this.#refOf(task) } },
           );
         });
-      this.#commit(id, "removed", () => {
-        this.#deps.tasks.remove(id);
-      });
+      this.#commit(
+        id,
+        "removed",
+        () => {
+          this.#deps.tasks.remove(id);
+        },
+        [task.parentId],
+      );
     })();
     for (const other of awaited) this.#announce(other, "changed", []);
-    if (task.parentId !== null) this.#derive(task.parentId);
     this.#graphChanged();
   }
 
@@ -1021,8 +1061,8 @@ export class TaskBoard {
   }): { task: BoardTaskDetail; message: MessageView } {
     // The draft's dependencies were checked when it was drafted; much can change before it is
     // confirmed, so they are checked again here, in the same write that makes the task.
-    const { task, message, created, dependsOn } = this.#deps.db.transaction(
-      () => {
+    const { task, message, created, dependsOn, moved } =
+      this.#deps.db.transaction(() => {
         const confirmed = this.#deps.cards.confirm({
           conversationId: input.conversationId,
           messageId: input.messageId,
@@ -1039,14 +1079,18 @@ export class TaskBoard {
             edge.requireDone,
             actor,
           );
-        return { ...confirmed, dependsOn: edges };
-      },
-    )();
+        // The parent takes its status again in the same write.
+        const moved =
+          confirmed.created && confirmed.parentId !== undefined
+            ? this.#deriveIn(confirmed.parentId)
+            : [];
+        return { ...confirmed, dependsOn: edges, moved };
+      })();
     if (created) {
       this.#announce(task.id, "created", [input.conversationId]);
       for (const edge of dependsOn) this.#announce(edge.taskId, "changed", []);
       const parentId = this.#existing(task.id).parentId;
-      if (parentId !== null) this.#adopted(parentId, null);
+      if (parentId !== null) this.#adopted(parentId, moved);
       if (workable(task.status)) this.#runs?.start(task.id);
       if (parentId !== null) this.#graphChanged();
     }
@@ -1127,12 +1171,13 @@ export class TaskBoard {
     });
   }
 
-  /** A task's status moved: the tasks that wait for it read it again, and the graph settles. */
+  /**
+   * A task's status moved: the tasks that wait for it read it again, and the graph settles. Its
+   * parent moved with it, in the same write.
+   */
   #statusMoved(id: string): void {
     for (const edge of this.graph().dependentsOf(id))
       this.#announce(edge.taskId, "changed", []);
-    const parent = this.#deps.tasks.get(id)?.parentId ?? null;
-    if (parent !== null) this.#derive(parent);
     this.#graphChanged();
   }
 
@@ -1167,45 +1212,104 @@ export class TaskBoard {
 
   /**
    * A task got a subtask: it does not start its own work any more (a run that would has not
-   * started yet is withdrawn; one that is going, such as an executor splitting its task, goes on),
-   * and it takes its status from its subtasks, as does the parent the subtask left.
+   * started yet is withdrawn; one that is going, such as an executor splitting its task, goes on).
+   * It took its status from its subtasks in the write that gave it one: `moved` is what that
+   * write moved, told now.
    */
-  #adopted(parentId: string, formerParentId: string | null): void {
+  #adopted(parentId: string, moved: readonly Moved[]): void {
     // No words of its own: the `subtask` entry next to it says why, in the reader's language.
     this.#runs?.withdraw(parentId, "executor");
-    this.#derive(parentId);
-    if (formerParentId !== null) this.#derive(formerParentId);
+    this.#derived(moved);
   }
 
   /**
    * A parent takes the status its subtasks make (`TaskGraph.derive`), and its parent then does the
    * same, up the tree while anything changes. A cancelled parent is left alone: that was the
    * user's word on the whole of it. Its timeline says the system moved it, and why.
+   *
+   * This writes inside the caller's write, the one that changed the subtask: the parent's status is
+   * a copy of what its subtasks make, and a copy written apart from them is one a crash in between
+   * leaves stale (the startup `reconcile` is the net under that). What it moved is told once the
+   * write is in (`#derived`).
    */
-  #derive(id: string): void {
-    let at: string | null = id;
+  #deriveIn(id: string | null): Moved[] {
+    const moved: Moved[] = [];
+    let at = id;
     while (at !== null) {
       const task = this.#deps.tasks.get(at);
-      if (task === undefined || task.status === "cancelled") return;
+      if (task === undefined || task.status === "cancelled") break;
       const derived = this.graph().derive(at);
-      if (derived === undefined || derived.status === task.status) return;
-      this.#commit(at, "changed", () => {
-        if (derived.reason === "all_cancelled")
-          this.#deps.tasks.record(task.id, "subtask", SYSTEM, {
-            data: { action: "all_cancelled" },
-          });
-        this.#deps.tasks.update(
-          task.id,
-          { status: derived.status, statusReason: derived.reason },
-          SYSTEM,
-        );
+      if (derived === undefined || derived.status === task.status) break;
+      if (derived.reason === "all_cancelled")
+        this.#deps.tasks.record(task.id, "subtask", SYSTEM, {
+          data: { action: "all_cancelled" },
+        });
+      this.#deps.tasks.update(
+        task.id,
+        { status: derived.status, statusReason: derived.reason },
+        SYSTEM,
+      );
+      moved.push({
+        id: task.id,
+        status: derived.status,
+        touched: this.#deps.cards.sync(task.id),
       });
-      if (derived.status === "done")
-        this.#runs?.stop(task.id, "The task is done: all of its subtasks are.");
-      for (const edge of this.graph().dependentsOf(task.id))
-        this.#announce(edge.taskId, "changed", []);
       at = task.parentId;
     }
+    return moved;
+  }
+
+  /** Parents moved in a write that is in: the board hears of them, and so does what waits for them. */
+  #derived(moved: readonly Moved[]): void {
+    for (const { id, status, touched } of moved) {
+      this.#announce(id, "changed", touched);
+      if (status === "done")
+        this.#runs?.stop(id, "The task is done: all of its subtasks are.");
+      for (const edge of this.graph().dependentsOf(id))
+        this.#announce(edge.taskId, "changed", []);
+    }
+  }
+
+  /**
+   * Every parent's status made again from its subtasks, deepest first so a parent reads its
+   * subtasks as corrected. The host does it as it starts, before any run: a process that died
+   * between a subtask's write and its parent's (an older one, which made them two writes) left the
+   * parent stale, and so everything waiting for it. A parent whose stored status was not what its
+   * subtasks make is moved, with `recomputed` on its status entry; a cancelled one is left alone,
+   * as always. Returns the ids corrected.
+   */
+  reconcile(): string[] {
+    const moved = this.#deps.db.transaction(() => {
+      const out: Moved[] = [];
+      let graph = this.graph();
+      const depth = (id: string) => graph.ancestorsOf(id).length;
+      const parents = this.#deps.tasks
+        .list()
+        .filter((task) => graph.hasChildren(task.id))
+        .map((task) => task.id)
+        .sort((a, b) => depth(b) - depth(a));
+      for (const id of parents) {
+        const task = this.#deps.tasks.get(id);
+        if (task === undefined || task.status === "cancelled") continue;
+        const derived = graph.derive(id);
+        if (derived === undefined || derived.status === task.status) continue;
+        this.#deps.tasks.update(
+          id,
+          { status: derived.status, statusReason: RECOMPUTED },
+          SYSTEM,
+        );
+        out.push({
+          id,
+          status: derived.status,
+          touched: this.#deps.cards.sync(id),
+        });
+        graph = this.graph();
+      }
+      return out;
+    })();
+    this.#derived(moved);
+    if (moved.length > 0) this.#graphChanged();
+    return moved.map((entry) => entry.id);
   }
 
   /** The graph changed: the system's own blocks that no longer hold are undone, and the queue is looked at again. */
@@ -1230,28 +1334,43 @@ export class TaskBoard {
         const last = this.#deps.tasks.lastStatusEntry(task.id);
         if (last?.data.reason !== DEPENDENCY_CANCELLED) continue;
         if (this.graph().gate(task.id).state === "broken") continue;
-        this.#commit(task.id, "changed", () => {
-          this.#deps.tasks.record(task.id, "dependency", system, {
-            data: { action: "unblocked" },
-          });
-          this.#deps.tasks.update(task.id, { status: "todo" }, system);
-        });
+        this.#commit(
+          task.id,
+          "changed",
+          () => {
+            this.#deps.tasks.record(task.id, "dependency", system, {
+              data: { action: "unblocked" },
+            });
+            this.#deps.tasks.update(task.id, { status: "todo" }, system);
+          },
+          [task.parentId],
+        );
         this.#runs?.start(task.id);
-        if (task.parentId !== null) this.#derive(task.parentId);
       }
     } finally {
       this.#settling = false;
     }
   }
 
-  /** A change, the refresh of the task's cards in the same write, and then the news of it. */
-  #commit(id: string, kind: BoardChange["kind"], work: () => void): void {
+  /**
+   * A change, the refresh of the task's cards in the same write, and then the news of it. The
+   * parents named in `derive` take their status again in that same write (`#deriveIn`).
+   */
+  #commit(
+    id: string,
+    kind: BoardChange["kind"],
+    work: () => void,
+    derive: readonly (string | null)[] = [],
+  ): void {
     let touched: string[] = [];
+    let moved: Moved[] = [];
     this.#deps.db.transaction(() => {
       work();
       touched = this.#deps.cards.sync(id);
+      moved = derive.flatMap((parent) => this.#deriveIn(parent));
     })();
     this.#announce(id, kind, touched);
+    this.#derived(moved);
   }
 
   #announce(

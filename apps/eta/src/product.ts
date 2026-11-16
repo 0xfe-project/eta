@@ -717,6 +717,13 @@ export function createProduct(options: {
   });
   // Nothing is running yet, so the runs the last process left going cannot be.
   taskRunner.recover();
+  // A parent's status is a copy of what its subtasks make: one the last process left stale is
+  // made again now, before the queue is looked at, so what waits for it reads the right one.
+  const corrected = board.reconcile();
+  if (corrected.length > 0)
+    warn(
+      `[eta] corrected the status of ${corrected.length} parent task(s) from their subtasks`,
+    );
   // Done and cancelled tasks left quiet are put away, now and every hour.
   const taskSettings = new SettingStore(db);
   const archiver = new TaskArchiver({
