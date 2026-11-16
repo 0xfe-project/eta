@@ -1,4 +1,4 @@
-import type { AcpAgentView } from "@/queries/acp";
+import type { AcpAgentView } from "@eta/client-contracts";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
 import { setWire } from "@/lib/wire";
@@ -315,6 +315,7 @@ describe("Settings → External agents", () => {
     expect(toasts.error).toHaveBeenCalledWith("still used by: Ada, Bob");
 
     refuse = false;
+    await flush();
     await click(labelled("删除 Demo"));
     await click(
       byText(

@@ -1,9 +1,9 @@
-import type { AcpDraft, AcpDraftProblems } from "./acp-form";
 import type {
   AcpAgentConfig,
   AcpAgentView,
   AcpTestResult,
-} from "@/queries/acp";
+} from "@eta/client-contracts";
+import type { AcpDraft, AcpDraftProblems } from "./acp-form";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { useId, useState } from "react";
