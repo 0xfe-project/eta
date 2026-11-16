@@ -655,7 +655,8 @@ export class TaskRunner implements TaskRuns {
         );
     } else {
       const executor = this.#executorOf(task);
-      if (task.createdBy.kind !== "agent" || executor === null)
+      // A task the user made runs too, once it names its executor (`TaskBoard.make`).
+      if (executor === null)
         throw new Error("this task has no executor: only an agent's task runs");
       if (board.isParent(task.id))
         throw new Error(
@@ -673,7 +674,9 @@ export class TaskRunner implements TaskRuns {
         ? runs.lastSessionOf(task.id, agentId)
         : undefined;
     // The run is on the machine its agent works on: a pinned agent's, else the project's.
-    const runner = agents.get(agentId ?? task.createdBy.agentId ?? "");
+    const runner = agents.get(
+      agentId ?? task.createdBy.agentId ?? task.assigneeAgentId ?? "",
+    );
     const machineId =
       runner === undefined
         ? project.machineId

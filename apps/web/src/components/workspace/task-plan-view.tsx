@@ -13,16 +13,11 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useOutbox } from "@/queries/outbox";
-import {
-  useAddDependency,
-  useRemoveDependency,
-  useTask,
-} from "@/queries/tasks";
+import { useAddDependency, useRemoveDependency } from "@/queries/tasks";
 import { wireErrorMessage } from "@/queries/wire";
 import { TaskLine } from "./task-bits";
-import { numbersLabel } from "./task-format";
 import { useTaskNav } from "./task-nav";
+import { useNewTask } from "./task-new-store";
 import {
   childrenOf,
   edgeRefusal,
@@ -33,8 +28,6 @@ import {
 } from "./task-plan";
 import { StatusIcon } from "./task-status-icon";
 import { waitingStripes } from "./task-words";
-import { useOpenGroup } from "./use-groups";
-import { useWorkspaceStore } from "./workspace-store";
 
 // The plan: a piece of work's tasks in the order they can happen. The steps come from the edges
 // (`planOf`), so the tasks of one step can run side by side; the longest chain is drawn heavier.
@@ -80,9 +73,8 @@ function stepNote(
 }
 
 /**
- * "+ Add a step at the end": a new subtask of the parent, waiting for every task of the last step.
- * Tasks are drafted by agents, so this asks for one in the parent's conversation: the composer
- * there is filled in with what to draft, for the user to finish and send.
+ * "+ Add a step at the end": the new-task form, as a subtask of the parent waiting for every task
+ * of the last step (nothing, when the plan is empty); the user names it and presses Create.
  */
 function AddStep({
   parent,
@@ -94,40 +86,16 @@ function AddStep({
   className?: string;
 }) {
   const { t } = useTranslation(["tasks"] as const);
-  const { task: detail } = useTask(parent.id);
-  const openGroup = useOpenGroup();
-  const setNewConversation = useWorkspaceStore((s) => s.setNewConversation);
-  const ask = () => {
-    // Nothing to wait for when the plan is empty (all of it cancelled, or never split).
-    const text =
-      last.length === 0
-        ? t("plan.addStepDraftFirst", {
-            number: parent.number,
-            title: parent.title,
-          })
-        : t("plan.addStepDraft", {
-            number: parent.number,
-            title: parent.title,
-            tasks: numbersLabel(last.map((x) => x.number)),
-          });
-    const conversation =
-      parent.conversationId ?? detail?.originConversationId ?? null;
-    if (conversation === null) {
-      setNewConversation({ open: true });
-      return;
-    }
-    const { drafts, setDraft } = useOutbox.getState();
-    const draft = drafts[conversation] ?? [];
-    setDraft(conversation, [
-      ...draft,
-      { type: "text", text: draft.length ? `\n${text}` : text },
-    ]);
-    openGroup(conversation);
-  };
+  const open = useNewTask((s) => s.open);
   return (
     <button
       type="button"
-      onClick={ask}
+      onClick={() =>
+        open({
+          parentId: parent.id,
+          dependsOn: last.map((x) => ({ id: x.id, requireDone: false })),
+        })
+      }
       title={t("plan.addStepHint")}
       className={cn(
         "pointer-events-auto flex w-full items-center gap-1.5 border border-dashed border-border-strong px-2.5 py-2 text-left text-xs text-muted-foreground outline-none hover:border-foreground/40 hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring",
@@ -715,6 +683,7 @@ export function PlanGroup({
   const [, setNav] = useTaskNav();
   const plan = planOf(tasks);
   const left = stepsLeft(plan);
+  const openNew = useNewTask((s) => s.open);
   return (
     <section
       aria-label={parent ? parent.title : t("list.loose")}
@@ -739,6 +708,15 @@ export function PlanGroup({
                   ? t("plan.allDone")
                   : t("plan.left", { count: left })}
               </span>
+              <Button
+                variant="ghost"
+                size="xs"
+                className="ml-auto"
+                onClick={() => openNew({ parentId: parent.id })}
+              >
+                <PlusIcon aria-hidden="true" />
+                {t("plan.addSubtask")}
+              </Button>
             </>
           ) : (
             <span className="text-muted-foreground">{t("list.loose")}</span>

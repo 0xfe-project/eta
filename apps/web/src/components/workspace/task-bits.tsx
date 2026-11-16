@@ -5,19 +5,7 @@ import { useEffect, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+
 import { cn } from "@/lib/utils";
 import {
   useAddDependency,
@@ -26,15 +14,16 @@ import {
 } from "@/queries/tasks";
 import { wireErrorMessage } from "@/queries/wire";
 import { ago } from "./task-format";
+import { useProjectOf } from "./task-hooks";
+import { useTaskNav } from "./task-nav";
+import { TaskPicker } from "./task-picker";
 import {
-  edgeRefusal,
   isRunning,
   isWaiting,
   releaseOf,
   waitsOf,
   waitSummary,
 } from "./task-plan";
-import { StatusIcon } from "./task-status-icon";
 import { blockedLine } from "./task-words";
 
 // The small pieces the board, the list and the plan say a task with: its progress, what it waits
@@ -258,89 +247,82 @@ export function TaskLine({
 }
 
 /**
- * Pick another task to wait for, instead of the cancelled one: the tasks it may wait for come
- * first, those it may not are greyed with why (a cycle, its own parent or subtask, cancelled).
+ * Pick another task to wait for, instead of the cancelled one: the one picker of tasks, without
+ * what it waits for already (picking that would only reset how it lets go).
  */
 function ReplaceDependency({
   task,
-  all,
   cancelled,
   disabled,
 }: {
   task: Task;
-  all: readonly Task[];
   cancelled: string[];
   disabled: boolean;
 }) {
   const { t } = useTranslation(["tasks"] as const);
   const add = useAddDependency();
   const remove = useRemoveDependency();
-  const [open, setOpen] = useState(false);
-  const candidates = all
-    // What it waits for already is not a new choice: picking it would only reset how it lets go.
-    .filter(
-      (other) =>
-        other.id !== task.id &&
-        !cancelled.includes(other.id) &&
-        !(task.dependsOn ?? []).some((e) => e.taskId === other.id),
-    )
-    .map((other) => ({ other, refusal: edgeRefusal(task.id, other.id, all) }))
-    .sort((a, b) => Number(Boolean(a.refusal)) - Number(Boolean(b.refusal)));
-  const choose = (dependsOn: string) => {
-    setOpen(false);
-    add.mutate(
-      { taskId: task.id, dependsOn },
-      {
-        onError: showError,
-        // Once it waits for the new one, it no longer needs the cancelled ones.
-        onSuccess: () => {
-          for (const old of cancelled)
-            remove.mutate(
-              { taskId: task.id, dependsOn: old },
-              { onError: showError },
-            );
-        },
-      },
-    );
-  };
+  const projectOf = useProjectOf();
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="xs" disabled={disabled}>
-          {t("cards.replace")}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 p-0">
-        <Command>
-          <CommandInput placeholder={t("cards.replaceSearch")} />
-          <CommandList>
-            <CommandEmpty>{t("cards.noCandidates")}</CommandEmpty>
-            <CommandGroup heading={t("cards.replaceTitle")}>
-              {candidates.map(({ other, refusal }) => (
-                <CommandItem
-                  key={other.id}
-                  value={`#${other.number} ${other.title}`}
-                  disabled={refusal !== undefined}
-                  onSelect={() => choose(other.id)}
-                  className="gap-2"
-                >
-                  <StatusIcon status={other.status} className="size-3.5" />
-                  <span className="w-8 shrink-0 text-muted-foreground tabular-nums">
-                    #{other.number}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{other.title}</span>
-                  {refusal === undefined ? null : (
-                    <span className="shrink-0 text-xs text-destructive">
-                      {t(`cards.refusal.${refusal}`)}
-                    </span>
-                  )}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+    <TaskPicker
+      mode="dependsOn"
+      subject={{ id: task.id, parentId: task.parentId ?? null }}
+      projectId={projectOf(task)}
+      exclude={[
+        ...cancelled,
+        ...(task.dependsOn ?? []).map((edge) => edge.taskId),
+      ]}
+      onPick={(other, requireDone) =>
+        add.mutate(
+          { taskId: task.id, dependsOn: other.id, requireDone },
+          {
+            onError: showError,
+            // Once it waits for the new one, it no longer needs the cancelled ones.
+            onSuccess: () => {
+              for (const old of cancelled)
+                remove.mutate(
+                  { taskId: task.id, dependsOn: old },
+                  { onError: showError },
+                );
+            },
+          },
+        )
+      }
+    >
+      <Button variant="outline" size="xs" disabled={disabled}>
+        {t("cards.replace")}
+      </Button>
+    </TaskPicker>
+  );
+}
+
+/**
+ * Where a blocked task with nothing of its own to change is dealt with: the parent whose
+ * prerequisite was cancelled, or the piece of work itself, whose page has the ways on.
+ */
+function GoDeal({ task, all }: { task: Task; all: readonly Task[] }) {
+  const { t } = useTranslation(["tasks"] as const);
+  const [, setNav] = useTaskNav();
+  const inherited = waitsOf(task).find(
+    (w) => w.state === "cancelled" && w.via !== null,
+  );
+  const owner =
+    inherited === undefined
+      ? task
+      : (all.find((x) => x.number === inherited.via) ?? task);
+  return (
+    <Button
+      variant="outline"
+      size="xs"
+      onClick={(event) => {
+        event.stopPropagation();
+        void setNav({ task: owner.id });
+      }}
+    >
+      {owner.id === task.id
+        ? t("cards.dealHere")
+        : t("cards.dealOnParent", { number: owner.number })}
+    </Button>
   );
 }
 
@@ -363,7 +345,18 @@ export function BlockedActions({
   const own = waitsOf(task)
     .filter((w) => w.state === "cancelled" && w.via === null)
     .map((w) => w.taskId);
-  if (task.status !== "blocked" || own.length === 0) return null;
+  if (task.status !== "blocked") return null;
+  // Nothing of its own to change: the way to where it is dealt with.
+  if (own.length === 0)
+    return (
+      <div
+        role="group"
+        aria-label={t("cards.blockedExits")}
+        className={cn("flex flex-wrap gap-1.5", className)}
+      >
+        <GoDeal task={task} all={all} />
+      </div>
+    );
   return (
     <div
       role="group"
@@ -386,7 +379,6 @@ export function BlockedActions({
       </Button>
       <ReplaceDependency
         task={task}
-        all={all}
         cancelled={own}
         disabled={remove.isPending}
       />

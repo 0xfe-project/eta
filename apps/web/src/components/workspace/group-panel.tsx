@@ -1,6 +1,7 @@
 import type { ConversationSummary } from "@eta/client-contracts";
 import { runningFirst } from "@eta/client-contracts";
 import { useTranslation } from "react-i18next";
+import { cn } from "@/lib/utils";
 import { useCaptain } from "@/queries/captain";
 import { useConversation } from "@/queries/conversations";
 import { useTasks } from "@/queries/tasks";
@@ -10,6 +11,8 @@ import { ArtifactRow } from "./artifact-list";
 import { CaptainModel, CaptainOperations } from "./captain-operations";
 import { GroupMembers } from "./groups";
 import { Section } from "./panel-section";
+import { contextRows } from "./task-side";
+import { ContextAside } from "./task-side-rows";
 import { useWorkspaceView } from "./workspace-search";
 
 /**
@@ -104,8 +107,8 @@ export function GroupPanel({
             </p>
           ) : (
             <ul className={listClass}>
-              {listed.map((task) => (
-                <li key={task.id}>
+              {contextRows(listed, board).map(({ task, depth }) => (
+                <li key={task.id} className={cn(depth === 1 && "pl-5")}>
                   <ActivityRefCard
                     value={{
                       kind: "task",
@@ -114,6 +117,7 @@ export function GroupPanel({
                       title: task.title,
                       status: task.status,
                     }}
+                    aside={<ContextAside task={task} all={board} />}
                   />
                 </li>
               ))}

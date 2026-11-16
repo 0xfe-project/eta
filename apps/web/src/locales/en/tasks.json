@@ -3,7 +3,8 @@
     "me": "Me"
   },
   "executor": {
-    "label": "Executor"
+    "label": "Executor",
+    "me": "you"
   },
   "workspace": {
     "label": "Workspace",
@@ -67,7 +68,7 @@
     "run": "Run",
     "rerun": "Start over",
     "fromScratchHint": "A comment lets the executor carry on where it stopped; this opens a session that remembers nothing.",
-    "parentHint": "A parent task does not run itself: its status comes from its subtasks."
+    "parentHint": "Moved by its subtasks"
   },
   "scope": {
     "group": "{{name}}",
@@ -113,14 +114,14 @@
     "noReplyReminder": "This turn ended without a report; one reminder was sent",
     "turnFailed": "This turn failed{{reason}}",
     "turnStopped": "This turn stopped{{reason}}",
-    "dependencyAdded": "now waits for {{task}}",
-    "dependencyAddedDone": "now waits for {{task}}, and only done lets it go",
-    "dependencyRequireDone": "now waits for {{task}} to be done, not only in review",
-    "dependencyRequireAny": "now lets {{task}} go once it is in review or done",
-    "dependencyRemoved": "no longer waits for {{task}}",
-    "dependencyDeleted": "{{task}} was deleted, so this no longer waits for it",
-    "dependencyBlocked": "{{task}} was cancelled, so this will not start on its own. Remove the dependency, or cancel this task.",
-    "dependencyUnblocked": "no dependency is cancelled any more, so this goes back to todo and starts once what it waits for is resolved",
+    "dependencyAdded": "added prerequisite “{{title}}”",
+    "dependencyAddedDone": "added prerequisite “{{title}}”, until it is accepted as done",
+    "dependencyRequireDone": "now waits for “{{title}}” to be accepted as done",
+    "dependencyRequireAny": "now goes once “{{title}}” is delivered",
+    "dependencyRemoved": "no longer waits for “{{title}}”",
+    "dependencyDeleted": "“{{title}}” was deleted, so this no longer waits for it",
+    "dependencyBlocked": "“{{title}}” was cancelled: this task is paused until you decide",
+    "dependencyUnblocked": "the prerequisite is back, so this task returns to todo",
     "parentSet": "became a subtask of {{task}}",
     "parentCleared": "is no longer a subtask of {{task}}",
     "parentDeleted": "{{task}} was deleted, so this is no longer a subtask of it",
@@ -228,7 +229,6 @@
       "waiting": "Waiting",
       "cancelled": "Cancelled"
     },
-    "blockedHint": "A task this one depends on was cancelled, so it will not start on its own. Remove that dependency, or cancel this task.",
     "subtasks": "Subtasks {{done}}/{{total}}",
     "parent": "Parent",
     "children": "Subtasks",
@@ -237,7 +237,7 @@
     "expand": "Show the subtasks of #{{number}}",
     "collapse": "Hide the subtasks of #{{number}}",
     "via": "via #{{number}}",
-    "parentCommentHint": "A parent task starts no new run because of a comment. To change the work, comment on a subtask or add one."
+    "parentCommentHint": "Discuss here; to change a step, say so on that subtask"
   },
   "views": {
     "label": "View",
@@ -329,7 +329,9 @@
     "showColumn": "Open the {{name}} column",
     "hideColumn": "Fold the {{name}} column",
     "prevColumn": "Previous column",
-    "nextColumn": "Next column"
+    "nextColumn": "Next column",
+    "dealHere": "Deal with it",
+    "dealOnParent": "Deal with it on #{{number}}"
   },
   "lines": {
     "waitDelivered": "Waits for “{{title}}” to be delivered",
@@ -367,8 +369,7 @@
     "allDone": "All done",
     "empty": "No subtasks yet",
     "addStep": "Add a step at the end",
-    "addStepHint": "Ask in this work's conversation for a subtask that waits for the last step",
-    "addStepDraft": "Add a step at the end of #{{number}} “{{title}}”: draft a subtask (part of #{{number}}, waiting for {{tasks}}). It should: ",
+    "addStepHint": "A new subtask that waits for every task of the last step",
     "critical": "Critical path",
     "connect": "Drag a task's right edge onto another to make that one wait for it",
     "connectFrom": "Draw a dependency from #{{number}}",
@@ -379,7 +380,6 @@
     "removeEdge": "Remove",
     "requireDone": "Wait until done",
     "requireAny": "Delivered is enough",
-    "addStepDraftFirst": "Add a step to #{{number}} “{{title}}”: draft a subtask (part of #{{number}}). It should: ",
     "exists": "#{{to}} waits for #{{from}} already; letting go does nothing. Use the edge's menu to change when it lets go",
     "waitsDone": "Waits until it is done",
     "waitsDelivered": "Delivered is enough",
@@ -388,6 +388,159 @@
       "inReview": "In review (lets the next go)",
       "inProgress": "In progress",
       "waiting": "Waiting for others"
-    }
+    },
+    "addSubtask": "Subtask"
+  },
+  "pick": {
+    "search": "Search by title or number",
+    "searchParent": "What does it belong to? Search by title or number",
+    "none": "No tasks to pick",
+    "same": "In the same piece of work",
+    "sameAs": "In the same piece of work · {{title}}",
+    "other": "Other",
+    "otherProject": "Another project",
+    "delivered": "Delivered",
+    "running": "Running",
+    "refusal": {
+      "cycle": "It waits for this task: a cycle",
+      "tree": "Above or under this task",
+      "cancelled": "Cancelled",
+      "self": "This task"
+    },
+    "release": "When does it let this one go",
+    "releaseDelivered": "Once it is delivered",
+    "releaseDeliveredHint": "Starts when it is in review, from its branch (default)",
+    "releaseDone": "Once it is accepted as done",
+    "releaseDoneHint": "Starts only after you mark it done"
+  },
+  "create": {
+    "title": "New task",
+    "description": "Make a task, or split a piece of work into subtasks. Pressing Create is your confirmation.",
+    "mode": "One task, or split into subtasks",
+    "one": "One task",
+    "split": "Split into subtasks",
+    "splitTitle": "Split into subtasks",
+    "splitUnder": "Split into subtasks · {{title}}",
+    "splitWhole": "What is the piece of work called (it becomes the parent)",
+    "splitHint": "One subtask a line; start a line with “→” to wait for the line above",
+    "splitPlaceholder": "Changelog\nUser docs\n→ Regression tests\n→ Announcement",
+    "preview": "Preview: ",
+    "previewEmpty": "Preview: no subtasks yet",
+    "previewStep": "step {{step}}: {{count}}",
+    "previewStepParallel": "step {{step}}: {{count}} side by side",
+    "belongsTo": "Belongs to",
+    "pickParent": "Pick a piece of work",
+    "clearParent": "Not under it",
+    "willBeStep": "· will be step {{count}}",
+    "in": "In",
+    "pickConversation": "Pick a conversation",
+    "pickExecutor": "Pick an executor",
+    "dependsOn": "Waits for",
+    "add": "Add",
+    "whenDone": "· until done",
+    "removeDependency": "Stop waiting for “{{title}}”",
+    "start": "Start",
+    "startWhenReady": "When ready",
+    "startBacklog": "Backlog first",
+    "createSubtasks": "Create {{count}} subtasks",
+    "createSubtasks_one": "Create {{count}} subtask",
+    "createSubtasks_other": "Create {{count}} subtasks"
+  },
+  "queue": {
+    "label": "Queue",
+    "one": "Can’t start yet: waiting for “{{title}}” to be delivered. Once it is in review, {{who}} starts this task.",
+    "oneBranch": "Can’t start yet: waiting for “{{title}}” to be delivered. Once it is in review, {{who}} starts this task and goes on from its branch.",
+    "oneDone": "Can’t start yet: waiting for “{{title}}” to be accepted as done. Once you mark it done, {{who}} starts this task.",
+    "many": "Can’t start yet: waiting for {{count}} tasks, still on {{titles}}",
+    "many_one": "Can’t start yet: waiting for {{count}} task, still on {{titles}}",
+    "many_other": "Can’t start yet: waiting for {{count}} tasks, still on {{titles}}",
+    "depsReady": "Everything it waits for is there; ",
+    "full": "waiting for room: {{machine}} already runs {{count}}",
+    "full_one": "waiting for room: {{machine}} already runs {{count}}",
+    "full_other": "waiting for room: {{machine}} already runs {{count}}",
+    "fullUnknown": "waiting for room: {{machine}} is full",
+    "offline": "Waiting for {{machine}} to connect; it starts then",
+    "waitDelivery": "Delivery is enough",
+    "waitDone": "Wait until it is done",
+    "startNow": "Don’t wait, start now",
+    "waitingPrereq": "Waiting for prerequisites"
+  },
+  "flow": {
+    "before": "Before",
+    "after": "After",
+    "self": "This task",
+    "left": "{{count}} to go",
+    "left_one": "{{count}} to go",
+    "left_other": "{{count}} to go",
+    "released": "Let go",
+    "waitsForThis": "Waits for this",
+    "cancelled": "Cancelled",
+    "delivered": "Delivered",
+    "done": "Done",
+    "running": "Running"
+  },
+  "stuck": {
+    "title": "This task is stuck and needs your decision",
+    "body": "“{{title}}” (#{{number}}), which it waits for, was cancelled ({{when}}), so {{who}} won’t start it. It stays blocked until you decide.",
+    "bodyMany": "{{count}} tasks it waits for were cancelled, so {{who}} won’t start it. It stays blocked until you decide.",
+    "bodyMany_one": "{{count}} task it waits for was cancelled, so {{who}} won’t start it. It stays blocked until you decide.",
+    "bodyMany_other": "{{count}} tasks it waits for were cancelled, so {{who}} won’t start it. It stays blocked until you decide.",
+    "startNow": "Don’t wait, start now",
+    "replace": "Wait for another task…",
+    "cancel": "Cancel this task",
+    "why": "See why #{{number}} was cancelled",
+    "allCancelled": "All of its subtasks were cancelled; nothing is left to do. Split out new subtasks, or cancel this piece of work.",
+    "inherited": "“{{title}}”, which it belongs to, waits for a cancelled task; decide on #{{number}}.",
+    "splitOne": "Split out a subtask",
+    "goParent": "Deal with it on #{{number}}"
+  },
+  "progress": {
+    "title": "Progress",
+    "summary": "{{done}} / {{total}} done · the parent does no work itself",
+    "done": "Done",
+    "now": "Now",
+    "next": "Next",
+    "toReview": "To review",
+    "splitOne": "Split one out"
+  },
+  "rail": {
+    "queue": "Queue",
+    "belongsTo": "Belongs to",
+    "startsFrom": "Starts from the branch of “{{title}}”",
+    "startsFromHead": "Starts from the project’s current commit",
+    "edit": "Edit…",
+    "dependents": "Waited on by",
+    "dependentsCount": "{{count}} tasks wait for it",
+    "dependentsCount_one": "{{count}} task waits for it",
+    "dependentsCount_other": "{{count}} tasks wait for it",
+    "dependentsAll": "{{count}} tasks wait for all of it",
+    "dependentsAll_one": "{{count}} task waits for all of it",
+    "dependentsAll_other": "{{count}} tasks wait for all of it",
+    "parentRun": "Moved by its subtasks",
+    "parentRunCount": "Moved by {{count}} subtasks",
+    "parentRunCount_one": "Moved by {{count}} subtask",
+    "parentRunCount_other": "Moved by {{count}} subtasks",
+    "removeParent": "Take it out"
+  },
+  "side": {
+    "needYou": "Needs you",
+    "going": "Going",
+    "waiting": "Waiting",
+    "other": "Other",
+    "waitPrereq": "Waiting for prerequisites",
+    "prereqCancelled": "Prerequisite cancelled",
+    "needDecision": "needs your decision",
+    "progress": "{{done}}/{{total}}"
+  },
+  "chatCard": {
+    "waitFor": "Waiting for “{{title}}”",
+    "waitMany": "Waiting for {{count}} tasks",
+    "waitMany_one": "Waiting for {{count}} task",
+    "waitMany_other": "Waiting for {{count}} tasks",
+    "blocked": "Blocked · needs your decision",
+    "progress": "{{status}} · {{done}}/{{total}}"
+  },
+  "detail": {
+    "parent": "Parent"
   }
 }

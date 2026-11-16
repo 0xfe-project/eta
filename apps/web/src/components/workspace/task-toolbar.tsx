@@ -4,7 +4,6 @@ import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/MagnifyingGlass";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { XIcon } from "@phosphor-icons/react/X";
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,17 +15,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { agentName, useAgentList } from "@/queries/agents";
+import { useNewTask } from "./task-new-store";
 import { executorOf } from "./task-plan";
 import { StatusIcon } from "./task-status-icon";
 import { taskViews, useTaskView } from "./task-view";
-import { useWorkspaceStore } from "./workspace-store";
 
 // The tasks page's bar: find a task, narrow to an executor or to one piece of work (a parent and
 // what is under it), switch between the board, the list and the plan, and start a new task. The
@@ -222,35 +216,18 @@ export function ViewSwitch<V extends string = TaskViewKind>({
   );
 }
 
-/**
- * "+ New". Tasks are drafted by agents and confirmed by the user, so a new one starts in a
- * conversation: this says so and opens one.
- */
+/** "+ New": the new-task form. */
 export function NewTask() {
   const { t } = useTranslation(["tasks"] as const);
-  const [open, setOpen] = useState(false);
-  const setNewConversation = useWorkspaceStore((s) => s.setNewConversation);
+  const open = useNewTask((s) => s.open);
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button size="sm" className="h-7 gap-1 px-2.5 text-xs">
-          <PlusIcon aria-hidden="true" className="size-3.5" />
-          {t("views.new")}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-72 space-y-3 text-sm">
-        <p className="text-muted-foreground">{t("views.newHint")}</p>
-        <Button
-          size="sm"
-          className="w-full"
-          onClick={() => {
-            setOpen(false);
-            setNewConversation({ open: true });
-          }}
-        >
-          {t("views.newConversation")}
-        </Button>
-      </PopoverContent>
-    </Popover>
+    <Button
+      size="sm"
+      className="h-7 gap-1 px-2.5 text-xs"
+      onClick={() => open()}
+    >
+      <PlusIcon aria-hidden="true" className="size-3.5" />
+      {t("views.new")}
+    </Button>
   );
 }

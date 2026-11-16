@@ -220,6 +220,19 @@ function ParentCard({ task, all }: { task: Task; all: readonly Task[] }) {
         {progress.total > 0 ? (
           <ProgressBar progress={progress} className="my-1.5" />
         ) : null}
+        {task.status === "blocked" ? (
+          // Stuck as a whole (its subtasks all cancelled, or what it waits for): what and the way in.
+          <>
+            <p className="text-xs text-state-error-ink">
+              {blockedLine(task, all)}
+            </p>
+            <BlockedActions
+              task={task}
+              all={all}
+              className="relative z-10 pt-1"
+            />
+          </>
+        ) : null}
         {progress.now || progress.next ? (
           <p className="flex min-w-0 items-baseline gap-1.5 text-xs text-muted-foreground">
             {progress.now && isRunning(progress.now) ? (

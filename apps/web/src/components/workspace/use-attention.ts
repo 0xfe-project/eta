@@ -7,6 +7,7 @@ import { listSeparator, translate } from "@/lib/i18n";
 import { usePendingInteractions } from "@/queries/inbox";
 import { useRoutines } from "@/queries/routines";
 import { useTasks } from "@/queries/tasks";
+import { waitsOf } from "./task-plan";
 
 // What waits for the user, derived from what the services already say: the
 // confirmations agents asked for, tasks that are the user's to act on, and
@@ -26,7 +27,11 @@ const closed = new Set<string>(["done", "cancelled"]);
 /** Why a task waits for the user, or null. */
 function taskReason(task: Task): string | null {
   if (closed.has(task.status)) return null;
-  if (task.status === "blocked") return translate("tasks:status.blocked");
+  // Stopped by a cancelled prerequisite: what the task page's banner is about, said the same way.
+  if (task.status === "blocked")
+    return waitsOf(task).some((w) => w.state === "cancelled")
+      ? translate("tasks:side.prereqCancelled")
+      : translate("tasks:status.blocked");
   if (task.status === "in_review") return translate("tasks:status.inReview");
   return null;
 }

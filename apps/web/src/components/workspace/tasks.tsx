@@ -15,6 +15,7 @@ import {
 } from "@eta/client-contracts";
 import { AppWindowIcon } from "@phosphor-icons/react/AppWindow";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
+import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/ArrowCounterClockwise";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
@@ -23,12 +24,16 @@ import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { CopyIcon } from "@phosphor-icons/react/Copy";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { InfoIcon } from "@phosphor-icons/react/Info";
+import { LinkBreakIcon } from "@phosphor-icons/react/LinkBreak";
+import { LinkSimpleIcon } from "@phosphor-icons/react/LinkSimple";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
+import { LockSimpleIcon } from "@phosphor-icons/react/LockSimple";
 import { PaperPlaneRightIcon } from "@phosphor-icons/react/PaperPlaneRight";
 import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
 import { SpinnerIcon } from "@phosphor-icons/react/Spinner";
 import { StopIcon } from "@phosphor-icons/react/Stop";
 import { UserIcon } from "@phosphor-icons/react/User";
+import { WarningIcon } from "@phosphor-icons/react/Warning";
 import {
   useEffect,
   useId,
@@ -72,7 +77,7 @@ import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { longDuration, revealBlock } from "@/lib/run-display";
 import { clock, rowsBetween, runTiming } from "@/lib/run-timing";
 import { cn } from "@/lib/utils";
-import { useAgentList } from "@/queries/agents";
+import { agentName, useAgentList } from "@/queries/agents";
 import { useConversationList } from "@/queries/conversations";
 import { useMachines, useProjects } from "@/queries/projects";
 import { useNow, useSessionLog } from "@/queries/sessions";
@@ -92,6 +97,7 @@ import { ArtifactButton } from "./artifact-dialog";
 import { Folded } from "./folded";
 import { MemoryPauseToggle } from "./memory-pause-toggle";
 import { when } from "./routine-format";
+import { BlockedBanner, FlowBar, QueueReason } from "./task-detail";
 import { useTaskDraft } from "./task-draft";
 import {
   actorName,
@@ -105,14 +111,12 @@ import {
   waitingNumbers,
   workspaceLabel,
 } from "./task-format";
-import {
-  DependencyBadge,
-  DependencyRows,
-  SubtaskCount,
-  TreeRows,
-} from "./task-graph";
+import { DependencyRows, TreeRows } from "./task-graph";
 import { useTaskNav } from "./task-nav";
+import { executorOf, isRunning, isWaiting } from "./task-plan";
 import { RunLog } from "./task-run-log";
+import { sideGroups } from "./task-side";
+import { SideMarker } from "./task-side-rows";
 import { StatusIcon } from "./task-status-icon";
 import { CancelTreeDialog, TaskStatusControl } from "./task-status-select";
 import { RunHeader } from "./transcript/run-timeline";
@@ -194,8 +198,8 @@ function Comments({ count }: { count: number }) {
   ) : null;
 }
 
-/** Title and when on top; number, executor and activity beneath. */
-function TaskRow({ task }: { task: Task }) {
+/** Title and what it is at on top; number, executor, when and activity beneath. */
+function TaskRow({ task, all }: { task: Task; all: readonly Task[] }) {
   useTranslation(["tasks", "common", "navigation"] as const);
   const [, setNav] = useTaskNav();
   const { agents } = useAgentList();
@@ -208,27 +212,36 @@ function TaskRow({ task }: { task: Task }) {
       >
         <StatusIcon status={task.status} className="mt-0.5" />
         <span className="min-w-0 flex-1 space-y-0.5">
-          <span className="flex items-baseline gap-3">
+          <span className="flex items-center gap-3">
             <span className="min-w-0 flex-1 truncate text-sm">
               {task.title}
             </span>
-            <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground tabular-nums">
-              {ago(task.updatedAt)}
-            </span>
+            <SideMarker task={task} all={all} />
           </span>
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
             <span className="shrink-0">#{task.number}</span>
             <span aria-hidden="true">·</span>
             <span className="min-w-0 truncate">
-              {actorName(task.createdBy, agents)}
+              {actorName(
+                {
+                  kind: "agent",
+                  agentId: executorOf(task) ?? task.createdBy.agentId,
+                },
+                agents,
+              )}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span className="shrink-0 whitespace-nowrap">
+              {ago(task.updatedAt)}
             </span>
             <span className="ml-auto flex shrink-0 items-center gap-3 pl-2">
-              <SubtaskCount task={task} />
-              <RunState task={task} />
+              {/* Running and waiting say so at the line's end already. */}
+              {isRunning(task) || isWaiting(task) ? null : (
+                <RunState task={task} />
+              )}
               <Comments count={task.comments} />
             </span>
           </span>
-          <DependencyBadge task={task} />
         </span>
       </button>
     </li>
@@ -252,6 +265,8 @@ function TaskList() {
       : all;
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const isOpen = (status: TaskStatus) => open[status] ?? !folded.has(status);
+  // What needs the user first, then what is going, then what waits; the rest by status.
+  const groups = sideGroups(tasks);
   return (
     <div className="space-y-2">
       <h2 className="text-sm font-semibold">
@@ -291,39 +306,61 @@ function TaskList() {
           {translateText("empty.description")}
         </Empty>
       ) : (
-        statuses.map(({ value, label }) => {
-          // In the board's order, newest first, but a task that runs before one that waits.
-          const section = runningFirst(
-            tasks.filter((task) => task.status === value),
-          );
-          if (!section.length) return null;
-          return (
-            <section key={value} aria-label={label} className="-mx-2">
-              <button
-                type="button"
-                aria-expanded={isOpen(value)}
-                onClick={() => setOpen({ ...open, [value]: !isOpen(value) })}
-                className="flex w-full items-center gap-2 px-2 py-1 text-left text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:text-foreground"
+        <>
+          {(["needYou", "going", "waiting"] as const).map((key) =>
+            groups[key].length === 0 ? null : (
+              <section
+                key={key}
+                aria-label={translateText(`side.${key}`)}
+                data-side-group={key}
+                className="-mx-2"
               >
-                {isOpen(value) ? (
-                  <CaretDownIcon aria-hidden="true" className="size-3" />
-                ) : (
-                  <CaretRightIcon aria-hidden="true" className="size-3" />
-                )}
-                <StatusIcon status={value} className="size-3.5" />
-                {label}
-                <span className="tabular-nums">{section.length}</span>
-              </button>
-              {isOpen(value) ? (
+                <h3 className="flex items-center gap-2 px-2 py-1 text-xs font-medium text-muted-foreground">
+                  {translateText(`side.${key}`)}
+                  <span className="tabular-nums">{groups[key].length}</span>
+                </h3>
                 <ul>
-                  {section.map((task) => (
-                    <TaskRow key={task.id} task={task} />
+                  {groups[key].map((task) => (
+                    <TaskRow key={task.id} task={task} all={all} />
                   ))}
                 </ul>
-              ) : null}
-            </section>
-          );
-        })
+              </section>
+            ),
+          )}
+          {statuses.map(({ value, label }) => {
+            // In the board's order, newest first, but a task that runs before one that waits.
+            const section = runningFirst(
+              groups.rest.filter((task) => task.status === value),
+            );
+            if (!section.length) return null;
+            return (
+              <section key={value} aria-label={label} className="-mx-2">
+                <button
+                  type="button"
+                  aria-expanded={isOpen(value)}
+                  onClick={() => setOpen({ ...open, [value]: !isOpen(value) })}
+                  className="flex w-full items-center gap-2 px-2 py-1 text-left text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:text-foreground"
+                >
+                  {isOpen(value) ? (
+                    <CaretDownIcon aria-hidden="true" className="size-3" />
+                  ) : (
+                    <CaretRightIcon aria-hidden="true" className="size-3" />
+                  )}
+                  <StatusIcon status={value} className="size-3.5" />
+                  {label}
+                  <span className="tabular-nums">{section.length}</span>
+                </button>
+                {isOpen(value) ? (
+                  <ul>
+                    {section.map((task) => (
+                      <TaskRow key={task.id} task={task} all={all} />
+                    ))}
+                  </ul>
+                ) : null}
+              </section>
+            );
+          })}
+        </>
       )}
     </div>
   );
@@ -511,11 +548,14 @@ export function TaskProperties({
   task,
   className,
   status: withStatus = true,
+  page = false,
   children,
 }: {
   task: TaskDetail;
   className?: string;
   status?: boolean;
+  /** On the task's own page, which lists the subtasks in its document. */
+  page?: boolean;
   children?: React.ReactNode;
 }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
@@ -525,6 +565,16 @@ export function TaskProperties({
   const latest = task.runs.filter((run) => run.agentId === null).at(-1);
   const away = useAwayMachine(task, latest);
   const path = away === undefined ? task.workspace.path : latest?.workspace;
+  const executor = executorOf(task);
+  const queueMachine = useMachineName(latest?.machineId);
+  // The base the host derives from the one task it waits for: "starts from <its> branch".
+  const from = (task.dependsOn ?? []).find(
+    (edge) => task.workspace.base === `eta/task-${edge.number}`,
+  );
+  const queued =
+    latest?.status === "queued" && latest.queueReason !== null
+      ? latest.queueReason
+      : undefined;
   return (
     <dl
       className={cn(
@@ -540,32 +590,63 @@ export function TaskProperties({
           </dd>
         </>
       ) : null}
-      {task.createdBy.kind === "agent" ? (
+      {isWaiting(task) ? (
+        <>
+          <dt className={propertyLabel}>{translateText("rail.queue")}</dt>
+          <dd className="flex min-w-0 items-center gap-1.5 py-1.5 text-xs leading-5">
+            <LockSimpleIcon aria-hidden="true" className="size-3.5 shrink-0" />
+            {translateText("queue.waitingPrereq")}
+          </dd>
+        </>
+      ) : queued !== undefined && queued !== "waiting_deps" ? (
+        <>
+          <dt className={propertyLabel}>{translateText("rail.queue")}</dt>
+          <dd className="min-w-0 py-1.5 text-xs leading-5">
+            {queueReasonLabel(queued, queueMachine)}
+          </dd>
+        </>
+      ) : null}
+      {executor !== null ? (
         <>
           <dt className={propertyLabel}>{translateText("executor.label")}</dt>
           <dd className="min-w-0 py-1.5 leading-5 wrap-anywhere">
-            {actorName(task.createdBy, agents)}
+            {agentName(agents, executor)}
           </dd>
-          <dt className={propertyLabel}>{translateText("workspace.label")}</dt>
-          <dd className="min-w-0 py-1.5 leading-5">
-            {away === undefined
-              ? workspaceLabel(task.workspace)
-              : translateText("workspace.away", { machine: away })}
-            {away === undefined && task.workspace.branch ? (
-              <span className="text-muted-foreground">
-                {" · "}
-                <code>{task.workspace.branch}</code>
-              </span>
-            ) : null}
-            {path ? (
-              <span className="block text-xs text-muted-foreground wrap-anywhere">
-                <code>{path}</code>
-              </span>
-            ) : null}
-          </dd>
+          <TreeRows
+            task={task}
+            labelClassName={propertyLabel}
+            withChildren={!page}
+          />
+          {task.subtasks != null ? null : (
+            <>
+              <dt className={propertyLabel}>
+                {translateText("workspace.label")}
+              </dt>
+              <dd className="min-w-0 py-1.5 leading-5">
+                {away === undefined
+                  ? workspaceLabel(task.workspace)
+                  : translateText("workspace.away", { machine: away })}
+                {away === undefined && task.workspace.branch ? (
+                  <span className="text-muted-foreground">
+                    {" · "}
+                    <code>{task.workspace.branch}</code>
+                  </span>
+                ) : null}
+                {from !== undefined && task.workspace.path === null ? (
+                  <span className="block text-xs text-muted-foreground">
+                    {translateText("rail.startsFrom", { title: from.title })}
+                  </span>
+                ) : null}
+                {path ? (
+                  <span className="block text-xs text-muted-foreground wrap-anywhere">
+                    <code>{path}</code>
+                  </span>
+                ) : null}
+              </dd>
+            </>
+          )}
           <RunRow task={task} />
           <TaskMemoryPause taskId={task.id} />
-          <TreeRows task={task} labelClassName={propertyLabel} />
           <DependencyRows task={task} labelClassName={propertyLabel} />
         </>
       ) : null}
@@ -641,29 +722,58 @@ function str(v: unknown) {
   return typeof v === "string" ? v : "";
 }
 
-/** A `dependency` entry in the reader's words, from its data; an older entry has only its body. */
+/** The mark a `dependency` entry carries: linked, unlinked, broken, or back. */
+const dependencyIcons = {
+  added: LinkSimpleIcon,
+  required: LinkSimpleIcon,
+  removed: LinkBreakIcon,
+  deleted: LinkBreakIcon,
+  blocked: WarningIcon,
+  unblocked: ArrowCounterClockwiseIcon,
+} as const;
+
+/**
+ * A `dependency` entry in the reader's words, from its data, with its mark; an older entry has
+ * only its body. The system's two (a prerequisite cancelled, and back) are said here too: the host
+ * writes only what happened.
+ */
 function dependencyLine(a: TaskActivity): React.ReactNode {
   const read = dependencyEntry(a.data);
   if (read === undefined) return a.body;
-  const task = `#${read.number} ${read.title}`.trim();
-  switch (read.action) {
-    case "added":
-      return read.requireDone
-        ? translate("tasks:activity.dependencyAddedDone", { task })
-        : translate("tasks:activity.dependencyAdded", { task });
-    case "required":
-      return read.requireDone
-        ? translate("tasks:activity.dependencyRequireDone", { task })
-        : translate("tasks:activity.dependencyRequireAny", { task });
-    case "removed":
-      return translate("tasks:activity.dependencyRemoved", { task });
-    case "deleted":
-      return translate("tasks:activity.dependencyDeleted", { task });
-    case "blocked":
-      return translate("tasks:activity.dependencyBlocked", { task });
-    case "unblocked":
-      return translate("tasks:activity.dependencyUnblocked");
-  }
+  const title = read.title || `#${read.number}`;
+  const words = (() => {
+    switch (read.action) {
+      case "added":
+        return read.requireDone
+          ? translate("tasks:activity.dependencyAddedDone", { title })
+          : translate("tasks:activity.dependencyAdded", { title });
+      case "required":
+        return read.requireDone
+          ? translate("tasks:activity.dependencyRequireDone", { title })
+          : translate("tasks:activity.dependencyRequireAny", { title });
+      case "removed":
+        return translate("tasks:activity.dependencyRemoved", { title });
+      case "deleted":
+        return translate("tasks:activity.dependencyDeleted", { title });
+      case "blocked":
+        return translate("tasks:activity.dependencyBlocked", { title });
+      case "unblocked":
+        return translate("tasks:activity.dependencyUnblocked");
+    }
+  })();
+  const Icon = dependencyIcons[read.action];
+  return (
+    <span data-dependency={read.action}>
+      <Icon
+        aria-hidden="true"
+        className={cn(
+          "mr-1 inline size-3.5 align-[-2px]",
+          read.action === "blocked" && "text-state-error",
+        )}
+      />
+      {words}
+    </span>
+  );
 }
 
 /** A `parent` or `subtask` entry in the reader's words, from its data; an older one has its body. */
@@ -774,7 +884,13 @@ function describe(a: TaskActivity): React.ReactNode {
 }
 
 /** What the thread gives a line of its own: what was said, what was delivered, what went wrong. */
-const standalone = new Set<string>(["comment", "artifact", "run_failed"]);
+const standalone = new Set<string>([
+  "comment",
+  "artifact",
+  "run_failed",
+  // What it waits for, and what happened to that: the graph's story, each a line with its mark.
+  "dependency",
+]);
 
 /**
  * Never a line: the first message already says who made the task and when, and a run waiting for
@@ -1309,7 +1425,9 @@ function RunRow({ task }: { task: TaskDetail }) {
             </span>
           ) : null}
           <p className="w-full text-xs leading-5 text-muted-foreground">
-            {translateText("runs.parentHint")}
+            {translateText("rail.parentRunCount", {
+              count: task.subtasks.total,
+            })}
           </p>
         </dd>
       </>
@@ -2095,6 +2213,7 @@ function TaskView({ task }: { task: TaskDetail }) {
   const { agents } = useAgentList();
   const [deleting, setDeleting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const { tasks: all } = useTasks();
   const replies = task.activity.filter((a) => a.kind === "comment").length;
   // A thread opens on its latest reply, next to the box to answer it; once more after the first
   // paint, for what lays itself out late (folded text measuring itself). It is at least as tall as
@@ -2176,6 +2295,15 @@ function TaskView({ task }: { task: TaskDetail }) {
         </div>
         <EditableTitle task={task} />
       </header>
+      <div className="space-y-2 pt-1 empty:hidden">
+        <BlockedBanner task={task} all={all} />
+        {task.subtasks == null ? (
+          <>
+            <FlowBar task={task} phone />
+            <QueueReason task={task} all={all} />
+          </>
+        ) : null}
+      </div>
       <div className={cn(threadRow, "group/first relative pt-2")}>
         <Face actor={task.createdBy} />
         <div className="min-w-0 space-y-1 text-sm">

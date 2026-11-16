@@ -13,6 +13,7 @@ import { useOutbox } from "@/queries/outbox";
 import { agentView, productHost, taskDetail } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
 import { TaskBoard } from "./task-board";
+import { useNewTask } from "./task-new-store";
 import { board, release } from "./task-tree-fixture";
 import { emptyFilter, useTaskView } from "./task-view";
 import { useWorkspaceStore } from "./workspace-store";
@@ -97,6 +98,7 @@ describe("the tasks page's views", () => {
     opened.group.mockClear();
     localStorage.clear();
     useOutbox.setState({ drafts: {} });
+    useNewTask.setState({ preset: undefined });
     useWorkspaceStore.setState({
       workspace: {},
       newConversation: { open: false },
@@ -502,16 +504,14 @@ describe("the tasks page's views", () => {
       ).toBe(true);
     });
 
-    it("asks for a step that waits for every task of the last step", async () => {
+    it("opens the form for a step that waits for every task of the last step", async () => {
       const tasks = board([
         { number: 1, title: "上线" },
         { number: 2, parent: 1 },
-        { number: 3, parent: 1, after: [2] },
-        { number: 4, parent: 1, after: [2] },
+        { number: 3, title: "三", parent: 1, after: [2] },
+        { number: 4, title: "四", parent: 1, after: [2] },
       ]);
-      host(
-        tasks.map((t) => (t.number === 1 ? { ...t, conversationId: "c2" } : t)),
-      );
+      host(tasks);
       useTaskView.setState({ view: "plan" });
       const { container } = await mount(<TaskBoard />);
       await flush();
@@ -520,23 +520,22 @@ describe("the tasks page's views", () => {
           (b) => b.textContent === "在最后加一步",
         ),
       );
-      expect(opened.group).toHaveBeenCalledWith("c2");
-      const text = useOutbox
-        .getState()
-        .drafts.c2!.map((p) => ("text" in p ? p.text : ""))
-        .join("");
-      expect(text).toContain("属于 #1，等 #3、#4");
+      expect(useNewTask.getState().preset).toEqual({
+        parentId: "t1",
+        dependsOn: [
+          { id: "t3", requireDone: false },
+          { id: "t4", requireDone: false },
+        ],
+      });
     });
 
-    it("asks for a first step, waiting for nothing, when every subtask was cancelled", async () => {
+    it("opens the form for a first step, waiting for nothing, when every subtask was cancelled", async () => {
       const tasks = board([
         { number: 1, title: "上线", status: "blocked" },
         { number: 2, parent: 1, status: "cancelled" },
         { number: 3, parent: 1, status: "cancelled" },
       ]);
-      host(
-        tasks.map((t) => (t.number === 1 ? { ...t, conversationId: "c3" } : t)),
-      );
+      host(tasks);
       useTaskView.setState({ view: "plan" });
       const { container } = await mount(<TaskBoard />);
       await flush();
@@ -547,17 +546,13 @@ describe("the tasks page's views", () => {
           (b) => b.textContent === "在最后加一步",
         ),
       );
-      const text = useOutbox
-        .getState()
-        .drafts.c3!.map((p) => ("text" in p ? p.text : ""))
-        .join("");
-      expect(text).toBe(
-        "给 #1「上线」加一步：起草一个子任务（属于 #1）。要做的是：",
-      );
-      expect(text).not.toContain("等");
+      expect(useNewTask.getState().preset).toEqual({
+        parentId: "t1",
+        dependsOn: [],
+      });
     });
 
-    it("asks for a last step in the work's conversation, waiting for the last step", async () => {
+    it("opens the new-task form for a last step: under the work, waiting for the last step", async () => {
       host();
       useTaskView.setState({ view: "plan" });
       const { container } = await mount(<TaskBoard />);
@@ -567,11 +562,12 @@ describe("the tasks page's views", () => {
           (b) => b.textContent === "在最后加一步",
         ),
       );
-      expect(opened.group).toHaveBeenCalledWith("c1");
-      const draft = useOutbox.getState().drafts.c1!;
-      expect(draft.map((p) => ("text" in p ? p.text : "")).join("")).toContain(
-        "属于 #4，等 #9",
-      );
+      await flush();
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+      expect(dialog.textContent).toContain("发布 v1.0");
+      expect(dialog.textContent).toContain("发布公告");
+      expect(dialog.textContent).toContain("会排在第 4 步");
+      expect(opened.group).not.toHaveBeenCalled();
     });
 
     it("stacks the steps on a phone, with no edges to drag", async () => {

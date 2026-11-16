@@ -25,11 +25,20 @@ import { PageHeader } from "./app-shell";
 import { BackToTop } from "./back-to-top";
 import { when } from "./routine-format";
 import { BoardView } from "./task-board-view";
+import {
+  BlockedBanner,
+  FlowBar,
+  ProgressCard,
+  QueueReason,
+  SubtaskList,
+} from "./task-detail";
 import { canCancelTree, createdBy } from "./task-format";
 import { ListView } from "./task-list-view";
 import { useTaskNav } from "./task-nav";
+import { NewTaskDialog } from "./task-new";
 import { childrenOf, filterTasks, planOf, stepsLeft } from "./task-plan";
 import { PlanGroup, PlanView } from "./task-plan-view";
+import { StatusIcon } from "./task-status-icon";
 import { CancelTreeDialog } from "./task-status-select";
 import {
   ClearFilter,
@@ -102,7 +111,12 @@ function TaskPage({ id }: { id: string }) {
       className="flex min-w-0 items-center gap-1.5 text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
     >
       <ArrowLeftIcon aria-hidden="true" className="size-3.5 shrink-0" />
-      <span className="truncate">
+      {task?.ancestors?.at(-1) === undefined ? null : (
+        <span className="max-w-[40%] shrink-0 truncate">
+          {task.ancestors.at(-1)!.title} ›
+        </span>
+      )}
+      <span className="truncate text-foreground">
         {task ? task.title : translateText("navigation:sections.tasks")}
       </span>
     </button>
@@ -124,6 +138,8 @@ function TaskPage({ id }: { id: string }) {
   const propertiesLabel = translateText("details.propertiesTab");
   const children = childrenOf(task.id, all);
   const isParent = children.length > 0;
+  // The list's copy of the task: what the board's helpers read.
+  const listed = all.find((x) => x.id === task.id) ?? task;
   const showPlan = isParent && mode === "plan";
   return (
     <>
@@ -203,7 +219,7 @@ function TaskPage({ id }: { id: string }) {
                 })}
           </p>
           <PlanGroup
-            parent={all.find((x) => x.id === task.id) ?? task}
+            parent={listed}
             tasks={children.filter((c) => c.status !== "cancelled")}
             all={all}
             phone={phone}
@@ -221,10 +237,29 @@ function TaskPage({ id }: { id: string }) {
             <div className="mx-auto w-full max-w-[42.5rem] space-y-6 px-4 pt-4 pb-6 sm:px-8">
               <p className="text-xs text-muted-foreground tabular-nums">
                 <span>#{task.number}</span>
+                {isParent ? ` · ${translateText("detail.parent")}` : null}
                 {" · "}
                 {createdBy(task, agents)}
               </p>
-              <EditableTitle task={task} className="text-xl" />
+              <div className="flex items-start gap-2.5">
+                <StatusIcon
+                  status={task.status}
+                  className="mt-1.5 size-5 shrink-0"
+                />
+                <EditableTitle task={task} className="min-w-0 flex-1 text-xl" />
+              </div>
+              <BlockedBanner task={task} all={all} />
+              {isParent ? (
+                <>
+                  <ProgressCard task={listed} all={all} />
+                  <SubtaskList task={listed} all={all} />
+                </>
+              ) : (
+                <>
+                  <FlowBar task={task} phone={phone} />
+                  <QueueReason task={task} all={all} />
+                </>
+              )}
               <Question task={task} />
               <Description key={task.description} task={task} className="" />
               <section aria-labelledby="task-activity" className="space-y-3">
@@ -263,7 +298,7 @@ function TaskPage({ id }: { id: string }) {
                 : "hidden",
             )}
           >
-            <TaskProperties task={task}>
+            <TaskProperties task={task} page>
               <dt className="text-xs leading-8 text-muted-foreground">
                 {translateText("fields.updatedAt")}
               </dt>
@@ -423,6 +458,7 @@ export function TaskBoard() {
           <TaskPage key={id} id={id} />
         </div>
       ) : null}
+      <NewTaskDialog />
     </div>
   );
 }
