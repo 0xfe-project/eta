@@ -26,6 +26,17 @@ rstest.mock("./task-nav", () => ({
   useTaskNav: () => [navigation, navigation.set],
 }));
 const opened = rstest.hoisted(() => ({ group: rstest.fn() }));
+const toasts = rstest.hoisted(() => ({
+  show: rstest.fn(),
+  error: rstest.fn(),
+}));
+rstest.mock("sonner", () => ({
+  toast: Object.assign(toasts.show, {
+    error: toasts.error,
+    success: rstest.fn(),
+    warning: rstest.fn(),
+  }),
+}));
 rstest.mock("./use-groups", () => ({
   useGroups: () => ({ groups: [], current: undefined, groupId: null }),
   useOpenGroup: () => opened.group,
@@ -96,6 +107,8 @@ describe("the tasks page's views", () => {
     navigation.task = null;
     navigation.set.mockClear();
     opened.group.mockClear();
+    toasts.show.mockClear();
+    toasts.error.mockClear();
     localStorage.clear();
     useOutbox.setState({ drafts: {} });
     useNewTask.setState({ preset: undefined });
@@ -263,6 +276,30 @@ describe("the tasks page's views", () => {
           (b) => b.textContent === "换一个前置…",
         ),
       ).toBe(true);
+    });
+
+    it("offers as another prerequisite neither the cancelled one nor one it already waits for", async () => {
+      // #11 waits for the cancelled #10 and for #2, which is still going.
+      const tasks = release();
+      const eleven = tasks.find((t) => t.number === 11)!;
+      // The same edge #3 has onto #2.
+      const onTwo = tasks.find((t) => t.number === 3)!.dependsOn![0]!;
+      eleven.dependsOn = [...eleven.dependsOn!, onTwo];
+      host(tasks);
+      const { container } = await mount(<TaskBoard />);
+      await flush();
+      await click(
+        [...card(container, 11).querySelectorAll("button")].find(
+          (b) => b.textContent === "换一个前置…",
+        ),
+      );
+      await flush();
+      const offered = [...document.querySelectorAll("[cmdk-item]")].map(
+        (i) => i.textContent ?? "",
+      );
+      expect(offered.some((o) => o.includes("接入前端登录页"))).toBe(true);
+      expect(offered.some((o) => o.includes("导出旧库快照"))).toBe(false);
+      expect(offered.some((o) => o.includes("实现登录接口"))).toBe(false);
     });
 
     it("unfolds the backlog when asked", async () => {
@@ -445,6 +482,7 @@ describe("the tasks page's views", () => {
       const result = await drag(container, "t9", "t5");
       expect(result).toEqual({ drawn: true, refused: true });
       expect(callsOf(h, "addDependency")).toEqual([]);
+      expect(toasts.error).toHaveBeenCalledTimes(1);
     });
 
     it("removes an edge, or makes it wait until done, from its menu", async () => {
@@ -478,6 +516,33 @@ describe("the tasks page's views", () => {
       ]);
     });
 
+    it("opens an edge's menu from the keyboard: focus the edge, press Enter, land on its first action", async () => {
+      useTaskView.setState({ view: "plan" });
+      host();
+      const { container } = await mount(<TaskBoard />);
+      await flush();
+      const edge = container.querySelector<SVGGElement>(
+        'g[data-edge="t8>t9"]',
+      )!;
+      expect(edge.getAttribute("tabindex")).toBe("0");
+      await act(async () => {
+        edge.focus();
+        edge.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      });
+      await act(async () => {
+        edge.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+        );
+      });
+      await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+      const menu = container.querySelector(
+        '[role="group"][aria-label="#9 等 #8"]',
+      )!;
+      expect(menu).not.toBeNull();
+      expect(document.activeElement).toBe(menu.querySelector("button"));
+      expect(document.activeElement?.textContent).toBe("改成等它完成");
+    });
+
     it('leaves an edge that is there alone when it is dragged again, keeping "until done"', async () => {
       // #9 waits for #8 until it is done; dragging #8 onto #9 again must not reset that.
       const tasks = release();
@@ -497,6 +562,10 @@ describe("the tasks page's views", () => {
       const result = await drag(container, "t8", "t9");
       expect(result.refused).toBe(false);
       expect(callsOf(h, "addDependency")).toEqual([]);
+      // The hint that said so during the drag is gone on release; a toast says it instead, as
+      // it does when the same edge is picked by clicks.
+      expect(toasts.show).toHaveBeenCalledTimes(1);
+      expect(toasts.show.mock.calls[0]![0]).toContain("#9 已经在等 #8 了");
       expect(
         container
           .querySelector('g[data-edge="t8>t9"]')!

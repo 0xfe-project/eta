@@ -2,6 +2,10 @@
   "$schema": "https://turborepo.com/schema.json",
   "extends": ["//"],
   "tasks": {
+    // The cascade tests (`src/test-browser.ts`) are skipped without a browser, except on CI.
+    "test": {
+      "passThroughEnv": ["CI"]
+    },
     "lint": {
       "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "$TURBO_ROOT$/eslint.config.js"]
     },

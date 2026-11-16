@@ -674,8 +674,10 @@
   }
 
   /* Copy, on the message it copies: invisible until the message is hovered, because a row of
-   * buttons nobody is pressing is a row of noise. Copied keeps it up for its beat. */
+   * buttons nobody is pressing is a row of noise. Copied keeps it up for its beat. A Captain
+   * review is a message drawn as a card, so hovering the card shows its copy the same way. */
   .message:hover .message-copy-btn,
+  .captain-review:hover .message-copy-btn,
   .message-copy-btn:focus-visible,
   .message-copy-btn[data-copied="true"] {
     opacity: 1;
@@ -688,10 +690,22 @@
     opacity: 0;
     cursor: pointer;
   }
-  /* A screen with no hover has no way to reveal it: there it stays, just as faint. */
+  /* A screen with no hover has no way to reveal it: there it stays, just as faint. A finger
+   * needs more than its 10px text, so an invisible square of about 40px, centred on it, takes
+   * the tap; what you see stays the size of the time beside it. */
   @media (hover: none), (pointer: coarse) {
     .message-copy-btn {
+      position: relative;
       opacity: 1;
+    }
+    .message-copy-btn::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, 40px);
+      height: max(100%, 40px);
+      transform: translate(-50%, -50%);
     }
   }
 

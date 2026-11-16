@@ -78,6 +78,7 @@ import { TaskCardRow, TaskDraftRow } from "./task-rows";
 import { StatusIcon } from "./task-status-icon";
 import { TranscriptRail } from "./transcript-rail";
 import { AskBlock } from "./transcript/ask-block";
+import { CopyMessage } from "./transcript/copy-message";
 import { Message, SystemMessage } from "./transcript/message";
 import { ProcessBox } from "./transcript/process-box";
 import { SlashMenu } from "./transcript/slash-menu";
@@ -1956,39 +1957,5 @@ export function ChatPanel({
         </div>
       </footer>
     </section>
-  );
-}
-
-/**
- * Copy what was said, as it was written, from under the message: a reply's Markdown, or the
- * user's own text with its mentions and attachment references as typed (images are not text).
- *
- * The whole point of the footer is that it is out of the way until you want it: the button is
- * 10px mono in the same dim line as the time, and it says "copied" for a beat rather than
- * throwing a toast for a click you already know you made.
- */
-function CopyMessage({ text }: { text: string }) {
-  const { t: translateText } = useTranslation(["chat", "common"] as const);
-  const [copied, setCopied] = useState(false);
-  if (text.trim().length === 0) return null;
-  return (
-    <button
-      type="button"
-      className="message-copy-btn font-mono text-[10px] uppercase tracking-[0.1em]"
-      data-copied={copied}
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-          setTimeout(setCopied, 1200, false);
-        } catch {
-          /* no clipboard outside a secure context */
-        }
-      }}
-    >
-      {copied
-        ? translateText("common:feedback.copied")
-        : translateText("common:actions.copy")}
-    </button>
   );
 }
