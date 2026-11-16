@@ -360,23 +360,27 @@ export function mountModules(
           return fn.apply(this, args);
         }
 
-        // Slow path: need to ask for approval (becomes async)
-        const refusalPromise = authorize(
-          request,
-          approvalStore,
-          async (req) => {
-            // Use the provided authorize hook to ask the human
-            const result = await hooks.authorize!({
-              name: `capability.${req.layer}.${req.capability}`,
-              input: req.args,
-              at: { identifier: "eta.modules", line: 0, column: 0 },
-            });
-            // Convert hooks.authorize result to boolean:
-            // undefined = approved (return true)
-            // string = denied (return false)
-            return result === undefined;
-          },
-        );
+        const at = { identifier: "eta.modules", line: 0, column: 0 };
+        const verdict = hooks.authorize({
+          name: `capability.${layer}.${name}`,
+          input: args,
+          at,
+        });
+        // The host answered at once: record it and stay synchronous, so a capability that
+        // returns a value still does when nothing had to be asked.
+        if (typeof verdict !== "object") {
+          approvalStore.record(layer, name, verdict === undefined);
+          if (verdict !== undefined)
+            throw new Error(
+              `User denied capability "${name}" from ${layer} layer`,
+            );
+          return fn.apply(this, args);
+        }
+
+        // Slow path: the answer is a person's, so the call becomes async.
+        const refusalPromise = authorize(request, approvalStore, async () => {
+          return (await verdict) === undefined;
+        });
 
         // Return a promise chain that handles authorization then calls the function
         return refusalPromise.then((refusal) => {

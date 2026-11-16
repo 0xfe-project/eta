@@ -34,7 +34,7 @@ import { acpPlugin } from "./acp/plugin";
 import { AcpService, projectMachinesOf } from "./acp/service";
 import { agentsPlugin } from "./agents/plugin";
 import { AgentStore } from "./agents/store";
-import { approvalMiddleware } from "./approval-middleware";
+import { approvalAuthorizer, approvalMiddleware } from "./approval-middleware";
 import { loadKey } from "./artifacts/capability";
 import { DEFAULT_LIMITS } from "./artifacts/files";
 import { KINDS } from "./artifacts/kinds";
@@ -763,7 +763,10 @@ export function createProduct(options: {
   // Each feature that adds tools, tool middleware or a question observer to sessions is one entry
   // here; the order is the order its tools and middleware are installed in.
   const productHooks: SessionHooks[] = [
-    { toolMiddleware: approvalMiddleware(inbox) },
+    {
+      toolMiddleware: approvalMiddleware(inbox),
+      realmAuthorizer: approvalAuthorizer(inbox),
+    },
     {
       toolMiddleware: ({ meta }) =>
         captain.identity()?.agentId === meta.agentId

@@ -133,6 +133,12 @@ export interface McpExecuteContext {
   signal?: AbortSignal;
   /** Forwarded to hooks so a harness can tie the approval to its own call. */
   toolCallId?: string;
+  /**
+   * Asked when the server sends `elicitation/create` while this call is running. It takes
+   * precedence over the scope's `hooks.elicit`: connections are shared by every caller of the
+   * same owner, and the call that is waiting is the one whose user should see the question.
+   */
+  elicit?: McpHooks["elicit"];
 }
 
 /** A tool definition any harness can register: a name, a JSON schema, a description and `execute`. */

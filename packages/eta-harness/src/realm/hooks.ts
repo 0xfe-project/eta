@@ -1,3 +1,4 @@
+import type { ElicitRequest, ElicitResult } from "../elicit";
 import type { Authorizer, Effect } from "./realm";
 
 /** One configured MCP server. */
@@ -47,12 +48,22 @@ export interface McpSink {
   search: (query: string) => McpSearchResult[];
   /** A server as a d.ts (`declare module "mcp:<server>"`), from cached metadata. Never connects. */
   describe: (server: string) => string;
+  /**
+   * Whether the server's own config asks for approval before this tool runs (`approveTools` in
+   * an `mcp.json`). Read by the host's authorizer; the realm itself never asks.
+   */
+  requiresApproval?: (server: string, tool: string) => boolean;
   /** Calls one tool and returns its content; throws on error. */
   callTool: (
     server: string,
     tool: McpToolInfo,
     args: Record<string, unknown>,
-    context?: { signal?: AbortSignal; toolCallId?: string },
+    context?: {
+      signal?: AbortSignal;
+      toolCallId?: string;
+      /** Asked when the server needs the user's input mid-call (`elicitation/create`). */
+      elicit?: (request: ElicitRequest) => Promise<ElicitResult>;
+    },
   ) => Promise<unknown>;
 }
 

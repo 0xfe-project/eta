@@ -60,7 +60,7 @@ Tools in a conversation (registered on each (agent × conversation) session): `m
 
 Questions (ask) in a session are aggregated by `inbox` into `interaction` rows: posed, answered, cancelled, and expired each have a state. An answer goes back to the asking session via `inbox.answer`, and the round waiting on it continues; the engine hears the same events and switches the reply between `working` and `waiting_for_input`. On process restart, unanswered questions all expire.
 
-**Approval list** (`inbox.setApprovals`, stored in the `setting` table): tools on the list ask the user before running, implemented as tool middleware, the same for local sessions and sessions on the daemon.
+**Approval list** (`inbox.setApprovals`, stored in the `setting` table): tools on the list ask the user before running. A tool the model calls is caught by tool middleware (`approvalMiddleware`); what a script reaches in the realm is caught by the realm's authorizer (`approvalAuthorizer`), under these names: `shell` for a `$` command, `fs.write` for every file write (`fs.writeFile`, `fs.rm`, `edit`…, or each by its own name), `mcp.<server>.<tool>` for an MCP tool, and an entry ending in `.*` for everything under it (`mcp.github.*`). A synchronous write that is listed is refused, since it cannot wait for the answer. Both ask with the same `allow` / `deny` card. Sessions on a daemon are not gated yet (see `packages/TOBEREFR/TODO.md`).
 
 ## Usage
 

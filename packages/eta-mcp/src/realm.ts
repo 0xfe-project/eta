@@ -5,7 +5,7 @@
  * The sink gives the realm linker enough to build `mcp:<server>` imports and `eta.mcp` exports.
  */
 import type { McpScope } from "./scope";
-import type { ServerState, ToolMeta } from "./types";
+import type { McpHooks, ServerState, ToolMeta } from "./types";
 import { describeServerTools } from "./describe";
 import { rankTools } from "./search-ranking";
 
@@ -22,11 +22,18 @@ export interface McpSink {
     query: string,
   ) => { server: string; tool: ToolMeta; score: number }[];
   describe: (server: string) => string;
+  /** Whether the server's `approveTools` covers this tool (see `McpScope.requiresApproval`). */
+  requiresApproval: (server: string, tool: string) => boolean;
   callTool: (
     server: string,
     tool: ToolMeta,
     args: Record<string, unknown>,
-    context?: { signal?: AbortSignal; toolCallId?: string },
+    context?: {
+      signal?: AbortSignal;
+      toolCallId?: string;
+      /** Asked when the server needs the user's input mid-call (`elicitation/create`). */
+      elicit?: McpHooks["elicit"];
+    },
   ) => Promise<unknown>;
 }
 
@@ -56,6 +63,7 @@ export function createMcpRealmAdapter(scope: McpScope): McpSink {
         .map(({ server, tool, score }) => ({ server, tool, score }));
     },
     describe: (server: string) => describeServerTools(scope, server),
+    requiresApproval: (server, tool) => scope.requiresApproval(server, tool),
     callTool: async (server, tool, args, context) => {
       const result = await scope.callTool(server, tool, args, context ?? {});
       if (result.isError === true) {

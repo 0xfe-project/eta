@@ -1,4 +1,8 @@
-import type { Effect, Hooks } from "../../src/realm/index";
+import type {
+  AuthorizationRequest,
+  Effect,
+  Hooks,
+} from "../../src/realm/index";
 import { Buffer } from "node:buffer";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
@@ -566,11 +570,127 @@ describe("$", () => {
     });
   });
 
-  it("a command is not a binding call, so it leaves no row", async () => {
+  it("a command is a `shell` row with the command line", async () => {
+    if (process.platform === "win32") return;
     const agent = new Agent({ root });
     const result = await agent.run("await $`true`;\nexport default 1;", {
       identifier: join(root, "probe.js"),
     });
-    expect(result.effects).toHaveLength(0);
+    expect(result.effects).toEqual([
+      expect.objectContaining({ name: "shell", status: "ok", detail: "true" }),
+    ]);
+  });
+});
+
+describe("$ and the authorizer", () => {
+  const seen: AuthorizationRequest[] = [];
+  const gated = (
+    answer: (
+      request: AuthorizationRequest,
+    ) => string | undefined | Promise<string | undefined>,
+  ) =>
+    new Agent({
+      root,
+      hooks: {
+        authorize: (request) => {
+          if (request.name !== "shell") return undefined;
+          seen.push(request);
+          return answer(request);
+        },
+      },
+    });
+  beforeEach(() => {
+    seen.length = 0;
+  });
+
+  it("asks before a command starts, with the command line", async () => {
+    if (process.platform === "win32") return;
+    const agent = gated(() => undefined);
+    const result = await agent.run(
+      // The interpolation is the script's own, quoted by zx.
+      [
+        "const words = 'a b';",
+        `const out = await $\`echo \${words}\`;`,
+        "export default out.stdout.trim();",
+      ].join("\n"),
+      { identifier: join(root, "probe.js") },
+    );
+    expect(result.value).toBe("a b");
+    expect(seen.map((request) => request.input)).toEqual([["echo $'a b'"]]);
+    expect(seen[0]!.at.line).toBe(2);
+  });
+
+  it("a refusal stops the command and is a blocked row", async () => {
+    if (process.platform === "win32") return;
+    const agent = gated(() => "not today");
+    const marker = join(root, "marker");
+    const error = (await agent
+      .run(`await $\`touch ${marker}\`;\nexport default 1;`, {
+        identifier: join(root, "probe.js"),
+      })
+      .catch((e: Error) => e)) as Error;
+    expect(error.message).toContain("shell was refused: not today");
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  it("waits for an answer that takes time, keeping the chained methods", async () => {
+    if (process.platform === "win32") return;
+    const agent = gated(
+      () => new Promise((resolve) => setTimeout(resolve, 50, undefined)),
+    );
+    const script = [
+      "const failed = await $`exit 3`.nothrow();",
+      "const quiet = await $`echo hi`.quiet();",
+      "const piped = await $`echo a b c`.pipe($`wc -w`);",
+      "export default { code: failed.exitCode, quiet: quiet.stdout.trim(), words: piped.stdout.trim() };",
+    ].join("\n");
+    const result = await agent.run(script, {
+      identifier: join(root, "probe.js"),
+    });
+    expect(result.value).toEqual({ code: 3, quiet: "hi", words: "3" });
+    expect(seen).toHaveLength(4);
+  });
+
+  it("a refusal that takes time rejects the command, even with nothrow, and it never runs", async () => {
+    if (process.platform === "win32") return;
+    const agent = gated(
+      () =>
+        new Promise((resolve) => setTimeout(resolve, 20, "the user said no")),
+    );
+    const marker = join(root, "marker");
+    const result = await agent.run(
+      [
+        `const command = $({ nothrow: true })\`touch ${marker}\`;`,
+        "let message = '';",
+        "try { await command; } catch (error) { message = error.message; }",
+        "command.run();",
+        "await new Promise((resolve) => setTimeout(resolve, 100));",
+        "export default message;",
+      ].join("\n"),
+      { identifier: join(root, "probe.js") },
+    );
+    expect(result.value).toBe("shell was refused: the user said no");
+    expect(existsSync(marker)).toBe(false);
+    expect(result.effects).toContainEqual(
+      expect.objectContaining({ name: "shell", status: "blocked" }),
+    );
+  });
+
+  it("a synchronous shell is refused when the answer would take time", async () => {
+    if (process.platform === "win32") return;
+    const agent = gated(() => Promise.resolve(undefined));
+    const error = (await agent
+      .run("$({ sync: true })`true`;\nexport default 1;", {
+        identifier: join(root, "probe.js"),
+      })
+      .catch((e: Error) => e)) as Error;
+    expect(error.message).toContain("synchronous shell cannot wait");
+
+    const allowed = gated(() => undefined);
+    const result = await allowed.run(
+      "export default $({ sync: true })`echo hi`.stdout.trim();",
+      { identifier: join(root, "probe.js") },
+    );
+    expect(result.value).toBe("hi");
   });
 });

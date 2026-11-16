@@ -32,6 +32,13 @@ export {
   type CompactionServiceOptions,
 } from "./compaction-service";
 export {
+  type ElicitRequest,
+  type ElicitResult,
+  elicitThroughAsk,
+  type ElicitValue,
+} from "./elicit";
+export type { EsmAuthorizer } from "./esm";
+export {
   calculateContextTokens,
   type ContextUsageEstimate,
   type CutPointResult,
@@ -102,6 +109,7 @@ export type {
   McpSink,
   McpToolInfo,
 } from "./realm/hooks";
+export type { AuthorizationRequest } from "./realm/realm";
 export {
   TaskReminderService,
   type TaskReminderServiceOptions,

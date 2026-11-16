@@ -316,4 +316,26 @@ eta.define("sameName", function() { return "global"; }, { desc: "test" });
     expect(approvalStore.isApproved("project", "sameName")).toBe(true);
     expect(approvalStore.isApproved("global", "sameName")).toBe(true);
   });
+
+  it("a capability the host lets through at once stays synchronous", async () => {
+    const agent = new Agent({
+      root: selfRoot,
+      project: projectRoot,
+      hooks: { authorize: () => undefined },
+    });
+    writeFileSync(
+      join(projectRoot, "env.js"),
+      `
+import eta from "eta";
+eta.define("syncCap", function() { return 41; }, { desc: "test" });
+`,
+    );
+    const result = await agent.run(`
+      import cap from "eta:project:syncCap";
+      const value = cap();
+      export default typeof value === "number" ? value + 1 : "a promise";
+    `);
+    expect(result.value).toBe(42);
+    expect(approvalStore.isApproved("project", "syncCap")).toBe(true);
+  });
 });

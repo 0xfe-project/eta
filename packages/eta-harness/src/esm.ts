@@ -26,9 +26,11 @@ import type {
   Runner,
 } from "@eta/core";
 import type { TSchema } from "typebox";
+import type { AskRegistry } from "./ask";
 import type {
   AskRequest,
   AskResult,
+  AuthorizationRequest,
   Effect,
   Layer,
   PlatformCall,
@@ -42,6 +44,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { toToolResultMessage } from "@eta/core";
 import { Type } from "typebox";
+import { elicitThroughAsk } from "./elicit";
 import { convertToLlm } from "./prompts/summaries";
 import { Agent, snippetSource } from "./realm";
 
@@ -74,7 +77,26 @@ export interface EsmSessionOptions {
   cwd?: string | undefined;
   /** MCP servers on this machine; absent in remote/daemon sessions. */
   mcp?: McpSink | undefined;
+  /**
+   * Asked before a realm binding (`mcp.<server>.<tool>`, `fs.writeFile`, `edit`…) or a shell
+   * command (`shell`) reaches the host. Absent means everything runs.
+   */
+  authorize?: EsmAuthorizer | undefined;
+  /**
+   * The session's ask channel. With it, an MCP server's `elicitation/create` becomes question
+   * cards (see `elicitThroughAsk`); without it the request is cancelled.
+   */
+  ask?: AskRegistry | undefined;
 }
+
+/**
+ * A host's realm authorizer, told which call it is deciding: `callId` is unique in the session
+ * (the tool call running the script, the binding and a counter), and `signal` aborts with it.
+ */
+export type EsmAuthorizer = (
+  request: AuthorizationRequest,
+  call: { callId: string; signal: AbortSignal | undefined },
+) => string | undefined | Promise<string | undefined>;
 
 export interface EsmSession {
   agent: Agent;
@@ -472,21 +494,45 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
       }
   };
 
-  /** The MCP sink with the running script's signal and a per-call id, like `eta.platform`. */
+  /**
+   * The MCP sink with the running script's signal and a per-call id, like `eta.platform`, and the
+   * session's question cards for a server that asks the user something mid-call.
+   */
   const frameMcp = (sink: McpSink): McpSink => ({
     servers: () => sink.servers(),
     load: (server) => sink.load(server),
     search: (query) => sink.search(query),
     describe: (server) => sink.describe(server),
+    ...(sink.requiresApproval === undefined
+      ? {}
+      : { requiresApproval: sink.requiresApproval }),
     callTool: (server, tool, args) => {
       const frame = frames.getStore();
+      const toolCallId = `${frame?.toolCallId ?? "esm"}.mcp.${server}.${tool.name}.${frame === undefined ? 0 : ++frame.seq}`;
+      const registry = options.ask;
+      let asked = 0;
       return sink.callTool(server, tool, args, {
-        toolCallId: `${frame?.toolCallId ?? "esm"}.mcp.${server}.${tool.name}.${frame === undefined ? 0 : ++frame.seq}`,
+        toolCallId,
         ...(frame?.signal === undefined ? {} : { signal: frame.signal }),
+        ...(registry === undefined
+          ? {}
+          : {
+              elicit: (request) =>
+                elicitThroughAsk(
+                  registry,
+                  {
+                    ...request,
+                    signal: anySignal(request.signal, frame?.signal),
+                  },
+                  `elicit:${toolCallId}.${++asked}`,
+                ),
+            }),
       });
     },
   });
 
+  const authorize = options.authorize;
+  let authorized = 0;
   const agent = new Agent({
     root,
     ...(options.project === undefined ? {} : { project: options.project }),
@@ -497,6 +543,17 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
       state: etaState,
       ask,
       ...(options.mcp === undefined ? {} : { mcp: frameMcp(options.mcp) }),
+      ...(authorize === undefined
+        ? {}
+        : {
+            authorize: (request: AuthorizationRequest) => {
+              const frame = frames.getStore();
+              return authorize(request, {
+                callId: `${frame?.toolCallId ?? "esm"}.${request.name}.${++authorized}`,
+                signal: frame?.signal,
+              });
+            },
+          }),
       onConsole: (level, line) => {
         frames
           .getStore()
@@ -807,4 +864,14 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
     delta,
     dispose: () => agent.dispose(),
   };
+}
+
+/** Aborts when either does; undefined when neither exists. */
+function anySignal(
+  a: AbortSignal | undefined,
+  b: AbortSignal | undefined,
+): AbortSignal | undefined {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  return AbortSignal.any([a, b]);
 }

@@ -82,9 +82,9 @@ async function setUp(options: { publicUrl?: string } = {}) {
   await writeFile(
     join(dataDir, ".eta", "mcp.json"),
     JSON.stringify({
-      // `approveTools` is still read, and no longer asks anything.
+      // No `approveTools`: that asks before a call (see approvals.test.ts), and nobody answers here.
       mcpServers: {
-        remote: { url: MCP_URL, auth: "oauth", approveTools: true },
+        remote: { url: MCP_URL, auth: "oauth" },
       },
     }),
   );

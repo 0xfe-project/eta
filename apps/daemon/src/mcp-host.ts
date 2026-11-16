@@ -121,6 +121,9 @@ export class McpHost {
       cacheFile: (owner) =>
         join(dir, "cache", `${encodeURIComponent(owner)}.json`),
       resolverCacheFile: join(dir, "launch-resolutions.json"),
+      // A session's realm hands each call the session's question cards (`elicit`), so every
+      // connection can tell its server that it may ask the user something mid-call.
+      elicitation: true,
       ...(options.authProviderFor === undefined
         ? {}
         : { authProviderFor: options.authProviderFor }),

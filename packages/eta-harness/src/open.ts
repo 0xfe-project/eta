@@ -48,7 +48,7 @@ import type {
 import type { GoalEntry } from "@eta/core/session";
 import type { StorageService } from "@eta/core/storage";
 import type { TSchema } from "typebox";
-import type { EsmSession } from "./esm";
+import type { EsmAuthorizer, EsmSession } from "./esm";
 import type { MemoryExtractionOutcome, MemoryFile, MemoryFs } from "./memory";
 import type {
   EtaPromptSection,
@@ -192,6 +192,8 @@ export interface OpenSessionOptions {
         global?: string | undefined;
         /** MCP on this machine: `import "mcp:<server>"` and `eta.mcp`. Absent for remote sessions. */
         mcp?: McpSink | undefined;
+        /** Asked before MCP calls, file writes, shell commands… reach the host (`EsmAuthorizer`). */
+        authorize?: EsmAuthorizer | undefined;
       }
     | undefined;
 }
@@ -408,6 +410,8 @@ export async function openSession(
           global: options.esm.global,
           cwd: options.cwd,
           mcp: options.esm.mcp,
+          authorize: options.esm.authorize,
+          ask,
         });
 
   const installedTools: HarnessTool<unknown, TSchema, unknown>[] = [

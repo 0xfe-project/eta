@@ -1,15 +1,16 @@
 import type * as vm from "node:vm";
+import type { ProcessPromise } from "zx";
 import type { Linker, Realm } from "./realm";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
 import { createRequire } from "node:module";
+
 import * as path from "node:path";
-
 import process from "node:process";
-import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { $ } from "zx";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { $, ProcessOutput } from "zx";
 
 /**
  * The `node:*` half of a realm's surface, in two layers with different rules.
@@ -305,28 +306,124 @@ export function mountNodeGlobals(realm: Realm): void {
  * The dependency is `zx@lite` — a separate published version (`8.8.5-lite`),
  * not a subpath of the full package: its `.` export is the core build, 130 KB
  * against 880 KB. What it exports is what a shell is for, so nothing is
- * wrapped and nothing is renamed; `$` is mounted as `$`.
+ * renamed; `$` is mounted as `$`.
+ *
+ * Every command is put to the authorizer as `shell`, with the command line as
+ * its one input, before it starts, and lands in the ledger as a `shell` effect.
+ * A command starts halted and runs once the answer is in, so `$` still returns
+ * a `ProcessPromise` at once and `.quiet()`, `.nothrow()`, `.text()` keep
+ * working while a person decides. `$({ ... })` returns a shell gated the same
+ * way. A synchronous shell (`$({ sync: true })`) cannot wait, so an answer that
+ * would need waiting refuses it.
  *
  * Worth stating what this does not do. A command's own reads, writes and
  * outbound calls happen on the far side of the seam, so none of them are
- * effects and none of them can be authorised. The ledger says a command ran
- * and nothing about what was inside it — the gap ESMMODE §1 already names.
+ * effects and none of them can be authorised one by one. The ledger says a
+ * command ran and nothing about what was inside it — the gap ESMMODE §1
+ * already names.
  */
 export function mountShell(realm: Realm, cwd?: string): void {
   // Commands run in the session's working directory; `$.cwd` is not changed for the host.
-  const shell = cwd === undefined ? $ : $({ cwd });
-  const tag = realm.wrap(
-    shell as unknown as (...args: unknown[]) => unknown,
-  ) as unknown as Record<string, unknown>;
-  // `$.nothrow()` and friends are properties on the function itself; without
-  // them the shell is there but every failure is fatal.
-  for (const [key, value] of Object.entries(
-    $ as unknown as Record<string, unknown>,
-  )) {
-    if (typeof value === "function")
-      tag[key] = realm.wrap(value as (...args: unknown[]) => unknown);
+  realm.global("$", gatedShell(realm, cwd === undefined ? {} : { cwd }));
+}
+
+type ShellOptions = Record<string, unknown>;
+type HostShell = (pieces: TemplateStringsArray, ...args: unknown[]) => unknown;
+const shellWith = $ as unknown as (options: ShellOptions) => HostShell;
+
+/** zx's internals a refused command is settled through, so it can never be `.run()` later. */
+interface Settleable {
+  _stage: string;
+  _output: unknown;
+  _reject: (error: unknown) => void;
+}
+
+function isTemplate(value: unknown): value is TemplateStringsArray {
+  return (
+    Array.isArray(value) && Array.isArray((value as { raw?: unknown }).raw)
+  );
+}
+
+function gatedShell(
+  realm: Realm,
+  options: ShellOptions,
+): (...args: unknown[]) => unknown {
+  return realm.wrap((first: unknown, ...rest: unknown[]): unknown => {
+    // `$({ nothrow: true })`: a shell with more options, gated the same way.
+    if (!isTemplate(first))
+      return gatedShell(realm, { ...options, ...(first as ShellOptions) });
+    return runGated(realm, options, first, rest);
+  });
+}
+
+function runGated(
+  realm: Realm,
+  options: ShellOptions,
+  pieces: TemplateStringsArray,
+  args: unknown[],
+): unknown {
+  const at = realm.callsite();
+  const halted = shellWith({ ...options, sync: false, halt: true })(
+    pieces,
+    ...args,
+  ) as ProcessPromise;
+  const command = halted.cmd;
+  const started = performance.now();
+  const record = (status: "ok" | "failed" | "blocked", detail = command) =>
+    realm.note("shell", detail, at, status, performance.now() - started);
+  const refuse = (reason: string): Error => {
+    record("blocked", `${command}: ${reason}`);
+    return new Error(`shell was refused: ${reason}`);
+  };
+
+  const verdict = realm.authorize("shell", [command], at);
+  if (options.sync === true) {
+    if (isPromise(verdict))
+      throw refuse(
+        "this command needs an answer from the user, which a synchronous shell cannot wait for; use the async $",
+      );
+    if (verdict !== undefined) throw refuse(verdict);
+    try {
+      const output = shellWith(options)(pieces, ...args);
+      record("ok");
+      return output;
+    } catch (error) {
+      record("failed");
+      throw error;
+    }
   }
-  realm.global("$", tag as unknown as (...args: unknown[]) => unknown);
+
+  const start = (): void => {
+    halted.run();
+    Promise.prototype.then.call(
+      halted,
+      () => record("ok"),
+      () => record("failed"),
+    );
+  };
+  if (verdict === undefined) {
+    start();
+    return halted;
+  }
+  if (!isPromise(verdict)) throw refuse(verdict);
+  // Refused after the fact: settle the halted command as rejected, so it can never run.
+  const reject = (reason: string): void => {
+    const error = refuse(reason);
+    const settle = halted as unknown as Settleable;
+    settle._output = ProcessOutput.fromError(error);
+    settle._stage = "rejected";
+    settle._reject(error);
+  };
+  void verdict.then(
+    (reason) => (reason === undefined ? start() : reject(reason)),
+    (error: unknown) =>
+      reject(error instanceof Error ? error.message : String(error)),
+  );
+  return halted;
+}
+
+function isPromise<T>(value: T | Promise<T>): value is Promise<T> {
+  return typeof (value as { then?: unknown } | undefined)?.then === "function";
 }
 
 /**

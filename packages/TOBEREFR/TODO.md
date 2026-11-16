@@ -57,7 +57,7 @@ git checkout 2d4d160d -- <path> # 取回原文件
 
 - OAuth：`src/mcp/credentials.ts`（凭据封存在数据库，按 server URL 的 sha256 存）、`src/mcp/service.ts` 的 `McpService`（登录/回调/登出，叠在 `McpHost` 上，`authProviderFor` 给 manager）、回调 `/mcp/oauth/callback`（`access.ts` 只对这一条 GET 免 token）。登录完成后重连等着它的 server。测试：`apps/eta/test/mcp-oauth.test.ts`（假授权服务器，login → callback → 存 token → connected → 会话 `import "mcp:remote"` 调用成功）。
 - 设置页 MCP 状态：`src/mcp/plugin.ts` 的 `mcpPlugin` 实现 `mcp` wire target（list/connect/reconnect/login/completeLogin/logout），合约 `@eta/client-contracts` 未改，前端未改。
-- 审批：删掉了 `@eta/mcp` 自己的门（`requiresApproval`、`McpHooks.approve`、`ApprovalRequest`），MCP 工具直接执行；realm `binding()` 的 authorize 不变。`mcp.json` 的 `approveTools` 照样解析不报错，但不再有任何效果。
+- 审批：删掉了 `@eta/mcp` 自己的门（`McpHooks.approve`、`ApprovalRequest`），MCP 工具由 realm `binding()` 的 authorize 来管。#178 起主节点上的会话接上了：审批列表（`mcp.<server>.<tool>`、`mcp.<server>.*`）和 `mcp.json` 的 `approveTools`（`McpScope.requiresApproval`）都在 `approvalAuthorizer` 里问。elicitation 也接上了：见 `docs/architecture/mcp.md`。
 
 还没接回的：
 
@@ -78,7 +78,7 @@ git checkout 2d4d160d -- <path> # 取回原文件
 
 用 `describe.skip` / `it.skip` 跳过、并标了 `// TOBEREFR: see packages/TOBEREFR/TODO.md` 的（能力回来后去掉 skip）：
 
-- `approvals.test.ts`：审批列表会拦截工具。原来靠 akhook 中间件拦截，要等 authorize 接回来。
+- ~~`approvals.test.ts`：审批列表会拦截工具。~~ #178 已恢复：改成脚本里的 `$`（`shell`）、写文件（`fs.write`）和 MCP 工具，由 realm 的 authorizer 拦。
 - `github-host.test.ts`：akhook 的 `gh pr create` 规则，以及 daemon shell 带 GitHub 登录（用的是 `bash` 工具）。
 - `remote-conversations.test.ts`：daemon 上的 `bash` 工具、审批、`publish_artifact` 通过 link 读远端文件。
 
@@ -93,5 +93,5 @@ git checkout 2d4d160d -- <path> # 取回原文件
 ## 恢复时要回答的问题
 
 1. ~~MCP 工具放在 realm 里还是保留成静态工具？~~ 已定：realm 模块（#33）。
-2. 审批：`approvals` 列表（inbox `setApprovals`）怎样接到 `binding()` 的 authorize 上？daemon 上的会话还走 `tool.gate` 吗？
+2. 审批：~~`approvals` 列表（inbox `setApprovals`）怎样接到 `binding()` 的 authorize 上？~~ #178：主节点经 `SessionManagerOptions.realmAuthorizer`（`approvalAuthorizer`）接上，`$` 也过 authorizer（名字 `shell`）。还没定的：daemon 上的会话还走 `tool.gate` 吗（#164 计划里的 T5）？
 3. 远程会话的文件和 shell：`ExecutionEnv` 没了以后，daemon 上的 realm 直接用 node:fs 和 `$`，primary 侧的工具（如 `publish_artifact`）怎样读远端文件？

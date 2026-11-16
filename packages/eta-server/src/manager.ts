@@ -9,6 +9,7 @@ import type {
 import type { AnswerPayload } from "@eta/core/session";
 import type {
   AskObserver,
+  EsmAuthorizer,
   McpSink,
   MemoryExtractionOutcome,
   OpenSession,
@@ -168,6 +169,21 @@ export interface SessionManagerOptions {
     | ((input: { meta: SessionMeta; session: OpenSession }) => ToolMiddleware[])
     | undefined;
   /**
+   * Policy on what a session's scripts reach in its realm: MCP tools (`mcp.<server>.<tool>`),
+   * file writes (`fs.writeFile`, `edit`…), shell commands (`shell`). The realm's half of
+   * `toolMiddleware`, which only sees the kernel's tools. Read once when the session opens; the
+   * session is passed as a function because the realm is built while the session is assembled,
+   * and the authorizer is only asked once a script runs.
+   */
+  realmAuthorizer?:
+    | ((input: {
+        meta: SessionMeta;
+        session: () => OpenSession;
+        /** The session's MCP (`mcpFor`), for a policy that reads the servers' own config. */
+        mcp: McpSink | undefined;
+      }) => EsmAuthorizer | undefined)
+    | undefined;
+  /**
    * Tools a session gets beyond the harness's own, read once when it opens.
    *
    * The other half of the same seam: the host knows what this app has that the harness does not
@@ -260,6 +276,7 @@ export class SessionManager {
   private readonly memoryEnabledFor: SessionManagerOptions["memoryEnabledFor"];
   private readonly agentPromptFor: SessionManagerOptions["agentPromptFor"];
   private readonly toolMiddleware: SessionManagerOptions["toolMiddleware"];
+  private readonly realmAuthorizer: SessionManagerOptions["realmAuthorizer"];
   private readonly sessionTools: SessionManagerOptions["sessionTools"];
   private readonly sessionAttach: SessionManagerOptions["sessionAttach"];
   private readonly askObserve: SessionManagerOptions["askObserve"];
@@ -285,6 +302,7 @@ export class SessionManager {
     this.memoryEnabledFor = options.memoryEnabledFor;
     this.agentPromptFor = options.agentPromptFor;
     this.toolMiddleware = options.toolMiddleware;
+    this.realmAuthorizer = options.realmAuthorizer;
     this.sessionTools = options.sessionTools;
     this.sessionAttach = options.sessionAttach;
     this.askObserve = options.askObserve;
@@ -490,6 +508,19 @@ export class SessionManager {
     const mcp =
       platform?.sessionDir === undefined ? undefined : this.mcpFor?.(meta);
     if (mcp !== undefined) this.mcpOf.set(meta.id, mcp);
+    let opened: OpenSession | undefined;
+    const authorize =
+      platform?.sessionDir === undefined
+        ? undefined
+        : this.realmAuthorizer?.({
+            meta,
+            mcp: mcp?.sink,
+            session: () => {
+              if (opened === undefined)
+                throw new Error(`session ${meta.id} is not open yet`);
+              return opened;
+            },
+          });
     const baseSystemPrompt = await this.baseSystemPromptFor?.();
     const session = await openSession({
       storage: (await this.store.open(meta.id))!.storage,
@@ -506,6 +537,7 @@ export class SessionManager {
               project: join(meta.cwd, ".eta"),
               global: join(platform.home, ".eta", "global"),
               ...(mcp === undefined ? {} : { mcp: mcp.sink }),
+              ...(authorize === undefined ? {} : { authorize }),
             },
           }),
       ...(agentPrompt === undefined ? {} : { agentPrompt }),
@@ -545,6 +577,7 @@ export class SessionManager {
       // journaling, usage and goals cannot hear another session's events.
       kernel: { warn: this.warn },
     });
+    opened = session;
     if (observe !== undefined) {
       recordAnswer = (payload) => {
         void session.journaling.recordAnswer(payload);

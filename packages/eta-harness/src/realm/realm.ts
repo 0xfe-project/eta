@@ -287,7 +287,7 @@ export class Realm {
       describe ?? ((...args: Args) => args.map(summarize).join(", "));
     return this.wrap((...args: Args): R => {
       const started = performance.now();
-      const at = this.#callsite();
+      const at = this.callsite();
       const request = label(...args);
       const finish = (status: Effect["status"], detail: string): void => {
         const effect: Effect = {
@@ -464,7 +464,7 @@ export class Realm {
    * name falls back to the module being evaluated. The line is right either way;
    * the file is only right for the module at the top.
    */
-  #callsite(): Effect["at"] {
+  callsite(): Effect["at"] {
     const stack = (new Error("callsite").stack ?? "").split("\n").slice(1);
     let afterWrapper = false;
     for (const raw of stack) {

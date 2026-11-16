@@ -263,7 +263,7 @@ describe("approveTools", () => {
     tool("plain"),
   ];
 
-  // Still read from mcp.json, but MCP no longer gates on it: every tool runs.
+  // The library does not gate on it: the host's policy asks (see requiresApproval below).
   const settings: ApproveTools[] = [true, ["write", "pl*"], "destructive"];
   for (const approveTools of settings)
     it(`runs every tool with approveTools ${JSON.stringify(approveTools)}`, async () => {
@@ -405,6 +405,55 @@ describe("elicitation", () => {
     expect(text(result)).not.toContain("accept");
   });
 
+  it("goes to the call in flight that brought its own elicit, before the scope's hook", async () => {
+    const { scope } = await one(
+      { tools: [tool("ask", { behavior: "elicit", elicit: form })] },
+      {
+        // The scope-wide hook a connection was opened with: the call's own answer wins.
+        hooks: { elicit: async () => ({ action: "decline" }) },
+      },
+    );
+    const known = await scope.toolsOrConnect("s");
+    const meta = (known.ok ? known.tools : []).find((t) => t.name === "ask")!;
+    const asked: string[] = [];
+    const result = await scope.callTool(
+      "s",
+      meta,
+      {},
+      {
+        elicit: async (request) => {
+          asked.push(String(request.params.message));
+          return { action: "accept", content: { pick: "a" } };
+        },
+      },
+    );
+    expect(asked).toEqual(["Which one?"]);
+    expect(JSON.parse(text(result))).toEqual({
+      action: "accept",
+      content: { pick: "a" },
+    });
+  });
+
+  it("claims elicitation with no hook when the manager is told calls bring their own", async () => {
+    const { scope } = await one(
+      { tools: [tool("ask", { behavior: "elicit", elicit: form })] },
+      { setupOptions: { elicitation: true } },
+    );
+    const known = await scope.toolsOrConnect("s");
+    const meta = (known.ok ? known.tools : []).find((t) => t.name === "ask")!;
+    // A call without its own elicit (a status page, say) is cancelled, not refused.
+    expect(JSON.parse(text(await scope.callTool("s", meta, {})))).toEqual({
+      action: "cancel",
+    });
+    const declined = await scope.callTool(
+      "s",
+      meta,
+      {},
+      { elicit: async () => ({ action: "decline" }) },
+    );
+    expect(JSON.parse(text(declined))).toEqual({ action: "decline" });
+  });
+
   it("does not count the time a user takes to answer against the request timeout", async () => {
     const { call } = await one(
       { tools: [tool("ask", { behavior: "elicit", elicit: form })] },
@@ -458,5 +507,29 @@ describe("tool list changes", () => {
       "announce",
       "b",
     ]);
+  });
+});
+
+describe("requiresApproval, for the host's policy", () => {
+  const tools = [
+    tool("read", { annotations: { readOnlyHint: true } }),
+    tool("safe", { annotations: { destructiveHint: false } }),
+    tool("wipe", { annotations: { destructiveHint: true } }),
+    tool("plain"),
+  ];
+  const covered = async (approveTools: ApproveTools) => {
+    const { scope } = await one({ tools }, { extra: { approveTools } });
+    await scope.toolsOrConnect("s");
+    return tools
+      .map((t) => t.name)
+      .filter((name) => scope.requiresApproval("s", name));
+  };
+
+  it("covers every tool, the named ones, or the ones that may be destructive", async () => {
+    expect(await covered(true)).toEqual(["read", "safe", "wipe", "plain"]);
+    expect(await covered(["wi*", "plain"])).toEqual(["wipe", "plain"]);
+    // A tool that says nothing may be destructive, as the spec's defaults have it.
+    expect(await covered("destructive")).toEqual(["wipe", "plain"]);
+    expect(await covered(false)).toEqual([]);
   });
 });

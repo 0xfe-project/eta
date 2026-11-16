@@ -115,6 +115,7 @@ export interface AssembleOptions {
   skillDirsFor?: ((meta: SessionMeta) => readonly string[]) | undefined;
   runtimeExtrasFor?: SessionManagerOptions["runtimeExtrasFor"] | undefined;
   toolMiddleware?: SessionManagerOptions["toolMiddleware"] | undefined;
+  realmAuthorizer?: SessionManagerOptions["realmAuthorizer"] | undefined;
   askObserve?: SessionManagerOptions["askObserve"] | undefined;
   /** Whether a session may read, recall or write project/long-term memory. */
   memoryEnabledFor?: SessionManagerOptions["memoryEnabledFor"] | undefined;
@@ -479,6 +480,9 @@ export async function assembleServer(
     ...(options.toolMiddleware === undefined
       ? {}
       : { toolMiddleware: options.toolMiddleware }),
+    ...(options.realmAuthorizer === undefined
+      ? {}
+      : { realmAuthorizer: options.realmAuthorizer }),
     ...(options.askObserve === undefined
       ? {}
       : { askObserve: options.askObserve }),

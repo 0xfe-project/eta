@@ -69,6 +69,11 @@ export interface ManagerOptions {
   /** Launch acceleration (npx, bunx, uvx → the installed executable). `false` starts commands as written. */
   resolvers?: ResolverEnv | false;
   requestTimeoutMs?: number;
+  /**
+   * Claim elicitation on every connection, for a host whose calls bring their own `elicit`
+   * (`McpExecuteContext.elicit`) instead of a manager- or scope-wide hook.
+   */
+  elicitation?: boolean;
 }
 
 export type ConnectionStatus = "connected" | "closed" | "needs-auth";
@@ -88,6 +93,12 @@ export interface Connection {
   inFlight: number;
   /** Hooks of the caller that used this connection last; server-initiated requests go to them. */
   hooks: McpHooks;
+  /**
+   * The `elicit` of each call in flight that brought one, oldest first. A server's
+   * `elicitation/create` goes to the newest: the protocol does not say which request it belongs
+   * to, and the newest call is the one most likely still waiting on it.
+   */
+  elicitors: NonNullable<McpHooks["elicit"]>[];
   /** The transport's session id, if it has one (streamable HTTP). */
   sessionId: string | undefined;
 }
@@ -494,6 +505,7 @@ export class ServerManager {
       lastUsedAt: this.now(),
       inFlight: 0,
       hooks,
+      elicitors: [],
       sessionId: undefined,
     };
     if (definition.command !== undefined) {
@@ -677,7 +689,9 @@ export class ServerManager {
   }
 
   private createClient(connection: Connection): Client {
-    const hasElicitation = connection.hooks.elicit !== undefined;
+    const hasElicitation =
+      connection.hooks.elicit !== undefined ||
+      this.options.elicitation === true;
     const client = new Client(CLIENT_INFO, {
       jsonSchemaValidator: createJsonSchemaValidator(),
       ...(hasElicitation
@@ -716,7 +730,7 @@ export class ServerManager {
       }
     | { action: "decline" | "cancel" }
   > {
-    const elicit = connection.hooks.elicit;
+    const elicit = connection.elicitors.at(-1) ?? connection.hooks.elicit;
     if (!elicit) return { action: "cancel" };
     const pause = this.prompts.get(connection) ?? {
       open: 0,
@@ -757,6 +771,7 @@ export class ServerManager {
     connection: Connection,
     params: { name: string; arguments: Record<string, unknown> },
     signal: AbortSignal | undefined,
+    elicit?: McpHooks["elicit"],
   ): Promise<Awaited<ReturnType<Client["callTool"]>>> {
     const client = connection.client;
     if (!client || connection.status !== "connected") {
@@ -801,6 +816,7 @@ export class ServerManager {
     };
     pause.deadlines.add(deadline);
     if (pause.open === 0) deadline.resume();
+    if (elicit !== undefined) connection.elicitors.push(elicit);
     try {
       return await client.callTool(params, {
         ...base,
@@ -816,6 +832,11 @@ export class ServerManager {
         },
       });
     } finally {
+      if (elicit !== undefined)
+        connection.elicitors.splice(
+          connection.elicitors.lastIndexOf(elicit),
+          1,
+        );
       pause.deadlines.delete(deadline);
       deadline.pause();
     }

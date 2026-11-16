@@ -34,7 +34,7 @@ import {
 import { lifecycleOf, resolveServers } from "./config";
 import { classifyCallError, DeliveryError, describeDelivery } from "./delivery";
 import { schemaViolation } from "./json-schema";
-import { isToolAllowed, qualifiedToolName } from "./names";
+import { isToolAllowed, matchesToolPattern, qualifiedToolName } from "./names";
 import {
   getObservedOutput,
   outputShapeKey,
@@ -234,6 +234,28 @@ export class McpScope {
     return this.host.manager.failures.describe(
       this.host.manager.failureKey(this.owner, server),
     );
+  }
+
+  /**
+   * Whether the server's `approveTools` covers this tool: `true` covers every tool, a list names
+   * tools (globs too), `"destructive"` covers a tool unless its annotations say it is read-only or
+   * not destructive (the spec's defaults: a tool says nothing, it may be destructive). This
+   * library does not ask anyone; the host's policy reads this and asks.
+   */
+  requiresApproval(server: string, tool: string): boolean {
+    const rule = this.definitions.get(server)?.approveTools;
+    if (rule === undefined || rule === false) return false;
+    if (rule === true) return true;
+    if (rule === "destructive") {
+      const annotations = this.tools(server)?.find(
+        (meta) => meta.name === tool,
+      )?.annotations;
+      return (
+        annotations?.readOnlyHint !== true &&
+        annotations?.destructiveHint !== false
+      );
+    }
+    return matchesToolPattern(server, tool, rule);
   }
 
   /** Every searchable tool, skipping disabled servers and ones inside their failure backoff. */
@@ -579,7 +601,8 @@ export class McpScope {
       );
     }
 
-    // `approveTools` is parsed but no longer gates a call: MCP tools run without approval.
+    // `approveTools` is not decided here: the host's policy asks before the call gets this far
+    // (`requiresApproval`).
     return await this.send(definition, tool, args, context);
   }
 
@@ -715,6 +738,7 @@ export class McpScope {
             connection,
             { name: tool.name, arguments: args },
             signal,
+            context.elicit,
           );
         });
       } catch (error) {
@@ -739,6 +763,7 @@ export class McpScope {
             connection,
             { name: tool.name, arguments: args },
             signal,
+            context.elicit,
           );
         });
       }
