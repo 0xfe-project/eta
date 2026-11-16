@@ -82,6 +82,8 @@ export interface McpServiceOptions {
   dataDir: string;
   home: string;
   agents: () => { id: string; name: string }[];
+  /** The MCP servers of an agent's plugins (`Plugins.mcpSourcesFor`). */
+  pluginSources?: McpHostOptions["pluginSources"];
   publicUrl?: string | undefined;
   changed: () => void;
   warn: (message: string) => void;
@@ -122,6 +124,7 @@ export class McpService {
       home: options.home,
       warn: options.warn,
       authProviderFor,
+      pluginSources: options.pluginSources,
       fetch: options.fetch,
       manager: options.manager,
     });
@@ -147,7 +150,7 @@ export class McpService {
           state: status.state,
           toolCount: status.toolCount,
           error: status.error ?? null,
-          auth: this.#authOf(definition, status.state),
+          auth: this.#authOf(definition, status.source, status.state),
         });
       }
     };
@@ -166,16 +169,22 @@ export class McpService {
     );
   }
 
+  /**
+   * A server the user declared `auth: "oauth"` needs a login until it has one. A plugin's remote
+   * server is OAuth only because nothing says it is not, so it asks for a login only when the
+   * server did (`needs-auth`): one that needs none shows no button.
+   */
   #authOf(
     definition: ReturnType<McpScope["definition"]>,
+    source: string,
     state: string,
   ): McpAuthState {
     if (definition?.auth !== "oauth" || definition.url === undefined)
       return "none";
     if (state === "needs-auth") return "needs_login";
-    return this.credentials.has(mcpServerKey(definition.url), "tokens")
-      ? "signed_in"
-      : "needs_login";
+    if (this.credentials.has(mcpServerKey(definition.url), "tokens"))
+      return "signed_in";
+    return source.startsWith("plugin:") ? "none" : "needs_login";
   }
 
   #scopeOf(agentId: string, server: string): McpScope {

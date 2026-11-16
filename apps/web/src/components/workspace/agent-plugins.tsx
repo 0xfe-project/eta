@@ -13,14 +13,11 @@ import { PluginServers } from "./plugin-servers";
 export function AgentPluginsField({
   form,
   skipped,
-  external,
   onOpenSettings,
 }: {
   form: UseFormReturn<AgentForm>;
   /** The plugins this agent has that its sessions skip for now. */
   skipped: readonly string[];
-  /** Whether it runs on an external runtime, which can start MCP servers. */
-  external: boolean;
   onOpenSettings: () => void;
 }) {
   const { t: translateText } = useTranslation(["agents", "plugins"] as const);
@@ -90,11 +87,6 @@ export function AgentPluginsField({
                 servers={plugin.servers}
                 label={translateText("plugins:servers.title")}
               />
-              {plugin.servers.length > 0 && !external ? (
-                <p className="text-xs text-muted-foreground">
-                  {translateText("plugins.noMcpOnEta")}
-                </p>
-              ) : null}
             </div>
           </li>
         );

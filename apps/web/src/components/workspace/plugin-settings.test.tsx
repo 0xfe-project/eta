@@ -209,7 +209,6 @@ describe("the form", () => {
     expect(passwordInput()).not.toBeNull();
     expect(text()).toContain("node ${PLUGIN_ROOT}/server.mjs");
     expect(text()).toContain("HELLO_KEY");
-    expect(text()).toContain("自带内核暂不支持 MCP");
     expect(text()).toContain("智能体访问");
   });
 

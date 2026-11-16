@@ -307,9 +307,6 @@ function ConfigureDialog({
                   servers={plugin.servers}
                   label={translateText("servers.title")}
                 />
-                <p className="text-xs text-muted-foreground">
-                  {translateText("servers.etaNote")}
-                </p>
               </section>
             ) : null}
           </div>

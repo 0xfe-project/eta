@@ -404,6 +404,7 @@ export function createProduct(options: {
     captainSupervisor?: CaptainSupervisor;
     hooks?: Required<SessionHooks>;
     inbox?: Inbox;
+    plugins?: Plugins;
   } = {};
   const hub = new MachineHub({
     machines,
@@ -466,6 +467,8 @@ export function createProduct(options: {
     dataDir,
     home: options.home ?? homedir(),
     agents: () => agents.list().map(({ id, name }) => ({ id, name })),
+    // Read when a session opens or the settings page asks; the plugins are made just below.
+    pluginSources: (agentId) => later.plugins?.mcpSourcesFor(agentId) ?? [],
     publicUrl: options.publicUrl,
     changed: () => wire?.pushNow("mcp"),
     warn,
@@ -482,9 +485,11 @@ export function createProduct(options: {
     changed: () => {
       wire?.pushNow("plugins");
       wire?.pushNow("agents");
+      wire?.pushNow("mcp");
     },
     warn,
   });
+  later.plugins = plugins;
   const router = new RemoteSessionsRouter({
     conversations,
     runs: runRows,

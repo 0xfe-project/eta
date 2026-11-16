@@ -65,8 +65,7 @@
   "servers": {
     "title": "会运行",
     "env": "注入环境变量：{{names}}",
-    "headers": "添加请求头：{{names}}",
-    "etaNote": "外部运行时的智能体才会启动这些服务器，自带内核暂不支持 MCP。"
+    "headers": "添加请求头：{{names}}"
   },
   "audit": {
     "title": "智能体读取记录",
