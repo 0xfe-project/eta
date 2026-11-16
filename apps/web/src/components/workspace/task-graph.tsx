@@ -8,9 +8,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import {
   useAddDependency,
+  useAllTasks,
   useRemoveDependency,
   useSetParent,
-  useTasks,
 } from "@/queries/tasks";
 import { wireErrorMessage } from "@/queries/wire";
 import { useTaskNav } from "./task-nav";
@@ -266,7 +266,7 @@ export function TreeRows({
   withChildren?: boolean;
 }) {
   const { t } = useTranslation(["tasks"] as const);
-  const { tasks: all } = useTasks();
+  const { tasks: all } = useAllTasks();
   const ancestors = task.ancestors ?? [];
   const children = withChildren ? (task.children ?? []) : [];
   const listed = all.find((x) => x.id === task.id);

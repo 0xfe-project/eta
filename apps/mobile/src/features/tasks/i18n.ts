@@ -146,6 +146,20 @@ export const i18n = {
     "tasks.edit.hint": "支持 Markdown。",
     "tasks.delete.title": "删除任务 #{number}？",
     "tasks.delete.body": "描述、评论和动态会一并删除，无法恢复。",
+    "tasks.archive.archive": "归档",
+    "tasks.archive.restore": "恢复到看板",
+    "tasks.archive.banner": "已归档 · {date}",
+    "tasks.archive.bannerAuto":
+      "已归档 · {date} 自动归档（完成后一段时间没有动静）",
+    "tasks.archive.hint": "有新评论或状态变化时会自动回到看板。",
+    "tasks.archive.runningTitle":
+      "#{number} 正在运行，归档会先停掉它的运行。确定吗？",
+    "tasks.archive.openTitle": "归档 #{number}？",
+    "tasks.archive.openBody":
+      "它会保持「{status}」状态，只是先收起来；有新动静时会自动回到看板。",
+    "tasks.archive.runningConfirm": "停下并归档",
+    "tasks.archive.done": "已归档 #{number}",
+    "tasks.archive.restored": "已恢复 #{number}",
     "tasks.error.timeout": "宿主没有及时回应。",
   },
   en: {
@@ -305,6 +319,21 @@ export const i18n = {
     "tasks.delete.title": "Delete task #{number}?",
     "tasks.delete.body":
       "Its description, comments and activity go with it. This can't be undone.",
+    "tasks.archive.archive": "Archive",
+    "tasks.archive.restore": "Restore to board",
+    "tasks.archive.banner": "Archived · {date}",
+    "tasks.archive.bannerAuto":
+      "Archived automatically · {date} (quiet after it finished)",
+    "tasks.archive.hint":
+      "A new comment or status change brings it back to the board.",
+    "tasks.archive.runningTitle":
+      "#{number} is running. Archiving stops its run first. Archive it?",
+    "tasks.archive.openTitle": "Archive #{number}?",
+    "tasks.archive.openBody":
+      "It stays {status}, only put away for now. Anything new on it brings it back.",
+    "tasks.archive.runningConfirm": "Stop and archive",
+    "tasks.archive.done": "Archived #{number}",
+    "tasks.archive.restored": "Restored #{number}",
     "tasks.error.timeout": "The host didn't respond in time.",
   },
 };

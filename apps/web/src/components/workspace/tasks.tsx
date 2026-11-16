@@ -82,6 +82,7 @@ import { useConversationList } from "@/queries/conversations";
 import { useMachines, useProjects } from "@/queries/projects";
 import { useNow, useSessionLog } from "@/queries/sessions";
 import {
+  useAllTasks,
   useCommentTask,
   useConfirmTaskDraft,
   useDeleteTask,
@@ -97,6 +98,7 @@ import { ArtifactButton } from "./artifact-dialog";
 import { Folded } from "./folded";
 import { MemoryPauseToggle } from "./memory-pause-toggle";
 import { when } from "./routine-format";
+import { ArchivedBanner, ArchiveDialog, ArchiveLine } from "./task-archive";
 import { BlockedBanner, FlowBar, QueueReason } from "./task-detail";
 import { useTaskDraft } from "./task-draft";
 import {
@@ -122,6 +124,7 @@ import { CancelTreeDialog, TaskStatusControl } from "./task-status-select";
 import { RunHeader } from "./transcript/run-timeline";
 import { SlashMenu } from "./transcript/slash-menu";
 import { TranscriptDialog } from "./transcript/transcript-dialog";
+import { useArchiveAction } from "./use-archive-action";
 import { useGroups } from "./use-groups";
 import { useInputMethod } from "./use-input-method";
 
@@ -877,6 +880,9 @@ function describe(a: TaskActivity): React.ReactNode {
     case "parent":
     case "subtask":
       return treeLine(a);
+    case "archived":
+    case "unarchived":
+      return <ArchiveLine a={a} />;
     default:
       // A kind from a newer host: what it said, if anything.
       return a.body;
@@ -2213,7 +2219,9 @@ function TaskView({ task }: { task: TaskDetail }) {
   const { agents } = useAgentList();
   const [deleting, setDeleting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  const { tasks: all } = useTasks();
+  // Archived ones too: what is under or around this task counts them.
+  const { tasks: all } = useAllTasks();
+  const archive = useArchiveAction(task, all);
   const replies = task.activity.filter((a) => a.kind === "comment").length;
   // A thread opens on its latest reply, next to the box to answer it; once more after the first
   // paint, for what lays itself out late (folded text measuring itself). It is at least as tall as
@@ -2273,6 +2281,9 @@ function TaskView({ task }: { task: TaskDetail }) {
                   {translateText("statusMenu.cancelTree")}
                 </DropdownMenuItem>
               ) : null}
+              <DropdownMenuItem onSelect={archive.run}>
+                {archive.label}
+              </DropdownMenuItem>
               <DropdownMenuItem
                 variant="destructive"
                 onSelect={() => setDeleting(true)}
@@ -2281,6 +2292,7 @@ function TaskView({ task }: { task: TaskDetail }) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <ArchiveDialog action={archive} />
           <CancelTreeDialog
             task={task}
             open={cancelling}
@@ -2296,6 +2308,7 @@ function TaskView({ task }: { task: TaskDetail }) {
         <EditableTitle task={task} />
       </header>
       <div className="space-y-2 pt-1 empty:hidden">
+        <ArchivedBanner task={task} />
         <BlockedBanner task={task} all={all} />
         {task.subtasks == null ? (
           <>

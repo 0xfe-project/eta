@@ -32,11 +32,13 @@ import type { TaskRunner } from "./runner";
 import type { RunRecord } from "./runs";
 import type { TaskRecord } from "./store";
 import {
+  archivedEntry,
   dependencyEntry,
   parentEntry,
   subtaskEntry,
   TASK_DRAFT_STATUSES,
   TASK_WORKSPACE_MODES,
+  unarchivedEntry,
 } from "@eta/client-contracts";
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
@@ -253,12 +255,29 @@ function reading(deps: TaskToolDeps) {
     }
   };
 
+  /** An `archived` or `unarchived` entry in words, from its data, like `dependencySaid`. */
+  const archiveSaid = (activity: TaskActivityView): string | null => {
+    if (activity.kind === "archived") {
+      const read = archivedEntry(activity.data);
+      const why =
+        read.reason === "stale"
+          ? `done or cancelled and quiet for ${read.days ?? "?"} days`
+          : "put away by hand";
+      return `Archived (${why})${read.with === null ? "" : ` with #${read.with.number}`}: off the board's lists until something new happens on it.`;
+    }
+    if (activity.kind !== "unarchived") return null;
+    const read = unarchivedEntry(activity.data);
+    return read.cause === "manual"
+      ? `Back on the board${read.with === null ? "" : ` with #${read.with.number}`}.`
+      : `Back on the board: something new happened on it (${read.cause}).`;
+  };
+
   const entry = (activity: TaskActivityView): string => {
     const { data } = activity;
     const said =
       (activity.kind === "dependency"
         ? dependencySaid(data)
-        : treeSaid(activity)) ??
+        : (treeSaid(activity) ?? archiveSaid(activity))) ??
       activity.body ??
       (activity.kind === "status" || activity.kind === "title"
         ? `${String(data.from)} -> ${String(data.to)}`
@@ -274,15 +293,22 @@ function reading(deps: TaskToolDeps) {
   const list = defineTool({
     name: "list_tasks",
     label: "list_tasks",
-    description: "List the tasks on the board, the one touched last first.",
+    description:
+      "List the tasks on the board, the one touched last first. Archived tasks (put away, usually done long ago) are left out unless `archived` asks for them.",
     parameters: Type.Object({
       status: Type.Optional(
         Type.String({ description: "Only the tasks in this status" }),
       ),
+      archived: Type.Optional(
+        Type.Union([Type.Literal("only"), Type.Literal("include")], {
+          description:
+            "`include` lists archived tasks too, `only` lists them alone",
+        }),
+      ),
     }),
     execute(args) {
       const tasks = board
-        .list()
+        .list({ archived: args.archived })
         .filter(
           (task) => args.status === undefined || task.status === args.status,
         );

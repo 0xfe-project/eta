@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/tooltip";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { useTasks, useUpdateTask } from "@/queries/tasks";
+import { useAllTasks, useUpdateTask } from "@/queries/tasks";
 import { wireErrorMessage } from "@/queries/wire";
 import {
   blockedByCancel,
@@ -233,7 +233,8 @@ export function CancelTreeDialog({
 }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
   const update = useUpdateTask();
-  const { tasks, loaded } = useTasks();
+  // Archived subtasks are cancelled with the tree like any other.
+  const { tasks, loaded } = useAllTasks();
   const blocked = blockedByCancel(task);
   // The count is the only thing between a click and a whole tree cancelled: until the board is
   // here (with this task in it), say nothing about how many and keep the button off.

@@ -92,6 +92,7 @@ import { isRoutineSession } from "./routines/session-key";
 import { RoutineStore } from "./routines/store";
 import { loadSecretKey } from "./secret";
 import { combineSessionHooks } from "./session-hooks";
+import { TaskArchiver } from "./tasks/archiver";
 import { TaskBoard } from "./tasks/board";
 import { TaskCards } from "./tasks/cards";
 import { tasksPlugin } from "./tasks/plugin";
@@ -132,6 +133,8 @@ export interface Product {
   readonly engine: Engine;
   /** The task board: what a test makes tasks with, since only agents' tools do in use. */
   readonly board: TaskBoard;
+  /** What puts quiet finished tasks away; `sweep()` for a test whose timer is off. */
+  readonly archiver: TaskArchiver;
   /** The links to other machines. */
   readonly hub: MachineHub;
   /** El Capitan's product service and its supervisor. */
@@ -697,6 +700,15 @@ export function createProduct(options: {
   });
   // Nothing is running yet, so the runs the last process left going cannot be.
   taskRunner.recover();
+  // Done and cancelled tasks left quiet are put away, now and every hour.
+  const taskSettings = new SettingStore(db);
+  const archiver = new TaskArchiver({
+    board,
+    settings: taskSettings,
+    timer: options.routines?.timer ?? true,
+    warn,
+  });
+  archiver.start();
 
   const limits = { ...DEFAULT_LIMITS, ...options.artifactLimits };
   const artifactsRoot = join(dataDir, "artifacts");
@@ -860,6 +872,7 @@ export function createProduct(options: {
   return {
     engine,
     board,
+    archiver,
     hub,
     captain,
     captainSupervisor,
@@ -881,6 +894,7 @@ export function createProduct(options: {
     endpoints: [hub.endpoint],
     close: async () => {
       // The runs stop first: they work through the links and the session host.
+      archiver.stop();
       captainSupervisor.stop();
       await taskRunner.detach();
       hub.close();
@@ -1038,7 +1052,13 @@ export function createProduct(options: {
       server.mount(
         "tasks",
         tasksPlugin(
-          { board, runner: taskRunner, workspaceFor: taskWorkspaceFor },
+          {
+            board,
+            runner: taskRunner,
+            workspaceFor: taskWorkspaceFor,
+            settings: taskSettings,
+            settingsChanged: () => void archiver.sweep(),
+          },
           applied("tasks"),
         ),
       );

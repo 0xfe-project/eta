@@ -37,6 +37,12 @@ import { openRunLog, openRuns } from "./runs";
 import { LinkSheet, PropertiesSheet, SheetOption, StatusSheet } from "./sheets";
 import { openQuestion, Thread } from "./thread";
 
+/** "11-08": the day a task was archived. */
+const archiveDate = (at: number): string => {
+  const date = new Date(at);
+  return `${date.getMonth() + 1}-${String(date.getDate()).padStart(2, "0")}`;
+};
+
 const showError = (error: unknown) =>
   toast(t("common.failed", { message: failure(error) }));
 
@@ -141,7 +147,14 @@ function LiveRuns(props: { task: () => TaskDetail }) {
   );
 }
 
-type Open = "status" | "properties" | "more" | "link" | "delete" | "cancelTree";
+type Open =
+  | "status"
+  | "properties"
+  | "more"
+  | "link"
+  | "delete"
+  | "cancelTree"
+  | "archive";
 
 function TaskView(props: { task: () => TaskDetail }) {
   const task = props.task;
@@ -201,6 +214,36 @@ function TaskView(props: { task: () => TaskDetail }) {
   const edit = () => {
     close();
     openEditTask(task());
+  };
+  // Archiving: put away from the board's lists, back on anything new. A finished task goes at once;
+  // one that is not, or that has a run going (which archiving stops), is asked about first.
+  const archived = () => task().archivedAt != null;
+  const running = () => task().runs.some((run) => isActive(run.status));
+  const archive = (): void => {
+    close();
+    call("tasks", "archive", {
+      taskId: task().id,
+      ...(running() ? { stopRuns: true } : {}),
+    }).then(
+      () => toast(t("tasks.archive.done", { number: task().number })),
+      showError,
+    );
+  };
+  const restore = (): void => {
+    close();
+    call("tasks", "unarchive", { taskId: task().id }).then(
+      () => toast(t("tasks.archive.restored", { number: task().number })),
+      showError,
+    );
+  };
+  const archiveOrAsk = (): void => {
+    if (archived()) restore();
+    else if (
+      (task().status === "done" || task().status === "cancelled") &&
+      !running()
+    )
+      archive();
+    else sheet.set("archive");
   };
   return (
     <View
@@ -280,6 +323,37 @@ function TaskView(props: { task: () => TaskDetail }) {
           {task().title}
         </Text>
       </View>
+      <If when={archived()}>
+        <View
+          testID="task-archived"
+          class="mx-4 mb-3 flex-row items-center gap-3 border border-border px-3 py-2"
+        >
+          <View class="min-w-0 flex-1 gap-[2px]">
+            <Text class="text-sm leading-[18px] text-foreground">
+              {task().archivedBy === "auto"
+                ? t("tasks.archive.bannerAuto", {
+                    date: archiveDate(task().archivedAt ?? 0),
+                  })
+                : t("tasks.archive.banner", {
+                    date: archiveDate(task().archivedAt ?? 0),
+                  })}
+            </Text>
+            <Text class="text-sm leading-[18px] text-muted-foreground">
+              {t("tasks.archive.hint")}
+            </Text>
+          </View>
+          <View
+            role="button"
+            testID="task-restore"
+            onPress={restore}
+            class="h-9 shrink-0 justify-center border border-border px-3 active:opacity-60"
+          >
+            <Text class="text-sm text-foreground">
+              {t("tasks.archive.restore")}
+            </Text>
+          </View>
+        </View>
+      </If>
       <Question task={task} onReply={() => focusBox()} />
       <View
         class={`min-h-0 grow basis-0 ${openQuestion(task()) === undefined ? "border-t border-border" : ""}`}
@@ -359,6 +433,13 @@ function TaskView(props: { task: () => TaskDetail }) {
           />
         </If>
         <SheetOption
+          label={
+            archived() ? t("tasks.archive.restore") : t("tasks.archive.archive")
+          }
+          testID="more-archive"
+          onPress={archiveOrAsk}
+        />
+        <SheetOption
           label={t("common.delete")}
           testID="more-delete"
           danger
@@ -374,6 +455,25 @@ function TaskView(props: { task: () => TaskDetail }) {
         disabled={!counted()}
         danger
         onConfirm={cancelTree}
+        onClose={close}
+      />
+      <ConfirmSheet
+        open={sheet() === "archive"}
+        title={
+          running()
+            ? t("tasks.archive.runningTitle", { number: task().number })
+            : t("tasks.archive.openTitle", { number: task().number })
+        }
+        body={t("tasks.archive.openBody", {
+          status: statusLabel(task().status),
+        })}
+        confirm={
+          running()
+            ? t("tasks.archive.runningConfirm")
+            : t("tasks.archive.archive")
+        }
+        danger={running()}
+        onConfirm={archive}
         onClose={close}
       />
       <ConfirmSheet

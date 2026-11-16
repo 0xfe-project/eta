@@ -1,4 +1,8 @@
-import type { TaskActor, TaskWorkspaceMode } from "@eta/client-contracts";
+import type {
+  TaskActor,
+  TaskArchivedFilter,
+  TaskWorkspaceMode,
+} from "@eta/client-contracts";
 /**
  * The `tasks` plugin: the board on the wire.
  *
@@ -10,6 +14,7 @@ import type { TaskActor, TaskWorkspaceMode } from "@eta/client-contracts";
  * `create`, whose call is the user pressing "Create" (`TaskBoard.make`).
  */
 import type { CallFrame } from "@eta/client-wire-proto";
+import type { SettingStore } from "../inbox/setting";
 import type {
   DependencyInput,
   FieldsInput,
@@ -18,13 +23,32 @@ import type {
 } from "./board";
 import type { TaskRunner } from "./runner";
 import type { WorkspaceChoice } from "./tools";
+import { TASK_ARCHIVED_FILTERS } from "@eta/client-contracts";
 import { Args, productPlugin, publish } from "../wire";
+import { boardSettings, saveBoardSettings } from "./archiver";
 
 export interface TasksDeps {
   board: TaskBoard;
   runner: TaskRunner;
   /** The workspace a task made in a conversation gets, when its parent does not say. */
   workspaceFor?: WorkspaceChoice;
+  /** Where the board's settings (how soon quiet tasks are archived) are kept. */
+  settings: Pick<SettingStore, "get" | "set">;
+  /** The settings changed: a shorter wait may have made tasks due now. */
+  settingsChanged?: () => void;
+}
+
+/** `archived` as a call sends it: absent is the board without the archived tasks. */
+function archivedFilterOf(
+  value: unknown,
+  call: string,
+): TaskArchivedFilter | undefined {
+  if (value === undefined) return undefined;
+  if (!(TASK_ARCHIVED_FILTERS as readonly unknown[]).includes(value))
+    throw new TypeError(
+      `${call}: archived is ${TASK_ARCHIVED_FILTERS.join(" or ")}`,
+    );
+  return value as TaskArchivedFilter;
 }
 
 const USER: TaskActor = { kind: "user", agentId: null };
@@ -91,7 +115,7 @@ function newTasksOf(call: CallFrame): NewTaskInput[] {
 }
 
 export function tasksPlugin(deps: TasksDeps, applied: () => void) {
-  const { board, runner, workspaceFor } = deps;
+  const { board, runner, workspaceFor, settings } = deps;
 
   return productPlugin(
     "tasks",
@@ -108,10 +132,58 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
           }),
         );
       };
-      for (const task of board.list()) add(task.id);
+      // Every task has its page, archived or not.
+      for (const task of board.list({ archived: "include" })) add(task.id);
 
       const offs = [
-        publish(wire, "tasks", { list: () => board.list() }, { eager: true }),
+        publish(
+          wire,
+          "tasks",
+          {
+            list: () => board.list(),
+            archived: () => board.list({ archived: "only" }),
+            settings: () => boardSettings(settings),
+          },
+          { eager: true },
+        ),
+
+        wire.handle("tasks", "list", (call) => {
+          const archived = archivedFilterOf(
+            (call.args as Record<string, unknown> | undefined)?.archived,
+            "tasks.list",
+          );
+          return { result: { tasks: board.list({ archived }) } };
+        }),
+
+        wire.handle("tasks", "archive", (call) => {
+          const args = new Args(call);
+          const task = board.archive(args.string("taskId"), USER, {
+            stopRuns: args.optionalBoolean("stopRuns"),
+          });
+          return { result: { task } };
+        }),
+
+        wire.handle("tasks", "unarchive", (call) => {
+          const args = new Args(call);
+          const one = args.optionalString("taskId");
+          const ids = [
+            ...(one === undefined ? [] : [one]),
+            ...args.strings("taskIds"),
+          ];
+          if (ids.length === 0)
+            throw new Error("tasks.unarchive needs taskId or taskIds");
+          return { result: { tasks: board.unarchive(ids, USER) } };
+        }),
+
+        wire.handle("tasks", "setSettings", (call) => {
+          const raw = (call.args ?? {}) as Record<string, unknown>;
+          const saved = saveBoardSettings(settings, {
+            archiveAfterDays: raw.archiveAfterDays,
+          });
+          wire.pushNow("tasks");
+          deps.settingsChanged?.();
+          return { result: { settings: saved } };
+        }),
 
         board.onChange(({ taskId, kind }) => {
           if (kind === "created") add(taskId);

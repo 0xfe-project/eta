@@ -29,7 +29,7 @@ import {
 import { formatLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { agentName, useAgentList } from "@/queries/agents";
-import { useTasks } from "@/queries/tasks";
+import { useAllTasks } from "@/queries/tasks";
 import { ArtifactButton } from "./artifact-dialog";
 import {
   applyFilters,
@@ -108,7 +108,7 @@ export function ArtifactRow({
 }) {
   const { t: translateText } = useTranslation(["artifacts", "common"] as const);
   const { agents } = useAgentList();
-  const { tasks } = useTasks();
+  const { tasks } = useAllTasks();
   const sectionLink = useSectionLink();
   const version = artifact.versions[0]?.number;
   const task =
