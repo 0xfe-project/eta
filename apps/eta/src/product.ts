@@ -102,7 +102,7 @@ import { tasksPlugin } from "./tasks/plugin";
 import { TaskRunner } from "./tasks/runner";
 import { TaskRunStore } from "./tasks/runs";
 import { isTaskSession, sessionKeyOf, taskOfKey } from "./tasks/session-key";
-import { TaskStore } from "./tasks/store";
+import { executorOf, TaskStore } from "./tasks/store";
 import { taskSessionTools } from "./tasks/tools";
 import { workspaceChooser } from "./tasks/workspace";
 import { busyAgents } from "./upgrade/database";
@@ -439,8 +439,9 @@ export function createProduct(options: {
         taskRun: (session) => {
           const run = runRows.bySession(session);
           const task = run === undefined ? undefined : taskRows.get(run.taskId);
-          // The maker, as ever; a task the user made has only its executor.
-          const agentId = task?.createdBy.agentId ?? task?.assigneeAgentId;
+          // The agent the session is: a mentioned agent's own, else the task's executor.
+          const agentId =
+            run?.agentId ?? (task === undefined ? null : executorOf(task));
           if (
             run === undefined ||
             agentId == null ||

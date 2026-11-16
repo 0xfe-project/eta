@@ -67,6 +67,7 @@ import { shellQuote } from "@eta/ssh";
 import { explainRunError } from "../agents/model";
 import { workable } from "./board";
 import { mentionKey, sessionKeyOf, taskKey } from "./session-key";
+import { executorOf } from "./store";
 import { prepareWorktree } from "./workspace";
 
 /**
@@ -634,7 +635,7 @@ export class TaskRunner implements TaskRuns {
    * keeps its maker, as it always was.
    */
   #executorOf(task: TaskRecord): string | null {
-    return task.assigneeAgentId ?? task.createdBy.agentId;
+    return executorOf(task);
   }
 
   /**
@@ -673,10 +674,9 @@ export class TaskRunner implements TaskRuns {
       options.continues === true
         ? runs.lastSessionOf(task.id, agentId)
         : undefined;
-    // The run is on the machine its agent works on: a pinned agent's, else the project's.
-    const runner = agents.get(
-      agentId ?? task.createdBy.agentId ?? task.assigneeAgentId ?? "",
-    );
+    // The run is on the machine of the agent that works in it — the mentioned agent, else the
+    // executor (the assignee before the maker) — a pinned agent's, else the project's.
+    const runner = agents.get(agentId ?? this.#executorOf(task) ?? "");
     const machineId =
       runner === undefined
         ? project.machineId

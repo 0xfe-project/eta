@@ -154,6 +154,137 @@ describe("a task of a pinned agent", () => {
   });
 });
 
+describe("where a task runs: its executor's machine", () => {
+  /** A task run to review on a scripted model, and the row of its one run. */
+  async function ran(
+    make: (r: Awaited<ReturnType<typeof named>>) => Promise<{
+      task: { id: string };
+      executor: string;
+    }>,
+  ) {
+    const { models, requests } = scriptedModels((request) =>
+      !request.system.includes("In this task you are")
+        ? say("ok")
+        : request.lastRole === "toolResult"
+          ? say("finished")
+          : call("finish_task", { summary: "Done." }),
+    );
+    const r = await named({ models });
+    const { task, executor } = await make(r);
+    await until(
+      () => r.host.product.board.detail(task.id)?.status === "in_review",
+      15_000,
+    );
+    const row = r.host.db
+      .query<{ machine_id: string; session_id: string }, [string]>(
+        "SELECT machine_id, session_id FROM task_run WHERE task_id = ?",
+      )
+      .get(task.id)!;
+    const brief = requests.find((request) =>
+      request.system.includes("In this task you are"),
+    )!;
+    return { r, row, brief, executor };
+  }
+
+  it("a task one agent made and assigned to another pinned elsewhere runs on the assignee's machine", async () => {
+    const { r, row, brief } = await ran(async (r) => {
+      // Ada follows the project (the primary's); Bob is pinned to the laptop.
+      const ada = await r.agent("Ada");
+      const bob = await r.agent("Bob", { machineId: r.daemon.machineId });
+      const project = await r.project({ stewardId: ada.id });
+      const group = await r.group(project.id, [ada.id, bob.id]);
+      const task = r.host.product.board.create(
+        {
+          title: "For Bob",
+          description: "Do it",
+          status: "todo",
+          conversationId: group.id,
+          workspace: "local",
+          assignee: bob.id,
+        },
+        { kind: "agent", agentId: ada.id },
+      );
+      return { task, executor: bob.id };
+    });
+    expect(row.machine_id).toBe(r.daemon.machineId);
+    expect(existsSync(join(r.daemon.dataDir, "sessions", row.session_id))).toBe(
+      true,
+    );
+    expect(brief.system).toContain("In this task you are Bob");
+    expect(brief.system).toContain(
+      "You are running on laptop, not on the machine this task belongs to (desk).",
+    );
+  });
+
+  it("a task the user made for a pinned agent runs on that agent's machine", async () => {
+    const { r, row } = await ran(async (r) => {
+      const bob = await r.agent("Bob", { machineId: r.daemon.machineId });
+      const project = await r.project({ stewardId: bob.id });
+      const group = await r.group(project.id, [bob.id]);
+      const [task] = r.host.product.board.make(
+        {
+          tasks: [
+            { title: "Mine, for Bob", description: "Do it", assignee: bob.id },
+          ],
+          conversationId: group.id,
+          workspace: "local",
+        },
+        { kind: "user", agentId: null },
+      );
+      return { task: task!, executor: bob.id };
+    });
+    expect(row.machine_id).toBe(r.daemon.machineId);
+  });
+
+  it("a task a pinned agent made and assigned to one that follows the project runs on the project's machine", async () => {
+    const { r, row, brief } = await ran(async (r) => {
+      // The maker is pinned away; the executor is not, so the run is the project's.
+      const ada = await r.agent("Ada", { machineId: r.daemon.machineId });
+      const bob = await r.agent("Bob");
+      const project = await r.project({ stewardId: ada.id });
+      const group = await r.group(project.id, [ada.id, bob.id]);
+      const task = r.host.product.board.create(
+        {
+          title: "For Bob, here",
+          description: "Do it",
+          status: "todo",
+          conversationId: group.id,
+          workspace: "local",
+          assignee: bob.id,
+        },
+        { kind: "agent", agentId: ada.id },
+      );
+      return { task, executor: bob.id };
+    });
+    expect(row.machine_id).toBe(r.primaryId);
+    expect(existsSync(join(r.host.dataDir, "sessions", row.session_id))).toBe(
+      true,
+    );
+    expect(brief.system).toContain("In this task you are Bob");
+    expect(brief.system).not.toContain("system-reminder");
+  });
+
+  it("an agent's own task, with no assignee, runs on the maker's machine as before", async () => {
+    const { r, row } = await ran(async (r) => {
+      const ada = await r.agent("Ada", { machineId: r.daemon.machineId });
+      const project = await r.project({ stewardId: ada.id });
+      const group = await r.group(project.id, [ada.id]);
+      const task = r.host.product.board.create(
+        {
+          title: "Mine",
+          description: "Do it",
+          status: "todo",
+          conversationId: group.id,
+          workspace: "local",
+        },
+        { kind: "agent", agentId: ada.id },
+      );
+      return { task, executor: ada.id };
+    });
+    expect(row.machine_id).toBe(r.daemon.machineId);
+  });
+});
+
 describe("an agent pinned to the primary", () => {
   it("answers here in a project on a daemon machine, and is told so", async () => {
     const { models, requests } = scriptedModels(() => say("from the desk"));
