@@ -6,8 +6,8 @@
 import type { McpConfigSource } from "@eta/mcp";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { McpHost } from "@eta/daemon";
 import { afterEach, describe, expect, it } from "vitest";
-import { McpHost } from "../src/mcp/host";
 import { tempDir } from "./support/host";
 
 const hosts: McpHost[] = [];
@@ -50,7 +50,7 @@ async function setUp(files: { user?: boolean; project?: boolean }) {
     dataDir,
     home,
     warn: () => undefined,
-    pluginSources: (agentId) => (agentId === "ada" ? [plugin] : []),
+    pluginSources: ({ agentId }) => (agentId === "ada" ? [plugin] : []),
     manager: { resolvers: false, checkIntervalMs: 0 },
   });
   hosts.push(host);
@@ -60,11 +60,9 @@ async function setUp(files: { user?: boolean; project?: boolean }) {
 describe("where a session's MCP servers come from", () => {
   it("puts the plugin's sources first, the user's file next, the project's last", async () => {
     const { host, cwd } = await setUp({ user: true, project: true });
-    expect(host.sourcesFor("ada", cwd).map((source) => source.name)).toEqual([
-      "plugin:demo",
-      "~/.eta/mcp.json",
-      ".mcp.json",
-    ]);
+    expect(
+      host.sourcesFor({ agentId: "ada" }, cwd).map((source) => source.name),
+    ).toEqual(["plugin:demo", "~/.eta/mcp.json", ".mcp.json"]);
   });
 
   it("lets the user's file override a plugin's server, and says so", async () => {
