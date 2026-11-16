@@ -181,9 +181,9 @@ function AgentDialog({
       .mutateAsync({
         machineId: machine.id,
         agent: config,
-        ...(agent !== undefined && agent.id !== config.id
-          ? { previousId: agent.id }
-          : {}),
+        // An edit always names the agent it edits: without `previousId` the host takes it for a
+        // new one, and refuses the id it already has.
+        ...(agent === undefined ? {} : { previousId: agent.id }),
       })
       .then(
         (saved) => {

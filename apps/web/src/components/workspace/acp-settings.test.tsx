@@ -309,7 +309,7 @@ describe("Settings → External agents", () => {
     expect(value("命令")).toBe("nope");
   });
 
-  it("edits an agent, sending the old id when the id changes", async () => {
+  it("edits an agent in place or renames it, always naming the one it edits", async () => {
     const fake = host([
       view({
         id: "demo",
@@ -344,11 +344,10 @@ describe("Settings → External agents", () => {
       args: {
         machineId: PRIMARY.id,
         agent: { id: "demo", label: "Demo Two" },
+        // In place: the host would take an edit without it for a new agent, and refuse the id.
+        previousId: "demo",
       },
     });
-    expect(
-      (fake.calls.at(-1)!.args as Record<string, unknown>).previousId,
-    ).toBeUndefined();
 
     await click(labelled("编辑 Demo"));
     await fill("ID", "demo-renamed");
