@@ -9,6 +9,7 @@
  * It starts that build with a HOME of its own (`docs/release.md`). The rest of this file is what
  * `drive.ts` uses to put a seed under a service and to check it afterwards.
  */
+import type { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
 import {
   chmodSync,
@@ -21,12 +22,16 @@ import {
 } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { Database } from "bun:sqlite";
 import { unseal } from "../../apps/eta/src/secret";
 import { connect, until } from "../../apps/eta/test/support/client";
 import { MARK, serveModel } from "./fake-model";
 
-const SEEDS = resolve(import.meta.dir, "..", "..", "test", "upgrade-seed");
+// A URL, not `import.meta.dir`: apps/eta's tests load this under vitest, which has no `dir`.
+const SEEDS = fileURLToPath(
+  new URL("../../test/upgrade-seed", import.meta.url),
+);
 /** Where the seed was made, and what paths in it start with. Replaced when it is put down. */
 const SEED_HOME = "/tmp/eta-seed-home";
 const SEED_PORT = 18_894;
@@ -70,7 +75,12 @@ export interface Manifest {
   sealed: { query: string; plain: string }[];
 }
 
-const tables = (db: Database): string[] =>
+/**
+ * The database's own tables, from `sqlite_master`: that is the main schema's catalogue, so the
+ * temporary views `leaveOutSystemData` puts over some of them neither add names nor stand in for
+ * a table that is gone.
+ */
+export const tables = (db: Database): string[] =>
   db
     .query<{ name: string }, []>(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name != 'eta_migrations' AND name NOT LIKE '%\\_fts%' ESCAPE '\\'",
@@ -135,8 +145,22 @@ export function restoreSeed(seed: string, dataDir: string, home: string): void {
  * agents are told by `system_role`, not by name, so a person's agent called Captain is still the
  * seed's. Temporary views of the same names come first in every query of this connection, the
  * manifest's own included; nothing is written to the database.
+ *
+ * The two rules below are not the same, on purpose for now:
+ *
+ * - `participant` leaves out every row of a system agent, in any conversation: a group a person
+ *   made and then gave to Captain is the person's, and keeps its other members.
+ * - `conversation` leaves out only `direct` conversations with a system agent. That is everything
+ *   a host makes for itself today: Captain's one conversation is the direct one `openDirect`
+ *   gives it, and every group with Captain in it was made by a person, so it belongs in the check.
+ *
+ * It stops holding when a build makes a conversation for a system agent that is not `direct` (a
+ * group of its own, say): that conversation stays in the view, shows up in the samples of an
+ * upgraded host, and the check reports it as drift although the seed is intact. Then leave out
+ * whatever that build makes, by how it marks it, not by dropping the `kind` test: a person's group
+ * with Captain in it must still be checked. apps/eta/test/upgrade-e2e.test.ts holds both rules.
  */
-function leaveOutSystemData(db: Database): void {
+export function leaveOutSystemData(db: Database): void {
   const columns = db
     .query<{ name: string }, []>("PRAGMA table_info(agent)")
     .all();
@@ -157,29 +181,37 @@ function leaveOutSystemData(db: Database): void {
 
 /** Everything that is no longer as the seed left it; nothing, when it is all there. */
 export function seedProblems(manifest: Manifest, dataDir: string): string[] {
-  const problems: string[] = [];
   const db = new Database(join(dataDir, "eta.sqlite"), { readonly: true });
   try {
     leaveOutSystemData(db);
-    const present = new Set(tables(db));
-    for (const [table, seeded] of Object.entries(manifest.counts)) {
-      if (!present.has(table)) problems.push(`table ${table} is gone`);
-      else if (count(db, table) < seeded)
-        problems.push(`${table}: ${count(db, table)} rows of ${seeded}`);
-    }
-    for (const [query, rows] of Object.entries(manifest.samples)) {
-      const now = JSON.stringify(db.query(query).all());
-      if (now !== JSON.stringify(rows))
-        problems.push(`${query}: ${now}, was ${JSON.stringify(rows)}`);
-    }
-    const key = readFileSync(join(dataDir, "secret.key"));
-    for (const { query, plain } of manifest.sealed) {
-      const row = db.query<{ sealed: Uint8Array }, []>(query).get();
-      const opened = row === null ? undefined : unseal(key, row.sealed);
-      if (opened !== plain) problems.push(`does not open: ${query}`);
-    }
+    return problemsIn(manifest, db, readFileSync(join(dataDir, "secret.key")));
   } finally {
     db.close();
+  }
+}
+
+/** `seedProblems` on an open database, with `leaveOutSystemData` already over it. */
+export function problemsIn(
+  manifest: Manifest,
+  db: Database,
+  key: Buffer,
+): string[] {
+  const problems: string[] = [];
+  const present = new Set(tables(db));
+  for (const [table, seeded] of Object.entries(manifest.counts)) {
+    if (!present.has(table)) problems.push(`table ${table} is gone`);
+    else if (count(db, table) < seeded)
+      problems.push(`${table}: ${count(db, table)} rows of ${seeded}`);
+  }
+  for (const [query, rows] of Object.entries(manifest.samples)) {
+    const now = JSON.stringify(db.query(query).all());
+    if (now !== JSON.stringify(rows))
+      problems.push(`${query}: ${now}, was ${JSON.stringify(rows)}`);
+  }
+  for (const { query, plain } of manifest.sealed) {
+    const row = db.query<{ sealed: Uint8Array }, []>(query).get();
+    const opened = row === null ? undefined : unseal(key, row.sealed);
+    if (opened !== plain) problems.push(`does not open: ${query}`);
   }
   return problems;
 }

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  // test/upgrade-e2e.test.ts imports scripts/upgrade-e2e from the repository root: a change
+  // there has to run it again, not replay a cached pass.
+  "tasks": {
+    "typecheck": {
+      "inputs": ["$TURBO_EXTENDS$", "$TURBO_ROOT$/scripts/upgrade-e2e/**"]
+    },
+    "test": {
+      "inputs": ["$TURBO_EXTENDS$", "$TURBO_ROOT$/scripts/upgrade-e2e/**"]
+    }
+  }
+}
