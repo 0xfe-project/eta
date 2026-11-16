@@ -62,8 +62,7 @@ export function agentDraft({
     name,
     instructions: description,
     persona,
-    // An `acp.<id>` until the contract's own type takes it (#167).
-    runtime: runtime as AgentRuntime,
+    runtime,
     model: model || null,
     thinkingLevel: (thinkingLevel || null) as ThinkingLevel | null,
     machineId: machineId || null,
