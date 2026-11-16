@@ -34,12 +34,19 @@ export {
 } from "./plugin-files";
 export {
   type ActivePlugin,
+  claimServerNames,
   pluginDataDir,
+  type PluginServersInput,
+  type ResolvedServer,
+  resolvePluginServers,
   runtimeExtras,
+  type ServerNameClash,
   type ServersConfig,
   serversConfig,
   serverSupported,
   sessionServerName,
+  toMcpEntries,
+  toSessionServers,
 } from "./plugin-launch";
 export {
   loadPlugin,

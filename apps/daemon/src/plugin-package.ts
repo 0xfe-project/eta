@@ -122,7 +122,7 @@ const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
 /** The filesystem-resolved form of a path whose last parts may not exist yet. */
-export async function resolvedPath(path: string): Promise<string> {
+async function resolvedPath(path: string): Promise<string> {
   try {
     return await realpath(path);
   } catch {

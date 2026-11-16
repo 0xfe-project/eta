@@ -6,13 +6,15 @@
  * agent share that agent's connections and two agents never do. What a session's realm sees is
  * `createMcpRealmAdapter(scope)`: `import "mcp:<server>"` and `eta.mcp`.
  *
- * Where servers are declared, later overriding earlier by name: the user's `~/.eta/mcp.json`,
- * then the `.mcp.json` of the session's working directory. Both are read when a session opens,
- * so an edit reaches the next session.
+ * Where servers are declared, later overriding earlier by name: the agent's plugins (a source
+ * `plugin:<plugin>` each, servers named `<plugin>-<server>`, given by `pluginSources`), then the
+ * user's `~/.eta/mcp.json`, then the `.mcp.json` of the session's working directory. All are read
+ * when a session opens, so an edit reaches the next session.
  *
  * OAuth: `authProviderFor` is the credential table's provider (`./service`); without it an
- * `auth: "oauth"` server reports that it needs sign-in. Not here yet: servers declared by bundles.
- * A session on another machine gets MCP from that machine's host.
+ * `auth: "oauth"` server reports that it needs sign-in. A plugin's remote server is `auth: "oauth"`
+ * unless its extension sends `Authorization`. A session on another machine does not get MCP from
+ * here.
  */
 import type {
   AuthProviderFor,
@@ -38,6 +40,11 @@ export interface McpHostOptions {
   authProviderFor?: AuthProviderFor | undefined;
   /** The fetch of HTTP transports and their token requests. */
   fetch?: McpManagerOptions["fetch"] | undefined;
+  /**
+   * The servers an agent's plugins declare, one source per plugin, resolved by the plugins
+   * (`Plugins.mcpSourcesFor`); this file does not read plugin directories.
+   */
+  pluginSources?: ((agentId: string) => McpConfigSource[]) | undefined;
   /** Overrides of the library's manager (a test turns timers and launch resolution off). */
   manager?: Partial<McpManagerOptions> | undefined;
 }
@@ -114,17 +121,38 @@ export class McpHost {
     });
   }
 
-  /** The sources a session in this directory would get; no directory is the user's file alone. */
-  sourcesFor(cwd: string | undefined): McpConfigSource[] {
-    return mcpSources(this.#options.home, cwd, this.#options.warn);
+  /**
+   * The sources a session of this agent in this directory would get: its plugins', the user's
+   * file, then the project's. No directory leaves the project's out.
+   */
+  sourcesFor(
+    agentId: string | undefined,
+    cwd: string | undefined,
+  ): McpConfigSource[] {
+    let plugins: McpConfigSource[] = [];
+    if (agentId !== undefined && this.#options.pluginSources !== undefined)
+      try {
+        plugins = this.#options.pluginSources(agentId);
+      } catch (error) {
+        this.#options.warn(
+          `[eta] MCP servers of ${agentId}'s plugins: ${messageOf(error)}`,
+        );
+      }
+    return [
+      ...plugins,
+      ...mcpSources(this.#options.home, cwd, this.#options.warn),
+    ];
   }
 
   /**
-   * A scope no session holds, for the status page: an owner's servers from the user's file, as a
-   * new session would see them. It shares the owner's connections and cache.
+   * A scope no session holds, for the status page: an owner's servers from its plugins and the
+   * user's file, as a new session would see them. It shares the owner's connections and cache.
    */
   inspect(owner: string): McpScope {
-    const sources = this.sourcesFor(undefined);
+    const sources = this.sourcesFor(
+      owner === BARE ? undefined : owner,
+      undefined,
+    );
     const found = this.#inspectors.get(owner);
     if (found !== undefined) {
       found.setSources(sources);
@@ -144,7 +172,7 @@ export class McpHost {
 
   /** The `mcpFor` hook of the session manager: undefined when no server is declared. */
   readonly sessionMcp = (meta: SessionMeta): SessionMcpWiring | undefined => {
-    const sources = this.sourcesFor(meta.cwd);
+    const sources = this.sourcesFor(meta.agentId, meta.cwd);
     if (sources.length === 0) return undefined;
     const owner = meta.agentId ?? BARE;
     const scope = this.manager.scope({ owner, sources, cwd: meta.cwd });

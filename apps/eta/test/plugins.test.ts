@@ -10,6 +10,7 @@
 import type { ScriptedTurn } from "@botiverse/oar/testing";
 import type {
   AgentView,
+  McpServerView,
   PluginAuditView,
   PluginsSections,
   PluginView,
@@ -168,6 +169,38 @@ describe("a plugin in settings", () => {
       ["languages", "read", ["none", "read"]],
     ]);
     expect(view(w).machines[0]).toMatchObject({ missing: [], checked: true });
+  });
+
+  it("reports a server whose name another plugin's server already has", async () => {
+    const dataDir = await tempDir();
+    for (const [name, server] of [
+      ["a-b", "c"],
+      ["a", "b-c"],
+    ] as const) {
+      const dir = join(dataDir, "plugins", name);
+      await mkdir(dir, { recursive: true });
+      await writeFile(
+        join(dir, "plugin.json"),
+        JSON.stringify({
+          $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+          name,
+        }),
+      );
+      await writeFile(
+        join(dir, "mcp.json"),
+        JSON.stringify({
+          $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+          mcpServers: { [server]: { type: "stdio", command: "node" } },
+        }),
+      );
+    }
+    const w = await world({ dataDir });
+    w.client.subscribe("plugins");
+    await until(() => views(w).length === 2);
+    expect(view(w, "a").reports).toEqual([]);
+    expect(view(w, "a-b").reports).toEqual([
+      "mcp.json: server c: its name a-b-c is also that of server b-c of plugin a; an agent with both enabled skips this one",
+    ]);
   });
 
   it("says which commands a machine lacks", async () => {
@@ -443,7 +476,7 @@ describe("an upgrade that breaks the configuration", () => {
 });
 
 describe("a session on eta's own loop", () => {
-  it("has the plugin's skill, a file it can read, and no MCP server", async () => {
+  it("has the plugin's skill and a file it can read", async () => {
     const { models, requests } = scriptedModels(() => say("ok"));
     const w = await installed({ models });
     await configure(w, fullConfig);
@@ -457,6 +490,71 @@ describe("a session on eta's own loop", () => {
     expect(system).toContain(join(dir, "skills", "greet", "SKILL.md"));
     for (const secret of [API_KEY, SCRIPT_KEY, PLAIN_KEY])
       expect(system).not.toContain(secret);
+  });
+
+  it("imports the plugin's server, started with its configuration, and keeps no secret on disk", async () => {
+    let told = "";
+    const { models } = scriptedModels((request) => {
+      if (request.lastRole === "toolResult") {
+        told = request.last;
+        return say("done");
+      }
+      return call("esmrun", {
+        script: `import eta from "eta";
+import { say_hello } from "mcp:hello-plugin-hello";
+const answer = await say_hello({ name: "Ada" });
+const { greeting, cwd, max } = JSON.parse(answer);
+export default { greeting, cwd, max, servers: eta.mcp.servers().map((s) => s.name).join(",") };`,
+      });
+    });
+    const w = await installed({ models });
+    await configure(w, fullConfig);
+    await until(() => view(w).state === "ready");
+    const agent = await enable(w, await w.agent("Ada"));
+    await ask(w, await direct(w, agent), "greet");
+    const root = realpathSync(join(w.host.dataDir, "plugins", NAME));
+    expect(told).toContain("Hello Ada from ops");
+    expect(told).toContain('"servers": "hello-plugin-hello"');
+    expect(told).toContain("mcp.hello-plugin-hello.say_hello");
+    // Started where the plugin is, with the configured values and nothing of the shell wrapper.
+    expect(told).toContain(`"cwd": ${JSON.stringify(root)}`);
+    expect(told).toContain('"max": "3"');
+    expect(
+      await readFile(
+        join(w.host.dataDir, "plugins", "data", NAME, "greetings.log"),
+        "utf8",
+      ),
+    ).toBe("Ada\n");
+    // The metadata cache and the launch resolutions under `mcp/` hold no value in the clear.
+    expect(filesUnder(join(w.host.dataDir, "mcp")).length).toBeGreaterThan(0);
+    expectNowhere(w.host.dataDir, [API_KEY]);
+    expect(framesHold(w, API_KEY)).toBe(false);
+  });
+
+  it("lists the plugin's server on the settings page, under the plugin, with no login to offer", async () => {
+    const w = await installed();
+    await configure(w, fullConfig);
+    await until(() => view(w).state === "ready");
+    const agent = await enable(w, await w.agent("Ada"));
+    w.client.subscribe("mcp");
+    const listed = () =>
+      (w.client.section<McpServerView[]>("mcp", "list") ?? []).find(
+        (server) =>
+          server.agentId === agent.id && server.server === "hello-plugin-hello",
+      );
+    await until(() => listed() !== undefined);
+    expect(listed()).toMatchObject({
+      source: "plugin:hello-plugin",
+      transport: "stdio",
+      auth: "none",
+    });
+    // An agent on an external runtime is given the server by its runtime, not by this host.
+    const cody = await enable(w, await w.agent("Cody", { runtime: "claude" }));
+    expect(
+      (w.client.section<McpServerView[]>("mcp", "list") ?? []).some(
+        (server) => server.agentId === cody.id,
+      ),
+    ).toBe(false);
   });
 
   it("does not have a plugin its agent did not enable", async () => {

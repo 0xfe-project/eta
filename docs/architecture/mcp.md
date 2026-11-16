@@ -1,6 +1,8 @@
 # MCP
 
-Agents use external tools via MCP. The library lives in `packages/eta-mcp` (`@eta/mcp`; its architecture comes from pi-mcp-adapter and it does not depend on any harness); the `McpHost` in `apps/daemon/src/mcp-host.ts` connects it to sessions. The main node and each daemon each use one, so MCP processes always start on the machine where the session is located.
+Agents use external tools via MCP. The library lives in `packages/eta-mcp` (`@eta/mcp`; its architecture comes from pi-mcp-adapter and it does not depend on any harness); the `McpHost` in `apps/eta/src/mcp/host.ts` connects it to the sessions of the main node, and `McpService` (`apps/eta/src/mcp/service.ts`) adds the credentials, the logins and the settings page.
+
+Only the main node has MCP for eta's own loop today. The daemon does not: `apps/daemon/src/node.ts` gives its session manager no `mcpFor`, so a session on eta's own loop on a daemon is told MCP is not connected there. The daemon imports nothing from `@eta/mcp` at run time (only the `McpServerEntry` type, for the plugin shape below), and `mcp.credential` exists only as a type in `packages/client-contracts/src/link.ts`: there is no handler for it on the main node, and the daemon's provider (`mcp-auth.ts`) is gone. A session on an external runtime is given its plugins' servers by that runtime, on whichever machine it runs.
 
 ## What a session gets
 
@@ -12,14 +14,17 @@ Agents use external tools via MCP. The library lives in `packages/eta-mcp` (`@et
 
 Later sources override earlier ones for servers with the same name:
 
-| Source            | Location                      | Description                                                           |
-| ----------------- | ----------------------------- | --------------------------------------------------------------------- |
-| `~/.eta/mcp.json` | This machine's user directory | For all agents on this machine                                        |
-| `.mcp.json`       | Session working directory     | Loaded directly, no approval needed (it is in the user's own project) |
+| Source            | Location                      | Description                                                                                 |
+| ----------------- | ----------------------------- | ------------------------------------------------------------------------------------------- |
+| `plugin:<plugin>` | The agent's enabled plugins   | Only for agents on eta's own loop; one source per plugin, servers named `<plugin>-<server>` |
+| `~/.eta/mcp.json` | This machine's user directory | For all agents on this machine                                                              |
+| `.mcp.json`       | Session working directory     | Loaded directly, no approval needed (it is in the user's own project)                       |
+
+Plugin sources come from `Plugins.mcpSourcesFor(agentId)` (`McpHostOptions.pluginSources`); `McpHost` does not read plugin directories. They are resolved the same way as for an external runtime (see [plugins](plugins.md#what-a-session-gets)) and then take `@eta/mcp`'s shape: a stdio server keeps its own `cwd` (no `sh` wrapper), sse is taken, and a remote server gets `auth: "oauth"` unless the plugin's extension already sends an `Authorization` header. The plugin's `mcp.json` itself is still read as the spec says, with no `auth` field.
 
 The format is the usual `{ "mcpServers": { ... } }`, with additional fields such as `lifecycle` (`lazy` / `keep-alive` / `lazy-keep-alive`), `directTools`, `approveTools`, `auth` (`oauth` / `bearer`), and `includeTools` / `excludeTools`; see the library's `McpServerEntry`. These files are read once when a session opens; changes take effect for newly opened sessions.
 
-The metadata cache, resolved results for `npx`/`bunx`/`uvx`, and the on-disk directory for oversized output live under `mcp/` in each machine's own state directory (for the main node, the data directory; for a daemon, its own).
+The metadata cache, resolved results for `npx`/`bunx`/`uvx`, and the on-disk directory for oversized output live under `mcp/` in the main node's data directory. Neither file holds a server's configuration: the cache keys a server by a SHA-256 of what decides its tools (command, args, env, url, headers, auth), and stores the tools, instructions and observed output shapes; a launch resolution is keyed by the package spec and stores the binary it found. So a plugin's secret that reaches a server's `env` or `headers` is not written there in the clear. A tool's own output, if the server echoes a secret, can still reach the oversized-output directory.
 
 ## Isolation and sharing
 
@@ -33,18 +38,19 @@ Connections are keyed by (agent, server name): all sessions of the same agent on
 
 ## OAuth
 
-Remote HTTP servers set `"auth": "oauth"`.
+Remote HTTP servers set `"auth": "oauth"`; a plugin's remote server has it unless its extension sends `Authorization`.
 
 - **Credentials** live in the main node's `credential` table (migration 0033, `integration = 'mcp'`). Each value is JSON, encrypted with AES-256-GCM using `secret.key` in the data directory, with a random 12-byte IV, stored as `iv | tag | ciphertext`; if tampered with or the key is changed, it cannot be read and is treated as not signed in. It stores `tokens`, `clientInformation`, `discoveryState`, and the `codeVerifier` for an in-progress login.
 - **Server key** is the SHA-256 of the server URL (with the fragment removed): independent of agent and configuration source, so one login is valid for all agents and all machines.
 - On connect, it uses the provider in connect mode (it never registers a client or redirects on its own; if login is missing, it reports “needs login”), and concurrent refreshes of the same refresh token are merged into a single request.
 - **Login**: `mcp.login` returns `{ pendingId, authorizationUrl }`; the browser goes to authorize. The authorization server sends the browser back to `GET /mcp/oauth/callback?code&state` (exempt from the token gate; see [access control](access.md)); the host finds the login it is waiting for by `state` and completes it, returning a page saying “You can close this tab”. When the host is not at an address the browser can return to (headless, remote), the user pastes the address where the authorization server finally landed into `mcp.completeLogin`. After login completes, servers waiting on that login reconnect immediately.
 - **Redirect URL** is `<origin>/mcp/oauth/callback`. The origin comes from the startup argument `--public-url` (or the environment variable `ETA_PUBLIC_URL`); if neither is set, it uses the `location.origin` reported by the web client in `login`: that is always an address the user's browser can open, and an address the page already trusts. If neither is available, login errors and prompts to set `--public-url`. The client registered with the authorization server remembers the redirect URL; if the address changes, it re-registers on the next login.
-- **The daemon does not store credentials.** Its provider reads and writes via `svc`'s `mcp.credential` by asking the main node: `get` / `set` / `delete`, allowing only `tokens`, `clientInformation`, and `discoveryState` (excluding the login `codeVerifier`); keys must be 64-digit hexadecimal (the URL hash, so the daemon can only touch servers whose URL it knows). After the daemon refreshes a token, the new token is stored on the main node, and the next session (on any machine) can read it. Login happens only on the main node: a server on a daemon that needs login reports “needs login”; after logging in from settings, it reconnects.
+- **Only the main node signs in.** Logins and refreshes happen there; the daemon has no MCP of its own yet (see the top of this page).
+- **A plugin's server shows a login only when it asked for one.** It is `auth: "oauth"` because nothing says otherwise, so it is `none` until the server answers 401 (`needs-auth` → `needs_login`), and `signed_in` once a login holds. A server the user declared `auth: "oauth"` in a file is `needs_login` until it has tokens.
 
 ## wire：`mcp` target
 
-`list` returns a section; each item (`McpServerView`): `agentId`, `agentName`, `server`, `source`, `transport` (`stdio` | `http` | `sse`), `lifecycle`, `state` (`connected` | `cached` | `not-connected` | `failed` | `needs-auth` | `disabled`), `toolCount`, `error`, `auth` (`none` | `signed_in` | `needs_login`). The content is the servers each agent gets from the user files, plus those read from the project `.mcp.json` by running sessions. Currently only configuration on the main node is listed; servers unique to a project on a daemon are not in the list.
+`list` returns a section; each item (`McpServerView`): `agentId`, `agentName`, `server`, `source`, `transport` (`stdio` | `http` | `sse`), `lifecycle`, `state` (`connected` | `cached` | `not-connected` | `failed` | `needs-auth` | `disabled`), `toolCount`, `error`, `auth` (`none` | `signed_in` | `needs_login`). The content is the servers each agent gets from its plugins (eta's own loop only) and the user files, plus those read from the project `.mcp.json` by running sessions. Only the main node's configuration is listed.
 
 | Action          | Description                                                                                                |
 | --------------- | ---------------------------------------------------------------------------------------------------------- |

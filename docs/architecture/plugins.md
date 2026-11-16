@@ -68,15 +68,20 @@ When config is no longer valid after an upgrade, fall back to pending configurat
 
 ## What a session gets
 
-| Runtime             | Skill                                                                                        | MCP                                                                       |
-| ------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Built-in kernel     | Directory wired into `skillDirsFor`, included in the skills block of the system prompt       | Not started in this version; marked in the UI; picked up by the next task |
-| Claude Code         | `--plugin-dir` natively loads a generated directory containing only valid skills             | oar's `mcpServers`                                                        |
-| Codex, OpenCode, Pi | Name, description, and path written into the system prompt; the agent reads the files itself | oar's `mcpServers`                                                        |
+| Runtime             | Skill                                                                                        | MCP                                                  |
+| ------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Built-in kernel     | Directory wired into `skillDirsFor`, included in the skills block of the system prompt       | `McpHost`, source `plugin:<plugin>` (main node only) |
+| Claude Code         | `--plugin-dir` natively loads a generated directory containing only valid skills             | oar's `mcpServers`                                   |
+| Codex, OpenCode, Pi | Name, description, and path written into the system prompt; the agent reads the files itself | oar's `mcpServers`                                   |
 
 Claude Code cannot use the plugin directory directly: `--plugin-dir` treats it as a Claude plugin, runs its `hooks/`, and loads its `commands/`, which eta does not support. The generated directory is at `<dataDir>/plugin-runtime/claude/<content hash>/<plugin name>/skills/`, containing symlinks to valid skills.
 
-The runtime does not accept a working directory, so the stdio server is started via `/bin/sh -c 'cd "$0" && exec "$@"'`, with cwd defaulting to the plugin root. The server name is `<plugin>-<server>`; invalid characters are replaced with `_`.
+Both go through one resolution, `resolvePluginServers` in `apps/daemon/src/plugin-launch.ts`: placeholders expanded, cwd (default: the plugin root) checked to stay in the plugin or its data directory, the extension's env and headers added, names made and claimed. Then each gets its own shape:
+
+- **External runtime** (`toSessionServers`, oar's `SessionMcpServer`): the runtime does not accept a working directory, so a stdio server is started via `/bin/sh -c 'cd "$0" && exec "$@"'`; sse is skipped with a warning. This shape is locked by `apps/daemon/test/plugin-mcp-shapes.test.ts`.
+- **Built-in kernel** (`toMcpEntries`, `@eta/mcp`'s `McpServerEntry`): stdio keeps its `cwd` with no wrapper; sse is taken; a remote server gets `auth: "oauth"` unless an `Authorization` header is sent (from the extension, or the file). Its secrets are in the entry's `env`/`headers`, which stay in memory; see [MCP](mcp.md#configuration-sources) for what is written under `mcp/`.
+
+The server name is `<plugin>-<server>`; invalid characters are replaced with `_`. Two servers can end up with one name (`a-b` + `c` and `a` + `b-c`, or two that differ only where `_` replaced something): in a session of an agent that has both enabled, the first in plugin-name order keeps it and the later is left out, with a warning. The settings page checks the installed plugins against each other and puts the clash in the later one's `reports`, saying it is skipped where both are enabled.
 
 `PLUGIN_ROOT` and `PLUGIN_DATA` are set by eta and override environment variables with the same names. `PLUGIN_DATA` is at `<dataDir>/plugins/data/<name>`, retained across plugin updates, with separate copies for the main node and the daemon.
 
@@ -86,7 +91,7 @@ When config or files change, the session's stamp changes with it (`<name>@<conte
 
 When a session is opened on a daemon, `RemotePlace` first uses `machine.pluginHave` to ask which content hashes it lacks, then sends files in chunks with `machine.pluginPut` (each batch no larger than one frame, symlinks followed, anything outside the plugin root skipped); the daemon places them in `<dataDir>/plugins/store/<hash>/` only after verifying the hashes.
 
-`machine.open` includes `plugins` (hashes and the values for each server) and `redactions`. These live only in daemon memory, are injected when the server starts, and are never written to disk. Sessions with the built-in kernel do not start MCP, so no server values are sent, but `redactions` still contains secrets.
+`machine.open` includes `plugins` (hashes and the values for each server) and `redactions`. These live only in daemon memory, are injected when the server starts, and are never written to disk. The daemon has no MCP for the built-in kernel yet, so such a session there gets no server values, but `redactions` still contains secrets.
 
 ## Agent reads config
 

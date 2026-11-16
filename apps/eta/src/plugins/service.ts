@@ -19,6 +19,7 @@ import type {
   PluginView,
   Redaction,
 } from "@eta/client-contracts";
+import type { McpConfigSource } from "@eta/mcp";
 import type { RuntimeExtras, SessionMeta } from "@eta/server";
 import type { Database } from "bun:sqlite";
 import type { Buffer } from "node:buffer";
@@ -35,10 +36,13 @@ import {
   fieldIssue,
 } from "@eta/client-contracts/plugin-fields";
 import {
+  claimServerNames,
   pluginChunks,
+  resolvePluginServers,
   runtimeExtras,
   serversConfig,
   serverSupported,
+  toMcpEntries,
 } from "@eta/daemon";
 import { PluginRegistry } from "./registry";
 import { PluginRows } from "./store";
@@ -202,6 +206,59 @@ export class Plugins {
   }
 
   /**
+   * The MCP servers eta's own loop gets from an agent's plugins, on this machine: one source per
+   * plugin, `plugin:<name>`, for `McpHost` to put before the user's and the project's files. An
+   * agent on an external runtime has none here; its runtime is given them (`runtimeExtrasFor`).
+   */
+  mcpSourcesFor(agentId: string): McpConfigSource[] {
+    if (this.#agents.get(agentId)?.runtime !== "eta") return [];
+    const active = this.active(agentId);
+    if (active.length === 0) return [];
+    const resolved = resolvePluginServers(
+      active.map((entry) => ({
+        plugin: entry.plugin!,
+        config: serversConfig(entry.plugin!, this.rows.values(entry.name)),
+      })),
+      this.#dataDir,
+      this.#warn,
+    );
+    return active.flatMap((entry) => {
+      const servers = toMcpEntries(
+        resolved.filter((server) => server.plugin === entry.name),
+      );
+      return Object.keys(servers).length === 0
+        ? []
+        : [{ name: `plugin:${entry.name}`, servers }];
+    });
+  }
+
+  /**
+   * What each plugin loses to another's server names, among the installed plugins. An agent's
+   * plugins are claimed in name order (`rows.enabled`), so the later by name is the one left out,
+   * but only in the sessions of an agent that has both enabled: the report says that, since one
+   * installed plugin that nobody enables takes nothing from anyone.
+   */
+  #clashes(): Map<string, string[]> {
+    const loaded = this.registry
+      .entries()
+      .flatMap((entry) => (entry.plugin === undefined ? [] : [entry.plugin]))
+      .sort((a, b) =>
+        a.manifest.name < b.manifest.name
+          ? -1
+          : a.manifest.name > b.manifest.name
+            ? 1
+            : 0,
+      );
+    const reports = new Map<string, string[]>();
+    for (const clash of claimServerNames(loaded).clashes)
+      reports.set(clash.plugin, [
+        ...(reports.get(clash.plugin) ?? []),
+        `mcp.json: server ${clash.server}: its name ${clash.name} is also that of server ${clash.takenBy.server} of plugin ${clash.takenBy.plugin}; an agent with both enabled skips this one`,
+      ]);
+    return reports;
+  }
+
+  /**
    * The saved secrets a session must not pass on: every plugin's, whether its agent uses the plugin
    * or not. The ones it is allowed to read as `value` stay: taking them out would undo the answer.
    */
@@ -294,13 +351,14 @@ export class Plugins {
   /* ------------------------------------------------------------------ the wire */
 
   view(): PluginView[] {
+    const clashes = this.#clashes();
     return this.registry
       .entries()
-      .map((entry) => this.#viewOf(entry))
+      .map((entry) => this.#viewOf(entry, clashes.get(entry.name) ?? []))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  #viewOf(entry: PluginEntry): PluginView {
+  #viewOf(entry: PluginEntry, clashes: string[]): PluginView {
     const { plugin } = entry;
     const values = this.rows.values(entry.name);
     const levels = this.rows.levels(entry.name);
@@ -316,7 +374,7 @@ export class Plugins {
         (plugin === undefined || plugin.configProblems.length === 0
           ? null
           : plugin.configProblems.join("; ")),
-      reports: plugin?.reports ?? [],
+      reports: [...(plugin?.reports ?? []), ...clashes],
       skills: (plugin?.skills ?? []).map(({ name, description }) => ({
         name,
         description,
@@ -334,7 +392,7 @@ export class Plugins {
           headers: Object.keys(binding?.headers ?? {}),
           problem: serverSupported(server)
             ? null
-            : "legacy HTTP+SSE is not supported",
+            : "legacy HTTP+SSE: external runtimes skip it; eta's own loop takes it",
         };
       }),
       requires,
