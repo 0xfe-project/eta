@@ -16,7 +16,8 @@ import { scrolledTop } from "./layer-scroll";
 import { LayerAreaContext, LayerSpaceContext } from "./layer-space";
 
 interface FrameProps {
-  title: string;
+  /** Text, or text with coloured spans (a task's status). */
+  title: ReactNode;
   footer?: string;
   children: ReactNode;
 }

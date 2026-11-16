@@ -1,5 +1,5 @@
 import type { AgentView, TaskQueueReason } from "@eta/client-contracts";
-import type { RunStatus, TaskDetail, TaskStatus } from "@/queries/tasks";
+import type { RunStatus, Task, TaskDetail, TaskStatus } from "@/queries/tasks";
 import { translate } from "@/lib/i18n";
 import { agentName } from "@/queries/agents";
 import { when } from "./routine-format";
@@ -54,6 +54,99 @@ export const statuses: { value: TaskStatus; label: string }[] = [
 
 export const statusLabel = (status: TaskStatus) =>
   statuses.find((s) => s.value === status)?.label ?? status;
+
+/**
+ * A status's colours: its words on a label (`ink`, a step deeper than the mark in the light theme,
+ * so 12px text keeps 4.5:1 on the tint), the mark (`text`), a label's tint and a control's border.
+ */
+const tones = {
+  backlog: {
+    ink: "text-muted-ink",
+    text: "text-muted-foreground",
+    tint: "bg-muted-foreground/10 dark:bg-muted-foreground/15",
+    border: "border-muted-foreground/40",
+  },
+  todo: {
+    ink: "text-foreground",
+    text: "text-foreground",
+    tint: "bg-foreground/6 dark:bg-foreground/8",
+    border: "border-foreground/40",
+  },
+  in_progress: {
+    ink: "text-state-info-ink",
+    text: "text-state-info",
+    tint: "bg-state-info/10 dark:bg-state-info/16",
+    border: "border-state-info",
+  },
+  in_review: {
+    ink: "text-state-warning-ink",
+    text: "text-state-warning",
+    tint: "bg-state-warning/13 dark:bg-state-warning/16",
+    border: "border-state-warning",
+  },
+  done: {
+    ink: "text-state-success-ink",
+    text: "text-state-success",
+    tint: "bg-state-success/10 dark:bg-state-success/15",
+    border: "border-state-success",
+  },
+  blocked: {
+    ink: "text-state-error-ink",
+    text: "text-state-error",
+    tint: "bg-state-error/9 dark:bg-state-error/16",
+    border: "border-state-error",
+  },
+  cancelled: {
+    ink: "text-muted-ink",
+    text: "text-muted-foreground",
+    tint: "bg-muted-foreground/10 dark:bg-muted-foreground/15",
+    border: "border-muted-foreground/40",
+  },
+} satisfies Record<
+  TaskStatus,
+  { ink: string; text: string; tint: string; border: string }
+>;
+
+export const statusTone = (status: TaskStatus) => tones[status] ?? tones.todo;
+
+/** Whether a task's menu offers to cancel it with its subtasks: a parent that is not cancelled. */
+export const canCancelTree = (task: Pick<TaskDetail, "subtasks" | "status">) =>
+  task.subtasks != null && task.status !== "cancelled";
+
+/**
+ * The tasks a parent's cancel takes with it, as the host picks them: everything under it, at any
+ * depth, that is neither done nor cancelled.
+ */
+export function cancelledWith(
+  id: string,
+  tasks: readonly Pick<Task, "id" | "parentId" | "status">[],
+): number {
+  const under: string[] = [id];
+  let count = 0;
+  for (let i = 0; i < under.length; i++)
+    for (const task of tasks)
+      if (task.parentId === under[i]) {
+        under.push(task.id);
+        if (task.status !== "done" && task.status !== "cancelled") count++;
+      }
+  return count;
+}
+
+/**
+ * The tasks a cancel would block: those that wait for this one and have not started (their edge
+ * is not resolved yet) and are not blocked already. A run queued behind a cancelled task is not
+ * started; it is blocked.
+ */
+export function blockedByCancel(task: Pick<TaskDetail, "dependents">) {
+  return (task.dependents ?? []).filter(
+    (edge) =>
+      edge.state === "waiting" &&
+      edge.status !== "done" &&
+      edge.status !== "cancelled" &&
+      // Already blocked: a cancel changes nothing for it.
+      edge.status !== "blocked",
+  ).length;
+}
 
 export const runStatusLabels: Record<RunStatus, string> = {
   get queued() {

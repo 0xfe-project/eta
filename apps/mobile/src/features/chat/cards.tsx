@@ -6,7 +6,6 @@ import type {
   TaskRunStatus,
 } from "@eta/client-contracts";
 import type { TextKey } from "../../i18n";
-import type { IconName } from "../../ui/icons";
 import type { Chat } from "./conversation";
 import type { ArtifactRef } from "./run";
 import { draftStatus } from "@eta/client-contracts";
@@ -16,20 +15,20 @@ import { go } from "../../nav/links";
 import { open } from "../../nav/stack";
 import { Icon } from "../../ui/Icon";
 import { Markdown } from "../../ui/Markdown";
+import { StatusPill, TaskStatusIcon } from "../../ui/StatusIcon";
 import { DraftScreen } from "./DraftScreen";
 
-const STATUS: Record<BoardTaskStatus, { icon: IconName; label: TextKey }> = {
-  backlog: { icon: "circleDashed", label: "chat.taskStatus.backlog" },
-  todo: { icon: "circle", label: "chat.taskStatus.todo" },
-  in_progress: { icon: "circleHalf", label: "chat.taskStatus.inProgress" },
-  in_review: { icon: "eye", label: "chat.taskStatus.inReview" },
-  done: { icon: "checkCircle", label: "chat.taskStatus.done" },
-  blocked: { icon: "prohibit", label: "chat.taskStatus.blocked" },
-  cancelled: { icon: "xCircle", label: "chat.taskStatus.cancelled" },
+const STATUS: Record<BoardTaskStatus, TextKey> = {
+  backlog: "chat.taskStatus.backlog",
+  todo: "chat.taskStatus.todo",
+  in_progress: "chat.taskStatus.inProgress",
+  in_review: "chat.taskStatus.inReview",
+  done: "chat.taskStatus.done",
+  blocked: "chat.taskStatus.blocked",
+  cancelled: "chat.taskStatus.cancelled",
 };
 
-export const taskStatusLabel = (status: BoardTaskStatus) =>
-  t(STATUS[status].label);
+export const taskStatusLabel = (status: BoardTaskStatus) => t(STATUS[status]);
 
 const RUN_STATUS: Partial<Record<TaskRunStatus, TextKey>> = {
   queued: "chat.runStatus.queued",
@@ -37,19 +36,6 @@ const RUN_STATUS: Partial<Record<TaskRunStatus, TextKey>> = {
   completed: "chat.runStatus.completed",
   failed: "chat.runStatus.failed",
 };
-
-export function TaskStatusIcon(props: {
-  status: BoardTaskStatus;
-  size?: number;
-}) {
-  return (
-    <Icon
-      name={STATUS[props.status].icon}
-      size={props.size ?? 18}
-      color={props.status === "blocked" ? "state-error" : "muted-foreground"}
-    />
-  );
-}
 
 /** A task an agent proposed (03d): one line that says it waits, and the way to the form. */
 export function DraftCard(props: { message: MessageView; chat: Chat }) {
@@ -129,7 +115,6 @@ export function TaskCard(props: { message: MessageView }) {
         ? undefined
         : RUN_STATUS[card().runStatus as TaskRunStatus];
     return [
-      taskStatusLabel(card().status),
       run === undefined ? undefined : t(run),
       card().comments > 0
         ? t("chat.task.comments", { count: card().comments })
@@ -156,15 +141,22 @@ export function TaskCard(props: { message: MessageView }) {
         onPress={() => go.task(card().taskId)}
         class="h-14 shrink-0 flex-row items-center gap-[10px] border border-border px-[10px] active:bg-muted"
       >
-        <TaskStatusIcon status={card().status} />
+        <TaskStatusIcon status={card().status} size={18} />
         <View class="min-w-0 grow basis-0">
           <Text class="truncate text-base leading-[20px] text-foreground">
             #{card().number} {card().title}
           </Text>
-          <Text class="truncate text-sm leading-4 text-muted-foreground">
-            {meta()}
-          </Text>
+          <If when={meta() !== ""}>
+            <Text class="truncate text-sm leading-4 text-muted-foreground">
+              {meta()}
+            </Text>
+          </If>
         </View>
+        <StatusPill
+          status={card().status}
+          label={taskStatusLabel(card().status)}
+          icon={false}
+        />
         <Icon name="caretRight" size={14} color="faint" />
       </View>
     </If>

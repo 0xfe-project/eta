@@ -11,6 +11,7 @@ import { t } from "../../i18n";
 import { go } from "../../nav/links";
 import { Icon } from "../../ui/Icon";
 import { SectionLabel } from "../../ui/Page";
+import { TaskStatusIcon } from "../../ui/StatusIcon";
 import { QuestionCard } from "./QuestionCard";
 import { executorOf, runCounts, RunRow, useRuns } from "./running";
 
@@ -71,11 +72,7 @@ function TaskRow(props: { task: BoardTaskView; last: boolean }) {
       onPress={() => go.task(props.task.id)}
       class={`h-[56px] shrink-0 flex-row items-center gap-[10px] border-t border-border px-4 active:bg-muted ${props.last ? "border-b" : ""}`}
     >
-      <Icon
-        name={blocked() ? "prohibit" : "eye"}
-        size={18}
-        color={blocked() ? "state-error" : "muted-foreground"}
-      />
+      <TaskStatusIcon status={props.task.status} size={18} />
       <View class="min-w-0 grow basis-0">
         <Text class="truncate text-base leading-[20px] text-foreground">
           {props.task.title}

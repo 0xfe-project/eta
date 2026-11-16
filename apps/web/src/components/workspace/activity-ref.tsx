@@ -1,4 +1,3 @@
-import type { TaskStatus } from "@/queries/tasks";
 import { AppWindowIcon } from "@phosphor-icons/react/AppWindow";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
@@ -11,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { actionClass, frameClass, framedClass, muted } from "./activity-card";
 import { ArtifactButton } from "./artifact-dialog";
 import { statuses } from "./task-format";
-import { StatusIcon } from "./task-status-icon";
+import { StatusIcon, StatusPill } from "./task-status-icon";
 import { useSectionLink } from "./workspace-search";
 
 /**
@@ -91,7 +90,11 @@ export function ActivityRefCard({
     .join(" ");
   const body = (
     <>
-      <Icon aria-hidden="true" className={cn("size-4 shrink-0", muted)} />
+      {status ? (
+        <StatusIcon status={status.value} />
+      ) : (
+        <Icon aria-hidden="true" className={cn("size-4 shrink-0", muted)} />
+      )}
       <span className="min-w-0 flex-1 truncate">
         {number ? (
           <span className={cn("tabular-nums", muted)}>#{number} </span>
@@ -105,15 +108,7 @@ export function ActivityRefCard({
           </span>
         ) : null}
       </span>
-      {status ? (
-        <span className={cn("flex shrink-0 items-center gap-1", muted)}>
-          <StatusIcon
-            status={status.value as TaskStatus}
-            className={iconClass}
-          />
-          {status.label}
-        </span>
-      ) : null}
+      {status ? <StatusPill status={status.value} icon={false} /> : null}
       <CaretRightIcon aria-hidden="true" className={iconClass} />
     </>
   );

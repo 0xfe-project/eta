@@ -304,6 +304,11 @@
   --color-state-warning: var(--state-warning);
   --color-state-success: var(--state-success);
   --color-state-info: var(--state-info);
+  --color-state-error-ink: var(--state-error-ink);
+  --color-state-warning-ink: var(--state-warning-ink);
+  --color-state-success-ink: var(--state-success-ink);
+  --color-state-info-ink: var(--state-info-ink);
+  --color-muted-ink: var(--muted-ink);
   --color-destructive: var(--destructive);
   --color-success: var(--success);
   --color-accent-foreground: var(--accent-foreground);
@@ -374,6 +379,14 @@
   --state-warning: oklch(0.62 0.18 75);
   --state-success: oklch(0.527 0.154 150.069);
   --state-info: oklch(0.52 0.18 240);
+  /* The state colours as small words on their own tint (a status label): a quarter of the way to
+     the foreground, so 12px text keeps 4.5:1 on that tint over the muted grey. Marks and tints keep
+     the colour itself. */
+  --state-error-ink: color-mix(in oklch, var(--state-error) 75%, var(--foreground));
+  --state-warning-ink: color-mix(in oklch, var(--state-warning) 75%, var(--foreground));
+  --state-success-ink: color-mix(in oklch, var(--state-success) 75%, var(--foreground));
+  --state-info-ink: color-mix(in oklch, var(--state-info) 75%, var(--foreground));
+  --muted-ink: color-mix(in oklch, var(--muted-foreground) 80%, var(--foreground));
   /* A run's steps by kind (the timing strip): slots 1-4 of the reference categorical palette, in
      its order, checked for colour blindness; "other" is a neutral grey. Two of them sit under 3:1
      on white, so the strip always shows its legend. */
@@ -430,6 +443,12 @@
   --state-warning: oklch(0.72 0.16 75);
   --state-success: oklch(0.65 0.16 150);
   --state-info: oklch(0.65 0.16 240);
+  /* Light enough on the dark tints already (5.3:1 and up). */
+  --state-error-ink: var(--state-error);
+  --state-warning-ink: var(--state-warning);
+  --state-success-ink: var(--state-success);
+  --state-info-ink: var(--state-info);
+  --muted-ink: var(--muted-foreground);
   --run-model: #3987e5;
   --run-shell: #d95926;
   --run-read: #199e70;
@@ -805,12 +824,6 @@
   .task-fold-head:hover .task-fold-title a {
     text-decoration: underline;
     text-underline-offset: 2px;
-  }
-  .task-fold-backlog {
-    flex: none;
-    border: 1px solid var(--border);
-    padding: 0 5px;
-    color: var(--muted-foreground);
   }
   .task-fold-waiting {
     flex: none;

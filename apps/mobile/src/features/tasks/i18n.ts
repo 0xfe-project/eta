@@ -10,6 +10,27 @@ export const i18n = {
     "tasks.status.in_review": "待验收",
     "tasks.status.done": "已完成",
     "tasks.status.cancelled": "已取消",
+    "tasks.statusHint.backlog": "先放着，不会开始执行",
+    "tasks.statusHint.todo": "排队等执行者开始",
+    "tasks.statusHint.in_progress": "执行者正在做",
+    "tasks.statusHint.in_review": "做完了，等你看；依赖它的任务会被放行",
+    "tasks.statusHint.done": "验收通过",
+    "tasks.statusHint.blocked": "需要你决定才能继续",
+    "tasks.statusHint.cancelled": "不做了",
+    "tasks.statusHint.cancelledDependents":
+      "不做了；等它的 {count} 个任务会转为受阻",
+    "tasks.statusHint.cancelledDependent": "不做了；等它的 1 个任务会转为受阻",
+    "tasks.status.auto": "自动",
+    "tasks.status.autoHint": "由 {count} 个子任务推出",
+    "tasks.status.autoHintOne": "由 1 个子任务推出",
+    "tasks.more.cancelTree": "取消这棵任务（连下面未完成的子任务）",
+    "tasks.cancelTree.title": "取消 #{number} 和它下面的任务？",
+    "tasks.cancelTree.body":
+      "它下面没完成的 {count} 个子任务会一起转为已取消。",
+    "tasks.cancelTree.bodyOne": "它下面没完成的 1 个子任务会一起转为已取消。",
+    "tasks.cancelTree.confirm": "全部取消",
+    "tasks.cancelTree.counting":
+      "它下面没完成的子任务会一起转为已取消（正在清点…）。",
     "tasks.run.queued": "排队中",
     "tasks.run.starting": "启动中",
     "tasks.run.running": "正在运行",
@@ -138,6 +159,30 @@ export const i18n = {
     "tasks.status.in_review": "In review",
     "tasks.status.done": "Done",
     "tasks.status.cancelled": "Cancelled",
+    "tasks.statusHint.backlog": "Parked; it won't start",
+    "tasks.statusHint.todo": "Queued for the executor to start",
+    "tasks.statusHint.in_progress": "The executor is working on it",
+    "tasks.statusHint.in_review":
+      "Finished, waiting for you; tasks that depend on it go ahead",
+    "tasks.statusHint.done": "Accepted",
+    "tasks.statusHint.blocked": "Needs your decision to go on",
+    "tasks.statusHint.cancelled": "Dropped",
+    "tasks.statusHint.cancelledDependents":
+      "Dropped; the {count} tasks waiting for it become blocked",
+    "tasks.statusHint.cancelledDependent":
+      "Dropped; the 1 task waiting for it becomes blocked",
+    "tasks.status.auto": "Auto",
+    "tasks.status.autoHint": "Derived from its {count} subtasks",
+    "tasks.status.autoHintOne": "Derived from its 1 subtask",
+    "tasks.more.cancelTree": "Cancel this tree (with its unfinished subtasks)",
+    "tasks.cancelTree.title": "Cancel #{number} and the tasks under it?",
+    "tasks.cancelTree.body":
+      "The {count} unfinished subtasks under it are cancelled with it.",
+    "tasks.cancelTree.bodyOne":
+      "The 1 unfinished subtask under it is cancelled with it.",
+    "tasks.cancelTree.confirm": "Cancel all",
+    "tasks.cancelTree.counting":
+      "The unfinished subtasks under it are cancelled with it (counting…).",
     "tasks.run.queued": "Queued",
     "tasks.run.starting": "Starting",
     "tasks.run.running": "Running",

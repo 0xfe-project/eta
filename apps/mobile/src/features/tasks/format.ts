@@ -11,7 +11,6 @@ import type {
   TaskRunView,
 } from "@eta/client-contracts";
 import type { TextKey } from "../../i18n";
-import type { IconName } from "../../ui/icons";
 import { agentById, machineById } from "../../app/lists";
 import { t } from "../../i18n";
 import { ago, clock, moment, reason } from "../../ui/format";
@@ -20,16 +19,6 @@ import { WireError } from "../../wire/wire";
 /** A task with what its own page reads: `tasks.<id>`'s two sections as one. */
 export type TaskDetail = BoardTaskDetail & { activity: TaskActivityView[] };
 
-/** 06d's order: the way work moves. */
-export const STATUSES: BoardTaskStatus[] = [
-  "backlog",
-  "todo",
-  "in_progress",
-  "blocked",
-  "in_review",
-  "done",
-  "cancelled",
-];
 /** 05's sections: what needs the user first. */
 export const OPEN_STATUSES: BoardTaskStatus[] = [
   "in_review",
@@ -47,22 +36,43 @@ export const FOLDED_STATUSES: BoardTaskStatus[] = [
 export const statusLabel = (status: BoardTaskStatus): string =>
   t(`tasks.status.${status}` as TextKey);
 
-export const STATUS_ICONS: Record<BoardTaskStatus, IconName> = {
-  backlog: "circleDashed",
-  todo: "circle",
-  in_progress: "circleHalf",
-  blocked: "prohibit",
-  in_review: "eye",
-  done: "checkCircle",
-  cancelled: "xCircle",
-};
+/**
+ * The tasks a cancel would block: those that wait for this one and have not started (their edge
+ * is not resolved yet) and are not blocked already, as the web app counts them.
+ */
+export const blockedByCancel = (task: Pick<TaskDetail, "dependents">): number =>
+  (task.dependents ?? []).filter(
+    (edge) =>
+      edge.state === "waiting" &&
+      edge.status !== "done" &&
+      edge.status !== "cancelled" &&
+      edge.status !== "blocked",
+  ).length;
 
-export const statusColor = (status: BoardTaskStatus) =>
-  status === "blocked"
-    ? ("state-error" as const)
-    : status === "in_progress"
-      ? ("foreground" as const)
-      : ("muted-foreground" as const);
+/**
+ * The tasks a parent's cancel takes with it, as the host picks them: everything under it, at any
+ * depth, that is neither done nor cancelled.
+ */
+export function cancelledWith(
+  id: string,
+  tasks: readonly Pick<BoardTaskView, "id" | "parentId" | "status">[],
+): number {
+  const under: string[] = [id];
+  let count = 0;
+  for (let i = 0; i < under.length; i++)
+    for (const task of tasks)
+      if (task.parentId === under[i]) {
+        under.push(task.id);
+        if (task.status !== "done" && task.status !== "cancelled") count++;
+      }
+  return count;
+}
+
+/** What a cancel does to the tasks that wait, in words: none, one, or how many. */
+export const cancelImpact = (dependents: number): string =>
+  dependents === 1
+    ? t("tasks.statusHint.cancelledDependent")
+    : t("tasks.statusHint.cancelledDependents", { count: dependents });
 
 export const runLabel = (status: TaskRunStatus): string =>
   t(`tasks.run.${status}` as TextKey);

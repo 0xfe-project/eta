@@ -24,10 +24,18 @@ import { wireErrorMessage } from "@/queries/wire";
 import { PageHeader } from "./app-shell";
 import { BackToTop } from "./back-to-top";
 import { when } from "./routine-format";
-import { actorName, ago, createdBy, statusLabel } from "./task-format";
+import {
+  actorName,
+  ago,
+  canCancelTree,
+  createdBy,
+  statusLabel,
+  statusTone,
+} from "./task-format";
 import { BlockedExits, DependencyBadge, SubtaskCount } from "./task-graph";
 import { useTaskNav } from "./task-nav";
 import { StatusIcon } from "./task-status-icon";
+import { CancelTreeDialog } from "./task-status-select";
 import {
   CommentBox,
   Comments,
@@ -151,6 +159,7 @@ function Card({
           <span className="ml-auto flex items-center gap-2">
             <RunState task={task} />
             <Comments count={task.comments} />
+            <StatusIcon status={task.status} className="size-3.5" />
           </span>
         </span>
         <span className="line-clamp-3 text-sm wrap-anywhere">{task.title}</span>
@@ -232,7 +241,8 @@ function BoardView({ tasks }: { tasks: readonly Task[] }) {
                 update.mutate({ taskId: id, status }, { onError: showError });
             }}
             className={cn(
-              "flex w-72 shrink-0 flex-col bg-muted/50 outline-offset-[-1px] duration-[60ms] ease-linear",
+              "flex w-72 shrink-0 flex-col border-t-2 bg-muted/50 outline-offset-[-1px] duration-[60ms] ease-linear",
+              statusTone(status).border,
               over === status && "bg-muted outline outline-foreground/30",
             )}
           >
@@ -283,6 +293,7 @@ function TaskPage({ id }: { id: string }) {
   const { task, missing, error } = useTask(id);
   const { agents } = useAgentList();
   const [deleting, setDeleting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   // Opened from the header, only while the rail does not fit.
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const back = () => void setNav({ task: null });
@@ -346,6 +357,11 @@ function TaskPage({ id }: { id: string }) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {canCancelTree(task) ? (
+              <DropdownMenuItem onSelect={() => setCancelling(true)}>
+                {translateText("statusMenu.cancelTree")}
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem
               variant="destructive"
               onSelect={() => setDeleting(true)}
@@ -354,6 +370,11 @@ function TaskPage({ id }: { id: string }) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <CancelTreeDialog
+          task={task}
+          open={cancelling}
+          onOpenChange={setCancelling}
+        />
         <DeleteTaskDialog
           task={task}
           open={deleting}

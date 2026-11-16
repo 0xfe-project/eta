@@ -5,6 +5,8 @@
 // - `comment-fails`: the first comment on a task does not arrive.
 // - `task-gone`: #135 is on the board but `tasks.task-135` is missing (06i).
 // - `task-loading`: `tasks.task-135` never gets its sections (06i).
+// - `parent`: #135 is in progress with two subtasks under it (#160 open, #161 done), so its
+//   status is theirs.
 
 import type {
   BoardTaskDetail,
@@ -107,6 +109,11 @@ interface Fixture {
   projectId?: string;
   branch?: string;
   path?: string;
+  /** The tasks that wait for it. */
+  dependents?: BoardTaskDetail["dependents"];
+  /** Its subtasks' count, for a parent. */
+  subtasks?: BoardTaskDetail["subtasks"];
+  parentId?: string;
 }
 
 function detail(task: Fixture): {
@@ -140,6 +147,9 @@ function detail(task: Fixture): {
       },
       originConversationId: conversationId,
       runs,
+      ...(task.dependents === undefined ? {} : { dependents: task.dependents }),
+      ...(task.subtasks === undefined ? {} : { subtasks: task.subtasks }),
+      ...(task.parentId === undefined ? {} : { parentId: task.parentId }),
     },
     activity,
   };
@@ -208,6 +218,17 @@ const FEATURED: Fixture[] = [
       "After a disconnect, the client sends the last seq it received, and the host replays from that row forward, then reattaches to live frames.\n\n## Definition of done\n- No frame loss across 200 kill-and-reconnect cycles\n- Order stays intact during backfill",
     branch: "task/128-replay",
     path: WORKTREE_128,
+    // #131 waits for it to be accepted: cancelling #128 would block it.
+    dependents: [
+      {
+        taskId: "task-131",
+        number: 131,
+        title: "Board column width remembers last drag",
+        status: "todo",
+        requireDone: true,
+        state: "waiting",
+      },
+    ],
     runs: [replay],
     activity: [
       entry("created", agent("ache"), at(1, 18, 20), {
@@ -753,6 +774,7 @@ const BOARD_SCENARIOS = [
   "task-gone",
   "task-loading",
   "queued-newer",
+  "parent",
 ];
 
 export function installTasks(host: FakeHost): void {
@@ -773,8 +795,31 @@ export function installTasks(host: FakeHost): void {
       ? FEATURED.map((task) =>
           task.number === 133 ? { ...task, updatedAt: minutesAgo(-1) } : task,
         )
-      : FEATURED;
-  const details = [...featured, ...filler()]
+      : scenario === "parent"
+        ? FEATURED.map((task) =>
+            task.number === 135
+              ? {
+                  ...task,
+                  status: "in_progress" as const,
+                  subtasks: { total: 2, done: 1 },
+                }
+              : task,
+          )
+        : FEATURED;
+  // `parent`: #135's two subtasks, one of them done.
+  const children: Fixture[] =
+    scenario === "parent"
+      ? (["todo", "done"] as const).map((status, index) => ({
+          id: `task-${160 + index}`,
+          number: 160 + index,
+          title: `Shortcut list part ${index + 1}`,
+          status,
+          by: agent("ache"),
+          parentId: "task-135",
+          updatedAt: minutesAgo(1600 + index),
+        }))
+      : [];
+  const details = [...featured, ...filler(), ...children]
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .map(detail);
   host.set(

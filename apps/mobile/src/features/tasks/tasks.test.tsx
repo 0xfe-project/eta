@@ -174,6 +174,27 @@ test("06d: the status moves, on the page and on the board", async () => {
   expect(app.shows("id:task-128")).toBe(false);
 });
 
+test("06d: each status says what it means, and a cancel how many waiting tasks it blocks", async () => {
+  const app = await task(128);
+  await app.press("id:task-status");
+  await app.waitFor("id:status-cancelled");
+  expect(app.texts()).toContain("做完了，等你看；依赖它的任务会被放行");
+  expect(app.texts()).toContain("不做了；等它的 1 个任务会转为受阻");
+});
+
+test("06d: a parent's status is its subtasks', and it is cancelled with them", async () => {
+  const app = await task(135, "parent");
+  expect(app.shows("id:task-status")).toBe(false);
+  expect(app.shows("id:task-status-auto")).toBe(true);
+  expect(app.texts()).toContain("自动");
+  await app.press("id:task-more");
+  await app.press("id:more-cancel-tree");
+  await app.waitFor("取消 #135 和它下面的任务？");
+  expect(app.texts()).toContain("它下面没完成的 1 个子任务会一起转为已取消。");
+  await app.press("role:button[全部取消]");
+  await app.waitFor("我 把状态从「进行中」改为「已取消」");
+});
+
 test("06f: title and description save together", async () => {
   const app = await task(128);
   await app.press("id:task-more");

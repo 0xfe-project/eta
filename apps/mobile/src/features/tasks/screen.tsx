@@ -6,6 +6,7 @@ import type {
 import type { ScrollRef } from "nsh";
 import type { TaskDetail } from "./format";
 import { computed, effect, Scroll, signal, Text, View } from "nsh";
+import { boardLoaded, boardTasks } from "../../app/lists";
 import { retry, wire } from "../../app/session";
 import { t } from "../../i18n";
 import { nav } from "../../nav/stack";
@@ -14,20 +15,23 @@ import { Markdown } from "../../ui/Markdown";
 import { Header, Page } from "../../ui/Page";
 import { ConfirmSheet, Sheet } from "../../ui/Sheet";
 import { Empty, Failed, Loading } from "../../ui/States";
+import { statusClasses, statusTone } from "../../ui/status-tone";
+import { StatusPill, TaskStatusIcon } from "../../ui/StatusIcon";
 import { toast } from "../../ui/toast";
 import { call, useTarget } from "../../wire/target";
 import { Composer, OutgoingComments, useComments } from "./composer";
 import { openEditTask } from "./edit";
 import {
   actorName,
+  blockedByCancel,
+  cancelImpact,
+  cancelledWith,
   failure,
   isActive,
   queueReason,
-  waitingNumbers,
   runActor,
-  STATUS_ICONS,
-  statusColor,
   statusLabel,
+  waitingNumbers,
 } from "./format";
 import { openRunLog, openRuns } from "./runs";
 import { LinkSheet, PropertiesSheet, SheetOption, StatusSheet } from "./sheets";
@@ -137,7 +141,7 @@ function LiveRuns(props: { task: () => TaskDetail }) {
   );
 }
 
-type Open = "status" | "properties" | "more" | "link" | "delete";
+type Open = "status" | "properties" | "more" | "link" | "delete" | "cancelTree";
 
 function TaskView(props: { task: () => TaskDetail }) {
   const task = props.task;
@@ -154,6 +158,34 @@ function TaskView(props: { task: () => TaskDetail }) {
     setTimeout(() => scroll?.scrollToEnd({ animated: false }), 0);
   });
 
+  // As the host derives it: from the subtasks that are not cancelled.
+  const autoHint = () => {
+    const count = task().subtasks?.total ?? 0;
+    return count === 1
+      ? t("tasks.status.autoHintOne")
+      : t("tasks.status.autoHint", { count });
+  };
+  // A parent cannot be moved by the status sheet, but it can be called off with the work under it.
+  const cancelTree = (): void => {
+    close();
+    call("tasks", "update", { taskId: task().id, status: "cancelled" }).catch(
+      showError,
+    );
+  };
+  // The count is the only thing between a press and a whole tree cancelled: until the board is
+  // here (with this task in it), say nothing about how many and keep the button off.
+  const counted = () =>
+    boardLoaded() && boardTasks().some((one) => one.id === task().id);
+  const cancelTreeBody = () => {
+    if (!counted()) return t("tasks.cancelTree.counting");
+    const under = cancelledWith(task().id, boardTasks());
+    const body =
+      under === 1
+        ? t("tasks.cancelTree.bodyOne")
+        : t("tasks.cancelTree.body", { count: under });
+    const blocked = blockedByCancel(task());
+    return blocked > 0 ? `${body} ${cancelImpact(blocked)}` : body;
+  };
   const setStatus = (status: BoardTaskStatus): void => {
     close();
     if (status === task().status) return;
@@ -180,23 +212,48 @@ function TaskView(props: { task: () => TaskDetail }) {
         border={false}
         right={
           <View class="flex-row items-center gap-2" style={{ marginRight: -8 }}>
-            <View
-              role="button"
-              testID="task-status"
-              accessibilityLabel={t("tasks.fields.status")}
-              onPress={() => sheet.set("status")}
-              class="h-8 flex-row items-center gap-[6px] border border-border-strong px-2 active:bg-muted"
+            <If
+              when={task().subtasks == null}
+              else={
+                // A parent's status is its subtasks': a label, and "Auto" saying from how many.
+                <View
+                  role="button"
+                  testID="task-status-auto"
+                  accessibilityLabel={`${statusLabel(task().status)} · ${t("tasks.status.auto")}`}
+                  accessibilityHint={autoHint()}
+                  onPress={() => toast(autoHint())}
+                  class="h-8 flex-row items-center gap-[6px] active:opacity-60"
+                >
+                  <StatusPill
+                    status={task().status}
+                    label={statusLabel(task().status)}
+                  />
+                  <Text class="text-sm leading-4 text-muted-foreground">
+                    {t("tasks.status.auto")}
+                  </Text>
+                </View>
+              }
             >
-              <Icon
-                name={STATUS_ICONS[task().status]}
-                size={14}
-                color={statusColor(task().status)}
-              />
-              <Text class="text-md leading-4 text-foreground">
-                {statusLabel(task().status)}
-              </Text>
-              <Icon name="caretDown" size={12} color="muted-foreground" />
-            </View>
+              <View
+                role="button"
+                testID="task-status"
+                accessibilityLabel={`${t("tasks.fields.status")}: ${statusLabel(task().status)}`}
+                onPress={() => sheet.set("status")}
+                class={`h-8 flex-row items-center gap-[6px] border px-2 active:opacity-60 ${statusClasses(task().status).frame}`}
+              >
+                <TaskStatusIcon status={task().status} size={14} />
+                <Text
+                  class={`text-md leading-4 ${statusClasses(task().status).text}`}
+                >
+                  {statusLabel(task().status)}
+                </Text>
+                <Icon
+                  name="caretDown"
+                  size={12}
+                  color={statusTone(task().status)}
+                />
+              </View>
+            </If>
             <View
               role="button"
               testID="task-properties"
@@ -265,6 +322,7 @@ function TaskView(props: { task: () => TaskDetail }) {
       <StatusSheet
         open={sheet() === "status"}
         value={task().status}
+        dependents={blockedByCancel(task())}
         onChange={setStatus}
         onClose={close}
       />
@@ -292,6 +350,14 @@ function TaskView(props: { task: () => TaskDetail }) {
           testID="more-link"
           onPress={() => sheet.set("link")}
         />
+        <If when={task().subtasks != null && task().status !== "cancelled"}>
+          <SheetOption
+            label={t("tasks.more.cancelTree")}
+            testID="more-cancel-tree"
+            danger
+            onPress={() => sheet.set("cancelTree")}
+          />
+        </If>
         <SheetOption
           label={t("common.delete")}
           testID="more-delete"
@@ -300,6 +366,16 @@ function TaskView(props: { task: () => TaskDetail }) {
         />
       </Sheet>
       <LinkSheet open={sheet() === "link"} task={task} onClose={close} />
+      <ConfirmSheet
+        open={sheet() === "cancelTree"}
+        title={t("tasks.cancelTree.title", { number: task().number })}
+        body={cancelTreeBody()}
+        confirm={t("tasks.cancelTree.confirm")}
+        disabled={!counted()}
+        danger
+        onConfirm={cancelTree}
+        onClose={close}
+      />
       <ConfirmSheet
         open={sheet() === "delete"}
         title={t("tasks.delete.title", { number: task().number })}

@@ -20,6 +20,33 @@
     "done": "Completed",
     "cancelled": "Cancelled"
   },
+  "statusMenu": {
+    "title": "Change status",
+    "hint": {
+      "backlog": "Parked; it won't start",
+      "todo": "Queued for the executor to start",
+      "inProgress": "The executor is working on it",
+      "inReview": "Finished, waiting for you; tasks that depend on it go ahead",
+      "done": "Accepted",
+      "blocked": "Needs your decision to go on",
+      "cancelled": "Dropped",
+      "cancelledDependents": "Dropped; the {{count}} tasks waiting for it become blocked",
+      "cancelledDependents_one": "Dropped; the {{count}} task waiting for it becomes blocked",
+      "cancelledDependents_other": "Dropped; the {{count}} tasks waiting for it become blocked"
+    },
+    "auto": "Auto",
+    "autoHint": "Derived from its {{count}} subtasks",
+    "autoHint_one": "Derived from its {{count}} subtask",
+    "autoHint_other": "Derived from its {{count}} subtasks",
+    "cancelTree": "Cancel this tree (with its unfinished subtasks)…",
+    "cancelTreeTitle": "Cancel #{{number}} and the tasks under it?",
+    "cancelTreeDescription": "The {{count}} unfinished subtasks under it are cancelled with it.",
+    "cancelTreeConfirm": "Cancel all",
+    "keep": "Keep it",
+    "cancelTreeDescription_one": "The {{count}} unfinished subtask under it is cancelled with it.",
+    "cancelTreeDescription_other": "The {{count}} unfinished subtasks under it are cancelled with it.",
+    "cancelTreeCounting": "The unfinished subtasks under it are cancelled with it (counting…)."
+  },
   "runStatus": {
     "queued": "Queued",
     "running": "Running",

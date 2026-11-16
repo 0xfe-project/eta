@@ -8,18 +8,17 @@ import { ago } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
 import { Sheet } from "../../ui/Sheet";
 import { Empty } from "../../ui/States";
+import { TaskStatusIcon } from "../../ui/StatusIcon";
 import { useTarget } from "../../wire/target";
 import {
   actorName,
   executor,
-  graphLabel,
   FOLDED_STATUSES,
+  graphLabel,
   isActive,
   OPEN_STATUSES,
   past,
   runLabel,
-  STATUS_ICONS,
-  statusColor,
   statusLabel,
 } from "./format";
 
@@ -81,11 +80,7 @@ function TaskRow(props: { task: BoardTaskView }) {
       onPress={() => go.task(props.task.id)}
       class="h-[60px] shrink-0 flex-row items-center gap-[10px] border-t border-border px-4 active:bg-muted"
     >
-      <Icon
-        name={STATUS_ICONS[props.task.status]}
-        size={18}
-        color={statusColor(props.task.status)}
-      />
+      <TaskStatusIcon status={props.task.status} size={18} />
       <View class="min-w-0 grow basis-0">
         <View class="flex-row gap-3">
           <Text class="min-w-0 grow basis-0 truncate text-base leading-[20px] text-foreground">
@@ -125,11 +120,7 @@ function PastRow(props: { task: BoardTaskView }) {
       onPress={() => go.task(task().id)}
       class="h-14 shrink-0 flex-row items-center gap-[10px] border-t border-border px-4 active:bg-muted"
     >
-      <Icon
-        name={STATUS_ICONS[task().status]}
-        size={18}
-        color="muted-foreground"
-      />
+      <TaskStatusIcon status={task().status} size={18} />
       <View class="min-w-0 grow basis-0">
         <Text class="truncate text-base leading-[20px] text-foreground">
           {task().title}
@@ -160,6 +151,7 @@ function Fold(props: {
         onPress={() => open.update((value) => !value)}
         class={`h-12 shrink-0 flex-row items-center gap-[10px] bg-surface px-4 active:bg-muted ${props.first ? "" : "border-t border-border"}`}
       >
+        <TaskStatusIcon status={props.status} size={16} />
         <Text class="grow basis-0 text-base leading-[18px] text-foreground">
           {statusLabel(props.status)}
         </Text>
@@ -359,9 +351,10 @@ export function TasksTab() {
             {(status, index) => (
               <>
                 <View
-                  class={`shrink-0 flex-row items-end justify-between px-4 pb-[6px] ${index() === 0 ? "h-9" : "h-[42px] border-t border-border"}`}
+                  class={`shrink-0 flex-row items-end gap-[6px] px-4 pb-[6px] ${index() === 0 ? "h-9" : "h-[42px] border-t border-border"}`}
                 >
-                  <Text class="text-sm leading-[18px] text-foreground">
+                  <TaskStatusIcon status={status()} size={14} />
+                  <Text class="grow basis-0 text-sm leading-[18px] text-foreground">
                     {statusLabel(status())}
                   </Text>
                   <Text class="text-sm leading-[18px] text-muted-foreground">

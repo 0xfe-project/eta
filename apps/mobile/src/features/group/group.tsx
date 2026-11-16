@@ -9,7 +9,6 @@ import type {
   TimelineSection,
 } from "@eta/client-contracts";
 import type { JSX } from "nsh";
-import type { IconName } from "../../ui/icons";
 import { runningFirst } from "@eta/client-contracts";
 import { computed, Scroll, signal, Text, View } from "nsh";
 import {
@@ -27,6 +26,7 @@ import { Icon } from "../../ui/Icon";
 import { Body, Header, Page } from "../../ui/Page";
 import { Sheet } from "../../ui/Sheet";
 import { Empty } from "../../ui/States";
+import { TaskStatusIcon } from "../../ui/StatusIcon";
 import { toast } from "../../ui/toast";
 import { call, useTarget } from "../../wire/target";
 import { EditGroupScreen } from "./edit";
@@ -48,24 +48,8 @@ import { StewardSheet } from "./steward";
 const CLOSED = new Set(["done", "cancelled"]);
 const SHOWN_TASKS = 5;
 
-const TASK_ICONS: Record<BoardTaskView["status"], IconName> = {
-  backlog: "circleDashed",
-  todo: "circle",
-  in_progress: "circleHalf",
-  in_review: "eye",
-  done: "check",
-  blocked: "prohibit",
-  cancelled: "x",
-};
-
 function TaskIcon(props: { status: BoardTaskView["status"] }) {
-  return (
-    <Icon
-      name={TASK_ICONS[props.status]}
-      size={18}
-      color={props.status === "blocked" ? "state-error" : "muted-foreground"}
-    />
-  );
+  return <TaskStatusIcon status={props.status} size={18} />;
 }
 
 function FactRow(props: {

@@ -92,11 +92,11 @@ import { ArtifactButton } from "./artifact-dialog";
 import { Folded } from "./folded";
 import { MemoryPauseToggle } from "./memory-pause-toggle";
 import { when } from "./routine-format";
-import { Select, SelectOption } from "./select-field";
 import { useTaskDraft } from "./task-draft";
 import {
   actorName,
   ago,
+  canCancelTree,
   isActive,
   queueReasonLabel,
   runStatusLabels,
@@ -114,6 +114,7 @@ import {
 import { useTaskNav } from "./task-nav";
 import { RunLog } from "./task-run-log";
 import { StatusIcon } from "./task-status-icon";
+import { CancelTreeDialog, TaskStatusControl } from "./task-status-select";
 import { RunHeader } from "./transcript/run-timeline";
 import { SlashMenu } from "./transcript/slash-menu";
 import { TranscriptDialog } from "./transcript/transcript-dialog";
@@ -352,38 +353,6 @@ function Field({
   );
 }
 
-function StatusSelect({
-  id,
-  value,
-  onChange,
-  className,
-  size,
-}: {
-  id?: string;
-  value: TaskStatus;
-  onChange: (status: TaskStatus) => void;
-  className?: string;
-  size?: "sm" | "default";
-}) {
-  const { t: translateText } = useTranslation(["tasks"] as const);
-  return (
-    <Select
-      id={id}
-      aria-label={id ? undefined : translateText("fields.status")}
-      className={className}
-      size={size}
-      value={value}
-      onValueChange={(value) => onChange(value as TaskStatus)}
-    >
-      {statuses.map((s) => (
-        <SelectOption key={s.value} value={s.value}>
-          {s.label}
-        </SelectOption>
-      ))}
-    </Select>
-  );
-}
-
 /** A task an agent drafted in a conversation, to confirm (a `task_draft` row of its timeline). */
 export interface TaskProposal {
   conversationId: string;
@@ -550,7 +519,6 @@ export function TaskProperties({
   children?: React.ReactNode;
 }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
-  const update = useUpdateTask();
   const { agents } = useAgentList();
   // The executor's latest run says where the work really is. On another machine than the
   // project's it had no worktree: the row names that machine and where the run started instead.
@@ -568,17 +536,7 @@ export function TaskProperties({
         <>
           <dt className={propertyLabel}>{translateText("fields.status")}</dt>
           <dd className="flex min-w-0 items-center gap-2">
-            <StatusIcon status={task.status} />
-            <StatusSelect
-              className="min-w-32"
-              value={task.status}
-              onChange={(status) =>
-                update.mutate(
-                  { taskId: task.id, status },
-                  { onError: showError },
-                )
-              }
-            />
+            <TaskStatusControl task={task} />
           </dd>
         </>
       ) : null}
@@ -2135,8 +2093,8 @@ function TaskView({ task }: { task: TaskDetail }) {
   ] as const);
   const [, setNav] = useTaskNav();
   const { agents } = useAgentList();
-  const update = useUpdateTask();
   const [deleting, setDeleting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const replies = task.activity.filter((a) => a.kind === "comment").length;
   // A thread opens on its latest reply, next to the box to answer it; once more after the first
   // paint, for what lays itself out late (folded text measuring itself). It is at least as tall as
@@ -2178,14 +2136,7 @@ function TaskView({ task }: { task: TaskDetail }) {
           <span className="flex-1 text-xs text-muted-foreground tabular-nums">
             #{task.number}
           </span>
-          <StatusIcon status={task.status} />
-          <StatusSelect
-            size="sm"
-            value={task.status}
-            onChange={(status) =>
-              update.mutate({ taskId: task.id, status }, { onError: showError })
-            }
-          />
+          <TaskStatusControl task={task} />
           <TaskDetails task={task} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -2198,6 +2149,11 @@ function TaskView({ task }: { task: TaskDetail }) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {canCancelTree(task) ? (
+                <DropdownMenuItem onSelect={() => setCancelling(true)}>
+                  {translateText("statusMenu.cancelTree")}
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem
                 variant="destructive"
                 onSelect={() => setDeleting(true)}
@@ -2206,6 +2162,11 @@ function TaskView({ task }: { task: TaskDetail }) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <CancelTreeDialog
+            task={task}
+            open={cancelling}
+            onOpenChange={setCancelling}
+          />
           <DeleteTaskDialog
             task={task}
             open={deleting}
