@@ -24,6 +24,13 @@ export {
   type ServeContext,
   type ServeHandler,
 } from "./link/peer";
+export {
+  mcpServerKey,
+  parseCredentialCall,
+  relayCredentialStore,
+  RELAYED_KINDS,
+} from "./mcp-auth";
+export { McpHost, type McpHostOptions, type PluginOwner } from "./mcp-host";
 export { forwardedOptions, modelSpecOf } from "./models";
 export { DaemonNode, type DaemonNodeOptions } from "./node";
 export {
@@ -36,6 +43,7 @@ export {
   type ActivePlugin,
   claimServerNames,
   pluginDataDir,
+  pluginMcpSources,
   type PluginServersInput,
   type ResolvedServer,
   resolvePluginServers,

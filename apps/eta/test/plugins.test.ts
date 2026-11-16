@@ -17,7 +17,13 @@ import type {
   SessionMcpServer,
 } from "@eta/client-contracts";
 import type { World } from "./support/world";
-import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
 import {
   cp,
   mkdir,
@@ -1029,9 +1035,56 @@ describe("a session on a daemon's machine", () => {
     const skill = inStore(r.daemon.dataDir, "skills", "greet", "SKILL.md");
     expect(statSync(skill).isFile()).toBe(true);
     expect(requests.at(-1)!.system).toContain(skill);
-    // eta's own loop starts no server, so the values have no reason to cross.
-    expect(r.traffic.in.join("").includes(API_KEY)).toBe(true); // redactions
-    expect(r.traffic.in.join("").includes("HELLO_API_KEY")).toBe(false);
+    // eta's own loop starts the plugin's server there too, so the open carries its values.
+    expect(r.traffic.in.join("").includes("HELLO_API_KEY")).toBe(true);
+  });
+
+  it("imports the plugin's server on eta's own loop, started there with its configuration", async () => {
+    let told = "";
+    const { models } = scriptedModels((request) => {
+      if (request.lastRole === "toolResult") {
+        told = request.last;
+        return say("done");
+      }
+      return call("esmrun", {
+        script: `import eta from "eta";
+import { say_hello } from "mcp:hello-plugin-hello";
+const answer = await say_hello({ name: "Ada" });
+const { greeting, cwd, max } = JSON.parse(answer);
+export default { greeting, cwd, max, servers: eta.mcp.servers().map((s) => s.name).join(",") };`,
+      });
+    });
+    const r = await remoteWorld({ models });
+    r.client.subscribe("plugins");
+    await install(r.host.dataDir);
+    await recheck(r);
+    await until(() => views(r).length > 0);
+    await configure(r, fullConfig);
+    await until(() => view(r).state === "ready");
+    const agent = await enable(r, await r.agent("Rem"));
+    const group = await r.group(r.remoteProject.id, [agent.id]);
+    await r.watch(group.id);
+    await ask(r, group.id, "greet");
+    expect(told).toContain("Hello Ada from ops");
+    expect(told).toContain('"servers": "hello-plugin-hello"');
+    // Started from the daemon's copy, and its data is the daemon's: the primary's has none.
+    expect(told).toContain(
+      `"cwd": ${JSON.stringify(realpathSync(inStore(r.daemon.dataDir)))}`,
+    );
+    expect(told).toContain('"max": "3"');
+    expect(
+      await readFile(
+        join(r.daemon.dataDir, "plugins", "data", NAME, "greetings.log"),
+        "utf8",
+      ),
+    ).toBe("Ada\n");
+    expect(
+      existsSync(
+        join(r.host.dataDir, "plugins", "data", NAME, "greetings.log"),
+      ),
+    ).toBe(false);
+    expect(filesUnder(join(r.daemon.dataDir, "mcp")).length).toBeGreaterThan(0);
+    expectNowhere(r.daemon.dataDir, [API_KEY, SCRIPT_KEY, PLAIN_KEY]);
   });
 
   it("gives a runtime there the server, with paths of that machine, and keeps nothing on disk", async () => {

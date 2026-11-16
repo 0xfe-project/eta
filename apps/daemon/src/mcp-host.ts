@@ -1,7 +1,8 @@
 /**
- * MCP on this machine, for the realm of the sessions the host opens here.
+ * MCP on this machine, for the realm of the sessions opened here: the primary's own, and a
+ * daemon's (`./node`). Both make one, so a session behaves the same wherever it runs.
  *
- * One `McpManager` per host: connections, the metadata cache and launch resolutions under
+ * One `McpManager` per machine: connections, the metadata cache and launch resolutions under
  * `<dataDir>/mcp/`. Every session gets a scope of it keyed by its agent, so the sessions of one
  * agent share that agent's connections and two agents never do. What a session's realm sees is
  * `createMcpRealmAdapter(scope)`: `import "mcp:<server>"` and `eta.mcp`.
@@ -11,10 +12,10 @@
  * user's `~/.eta/mcp.json`, then the `.mcp.json` of the session's working directory. All are read
  * when a session opens, so an edit reaches the next session.
  *
- * OAuth: `authProviderFor` is the credential table's provider (`./service`); without it an
- * `auth: "oauth"` server reports that it needs sign-in. A plugin's remote server is `auth: "oauth"`
- * unless its extension sends `Authorization`. A session on another machine does not get MCP from
- * here.
+ * OAuth: `authProviderFor` is the caller's. On the primary it reads the credential table; on a
+ * daemon it reads the same rows over the link (`./mcp-auth`), so a daemon keeps no credentials.
+ * Without one an `auth: "oauth"` server reports that it needs sign-in. A plugin's remote server is
+ * `auth: "oauth"` unless its extension sends `Authorization`.
  */
 import type {
   AuthProviderFor,
@@ -26,6 +27,12 @@ import type { SessionMcpWiring, SessionMeta } from "@eta/server";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createMcpRealmAdapter, McpManager, parseMcpServers } from "@eta/mcp";
+
+/** Whose plugins a session gets. */
+export interface PluginOwner {
+  agentId: string;
+  conversationId?: string | undefined;
+}
 
 /** The owner of sessions that belong to no agent. */
 const BARE = "session";
@@ -41,10 +48,11 @@ export interface McpHostOptions {
   /** The fetch of HTTP transports and their token requests. */
   fetch?: McpManagerOptions["fetch"] | undefined;
   /**
-   * The servers an agent's plugins declare, one source per plugin, resolved by the plugins
-   * (`Plugins.mcpSourcesFor`); this file does not read plugin directories.
+   * The servers an agent's plugins declare, one source per plugin (`pluginMcpSources`); this file
+   * does not read plugin directories. `conversationId` is the session's, absent for the status
+   * page: a daemon knows an agent's plugins by the conversation it was opened in.
    */
-  pluginSources?: ((agentId: string) => McpConfigSource[]) | undefined;
+  pluginSources?: ((owner: PluginOwner) => McpConfigSource[]) | undefined;
   /** Overrides of the library's manager (a test turns timers and launch resolution off). */
   manager?: Partial<McpManagerOptions> | undefined;
 }
@@ -126,16 +134,16 @@ export class McpHost {
    * file, then the project's. No directory leaves the project's out.
    */
   sourcesFor(
-    agentId: string | undefined,
+    owner: PluginOwner | undefined,
     cwd: string | undefined,
   ): McpConfigSource[] {
     let plugins: McpConfigSource[] = [];
-    if (agentId !== undefined && this.#options.pluginSources !== undefined)
+    if (owner !== undefined && this.#options.pluginSources !== undefined)
       try {
-        plugins = this.#options.pluginSources(agentId);
+        plugins = this.#options.pluginSources(owner);
       } catch (error) {
         this.#options.warn(
-          `[eta] MCP servers of ${agentId}'s plugins: ${messageOf(error)}`,
+          `[eta] MCP servers of ${owner.agentId}'s plugins: ${messageOf(error)}`,
         );
       }
     return [
@@ -150,7 +158,7 @@ export class McpHost {
    */
   inspect(owner: string): McpScope {
     const sources = this.sourcesFor(
-      owner === BARE ? undefined : owner,
+      owner === BARE ? undefined : { agentId: owner },
       undefined,
     );
     const found = this.#inspectors.get(owner);
@@ -172,7 +180,12 @@ export class McpHost {
 
   /** The `mcpFor` hook of the session manager: undefined when no server is declared. */
   readonly sessionMcp = (meta: SessionMeta): SessionMcpWiring | undefined => {
-    const sources = this.sourcesFor(meta.agentId, meta.cwd);
+    const sources = this.sourcesFor(
+      meta.agentId === undefined
+        ? undefined
+        : { agentId: meta.agentId, conversationId: meta.conversationId },
+      meta.cwd,
+    );
     if (sources.length === 0) return undefined;
     const owner = meta.agentId ?? BARE;
     const scope = this.manager.scope({ owner, sources, cwd: meta.cwd });

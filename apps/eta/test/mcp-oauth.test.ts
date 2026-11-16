@@ -8,13 +8,13 @@ import type { McpServerView } from "@eta/client-contracts";
 import type { McpTuning } from "../src/product";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { mcpServerKey } from "@eta/daemon";
 import { describe, expect, it } from "vitest";
 import {
   createFakeAuthServer,
   MCP_URL,
 } from "../../../packages/eta-mcp/test/oauth/fake-auth-server";
 import { CredentialRows } from "../src/mcp/credentials";
-import { mcpServerKey } from "../src/mcp/service";
 import { loadSecretKey } from "../src/secret";
 import { connect, until } from "./support/client";
 import { tempDir, testHost } from "./support/host";
