@@ -112,6 +112,8 @@ interface TaskRow {
   origin_conversation_id: string | null;
   created_at: number;
   updated_at: number;
+  archived_at: number | null;
+  archived_by: string | null;
   comments: number;
   run_status: string | null;
 }
@@ -153,6 +155,8 @@ const recordOf = (row: TaskRow): TaskRecord => ({
   comments: row.comments,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
+  archivedAt: row.archived_at,
+  archivedBy: row.archived_by,
 });
 
 const activityOf = (row: ActivityRow): TaskActivityView => {
@@ -189,6 +193,16 @@ const SELECT_TASK = `
          (SELECT COUNT(*) FROM task_activity a WHERE a.task_id = t.id AND a.kind = 'comment') AS comments,
          (SELECT r.status FROM task_run r WHERE r.task_id = t.id AND r.agent_id IS NULL ORDER BY r.created_at DESC, r.rowid DESC LIMIT 1) AS run_status
     FROM task t`;
+
+/** The kinds that put a task away and bring it back: the only entries that do not bring it back. */
+const ARCHIVE_KINDS: readonly TaskActivityKind[] = ["archived", "unarchived"];
+
+/** The ends of a run: the one an archive stopped does not bring its task back. */
+const RUN_ENDS: readonly TaskActivityKind[] = [
+  "run_completed",
+  "run_failed",
+  "run_interrupted",
+];
 
 export class TaskStore {
   readonly #db: Database;
@@ -444,6 +458,99 @@ export class TaskStore {
     return row === null ? undefined : activityOf(row);
   }
 
+  /* ---------------------------------------------------------------- archiving */
+
+  /**
+   * Put the task away, saying so on its timeline: who did it (`by`), and the rest of what the
+   * entry keeps (`archivedEntry`). The caller decides whether it may be; this only writes it.
+   */
+  archive(
+    id: string,
+    by: string,
+    actor: TaskActor,
+    data: Record<string, unknown>,
+    at: number = Date.now(),
+  ): void {
+    this.#db.transaction(() => {
+      this.#db
+        .query(
+          "UPDATE task SET archived_at = ?, archived_by = ?, updated_at = ? WHERE id = ?",
+        )
+        .run(at, by, at, id);
+      this.#log(id, "archived", actor, { data: { by, ...data } });
+    })();
+  }
+
+  /** Bring the task back to the board, saying why (`cause`: an entry's kind, or `manual`). */
+  unarchive(id: string, actor: TaskActor, data: Record<string, unknown>): void {
+    this.#db.transaction(() => {
+      this.#db
+        .query(
+          "UPDATE task SET archived_at = NULL, archived_by = NULL, updated_at = ? WHERE id = ?",
+        )
+        .run(Date.now(), id);
+      this.#log(id, "unarchived", actor, { data });
+    })();
+  }
+
+  /** When each task's timeline last moved: the time of its newest entry. */
+  lastActivity(): Map<string, number> {
+    return new Map(
+      this.#db
+        .query<{ task_id: string; at: number }, []>(
+          "SELECT task_id, MAX(created_at) AS at FROM task_activity GROUP BY task_id",
+        )
+        .all()
+        .map((row) => [row.task_id, row.at]),
+    );
+  }
+
+  /**
+   * The rule that brings an archived task back, in the one place every timeline entry is written:
+   * anything new on it (a comment, a status, a run, an artifact, the graph) means it is not put
+   * away any more, whoever put it away. Only the entries of archiving itself are not news, and
+   * neither is the end of a run the archive stopped, which arrives after it. The task comes back
+   * with an entry that says what brought it.
+   */
+  #revive(
+    taskId: string,
+    kind: TaskActivityKind,
+    runId: string | undefined,
+  ): void {
+    if (ARCHIVE_KINDS.includes(kind)) return;
+    const row = this.#db
+      .query<{ archived_at: number | null }, [string]>(
+        "SELECT archived_at FROM task WHERE id = ?",
+      )
+      .get(taskId);
+    if (row?.archived_at === null || row?.archived_at === undefined) return;
+    if (runId !== undefined && RUN_ENDS.includes(kind)) {
+      const archived = this.#db
+        .query<{ data: string }, [string]>(
+          `SELECT data FROM task_activity WHERE task_id = ? AND kind = 'archived'
+            ORDER BY rowid DESC LIMIT 1`,
+        )
+        .get(taskId);
+      const stopped = (
+        JSON.parse(archived?.data ?? "{}") as { stoppedRuns?: unknown }
+      ).stoppedRuns;
+      if (Array.isArray(stopped) && stopped.includes(runId)) return;
+    }
+    this.#db
+      .query(
+        "UPDATE task SET archived_at = NULL, archived_by = NULL WHERE id = ?",
+      )
+      .run(taskId);
+    this.#log(
+      taskId,
+      "unarchived",
+      { kind: "system", agentId: null },
+      {
+        data: { cause: kind },
+      },
+    );
+  }
+
   /** Remove a task and, with it, its timeline. */
   remove(id: string): boolean {
     return this.#db.query("DELETE FROM task WHERE id = ?").run(id).changes > 0;
@@ -483,6 +590,7 @@ export class TaskStore {
     },
   ): TaskActivityView {
     const id = crypto.randomUUID();
+    this.#revive(taskId, kind, detail.runId);
     this.#db
       .query(
         `INSERT INTO task_activity (id, task_id, run_id, kind, actor, actor_agent, body, data, created_at)

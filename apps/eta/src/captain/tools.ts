@@ -195,9 +195,12 @@ export function captainSessionTools(
     const listTasks = defineTool({
       name: "captain_list_tasks",
       description:
-        "List the task board with status, executor, assignment source and run status, and the task graph: parentId and subtasks (done/total) for the tree, dependsOn (each edge with its state and requireDone) and waitingOn (what its work still waits for, inherited from parents too, `via` the parent). `under` lists one tree: the task and everything below it.",
+        "List the task board with status, executor, assignment source and run status, and the task graph: parentId and subtasks (done/total) for the tree, dependsOn (each edge with its state and requireDone) and waitingOn (what its work still waits for, inherited from parents too, `via` the parent). `under` lists one tree: the task and everything below it. Archived tasks (archivedAt set; put away, usually done long ago) are left out unless `archived` asks for them.",
       parameters: Type.Object({
         status: Type.Optional(Type.String()),
+        archived: Type.Optional(
+          Type.Union([Type.Literal("only"), Type.Literal("include")]),
+        ),
         under: Type.Optional(
           Type.String({ description: "A task's number (#12) or id" }),
         ),
@@ -220,7 +223,7 @@ export function captainSessionTools(
         return text(
           json(
             deps.board
-              .list()
+              .list({ archived: args.archived })
               .filter(
                 (task) =>
                   (args.status === undefined || task.status === args.status) &&

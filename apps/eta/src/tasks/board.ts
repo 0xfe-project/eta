@@ -6,6 +6,7 @@ import type {
   TaskActivityKind,
   TaskActivityView,
   TaskActor,
+  TaskArchivedFilter,
   TaskArtifactRef,
   TaskDependencyView,
   TaskRefView,
@@ -220,7 +221,15 @@ const viewOf = (task: TaskRecord, graph: TaskGraph): BoardTaskView => ({
   comments: task.comments,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
+  archivedAt: task.archivedAt ?? null,
+  archivedBy: task.archivedBy ?? null,
 });
+
+const DAY = 24 * 60 * 60 * 1000;
+
+/** Done or cancelled: the statuses a task can be archived in by itself. */
+const finished = (status: BoardTaskStatus): boolean =>
+  status === "done" || status === "cancelled";
 
 export class TaskBoard {
   readonly #deps: TaskBoardDeps;
@@ -246,10 +255,28 @@ export class TaskBoard {
 
   /* ---------------------------------------------------------------- reads */
 
-  list(): BoardTaskView[] {
+  /**
+   * The board's tasks, the one touched last first: without the archived ones, unless `archived`
+   * asks for them (`only`: those alone, the one archived last first). The graph every view is
+   * read against is always the whole board, so a parent's progress and a dependency count an
+   * archived task like any other.
+   */
+  list(
+    options: { archived?: TaskArchivedFilter | undefined } = {},
+  ): BoardTaskView[] {
     const tasks = this.#deps.tasks.list();
     const graph = this.#graphOf(tasks);
-    return tasks.map((task) => viewOf(task, graph));
+    const archived = (task: TaskRecord): boolean =>
+      task.archivedAt !== null && task.archivedAt !== undefined;
+    const chosen =
+      options.archived === "include"
+        ? tasks
+        : options.archived === "only"
+          ? tasks
+              .filter(archived)
+              .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0))
+          : tasks.filter((task) => !archived(task));
+    return chosen.map((task) => viewOf(task, graph));
   }
 
   /** The graph as it is now, to ask (`graph.ts`). */
@@ -760,6 +787,145 @@ export class TaskBoard {
   artifactsChanged(taskId: string): void {
     if (this.#deps.tasks.get(taskId) === undefined) return;
     this.#commit(taskId, "changed", () => undefined);
+  }
+
+  /* ---------------------------------------------------------------- archiving */
+
+  /**
+   * Put a task away, and its subtasks with it: a parent is never archived with work under it still
+   * on the board. Any status may be; a task whose tree has a run that has not ended is refused
+   * unless `stopRuns`, which stops them first, the way a cancel does. The runs that were going end
+   * after the task is archived, and their ends do not bring it back (`TaskStore`). Who did it is
+   * on each timeline. A task archived already is left as it is.
+   */
+  archive(
+    id: string,
+    actor: TaskActor,
+    options: { stopRuns?: boolean | undefined } = {},
+  ): BoardTaskDetail {
+    const task = this.#existing(id);
+    const graph = this.graph();
+    const tree = [
+      task,
+      ...graph.descendantsOf(task.id).map((t) => this.#existing(t.id)),
+    ].filter((t) => t.archivedAt === null || t.archivedAt === undefined);
+    if (tree.length === 0) return this.#detailOf(task);
+    const running = tree.filter((t) => this.#deps.runs.openOf(t.id).length > 0);
+    if (running.length > 0 && options.stopRuns !== true)
+      throw new Error(
+        `${running.map((t) => `#${t.number}`).join(", ")} ${running.length === 1 ? "has a run" : "have runs"} that has not ended; archiving stops ${running.length === 1 ? "it" : "them"} (stopRuns)`,
+      );
+    const stopped = new Map<string, string[]>();
+    for (const t of running) {
+      stopped.set(
+        t.id,
+        this.#deps.runs.openOf(t.id).map((run) => run.id),
+      );
+      this.#runs?.stop(t.id, "The task is archived.");
+    }
+    const by =
+      actor.kind === "agent" && actor.agentId !== null ? actor.agentId : "user";
+    this.#deps.db.transaction(() => {
+      for (const t of tree)
+        this.#commit(t.id, "changed", () => {
+          this.#deps.tasks.archive(t.id, by, actor, {
+            reason: "manual",
+            stoppedRuns: (stopped.get(t.id) ?? []).filter(
+              // A queued run ended as it was stopped; only one that was going ends later.
+              (runId) => this.#deps.runs.get(runId)?.finishedAt === null,
+            ),
+            ...(t.id === task.id ? {} : { with: this.#refOf(task) }),
+          });
+        });
+    })();
+    return this.#detailOf(this.#existing(task.id));
+  }
+
+  /** Bring tasks back to the board, each with its archived subtasks. */
+  unarchive(ids: readonly string[], actor: TaskActor): BoardTaskDetail[] {
+    const roots = ids.map((id) => this.#named(id));
+    const graph = this.graph();
+    this.#deps.db.transaction(() => {
+      for (const root of roots)
+        for (const t of [
+          root,
+          ...graph.descendantsOf(root.id).map((d) => this.#existing(d.id)),
+        ]) {
+          const now = this.#existing(t.id);
+          if (now.archivedAt === null || now.archivedAt === undefined) continue;
+          this.#commit(t.id, "changed", () => {
+            this.#deps.tasks.unarchive(t.id, actor, {
+              cause: "manual",
+              ...(t.id === root.id ? {} : { with: this.#refOf(root) }),
+            });
+          });
+        }
+    })();
+    return roots.map((root) => this.#detailOf(this.#existing(root.id)));
+  }
+
+  /**
+   * The host puts away what is finished and quiet: a done or cancelled task, not archived, whose
+   * timeline has had nothing new for `days` days and that has no run left going. A parent goes
+   * only once everything under it would too (or is away already), and then the whole tree goes
+   * together. Returns the tasks it archived.
+   */
+  archiveStale(days: number, now: number = Date.now()): string[] {
+    const cutoff = now - days * DAY;
+    const tasks = this.#deps.tasks.list();
+    const byId = new Map(tasks.map((task) => [task.id, task]));
+    const graph = this.#graphOf(tasks);
+    const last = this.#deps.tasks.lastActivity();
+    const isArchived = (task: TaskRecord): boolean =>
+      task.archivedAt !== null && task.archivedAt !== undefined;
+    const ready = new Map<string, boolean>();
+    const readyOf = (task: TaskRecord): boolean => {
+      const known = ready.get(task.id);
+      if (known !== undefined) return known;
+      ready.set(task.id, false);
+      const answer =
+        isArchived(task) ||
+        (finished(task.status) &&
+          (last.get(task.id) ?? task.updatedAt) < cutoff &&
+          this.#deps.runs.openOf(task.id).length === 0 &&
+          graph
+            .childrenOf(task.id)
+            .every((child) => readyOf(byId.get(child.id)!)));
+      ready.set(task.id, answer);
+      return answer;
+    };
+    const chosen = tasks.filter((task) => !isArchived(task) && readyOf(task));
+    if (chosen.length === 0) return [];
+    // The top of each tree that goes, so a subtask can say which one it went with.
+    const topOf = (task: TaskRecord): TaskRecord => {
+      let at = task;
+      while (at.parentId !== null) {
+        const parent = byId.get(at.parentId);
+        if (parent === undefined || isArchived(parent) || !readyOf(parent))
+          break;
+        at = parent;
+      }
+      return at;
+    };
+    this.#deps.db.transaction(() => {
+      for (const task of chosen) {
+        const top = topOf(task);
+        this.#commit(task.id, "changed", () => {
+          this.#deps.tasks.archive(
+            task.id,
+            "auto",
+            SYSTEM,
+            {
+              reason: "stale",
+              days,
+              ...(top.id === task.id ? {} : { with: this.#refOf(top) }),
+            },
+            now,
+          );
+        });
+      }
+    })();
+    return chosen.map((task) => task.id);
   }
 
   /* ---------------------------------------------------------------- runs */

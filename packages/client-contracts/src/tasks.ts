@@ -160,6 +160,80 @@ export interface BoardTaskView {
   createdAt: number;
   /** Moves on every change, comment and artifact: the board is ordered by it, newest first. */
   updatedAt: number;
+  /**
+   * When it was archived: put away from the board's lists, still itself everywhere else (its page,
+   * `#N`, dependencies, a parent's progress). Null, or absent from an older host, is on the board.
+   * Anything new on its timeline, or a status moved off done or cancelled, brings it back.
+   */
+  archivedAt?: number | null;
+  /** Who archived it: `auto` (the host, for a quiet done or cancelled task), `user`, or an agent's id. */
+  archivedBy?: string | null;
+}
+
+/** Which tasks a list holds: those on the board (the default), only the archived ones, or both. */
+export const TASK_ARCHIVED_FILTERS = ["only", "include"] as const;
+export type TaskArchivedFilter = (typeof TASK_ARCHIVED_FILTERS)[number];
+
+/** How many quiet days put a done or cancelled task away, as the setting offers; null is never. */
+export const TASK_ARCHIVE_DAYS = [3, 7, 30] as const;
+export type TaskArchiveDays = (typeof TASK_ARCHIVE_DAYS)[number];
+export const DEFAULT_TASK_ARCHIVE_DAYS: TaskArchiveDays = 7;
+
+/** The board's own settings, on `tasks`. */
+export interface TaskBoardSettings {
+  /** Days a done or cancelled task stays quiet before the host archives it; null never does. */
+  archiveAfterDays: TaskArchiveDays | null;
+}
+
+/**
+ * What an `archived` entry's `data` says: who (`by`: `auto`, `user` or an agent's id), why
+ * (`reason`: `stale` when the host did it after `days` quiet days, `manual` otherwise), the runs it
+ * stopped to do it (`stoppedRuns`), and, for a subtask put away with its parent, that parent
+ * (`with`).
+ */
+export interface TaskArchivedEntry {
+  by: string;
+  reason: "stale" | "manual";
+  days: number | null;
+  stoppedRuns: string[];
+  with: TaskEntryRef | null;
+}
+
+/** An `archived` entry's `data` read. */
+export function archivedEntry(
+  data: Record<string, unknown>,
+): TaskArchivedEntry {
+  return {
+    by: typeof data.by === "string" ? data.by : "user",
+    reason: data.reason === "stale" ? "stale" : "manual",
+    days: typeof data.days === "number" ? data.days : null,
+    stoppedRuns: Array.isArray(data.stoppedRuns)
+      ? data.stoppedRuns.filter((id): id is string => typeof id === "string")
+      : [],
+    with: entryRef(data.with),
+  };
+}
+
+/**
+ * What an `unarchived` entry's `data` says: the kind of entry that brought the task back
+ * (`cause`: `comment`, `status`, `run_started`, …), or `manual` when someone restored it, and the
+ * parent it came back with (`with`).
+ */
+export interface TaskUnarchivedEntry {
+  cause: TaskActivityKind | "manual";
+  with: TaskEntryRef | null;
+}
+
+export function unarchivedEntry(
+  data: Record<string, unknown>,
+): TaskUnarchivedEntry {
+  return {
+    cause:
+      typeof data.cause === "string"
+        ? (data.cause as TaskActivityKind | "manual")
+        : "manual",
+    with: entryRef(data.with),
+  };
 }
 
 /** The newest version of an artifact published for a task. */
@@ -253,6 +327,8 @@ export interface BoardTaskDetail extends BoardTaskView {
  * `deleted`, with the subtask as `taskId`, `number`, `title`; or `all_cancelled`). Like
  * `dependency`, neither has a `body` (`parentEntry`, `subtaskEntry`). A `status` entry the system
  * wrote because the subtasks moved has `reason: "subtasks"` (or `"all_cancelled"`).
+ * `archived` and `unarchived` are the task put away and brought back (`archivedEntry`,
+ * `unarchivedEntry`); like the graph's kinds they have no `body`.
  */
 export type TaskActivityKind =
   | "created"
@@ -270,7 +346,9 @@ export type TaskActivityKind =
   | "run_nudged"
   | "dependency"
   | "parent"
-  | "subtask";
+  | "subtask"
+  | "archived"
+  | "unarchived";
 
 /** What a `dependency` entry's `data` says, when it says it (see `TaskActivityKind`). */
 export interface TaskDependencyEntry {
@@ -462,9 +540,13 @@ export interface TaskCardData {
 
 /* ------------------------------------------------------------------ sections */
 
-/** `tasks`: eager. */
+/** `tasks`: eager. `list` is the board, without the archived tasks, which are `archived`. */
 export interface TaskListSections {
   list: BoardTaskView[];
+  /** Archived tasks, the one archived last first. Absent from an older host. */
+  archived?: BoardTaskView[];
+  /** Absent from an older host. */
+  settings?: TaskBoardSettings;
 }
 /** `tasks.<id>`: registered for every task, from startup or from its creation, until it is deleted. */
 export interface TaskDetailSections {
@@ -487,6 +569,10 @@ export const TASK_ACTIONS = [
   "addDependency",
   "removeDependency",
   "setParent",
+  "list",
+  "archive",
+  "unarchive",
+  "setSettings",
 ] as const;
 export type TaskAction = (typeof TASK_ACTIONS)[number];
 
@@ -586,6 +672,17 @@ export interface TaskArgs {
    * parent is the task or one of its subtasks, or when it would close a cycle of waiting.
    */
   setParent: { taskId: string; parent: string | null };
+  /** The board as `tasks.list` shows it: without the archived tasks unless `archived` asks for them. */
+  list: { archived?: TaskArchivedFilter };
+  /**
+   * Put the task away, with its subtasks. Any status may be archived; a task with a run that has
+   * not ended (its own or a subtask's) is refused unless `stopRuns` is set, which stops those runs
+   * first, as `interrupt` does. Archiving a task that is archived already changes nothing.
+   */
+  archive: { taskId: string; stopRuns?: boolean };
+  /** Bring tasks back to the board, each with its archived subtasks. */
+  unarchive: { taskId?: string; taskIds?: string[] };
+  setSettings: Partial<TaskBoardSettings>;
 }
 export interface TaskResults {
   create: { tasks: BoardTaskDetail[] };
@@ -599,6 +696,10 @@ export interface TaskResults {
   addDependency: { task: BoardTaskDetail };
   removeDependency: { task: BoardTaskDetail };
   setParent: { task: BoardTaskDetail };
+  list: { tasks: BoardTaskView[] };
+  archive: { task: BoardTaskDetail };
+  unarchive: { tasks: BoardTaskDetail[] };
+  setSettings: { settings: TaskBoardSettings };
 }
 export type TaskCall = {
   [A in TaskAction]: Omit<CallFrame, "target" | "action" | "args"> & {
