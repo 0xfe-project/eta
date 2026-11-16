@@ -913,11 +913,12 @@ export function installChat(host: FakeHost): void {
     truncated: false,
   }));
 
-  const conversationOf = (id: string): Conversation => {
+  const attachments = new Map<string, AttachmentView>();
+  function conversationOf(id: string): Conversation {
     const conversation = conversations.get(id);
     if (conversation === undefined) throw new Error(`no conversation ${id}`);
     return conversation;
-  };
+  }
 
   host.on(
     "conversations.send",
@@ -1141,7 +1142,6 @@ export function installChat(host: FakeHost): void {
     },
   );
 
-  const attachments = new Map<string, AttachmentView>();
   host.on(
     "conversations.attach",
     (args: {

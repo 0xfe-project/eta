@@ -2,11 +2,11 @@ import type { Signal } from "nsh";
 import type { ToolBlock } from "./run";
 import { computed, Scroll, signal, Text, View } from "nsh";
 import { t } from "../../i18n";
-import { ToolImages } from "./ToolImages";
 import { Header, Page } from "../../ui/Page";
 import { Counts } from "./ProcessBox";
 import { sentence, stepOf, summarize } from "./steps";
 import { exitCodeOf, fullOutputOf, shapeOf, withoutAnsi } from "./tool-shape";
+import { ToolImages } from "./ToolImages";
 
 /** Past this many lines a block folds to its first ones, with the rest one press away. */
 const FOLD_LINES = 14;

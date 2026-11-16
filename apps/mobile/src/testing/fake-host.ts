@@ -141,7 +141,7 @@ export class FakeHost {
 
   socket(refused: RefusedBy | undefined): WireSocket {
     let onClose: (why?: RefusedBy) => void = () => undefined;
-    if (refused !== undefined) setTimeout(() => onClose(refused), 200);
+    if (refused !== undefined) setTimeout(onClose, 200, refused);
     else {
       setTimeout(() => {
         const ops = [...this.ops.keys()].map((name) => {

@@ -46,7 +46,7 @@ function ProjectRow(props: {
 }
 
 /** 07: a project and an agent. What it makes is a conversation with the agent in that project. */
-export function NewConversationScreen(_props: {}) {
+export function NewConversationScreen() {
   const projects = useProjectChoice();
   const agentId = signal<string | undefined>(undefined);
   const sending = signal(false);

@@ -397,9 +397,9 @@ function Reply(props: {
   );
 }
 
-const isText = (
-  block: RunBlock,
-): block is Extract<RunBlock, { type: "text" }> => block.type === "text";
+function isText(block: RunBlock): block is Extract<RunBlock, { type: "text" }> {
+  return block.type === "text";
+}
 
 function TaskRow(props: { message: MessageView; chat: Chat }) {
   return (

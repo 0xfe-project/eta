@@ -1,10 +1,5 @@
 // Every way from one feature into another. Inside a feature, push with `open` from `stack.ts`.
 
-import {
-  AgentInfoScreen,
-  ArtifactScreen,
-  GroupInfoScreen,
-} from "../features/group";
 import { ChatScreen } from "../features/chat";
 import { ArchivedScreen } from "../features/conversations";
 import {
@@ -12,6 +7,11 @@ import {
   NewConversationScreen,
   NewGroupScreen,
 } from "../features/create";
+import {
+  AgentInfoScreen,
+  ArtifactScreen,
+  GroupInfoScreen,
+} from "../features/group";
 import { MachineScreen, SettingsScreen } from "../features/settings";
 import { TaskScreen } from "../features/tasks";
 import { open } from "./stack";

@@ -1,6 +1,6 @@
-import { effect, lifecycle, signal, Text, untracked, View } from "nsh";
 import type { AgentStatus, MessageStatus } from "@eta/client-contracts";
 import type { TextKey } from "../../i18n";
+import { effect, lifecycle, signal, Text, untracked, View } from "nsh";
 import { agentById } from "../../app/lists";
 import { t } from "../../i18n";
 import { go } from "../../nav/links";
