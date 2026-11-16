@@ -17,7 +17,7 @@ import { AGENT_RUNTIMES, isAgentRuntime } from "@eta/client-contracts";
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
 import { interactionId } from "../inbox/store";
-import { isTaskSession } from "../tasks/session-key";
+import { heldIn } from "../session-owner";
 import { GroupConflictError } from "./propose-group";
 import { redactJson, redactText, redactValue } from "./redact";
 
@@ -375,14 +375,13 @@ export function captainSessionTools(
       },
     });
 
-    /** Where a proposal's card goes: this conversation, or Captain's direct chat from a task. */
     /**
      * Where a proposal's card goes: this conversation, or Captain's direct chat from a session held
      * in none (a task's, a routine run's).
      */
     const proposalOrigin = async (): Promise<string> =>
       meta.conversationId === undefined ||
-      isTaskSession(meta.conversationId) ||
+      heldIn(meta.conversationId) !== "conversation" ||
       deps.conversations.get(meta.conversationId) === undefined
         ? (await deps.service.direct()).conversationId
         : meta.conversationId;

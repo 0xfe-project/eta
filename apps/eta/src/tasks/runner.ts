@@ -65,8 +65,8 @@ import { homedir } from "node:os";
 import { LinkError } from "@eta/daemon";
 import { shellQuote } from "@eta/ssh";
 import { explainRunError } from "../agents/model";
+import { mentionKey, sessionKeyOf, taskKey } from "../session-owner";
 import { workable } from "./board";
-import { mentionKey, sessionKeyOf, taskKey } from "./session-key";
 import { executorOf } from "./store";
 import { prepareWorktree } from "./workspace";
 
@@ -104,7 +104,7 @@ export interface TaskRunnerDeps {
   /** Where sessions are made; the engine knows the places. */
   engine: {
     openRunSession: (input: {
-      /** What the session is held in (`session-key.ts`). */
+      /** What the session is held in (`session-owner.ts`). */
       key: string;
       /** The session to carry on in; null opens a new one. */
       existing: string | null;

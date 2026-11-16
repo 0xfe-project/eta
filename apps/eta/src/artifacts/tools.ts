@@ -7,7 +7,7 @@ import type { KernelTool } from "@eta/core";
  * is packed is judged by the service (`kinds/site.ts`) and stored as a new version. A version published
  * for a task goes on the task's timeline and into its cards.
  *
- * A task's session is held in a key, not in a conversation (`tasks/session-key.ts`), so what it
+ * A task's session is held in a key, not in a conversation (`session-owner.ts`), so what it
  * publishes is for its task, and comes from the conversation the task is in, if it is in one.
  */
 import type { SessionHooks } from "../session-hooks";
@@ -16,8 +16,7 @@ import type { SiteLimits } from "./files";
 import type { ArtifactService } from "./service";
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
-import { isRoutineSession } from "../routines/session-key";
-import { isTaskSession, taskOfKey } from "../tasks/session-key";
+import { heldIn, taskOf } from "../session-owner";
 import { ArtifactError, collectSite } from "./files";
 
 /** The tool needs nothing from the run: where it reads is the session's own directory. */
@@ -96,14 +95,16 @@ export function artifactSessionTools(deps: {
           if (args.taskId !== undefined && task === undefined)
             throw new ArtifactError(`no such task: ${args.taskId}`);
           // Read now, not when the session opened: a task can move to another conversation.
-          const ownId = taskOfKey(conversationId, deps.taskOfRun);
+          const ownId = taskOf(conversationId, deps.taskOfRun);
           const own = ownId === undefined ? undefined : deps.board.find(ownId);
-          const where = isTaskSession(conversationId)
-            ? (own?.conversationId ?? own?.originConversationId ?? undefined)
-            : // A routine run is held in no conversation, and has none to file it under.
-              isRoutineSession(conversationId)
-              ? undefined
-              : conversationId;
+          const held = heldIn(conversationId);
+          // A routine run is held in no conversation, and has none to file it under.
+          const where =
+            held === "task"
+              ? (own?.conversationId ?? own?.originConversationId ?? undefined)
+              : held === "routine"
+                ? undefined
+                : conversationId;
           const artifactId =
             args.artifactId === undefined
               ? undefined

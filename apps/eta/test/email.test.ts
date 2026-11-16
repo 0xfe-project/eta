@@ -292,7 +292,8 @@ describe("iMAP and SMTP bridge", () => {
         ask: { question: "does it land", needed: "confirm it arrives" },
         decided: [{ text: "the bridge works", source: "this test" }],
         draft: "Hello from the ETA mail test.",
-        origin: { conversationId: "task:t9", cwd: "/tmp/eta" },
+        // A mentioned agent's session on task t9: the mail names the task, not `t9:agent-1`.
+        origin: { conversationId: "task:t9:agent-1", cwd: "/tmp/eta" },
       },
     });
     const sent = await service.confirmProposal(proposal.id);

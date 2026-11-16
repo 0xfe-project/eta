@@ -15,6 +15,7 @@ import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
 import { resource } from "../resources";
+import { taskOf } from "../session-owner";
 import {
   decodeEmailMeta,
   encodeContextPackets,
@@ -51,14 +52,6 @@ const messageIdFor = (sessionId: string, address: string) => {
   const domain = address.split("@")[1] || "localhost";
   return `<eta.${crypto.randomUUID()}.${sessionId}@${domain}>`;
 };
-
-/**
- * The board task a session key names, when it names one. `tasks/session-key.ts` owns the full
- * mapping; a mail only needs the plain `task:<id>` form, and a legacy `task-run:<runId>` key
- * resolves to no id here rather than to a wrong one.
- */
-const taskOfSessionKey = (key: string | null): string | null =>
-  key !== null && key.startsWith("task:") ? key.slice("task:".length) : null;
 
 /** The origin of a configured public URL, or nothing when it is not a site. */
 const httpOrigin = (text: string | undefined): string | undefined => {
@@ -596,7 +589,7 @@ export class EmailService {
           agentName: agent?.name ?? null,
           sessionId: proposal.sessionId,
           conversationId,
-          taskId: taskOfSessionKey(conversationId),
+          taskId: taskOf(conversationId ?? undefined) ?? null,
           cwd: context.origin?.cwd ?? null,
           mailThreadId,
         },

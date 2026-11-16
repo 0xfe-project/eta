@@ -5,7 +5,7 @@
  * A run is Captain's. It is a session made the way Captain's other sessions are, through the
  * engine (`RoutineCaptain.open`, which is `Engine.openRunSession`): Captain's model, instructions
  * and every Captain tool, plus this routine's own (`tools.ts`). It is held in `routine:<runId>`
- * (`session-key.ts`) and works in a directory of the routine's own (`<dataDir>/routines/<id>/`).
+ * (`session-owner.ts`) and works in a directory of the routine's own (`<dataDir>/routines/<id>/`).
  * The rules:
  *
  * - **Captain off, no run.** A time that comes while Captain is off (its supervisor switched off,
@@ -45,8 +45,8 @@ import type { Said } from "./tools";
 import { mkdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { kernelOn } from "@eta/core";
+import { ownerOf, routineKey } from "../session-owner";
 import { nudgePrompt, revisionPrompt, runPrompt } from "./prompts";
-import { routineKey, runOfKey } from "./session-key";
 import { routineTools } from "./tools";
 
 /** What a run says when the process died under it. */
@@ -180,8 +180,10 @@ export class RoutineRunner {
    * is not one of ours, and a run's session opened again after its run ended gets none.
    */
   readonly sessionTools = (input: { meta: SessionMeta }): KernelTool[] => {
-    const runId = runOfKey(input.meta.conversationId);
-    if (runId === undefined || !this.#captain.is(input.meta.agentId)) return [];
+    const owner = ownerOf(input.meta.conversationId);
+    if (owner?.kind !== "routine" || !this.#captain.is(input.meta.agentId))
+      return [];
+    const runId = owner.runId;
     const run = this.#store.run(runId);
     if (run === undefined) return [];
     return routineTools({
@@ -215,8 +217,9 @@ export class RoutineRunner {
   readonly routineOf = (
     meta: Pick<SessionMeta, "cwd" | "conversationId">,
   ): string | undefined => {
-    const runId = runOfKey(meta.conversationId);
-    if (runId !== undefined) return this.#store.run(runId)?.routineId;
+    const owner = ownerOf(meta.conversationId);
+    if (owner?.kind === "routine")
+      return this.#store.run(owner.runId)?.routineId;
     if (dirname(meta.cwd) !== homesIn(this.#dataDir)) return undefined;
     const routineId = basename(meta.cwd);
     return this.#store.get(routineId) === undefined ? undefined : routineId;

@@ -29,7 +29,7 @@ export interface RunRecord extends TaskRunView {
    * comment's wake and a mentioned agent's answer do not.
    */
   waitsForDeps: boolean;
-  /** What the session is held in (`session-key.ts`); null until the run has a session. */
+  /** What the session is held in (`session-owner.ts`); null until the run has a session. */
   sessionKey: string | null;
 }
 
