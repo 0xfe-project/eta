@@ -46,8 +46,14 @@ function listOf<T>(state: Targets, target: string): readonly T[] {
 
 export const inboxList = (state: Targets) =>
   listOf<InteractionView>(state, "inbox");
+/**
+ * The board's tasks. The host's `list` leaves archived tasks out already; one that says it is
+ * archived (put away, back on anything new) is not listed here either.
+ */
 export const taskList = (state: Targets) =>
-  listOf<BoardTaskView>(state, "tasks");
+  listOf<BoardTaskView>(state, "tasks").filter(
+    (task) => task.archivedAt == null,
+  );
 export const agentList = (state: Targets) => listOf<AgentView>(state, "agents");
 const NO_CONVERSATIONS: readonly ConversationSummary[] = [];
 

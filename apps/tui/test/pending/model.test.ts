@@ -179,6 +179,20 @@ describe("the open tasks", () => {
     });
     expect(openTasks(s).open.map((t) => t.id)).toEqual(["t1", "t3", "t2"]);
   });
+
+  it("leave out archived tasks, and do not count them as closed", () => {
+    const s = state({
+      tasks: [
+        task("t1", "todo", 10),
+        { ...task("t2", "todo", 20), archivedAt: 30, archivedBy: "user" },
+        { ...task("t3", "done", 5), archivedAt: 30, archivedBy: "auto" },
+      ],
+    });
+    expect(openTasks(s)).toEqual({
+      open: [expect.objectContaining({ id: "t1" })],
+      closed: 0,
+    });
+  });
 });
 
 describe("an item's conversation", () => {
