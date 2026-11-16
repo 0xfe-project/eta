@@ -192,6 +192,7 @@ export type ProviderKind =
   | "zai"
   | "opencode"
   | "opencode-go"
+  | "commandcode"
   | "openai-codex"
   | "openai-compatible"
   | "openai-responses";

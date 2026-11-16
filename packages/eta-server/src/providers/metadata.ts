@@ -29,6 +29,7 @@ const ENDPOINTS: Record<string, string> = {
   [BUILTIN_PROVIDER_PRESETS.zai.baseUrl]: "zai-coding-plan",
   [BUILTIN_PROVIDER_PRESETS.opencode.baseUrl]: "opencode",
   [BUILTIN_PROVIDER_PRESETS["opencode-go"].baseUrl]: "opencode-go",
+  [BUILTIN_PROVIDER_PRESETS.commandcode.baseUrl]: "commandcode",
   "https://api.openai.com/v1": "openai",
 };
 

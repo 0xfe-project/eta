@@ -71,7 +71,11 @@
     "accountReady_one": "{{name}} is connected, with {{count}} model.",
     "accountReady_other": "{{name}} is connected, with {{count}} models.",
     "recommended": "Recommended",
-    "getEtaKey": "Get a key"
+    "getEtaKey": "Get a key",
+    "commandCode": {
+      "getKey": "Create a key in Studio",
+      "plans": "The Go plan has no API access; GOAT, Pro, Max, Team and Provider plans do. Claude models only speak the Anthropic protocol, which eta does not support yet."
+    }
   },
   "detail": {
     "breadcrumb": "Location",

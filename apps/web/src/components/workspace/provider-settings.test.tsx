@@ -517,6 +517,7 @@ describe("adding a source", () => {
         "GGoogle AI Studio",
         "OOpenCode Zen",
         "OOpenCode Go",
+        "CCommand Code",
       ],
       ["OOpenAI 兼容接口", "本本机模型Ollama、LM Studio"],
     ]);
@@ -591,6 +592,67 @@ describe("adding a source", () => {
     expect(page.calls("check")).toEqual([{ id: "opencode-zen" }]);
     expect(document.querySelector("[role=dialog]")).toBeNull();
     expect(rows()[0]).toContain("OpenCode Zen");
+  });
+
+  it("connects Command Code with a key from its Studio, and keeps its Claude models unchosen for their protocol", async () => {
+    const page = await render({
+      discover: () => ({
+        models: [
+          {
+            id: "moonshotai/Kimi-K3",
+            name: "Kimi K3",
+            api: "openai-completions",
+          },
+        ],
+        unsupported: [
+          {
+            id: "claude-opus-5-5",
+            name: "Claude Opus 5.5",
+            protocol: "@ai-sdk/anthropic",
+            reason: "protocol",
+          },
+        ],
+      }),
+    });
+    await click(/添加来源/);
+    await click(/^CCommand Code$/);
+    expect(find("a", /去 Studio 创建 key/).getAttribute("href")).toBe(
+      "https://commandcode.ai/settings/keys",
+    );
+    expect(text()).toContain("Go 计划没有 API 权限");
+    await type(/Command Code 的 API key/, "sk-cmd");
+    await click(/^连接$/);
+    expect(page.calls("discover")).toEqual([
+      {
+        kind: "commandcode",
+        baseUrl: "https://api.commandcode.ai/provider/v1",
+        apiKey: "sk-cmd",
+      },
+    ]);
+    expect(find("li", /Claude Opus 5\.5/).textContent).toContain(
+      "暂不支持（Anthropic 协议）",
+    );
+    expect(text()).toContain("已选 1 个");
+    await click(/^完成$/);
+    expect(page.calls("save")).toEqual([
+      {
+        provider: {
+          id: "command-code",
+          name: "Command Code",
+          kind: "commandcode",
+          baseUrl: "https://api.commandcode.ai/provider/v1",
+          apiKey: "sk-cmd",
+          models: [
+            {
+              id: "moonshotai/Kimi-K3",
+              name: "Kimi K3",
+              api: "openai-completions",
+            },
+          ],
+        },
+        revision: "r1",
+      },
+    ]);
   });
 
   it("takes an address and a protocol for a custom endpoint, and names it after its host", async () => {

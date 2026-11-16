@@ -274,6 +274,28 @@
       "models": []
     },
     {
+      "id": "commandcode",
+      "match": {
+        "kinds": ["commandcode"],
+        "baseUrls": []
+      },
+      "auth": {
+        "adapter": "api-key",
+        "required": true,
+        "missingError": "key_required"
+      },
+      "discovery": { "adapter": "models-dev", "provider": "commandcode" },
+      "runtime": {
+        "adapter": "openai-chat",
+        "thinking": "reasoning-effort",
+        "developerRole": false,
+        "store": false,
+        "maxTokensField": "max_tokens"
+      },
+      "restrictToListedModels": true,
+      "models": []
+    },
+    {
       "id": "openai-compatible",
       "match": { "kinds": ["openai-compatible"], "baseUrls": [] },
       "auth": { "adapter": "api-key", "required": false },

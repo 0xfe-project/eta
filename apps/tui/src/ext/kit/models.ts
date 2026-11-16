@@ -29,6 +29,7 @@ const PRESET_NAMES: Partial<Record<ProviderKind, string>> = {
   zai: "GLM Coding Plan (Global)",
   opencode: "OpenCode Zen",
   "opencode-go": "OpenCode Go",
+  commandcode: "Command Code",
 };
 
 /** What a provider is called: its own name, else its kind's, else its id. */
