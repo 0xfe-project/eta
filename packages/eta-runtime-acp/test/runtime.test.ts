@@ -11,7 +11,7 @@ import type { AcpAgentConfig } from "@eta/client-contracts";
 import type { AgentMessage, KernelTool } from "@eta/core";
 import type { AskObserver } from "@eta/harness";
 import type { ManagedSession, SessionManagerOptions } from "@eta/server";
-import { realpathSync } from "node:fs";
+import { realpathSync, writeFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -347,6 +347,24 @@ describe("a permission request", () => {
     expect(
       agent.log().find((entry) => entry.method === "permission"),
     ).toMatchObject({ outcome: "yes" });
+  });
+});
+
+describe("a permission request after the turn has ended", () => {
+  it("is answered cancelled, and nobody is asked", async () => {
+    const { manager, agent, asked } = setup();
+    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    expect((await run(managed, "late")).status).toBe("completed");
+    // The turn is over: only now does the agent ask.
+    writeFileSync(join(agent.dir, "late.go"), "");
+    await until(
+      () => agent.log().find((entry) => entry.method === "late-permission"),
+      "the late request's answer",
+    );
+    expect(
+      agent.log().find((entry) => entry.method === "late-permission"),
+    ).toMatchObject({ outcome: "cancelled" });
+    expect(asked).toEqual([]);
   });
 });
 

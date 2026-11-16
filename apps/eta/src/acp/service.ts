@@ -233,7 +233,9 @@ export class AcpService {
         list = { error: messageOf(error) };
       }
       // Only the latest fetch, on the same link, may write: a later fetch, a change or a link
-      // that dropped meanwhile makes this answer old.
+      // that dropped meanwhile makes this answer old. Both of this fetch's answers carry its
+      // generation, so its own `ask(true)` still writes while it is the latest: the looks always
+      // reach the page, through this fetch or the newer one that asks again.
       if (
         this.#generations.get(id) === generation &&
         this.#options.link(id) === place.link
