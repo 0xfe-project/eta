@@ -31,7 +31,7 @@ import { homedir, hostname, platform } from "node:os";
 import { join } from "node:path";
 import { peerAddressOf, redactionMiddleware } from "@eta/server";
 import { acpPlugin } from "./acp/plugin";
-import { AcpService } from "./acp/service";
+import { AcpService, projectMachinesOf } from "./acp/service";
 import { agentsPlugin } from "./agents/plugin";
 import { AgentStore } from "./agents/store";
 import { approvalMiddleware } from "./approval-middleware";
@@ -1130,8 +1130,12 @@ export function createProduct(options: {
           acpPlugin(
             {
               service: new AcpService({
-                acp: options.acp,
+                local: options.acp,
+                machines,
+                link: (machineId) => hub.link(machineId),
                 agents: () => agents.list(),
+                projectMachines: (agentId) =>
+                  projectMachinesOf({ projects, conversations }, agentId),
                 changed: () => wire?.pushNow("acp"),
               }),
             },

@@ -1,10 +1,13 @@
 /**
- * The `acp` plugin: the settings page's view of the ACP agents this host runs, and the calls
- * that add, change, remove and try one.
+ * The `acp` plugin: the settings page's view of the ACP agents each machine runs, and the calls
+ * that add, change, remove and try one on one machine.
  *
- * One section, `list`, pushed when it changes. `save` adds an agent (no `previousId`), changes
- * one in place (`previousId` is its id) or renames one (`previousId` is its old id). `test` takes
- * a configuration that need not be saved.
+ * One section, `machines`: every known machine's list (or why its file cannot be read), by
+ * machine id, pushed when one changes. The primary's is always there; a daemon's once
+ * `refresh` asked for it. Every call takes a `machineId`, the primary when absent; a daemon that
+ * is offline is an error. `save` adds an agent (no `previousId`), changes one in place
+ * (`previousId` is its id) or renames one (`previousId` is its old id). `test` takes a
+ * configuration that need not be saved.
  */
 import type { CallFrame } from "@eta/client-wire-proto";
 import type { AcpService } from "./service";
@@ -28,12 +31,19 @@ export function acpPlugin(deps: AcpPluginDeps, applied: () => void) {
     "acp",
     ({ wire }) => {
       const offs = [
-        publish(wire, "acp", { list: () => service.list() }),
+        publish(wire, "acp", { machines: () => service.lists() }),
+
+        wire.handle("acp", "refresh", async (call) => ({
+          result: await service.refresh(
+            new Args(call).optionalString("machineId"),
+          ),
+        })),
 
         wire.handle("acp", "save", async (call) => {
           const args = new Args(call);
           return {
-            result: service.save(
+            result: await service.save(
+              args.optionalString("machineId"),
               agentOf(call),
               args.optionalString("previousId"),
             ),
@@ -41,12 +51,19 @@ export function acpPlugin(deps: AcpPluginDeps, applied: () => void) {
         }),
 
         wire.handle("acp", "delete", async (call) => {
-          service.delete(new Args(call).string("id"));
+          const args = new Args(call);
+          await service.delete(
+            args.optionalString("machineId"),
+            args.string("id"),
+          );
           return { result: {} };
         }),
 
         wire.handle("acp", "test", async (call) => ({
-          result: await service.test(agentOf(call)),
+          result: await service.test(
+            new Args(call).optionalString("machineId"),
+            agentOf(call),
+          ),
         })),
       ];
       return () => {

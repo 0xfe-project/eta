@@ -13,8 +13,6 @@ export interface AcpDraft {
   args: string;
   /** One KEY=VALUE per line. */
   env: string;
-  cwd: string;
-  autoAllow: boolean;
 }
 
 export const emptyAcpDraft: AcpDraft = {
@@ -23,8 +21,6 @@ export const emptyAcpDraft: AcpDraft = {
   command: "",
   args: "",
   env: "",
-  cwd: "",
-  autoAllow: false,
 };
 
 export function acpDraftOf(agent: AcpAgentConfig): AcpDraft {
@@ -36,8 +32,6 @@ export function acpDraftOf(agent: AcpAgentConfig): AcpDraft {
     env: Object.entries(agent.env)
       .map(([key, value]) => `${key}=${value}`)
       .join("\n"),
-    cwd: agent.cwd ?? "",
-    autoAllow: agent.autoAllow ?? false,
   };
 }
 
@@ -89,7 +83,8 @@ export type AcpDraftProblems = Partial<
 
 /**
  * What stops the draft from being saved, by field, as i18n keys of the `acp` namespace; the config
- * to send when nothing does. `taken` are the ids already in use, apart from the one being edited.
+ * to send when nothing does. `taken` are the ids already in use on the same machine, apart from the one being edited:
+ * another machine's agents are its own, and may have the same id.
  */
 export function checkAcpDraft(
   draft: AcpDraft,
@@ -111,7 +106,6 @@ export function checkAcpDraft(
     problems.env = { key: `errors.env.${env.reason}`, line: env.line };
   if (Object.keys(problems).length > 0 || !env.ok)
     return { ok: false, problems };
-  const cwd = draft.cwd.trim();
   return {
     ok: true,
     config: {
@@ -120,8 +114,6 @@ export function checkAcpDraft(
       command: draft.command.trim(),
       args: parseAcpArgs(draft.args),
       env: env.env,
-      ...(cwd === "" ? {} : { cwd }),
-      autoAllow: draft.autoAllow,
     },
   };
 }

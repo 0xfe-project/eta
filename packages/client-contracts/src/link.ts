@@ -1,3 +1,4 @@
+import type { AcpAgentView, AcpTestResult } from "./acp";
 import type { PromptImage } from "./operations";
 import type { AgentRuntimeInfo, ProcessStep, ToolActivity } from "./product";
 
@@ -195,6 +196,20 @@ export interface DaemonServiceParams {
   upgrade: { version: string; sha256: string };
   /** The external agent runtimes this machine has, with their models; `fresh` asks them again. */
   runtimes: { fresh?: boolean };
+  /**
+   * The ACP agents in this machine's own `~/.eta/acp.json`, as the settings page shows them: as
+   * known now, or (`settled`) once every look under way has finished. A file that cannot be read
+   * whole is an error saying so.
+   */
+  acpList: { settled?: boolean };
+  /**
+   * Add (no `previousId`), change or rename an ACP agent in this machine's file. Whether an agent
+   * still runs on the old id is the primary's to check first; the daemon does not know agents.
+   */
+  acpSave: { agent: unknown; previousId?: string };
+  acpDelete: { id: string };
+  /** Start a configuration here, saved or not, and shake hands. */
+  acpTest: { agent: unknown };
 }
 
 /** Evidence that a remote run is alive, streamed while it is in flight. */
@@ -206,6 +221,10 @@ export interface DaemonServiceResults {
   run: RunOutcome;
   upgrade: { ok: true } | { ok: false; reason: string };
   runtimes: { runtimes: AgentRuntimeInfo[] };
+  acpList: { agents: AcpAgentView[] };
+  acpSave: AcpAgentView;
+  acpDelete: Record<string, never>;
+  acpTest: AcpTestResult;
   exec: {
     code: number;
     stdout: string;

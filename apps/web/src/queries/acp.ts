@@ -1,45 +1,67 @@
 import type {
   AcpAgentConfig,
   AcpAgentView,
+  AcpMachineList,
   AcpTestResult,
 } from "@eta/client-contracts";
-import { useListTarget, useTarget, useWireMutation } from "@/queries/wire";
+import { useEffect } from "react";
+import { getWire } from "@/lib/wire";
+import { usePluginError, useTarget, useWireMutation } from "@/queries/wire";
 
-// External agents on the wire: the `acp` target (one `list` section, every ACP agent configured in
-// ~/.eta/acp.json, as the host sees it) and its calls. The host keeps the file; the page only asks.
+// External agents on the wire: the `acp` target and its calls. Every machine keeps its own
+// ~/.eta/acp.json; the target's one section, `machines`, is each known machine's list by machine
+// id, and every call names the machine it is for. The host keeps the files; the page only asks.
 // The shapes are the contract's (`packages/client-contracts/src/acp.ts`); the call arguments and
 // results below are how this page names them.
 
 export interface AcpArgs {
-  save: { agent: AcpAgentConfig; previousId?: string };
-  delete: { id: string };
-  test: { agent: AcpAgentConfig };
+  refresh: { machineId: string };
+  save: { machineId: string; agent: AcpAgentConfig; previousId?: string };
+  delete: { machineId: string; id: string };
+  test: { machineId: string; agent: AcpAgentConfig };
 }
 export interface AcpResults {
+  refresh: AcpMachineList;
   save: AcpAgentView;
   delete: Record<string, never>;
   test: AcpTestResult;
 }
 
 const TARGET = "acp";
+const NONE: AcpAgentView[] = [];
 
 /**
- * Every configured ACP agent, kept live: the host pushes the list again after each change. When
- * the host cannot read acp.json whole, the target carries an `error` section (its message names
- * the file) instead of a list: that is the page's error, never an empty list.
+ * One machine's ACP agents, kept live: the host pushes the list again after each change, and
+ * again when the agents it started looking at have answered. A daemon's list is asked for when
+ * the page comes to it (`enabled`: only while it is online). When the machine cannot read its
+ * acp.json whole, `error` says so (its message names the file): that is the page's error, never
+ * an empty list.
  */
-export function useAcpAgents() {
-  const { items, loaded, error } = useListTarget<AcpAgentView>(TARGET);
-  const failure = (
-    useTarget(TARGET)?.sections.error as { message?: unknown } | undefined
-  )?.message;
-  if (typeof failure === "string")
-    return { agents: items, loaded: false, error: new Error(failure) };
-  return { agents: items, loaded, error };
+export function useAcpAgents(machineId: string | undefined, enabled = true) {
+  const machines = useTarget(TARGET)?.sections.machines as
+    | Record<string, AcpMachineList>
+    | undefined;
+  const failure = usePluginError(TARGET);
+  useEffect(() => {
+    if (machineId === undefined || !enabled) return;
+    // What it answers arrives as the section; a failure here (it went offline meanwhile) is
+    // shown by the machine's own status.
+    void getWire()
+      .call(TARGET, "refresh", { machineId })
+      .catch(() => undefined);
+  }, [machineId, enabled]);
+  const list = machineId === undefined ? undefined : machines?.[machineId];
+  if (list?.error !== undefined)
+    return { agents: NONE, loaded: false, error: new Error(list.error) };
+  return {
+    agents: list?.agents ?? NONE,
+    loaded: list !== undefined,
+    error: machines === undefined ? failure : undefined,
+  };
 }
 
 /**
- * Without `previousId` adds (the host refuses an id already taken); `previousId` equal to
+ * Without `previousId` adds (the machine refuses an id it already has); `previousId` equal to
  * `agent.id` changes that agent in place; a different `previousId` renames it.
  */
 export function useSaveAcpAgent() {
@@ -55,7 +77,7 @@ export function useDeleteAcpAgent() {
   );
 }
 
-/** Start the agent and shake hands; a draft that was never saved can be tried too. */
+/** Start the agent on the machine and shake hands; a draft that was never saved can be tried too. */
 export function useTestAcpAgent() {
   return useWireMutation<AcpArgs["test"], AcpResults["test"]>(TARGET, "test", {
     timeoutMs: 60_000,

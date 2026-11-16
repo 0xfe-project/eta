@@ -235,7 +235,7 @@ export class AcpCatalog {
           command: agent.command,
           args: agent.args,
           env: agent.env,
-          cwd: agent.cwd ?? scratch,
+          cwd: scratch,
         },
         {
           update: () => undefined,
@@ -324,7 +324,7 @@ function commandExists(agent: AcpAgentConfig): boolean {
     }
   };
   if (agent.command.includes("/") || agent.command.includes("\\"))
-    return executable(resolve(agent.cwd ?? ".", agent.command));
+    return executable(resolve(agent.command));
   const path = agent.env.PATH ?? env.PATH ?? "";
   return path
     .split(delimiter)

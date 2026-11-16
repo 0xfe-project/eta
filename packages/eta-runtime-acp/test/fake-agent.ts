@@ -205,6 +205,42 @@ const app = acp
           ...(messageId === undefined ? {} : { messageId }),
         },
       });
+    if (asked.includes("late")) {
+      // Ends its turn now, and asks for a permission only once the test says the turn is over
+      // (by writing `late.go`): a request that belongs to no turn.
+      void (async () => {
+        while (!existsSync(join(dir, "late.go"))) await sleep(10);
+        const decision = await client.request(
+          methods.client.session.requestPermission,
+          {
+            sessionId,
+            toolCall: {
+              toolCallId: "t-late",
+              title: "Write late.txt",
+              kind: "edit",
+            },
+            options: [
+              { optionId: "yes", name: "Allow", kind: "allow_once" },
+              {
+                optionId: "always",
+                name: "Always allow",
+                kind: "allow_always",
+              },
+              { optionId: "no", name: "Reject", kind: "reject_once" },
+            ],
+          },
+        );
+        log({
+          method: "late-permission",
+          outcome:
+            decision.outcome.outcome === "selected"
+              ? decision.outcome.optionId
+              : "cancelled",
+        });
+      })();
+      await say("Done for now.");
+      return { stopReason: "end_turn" };
+    }
     if (asked.includes("die")) {
       await say("about to die");
       await sleep(30);
@@ -395,7 +431,7 @@ const app = acp
     return { stopReason: "end_turn" };
   });
 
-log({ method: "started", caps });
+log({ method: "started", caps, cwd: process.cwd() });
 const connection = app.connect(
   acp.ndJsonStream(
     Writable.toWeb(process.stdout) as WritableStream<Uint8Array>,

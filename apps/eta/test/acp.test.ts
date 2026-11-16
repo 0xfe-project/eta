@@ -8,19 +8,23 @@
  */
 import type {
   AcpAgentView,
+  AcpMachineList,
   AcpTestResult,
   AgentRuntimeInfo,
   AgentView,
+  MachineView,
   ToolActivity,
 } from "@eta/client-contracts";
+import type { RemoteWorld } from "./support/remote";
 import type { World } from "./support/world";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fakeAgent } from "@eta/runtime-acp/testing";
 import { describe, expect, it } from "vitest";
 import { until } from "./support/client";
+import { machineView } from "./support/daemon";
 import { scriptedModels } from "./support/models";
 import { remoteWorld, sessionOf } from "./support/remote";
 import { world } from "./support/world";
@@ -33,14 +37,31 @@ async function host(): Promise<World> {
   return await world({ models });
 }
 
-const list = (w: World): AcpAgentView[] =>
-  w.client.section<AcpAgentView[]>("acp", "list") ?? [];
+const primaryOf = (w: World): string =>
+  w.client
+    .section<MachineView[]>("machines", "list")!
+    .find((machine) => machine.kind === "primary")!.id;
 
-async function save(w: World, agent: unknown, previousId?: string) {
+/** One machine's entry in the `acp` target's `machines` section; the primary's by default. */
+const entry = (w: World, machineId?: string): AcpMachineList | undefined =>
+  w.client.section<Record<string, AcpMachineList>>("acp", "machines")?.[
+    machineId ?? primaryOf(w)
+  ];
+
+const list = (w: World, machineId?: string): AcpAgentView[] =>
+  entry(w, machineId)?.agents ?? [];
+
+async function save(
+  w: World,
+  agent: unknown,
+  previousId?: string,
+  machineId?: string,
+) {
   // The wire hands a call's `result` back as the call's value.
   return (await w.client.call("acp", "save", {
     agent,
     ...(previousId === undefined ? {} : { previousId }),
+    ...(machineId === undefined ? {} : { machineId }),
   })) as AcpAgentView;
 }
 
@@ -57,7 +78,7 @@ describe("an ACP agent, from the settings page to a reply", () => {
     const w = await host();
     const fake = fakeAgent("fake");
     w.client.subscribe("acp");
-    await until(() => w.client.section("acp", "list") !== undefined);
+    await until(() => entry(w) !== undefined);
     expect(list(w)).toEqual([]);
 
     const saved = await save(w, fake.config);
@@ -202,15 +223,10 @@ describe("the acp target", () => {
     const { config } = fakeAgent("fake");
     w.client.subscribe("acp");
     await save(w, config);
-    const changed = await save(
-      w,
-      { ...config, label: "Renamed", autoAllow: true },
-      "fake",
-    );
+    const changed = await save(w, { ...config, label: "Renamed" }, "fake");
     expect(changed).toMatchObject({
       id: "fake",
       label: "Renamed",
-      autoAllow: true,
       status: "available",
     });
     const moved = await save(w, { ...config, id: "moved" }, "fake");
@@ -270,8 +286,7 @@ describe("the acp target", () => {
 
 describe("an acp.json that cannot be read whole", () => {
   const fileOf = (w: World) => join(w.host.dataDir, "acp.json");
-  const listError = (w: World) =>
-    w.client.section<{ message: string }>("acp", "error")?.message;
+  const listError = (w: World) => entry(w)?.error;
 
   it("refuses save, rename and delete without writing a byte, and the list says why", async () => {
     const w = await host();
@@ -284,7 +299,7 @@ describe("an acp.json that cannot be read whole", () => {
     await until(() => listError(w) !== undefined);
     expect(listError(w)).toContain(fileOf(w));
     expect(listError(w)).toContain("is not valid JSON");
-    expect(w.client.section("acp", "list")).toBeUndefined();
+    expect(entry(w)?.agents).toBeUndefined();
 
     await expect(save(w, fakeAgent("three").config)).rejects.toThrow(
       /is not valid JSON/,
@@ -350,7 +365,7 @@ describe("saving an agent that is slow to answer", () => {
       env: { FAKE_ACP_INIT_DELAY_MS: "3000" },
     }).config;
     w.client.subscribe("acp");
-    await until(() => w.client.section("acp", "list") !== undefined);
+    await until(() => entry(w) !== undefined);
     const started = Date.now();
     const saved = await save(w, slow);
     expect(Date.now() - started).toBeLessThan(1_000);
@@ -402,5 +417,178 @@ describe("an ACP agent on a daemon", () => {
     expect(JSON.stringify(failed)).toContain(
       "the ACP agent elsewhere is not configured on this machine",
     );
+  });
+});
+
+describe("one machine at a time: the settings page on a daemon", () => {
+  const daemonFile = (r: RemoteWorld) =>
+    join(r.daemon.dataDir, ".eta", "acp.json");
+  const primaryFile = (w: World) => join(w.host.dataDir, "acp.json");
+  const readAgents = (path: string) =>
+    existsSync(path)
+      ? (JSON.parse(readFileSync(path, "utf8")) as { agents: unknown[] }).agents
+      : undefined;
+
+  it("lists, adds, tests, changes and deletes in the daemon's own acp.json, leaving the primary's alone", async () => {
+    const r = await remoteWorld();
+    const machineId = r.daemon.machineId;
+    const fake = fakeAgent("fake");
+    r.client.subscribe("acp");
+    expect(await r.client.call("acp", "refresh", { machineId })).toEqual({
+      agents: [],
+    });
+    await until(() => entry(r, machineId) !== undefined);
+
+    const saved = await save(r, fake.config, undefined, machineId);
+    expect(saved).toMatchObject({ id: "fake", runtime: "acp.fake" });
+    expect(readAgents(daemonFile(r))).toEqual([fake.config]);
+    expect(readAgents(primaryFile(r))).toBeUndefined();
+    // The look the daemon ran behind arrives as the daemon's list.
+    await until(() => list(r, machineId)[0]?.version === "0.0.1");
+    expect(list(r)).toEqual([]);
+
+    expect(
+      await r.client.call("acp", "test", { machineId, agent: fake.config }),
+    ).toMatchObject({ ok: true, agentName: "Fake Agent" });
+
+    await save(r, { ...fake.config, label: "Far" }, "fake", machineId);
+    expect(readAgents(daemonFile(r))).toEqual([
+      { ...fake.config, label: "Far" },
+    ]);
+    await until(() => list(r, machineId)[0]?.label === "Far");
+
+    expect(
+      await r.client.call("acp", "delete", { machineId, id: "fake" }),
+    ).toEqual({});
+    expect(readAgents(daemonFile(r))).toEqual([]);
+    expect(readAgents(primaryFile(r))).toBeUndefined();
+    await until(() => list(r, machineId).length === 0);
+  });
+
+  it("keeps the same id on two machines apart, and checks it only against the machine's own", async () => {
+    const r = await remoteWorld();
+    const machineId = r.daemon.machineId;
+    const here = fakeAgent("same").config;
+    const there = { ...fakeAgent("same").config, label: "Over there" };
+    await save(r, here);
+    // Taken on the primary, free on the daemon.
+    await save(r, there, undefined, machineId);
+    await expect(save(r, there, undefined, machineId)).rejects.toThrow(
+      /already exists on this machine/,
+    );
+    await save(r, { ...there, label: "Moved on" }, "same", machineId);
+    expect(readAgents(primaryFile(r))).toEqual([here]);
+    await r.client.call("acp", "delete", { machineId, id: "same" });
+    expect(readAgents(primaryFile(r))).toEqual([here]);
+    expect(readAgents(daemonFile(r))).toEqual([]);
+    await r.client.call("acp", "delete", { id: "same" });
+    expect(readAgents(primaryFile(r))).toEqual([]);
+  });
+
+  it("refuses a daemon that is offline, and never does it on the primary instead", async () => {
+    const r = await remoteWorld();
+    const machineId = r.daemon.machineId;
+    const fake = fakeAgent("fake").config;
+    await r.daemon.stop();
+    await until(() => machineView(r.client, machineId)?.status === "offline");
+    await expect(save(r, fake, undefined, machineId)).rejects.toThrow(
+      /is offline/,
+    );
+    await expect(
+      r.client.call("acp", "test", { machineId, agent: fake }),
+    ).rejects.toThrow(/is offline/);
+    await expect(
+      r.client.call("acp", "delete", { machineId, id: "fake" }),
+    ).rejects.toThrow(/is offline/);
+    await expect(
+      r.client.call("acp", "refresh", { machineId }),
+    ).rejects.toThrow(/is offline/);
+    expect(readAgents(primaryFile(r))).toBeUndefined();
+    expect(entry(r, machineId)).toBeUndefined();
+    await expect(
+      r.client.call("acp", "refresh", { machineId: "no-such-machine" }),
+    ).rejects.toThrow(/no such machine/);
+  });
+
+  it("refuses to write the daemon's file when it cannot be read whole, and its list says why", async () => {
+    const r = await remoteWorld();
+    const machineId = r.daemon.machineId;
+    const one = fakeAgent("one").config;
+    mkdirSync(join(r.daemon.dataDir, ".eta"), { recursive: true });
+    const text = `{ "agents": [${JSON.stringify(one)},] }`;
+    writeFileSync(daemonFile(r), text);
+    r.client.subscribe("acp");
+    const answered = (await r.client.call("acp", "refresh", {
+      machineId,
+    })) as AcpMachineList;
+    expect(answered.error).toContain(daemonFile(r));
+    expect(answered.error).toContain("is not valid JSON");
+    await until(() => entry(r, machineId)?.error !== undefined);
+    await expect(
+      save(r, fakeAgent("two").config, undefined, machineId),
+    ).rejects.toThrow(/is not valid JSON/);
+    await expect(
+      save(r, { ...one, id: "moved" }, "one", machineId),
+    ).rejects.toThrow(/is not valid JSON/);
+    await expect(
+      r.client.call("acp", "delete", { machineId, id: "one" }),
+    ).rejects.toThrow(/is not valid JSON/);
+    expect(readFileSync(daemonFile(r), "utf8")).toBe(text);
+    // The primary's file is its own business: still writable.
+    await save(r, fakeAgent("two").config);
+    expect(entry(r)?.agents).toBeDefined();
+  });
+
+  it("counts only the agents on that machine as still using an id", async () => {
+    const r = await remoteWorld();
+    const machineId = r.daemon.machineId;
+    const { config } = fakeAgent("fake");
+    await save(r, config);
+    await save(r, config, undefined, machineId);
+    // Pinned to the daemon: holds the daemon's, not the primary's.
+    await r.agent("Pinned", { runtime: "acp.fake", machineId });
+    // Pinned to none, and in a conversation in the daemon's project: holds the daemon's too.
+    const follower = await r.agent("Follower", { runtime: "acp.fake" });
+    await r.group(r.remoteProject.id, [follower.id]);
+    await expect(
+      r.client.call("acp", "delete", { machineId, id: "fake" }),
+    ).rejects.toThrow(/Cannot delete fake: Follower, Pinned run on acp\.fake/);
+    await expect(
+      save(r, { ...config, id: "moved" }, "fake", machineId),
+    ).rejects.toThrow(/Cannot rename fake: Follower, Pinned run on acp\.fake/);
+    // On the primary only the follower (its home is there) runs on it.
+    await expect(
+      r.client.call("acp", "delete", { id: "fake" }),
+    ).rejects.toThrow(/Cannot delete fake: Follower runs on acp\.fake/);
+  });
+
+  it("does not count an agent that follows its projects when none is on that machine", async () => {
+    const r = await remoteWorld();
+    const machineId = r.daemon.machineId;
+    const { config } = fakeAgent("fake");
+    await save(r, config, undefined, machineId);
+    // Its home, and so its only project, is on the primary.
+    await r.agent("Homebody", { runtime: "acp.fake" });
+    expect(
+      await r.client.call("acp", "delete", { machineId, id: "fake" }),
+    ).toEqual({});
+  });
+
+  it("runs an agent pinned to the daemon on the agent the settings page added there", async () => {
+    const r = await remoteWorld();
+    const machineId = r.daemon.machineId;
+    const fake = fakeAgent("fake");
+    await save(r, fake.config, undefined, machineId);
+    const { runtimes } = (await r.client.call("agents", "runtimes", {
+      machineId,
+      fresh: true,
+    })) as { runtimes: AgentRuntimeInfo[] };
+    expect(runtimes.some((runtime) => runtime.id === "acp.fake")).toBe(true);
+    const ace = await r.agent("Ace", { runtime: "acp.fake", machineId });
+    const chat = await direct(r, ace);
+    const sent = await r.send(chat, "state");
+    const done = await r.settled(chat, sent.replies[0]!.id);
+    expect(done.status).toBe("done");
+    expect(JSON.parse(done.text)).toMatchObject({ prompts: 1 });
   });
 });

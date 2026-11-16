@@ -2,6 +2,7 @@ import type {
   AcpAgentConfig,
   AcpAgentView,
   AcpTestResult,
+  MachineView,
 } from "@eta/client-contracts";
 import type { AcpDraft, AcpDraftProblems } from "./acp-form";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
@@ -32,7 +33,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useAcpAgents,
@@ -40,12 +40,16 @@ import {
   useSaveAcpAgent,
   useTestAcpAgent,
 } from "@/queries/acp";
+import { useMachines } from "@/queries/projects";
 import { wireErrorMessage } from "@/queries/wire";
 import { acpDraftOf, acpSlug, checkAcpDraft, emptyAcpDraft } from "./acp-form";
+import { Select, SelectOption } from "./select-field";
 
-// Settings → External agents: the ACP agents in ~/.eta/acp.json, each a runtime an agent can run
-// on as `acp.<id>`. The host keeps the file and checks every change; this page lists what it says,
-// and sends a whole config to save, an id to delete, or a config (saved or not) to try.
+// Settings → External agents: one machine at a time, the ACP agents in that machine's own
+// ~/.eta/acp.json, each a runtime an agent on that machine can run on as `acp.<id>`. The machine
+// keeps the file and checks every change; this page lists what it says, and sends a whole config
+// to save, an id to delete, or a config (saved or not) to try, always naming the machine. A
+// daemon that is offline stays chosen and says so: nothing goes to the primary instead.
 
 const showError = (error: Error) => toast.error(wireErrorMessage(error));
 
@@ -108,12 +112,14 @@ function FieldError({ id, text }: { id: string; text: string | undefined }) {
 
 /** Add or edit one agent. `agent` is the one being edited; none adds. */
 function AgentDialog({
+  machine,
   agent,
   taken,
   onClose,
 }: {
+  machine: MachineView;
   agent: AcpAgentView | undefined;
-  /** Ids in use by the other agents. */
+  /** Ids in use by the machine's other agents. */
   taken: readonly string[];
   onClose: () => void;
 }) {
@@ -173,10 +179,11 @@ function AgentDialog({
     // The promise, not mutate's callbacks: a rename's new list can close this dialog first.
     save
       .mutateAsync({
+        machineId: machine.id,
         agent: config,
-        ...(agent !== undefined && agent.id !== config.id
-          ? { previousId: agent.id }
-          : {}),
+        // An edit always names the agent it edits: without `previousId` the host takes it for a
+        // new one, and refuses the id it already has.
+        ...(agent === undefined ? {} : { previousId: agent.id }),
       })
       .then(
         (saved) => {
@@ -194,7 +201,7 @@ function AgentDialog({
     const config = checked();
     if (config === undefined) return;
     test.mutate(
-      { agent: config },
+      { machineId: machine.id, agent: config },
       {
         onSuccess: (result) => report(config.label, result),
         onError: showError,
@@ -227,7 +234,7 @@ function AgentDialog({
               : translateText("form.editTitle", { label: agent.label })}
           </DialogTitle>
           <DialogDescription>
-            {translateText("form.description")}
+            {translateText("form.description", { machine: machine.name })}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -336,33 +343,6 @@ function AgentDialog({
               <FieldError id={`${env.id}-error`} text={env.error} />
             )}
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`${baseId}-cwd`}>{translateText("form.cwd")}</Label>
-            <Input
-              id={`${baseId}-cwd`}
-              autoComplete="off"
-              spellCheck={false}
-              className="font-mono"
-              placeholder={translateText("form.cwdPlaceholder")}
-              value={draft.cwd}
-              onChange={(event) => change("cwd", event.target.value)}
-            />
-          </div>
-          <div className="flex items-start justify-between gap-3">
-            <div className="space-y-0.5">
-              <Label htmlFor={`${baseId}-auto`}>
-                {translateText("form.autoAllow")}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {translateText("form.autoAllowHint")}
-              </p>
-            </div>
-            <Switch
-              id={`${baseId}-auto`}
-              checked={draft.autoAllow}
-              onCheckedChange={(next) => change("autoAllow", next)}
-            />
-          </div>
           {failure === undefined ? null : (
             <p
               role="alert"
@@ -399,9 +379,11 @@ function AgentDialog({
 }
 
 function AgentRow({
+  machineId,
   agent,
   onEdit,
 }: {
+  machineId: string;
   agent: AcpAgentView;
   onEdit: () => void;
 }) {
@@ -424,9 +406,6 @@ function AgentRow({
             <span className="text-xs font-normal text-muted-foreground">
               {agent.version}
             </span>
-          ) : null}
-          {agent.autoAllow ? (
-            <Badge variant="outline">{translateText("list.autoAllow")}</Badge>
           ) : null}
         </p>
         <p className="truncate font-mono text-xs text-muted-foreground">
@@ -452,7 +431,7 @@ function AgentRow({
           disabled={test.isPending}
           onClick={() =>
             test.mutate(
-              { agent: configOf(agent) },
+              { machineId, agent: configOf(agent) },
               {
                 onSuccess: (result) => report(agent.label, result),
                 onError: showError,
@@ -502,7 +481,7 @@ function AgentRow({
               // The promise, not mutate's callbacks: the host's new list drops this row, and an
               // unmounted row's callbacks never run.
               onClick={() =>
-                void remove.mutateAsync({ id: agent.id }).then(
+                void remove.mutateAsync({ machineId, id: agent.id }).then(
                   () =>
                     toast(
                       translateText("feedback.deleted", {
@@ -522,21 +501,96 @@ function AgentRow({
   );
 }
 
+/** The machines that can run ACP agents: the primary and every daemon not revoked. */
+function acpMachines(machines: readonly MachineView[]): MachineView[] {
+  return machines
+    .filter(
+      (machine) =>
+        (machine.kind === "primary" || machine.kind === "daemon") &&
+        machine.status !== "revoked",
+    )
+    .sort(
+      (a, b) => Number(b.kind === "primary") - Number(a.kind === "primary"),
+    );
+}
+
+/** Which machine's agents the page shows: every one is listed, an offline one as offline. */
+function MachineSelect({
+  machines,
+  value,
+  onChange,
+}: {
+  machines: readonly MachineView[];
+  value: string;
+  onChange: (machineId: string) => void;
+}) {
+  const { t: translateText } = useTranslation(["acp", "machines"] as const);
+  const baseId = useId();
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Label id={`${baseId}-machine`} className="text-xs">
+        {translateText("machine.label")}
+      </Label>
+      <Select
+        aria-labelledby={`${baseId}-machine`}
+        size="sm"
+        className="h-7 min-w-48 text-xs"
+        value={value}
+        onValueChange={onChange}
+      >
+        {machines.map((machine) => (
+          <SelectOption key={machine.id} value={machine.id}>
+            {machineName(machine, translateText("machine.primarySuffix"))}
+            {machine.status === "online" ? null : (
+              <span className="text-muted-foreground">
+                {" · "}
+                {translateText(`machines:status.${machine.status}`)}
+              </span>
+            )}
+          </SelectOption>
+        ))}
+      </Select>
+    </div>
+  );
+}
+
+function machineName(machine: MachineView, primarySuffix: string): string {
+  return `${machine.name}${machine.kind === "primary" ? primarySuffix : ""}`;
+}
+
 /** Settings → External agents. */
 export function AcpSettings() {
-  const { t: translateText } = useTranslation(["acp", "common"] as const);
-  const { agents, loaded, error } = useAcpAgents();
+  const { t: translateText } = useTranslation([
+    "acp",
+    "machines",
+    "common",
+  ] as const);
+  const { machines, loaded: machinesLoaded } = useMachines();
+  const listed = acpMachines(machines);
+  const primary = listed.find((machine) => machine.kind === "primary");
+  // The primary until another is chosen; a chosen machine stays chosen whatever its status.
+  const [chosen, setChosen] = useState<string>();
+  const machineId = chosen ?? primary?.id;
+  const machine = listed.find((item) => item.id === machineId);
+  const reachable =
+    machine !== undefined &&
+    (machine.kind === "primary" || machine.status === "online");
+  const { agents, loaded, error } = useAcpAgents(machineId, reachable);
   // undefined: no dialog; null: adding; an id: editing that one.
   const [editing, setEditing] = useState<string | null>();
   const edited =
     typeof editing === "string"
       ? agents.find((agent) => agent.id === editing)
       : undefined;
+  const choose = (next: string) => {
+    setChosen(next);
+    setEditing(undefined);
+  };
   const add = (
     <Button
       size="sm"
       variant="outline"
-      disabled={!loaded}
+      disabled={!loaded || !reachable}
       onClick={() => setEditing(null)}
     >
       <PlusIcon aria-hidden="true" data-icon="inline-start" />
@@ -552,34 +606,76 @@ export function AcpSettings() {
       <p className="text-xs text-muted-foreground">
         {translateText("description")}
       </p>
-      {error ? (
-        <LoadError what={translateText("title")} error={error} />
-      ) : !loaded ? (
-        <Loading rows={3} />
-      ) : agents.length === 0 ? (
-        <Empty icon={PlugsConnectedIcon} title={translateText("empty.title")}>
-          {translateText("empty.description")}
-        </Empty>
+      {machine === undefined ? (
+        machinesLoaded && chosen !== undefined ? (
+          <p role="status" className="border px-3 py-2 text-sm">
+            {translateText("machine.gone")}
+          </p>
+        ) : (
+          <Loading rows={3} />
+        )
       ) : (
-        <ul aria-label={translateText("title")} className="divide-y border">
-          {agents.map((agent) => (
-            <AgentRow
-              key={agent.id}
-              agent={agent}
-              onEdit={() => setEditing(agent.id)}
+        <>
+          <MachineSelect
+            machines={listed}
+            value={machine.id}
+            onChange={choose}
+          />
+          {!reachable ? (
+            <p
+              role="status"
+              className="border px-3 py-2 text-sm text-muted-foreground"
+            >
+              {translateText("machine.offline", {
+                name: machine.name,
+                status: translateText(`machines:status.${machine.status}`),
+              })}
+            </p>
+          ) : error ? (
+            <LoadError what={translateText("title")} error={error} />
+          ) : !loaded ? (
+            <Loading rows={3} />
+          ) : agents.length === 0 ? (
+            <Empty
+              icon={PlugsConnectedIcon}
+              title={translateText("empty.title")}
+            >
+              {translateText("empty.description")}
+            </Empty>
+          ) : (
+            <ul
+              aria-label={translateText("list.label", {
+                machine: machineName(
+                  machine,
+                  translateText("machine.primarySuffix"),
+                ),
+              })}
+              className="divide-y border"
+            >
+              {agents.map((agent) => (
+                <AgentRow
+                  key={agent.id}
+                  machineId={machine.id}
+                  agent={agent}
+                  onEdit={() => setEditing(agent.id)}
+                />
+              ))}
+            </ul>
+          )}
+          {reachable && (editing === null || edited !== undefined) ? (
+            <AgentDialog
+              key={machine.id}
+              machine={machine}
+              agent={edited}
+              // This machine's ids only: another machine may have the same one.
+              taken={agents
+                .map((agent) => agent.id)
+                .filter((id) => id !== edited?.id)}
+              onClose={() => setEditing(undefined)}
             />
-          ))}
-        </ul>
+          ) : null}
+        </>
       )}
-      {editing === null || edited !== undefined ? (
-        <AgentDialog
-          agent={edited}
-          taken={agents
-            .map((agent) => agent.id)
-            .filter((id) => id !== edited?.id)}
-          onClose={() => setEditing(undefined)}
-        />
-      ) : null}
     </div>
   );
 }

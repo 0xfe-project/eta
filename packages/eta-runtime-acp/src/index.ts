@@ -16,6 +16,8 @@ import { acpAgentId, AcpConfigFile, defaultAcpConfigPath } from "./config";
 import { AcpDelegate } from "./delegate";
 import { acpModels } from "./models";
 
+export { AcpAdmin } from "./admin";
+export type { AcpAdminOptions } from "./admin";
 export { AcpCatalog } from "./catalog";
 export {
   acpAgentId,
@@ -74,7 +76,6 @@ export function createAcpRuntimes(
         resume: input.resume,
         agentPrompt: input.agentPrompt,
         remember: input.remember,
-        ask: input.ask,
         mcpServers: input.mcpServers,
         hostTools: input.hostTools,
         learn: (choices) => catalog.learn(id, choices),

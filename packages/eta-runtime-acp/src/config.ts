@@ -68,19 +68,15 @@ export function checkAcpAgent(raw: unknown): AcpAgentConfig {
       env[key] = item;
     }
   }
-  if (value.cwd !== undefined && typeof value.cwd !== "string")
-    throw new Error("cwd is a path");
-  if (value.autoAllow !== undefined && typeof value.autoAllow !== "boolean")
-    throw new Error("autoAllow is true or false");
-  const cwd = typeof value.cwd === "string" ? value.cwd.trim() : "";
+  // Anything else is left behind, whatever it holds: `cwd` and `autoAllow` from older files (the
+  // process starts in the session's directory, and every permission request is answered yes)
+  // are read past, and the next write no longer has them.
   return {
     id,
     label,
     command,
     args: [...((value.args as string[] | undefined) ?? [])],
     env,
-    ...(cwd === "" ? {} : { cwd }),
-    ...(value.autoAllow === true ? { autoAllow: true } : {}),
   };
 }
 

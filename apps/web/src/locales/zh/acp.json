@@ -1,6 +1,12 @@
 {
   "title": "外部 Agent",
-  "description": "智能体可以运行在其上的 ACP agent，保存在 ~/.eta/acp.json。创建或编辑智能体时，每一个都会作为运行方式 acp.<id> 出现。",
+  "description": "智能体可以运行在其上的 ACP agent。每台机器在自己的 ~/.eta/acp.json 里各管一份；其中每一个都会作为运行方式 acp.<id>，提供给在这台机器上运行的智能体。",
+  "machine": {
+    "label": "机器",
+    "primarySuffix": "（主机器）",
+    "offline": "{{name}} 目前{{status}}。它重新上线之前，无法列出或修改它的外部 Agent。",
+    "gone": "这台机器已经不在了，请换一台。"
+  },
   "empty": {
     "title": "还没有外部 Agent",
     "description": "用启动它的命令添加一个支持 Agent Client Protocol（ACP）的 agent。"
@@ -12,7 +18,7 @@
     "error": "出错"
   },
   "list": {
-    "autoAllow": "自动允许"
+    "label": "{{machine}} 上的外部 Agent"
   },
   "actions": {
     "add": "添加 Agent",
@@ -22,7 +28,7 @@
   "form": {
     "addTitle": "添加外部 Agent",
     "editTitle": "编辑 {{label}}",
-    "description": "eta 会启动这条命令，经 stdio 用 ACP 和它对话。",
+    "description": "在 {{machine}} 上：eta 在那台机器上、以会话的工作目录启动这条命令，经 stdio 用 ACP 和它对话。",
     "label": "名称",
     "labelPlaceholder": "我的 Agent",
     "id": "ID",
@@ -31,17 +37,13 @@
     "args": "参数",
     "argsHint": "一行一个。",
     "env": "环境变量",
-    "envHint": "一行一个 KEY=VALUE。",
-    "cwd": "工作目录",
-    "cwdPlaceholder": "会话的工作目录",
-    "autoAllow": "不询问直接允许",
-    "autoAllowHint": "关闭时，agent 的每个权限请求都会先问你。"
+    "envHint": "一行一个 KEY=VALUE。"
   },
   "errors": {
     "labelRequired": "请填写名称。",
     "idRequired": "请填写 ID。",
     "idFormat": "只能用小写字母、数字和连字符，并以字母或数字开头。",
-    "idTaken": "已有外部 Agent 使用这个 ID。",
+    "idTaken": "这台机器上已有外部 Agent 使用这个 ID。",
     "commandRequired": "请填写启动它的命令。",
     "env": {
       "noEquals": "第 {{line}} 行：请写成 KEY=VALUE。",
