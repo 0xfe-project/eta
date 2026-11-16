@@ -323,15 +323,32 @@ function WidePlan({
     (all.find((x) => x.id === to)?.dependsOn ?? []).some(
       (e) => e.taskId === from,
     );
-  const connect = (from: string, to: string) => {
-    // The host would take the edge again as an upsert and reset it to "delivered is enough";
-    // changing how an edge lets go is its menu's job, not a drag's.
-    if (waitsAlready(to, from)) return true;
-    if (refusalOf(to, from) !== undefined) return false;
+
+  /**
+   * Make `to` wait for `from`, by a drop or by a click: an edge that is there already, or one the
+   * host would refuse, is said in a toast, because the hint that said it during a drag is gone
+   * once the pointer is up. Whether connecting is over.
+   */
+  const link = (from: string, to: string) => {
+    // Not made again: the host would take the edge as an upsert and reset it to "delivered is
+    // enough", and changing how an edge lets go is its menu's job, not a drag's.
+    if (waitsAlready(to, from)) {
+      toast(
+        t("plan.exists", {
+          from: all.find((x) => x.id === from)?.number,
+          to: all.find((x) => x.id === to)?.number,
+        }),
+      );
+      return true;
+    }
+    const refusal = refusalOf(to, from);
+    if (refusal !== undefined) {
+      toast.error(t(`cards.refusal.${refusal}`));
+      return false;
+    }
     add.mutate({ taskId: to, dependsOn: from }, { onError: showError });
     return true;
   };
-
   const point = (e: { clientX: number; clientY: number }) => {
     const root = boxRef.current?.getBoundingClientRect();
     return {
@@ -391,7 +408,8 @@ function WidePlan({
           Math.abs(ev.clientY - start.clientY) >
         3;
       setDrag(undefined);
-      if (over !== undefined) connect(from, over);
+      // Dropped on a task: what a click there would do, saying so if nothing is made.
+      if (over !== undefined) link(from, over);
       // A press without a drag starts connecting by clicks: the next task picked waits for this one.
       else if (!moved) setConnectFrom(from);
     };
@@ -406,21 +424,8 @@ function WidePlan({
   };
   const onPick = (id: string) => {
     if (connectFrom === undefined) return false;
-    if (id !== connectFrom && waitsAlready(id, connectFrom))
-      toast(
-        t("plan.exists", {
-          from: all.find((x) => x.id === connectFrom)?.number,
-          to: all.find((x) => x.id === id)?.number,
-        }),
-      );
-    else if (id !== connectFrom) {
-      const refusal = refusalOf(id, connectFrom);
-      if (refusal !== undefined) {
-        toast.error(t(`cards.refusal.${refusal}`));
-        return true;
-      }
-      connect(connectFrom, id);
-    }
+    // A refused pick keeps connecting, so another task can be picked.
+    if (id !== connectFrom && !link(connectFrom, id)) return true;
     setConnectFrom(undefined);
     return true;
   };
