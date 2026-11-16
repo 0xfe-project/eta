@@ -1,6 +1,6 @@
-import type { AgentMessage, ViewMessageRow } from "@eta/client-contracts";
-import { describe, expect, it } from "@rstest/core";
-import { groupBlocks, logBlocks, runBlocks, savedTools } from "./run";
+import type { AgentMessage, ViewMessageRow } from "../src/index";
+import { describe, expect, it } from "vitest";
+import { groupBlocks, logBlocks, runBlocks, savedTools } from "../src/index";
 
 let seq = 0;
 const row = (message: object): ViewMessageRow => {

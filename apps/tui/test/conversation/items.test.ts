@@ -261,6 +261,43 @@ describe("a finished reply", () => {
     ]);
   });
 
+  it("keeps what it said between its calls once it ended, in the order its run said it", () => {
+    const done = reply({
+      text: "the answer",
+      thinking: "then check",
+      data: {
+        activity: [
+          {
+            id: "t1",
+            name: "bash",
+            input: { command: "ls" },
+            status: "completed",
+          },
+        ],
+        process: [
+          { type: "thinking", text: "look first" },
+          { type: "text", text: "Listing the files." },
+          { type: "tool", id: "t1" },
+          { type: "thinking", text: "then check" },
+          { type: "text", text: "the answer" },
+        ],
+      },
+    });
+    expect(
+      items({ rows: [done] }).map((item) =>
+        item.kind === "tool"
+          ? `tool ${item.tool.id}`
+          : `${item.kind} ${"text" in item ? item.text : ""}`,
+      ),
+    ).toEqual([
+      "thinking look first",
+      "text Listing the files.",
+      "tool t1",
+      "thinking then check",
+      "text the answer",
+    ]);
+  });
+
   it("in a group starts with its author's name; an unknown agent is its id's first six characters", () => {
     const a = reply({ text: "one" });
     const b = reply({ text: "two", agentId: "zz9876543210" });

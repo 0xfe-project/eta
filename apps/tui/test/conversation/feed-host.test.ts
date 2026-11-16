@@ -188,9 +188,10 @@ describe("the feed on a real host", () => {
       text: "the answer",
       streaming: false,
     });
+    // The host kept the reply's process (`data.process`), so its thought is a step of it.
     expect(items).toContainEqual({
       kind: "thinking",
-      key: `${reply}:thinking`,
+      key: `${reply}:step0`,
       text: "a thought",
       streaming: false,
     });

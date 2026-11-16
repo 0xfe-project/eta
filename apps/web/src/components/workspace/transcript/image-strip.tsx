@@ -1,4 +1,4 @@
-import type { RunImage } from "@/lib/run";
+import type { RunImage } from "@eta/client-contracts";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {

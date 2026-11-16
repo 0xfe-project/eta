@@ -1,13 +1,11 @@
-import type { ReactNode } from "react";
-import type { ToolBlock } from "@/lib/run";
+import type { ToolBlock } from "@eta/client-contracts";
 import type {
   ChildStep,
   FilePatch,
   PlanItem,
   ToolShape,
-} from "@/lib/tool-shape";
-import { useState } from "react";
-import { useTranslation } from "react-i18next";
+} from "@eta/client-contracts/tool-shape";
+import type { ReactNode } from "react";
 import {
   childrenOf,
   exitCodeOf,
@@ -15,9 +13,11 @@ import {
   patchCounts,
   runtimeTaskOf,
   shapeOf,
+  summarizeArgs,
   withoutAnsi,
-} from "@/lib/tool-shape";
-import { summarizeArgs } from "@/lib/tool-summary";
+} from "@eta/client-contracts/tool-shape";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { CodeView } from "./code-view";
 import { ImageStrip } from "./image-strip";

@@ -2,7 +2,7 @@
 // answered as apps/eta/src/conversations answers them. `wire` is 03, `artifacts` 03d, `dm-xiaoman`
 // 03h, `board` a run with a failed test (03i). The rest are variants of `wire`, by scenario:
 // chat-queue (03a), chat-errors (03f), chat-empty, chat-loading, chat-archived, chat-no-members,
-// chat-no-model, chat-elsewhere (03g).
+// chat-no-model, chat-elsewhere (03g), chat-process (a finished reply that spoke between its calls).
 
 import type {
   AgentMessage,
@@ -410,13 +410,29 @@ const savedActivity: ToolActivity[] = [
   },
 ];
 
-function wireRows(): MessageView[] {
+function wireRows(spoke = false): MessageView[] {
   return [
     ...older("wire"),
     reply("wire", 9, "agent-ache", {
       text: LONG_REPLY,
       thinking: "Read wire.ts first.",
-      data: { activity: savedActivity },
+      data: {
+        activity: savedActivity,
+        ...(spoke
+          ? {
+              process: [
+                { type: "thinking", text: "Read wire.ts first." },
+                { type: "tool", id: "s1" },
+                {
+                  type: "text",
+                  text: "wire.ts never resends after a reconnect.",
+                },
+                { type: "tool", id: "s2" },
+                { type: "text", text: LONG_REPLY },
+              ],
+            }
+          : {}),
+      },
     }),
     user(
       "wire",
@@ -708,6 +724,7 @@ export function installChat(host: FakeHost): void {
     if (scenario === "chat-queue") return queueRows();
     if (scenario === "chat-errors") return errorRows();
     if (scenario === "chat-empty") return [];
+    if (scenario === "chat-process") return wireRows(true);
     return wireRows();
   };
 

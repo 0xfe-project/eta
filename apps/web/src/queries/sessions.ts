@@ -1,16 +1,17 @@
 import type {
   AgentMessage,
   CompactResult,
+  LogBlock,
+  RunImage,
   SessionArgs,
   SessionImage,
   SessionViewSections,
   ViewMessageRow,
 } from "@eta/client-contracts";
-import type { LogBlock, RunImage } from "@/lib/run";
 import type { RunTiming } from "@/lib/run-timing";
+import { logBlocks, runBlocks } from "@eta/client-contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
-import { logBlocks, runBlocks } from "@/lib/run";
 import { replyRows, runFromOfCall, runTiming } from "@/lib/run-timing";
 import { getWire } from "@/lib/wire";
 import { useWireMutation } from "@/queries/wire";

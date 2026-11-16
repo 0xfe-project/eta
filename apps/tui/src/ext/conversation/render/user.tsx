@@ -1,7 +1,6 @@
-import type { AttachmentView } from "@eta/client-contracts";
+import type { AttachmentView, RunImage } from "@eta/client-contracts";
 import type { ReactNode } from "react";
 import type { PasteRange, TranscriptItem } from "../contract";
-import type { RunImage } from "../model/run";
 import type { DrawContext, DrawnItem } from "./context";
 import { Text } from "ink";
 import { draw } from "./lines";

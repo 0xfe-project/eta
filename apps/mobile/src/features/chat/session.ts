@@ -3,14 +3,15 @@
 
 import type {
   AgentMessage,
+  LogBlock,
+  RunBlock,
   TranscriptSection,
   ViewCore,
   ViewMessageRow,
 } from "@eta/client-contracts";
-import type { LogBlock, RunBlock } from "./run";
+import { logBlocks, runBlocks } from "@eta/client-contracts";
 import { cleanup, effect, signal } from "nsh";
 import { wire } from "../../app/session";
-import { logBlocks, runBlocks } from "./run";
 
 const targetOf = (sessionId: string) => `sessions.${sessionId}`;
 

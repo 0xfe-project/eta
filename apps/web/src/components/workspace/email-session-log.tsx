@@ -1,8 +1,8 @@
+import { logBlocks } from "@eta/client-contracts";
+import { summarizeArgs } from "@eta/client-contracts/tool-shape";
 import { useTranslation } from "react-i18next";
 import { Markdown } from "@/components/markdown";
 import { Loading } from "@/components/states";
-import { logBlocks } from "@/lib/run";
-import { summarizeArgs } from "@/lib/tool-summary";
 import { useSession } from "@/queries/sessions";
 import { EmailProposalCard } from "./email-proposal-card";
 import { ThinkingBlock } from "./transcript/thinking-block";

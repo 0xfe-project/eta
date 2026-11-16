@@ -1,11 +1,17 @@
+import type { ToolBlock } from "@eta/client-contracts";
 import type { Signal } from "nsh";
-import type { ToolBlock } from "./run";
+import {
+  exitCodeOf,
+  fullOutputOf,
+  shapeOf,
+  summarizeArgs,
+  withoutAnsi,
+} from "@eta/client-contracts/tool-shape";
 import { computed, Scroll, signal, Text, View } from "nsh";
 import { t } from "../../i18n";
 import { Header, Page } from "../../ui/Page";
 import { Counts } from "./ProcessBox";
-import { sentence, stepOf, summarize } from "./steps";
-import { exitCodeOf, fullOutputOf, shapeOf, withoutAnsi } from "./tool-shape";
+import { sentence, stepOf } from "./steps";
 import { ToolImages } from "./ToolImages";
 
 /** Past this many lines a block folds to its first ones, with the rest one press away. */
@@ -135,7 +141,7 @@ export function ToolScreen(props: {
   };
   const title = () => {
     const current = shape();
-    if (current.kind === "command") return summarize(current.command);
+    if (current.kind === "command") return summarizeArgs(current.command);
     return step().text === "" ? sentence(step()) : step().text;
   };
   return (

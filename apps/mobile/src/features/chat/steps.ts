@@ -1,8 +1,13 @@
 // A reply's steps in human words (03, 03h, 04): what it read, changed, ran, was stopped from.
 
-import type { ToolBlock } from "./run";
+import type { ToolBlock } from "@eta/client-contracts";
+import {
+  exitCodeOf,
+  patchCounts,
+  shapeOf,
+  summarizeArgs,
+} from "@eta/client-contracts/tool-shape";
 import { t } from "../../i18n";
-import { exitCodeOf, patchCounts, shapeOf } from "./tool-shape";
 
 export interface Step {
   id: string;
@@ -19,37 +24,6 @@ export interface Step {
   failed: boolean;
   refused: boolean;
   block: ToolBlock;
-}
-
-const PREFERRED = [
-  "command",
-  "path",
-  "file_path",
-  "file",
-  "pattern",
-  "query",
-  "url",
-  "goal",
-  "text",
-];
-
-/** One line of what a call was about: the first value a person would say. See web's `summarizeArgs`. */
-export function summarize(args: unknown, limit = 60): string {
-  const cut = (text: string) => {
-    const squashed = text.trim().replace(/\s+/g, " ");
-    return squashed.length <= limit ? squashed : `${squashed.slice(0, limit)}…`;
-  };
-  if (args === undefined || args === null) return "";
-  if (typeof args === "string") return cut(args);
-  if (typeof args !== "object") return cut(String(args));
-  const record = args as Record<string, unknown>;
-  for (const key of PREFERRED) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim().length > 0) return cut(value);
-  }
-  for (const value of Object.values(record))
-    if (typeof value === "string" && value.trim().length > 0) return cut(value);
-  return "";
 }
 
 /** The kernel's words for a call a hook stopped (`blocked by <hook>: <reason>`). */
@@ -86,7 +60,7 @@ export function stepOf(block: ToolBlock): Step {
       text:
         shape.kind === "command"
           ? shape.command
-          : summarize(block.input) || block.name,
+          : summarizeArgs(block.input) || block.name,
     };
   if (shape.kind === "command") {
     const code = exitCodeOf(block);
@@ -97,7 +71,7 @@ export function stepOf(block: ToolBlock): Step {
       ...base,
       failed,
       verb: t("chat.step.ran"),
-      text: summarize(shape.command, 200),
+      text: summarizeArgs(shape.command, 200),
       ...(failed
         ? { note: t("chat.tool.exit", { code: code ?? "?" }) }
         : tests === undefined
@@ -141,7 +115,7 @@ export function stepOf(block: ToolBlock): Step {
       text: t("chat.step.planItems", { count: shape.items.length }),
     };
   const name = block.name.toLowerCase();
-  const what = summarize(block.input);
+  const what = summarizeArgs(block.input);
   if (/grep|glob|search|find/.test(name)) {
     const hits = block.output === undefined ? undefined : lines(block.output);
     return {

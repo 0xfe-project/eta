@@ -48,6 +48,11 @@ test("03: a group's run in its box, who waits near the composer, the question ov
   expect(app.shows("role:button[停止]")).toBe(true);
 });
 
+test("03: a finished reply keeps what it said between its calls", async () => {
+  const app = await chat("wire", "chat-process");
+  await app.waitFor("text:wire.ts never resends after a reconnect.");
+});
+
 test("03: stop goes to the running reply", async () => {
   const app = await chat("wire");
   await app.waitFor("text:14 步");

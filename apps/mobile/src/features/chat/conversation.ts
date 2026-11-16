@@ -7,9 +7,10 @@ import type {
   HistoryResult,
   MemberView,
   MessageView,
+  RunBlock,
   TimelineSection,
 } from "@eta/client-contracts";
-import type { RunBlock } from "./run";
+import { runFromOf, savedSteps } from "@eta/client-contracts";
 import { computed, effect, signal, untracked } from "nsh";
 import {
   agentById,
@@ -27,7 +28,6 @@ import {
   settleWindow,
   taskRowsByTurn,
 } from "./rows";
-import { runFromOf, savedTools } from "./run";
 import { useSessions } from "./session";
 
 /** How many rows `conversations.history` is asked for at a time. */
@@ -170,22 +170,6 @@ export function useChat(id: string) {
 const isRunning = (message: MessageView) =>
   RUNNING_STATUSES.has(message.status);
 
-/** A finished reply's process as blocks: what it worked through, then what it did. */
-function savedBlocks(message: MessageView): RunBlock[] {
-  return [
-    ...(message.thinking === ""
-      ? []
-      : [
-          {
-            type: "thinking" as const,
-            id: `${message.id}:thinking`,
-            text: message.thinking,
-          },
-        ]),
-    ...savedTools(message.data),
-  ];
-}
-
 /** The blocks of a reply: from its session while it runs, from its row once it ended. Reactive. */
 export function replyBlocks(
   chat: Chat,
@@ -195,7 +179,15 @@ export function replyBlocks(
     ? chat.sessionOf(message.agentId)
     : undefined;
   return session === undefined
-    ? { live: false, blocks: savedBlocks(message) }
+    ? {
+        live: false,
+        // A thought's fold is kept per chat, by its block's id: name the reply in it.
+        blocks: savedSteps(message).map((block) =>
+          block.type === "tool"
+            ? block
+            : { ...block, id: `${message.id}:${block.id}` },
+        ),
+      }
     : {
         live: true,
         blocks: chat.sessions.blocks(session, runFromOf(message.data)),

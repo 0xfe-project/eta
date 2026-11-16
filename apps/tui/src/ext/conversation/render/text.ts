@@ -1,7 +1,7 @@
+import type { RunImage } from "@eta/client-contracts";
 import type { Translate } from "../../../i18n/messages";
-import type { RunImage } from "../model/run";
 import type { RenderMessageKey } from "./messages";
-import { withoutAnsi } from "../model/tool-shape";
+import { withoutAnsi } from "@eta/client-contracts/tool-shape";
 
 const KIB = 1024;
 const MIB = 1024 * 1024;

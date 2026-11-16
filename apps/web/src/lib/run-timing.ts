@@ -1,5 +1,5 @@
 import type { AgentMessage, ViewMessageRow } from "@eta/client-contracts";
-import { summarizeArgs } from "./tool-summary";
+import { summarizeArgs } from "@eta/client-contracts/tool-shape";
 
 // Where a run's time went, read back from the times its transcript already holds: no host keeps a
 // clock for this. A row's `at` is when it was written; a message's own `timestamp` is when it
