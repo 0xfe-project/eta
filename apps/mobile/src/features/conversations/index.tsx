@@ -1,9 +1,9 @@
 import type { AgentResults, ConversationSummary } from "@eta/client-contracts";
 import type { GroupSection, StatusLine } from "./list";
 import { cleanup, Scroll, signal, Text, View } from "nsh";
-import { go } from "../../nav/links";
 import { projectById } from "../../app/lists";
 import { t } from "../../i18n";
+import { go } from "../../nav/links";
 import { AgentAvatar } from "../../ui/AgentAvatar";
 import { ago, reason } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
@@ -335,7 +335,7 @@ function ArchivedRow(props: { conversation: ConversationSummary }) {
 }
 
 /** 03p2. */
-export function ArchivedScreen(_props: {}) {
+export function ArchivedScreen() {
   return (
     <Page>
       <Header title={t("conversations.archived")} />

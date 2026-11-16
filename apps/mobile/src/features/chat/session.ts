@@ -10,7 +10,6 @@ import type {
 import type { LogBlock, RunBlock } from "./run";
 import { cleanup, effect, signal } from "nsh";
 import { wire } from "../../app/session";
-import { call } from "../../wire/target";
 import { logBlocks, runBlocks } from "./run";
 
 const targetOf = (sessionId: string) => `sessions.${sessionId}`;

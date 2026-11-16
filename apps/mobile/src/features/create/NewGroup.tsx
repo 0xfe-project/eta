@@ -27,7 +27,7 @@ import { choosableProjects, folderName, useProjectChoice } from "./project";
 const ADD = "__add__";
 
 /** 07b. A name left empty goes as empty: the host names the group after its project. */
-export function NewGroupScreen(_props: {}) {
+export function NewGroupScreen() {
   const projects = useProjectChoice();
   const name = signal("");
   const goal = signal("");

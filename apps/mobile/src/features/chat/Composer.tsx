@@ -390,10 +390,10 @@ export function Composer(props: {
   const id = chat.id;
   let input: InputRef | undefined;
   const text = computed(() => drafts()[id] ?? "");
-  const blank = () => text().trim() === "" && files().length === 0;
   const files = computed(() =>
     uploads().filter((file) => file.conversationId === id),
   );
+  const blank = () => text().trim() === "" && files().length === 0;
   const dismissed = signal(false);
   const focused = signal(false);
   const height = signal(0);
@@ -514,8 +514,6 @@ export function Composer(props: {
       () => undefined,
     );
   });
-  effect(() => props.menuOpen.set(menu() !== null));
-
   const menu = computed((): MenuState | null =>
     buildMenu({
       text: text(),
@@ -539,6 +537,7 @@ export function Composer(props: {
           }),
     }),
   );
+  effect(() => props.menuOpen.set(menu() !== null));
   const showToolbar = () => {
     const kind = menu()?.kind;
     return !blocked() && kind !== "slash" && kind !== "hash";
@@ -548,11 +547,12 @@ export function Composer(props: {
     setDraft(id, next);
     dismissed.set(false);
   };
-  const sessionOf = (agentId: string | undefined) =>
-    members().length === 0
+  function sessionOf(agentId: string | undefined) {
+    return members().length === 0
       ? undefined
       : (chat.members().find((member) => member.agentId === agentId)
           ?.sessionId ?? undefined);
+  }
   const stopAll = () =>
     call<{ stopped: never[] }>("conversations", "stop", {
       conversationId: id,

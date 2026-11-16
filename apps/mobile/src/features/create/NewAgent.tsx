@@ -221,7 +221,7 @@ const SUFFIX = {
 type Picking = "machine" | "runtime" | "model" | "thinking";
 
 /** 07c. */
-export function NewAgentScreen(_props: {}) {
+export function NewAgentScreen() {
   const draft = useDraft();
   const picking = signal<Picking | undefined>(undefined);
   const sentinel = "__follow__";

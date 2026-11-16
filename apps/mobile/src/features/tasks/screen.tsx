@@ -153,8 +153,8 @@ function TaskView(props: { task: () => TaskDetail }) {
 
   // A thread opens on its latest word, next to the box to answer it.
   effect(() => {
-    task().activity.length;
-    comments.waiting().length;
+    void task().activity.length;
+    void comments.waiting().length;
     setTimeout(() => scroll?.scrollToEnd({ animated: false }), 0);
   });
 

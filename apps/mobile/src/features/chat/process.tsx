@@ -54,7 +54,9 @@ function formatDuration(ms: number): string {
 const newestCommand = (rows: readonly Row[]) =>
   rows.find((row) => row.type === "step" && isCommand(row.step.block));
 
-const isCommand = (block: ToolBlock) => shapeOf(block).kind === "command";
+function isCommand(block: ToolBlock) {
+  return shapeOf(block).kind === "command";
+}
 
 function RowLine(props: {
   verb: string;
@@ -443,7 +445,9 @@ function logRows(blocks: readonly LogBlock[]): Row[] {
           text: block.text,
           failed: !block.aborted,
         };
+      // Every other kind is covered above; TypeScript narrows what is left to the summary.
       case "summary":
+      default:
         return {
           key: block.id,
           type: "note",

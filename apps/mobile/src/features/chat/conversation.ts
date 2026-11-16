@@ -17,13 +17,13 @@ import {
   interactions,
   projectById,
 } from "../../app/lists";
-import { useTarget, call } from "../../wire/target";
+import { call, useTarget } from "../../wire/target";
 import {
   ACTIVE_STATUSES,
-  RUNNING_STATUSES,
   mergeRows,
   rememberRows,
   rowsOf,
+  RUNNING_STATUSES,
   settleWindow,
   taskRowsByTurn,
 } from "./rows";
