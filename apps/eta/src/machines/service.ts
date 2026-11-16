@@ -10,6 +10,8 @@
  * - **Product tools** (`tool.call`). The real tool runs on the primary for that session. (It used
  *   to get an SSH environment over the link to read the machine's files; that went to TOBEREFR.)
  * - **The approval list** (`tool.gate`): does the user want to be asked before this tool runs?
+ * - **MCP credentials** (`mcp.credential`): the OAuth state of MCP servers is kept here, once per
+ *   server URL; a daemon reads it for its connections and saves the tokens it refreshes.
  * - **Questions** (`ask.observe`): a session on the daemon asked, was answered or gave up; the
  *   conversation and the inbox hear it exactly as they hear a local session's.
  *
@@ -48,6 +50,8 @@ export interface LinkServiceDeps {
   hooks: () => Required<SessionHooks> | undefined;
   /** The tools the user wants to be asked about. */
   approvals: () => readonly string[];
+  /** A daemon's read or write of an MCP server's OAuth state; the credentials are the primary's. */
+  mcpCredential: (raw: unknown) => Promise<unknown>;
   /** A generation ended: count it. */
   generated: (meta: SessionMeta, message: AssistantMessage) => void;
   warn: (message: string) => void;
@@ -141,6 +145,8 @@ export function serveLink(link: MachineLink, deps: LinkServiceDeps): void {
     const { name } = raw as { name: string };
     return { ask: deps.approvals().includes(name) };
   });
+
+  link.peer.handle("mcp.credential", (raw) => deps.mcpCredential(raw));
 
   // GitHub is gone, but a daemon from before asks for its login every minute until it is
   // upgraded; "not connected" keeps it quiet where "unknown method" would warn each time.

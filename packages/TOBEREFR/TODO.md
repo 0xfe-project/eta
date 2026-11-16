@@ -24,7 +24,7 @@ git checkout 2d4d160d -- <path> # 取回原文件
 
 ## apps/daemon 被删的接入点
 
-- `src/mcp-host.ts`、`src/mcp-auth.ts`、`test/mcp-host.test.ts`：整文件删除。daemon 不再启动 MCP 服务器，也不再向 primary 转发 OAuth 凭据。
+- `src/mcp-host.ts`、`src/mcp-auth.ts`、`test/mcp-host.test.ts`：整文件删除。（#160 已接回：`McpHost` 移到 `apps/daemon/src/mcp-host.ts`，主节点和 daemon 共用；`mcp-auth.ts` 重写，凭据经 `mcp.credential` 向主节点读写。）
 - `src/node.ts`：
   - 删除了 `McpHost`、`AkhookSession`、`createLocalEnvironment`、`createRefreshDedupingFetch` 的引用。
   - `sessionTools` 只返回 `proxyTools`，不再拼 MCP 工具。
@@ -42,7 +42,7 @@ git checkout 2d4d160d -- <path> # 取回原文件
   - 本机会话不再额外拿 MCP 工具，`sessionHooks` 等于 `later.hooks`。
 - `src/host.ts`：删掉了 `HostOptions.mcp`、`HostOptions.akhook`。
 - `src/access.ts`：去掉了 `MCP_CALLBACK_PATH`（`/mcp/oauth/callback`）这条免 token 路径。
-- `src/machines/service.ts`：去掉了 `mcp.credential` 这个 link handler 和 `mcpCredential` 依赖。`tool.gate` handler 保留，但 daemon 侧已经没人调用。
+- `src/machines/service.ts`：去掉了 `mcp.credential` 这个 link handler 和 `mcpCredential` 依赖（#160 已恢复）。`tool.gate` handler 保留，但 daemon 侧已经没人调用。
 - `src/machines/remote-place.ts`：远程会话 open 时不再带 `akhook` 层。
 - `package.json`：去掉了 `@eta/mcp`、`@eta/plugin-akhook` 依赖。
 
@@ -62,7 +62,7 @@ git checkout 2d4d160d -- <path> # 取回原文件
 还没接回的：
 
 - bundle 的 `mcp.json`（`bundleMcpServers`、`mcpSourcesFor`）：没有作为来源。
-- daemon / 远程会话：daemon 不建 `McpHost`，远程会话的 realm 报 not connected。
+- daemon / 远程会话：#160 起 daemon 也建 `McpHost`，并给 eta 自己循环的会话 realm（`platformFor`）；测试 `apps/eta/test/remote-mcp.test.ts`。
 
 ## 跟着变的测试
 

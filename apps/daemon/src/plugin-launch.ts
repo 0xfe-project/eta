@@ -26,7 +26,7 @@ import type {
   PluginValue,
   SessionMcpServer,
 } from "@eta/client-contracts";
-import type { McpServerEntry } from "@eta/mcp";
+import type { McpConfigSource, McpServerEntry } from "@eta/mcp";
 import type { RuntimeExtras } from "@eta/server";
 import type { PluginPackage, PluginServer } from "./plugin-package";
 import { mkdirSync, realpathSync, symlinkSync } from "node:fs";
@@ -360,6 +360,28 @@ export function toMcpEntries(
       ];
     }),
   );
+}
+
+/**
+ * The sources eta's own loop gets from these plugins: one `plugin:<plugin>` each, in their order,
+ * a plugin with no server left out. The primary and a daemon both call it, so a session gets the
+ * same servers wherever it runs.
+ */
+export function pluginMcpSources(
+  plugins: readonly PluginServersInput[],
+  dataDir: string,
+  warn: (message: string) => void,
+): McpConfigSource[] {
+  const resolved = resolvePluginServers(plugins, dataDir, warn);
+  return plugins.flatMap(({ plugin }) => {
+    const name = plugin.manifest.name;
+    const servers = toMcpEntries(
+      resolved.filter((server) => server.plugin === name),
+    );
+    return Object.keys(servers).length === 0
+      ? []
+      : [{ name: `plugin:${name}`, servers }];
+  });
 }
 
 /** One plugin's servers as an external runtime takes them; the shape `runtimeExtras` gives. */

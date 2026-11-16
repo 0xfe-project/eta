@@ -27,18 +27,20 @@ import type {
 import type { CallFrame, ServerFrame } from "@eta/client-wire-proto";
 import type { KernelTool, PersonaCard, ThinkingLevel } from "@eta/core";
 import type { AskObserver } from "@eta/harness";
+import type { McpManagerOptions } from "@eta/mcp";
 import type { OarRuntimes } from "@eta/runtime-oar";
 import type { SessionMeta, SessionsService, Socket } from "@eta/server";
 import type { Peer } from "./link/peer";
 import type { ActivePlugin } from "./plugin-launch";
 import { Buffer } from "node:buffer";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { homedir, hostname, platform } from "node:os";
 import { isAbsolute, join } from "node:path";
 import process from "node:process";
 import { LINK_PROTOCOL } from "@eta/client-contracts";
 import { kernelOn } from "@eta/core";
+import { createRefreshDedupingFetch } from "@eta/mcp";
 import { createOarRuntimes } from "@eta/runtime-oar";
 import {
   createConnection,
@@ -53,9 +55,11 @@ import {
 } from "@eta/server";
 import { LocalTransport } from "@eta/ssh";
 import { Context } from "cordis";
+import { relayAuthProviderFor } from "./mcp-auth";
+import { McpHost } from "./mcp-host";
 import { ModelCatalog, remoteModels } from "./models";
 import { PluginStore } from "./plugin-files";
-import { runtimeExtras } from "./plugin-launch";
+import { pluginMcpSources, runtimeExtras } from "./plugin-launch";
 import { loadPlugin } from "./plugin-package";
 import { Reports } from "./reports";
 import { lastSeq, runAndWait } from "./run";
@@ -82,6 +86,10 @@ export interface DaemonNodeOptions {
     | undefined;
   /** The external runtimes; oar's by default (a test hands in scripted ones). */
   runtimes?: OarRuntimes | undefined;
+  /** The fetch of MCP's HTTP transports and token requests (a test reaches a fake server). */
+  mcpFetch?: McpManagerOptions["fetch"] | undefined;
+  /** Overrides of the MCP library's manager, for a test. */
+  mcp?: Partial<McpManagerOptions> | undefined;
 }
 
 /** What the primary last said about one agent's session in one conversation. */
@@ -125,6 +133,8 @@ export class DaemonNode {
   readonly #store: FileSessionStore;
   readonly #catalog = new ModelCatalog();
   readonly #runtimes: OarRuntimes;
+  /** MCP for the sessions on eta's own loop; its OAuth credentials are the primary's. */
+  readonly #mcp: McpHost;
   /** The plugins the primary sent, by contents. */
   readonly #plugins: PluginStore;
   /** The openings the primary sent, by `conversation:agent`; read when a session opens. */
@@ -154,6 +164,23 @@ export class DaemonNode {
     const home = options.home ?? homedir();
     this.#plugins = new PluginStore(join(options.dataDir, "plugins", "store"));
     this.#runtimes = options.runtimes ?? createOarRuntimes({ warn });
+    this.#mcp = new McpHost({
+      dataDir: options.dataDir,
+      home,
+      warn,
+      // Credentials are the primary's: a token this machine refreshes is saved there.
+      authProviderFor: relayAuthProviderFor(() => this.#peer),
+      fetch: options.mcpFetch ?? createRefreshDedupingFetch(),
+      // The plugins the primary opened this agent's session in this conversation with, and the
+      // values it sent for their servers; nothing for the status page, which is the primary's.
+      pluginSources: ({ agentId, conversationId }) => {
+        if (conversationId === undefined) return [];
+        const opening = this.#openings.get(keyOf(conversationId, agentId));
+        if (opening === undefined || opening.plugins.length === 0) return [];
+        return pluginMcpSources(opening.plugins, options.dataDir, warn);
+      },
+      manager: options.mcp,
+    });
     this.#manager = new SessionManager({
       store: this.#store,
       // Claude Code, Codex, OpenCode, Pi: an agent on one of them runs it on this machine.
@@ -165,6 +192,22 @@ export class DaemonNode {
           catalog: this.#catalog,
           peer: () => this.#peer,
         }),
+      // The realm and the platform briefing of eta's own loop, as the primary gives its own
+      // sessions (`@eta/server`'s `platformFor`): scripts run on this machine, in the session's
+      // directory here. The config line is left out: the providers are the primary's.
+      platformFor: (meta) => {
+        if (meta.runtime !== undefined) return undefined;
+        const target = join(meta.cwd, ".eta", "MEMORY.md");
+        return {
+          cwd: meta.cwd,
+          home,
+          sessionDir: join(options.dataDir, "sessions", meta.id),
+          memoryTarget: target,
+          memoryExists: existsSync(target),
+        };
+      },
+      // The project's memory is read here, where the project is; nothing extracts to it yet.
+      memoryFor: () => ({ home }),
       personasFor: async (meta) => {
         const found = await discoverPersonas({ cwd: meta.cwd, home, warn });
         // The user's cards live on the primary; the ones it sent win a clash like a project's do.
@@ -180,6 +223,9 @@ export class DaemonNode {
           warn,
         });
       },
+      // `import "mcp:<server>"` in eta's own loop: the agent's plugins, the user's file and the
+      // project's, as on the primary. A server starts on this machine, with the session.
+      mcpFor: (meta) => this.#mcp.sessionMcp(meta),
       runtimeExtrasFor: async (meta) =>
         await runtimeExtras(this.#openingOf(meta)?.plugins ?? [], {
           dataDir: options.dataDir,
@@ -199,8 +245,7 @@ export class DaemonNode {
         const { meta } = input;
         const opening = this.#openingOf(meta);
         if (opening === undefined) return [];
-        // The product's tools are the primary's. (MCP servers and akhook rules started here
-        // until they moved to TOBEREFR; see packages/TOBEREFR/TODO.md.)
+        // The product's tools are the primary's; MCP comes in through the realm (`mcpFor`).
         return proxyTools({
           session: meta.id,
           specs: opening.tools,
@@ -352,6 +397,7 @@ export class DaemonNode {
   async close(): Promise<void> {
     for (const fiber of this.#fibers.splice(0).reverse()) await fiber.dispose();
     await this.#manager.closeAll();
+    await this.#mcp.close();
     await this.#store.close();
   }
 
