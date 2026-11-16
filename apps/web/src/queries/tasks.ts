@@ -9,7 +9,9 @@ import type {
   TaskRunStatus,
   TaskRunView,
 } from "@eta/client-contracts";
+import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { getWire } from "@/lib/wire";
 import { rememberRows } from "@/queries/conversations";
 import {
   useListTarget,
@@ -129,6 +131,34 @@ export function useCreateTasks() {
     "tasks",
     "create",
   );
+}
+
+/**
+ * Where tasks made under `parent`, else in `conversationId`, would work: a worktree or the
+ * project's directory. Undefined while it is asked, or when it cannot be told.
+ */
+export function useNewTaskWorkspace(
+  where: TaskArgs["workspaceFor"],
+): TaskResults["workspaceFor"]["mode"] | undefined {
+  const { parent, conversationId } = where;
+  const query = useQuery({
+    queryKey: [
+      "wire",
+      "tasks",
+      "workspaceFor",
+      parent ?? null,
+      conversationId ?? null,
+    ],
+    queryFn: async () =>
+      await getWire().call<TaskResults["workspaceFor"]>(
+        "tasks",
+        "workspaceFor",
+        parent === undefined ? { conversationId } : { parent },
+      ),
+    enabled: parent !== undefined || conversationId !== undefined,
+    retry: false,
+  });
+  return query.data?.mode;
 }
 
 /** Stop a run: a queued one never starts, a going one ends `interrupted`. */

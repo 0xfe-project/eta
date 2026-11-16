@@ -458,7 +458,15 @@
     "startBacklog": "Backlog first",
     "createSubtasks": "Create {{count}} subtasks",
     "createSubtasks_one": "Create {{count}} subtask",
-    "createSubtasks_other": "Create {{count}} subtasks"
+    "createSubtasks_other": "Create {{count}} subtasks",
+    "base": "Starts from",
+    "baseTask": "Branch of “{{title}}”",
+    "baseHead": "Project HEAD",
+    "baseCustom": "Another branch or commit…",
+    "baseCustomPlaceholder": "Branch, commit or #N",
+    "baseAuto": "· automatic",
+    "baseSplit": "Only the first step's subtasks start here; later ones follow what they wait for.",
+    "baseMany": "Pick one of its prerequisites under “Starts from” to go on from it instead."
   },
   "queue": {
     "label": "Queue",

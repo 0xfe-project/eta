@@ -51,6 +51,8 @@ export interface NewTaskInput {
   after?: readonly number[] | undefined;
   /** An earlier task of the batch it is a subtask of, by index; else the batch's parent. */
   under?: number | undefined;
+  /** Where its worktree starts (`#N`, a branch or a commit; empty is HEAD); absent is derived. */
+  base?: string | undefined;
 }
 
 /** What the system writes on a parent's status it found stale and made again (`reconcile`). */
@@ -473,6 +475,7 @@ export class TaskBoard {
         dependsOn: this.#dependenciesOf(entry.dependsOn),
         after: [...new Set(entry.after ?? [])],
         under: entry.under,
+        base: entry.base === undefined ? undefined : this.#baseOf(entry.base),
       };
     });
     const parents = new Set<number>(
@@ -491,6 +494,7 @@ export class TaskBoard {
           conversationId,
           projectId,
           workspaceMode: workspace,
+          baseBranch: entry.base,
         }),
       );
       planned.forEach((entry, index) => {
@@ -1003,6 +1007,11 @@ export class TaskBoard {
   }
 
   /** The worktree a run made for the task. */
+  /** The workspace a task's new subtasks get: its own (`make` with this parent). */
+  workspaceOf(task: string): TaskWorkspaceMode {
+    return this.#named(task).workspaceMode;
+  }
+
   setWorktree(id: string, path: string, branch: string): void {
     this.#deps.tasks.setWorktree(id, path, branch);
     this.#commit(id, "changed", () => undefined);

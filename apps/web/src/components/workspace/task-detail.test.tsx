@@ -611,6 +611,142 @@ describe("the new-task form (08)", () => {
   });
 });
 
+describe("where the new task starts", () => {
+  /** The form under #4, waiting for these, in a project that gives tasks a worktree or not. */
+  async function form(
+    dependsOn: string[],
+    mode: "worktree" | "local" = "worktree",
+    split = false,
+  ) {
+    const h = host();
+    h.handle("tasks.workspaceFor", () => ({ mode }));
+    await mount(<NewTaskDialog />);
+    await act(async () =>
+      useNewTask.getState().open({
+        parentId: "t4",
+        split,
+        dependsOn: dependsOn.map((id) => ({ id, requireDone: false })),
+      }),
+    );
+    await flush();
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    if (!split)
+      await type(dialog.querySelector('input[aria-label="标题"]')!, "上线");
+    return { h, dialog };
+  }
+  const trigger = (dialog: HTMLElement) =>
+    dialog.querySelector<HTMLElement>(
+      '[role="combobox"][aria-labelledby="new-task-base"]',
+    );
+  const key = (el: HTMLElement) =>
+    act(async () => {
+      el.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+    });
+  async function choose(dialog: HTMLElement, text: string) {
+    await key(trigger(dialog)!);
+    const option = [
+      ...document.querySelectorAll<HTMLElement>('[role="option"]'),
+    ].find((o) => o.textContent?.includes(text));
+    expect(option).toBeDefined();
+    await key(option!);
+    await flush();
+  }
+  async function submit(dialog: HTMLElement) {
+    await act(async () => {
+      dialog
+        .querySelector("form")!
+        .dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true }),
+        );
+    });
+    await flush();
+  }
+  const sent = (h: ReturnType<typeof host>) =>
+    (callsOf(h, "create")[0] as { tasks: Record<string, unknown>[] }).tasks;
+
+  it("is not asked in a project without worktrees", async () => {
+    const { dialog } = await form(["t8"], "local");
+    expect(trigger(dialog)).toBeNull();
+    expect(dialog.textContent).not.toContain("起点");
+  });
+
+  it("shows what the host derives, and sends nothing when left alone", async () => {
+    const { h, dialog } = await form(["t8"]);
+    expect(trigger(dialog)!.textContent).toBe(
+      "「跑回归测试」的分支 eta/task-8 · 自动",
+    );
+    await submit(dialog);
+    expect(sent(h)[0]).not.toHaveProperty("base");
+  });
+
+  it("can start from HEAD instead, or a branch or commit typed in", async () => {
+    const { h, dialog } = await form(["t8"]);
+    await choose(dialog, "项目当前的提交");
+    expect(trigger(dialog)!.textContent).toBe("项目当前的提交（HEAD）");
+    await submit(dialog);
+    expect(sent(h)[0]).toMatchObject({ base: "" });
+
+    await cleanup();
+    const other = await form(["t8"]);
+    await choose(other.dialog, "其他分支或提交");
+    await type(
+      other.dialog.querySelector('input[aria-label="其他分支或提交…"]')!,
+      "release/1.2",
+    );
+    await submit(other.dialog);
+    expect(sent(other.h)[0]).toMatchObject({ base: "release/1.2" });
+  });
+
+  it("with two prerequisites, starts from HEAD unless the user picks the one to go on from", async () => {
+    const { h, dialog } = await form(["t7", "t8"]);
+    expect(trigger(dialog)!.textContent).toBe("项目当前的提交（HEAD） · 自动");
+    // #135's hint, and where to change it.
+    expect(dialog.querySelector("[data-join-hint]")!.textContent).toBe(
+      "它会从项目当前的 HEAD 开始，前面并行那一步的改动不会自动带进来。",
+    );
+    expect(dialog.textContent).toContain(
+      "可以在「起点」里改成接在其中一个前置后面。",
+    );
+    await choose(dialog, "打包桌面安装包");
+    // Picked: it no longer starts at HEAD, so the hint goes.
+    expect(dialog.querySelector("[data-join-hint]")).toBeNull();
+    expect(trigger(dialog)!.textContent).toBe(
+      "「打包桌面安装包」的分支 eta/task-7",
+    );
+    await submit(dialog);
+    expect(sent(h)[0]).toMatchObject({
+      base: "#7",
+      dependsOn: [
+        { task: "t7", requireDone: false },
+        { task: "t8", requireDone: false },
+      ],
+    });
+  });
+
+  it("starts a split's first step where the user says", async () => {
+    const { h, dialog } = await form([], "worktree", true);
+    await type(
+      dialog.querySelector('textarea[aria-label="拆成子任务"]')!,
+      "A\nB\n→ C",
+    );
+    expect(dialog.textContent).toContain("这里只管第 1 步的子任务");
+    await choose(dialog, "其他分支或提交");
+    await type(
+      dialog.querySelector('input[aria-label="其他分支或提交…"]')!,
+      "#2",
+    );
+    await click(buttonIn(dialog, "创建 3 个子任务"));
+    await flush();
+    expect(sent(h)).toEqual([
+      { title: "A", assignee: "ada", base: "#2" },
+      { title: "B", assignee: "ada", base: "#2" },
+      { title: "C", assignee: "ada", after: [0, 1] },
+    ]);
+  });
+});
+
 describe("the picker (09)", () => {
   it("greys what would close a cycle, saying so, and keeps a parent's own work out of its parents", async () => {
     host();

@@ -197,3 +197,98 @@ describe("the user makes a task", () => {
     ).toThrow(/only the user makes tasks this way/);
   });
 });
+
+describe("where a task the user makes starts", () => {
+  // Backlog worktree tasks never run here: the page's `workspace.base` is what a run would start from.
+  const backlog = { status: "backlog", workspace: "worktree" };
+
+  it("without a base, from the branch of the one task it waits for, else HEAD", async () => {
+    const r = await room();
+    const [a, b] = await r.create({
+      ...backlog,
+      tasks: [
+        { title: "A", assignee: "Ada" },
+        { title: "B", assignee: "Ada" },
+      ],
+    });
+    const [one, two] = await r.create({
+      ...backlog,
+      tasks: [
+        { title: "After A", assignee: "Ada", dependsOn: [{ task: a!.id }] },
+        {
+          title: "After both",
+          assignee: "Ada",
+          dependsOn: [{ task: a!.id }, { task: b!.id }],
+        },
+      ],
+    });
+    expect(r.task(one!.id).workspace.base).toBe(`eta/task-${a!.number}`);
+    expect(r.task(two!.id).workspace.base).toBeNull();
+  });
+
+  it("with a base: #N is that task's branch, a branch or commit as written, empty is HEAD", async () => {
+    const r = await room();
+    const [a, b] = await r.create({
+      ...backlog,
+      tasks: [
+        { title: "A", assignee: "Ada" },
+        { title: "B", assignee: "Ada" },
+      ],
+    });
+    const made = await r.create({
+      ...backlog,
+      tasks: [
+        // Two to wait for: the user picks which one it goes on from.
+        {
+          title: "Join on B",
+          assignee: "Ada",
+          dependsOn: [{ task: a!.id }, { task: b!.id }],
+          base: `#${b!.number}`,
+        },
+        { title: "Release", assignee: "Ada", base: " release/1.2 " },
+        { title: "Commit", assignee: "Ada", base: "4f2a9c1" },
+        // HEAD although it waits for one task whose branch it would otherwise take.
+        {
+          title: "From HEAD",
+          assignee: "Ada",
+          dependsOn: [{ task: a!.id }],
+          base: "",
+        },
+      ],
+    });
+    expect(made.map((t) => r.task(t.id).workspace.base)).toEqual([
+      `eta/task-${b!.number}`,
+      "release/1.2",
+      "4f2a9c1",
+      "",
+    ]);
+  });
+
+  it("refuses a base that is not a string", async () => {
+    const r = await room();
+    await expect(
+      r.create({ tasks: [{ title: "X", assignee: "Ada", base: 12 }] }),
+    ).rejects.toThrow(/base must be a string/);
+    expect(r.w.host.product.board.list()).toEqual([]);
+  });
+
+  it("tells the form where new tasks would work: the parent's, else the project's", async () => {
+    const r = await room();
+    const [stage] = await r.create({
+      ...backlog,
+      tasks: [{ title: "Stage", assignee: "Ada" }],
+    });
+    const where = (args: Record<string, unknown>) =>
+      r.w.client.call("tasks", "workspaceFor", args);
+    await expect(where({ parent: `#${stage!.number}` })).resolves.toEqual({
+      mode: "worktree",
+    });
+    // The test project is a plain directory, not a git repository.
+    await expect(where({ conversationId: r.group.id })).resolves.toEqual({
+      mode: "local",
+    });
+    await expect(where({})).rejects.toThrow(
+      /needs a parent or a conversationId/,
+    );
+  });
+});

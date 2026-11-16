@@ -578,6 +578,7 @@ export const TASK_ACTIONS = [
   "archive",
   "unarchive",
   "setSettings",
+  "workspaceFor",
 ] as const;
 export type TaskAction = (typeof TASK_ACTIONS)[number];
 
@@ -594,6 +595,13 @@ export interface NewTaskArgs {
   dependsOn?: { task: string; requireDone?: boolean }[];
   after?: number[];
   under?: number;
+  /**
+   * Where its worktree starts, as `create_task`'s `base`: a branch, a commit, or `#N` (that task's
+   * `eta/task-<N>` branch). An empty string is the project checkout's HEAD, whatever it waits for.
+   * Absent is what the host derives when the run starts: the branch of the one unfinished task it
+   * waits for in the same project, else HEAD. Only a worktree reads it.
+   */
+  base?: string;
 }
 
 /** `tasks.create`: every task made in one write, or none. */
@@ -688,6 +696,11 @@ export interface TaskArgs {
   /** Bring tasks back to the board, each with its archived subtasks. */
   unarchive: { taskId?: string; taskIds?: string[] };
   setSettings: Partial<TaskBoardSettings>;
+  /**
+   * Where tasks made with `create` and these would work: the parent's workspace, else a worktree
+   * for a conversation whose project is a git repository and its directory for one that is not.
+   */
+  workspaceFor: { parent?: string; conversationId?: string };
 }
 export interface TaskResults {
   create: { tasks: BoardTaskDetail[] };
@@ -705,6 +718,7 @@ export interface TaskResults {
   archive: { task: BoardTaskDetail };
   unarchive: { tasks: BoardTaskDetail[] };
   setSettings: { settings: TaskBoardSettings };
+  workspaceFor: { mode: TaskWorkspaceMode };
 }
 export type TaskCall = {
   [A in TaskAction]: Omit<CallFrame, "target" | "action" | "args"> & {

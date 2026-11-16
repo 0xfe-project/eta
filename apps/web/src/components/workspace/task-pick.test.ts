@@ -147,4 +147,13 @@ describe("splitting into subtasks", () => {
       { title: "发布公告", assignee: "ada", after: [3], under: 0 },
     ]);
   });
+
+  it("starts the first step's lines where the form says; later lines follow what they wait for", () => {
+    expect(splitBatch(parseSplit(text), "ada", undefined, "#3")).toEqual([
+      { title: "整理变更日志", assignee: "ada", base: "#3" },
+      { title: "更新用户文档", assignee: "ada", base: "#3" },
+      { title: "跑回归测试", assignee: "ada", after: [0, 1] },
+      { title: "发布公告", assignee: "ada", after: [2] },
+    ]);
+  });
 });
