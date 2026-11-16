@@ -43,7 +43,7 @@ apps/
 packages/
   eta-core, eta-harness, eta-compaction, eta-execution(-node), eta-storage-jsonl   kernel and session runtime
   eta-server, eta-plugin-sdk     upstream server floor: WebSocket pipeline, registry, state push, sessions, and other bundled plugins
-  eta-ssh, eta-plugin-ssh, eta-plugin-git   execution environment over SSH and git plugins
+  eta-ssh             transport: run `sh` locally or over SSH (task worktrees, remote machines)
   eta-plugin-akhook   declarative rules (akhook configuration) and streaming rules, see [akhook](akhook.md)
   eta-mcp             MCP library: proxy tools, lazy connections, metadata cache, direct tools, OAuth, see [MCP](mcp.md)
   client-wire-proto, client-contracts   wire frames and product target types (shared by Web and host)

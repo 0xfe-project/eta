@@ -63,9 +63,15 @@ points eta at a SearXNG of your own instead.
   under eta's MIT License.
 - Each adapted file keeps its original license header and says how it was changed for eta.
 
+### pi-mcp-adapter and opencode (MCP)
+
+`packages/eta-mcp` includes code adapted from
+[pi-mcp-adapter](https://github.com/nicobailon/pi-mcp-adapter) and
+[opencode](https://github.com/anomalyco/opencode), both MIT. The notice is in
+`packages/eta-mcp/NOTICE`.
+
 ### TOBEREFR
 
 `packages/TOBEREFR` is not part of any build. It keeps its own notices:
 
-- `packages/TOBEREFR/eta-mcp/NOTICE`: code adapted from pi-mcp-adapter and opencode, MIT.
 - `packages/TOBEREFR/eta-plugin-akhook/presets/omp/LICENSE`: MIT.

@@ -6,11 +6,11 @@ The main node hosts the Web, product data, model credentials, and the memory sid
 
 `kind` in the `machine` table:
 
-| kind      | Meaning                                                                                                                                                                         |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `primary` | The computer hosting the deployment, created automatically at startup (a unique index guarantees only one). Sessions run in-process                                             |
-| `daemon`  | A machine running `eta-daemon`. Status `pending` (registered, awaiting user approval), `online`, `offline`, `revoked`                                                           |
-| `ssh`     | The schema retains this value; SSH-based execution environments are in `packages/eta-ssh`, `eta-plugin-ssh`; currently there is no corresponding add entry point in the product |
+| kind      | Meaning                                                                                                                                                                                        |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `primary` | The computer hosting the deployment, created automatically at startup (a unique index guarantees only one). Sessions run in-process                                                            |
+| `daemon`  | A machine running `eta-daemon`. Status `pending` (registered, awaiting user approval), `online`, `offline`, `revoked`                                                                          |
+| `ssh`     | The schema retains this value; `packages/eta-ssh` only keeps the SSH transport (the SSH execution environment was deleted); currently there is no corresponding add entry point in the product |
 
 A project points to a machine (`project.machine_id`); the session in the conversation runs on the machine where the project is located, with the project's directory as cwd.
 
