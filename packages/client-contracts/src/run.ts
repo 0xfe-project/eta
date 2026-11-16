@@ -110,6 +110,8 @@ export function savedSteps(message: {
   const blocks = saved.flatMap(
     (step: Partial<ProcessStep> | null, at): RunBlock[] => {
       if (step?.type === "tool") {
+        // A step whose call `data.activity` does not hold (malformed, or dropped from it) has
+        // nothing to draw: it is left out on purpose, the rest of the order still stands.
         const tool = byId.get(String(step.id));
         return tool === undefined ? [] : [tool];
       }

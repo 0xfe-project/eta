@@ -400,6 +400,24 @@ describe("where a reply's answer starts", () => {
     expect(steps.map((block) => block.id)).toEqual(["t2", "t1"]);
   });
 
+  it("leaves out a step naming a call its activity does not hold, and keeps the rest in order", () => {
+    const steps = savedSteps({
+      thinking: "",
+      data: {
+        activity: [{ id: "t1", name: "bash", input: {}, status: "completed" }],
+        process: [
+          { type: "text", text: "first" },
+          { type: "tool", id: "gone" },
+          { type: "tool", id: "t1" },
+          { type: "text", text: "the answer" },
+        ],
+      },
+    });
+    expect(
+      steps.map((block) => (block.type === "tool" ? block.id : block.text)),
+    ).toEqual(["first", "t1"]);
+  });
+
   it("of a finished reply that only wrote text has no process", () => {
     expect(
       savedSteps({
