@@ -14,7 +14,7 @@
   "scripts": {
     "test": "NODE_OPTIONS=--experimental-vm-modules vitest --run --passWithNoTests",
     "typecheck": "tsc --noEmit",
-    "smoke": "ETA_SMOKE_CONFIG=\"${ETA_SMOKE_CONFIG:-$HOME/.eta/config.json}\" vitest --run test/smoke.e2e.test.ts test/smoke-compaction.e2e.test.ts test/session.e2e.test.ts",
+    "smoke": "ETA_SMOKE_CONFIG=\"${ETA_SMOKE_CONFIG:-$HOME/.eta/config.json}\" vitest --run test/smoke.e2e.test.ts test/session.e2e.test.ts",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
   },
   "dependencies": {
@@ -28,7 +28,6 @@
     "zx": "lite"
   },
   "devDependencies": {
-    "@eta/compaction": "*",
     "@types/node": "22.19.19",
     "typescript": "5.9.3",
     "vitest": "4.1.9"
