@@ -185,57 +185,6 @@ export interface TaskBoardSettings {
   archiveAfterDays: TaskArchiveDays | null;
 }
 
-/**
- * What an `archived` entry's `data` says: who (`by`: `auto`, `user` or an agent's id), why
- * (`reason`: `stale` when the host did it after `days` quiet days, `manual` otherwise), the runs it
- * stopped to do it (`stoppedRuns`), and, for a subtask put away with its parent, that parent
- * (`with`).
- */
-export interface TaskArchivedEntry {
-  by: string;
-  reason: "stale" | "manual";
-  days: number | null;
-  stoppedRuns: string[];
-  with: TaskEntryRef | null;
-}
-
-/** An `archived` entry's `data` read. */
-export function archivedEntry(
-  data: Record<string, unknown>,
-): TaskArchivedEntry {
-  return {
-    by: typeof data.by === "string" ? data.by : "user",
-    reason: data.reason === "stale" ? "stale" : "manual",
-    days: typeof data.days === "number" ? data.days : null,
-    stoppedRuns: Array.isArray(data.stoppedRuns)
-      ? data.stoppedRuns.filter((id): id is string => typeof id === "string")
-      : [],
-    with: entryRef(data.with),
-  };
-}
-
-/**
- * What an `unarchived` entry's `data` says: the kind of entry that brought the task back
- * (`cause`: `comment`, `status`, `run_started`, …), or `manual` when someone restored it, and the
- * parent it came back with (`with`).
- */
-export interface TaskUnarchivedEntry {
-  cause: TaskActivityKind | "manual";
-  with: TaskEntryRef | null;
-}
-
-export function unarchivedEntry(
-  data: Record<string, unknown>,
-): TaskUnarchivedEntry {
-  return {
-    cause:
-      typeof data.cause === "string"
-        ? (data.cause as TaskActivityKind | "manual")
-        : "manual",
-    with: entryRef(data.with),
-  };
-}
-
 /** The newest version of an artifact published for a task. */
 export interface TaskArtifactRef {
   artifactId: string;
@@ -442,6 +391,57 @@ export function subtaskEntry(
   )
     return undefined;
   return { action: data.action, task };
+}
+
+/**
+ * What an `archived` entry's `data` says: who (`by`: `auto`, `user` or an agent's id), why
+ * (`reason`: `stale` when the host did it after `days` quiet days, `manual` otherwise), the runs it
+ * stopped to do it (`stoppedRuns`), and, for a subtask put away with its parent, that parent
+ * (`with`).
+ */
+export interface TaskArchivedEntry {
+  by: string;
+  reason: "stale" | "manual";
+  days: number | null;
+  stoppedRuns: string[];
+  with: TaskEntryRef | null;
+}
+
+/** An `archived` entry's `data` read. */
+export function archivedEntry(
+  data: Record<string, unknown>,
+): TaskArchivedEntry {
+  return {
+    by: typeof data.by === "string" ? data.by : "user",
+    reason: data.reason === "stale" ? "stale" : "manual",
+    days: typeof data.days === "number" ? data.days : null,
+    stoppedRuns: Array.isArray(data.stoppedRuns)
+      ? data.stoppedRuns.filter((id): id is string => typeof id === "string")
+      : [],
+    with: entryRef(data.with),
+  };
+}
+
+/**
+ * What an `unarchived` entry's `data` says: the kind of entry that brought the task back
+ * (`cause`: `comment`, `status`, `run_started`, …), or `manual` when someone restored it, and the
+ * parent it came back with (`with`).
+ */
+export interface TaskUnarchivedEntry {
+  cause: TaskActivityKind | "manual";
+  with: TaskEntryRef | null;
+}
+
+export function unarchivedEntry(
+  data: Record<string, unknown>,
+): TaskUnarchivedEntry {
+  return {
+    cause:
+      typeof data.cause === "string"
+        ? (data.cause as TaskActivityKind | "manual")
+        : "manual",
+    with: entryRef(data.with),
+  };
 }
 
 export interface TaskActivityView {

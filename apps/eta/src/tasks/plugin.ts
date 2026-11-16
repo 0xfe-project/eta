@@ -39,7 +39,7 @@ export interface TasksDeps {
 }
 
 /** `archived` as a call sends it: absent is the board without the archived tasks. */
-export function archivedFilterOf(
+function archivedFilterOf(
   value: unknown,
   call: string,
 ): TaskArchivedFilter | undefined {

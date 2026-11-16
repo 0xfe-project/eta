@@ -12,7 +12,7 @@ import {
 } from "@eta/client-contracts";
 
 /** The setting's key: a number of days from `TASK_ARCHIVE_DAYS`, or null for never. */
-export const ARCHIVE_AFTER_SETTING = "tasks.archiveAfterDays";
+const ARCHIVE_AFTER_SETTING = "tasks.archiveAfterDays";
 
 const HOUR = 60 * 60 * 1000;
 
