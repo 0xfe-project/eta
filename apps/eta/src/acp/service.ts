@@ -78,9 +78,9 @@ export class AcpService {
    * Each daemon's fetch generation: an invariant, not a fix for an order seen today (one link
    * answers in completion order, and the daemon's settled list reads the file after its looks).
    * It keeps holding if that changes: a retry, a second channel, a list built from the looks.
-   * A fetch writes what it hears only while its generation is
-   * still the latest: a change, a newer fetch or the machine going offline makes every answer
-   * still on its way stale, so a slow look can never put back a list from before a save.
+   * A fetch writes what it hears only while its generation is still the latest: a newer fetch
+   * (every save and delete starts one once it lands) or the machine going offline makes every
+   * answer still on its way stale, so a slow look can never put back a list from before a save.
    */
   readonly #generations = new Map<string, number>();
 
@@ -150,8 +150,6 @@ export class AcpService {
     if (previousId !== undefined && previousId !== agent.id)
       this.#unused(place.machine, previousId, `rename ${previousId}`);
     if (place.kind === "local") return place.admin.save(agent, previousId);
-    // What is asked of the list until the change lands is from before it.
-    this.#nextGeneration(place.machine.id);
     const view = await place.link.daemon(
       "acpSave",
       { agent, ...(previousId === undefined ? {} : { previousId }) },
@@ -168,7 +166,6 @@ export class AcpService {
       place.admin.delete(id);
       return;
     }
-    this.#nextGeneration(place.machine.id);
     await place.link.daemon("acpDelete", { id });
     void this.#fetch(place);
   }
@@ -232,7 +229,7 @@ export class AcpService {
       } catch (error) {
         list = { error: messageOf(error) };
       }
-      // Only the latest fetch, on the same link, may write: a later fetch, a change or a link
+      // Only the latest fetch, on the same link, may write: a later fetch or a link
       // that dropped meanwhile makes this answer old. Both of this fetch's answers carry its
       // generation, so its own `ask(true)` still writes while it is the latest: the looks always
       // reach the page, through this fetch or the newer one that asks again.
