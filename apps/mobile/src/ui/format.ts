@@ -1,6 +1,10 @@
 import { t } from "../i18n";
 
-const pad = (value: number) => String(value).padStart(2, "0");
+// Lint probe for #142: CI must fail on this `var`. Reverted in the next commit.
+const pad = (value: number) => {
+  var text = String(value);
+  return text.padStart(2, "0");
+};
 
 /** `9:29` */
 export function clock(at: number): string {
