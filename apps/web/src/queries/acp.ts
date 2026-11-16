@@ -3,7 +3,7 @@ import type {
   AcpAgentView,
   AcpTestResult,
 } from "@eta/client-contracts";
-import { useListTarget, useWireMutation } from "@/queries/wire";
+import { useListTarget, useTarget, useWireMutation } from "@/queries/wire";
 
 // External agents on the wire: the `acp` target (one `list` section, every ACP agent configured in
 // ~/.eta/acp.json, as the host sees it) and its calls. The host keeps the file; the page only asks.
@@ -23,9 +23,18 @@ export interface AcpResults {
 
 const TARGET = "acp";
 
-/** Every configured ACP agent, kept live: the host pushes the list again after each change. */
+/**
+ * Every configured ACP agent, kept live: the host pushes the list again after each change. When
+ * the host cannot read acp.json whole, the target carries an `error` section (its message names
+ * the file) instead of a list: that is the page's error, never an empty list.
+ */
 export function useAcpAgents() {
   const { items, loaded, error } = useListTarget<AcpAgentView>(TARGET);
+  const failure = (
+    useTarget(TARGET)?.sections.error as { message?: unknown } | undefined
+  )?.message;
+  if (typeof failure === "string")
+    return { agents: items, loaded: false, error: new Error(failure) };
   return { agents: items, loaded, error };
 }
 

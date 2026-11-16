@@ -40,6 +40,20 @@ Every agent in `~/.eta/acp.json` (`{ "agents": AcpAgentConfig[] }`, types in
 `packages/client-contracts/src/acp.ts`) is a runtime `acp.<id>`. There are no presets: the list is
 the file. The `acp` wire target edits it (`list`, `save`, `delete`, `test`).
 
+The file may be edited by hand, and `save` and `delete` rewrite it whole, so a file that is there
+but cannot be read whole is an error, never an empty or shorter list. That covers a file that
+cannot be read, is not JSON (a trailing comma included), does not hold `{ "agents": [...] }`, lists
+an id twice, or has **any single agent that does not pass the checks**: that one agent fails the
+whole file rather than being skipped, because a skipped agent would be dropped by the next write.
+While the file is in that state, `acp.list` carries the error (it names the file and the reason)
+instead of a list, the settings page shows it and offers no edits, `save` and `delete` are refused
+without writing a byte, and no `acp.<id>` runtime is listed. A missing file is an empty list.
+
+`save` writes the file and returns at once, with the agent as last known; an agent nobody has
+looked at yet says `Checking…` in its `detail`. The look (`initialize` and an empty session, up to
+twenty seconds each) runs behind and arrives as the next `acp.list`. `test` still waits for its
+answer.
+
 One eta session is one agent process (a stdio child of the host, or of the daemon the session is
 on) and one ACP session in it, started at the first run and kept until the session closes.
 

@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import { acpServers } from "../src/delegate";
 import {
   acpAgentId,
+  AcpConfigError,
   AcpConfigFile,
   acpRuntimeId,
   checkAcpAgent,
@@ -70,18 +71,37 @@ describe("acp.json", () => {
     expect(statSync(path).mode & 0o777).toBe(0o600);
     expect(file.get("gemini")).toEqual(agent);
     expect(warnings).toEqual([]);
-    // A hand-edit that went wrong costs the entry it is in, not the others.
-    writeFileSync(
-      path,
-      JSON.stringify({
-        agents: [agent, { id: "Bad Id", command: "x" }, { ...agent }],
-      }),
+  });
+
+  it("that cannot be read whole is an error naming the file, never a shorter list", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "eta-acp-file-")), "acp.json");
+    const file = new AcpConfigFile(path);
+    const refuses = (text: string, reason: RegExp) => {
+      writeFileSync(path, text);
+      expect(() => file.read()).toThrow(AcpConfigError);
+      expect(() => file.read()).toThrow(path);
+      expect(() => file.read()).toThrow(reason);
+      expect(() => file.get("gemini")).toThrow(path);
+    };
+    // A trailing comma, as a hand-edit leaves it.
+    refuses(
+      `{ "agents": [${JSON.stringify(agent)}, ${JSON.stringify({ ...agent, id: "two" })},] }`,
+      /is not valid JSON/,
     );
+    refuses(`{ "agents": {} }`, /does not hold a list of agents/);
+    refuses(`null`, /does not hold a list of agents/);
+    // One agent that does not hold up fails the file: skipped, it would be lost at the next write.
+    refuses(
+      JSON.stringify({ agents: [agent, { id: "Bad Id", command: "x" }] }),
+      /agent 2 \("Bad Id"\): the id "Bad Id" is not valid/,
+    );
+    refuses(
+      JSON.stringify({ agents: [agent, { ...agent }] }),
+      /gemini is listed twice/,
+    );
+    // Fixed, it reads again.
+    writeFileSync(path, JSON.stringify({ agents: [agent] }));
     expect(file.read()).toEqual([agent]);
-    expect(warnings).toHaveLength(2);
-    expect(warnings[1]).toContain("gemini is listed twice");
-    writeFileSync(path, "{ not json");
-    expect(file.read()).toEqual([]);
   });
 });
 

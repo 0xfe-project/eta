@@ -19,6 +19,7 @@ import { acpModels } from "./models";
 export { AcpCatalog } from "./catalog";
 export {
   acpAgentId,
+  AcpConfigError,
   AcpConfigFile,
   acpRuntimeId,
   checkAcpAgent,

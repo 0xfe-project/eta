@@ -2,8 +2,9 @@
  * `~/.eta/acp.json`: the ACP agents this machine runs, as the user configured them.
  *
  * The file is `{ "agents": AcpAgentConfig[] }`. It is read every time it is asked for (it is a
- * few lines, and the user may edit it by hand), and written whole. An entry that does not hold
- * up is left out with a warning rather than failing the others.
+ * few lines, and the user may edit it by hand), and written whole. Because it is written whole, a
+ * file that cannot be read whole is an error, never an empty or shorter list: one bad entry
+ * fails the read, and nothing is written until the user fixes it.
  */
 import type { AcpAgentConfig } from "@eta/client-contracts";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -89,56 +90,90 @@ function isStrings(value: unknown): value is string[] {
   );
 }
 
+/** `acp.json` is there but cannot be read whole. Nothing may be written over it until it is fixed. */
+export class AcpConfigError extends Error {
+  readonly path: string;
+  constructor(path: string, reason: string) {
+    super(
+      `${path} ${reason}. Fix the file by hand; nothing is changed until it reads.`,
+    );
+    this.name = "AcpConfigError";
+    this.path = path;
+  }
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function describe(raw: unknown): string {
+  const id = (raw as { id?: unknown } | null)?.id;
+  return typeof id === "string" && id !== "" ? ` (${JSON.stringify(id)})` : "";
+}
+
 export class AcpConfigFile {
   readonly path: string;
-  readonly #warn: (message: string) => void;
 
   constructor(
     path: string = defaultAcpConfigPath(),
-    warn: (message: string) => void = () => undefined,
+    /** Unused since a bad file is an error; kept so callers need not change. */
+    _warn: (message: string) => void = () => undefined,
   ) {
     this.path = path;
-    this.#warn = warn;
   }
 
-  /** The agents the file lists; none when there is no file. */
+  /**
+   * The agents the file lists; none when there is no file. A file that is there but cannot be
+   * read whole (unreadable, not JSON, not a list of agents, or any one agent that does not hold
+   * up) throws an `AcpConfigError` naming the file: the caller must not take it for an empty or
+   * shorter list, or the next `write` would drop what it could not read.
+   */
   read(): AcpAgentConfig[] {
     let text: string;
     try {
       text = readFileSync(this.path, "utf8");
     } catch (error) {
-      if ((error as { code?: string }).code !== "ENOENT")
-        this.#warn(
-          `[eta-runtime-acp] could not read ${this.path}: ${String(error)}`,
-        );
-      return [];
+      if ((error as { code?: string }).code === "ENOENT") return [];
+      throw new AcpConfigError(
+        this.path,
+        `cannot be read: ${messageOf(error)}`,
+      );
     }
     let parsed: unknown;
     try {
       parsed = JSON.parse(text);
     } catch (error) {
-      this.#warn(
-        `[eta-runtime-acp] ${this.path} is not JSON: ${String(error)}`,
+      throw new AcpConfigError(
+        this.path,
+        `is not valid JSON: ${messageOf(error)}`,
       );
-      return [];
     }
     const list = Array.isArray(parsed)
       ? parsed
-      : (parsed as { agents?: unknown } | null)?.agents;
-    if (!Array.isArray(list)) return [];
+      : typeof parsed === "object" && parsed !== null
+        ? (parsed as { agents?: unknown }).agents
+        : undefined;
+    if (!Array.isArray(list))
+      throw new AcpConfigError(
+        this.path,
+        `does not hold a list of agents: it should be { "agents": [ ... ] }`,
+      );
     const agents: AcpAgentConfig[] = [];
     const seen = new Set<string>();
-    for (const raw of list) {
+    for (const [index, raw] of list.entries()) {
+      let agent: AcpAgentConfig;
       try {
-        const agent = checkAcpAgent(raw);
-        if (seen.has(agent.id)) throw new Error(`${agent.id} is listed twice`);
-        seen.add(agent.id);
-        agents.push(agent);
+        agent = checkAcpAgent(raw);
       } catch (error) {
-        this.#warn(
-          `[eta-runtime-acp] ${this.path}: skipped an agent: ${error instanceof Error ? error.message : String(error)}`,
+        throw new AcpConfigError(
+          this.path,
+          `agent ${index + 1}${describe(raw)}: ${messageOf(error)}`,
         );
       }
+      if (seen.has(agent.id))
+        throw new AcpConfigError(this.path, `${agent.id} is listed twice`);
+      seen.add(agent.id);
+      agents.push(agent);
     }
     return agents;
   }

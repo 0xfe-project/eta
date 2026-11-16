@@ -4,6 +4,10 @@
  * The list is `~/.eta/acp.json` (`@eta/runtime-acp` reads it when a session opens, so there is no
  * second copy to keep in step). What this adds is the checking a hand-edit does not get, and the
  * one rule that needs the product: an agent that still answers on `acp.<id>` keeps that id.
+ *
+ * A file that cannot be read whole refuses every change (`AcpConfigFile.read` throws), and the
+ * list says why instead of being empty. `save` and `delete` run from read to write without
+ * yielding, so two calls on this host cannot interleave and lose one another's change.
  */
 import type { AcpAgentView, AcpTestResult } from "@eta/client-contracts";
 import type { AcpRuntimes } from "@eta/runtime-acp";
@@ -48,9 +52,10 @@ export class AcpService {
    * Add an agent, change one, or rename one. No `previousId` adds; `previousId` equal to the
    * agent's id changes it in place; another `previousId` renames that agent.
    */
-  async save(raw: unknown, previousId?: string): Promise<AcpAgentView> {
+  save(raw: unknown, previousId?: string): AcpAgentView {
     const agent = checkAcpAgent(raw);
     const { config, catalog } = this.#options.acp;
+    // Throws when the file is there but cannot be read whole: then nothing is written.
     const agents = config.read();
     const taken = agents.some((item) => item.id === agent.id);
     if (previousId === undefined) {
@@ -74,13 +79,22 @@ export class AcpService {
     }
     config.write(agents);
     catalog.invalidate(agent.id);
-    const view = await catalog.view(agent);
     this.#options.changed();
+    // The look costs a process and may take its full timeouts: it runs behind, and what it
+    // finds arrives as the next list. Until then the agent says it is being checked.
+    void catalog
+      .view(agent)
+      .catch(() => undefined)
+      .finally(() => this.#options.changed());
+    const view = catalog.snapshot().find((item) => item.id === agent.id);
+    if (view === undefined)
+      throw new Error(`${agent.id} was saved but is not in ${config.path}.`);
     return view;
   }
 
   delete(id: string): void {
     const { config, catalog } = this.#options.acp;
+    // Throws when the file is there but cannot be read whole: then nothing is written.
     const agents = config.read();
     if (!agents.some((agent) => agent.id === id))
       throw new Error(`There is no ACP agent ${id}.`);
