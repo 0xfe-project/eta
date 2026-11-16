@@ -158,7 +158,7 @@ export type ProviderAction = (typeof PROVIDER_ACTIONS)[number];
 export interface ProviderInput {
   id: string;
   name?: string;
-  kind?: import("./types").ProviderKind;
+  kind?: import("./providers").ProviderKind;
   baseUrl: string;
   /** Write-only; provider summaries expose hasApiKey instead. */
   apiKey?: string | null;
@@ -186,7 +186,7 @@ export interface ProviderArgs {
   discover: {
     id?: string;
     revision?: string;
-    kind: import("./types").ProviderKind;
+    kind: import("./providers").ProviderKind;
     baseUrl: string;
     apiKey?: string | null;
     headers?: import("./types").ProviderHeaders | null;

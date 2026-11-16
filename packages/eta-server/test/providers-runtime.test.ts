@@ -12,7 +12,6 @@
 import type { EtaProviderConfig } from "../src/providers/config-types";
 import { describe, expect, it } from "vitest";
 import {
-  parseProviderModelCatalog,
   providerModelCatalog,
   resolveConfiguredModels,
 } from "../src/providers/catalog";
@@ -235,28 +234,6 @@ describe("what the catalog says about a provider", () => {
       ).toEqual(configured);
     },
   );
-
-  it("refuses a catalog that does not describe itself honestly", () => {
-    expect(() =>
-      parseProviderModelCatalog({ version: 2, providers: [] }),
-    ).toThrow(/version/);
-    expect(() =>
-      parseProviderModelCatalog({
-        version: 1,
-        providers: [
-          {
-            id: "a",
-            match: { kinds: ["deepseek"], baseUrls: [] },
-            auth: { adapter: "api-key", required: true },
-            discovery: { adapter: "openai-models" },
-            runtime: { adapter: "openai-chat" },
-            restrictToListedModels: true,
-            models: [{ id: "m1", contextWindow: 100, maxTokens: 200 }],
-          },
-        ],
-      }),
-    ).toThrow(/token limits/);
-  });
 });
 
 describe("discovery", () => {

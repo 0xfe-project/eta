@@ -9,20 +9,10 @@ import { describe, expect, it } from "vitest";
 import {
   applyProviderHeaders,
   effectiveModel,
-  isCustomKind,
   modelThinkingLevels,
   providerSummary,
   sanitizeProviderHeaders,
 } from "../src/providers/config-types";
-
-describe("kinds", () => {
-  it("knows which kinds bring their own endpoint", () => {
-    expect(isCustomKind(undefined)).toBe(true);
-    expect(isCustomKind("openai-compatible")).toBe(true);
-    expect(isCustomKind("openai-responses")).toBe(true);
-    expect(isCustomKind("deepseek")).toBe(false);
-  });
-});
 
 describe("what a model declares", () => {
   it("keeps `unknown` and `none` apart", () => {

@@ -4,6 +4,7 @@ import type {
   LlmConnection,
   LlmModel,
   LlmQuota,
+  ModelSource,
   ProviderCheck,
   ProviderDiscoverResult,
   ProviderInput,
@@ -11,11 +12,21 @@ import type {
   ProviderSummary,
   ProvidersView,
 } from "@eta/client-contracts";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { MODEL_SOURCES } from "@eta/client-contracts";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  rstest,
+} from "@rstest/core";
 import { QueryClient } from "@tanstack/react-query";
 import { act } from "react";
 import { toast } from "sonner";
 import { setWire } from "@/lib/wire";
+import { modelsOf } from "@/queries/providers";
 import { cleanup, mount } from "@/test-render";
 import { FakeHost } from "@/test-wire";
 import { ProviderSettings } from "./provider-settings";
@@ -700,6 +711,60 @@ describe("adding a source", () => {
     // Leaving while it waits cancels the attempt.
     await click(/^取消$/);
     expect(page.calls("loginCancel")).toEqual([{ id: "login-1" }]);
+  });
+});
+
+describe("a kind of source that is only an entry in MODEL_SOURCES", () => {
+  // Nothing else in the web app is told about it: its card, key link, name and models must all
+  // follow from the entry.
+  const sources = MODEL_SOURCES as Record<string, ModelSource>;
+  beforeAll(() => {
+    sources.acme = {
+      name: "Acme Models",
+      baseUrl: "https://api.acme.test/v1",
+      keysUrl: "https://acme.test/keys",
+      auth: "key",
+      models: "endpoint",
+    };
+  });
+  afterAll(() => {
+    delete sources.acme;
+  });
+
+  it("is a card among the key sources, connects with a key, and its models are picked under its name", async () => {
+    const page = await render({
+      discover: () => ({ models: [{ id: "acme-1", name: "Acme One" }] }),
+    });
+    await click(/添加来源/);
+    await click(/^AAcme Models$/);
+    expect(find("a", /获取 key/).getAttribute("href")).toBe(
+      "https://acme.test/keys",
+    );
+    await type(/Acme Models 的 API key/, "sk-acme");
+    await click(/^连接$/);
+    expect(page.calls("discover")).toEqual([
+      {
+        kind: "acme",
+        baseUrl: "https://api.acme.test/v1",
+        apiKey: "sk-acme",
+      },
+    ]);
+    await click(/^完成$/);
+    expect(page.calls("save")[0]).toMatchObject({
+      provider: { id: "acme-models", name: "Acme Models", kind: "acme" },
+    });
+    expect(rows()[0]).toMatch(/Acme Models.*API key.*1 个模型/);
+    // The model picker names it the same way, and wants its key.
+    const [model] = modelsOf({
+      revision: "r",
+      providers: [
+        provider({ id: "acme", kind: "acme" as never, hasApiKey: false }),
+      ],
+    });
+    expect(model).toMatchObject({
+      providerName: "Acme Models",
+      available: false,
+    });
   });
 });
 

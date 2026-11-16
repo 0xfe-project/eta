@@ -5,6 +5,7 @@ import type {
   ProviderSummary,
 } from "@eta/client-contracts";
 import type { ReactNode } from "react";
+import { providerLabel } from "@eta/client-contracts";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
@@ -33,7 +34,6 @@ import { useLlm } from "@/queries/llm";
 import {
   discoveryErrorMessage,
   providerErrorMessage,
-  providerLabel,
   useRefreshProvider,
   useSaveProvider,
 } from "@/queries/providers";

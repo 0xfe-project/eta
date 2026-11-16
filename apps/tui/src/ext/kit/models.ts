@@ -1,16 +1,17 @@
-// Adapted from apps/web/src/queries/providers.ts (`providerLabel`, `signsIn`, `keyMissing`,
-// `modelsOf`, `gatewayModels`, `useModels`): the same rules as pure functions over the
-// `providers` and `llm` targets' sections.
+// Adapted from apps/web/src/queries/providers.ts (`modelsOf`, `gatewayModels`, `useModels`): the
+// same rules as pure functions over the `providers` and `llm` targets' sections.
 
 import type {
   LlmAccounts,
   LlmModel,
-  ProviderKind,
-  ProviderSummary,
   ProvidersView,
 } from "@eta/client-contracts";
 import type { Locale } from "../../config/types";
-import { LLM_PROVIDER_ID } from "@eta/client-contracts";
+import {
+  keyMissing,
+  LLM_PROVIDER_ID,
+  providerLabel,
+} from "@eta/client-contracts";
 import { useMemo } from "react";
 import { useLocale, useMessages } from "../../i18n/react";
 import { llmProblemText } from "./errors";
@@ -18,46 +19,6 @@ import { kitMessages } from "./messages";
 import { useMounted, useTarget, useWireState } from "./wire-hooks";
 
 const PROVIDERS = "providers";
-
-/** Names of the kinds that come with an endpoint of their own. */
-const PRESET_NAMES: Partial<Record<ProviderKind, string>> = {
-  eta: "Eta Token Plan",
-  "openai-codex": "Codex",
-  "kimi-coding": "Kimi for Coding",
-  deepseek: "DeepSeek",
-  "zai-coding-cn": "GLM Coding Plan (CN)",
-  zai: "GLM Coding Plan (Global)",
-  opencode: "OpenCode Zen",
-  "opencode-go": "OpenCode Go",
-  commandcode: "Command Code",
-};
-
-/** What a provider is called: its own name, else its kind's, else its id. */
-export function providerLabel(
-  provider: Pick<ProviderSummary, "id" | "kind" | "name">,
-): string {
-  return provider.name ?? PRESET_NAMES[provider.kind] ?? provider.id;
-}
-
-/** Codex signs in through ChatGPT instead of holding a key. */
-function signsIn(provider: Pick<ProviderSummary, "kind">): boolean {
-  return provider.kind === "openai-codex";
-}
-
-/**
- * Whether the provider cannot be used until a key is set. Custom endpoints may run without one,
- * and Codex has no key.
- */
-export function keyMissing(
-  provider: Pick<ProviderSummary, "hasApiKey" | "kind">,
-): boolean {
-  return (
-    !provider.hasApiKey &&
-    !signsIn(provider) &&
-    provider.kind !== "openai-compatible" &&
-    provider.kind !== "openai-responses"
-  );
-}
 
 /** A model a chat can run on, as a picker lists it. */
 export interface Model {

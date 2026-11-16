@@ -7,7 +7,7 @@
  * eta.0xfe.tech or models.dev.
  */
 import type { AssistantMessage, Context } from "@earendil-works/pi-ai";
-import { BUILTIN_PROVIDER_PRESETS } from "@eta/client-contracts";
+import { MODEL_SOURCES } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
 import { catalogCompat } from "../src/providers/catalog";
 import { checkOf, listProviderModels } from "../src/providers/discovery";
@@ -18,7 +18,7 @@ import {
 } from "../src/providers/metadata";
 import { buildModels } from "../src/providers/runtime";
 
-const GATEWAY = BUILTIN_PROVIDER_PRESETS.eta.baseUrl;
+const GATEWAY = MODEL_SOURCES.eta.baseUrl;
 const KEY = "sk-eta-test";
 const REFUSED = {
   error: { message: "invalid API key", type: "authentication_error" },

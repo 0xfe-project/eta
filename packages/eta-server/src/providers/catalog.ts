@@ -1,78 +1,17 @@
 /**
- * The provider catalog: which kinds exist, what their runtime looks like, and which models each
- * publishes.
- *
- * Two sources, deliberately kept apart:
- *
- * - **The checked-in JSON** (`catalog.json`, ported from eta-agent) says, per provider kind, how
- *   to match it, how its auth and discovery work, which runtime adapter it needs, and which
- *   models it publishes with what capabilities. It is data because it is the part that changes
- *   when a provider ships a new model.
- * - **pi-ai's own provider factories** supply live capabilities (a model's real context window,
- *   whether it reasons). The JSON is checked in because a catalog that can only be known by
- *   asking the network is a catalog that cannot render offline.
- *
- * The parsing is strict on purpose: this file is the contract for what a provider *is*, and a
- * typo in it should fail loudly at load rather than produce a provider that half works.
+ * The models a source publishes: the ones its definition lists (`MODEL_SOURCES` in
+ * `@eta/client-contracts`), with pi-ai's own facts filling in what the definition leaves out
+ * (a model's real context window, whether it reasons) for the kinds pi-ai has a provider for.
  */
-import type { Api, Model, Provider } from "@earendil-works/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import type { ProviderKind } from "@eta/client-contracts";
-import type {
-  EtaModelConfig,
-  ModelCapabilities,
-  ModelInput,
-} from "./config-types";
-import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
-import { kimiCodingProvider } from "@earendil-works/pi-ai/providers/kimi-coding";
-import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
-import { zaiProvider } from "@earendil-works/pi-ai/providers/zai";
-import { zaiCodingCnProvider } from "@earendil-works/pi-ai/providers/zai-coding-cn";
-import { BUILTIN_PROVIDER_PRESETS } from "@eta/client-contracts";
-import rawCatalog from "./catalog.json";
+import type { EtaModelConfig } from "./config-types";
+import { getBuiltinModels } from "@earendil-works/pi-ai/providers/all";
 import {
-  HEADER_NAME_PATTERN,
   isCustomKind,
-  MODEL_THINKING_LEVELS,
-} from "./config-types";
-
-export interface ProviderRuntimeDefinition {
-  adapter: "openai-chat" | "openai-responses" | "codex";
-  thinking?: "reasoning-effort" | "deepseek" | "zai";
-  developerRole?: boolean;
-  store?: boolean;
-  maxTokensField?: "max_tokens" | "max_completion_tokens";
-  replayReasoningContent?: boolean;
-  toolStream?: "zai";
-  /**
-   * The header a gateway routes one conversation by (OpenCode refuses a request without
-   * `x-opencode-session`). Each request carries the session's id in it; see `withSessionHeader`.
-   */
-  sessionHeader?: string;
-}
-
-export interface ProviderCatalogEntry {
-  id: string;
-  match: { kinds: ProviderKind[]; baseUrls: string[] };
-  auth: {
-    adapter: "api-key" | "codex-oauth";
-    required: boolean;
-    missingError?: string;
-  };
-  discovery: {
-    /**
-     * `openai-models` asks the endpoint's `/models`; `catalog` is the checked-in list;
-     * `models-dev` reads the provider's entry on models.dev (`provider`), where each model also
-     * says which protocol it is served over.
-     */
-    adapter: "openai-models" | "catalog" | "models-dev";
-    requireContextWindow: boolean;
-    provider?: string;
-  };
-  runtime: ProviderRuntimeDefinition;
-  /** Limit catalog suggestions to checked-in entries, not manually configured IDs. */
-  restrictToListedModels: boolean;
-  models: Map<string, ModelCapabilities>;
-}
+  MODEL_SOURCES,
+  modelSource,
+} from "@eta/client-contracts";
 
 /** A provider reference: what a config entry says about where it points. */
 export interface ProviderReference {
@@ -80,451 +19,37 @@ export interface ProviderReference {
   baseUrl: string;
 }
 
-const PROVIDER_KINDS = new Set<string>([
-  ...Object.keys(BUILTIN_PROVIDER_PRESETS),
-  "openai-compatible",
-  "openai-responses",
-]);
-const CAPABILITY_KEYS = new Set([
-  "name",
-  "contextWindow",
-  "maxTokens",
-  "input",
-  "reasoning",
-  "thinkingMode",
-  "reasoningEfforts",
-  "providerDefaultEffort",
-]);
-const INPUTS = new Set<ModelInput>(["text", "image"]);
-const EFFORTS = new Set<string>(
-  MODEL_THINKING_LEVELS.filter((level) => level !== "off"),
-);
-
-function object(value: unknown, label: string): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error(`invalid provider catalog: ${label}`);
-  }
-  return value as Record<string, unknown>;
+/** pi-ai's own models for a kind it has a provider of the same id for. */
+export function piModels(kind: ProviderKind): Model<Api>[] {
+  return getBuiltinModels(kind as never) as Model<Api>[];
 }
-
-function onlyKeys(
-  value: Record<string, unknown>,
-  allowed: Set<string>,
-  label: string,
-): void {
-  if (Object.keys(value).some((key) => !allowed.has(key)))
-    throw new Error(`invalid provider catalog: ${label} field`);
-}
-
-function normalizedBaseUrl(value: string): string {
-  const url = new URL(value);
-  if (
-    !["http:", "https:"].includes(url.protocol) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  ) {
-    throw new Error("invalid provider catalog: base URL");
-  }
-  return url.href.replace(/\/+$/, "");
-}
-
-function stringArray(
-  value: unknown,
-  allowed: Set<string>,
-  label: string,
-  allowEmpty = false,
-): string[] {
-  if (
-    !Array.isArray(value) ||
-    (!allowEmpty && value.length === 0) ||
-    value.some((item) => typeof item !== "string" || !allowed.has(item))
-  ) {
-    throw new Error(`invalid provider catalog: ${label}`);
-  }
-  return [...new Set(value)];
-}
-
-function positive(value: unknown, label: string): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
-    throw new Error(`invalid provider catalog: ${label}`);
-  }
-  return value;
-}
-
-function parseCapabilities(value: unknown, label: string): ModelCapabilities {
-  const input = object(value, label);
-  onlyKeys(input, CAPABILITY_KEYS, label);
-  const output: ModelCapabilities = {};
-  if (input.name !== undefined) {
-    if (typeof input.name !== "string" || input.name.trim().length === 0)
-      throw new Error(`invalid provider catalog: ${label} name`);
-    output.name = input.name.trim();
-  }
-  if (input.contextWindow !== undefined)
-    output.contextWindow = positive(
-      input.contextWindow,
-      `${label} contextWindow`,
-    );
-  if (input.maxTokens !== undefined)
-    output.maxTokens = positive(input.maxTokens, `${label} maxTokens`);
-  if (input.input !== undefined)
-    output.input = stringArray(
-      input.input,
-      INPUTS,
-      `${label} input`,
-    ) as ModelInput[];
-  if (input.reasoning !== undefined) {
-    if (typeof input.reasoning !== "boolean")
-      throw new Error(`invalid provider catalog: ${label} reasoning`);
-    output.reasoning = input.reasoning;
-  }
-  if (input.thinkingMode !== undefined) {
-    if (
-      input.thinkingMode !== "only" &&
-      input.thinkingMode !== "both" &&
-      input.thinkingMode !== "no"
-    ) {
-      throw new Error(`invalid provider catalog: ${label} thinkingMode`);
-    }
-    output.thinkingMode = input.thinkingMode;
-  }
-  if (input.reasoningEfforts !== undefined) {
-    output.reasoningEfforts = stringArray(
-      input.reasoningEfforts,
-      EFFORTS,
-      `${label} reasoningEfforts`,
-      true,
-    ) as NonNullable<ModelCapabilities["reasoningEfforts"]>;
-  }
-  if (input.providerDefaultEffort !== undefined) {
-    if (
-      typeof input.providerDefaultEffort !== "string" ||
-      !EFFORTS.has(input.providerDefaultEffort)
-    ) {
-      throw new Error(
-        `invalid provider catalog: ${label} providerDefaultEffort`,
-      );
-    }
-    output.providerDefaultEffort =
-      input.providerDefaultEffort as ModelCapabilities["providerDefaultEffort"];
-  }
-  if (
-    output.contextWindow !== undefined &&
-    output.maxTokens !== undefined &&
-    output.maxTokens > output.contextWindow
-  ) {
-    throw new Error(`invalid provider catalog: ${label} token limits`);
-  }
-  return output;
-}
-
-function parseRuntime(
-  value: unknown,
-  label: string,
-): ProviderRuntimeDefinition {
-  const input = object(value, label);
-  onlyKeys(
-    input,
-    new Set([
-      "adapter",
-      "thinking",
-      "developerRole",
-      "store",
-      "maxTokensField",
-      "replayReasoningContent",
-      "toolStream",
-      "sessionHeader",
-    ]),
-    label,
-  );
-  if (
-    input.adapter !== "openai-chat" &&
-    input.adapter !== "openai-responses" &&
-    input.adapter !== "codex"
-  ) {
-    throw new Error(`invalid provider catalog: ${label} adapter`);
-  }
-  if (
-    input.adapter !== "openai-chat" &&
-    Object.keys(input).some((key) => key !== "adapter")
-  ) {
-    throw new Error(`invalid provider catalog: ${label} transport fields`);
-  }
-  const output: ProviderRuntimeDefinition = { adapter: input.adapter };
-  if (input.thinking !== undefined) {
-    if (
-      input.thinking !== "reasoning-effort" &&
-      input.thinking !== "deepseek" &&
-      input.thinking !== "zai"
-    ) {
-      throw new Error(`invalid provider catalog: ${label} thinking`);
-    }
-    output.thinking = input.thinking;
-  }
-  for (const key of [
-    "developerRole",
-    "store",
-    "replayReasoningContent",
-  ] as const) {
-    if (input[key] === undefined) continue;
-    if (typeof input[key] !== "boolean")
-      throw new Error(`invalid provider catalog: ${label} ${key}`);
-    output[key] = input[key];
-  }
-  if (input.maxTokensField !== undefined) {
-    if (
-      input.maxTokensField !== "max_tokens" &&
-      input.maxTokensField !== "max_completion_tokens"
-    ) {
-      throw new Error(`invalid provider catalog: ${label} maxTokensField`);
-    }
-    output.maxTokensField = input.maxTokensField;
-  }
-  if (input.sessionHeader !== undefined) {
-    if (
-      typeof input.sessionHeader !== "string" ||
-      !HEADER_NAME_PATTERN.test(input.sessionHeader)
-    )
-      throw new Error(`invalid provider catalog: ${label} sessionHeader`);
-    output.sessionHeader = input.sessionHeader;
-  }
-  if (input.toolStream !== undefined) {
-    if (input.toolStream !== "zai")
-      throw new Error(`invalid provider catalog: ${label} toolStream`);
-    output.toolStream = input.toolStream;
-  }
-  return output;
-}
-
-/** Parse the checked-in catalog. Exported so a test can feed it something broken. */
-export function parseProviderModelCatalog(
-  value: unknown,
-): Map<string, ProviderCatalogEntry> {
-  const root = object(value, "root");
-  onlyKeys(root, new Set(["version", "providers"]), "root");
-  if (root.version !== 1) throw new Error("invalid provider catalog: version");
-  if (!Array.isArray(root.providers))
-    throw new Error("invalid provider catalog: providers");
-  const output = new Map<string, ProviderCatalogEntry>();
-  const matchedKinds = new Set<ProviderKind>();
-  const matchedBaseUrls = new Set<string>();
-  for (const rawProvider of root.providers) {
-    const provider = object(rawProvider, "provider");
-    onlyKeys(
-      provider,
-      new Set([
-        "id",
-        "match",
-        "auth",
-        "discovery",
-        "runtime",
-        "restrictToListedModels",
-        "models",
-      ]),
-      "provider",
-    );
-    if (typeof provider.id !== "string" || provider.id.trim().length === 0) {
-      throw new Error("invalid provider catalog: provider id");
-    }
-    const providerId = provider.id.trim();
-    if (output.has(providerId))
-      throw new Error(
-        `invalid provider catalog: duplicate provider ${providerId}`,
-      );
-    const match = object(provider.match, `${providerId} match`);
-    onlyKeys(match, new Set(["kinds", "baseUrls"]), `${providerId} match`);
-    const kinds = stringArray(
-      match.kinds,
-      PROVIDER_KINDS,
-      `${providerId} kinds`,
-    ) as ProviderKind[];
-    if (
-      !Array.isArray(match.baseUrls) ||
-      match.baseUrls.some((url) => typeof url !== "string")
-    ) {
-      throw new Error(`invalid provider catalog: ${providerId} baseUrls`);
-    }
-    const baseUrls = [
-      ...new Set((match.baseUrls as string[]).map(normalizedBaseUrl)),
-    ];
-    if (kinds.some((kind) => matchedKinds.has(kind)))
-      throw new Error(`invalid provider catalog: duplicate kind ${providerId}`);
-    if (baseUrls.some((url) => matchedBaseUrls.has(url))) {
-      throw new Error(
-        `invalid provider catalog: duplicate base URL ${providerId}`,
-      );
-    }
-    for (const kind of kinds) matchedKinds.add(kind);
-    for (const url of baseUrls) matchedBaseUrls.add(url);
-    if (typeof provider.restrictToListedModels !== "boolean") {
-      // eslint-disable-next-line unicorn/prefer-type-error -- keep the thrown class
-      throw new Error(`invalid provider catalog: ${providerId} restriction`);
-    }
-    if (!Array.isArray(provider.models))
-      throw new Error(`invalid provider catalog: ${providerId} models`);
-    const models = new Map<string, ModelCapabilities>();
-    for (const rawModel of provider.models) {
-      const model = object(rawModel, `${providerId} model`);
-      onlyKeys(
-        model,
-        new Set(["id", ...CAPABILITY_KEYS]),
-        `${providerId} model`,
-      );
-      if (typeof model.id !== "string" || model.id.trim().length === 0) {
-        throw new Error(`invalid provider catalog: ${providerId} model id`);
-      }
-      const modelId = model.id.trim();
-      if (models.has(modelId))
-        throw new Error(
-          `invalid provider catalog: duplicate model ${providerId}:${modelId}`,
-        );
-      const { id: _id, ...capabilities } = model;
-      models.set(
-        modelId,
-        parseCapabilities(capabilities, `${providerId}:${modelId}`),
-      );
-    }
-    const auth = object(provider.auth, `${providerId} auth`);
-    onlyKeys(
-      auth,
-      new Set(["adapter", "required", "missingError"]),
-      `${providerId} auth`,
-    );
-    if (auth.adapter !== "api-key" && auth.adapter !== "codex-oauth") {
-      throw new Error(`invalid provider catalog: ${providerId} auth adapter`);
-    }
-    if (auth.adapter === "api-key" && typeof auth.required !== "boolean") {
-      throw new Error(`invalid provider catalog: ${providerId} auth required`);
-    }
-    const discovery = object(provider.discovery, `${providerId} discovery`);
-    onlyKeys(
-      discovery,
-      new Set(["adapter", "requireContextWindow", "provider"]),
-      `${providerId} discovery`,
-    );
-    if (
-      discovery.adapter !== "openai-models" &&
-      discovery.adapter !== "catalog" &&
-      discovery.adapter !== "models-dev"
-    ) {
-      throw new Error(
-        `invalid provider catalog: ${providerId} discovery adapter`,
-      );
-    }
-    // models.dev needs to know whose entry to read, and nothing else may name one.
-    if (
-      (discovery.adapter === "models-dev") !==
-      (typeof discovery.provider === "string" &&
-        discovery.provider.trim().length > 0)
-    ) {
-      throw new Error(
-        `invalid provider catalog: ${providerId} discovery provider`,
-      );
-    }
-    const runtime = parseRuntime(provider.runtime, `${providerId} runtime`);
-    // Its models pick Chat Completions or Responses one by one, so the provider's own transport
-    // has to be the OpenAI one both of those share an endpoint with.
-    if (discovery.adapter === "models-dev" && runtime.adapter !== "openai-chat")
-      throw new Error(
-        `invalid provider catalog: ${providerId} models-dev runtime`,
-      );
-    if (
-      runtime.adapter === "codex" &&
-      (auth.adapter !== "codex-oauth" || discovery.adapter !== "catalog")
-    ) {
-      throw new Error(`invalid provider catalog: ${providerId} codex adapters`);
-    }
-    if (auth.adapter === "codex-oauth" && runtime.adapter !== "codex") {
-      throw new Error(`invalid provider catalog: ${providerId} oauth runtime`);
-    }
-    output.set(providerId, {
-      id: providerId,
-      match: { kinds, baseUrls },
-      auth: {
-        adapter: auth.adapter,
-        required:
-          auth.adapter === "api-key" ? (auth.required as boolean) : false,
-        ...(typeof auth.missingError === "string"
-          ? { missingError: auth.missingError }
-          : {}),
-      },
-      discovery: {
-        adapter: discovery.adapter,
-        requireContextWindow: discovery.requireContextWindow === true,
-        ...(discovery.adapter === "models-dev"
-          ? { provider: (discovery.provider as string).trim() }
-          : {}),
-      },
-      runtime,
-      restrictToListedModels: provider.restrictToListedModels,
-      models,
-    });
-  }
-  return output;
-}
-
-const CATALOG = parseProviderModelCatalog(rawCatalog);
-
-/** pi-ai's own factories, for the live half of a model's capabilities. */
-const PI_PROVIDERS: Readonly<Record<string, Provider<Api>>> = {
-  "openai-codex": openaiCodexProvider(),
-  "kimi-coding": kimiCodingProvider(),
-  deepseek: deepseekProvider(),
-  zai: zaiProvider(),
-  "zai-coding-cn": zaiCodingCnProvider(),
-};
 
 /**
- * The Chat Completions fields the catalog says a kind takes, as pi-ai's `compat`, for a kind pi-ai
- * has no provider of its own for (Eta Token Plan). pi-ai recognises its own providers by their
- * address and knows their fields; it reads any other address as OpenAI itself, which sends
- * `store`, the `developer` role and `max_completion_tokens` — fields a gateway may refuse.
+ * The Chat Completions fields the definition says a kind takes, as pi-ai's `compat`, for a kind
+ * pi-ai does not recognise by its address (Eta Token Plan, Command Code). pi-ai reads any other
+ * address as OpenAI itself, which sends `store`, the `developer` role and
+ * `max_completion_tokens` — fields a gateway may refuse.
  */
 export function catalogCompat(
   kind: ProviderKind | undefined,
 ): Record<string, unknown> | undefined {
-  if (kind === undefined || isCustomKind(kind) || kind in PI_PROVIDERS)
-    return undefined;
-  const runtime = providerDefinitionForKind(kind)?.runtime;
-  if (runtime?.adapter !== "openai-chat") return undefined;
-  const compat: Record<string, unknown> = {
-    ...(runtime.developerRole === undefined
-      ? {}
-      : { supportsDeveloperRole: runtime.developerRole }),
-    ...(runtime.store === undefined ? {} : { supportsStore: runtime.store }),
-    ...(runtime.maxTokensField === undefined
-      ? {}
-      : { maxTokensField: runtime.maxTokensField }),
-  };
-  return Object.keys(compat).length === 0 ? undefined : compat;
+  const source = modelSource(kind);
+  return source?.pi === "catalog" ? undefined : source?.compat;
 }
 
-export function providerDefinitionForKind(
-  kind?: ProviderKind,
-): ProviderCatalogEntry | undefined {
-  const target = kind ?? "openai-compatible";
-  for (const entry of CATALOG.values()) {
-    if (entry.match.kinds.includes(target)) return entry;
-  }
-  return undefined;
-}
-
-/** Which catalog entry a config entry belongs to: by kind, or by the endpoint it points at. */
-function catalogId(provider: ProviderReference): string | undefined {
+/** Which kind's models a config entry gets: its own, or the one whose endpoint it points at. */
+function sourceKind(provider: ProviderReference): ProviderKind | undefined {
   if (!isCustomKind(provider.kind))
-    return providerDefinitionForKind(provider.kind)?.id;
+    return modelSource(provider.kind) === undefined ? undefined : provider.kind;
   let baseUrl: string;
   try {
-    baseUrl = normalizedBaseUrl(provider.baseUrl);
+    baseUrl = new URL(provider.baseUrl).href.replace(/\/+$/, "");
   } catch {
     return undefined;
   }
-  for (const [id, entry] of CATALOG) {
-    if (entry.match.baseUrls.includes(baseUrl)) return id;
-  }
-  return undefined;
+  return (Object.keys(MODEL_SOURCES) as ProviderKind[]).find(
+    (kind) => modelSource(kind)?.baseUrl === baseUrl,
+  );
 }
 
 /** A model's capabilities as pi-ai knows them. */
@@ -541,32 +66,26 @@ function fromPiModel(model: Model<Api>): EtaModelConfig {
 }
 
 /**
- * The models a provider serves: pi-ai's list, corrected by the checked-in metadata.
- *
- * The catalog wins where it speaks (its context windows and thinking levels are the ones the
- * server has tested), and pi-ai fills in what it knows. Restricted suggestions use only the
- * checked-in list; this is metadata, not an allowlist for configured or discovered IDs.
+ * The models a provider serves: its definition's list, with pi-ai's facts under it. The
+ * definition wins where it speaks (its context windows and thinking levels are the ones the
+ * server has tested). This is metadata, not an allowlist for configured or discovered IDs.
  */
 export function providerModelCatalog(
   provider: ProviderReference,
 ): EtaModelConfig[] {
-  const id = catalogId(provider);
-  if (id === undefined) return [];
-  const entry = CATALOG.get(id);
-  if (entry === undefined) return [];
-  const piModels = new Map(
-    (PI_PROVIDERS[id]?.getModels() ?? []).map((model) => [
+  const kind = sourceKind(provider);
+  const source = modelSource(kind);
+  if (kind === undefined || source === undefined) return [];
+  const pi = new Map(
+    (source.pi === "catalog" ? piModels(kind) : []).map((model) => [
       model.id,
       fromPiModel(model),
     ]),
   );
-  const ids = entry.restrictToListedModels
-    ? [...entry.models.keys()]
-    : [...new Set([...piModels.keys(), ...entry.models.keys()])];
-  return ids.map((modelId) => ({
-    id: modelId,
-    ...piModels.get(modelId),
-    ...entry.models.get(modelId),
+  return (source.listed ?? []).map(({ id, ...capabilities }) => ({
+    id,
+    ...pi.get(id),
+    ...structuredClone(capabilities),
   }));
 }
 
@@ -588,11 +107,4 @@ export function resolveConfiguredModels(
     resolved.push({ ...(known ?? {}), ...model, id: model.id });
   }
   return resolved;
-}
-
-/** The catalog itself, for the providers that publish one (a settings page renders it). */
-export function catalogModelsFor(
-  provider: ProviderReference,
-): EtaModelConfig[] {
-  return providerModelCatalog(provider);
 }

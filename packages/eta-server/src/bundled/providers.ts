@@ -25,8 +25,8 @@ import type {
 import type { DiscoveryResult } from "../providers/discovery";
 import type { ProviderConfigStore } from "../providers/store";
 import type { WireService } from "../wire-service";
+import { modelSource } from "@eta/client-contracts";
 import { Service } from "cordis";
-import { providerDefinitionForKind } from "../providers/catalog";
 import {
   checkConnection,
   checkOf,
@@ -335,9 +335,7 @@ export function providersPlugin(options: ProvidersPluginOptions) {
               discovered.models,
               at,
               {
-                delist:
-                  providerDefinitionForKind(kind)?.discovery.adapter ===
-                  "models-dev",
+                delist: modelSource(kind)?.models === "models-dev",
               },
             );
             latest = updated?.view ?? (await refresh());
@@ -375,13 +373,12 @@ export function providersPlugin(options: ProvidersPluginOptions) {
             await Promise.all(
               targets.map(async (provider) => {
                 const kind = provider.kind ?? "openai-compatible";
-                const definition = providerDefinitionForKind(kind);
                 // A key the provider cannot run without is missing, which the config already
                 // says; a subscription signs in elsewhere. Neither has anything to probe.
+                const auth = modelSource(kind)?.auth;
                 if (
-                  definition?.auth.adapter === "codex-oauth" ||
-                  (definition?.auth.required === true &&
-                    (provider.apiKey ?? "").length === 0)
+                  auth === "sign-in" ||
+                  (auth === "key" && (provider.apiKey ?? "").length === 0)
                 ) {
                   record(provider.id, undefined);
                   return;

@@ -23,8 +23,9 @@ import type {
 } from "@eta/client-contracts";
 import type { ProviderReference } from "./catalog";
 import type { EtaModelConfig } from "./config-types";
+import { modelSource } from "@eta/client-contracts";
 import { attributionHeaders } from "./attribution";
-import { providerDefinitionForKind, resolveConfiguredModels } from "./catalog";
+import { resolveConfiguredModels } from "./catalog";
 import { applyProviderHeaders } from "./config-types";
 import {
   fetchModelsDev,
@@ -53,25 +54,6 @@ export interface DiscoveryResult {
   status?: number;
 }
 
-/** Whether this provider's models come from its own endpoint. */
-export function discoversModels(reference: ProviderReference): boolean {
-  const definition = providerDefinitionForKind(reference.kind);
-  return (
-    definition?.discovery.adapter === "openai-models" ||
-    definition?.discovery.adapter === "models-dev"
-  );
-}
-
-/** Whether a discovered model has to declare a context window to be usable. */
-export function discoveryRequiresContextWindow(
-  reference: ProviderReference,
-): boolean {
-  return (
-    providerDefinitionForKind(reference.kind)?.discovery
-      .requireContextWindow === true
-  );
-}
-
 /**
  * Ask a provider for its model list.
  *
@@ -82,16 +64,10 @@ export function discoveryRequiresContextWindow(
 export async function discoverModels(
   options: DiscoveryOptions,
 ): Promise<DiscoveryResult> {
-  const definition = providerDefinitionForKind(options.reference.kind);
-  if (
-    definition?.discovery.adapter === "models-dev" &&
-    definition.discovery.provider !== undefined
-  )
-    return await discoverFromModelsDev(options, definition.discovery.provider);
-  if (
-    definition === undefined ||
-    definition.discovery.adapter !== "openai-models"
-  ) {
+  const source = modelSource(options.reference.kind);
+  if (source?.models === "models-dev" && source.modelsDev !== undefined)
+    return await discoverFromModelsDev(options, source.modelsDev);
+  if (source?.models !== "endpoint") {
     return {
       models: [],
       error: "this provider does not publish a model list",
@@ -148,7 +124,7 @@ export async function discoverModels(
       failure: "response",
     };
 
-  const requiresWindow = discoveryRequiresContextWindow(options.reference);
+  const requiresWindow = source.requireContextWindow === true;
   const discovered: EtaModelConfig[] = [];
   for (const raw of entries) {
     const entry = raw as {
@@ -286,10 +262,7 @@ async function discoverFromModelsDev(
 
 /** Whether this kind lists its models from models.dev rather than from its own endpoint. */
 function listsModelsDev(reference: ProviderReference): boolean {
-  return (
-    providerDefinitionForKind(reference.kind)?.discovery.adapter ===
-    "models-dev"
-  );
+  return modelSource(reference.kind)?.models === "models-dev";
 }
 
 /**

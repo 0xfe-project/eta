@@ -6,14 +6,13 @@ import type {
   ProviderCheckResult,
   ProviderDiscoverResult,
   ProviderInput,
-  ProviderKind,
   ProviderRefreshResult,
-  ProviderSummary,
   ProvidersView,
 } from "@eta/client-contracts";
 import {
-  BUILTIN_PROVIDER_PRESETS,
+  keyMissing,
   LLM_PROVIDER_ID,
+  providerLabel,
 } from "@eta/client-contracts";
 import { useMutation } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -34,41 +33,6 @@ import {
 // config (`config_changed`), and the page re-reads and says so.
 
 const TARGET = "providers";
-
-/** What a provider is called: its own name, else its kind's, else its id. */
-export function providerLabel(
-  provider: Pick<ProviderSummary, "id" | "kind" | "name">,
-): string {
-  const preset = Object.entries(BUILTIN_PROVIDER_PRESETS).find(
-    ([kind]) => kind === provider.kind,
-  )?.[1];
-  return provider.name ?? preset?.name ?? provider.id;
-}
-
-/** Kinds you point at an endpoint of your own: the address and the protocol are yours. */
-export function isCustomKind(kind: ProviderKind): boolean {
-  return kind === "openai-compatible" || kind === "openai-responses";
-}
-
-/** Codex signs in through ChatGPT instead of holding a key. */
-export function signsIn(provider: Pick<ProviderSummary, "kind">): boolean {
-  return provider.kind === "openai-codex";
-}
-
-/**
- * Whether the provider cannot be used until a key is set. Custom endpoints may run without one,
- * and Codex has no key: for it the view carries no sign-in fact, so nothing is claimed.
- */
-export function keyMissing(
-  provider: Pick<ProviderSummary, "hasApiKey" | "kind">,
-): boolean {
-  return (
-    !provider.hasApiKey &&
-    !signsIn(provider) &&
-    provider.kind !== "openai-compatible" &&
-    provider.kind !== "openai-responses"
-  );
-}
 
 const NO_CHECKS: Record<string, ProviderCheck> = {};
 

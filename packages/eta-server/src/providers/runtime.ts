@@ -30,15 +30,17 @@ import type {
   ProviderStreams,
   ThinkingLevelMap,
 } from "@earendil-works/pi-ai";
-import type { ModelApi, ProviderKind } from "@eta/client-contracts";
+import type {
+  ModelApi,
+  ModelSource,
+  ProviderKind,
+} from "@eta/client-contracts";
 import type { KernelModels } from "@eta/core";
-import type { ProviderRuntimeDefinition } from "./catalog";
 import type { EtaModelConfig, EtaProviderConfig } from "./config-types";
 import { createModels, createProvider } from "@earendil-works/pi-ai";
-import { opencodeProvider } from "@earendil-works/pi-ai/providers/opencode";
-import { opencodeGoProvider } from "@earendil-works/pi-ai/providers/opencode-go";
+import { modelSource } from "@eta/client-contracts";
 import { attributionHeaders } from "./attribution";
-import { catalogCompat, providerDefinitionForKind } from "./catalog";
+import { catalogCompat, piModels } from "./catalog";
 import {
   effectiveModel,
   MODEL_THINKING_LEVELS,
@@ -63,45 +65,28 @@ async function apiFor(api: ModelApi): Promise<ProviderStreams> {
 }
 
 /** The protocol a provider's models speak unless a model says otherwise. */
-function kindApi(runtime: ProviderRuntimeDefinition): ModelApi {
-  return runtime.adapter === "openai-responses"
-    ? "openai-responses"
-    : "openai-completions";
+function kindApi(source: ModelSource): ModelApi {
+  return source.api ?? "openai-completions";
 }
 
 /**
- * OpenCode's gateways, and pi-ai's own description of them. The model list and capabilities come
- * from models.dev (see discovery); what pi-ai adds is the transport quirks of each model behind
- * the gateway (DeepSeek's thinking format, which fields a gateway takes), which models.dev does
- * not describe. A model pi-ai does not know yet gets the gateway's common settings.
+ * The wire settings one model takes. A gateway pi-ai describes (OpenCode) says them per model
+ * behind it (DeepSeek's thinking format, which fields a gateway takes), which models.dev does
+ * not; any other model gets its kind's from the definition.
  */
-const OPENCODE: Partial<Record<ProviderKind, () => Provider<Api>>> = {
-  opencode: opencodeProvider,
-  "opencode-go": opencodeGoProvider,
-};
-const opencodeCatalogs = new Map<ProviderKind, Provider<Api>>();
-function opencodeCompat(
-  kind: ProviderKind,
+function compatFor(
+  kind: ProviderKind | undefined,
   id: string,
   api: ModelApi,
 ): Model<Api>["compat"] {
-  const create = OPENCODE[kind];
-  if (create === undefined) return undefined;
-  let catalog = opencodeCatalogs.get(kind);
-  if (catalog === undefined) {
-    catalog = create();
-    opencodeCatalogs.set(kind, catalog);
+  if (kind !== undefined && modelSource(kind)?.pi === "gateway") {
+    const known = piModels(kind).find(
+      (model) => model.id === id && model.api === api,
+    );
+    if (known !== undefined) return known.compat;
   }
-  const known = catalog
-    .getModels()
-    .find((model) => model.id === id && model.api === api);
-  if (known !== undefined) return known.compat;
   return api === "openai-completions"
-    ? {
-        supportsStore: false,
-        supportsDeveloperRole: false,
-        maxTokensField: "max_tokens",
-      }
+    ? (catalogCompat(kind) as Model<Api>["compat"])
     : undefined;
 }
 
@@ -139,7 +124,7 @@ function apiKeyAuth(provider: EtaProviderConfig): {
  */
 function thinkingLevelMap(
   model: EtaModelConfig,
-  runtime: ProviderRuntimeDefinition,
+  source: ModelSource,
 ): ThinkingLevelMap {
   const levels = modelThinkingLevels(model);
   const mapped: Record<string, string | null | undefined> = {};
@@ -147,11 +132,7 @@ function thinkingLevelMap(
     if (level === "off") {
       // "none" is the OpenAI-compatible disable; a provider that has no off switch says null.
       mapped[level] =
-        runtime.thinking === "zai"
-          ? null
-          : levels.includes("off")
-            ? "none"
-            : null;
+        source.noThinkingOff !== true && levels.includes("off") ? "none" : null;
       continue;
     }
     mapped[level] = levels.includes(level) ? level : null;
@@ -164,18 +145,15 @@ function runtimeModel(
   provider: EtaProviderConfig,
   configured: EtaModelConfig,
   headers: Record<string, string> | undefined,
-  runtime: ProviderRuntimeDefinition,
+  source: ModelSource,
 ): Model<ModelApi> {
   const model = effectiveModel(configured);
   const contextWindow = model.contextWindow ?? 128_000;
-  const api = model.api ?? kindApi(runtime);
+  const api = model.api ?? kindApi(source);
   const compat =
     provider.kind === undefined
       ? undefined
-      : (opencodeCompat(provider.kind, model.id, api) ??
-        (api === "openai-completions"
-          ? catalogCompat(provider.kind)
-          : undefined));
+      : compatFor(provider.kind, model.id, api);
   return {
     id: model.id,
     name: model.name ?? model.id,
@@ -185,7 +163,7 @@ function runtimeModel(
     ...(headers === undefined ? {} : { headers }),
     reasoning: model.reasoning ?? false,
     ...(model.reasoning === true
-      ? { thinkingLevelMap: thinkingLevelMap(model, runtime) }
+      ? { thinkingLevelMap: thinkingLevelMap(model, source) }
       : {}),
     input: model.input ?? ["text"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -199,15 +177,15 @@ function runtimeModel(
     // Schema, instead of the strict dialect `makeStrictJsonSchema` would rewrite it into.
     compat: { ...compat, supportsStrictMode: false },
     // Not a pi-ai field: read by `withSessionHeader`, which knows the session.
-    ...(runtime.sessionHeader === undefined
+    ...(source.sessionHeader === undefined
       ? {}
-      : { sessionHeader: runtime.sessionHeader }),
+      : { sessionHeader: source.sessionHeader }),
   } as Model<ModelApi>;
 }
 
 /**
  * One session's view of a model layer: a model whose provider routes conversations by a header
- * (OpenCode's `x-opencode-session`, declared in the catalog) gets the session's id in it on every
+ * (OpenCode's `x-opencode-session`, in its definition) gets the session's id in it on every
  * request. Every other request goes out exactly as it was asked for — pi-ai's own `sessionId`
  * option is deliberately not used, because it also turns on prompt-cache keys and session headers
  * for every other provider.
@@ -290,20 +268,20 @@ export async function buildProvider(
   provider: EtaProviderConfig,
   options: { fetch?: typeof fetch } = {},
 ): Promise<Provider<Api>> {
-  const definition = providerDefinitionForKind(provider.kind);
-  if (definition === undefined)
+  const source = modelSource(provider.kind);
+  if (source === undefined)
     throw new Error(
       `unsupported provider kind: ${String(provider.kind ?? "openai-compatible")}`,
     );
   const headers = attributionHeaders(provider.baseUrl, provider.headers);
   const models = provider.models.map((configured) =>
-    runtimeModel(provider, configured, headers, definition.runtime),
+    runtimeModel(provider, configured, headers, source),
   );
   // One implementation per protocol the models use: a provider can mix them (OpenCode), and
   // pi-ai dispatches each model to the one its `api` names.
   const api: Partial<Record<ModelApi, ProviderStreams>> = {};
   for (const name of new Set([
-    kindApi(definition.runtime),
+    kindApi(source),
     ...models.map((model) => model.api),
   ]))
     api[name] = await apiFor(name);
@@ -318,8 +296,7 @@ export async function buildProvider(
     // A provider that publishes its model list gets a refresh that asks it — with the same
     // headers and key as a request, which is the only way a custom User-Agent endpoint can
     // have working chat and a working model list at the same time.
-    ...(definition.discovery.adapter === "openai-models" ||
-    definition.discovery.adapter === "models-dev"
+    ...(source.models !== "listed"
       ? {
           fetchModels: async (context: { signal: AbortSignal }) => {
             const discovered = await discoverModels({
@@ -334,7 +311,7 @@ export async function buildProvider(
             return discovered.models
               .filter((model) => model.deprecated !== true)
               .map((configured) =>
-                runtimeModel(provider, configured, headers, definition.runtime),
+                runtimeModel(provider, configured, headers, source),
               );
           },
         }

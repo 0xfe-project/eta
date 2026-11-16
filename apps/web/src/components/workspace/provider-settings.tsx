@@ -1,5 +1,5 @@
 import type { Source } from "@/queries/sources";
-import { BUILTIN_PROVIDER_PRESETS } from "@eta/client-contracts";
+import { MODEL_SOURCES } from "@eta/client-contracts";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { useState } from "react";
@@ -101,7 +101,7 @@ export function ProviderSettings() {
               </p>
               <Button size="sm" onClick={() => setAdding("eta")}>
                 {translateText("list.addEta", {
-                  name: BUILTIN_PROVIDER_PRESETS.eta.name,
+                  name: MODEL_SOURCES.eta.name,
                 })}
               </Button>
             </div>
