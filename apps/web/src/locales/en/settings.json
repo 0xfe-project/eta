@@ -36,14 +36,6 @@
     "accountsNeedAttention": "Accounts need attention"
   },
   "update": {
-    "remoteHost": "Connected host",
-    "version": "This version",
-    "latest": "Latest version",
-    "latestFull": "Latest full release",
-    "latestWithPrerelease": "Latest version (incl. pre-releases)",
-    "prerelease": "Pre-releases",
-    "prereleaseHint": "Also offer -alpha, -beta and -rc versions. They can be unstable. Turning this off never goes back to an older version.",
-    "heldOnPrerelease": "You're on the pre-release {{version}}. With pre-releases off, an update will be offered once a newer full release is out.",
     "upstream": "Updates from",
     "upstreamFrom": {
       "build": "Default",
@@ -73,7 +65,6 @@
     "tokenInput": "Token",
     "tokenHint": "It has to be able to read the repository's releases: Contents read-only on a fine-grained token, repo on a classic one. A token in the server's environment comes first.",
     "tokenRemove": "Remove",
-    "unknown": "Unknown",
     "upToDate": "Up to date",
     "install": "Update to {{version}}",
     "recheck": "Check again",
@@ -120,7 +111,49 @@
     "busyTask": "Task #{{number}} {{name}}",
     "busyRoutine": "Routine {{name}}",
     "busyReply": "A reply in {{name}}",
-    "hostHeading": "Host"
+    "title": {
+      "server": "eta host · this server",
+      "computer": "eta host · this computer",
+      "remote": "eta host · connected at {{host}}"
+    },
+    "state": {
+      "available": "Update available",
+      "held": "Pre-release · you'll be told when the full release is out",
+      "running": "Updating · {{phase}}",
+      "blocked": "Can't update from here",
+      "checkFailed": "Couldn't find the latest version",
+      "lastFailed": "The last update didn't work"
+    },
+    "retry": "Retry",
+    "tryAgain": "Try again",
+    "checkFailedNext": "Check the server's network, or change where updates come from or set an access token under Advanced.",
+    "notes": "What's new",
+    "notesFull": "Read the full notes",
+    "steps": {
+      "starting": "Prepare",
+      "downloading": "Download",
+      "waiting": "Wait for agents",
+      "backingUp": "Back up data",
+      "restarting": "Restart",
+      "verifying": "Check new version"
+    },
+    "channel": "Which versions",
+    "channelLabel": "Channel",
+    "channelFull": "Full releases only",
+    "channelPrerelease": "Pre-releases too",
+    "channelHint": "Pre-releases (-rc, -beta…) get new features earlier and can be unstable. Switching back never goes to an older version.",
+    "source": "Where updates come from",
+    "advanced": "Advanced",
+    "tokenWhen": "Only a private repository needs one.",
+    "checked": {
+      "justNow": "Checked just now",
+      "minutes": "Checked {{count}} minutes ago",
+      "minutes_one": "Checked {{count}} minute ago",
+      "minutes_other": "Checked {{count}} minutes ago",
+      "hours": "Checked {{count}} hours ago",
+      "hours_one": "Checked {{count}} hour ago",
+      "hours_other": "Checked {{count}} hours ago"
+    }
   },
   "host": {
     "local": "Running on this computer",
@@ -129,8 +162,6 @@
     "change": "Change"
   },
   "desktopUpdate": {
-    "heading": "Desktop app",
-    "version": "This version",
     "check": "Check for updates",
     "checking": "Checking",
     "upToDate": "Up to date",
@@ -147,6 +178,13 @@
       "check": "The check didn't work: {{error}}",
       "download": "The download didn't work: {{error}}",
       "apply": "The update didn't start; this is still the current version: {{error}}"
+    },
+    "title": "eta desktop app · this computer",
+    "state": {
+      "available": "Update available",
+      "ready": "Downloaded; restart to switch to it",
+      "failed": "That didn't work",
+      "idle": "Not checked yet"
     }
   }
 }

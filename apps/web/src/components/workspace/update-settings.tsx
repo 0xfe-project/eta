@@ -1,10 +1,14 @@
 import type {
+  UpgradePhase,
   UpgradeTokenView,
   UpgradeUpstreamView,
 } from "@eta/client-contracts";
 import type { TFunction } from "i18next";
-import { ArrowsClockwiseIcon } from "@phosphor-icons/react/ArrowsClockwise";
-import { useState } from "react";
+import type { ReactNode } from "react";
+import type { UpdateTone } from "./update-status";
+import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
+import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
+import { useEffect, useId, useReducer, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { LoadError, Loading } from "@/components/states";
@@ -28,7 +32,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { hasCapability, host } from "@/lib/native";
 import {
   busyLabels,
@@ -43,9 +46,18 @@ import {
 } from "@/queries/upgrade";
 import { wireErrorMessage } from "@/queries/wire";
 import { DesktopUpdate } from "./desktop-update";
+import {
+  ReleaseNotes,
+  UpdateGroup,
+  UpdateNotice,
+  UpdateRow,
+  UpdateStatusBar,
+  UpdateSteps,
+} from "./update-status";
 
-// Settings → Update: which version this host is, whether there is a newer one, and the button. The
-// work happens in a process of its own (`apps/eta/src/upgrade/worker.ts`); from the moment the
+// Settings → Update: which version this host is, whether there is a newer one, and the button,
+// in one bar at the top (`update-status.tsx`); under it, what goes wrong or how far an update has
+// got, then which versions to take and where they come from. The work happens in a process of its own (`apps/eta/src/upgrade/worker.ts`); from the moment the
 // service stops this page is under `UpgradeScreen`. In a window connected to a remote host all of
 // this is that host's, so it says which one: the button does not touch the computer it is on.
 
@@ -235,27 +247,68 @@ function tokenNotes(
 }
 
 /**
- * The desktop app's own update over the host's, each under its name, when the app can update
- * itself; the host's alone otherwise, as in a browser.
+ * The desktop app's own update over the host's, one bar each, when the app can update itself; the
+ * host's alone otherwise, as in a browser.
  */
 export function UpdateSettings() {
-  const { t: translateText } = useTranslation(["settings"] as const);
   if (!hasCapability("shell-update")) return <HostUpdate />;
   return (
-    <div className="space-y-6">
-      <section className="space-y-2">
-        <h3 className="text-sm font-medium">
-          {translateText("desktopUpdate.heading")}
-        </h3>
-        <DesktopUpdate />
-      </section>
-      <section className="space-y-2">
-        <h3 className="text-sm font-medium">
-          {translateText("update.hostHeading")}
-        </h3>
-        <HostUpdate />
-      </section>
+    <div className="space-y-3">
+      <DesktopUpdate />
+      <HostUpdate />
     </div>
+  );
+}
+
+/** The six steps an update is drawn in; each phase is one of them. */
+const STEPS = [
+  "starting",
+  "downloading",
+  "waiting",
+  "backingUp",
+  "restarting",
+  "verifying",
+] as const;
+
+const stepOf = {
+  starting: 0,
+  downloading: 1,
+  waiting: 2,
+  // The service stops so the database can be copied: the same step for the eye.
+  stopping: 3,
+  "backing-up": 3,
+  restarting: 4,
+  verifying: 5,
+  "rolling-back": 5,
+} as const satisfies Record<UpgradePhase, number>;
+
+/** Renders again now and then, so "checked N minutes ago" keeps up. */
+function useTick(ms: number) {
+  const [, tick] = useReducer((count: number) => count + 1, 0);
+  useEffect(() => {
+    const timer = setInterval(tick, ms);
+    return () => clearInterval(timer);
+  }, [ms]);
+}
+
+/** "Checked just now", "Checked 5 minutes ago". */
+function checkedAgo(at: number, translateText: TFunction<"settings">) {
+  const minutes = Math.floor((Date.now() - at) / 60_000);
+  if (minutes < 1) return translateText("update.checked.justNow");
+  if (minutes < 60)
+    return translateText("update.checked.minutes", { count: minutes });
+  return translateText("update.checked.hours", {
+    count: Math.floor(minutes / 60),
+  });
+}
+
+/** Who the bar is about: this server in a browser, this computer in the app, or the remote one. */
+function hostTitle(translateText: TFunction<"settings">) {
+  const { address, connection, kind } = host();
+  if (connection === "remote" && address !== undefined)
+    return translateText("update.title.remote", { host: address });
+  return translateText(
+    kind === "desktop" ? "update.title.computer" : "update.title.server",
   );
 }
 
@@ -269,6 +322,10 @@ function HostUpdate() {
   const [confirming, setConfirming] = useState(false);
   const [changing, setChanging] = useState(false);
   const [settingToken, setSettingToken] = useState(false);
+  // Null until the user folds or unfolds it: until then it follows whether something is off.
+  const [advanced, setAdvanced] = useState<boolean | null>(null);
+  const channelId = useId();
+  useTick(30_000);
 
   if (check.isPending) return <Loading rows={2} />;
   if (check.isError)
@@ -286,181 +343,308 @@ function HostUpdate() {
     error,
     heldOnPrerelease,
     latest,
+    notes,
     prerelease,
     token,
     upstream,
     version,
   } = check.data;
-  const notes = tokenNotes(token, translateText);
+  const tokenNote = tokenNotes(token, translateText);
   const { address, connection } = host();
   const remote = connection === "remote" ? address : undefined;
   const running = status?.state === "running";
   const failed =
-    status?.state === "failed" ||
-    status?.state === "rolled-back" ||
-    status?.state === "lost";
+    !running &&
+    (status?.state === "failed" ||
+      status?.state === "rolled-back" ||
+      status?.state === "lost");
+  const offer = available && latest !== null;
+  const advancedOpen =
+    advanced ??
+    (upstream.source !== "build" || tokenNote.note !== null || error !== null);
 
   const go = (force: boolean) => {
     setConfirming(false);
     start.mutate({ force }, { onError: showError });
   };
+  const recheck = () => void check.refetch();
+  const install = (label: string) => (
+    <Button
+      size="xs"
+      disabled={start.isPending || blocked !== null}
+      onClick={() => setConfirming(true)}
+    >
+      {label}
+    </Button>
+  );
+  const recheckButton = (
+    <Button
+      variant="ghost"
+      size="xs"
+      className="h-5 px-1 font-normal text-muted-foreground"
+      disabled={check.isFetching}
+      onClick={recheck}
+    >
+      {translateText("update.recheck")}
+    </Button>
+  );
 
-  return (
-    <div className="space-y-3">
-      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
-        {remote !== undefined && (
-          <>
-            <dt className="text-muted-foreground">
-              {translateText("update.remoteHost")}
-            </dt>
-            <dd className="break-all">{remote}</dd>
-          </>
-        )}
-        <dt className="text-muted-foreground">
-          {translateText("update.version")}
-        </dt>
-        <dd className="break-all">{version}</dd>
-        <dt className="text-muted-foreground">
-          {translateText(
-            prerelease
-              ? "update.latestWithPrerelease"
-              : heldOnPrerelease
-                ? "update.latestFull"
-                : "update.latest",
-          )}
-        </dt>
-        <dd className="flex items-center gap-1">
-          {latest ?? translateText("update.unknown")}
+  // One state, in the order they matter: what is happening, what went wrong, what can be done.
+  const bar: {
+    tone: UpdateTone;
+    state: string;
+    target?: string | undefined;
+    primary?: ReactNode;
+    recheck: boolean;
+  } = running
+    ? {
+        tone: "info",
+        state: translateText("update.state.running", {
+          phase: translateText(`update.phase.${phaseKeys[status.phase]}`),
+        }),
+        target: status.to,
+        primary: CANCELLABLE.has(status.phase) ? (
           <Button
             variant="ghost"
-            size="icon-xs"
-            aria-label={translateText("update.recheck")}
-            title={translateText("update.recheck")}
-            disabled={check.isFetching}
-            onClick={() => void check.refetch()}
+            size="xs"
+            className="text-muted-foreground"
+            disabled={cancel.isPending}
+            onClick={() => cancel.mutate({}, { onError: showError })}
           >
-            <ArrowsClockwiseIcon aria-hidden="true" />
+            {translateText("update.cancel")}
           </Button>
-        </dd>
-        <dt id="update-prerelease" className="text-muted-foreground">
-          {translateText("update.prerelease")}
-        </dt>
-        <dd className="space-y-1">
-          {/* The host's setting: on a remote host, that host's. */}
-          <Switch
-            aria-labelledby="update-prerelease"
-            checked={prerelease}
-            disabled={running || setPrerelease.isPending}
-            onCheckedChange={(on) =>
-              setPrerelease.mutate({ prerelease: on }, { onError: showError })
+        ) : undefined,
+        recheck: false,
+      }
+    : failed
+      ? {
+          tone: "error",
+          state: translateText("update.state.lastFailed"),
+          primary:
+            offer && blocked === null
+              ? install(translateText("update.tryAgain"))
+              : undefined,
+          recheck: true,
+        }
+      : blocked !== null
+        ? {
+            tone: "muted",
+            state: translateText("update.state.blocked"),
+            primary: offer
+              ? install(translateText("update.install", { version: latest }))
+              : undefined,
+            recheck: true,
+          }
+        : error !== null
+          ? {
+              tone: "error",
+              state: translateText("update.state.checkFailed"),
+              primary: (
+                <Button
+                  variant="outline"
+                  size="xs"
+                  disabled={check.isFetching}
+                  onClick={recheck}
+                >
+                  {translateText("update.retry")}
+                </Button>
+              ),
+              recheck: false,
             }
-          />
-          <p className="text-xs text-muted-foreground">
-            {translateText("update.prereleaseHint")}
-          </p>
-        </dd>
-        <dt className="text-muted-foreground">
-          {translateText("update.upstream")}
-        </dt>
-        <dd className="flex flex-wrap items-center gap-x-2">
-          <span className="break-all">{upstream.label}</span>
-          <span className="text-muted-foreground">
-            {translateText(`update.upstreamFrom.${upstream.source}`)}
-          </span>
-          {/* What the environment says wins, so a setting would change nothing. */}
-          {upstream.source !== "env" && (
-            <Button
-              variant="ghost"
-              size="xs"
-              disabled={running}
-              onClick={() => setChanging(true)}
-            >
-              {translateText("update.upstreamChange")}
-            </Button>
-          )}
-        </dd>
-        {/* Another server has its own token, and GitHub's credentials do not go there. */}
-        {token.host !== null && (
-          <>
-            <dt className="text-muted-foreground">
-              {translateText("update.token")}
-            </dt>
-            <dd className="flex flex-wrap items-center gap-x-2">
-              <span>{notes.source}</span>
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={() => setSettingToken(true)}
-              >
-                {translateText(
-                  token.saved === null
-                    ? "update.tokenSet"
-                    : "update.tokenChange",
-                )}
-              </Button>
-              {notes.note !== null && (
-                <span className="w-full text-muted-foreground">
-                  {notes.note}
-                </span>
-              )}
-            </dd>
-          </>
-        )}
-      </dl>
+          : offer
+            ? {
+                tone: "info",
+                state: translateText("update.state.available"),
+                target: latest,
+                primary: install(
+                  translateText("update.install", { version: latest }),
+                ),
+                recheck: true,
+              }
+            : heldOnPrerelease
+              ? {
+                  tone: "warning",
+                  state: translateText("update.state.held"),
+                  recheck: true,
+                }
+              : {
+                  tone: "success",
+                  state: translateText("update.upToDate"),
+                  recheck: true,
+                };
 
-      {error !== null && (
-        <p className="text-sm text-destructive">
-          {translateText("update.checkFailed", { error })}
-        </p>
+  return (
+    <div>
+      <UpdateStatusBar
+        title={hostTitle(translateText)}
+        version={version}
+        target={bar.target}
+        tone={bar.tone}
+        state={bar.state}
+        actions={
+          <>
+            {bar.primary}
+            {bar.recheck && recheckButton}
+          </>
+        }
+        meta={
+          running ? undefined : checkedAgo(check.dataUpdatedAt, translateText)
+        }
+      />
+
+      {!running && offer && notes !== null && (
+        <ReleaseNotes text={notes.text} url={notes.url} />
       )}
 
-      {running ? (
-        <div className="space-y-2 text-sm">
-          <p role="status">
-            {translateText(`update.phase.${phaseKeys[status.phase]}`)}
-          </p>
-          {status.busy !== undefined && (
-            <p className="text-muted-foreground">
+      {running && (
+        <UpdateSteps
+          steps={STEPS.map((key) => ({
+            key,
+            label: translateText(`update.steps.${key}`),
+          }))}
+          current={stepOf[status.phase]}
+          failing={status.phase === "rolling-back"}
+        >
+          {status.busy !== undefined && status.busy.length > 0 && (
+            <p className="mt-1.5 text-xs text-muted-foreground">
               {translateText("update.waitingFor", {
                 list: busyLabels(status.busy).join("、"),
               })}
             </p>
           )}
-          {CANCELLABLE.has(status.phase) && (
-            <Button
-              variant="outline"
-              disabled={cancel.isPending}
-              onClick={() => cancel.mutate({}, { onError: showError })}
-            >
-              {translateText("update.cancel")}
-            </Button>
-          )}
-        </div>
-      ) : blocked !== null ? (
-        <p className="text-sm text-muted-foreground">
-          {translateText(`update.blocked.${blockKeys[blocked]}`)}
-        </p>
-      ) : available && latest !== null ? (
-        <Button disabled={start.isPending} onClick={() => setConfirming(true)}>
-          {translateText("update.install", { version: latest })}
-        </Button>
-      ) : heldOnPrerelease ? (
-        <p className="text-sm text-muted-foreground">
-          {translateText("update.heldOnPrerelease", { version })}
-        </p>
-      ) : (
-        error === null && (
-          <p className="text-sm text-muted-foreground">
-            {translateText("update.upToDate")}
-          </p>
-        )
+        </UpdateSteps>
       )}
 
-      {failed && !running && status.error !== undefined && (
-        <p className="text-sm break-words text-destructive">
-          {translateText("update.lastFailed", { error: status.error })}
-        </p>
+      {failed && status.error !== undefined && (
+        <UpdateNotice tone="error">
+          <p>{translateText("update.lastFailed", { error: status.error })}</p>
+          <p className="text-muted-foreground">
+            {translateText("update.screen.help")}
+          </p>
+        </UpdateNotice>
       )}
+      {!running && blocked !== null && (
+        <UpdateNotice tone="warning">
+          <p>{translateText(`update.blocked.${blockKeys[blocked]}`)}</p>
+        </UpdateNotice>
+      )}
+      {!running && error !== null && (
+        <UpdateNotice tone="error">
+          <p>{translateText("update.checkFailed", { error })}</p>
+          <p className="text-muted-foreground">
+            {translateText("update.checkFailedNext")}
+          </p>
+        </UpdateNotice>
+      )}
+
+      <UpdateGroup label={translateText("update.channel")}>
+        <UpdateRow
+          label={translateText("update.channelLabel")}
+          labelId={channelId}
+          value={
+            // The host's setting: on a remote host, that host's.
+            <div
+              role="group"
+              aria-labelledby={channelId}
+              className="inline-flex border border-border"
+            >
+              {[false, true].map((on) => (
+                <button
+                  key={String(on)}
+                  type="button"
+                  aria-pressed={prerelease === on}
+                  disabled={running || setPrerelease.isPending}
+                  className="px-2 text-xs leading-5 text-muted-foreground hover:text-foreground disabled:opacity-50 aria-pressed:bg-foreground aria-pressed:text-background"
+                  onClick={() => {
+                    if (prerelease !== on)
+                      setPrerelease.mutate(
+                        { prerelease: on },
+                        { onError: showError },
+                      );
+                  }}
+                >
+                  {translateText(
+                    on ? "update.channelPrerelease" : "update.channelFull",
+                  )}
+                </button>
+              ))}
+            </div>
+          }
+          hint={translateText("update.channelHint")}
+        />
+      </UpdateGroup>
+
+      <UpdateGroup
+        label={translateText("update.source")}
+        toggle={
+          <button
+            type="button"
+            aria-expanded={advancedOpen}
+            className="flex items-center gap-1 hover:text-foreground"
+            onClick={() => setAdvanced(!advancedOpen)}
+          >
+            {translateText("update.advanced")}
+            {advancedOpen ? (
+              <CaretDownIcon aria-hidden="true" className="size-3" />
+            ) : (
+              <CaretRightIcon aria-hidden="true" className="size-3" />
+            )}
+          </button>
+        }
+      >
+        {advancedOpen && (
+          <>
+            <UpdateRow
+              label={translateText("update.upstream")}
+              value={<span className="break-all">{upstream.label}</span>}
+              hint={translateText(`update.upstreamFrom.${upstream.source}`)}
+              action={
+                // What the environment says wins, so a setting would change nothing.
+                upstream.source !== "env" && (
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    disabled={running}
+                    onClick={() => setChanging(true)}
+                  >
+                    {translateText("update.upstreamChange")}
+                  </Button>
+                )
+              }
+            />
+            {/* Another server has its own token, and GitHub's credentials do not go there. */}
+            {token.host !== null && (
+              <UpdateRow
+                label={translateText("update.token")}
+                value={tokenNote.source}
+                hint={
+                  <>
+                    {tokenNote.note !== null && (
+                      <span className="block text-state-warning-ink">
+                        {tokenNote.note}
+                      </span>
+                    )}
+                    {translateText("update.tokenWhen")}
+                  </>
+                }
+                action={
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    onClick={() => setSettingToken(true)}
+                  >
+                    {translateText(
+                      token.saved === null
+                        ? "update.tokenSet"
+                        : "update.tokenChange",
+                    )}
+                  </Button>
+                }
+              />
+            )}
+          </>
+        )}
+      </UpdateGroup>
 
       {changing && (
         <UpstreamDialog

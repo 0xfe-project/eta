@@ -838,11 +838,11 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
       page.screenshot({ path: join(SHOTS, `${process.platform}-${file}.png`) });
     const settings = async (): Promise<void> => {
       await page.goto(`http://127.0.0.1:${PORT}/?settings=update`);
-      await page.getByText("当前版本").waitFor({ timeout: 30_000 });
+      await page.locator("[data-version]").first().waitFor({ timeout: 30_000 });
       await sleep(800);
     };
     const shown = (): Promise<string | null> =>
-      page.locator("dl dd").first().textContent();
+      page.locator("[data-version]").first().textContent();
 
     await settings();
     want("the page says the old build", await shown(), "0.9.0");
