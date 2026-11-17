@@ -221,6 +221,7 @@ const viewOf = (task: TaskRecord, graph: TaskGraph): BoardTaskView => ({
   createdBy: task.createdBy,
   assigneeAgentId: task.assigneeAgentId,
   conversationId: task.conversationId,
+  workspaceMode: task.workspaceMode,
   captainAssignmentId: task.captainAssignmentId,
   captainMessageId: task.captainMessageId,
   runStatus: task.runStatus,

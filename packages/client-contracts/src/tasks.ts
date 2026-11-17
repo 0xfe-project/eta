@@ -134,6 +134,11 @@ export interface BoardTaskView {
   assigneeAgentId: string | null;
   /** The conversation it is discussed in, if linked. */
   conversationId: string | null;
+  /**
+   * Where its runs work: the project's directory or a git worktree of it. Absent from a host older
+   * than this field, which the page reads as not known.
+   */
+  workspaceMode?: TaskWorkspaceMode;
   /** The Captain instruction that authorized this task, when it came from one. */
   captainAssignmentId?: string | null;
   captainMessageId?: string | null;

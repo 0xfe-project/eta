@@ -2,6 +2,7 @@ import type { TaskDependencyView } from "@eta/client-contracts";
 import type { QueueMachine } from "./task-words";
 import type { Task, TaskDetail } from "@/queries/tasks";
 import { ArrowRightIcon } from "@phosphor-icons/react/ArrowRight";
+import { GitMergeIcon } from "@phosphor-icons/react/GitMerge";
 import { LockSimpleIcon } from "@phosphor-icons/react/LockSimple";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { WarningIcon } from "@phosphor-icons/react/Warning";
@@ -19,6 +20,7 @@ import { wireErrorMessage } from "@/queries/wire";
 import { ProgressBar, RunningFor } from "./task-bits";
 import { ago } from "./task-format";
 import { useExecutorName } from "./task-hooks";
+import { joinStartsAtHead } from "./task-join";
 import { useTaskNav } from "./task-nav";
 import { useNewTask } from "./task-new-store";
 import { TaskPicker } from "./task-picker";
@@ -161,6 +163,31 @@ export function FlowBar({
       {column("after", after, t("flow.after"))}
     </div>
   );
+}
+
+// --- where a join starts --------------------------------------------------------------
+
+/** A line saying a join starts at the project's HEAD: on the task's page and in the new-task form. */
+export function JoinHint({ children }: { children: React.ReactNode }) {
+  return (
+    <p
+      data-join-hint
+      className="flex items-start gap-2 text-xs leading-5 text-muted-foreground"
+    >
+      <GitMergeIcon aria-hidden="true" className="mt-0.75 size-3.5 shrink-0" />
+      <span>{children}</span>
+    </p>
+  );
+}
+
+/**
+ * Beside the flow bar of a worktree task that waits for two or more: it starts at the project's
+ * HEAD, and what the parallel step before it did is not in its worktree (`joinStartsAtHead`).
+ */
+export function JoinBaseHint({ task }: { task: TaskDetail }) {
+  const { t } = useTranslation(["tasks"] as const);
+  if (!joinStartsAtHead(task)) return null;
+  return <JoinHint>{t("join.startsAtHead")}</JoinHint>;
 }
 
 // --- why it has not started ----------------------------------------------------------

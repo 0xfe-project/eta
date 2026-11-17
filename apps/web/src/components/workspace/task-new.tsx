@@ -29,7 +29,9 @@ import { useAgentList } from "@/queries/agents";
 import { useConversationList } from "@/queries/conversations";
 import { useCreateTasks, useTasks } from "@/queries/tasks";
 import { wireErrorMessage } from "@/queries/wire";
+import { JoinHint } from "./task-detail";
 import { useProjectOf } from "./task-hooks";
+import { newTaskMode, newTaskStartsAtHead, splitJoinSteps } from "./task-join";
 import { useTaskNav } from "./task-nav";
 import { useNewTask } from "./task-new-store";
 import { stepIfMade } from "./task-pick";
@@ -184,6 +186,10 @@ function NewTaskForm({ preset }: { preset: NewTaskPreset }) {
   const parsed = parseSplit(lines);
   const sizes = stepSizes(parsed);
   const byId = new Map(all.map((task) => [task.id, task]));
+  // A join (two or more prerequisites) in a worktree project starts at the project's HEAD.
+  const mode = newTaskMode(parent, projectId, all, projectOf);
+  const joinSteps = split ? splitJoinSteps(mode, parsed) : [];
+  const joinsAtHead = !split && newTaskStartsAtHead(mode, dependsOn.length);
 
   const ready =
     assignee !== undefined &&
@@ -351,6 +357,11 @@ function NewTaskForm({ preset }: { preset: NewTaskPreset }) {
                   )
                   .join(" · ")}`}
           </p>
+          {joinSteps.map((step) => (
+            <JoinHint key={step}>
+              {t("join.stepStartsAtHead", { step, before: step - 1 })}
+            </JoinHint>
+          ))}
         </div>
       ) : null}
       <div className="space-y-2.5">
@@ -428,6 +439,11 @@ function NewTaskForm({ preset }: { preset: NewTaskPreset }) {
             </TaskPicker>
           </Row>
         )}
+        {joinsAtHead ? (
+          <div className="pl-19">
+            <JoinHint>{t("join.startsAtHead")}</JoinHint>
+          </div>
+        ) : null}
         <Row label={t("create.start")} id="new-task-start">
           <Segments
             labelledBy="new-task-start"
