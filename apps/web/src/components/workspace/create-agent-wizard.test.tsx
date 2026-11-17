@@ -413,6 +413,51 @@ describe("creating an agent step by step", () => {
   });
 });
 
+describe("a new agent's persona", () => {
+  const persona = () =>
+    document.getElementById("agent-persona") as HTMLButtonElement;
+  const hint = () => document.getElementById("agent-persona-hint");
+  const runOn = async (label: string) => {
+    await click("上一步");
+    await choose("agent-runtime", label);
+    await click("下一步");
+  };
+
+  it("is chosen on eta's own runtime, set aside on an external one, and kept for the way back", async () => {
+    host.set("personas", {
+      cards: [
+        { id: "terse", name: "简短", description: "话少", custom: false },
+        { id: "warm", name: "温和", description: "耐心", custom: false },
+      ],
+    });
+    await open();
+    await type("agent-name", "审查");
+    await click("下一步");
+    expect(persona().disabled).toBe(false);
+    expect(hint()).toBeNull();
+    await choose("agent-persona", "简短");
+    expect(persona().textContent).toContain("简短");
+
+    await runOn("Claude Code");
+    expect(persona().disabled).toBe(true);
+    expect(persona().textContent).toContain("简短");
+    expect(hint()?.textContent).toBe(
+      "人格只对 eta 运行时生效。外部运行时的语气请写在指令里。",
+    );
+    expect(persona().getAttribute("aria-describedby")).toBe(
+      "agent-persona-hint",
+    );
+
+    await runOn("eta 内置");
+    expect(persona().disabled).toBe(false);
+    expect(hint()).toBeNull();
+    expect(persona().textContent).toContain("简短");
+    await choose("agent-persona", "温和");
+    await click("创建");
+    expect(created).toMatchObject([{ runtime: "eta", persona: "warm" }]);
+  });
+});
+
 describe("choosing where a new agent runs", () => {
   const claude = runtimes[0]!;
   const opencode = {

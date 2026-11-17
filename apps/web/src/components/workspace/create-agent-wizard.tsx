@@ -264,7 +264,7 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
               </p>
             ) : null}
             <InstructionsField form={form} autoFocus />
-            <PersonaField form={form} />
+            <PersonaField form={form} external={external} />
           </>
         )}
       </div>
