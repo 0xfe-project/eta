@@ -11,6 +11,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { draftOf } from "@/lib/composer";
 import { translate } from "@/lib/i18n";
+import { randomUUID } from "@/lib/random-uuid";
 import { getWire, WireError } from "@/lib/wire";
 import { rememberRows } from "@/queries/conversations";
 
@@ -242,7 +243,7 @@ export function useOutboxActions() {
       blocks: PasteRange[] = [],
     ) {
       const outgoing = {
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         conversationId,
         text,
         blocks,
@@ -263,7 +264,7 @@ export function useOutboxActions() {
       const draft: Draft = [
         ...draftOf(outgoing.text),
         ...outgoing.attachments.map((attachment): FilePart => {
-          const id = crypto.randomUUID();
+          const id = randomUUID();
           useOutbox.getState().setUpload(id, {
             conversationId: outgoing.conversationId,
             attachment,
@@ -378,7 +379,7 @@ async function upload(conversationId: string, id: string, file: File) {
 
 /** A file pasted or picked into the conversation's draft: the block for it, already uploading. */
 export function beginUpload(conversationId: string, file: File): FilePart {
-  const id = crypto.randomUUID();
+  const id = randomUUID();
   void upload(conversationId, id, file);
   return {
     type: "file",

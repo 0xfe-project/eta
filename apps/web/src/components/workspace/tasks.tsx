@@ -74,6 +74,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { applyItem, buildMenu } from "@/lib/composer-menu";
 import { translate } from "@/lib/i18n";
 import { mentionedMembers, mentionLabel } from "@/lib/mentions";
+import { randomUUID } from "@/lib/random-uuid";
 import { longDuration, revealBlock } from "@/lib/run-display";
 import { clock, rowsBetween, runTiming } from "@/lib/run-timing";
 import { cn } from "@/lib/utils";
@@ -1674,7 +1675,7 @@ export function CommentBox({
     const body = text.trim();
     if (!body || waiting) return;
     const o = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       body,
       mentions: mentionedMembers(body, members),
       before: commentsLike(task, body),
