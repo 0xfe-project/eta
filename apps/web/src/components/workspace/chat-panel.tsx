@@ -14,6 +14,7 @@ import type { Outgoing, SendMode } from "@/queries/outbox";
 import type { AnsweringQuestion, Question } from "@/queries/questions";
 import type { TaskStatus } from "@/queries/tasks";
 import {
+  lastSaid,
   MAX_ATTACHMENTS,
   publishedRefs,
   runFromOf,
@@ -787,6 +788,11 @@ function useSettled(key: string | undefined): boolean {
  * Text that follows a step stays in the box, as the step's next line, until no step has followed it
  * for `ANSWER_SETTLE_MS`: until then it is as likely a sentence before the next call. Text before
  * any step is the answer at once, so a reply without tools never draws a box.
+ *
+ * The last thing it said (`lastSaid`) is the line over the box: the sentence before its first call
+ * stays there, in place, rather than going into the box to scroll away, and a newer one between
+ * calls takes its place (that one stays in the box too, as a step). Once at its answer, the line is
+ * the end of the folded row instead.
  */
 function LiveReply({
   sessionId,
@@ -813,6 +819,19 @@ function LiveReply({
   const answered = split.steps.length === 0 || settled;
   const steps = answered ? split.steps : blocks;
   const answer = answered ? split.answer : [];
+  const folded = answer.length > 0;
+  const said = lastSaid(steps);
+  // What the box draws: the words before the first call are the line over it, not a step in it.
+  // Folded, the row opens to every step in its order.
+  const lead = folded ? 0 : steps.findIndex((block) => block.type !== "text");
+  const views = steps.map((block) => (
+    <ProcessStepView
+      key={block.id}
+      block={block}
+      sessionId={sessionId}
+      streaming
+    />
+  ));
   // Nothing from the run yet: the placeholder holds the place, and the first block replaces it.
   const placeholder = blocks.length === 0 && !waiting ? <FirstToken /> : null;
   const text = answer.map((block) => (
@@ -825,20 +844,12 @@ function LiveReply({
       {steps.length === 0 && placeholder === null ? null : (
         // Before the first token the box is already there, at work; its steps fill the same frame.
         <ProcessBox
-          steps={
-            placeholder ??
-            steps.map((block) => (
-              <ProcessStepView
-                key={block.id}
-                block={block}
-                sessionId={sessionId}
-                streaming
-              />
-            ))
-          }
+          steps={placeholder ?? (lead > 0 ? views.slice(lead) : views)}
+          whole={placeholder ?? views}
           count={steps.length}
           running
-          folded={answer.length > 0}
+          folded={folded}
+          said={said}
           author={author}
           agentId={agentId}
           sessionId={sessionId}
@@ -990,6 +1001,7 @@ const Turn = memo(
                 callId={tools[0]?.id}
                 time={when(message.createdAt)}
                 answer={answer}
+                said={lastSaid(steps)}
               />
             )}
             {answer}

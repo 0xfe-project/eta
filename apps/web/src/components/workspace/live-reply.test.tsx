@@ -140,11 +140,13 @@ describe.each(["group", "direct"] as const)(
       await stream(said(10, [{ type: "text", text: "我先看看" }]));
       expect(paragraph(container, "我先看看")).toBe(shown);
 
-      // A call follows the words: they were a step, and go into the process box, in their order.
+      // A call follows the words: they were said on the way, and stay in place as the line over
+      // the process box, not a step that scrolls away inside it.
       const first = said(10, [{ type: "text", text: "我先看看" }, call]);
       await stream(first);
       const step = paragraph(container, "我先看看");
-      expect(processBox(container)?.contains(step)).toBe(true);
+      expect(step.classList.contains("process-said-line")).toBe(true);
+      expect(processBox(container)?.contains(step)).toBe(false);
       // The message lands in the transcript, and the tool it called runs and answers.
       await commit([entry(2, first)]);
       expect(paragraph(container, "我先看看")).toBe(step);
@@ -165,7 +167,11 @@ describe.each(["group", "direct"] as const)(
       await stream(said(20, [{ type: "text", text: "看完了" }]));
       await flush(1600);
       const fold = processFold(container);
+      // Folded, the process has them as its first step, and its row ends with them.
       expect(fold?.contains(paragraph(container, "我先看看"))).toBe(true);
+      expect(fold?.querySelector(":scope > summary")?.textContent).toContain(
+        "我先看看",
+      );
       expect(fold?.contains(paragraph(container, "看完了"))).toBe(false);
     });
 
