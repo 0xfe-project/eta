@@ -32,6 +32,8 @@ const build = (process.env.ETA_WEB_BUILD ||= Date.now().toString(36));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
+  // Where the host answers in development, for everything vite does not own.
+  const hostOrigin = env.ETA_HOST_ORIGIN || "http://127.0.0.1:8787";
   return {
     define: { __ETA_BUILD__: JSON.stringify(build) },
     resolve: {
@@ -89,9 +91,19 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
       // Development is two processes: this one owns the page and its HMR, the host
       // owns the data. The page talks to the host over exactly one WebSocket, at
-      // /ws, so that is all that crosses over and nothing in the SPA needs to
-      // know a second port exists. The browser still sends vite's origin, which
-      // the host is started to allow (--allow-origin, see the root dev script).
+      // /ws, and nothing in the SPA needs to know a second port exists. The
+      // browser still sends vite's origin, which the host is started to allow
+      // (--allow-origin, see the root dev script).
+      //
+      // The artifacts' HTTP routes cross over too. A preview address, a share and a
+      // download are all relative (`artifacts.preview` answers
+      // `/preview/<capability>/…`, see apps/eta/src/artifacts/service.ts) because
+      // in production one server has both the page and the product. Here vite has
+      // the page, and its fallback answers every unknown path with the app's own
+      // index.html: without these the dialog's iframe loads the app shell instead
+      // of the published page and stays on its skeleton. The host answers under
+      // `/preview/` and `/share/` found or not (a missing share must not become a
+      // page), so each of those is forwarded whole.
       //
       // `/up` and `/version` stay here on purpose. They answer "is this page
       // alive" and "which build of this page am I", so the server that serves
@@ -101,12 +113,15 @@ export default defineConfig(({ mode }) => {
       // and the bundle's in another, which is how every tab ends up claiming an
       // update is waiting.
       proxy: {
-        "/upgrade": env.ETA_HOST_ORIGIN || "http://127.0.0.1:8787",
+        "/upgrade": hostOrigin,
         "/ws": {
-          target: env.ETA_HOST_ORIGIN || "http://127.0.0.1:8787",
+          target: hostOrigin,
           ws: true,
           changeOrigin: false,
         },
+        "/preview/": hostOrigin,
+        "/share/": hostOrigin,
+        "/artifacts/": hostOrigin,
       },
     },
     preview: {
