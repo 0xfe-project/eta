@@ -31,6 +31,7 @@ export function UpdateStatusBar({
   state,
   actions,
   meta,
+  progress,
   className,
 }: {
   title: string;
@@ -42,13 +43,15 @@ export function UpdateStatusBar({
   actions?: ReactNode;
   /** Small words under the buttons: when it was last checked. */
   meta?: string | undefined;
+  /** Download progress inside the bottom edge of the bar (`null` when total is unknown). */
+  progress?: number | null | undefined;
   className?: string;
 }) {
   return (
     <section
       aria-label={title}
       className={cn(
-        "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 border border-border px-3 py-2",
+        "relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 border border-border px-3 py-2",
         className,
       )}
     >
@@ -80,6 +83,13 @@ export function UpdateStatusBar({
           <span className="text-[11px] leading-4 text-faint">{meta}</span>
         )}
       </div>
+      {progress !== undefined && (
+        <UpdateProgressBar
+          value={progress ?? undefined}
+          label={state}
+          className="absolute inset-x-0 bottom-0 mt-0 h-[2px]"
+        />
+      )}
     </section>
   );
 }
@@ -164,11 +174,16 @@ export function UpdateSteps({
   steps,
   current,
   failing = false,
+  progress,
+  progressLabel,
   children,
 }: {
   steps: readonly UpdateStep[];
   current: number;
   failing?: boolean;
+  /** Progress for the current step (`null` when total is unknown). */
+  progress?: number | null | undefined;
+  progressLabel?: string | undefined;
   children?: ReactNode;
 }) {
   return (
@@ -177,22 +192,38 @@ export function UpdateSteps({
         {steps.map((step, index) => {
           const state =
             index < current ? "done" : index === current ? "current" : "todo";
+          const showProgress =
+            state === "current" && !failing && progress !== undefined;
           return (
             <li
               key={step.key}
               data-step={state}
               aria-current={state === "current" ? "step" : undefined}
               className={cn(
-                "border-t-[3px] pt-1 text-[11px] leading-4",
-                state === "done" &&
-                  "border-state-success text-muted-foreground",
-                state === "current" &&
-                  (failing
-                    ? "border-state-error text-foreground"
-                    : "border-state-info text-foreground"),
-                state === "todo" && "border-border text-faint",
+                "text-[11px] leading-4",
+                state === "done" && "text-muted-foreground",
+                state === "current" && "text-foreground",
+                state === "todo" && "text-faint",
               )}
             >
+              {showProgress ? (
+                <UpdateProgressBar
+                  value={progress ?? undefined}
+                  label={progressLabel ?? step.label}
+                  className="mt-0 mb-1 h-[3px]"
+                />
+              ) : (
+                <div
+                  aria-hidden="true"
+                  className={cn(
+                    "mb-1 h-[3px] w-full",
+                    state === "done" && "bg-state-success",
+                    state === "current" &&
+                      (failing ? "bg-state-error" : "bg-state-info"),
+                    state === "todo" && "bg-border",
+                  )}
+                />
+              )}
               {step.label}
             </li>
           );

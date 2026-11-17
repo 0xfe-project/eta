@@ -50,7 +50,6 @@ import {
   ReleaseNotes,
   UpdateGroup,
   UpdateNotice,
-  UpdateProgressBar,
   UpdateRow,
   UpdateStatusBar,
   UpdateSteps,
@@ -532,10 +531,13 @@ function HostUpdate() {
           }))}
           current={stepOf[status.phase]}
           failing={status.phase === "rolling-back"}
+          progress={
+            status.phase === "downloading"
+              ? (downloadPercent ?? null)
+              : undefined
+          }
+          progressLabel={bar.state}
         >
-          {status.phase === "downloading" && (
-            <UpdateProgressBar value={downloadPercent} label={bar.state} />
-          )}
           {status.busy !== undefined && status.busy.length > 0 && (
             <p className="mt-1.5 text-xs text-muted-foreground">
               {translateText("update.waitingFor", {
