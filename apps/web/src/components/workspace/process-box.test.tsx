@@ -110,6 +110,62 @@ async function live(kind: "group" | "direct" = "group") {
   };
   return { ...mounted, say };
 }
+/** A group with two replies at work, one per member, each fed by its own session's run. */
+async function twoAtWork() {
+  conversations += 1;
+  const id = `process-box-${conversations}`;
+  const host = surfaceHost({
+    agents: [
+      agentView({ id: "a1", name: "研究员" }),
+      agentView({ id: "a2", name: "运维" }),
+    ],
+    conversations: [
+      conversationView({
+        id,
+        kind: "group",
+        participants: [
+          memberView("a1", { sessionId: "s1" }),
+          memberView("a2", { sessionId: "s2" }),
+        ],
+      }),
+    ],
+    messages: {
+      [id]: ["a1", "a2"].map((agentId) =>
+        messageView({
+          conversationId: id,
+          author: "agent",
+          agentId,
+          status: "working",
+          text: "",
+        }),
+      ),
+    },
+  });
+  for (const session of ["s1", "s2"])
+    host.target(`sessions.${session}`, {
+      core: { session, running: true },
+      model: { id: "p:m", thinkingLevel: "off" },
+      transcript: { messages: [] },
+    });
+  host.handle("sessions.resync", () => ({}));
+  const mounted = await mount(<Chat conversationId={id} />);
+  await flush();
+  const say = async (
+    session: string,
+    ...content: Record<string, unknown>[]
+  ) => {
+    await act(async () =>
+      host.socket.receive({
+        type: "event",
+        target: `sessions.${session}`,
+        name: "message:update",
+        data: { message: { role: "assistant", content, timestamp: 5 } },
+      }),
+    );
+    await flush(60);
+  };
+  return { ...mounted, say };
+}
 const thought = { type: "thinking", thinking: "想一想" };
 const call = (id: string) => ({
   type: "toolCall",
@@ -775,15 +831,20 @@ describe("a reply at work, as a browser draws it", () => {
 
   it("does not move a reply under it while both work", async ({ skip }) => {
     if (!(await hasBrowser())) return skip();
-    const above = await live("group");
-    const below = await live("group");
-    await above.say(words("我先看看配置"), call("a"));
-    await below.say(words("我去查日志"), call("x"));
+    const { container, say } = await twoAtWork();
+    const above = (...content: Record<string, unknown>[]) =>
+      say("s1", ...content);
+    await say("s2", words("我去查日志"), call("x"));
+    const replies = () => [...container.querySelectorAll(".message.assistant")];
     const tops: number[] = [];
-    const measure = async () =>
+    const measure = async () => {
+      const [first, second] = replies();
+      expect(second?.querySelector(".process-said-line")?.textContent).toBe(
+        "我去查日志",
+      );
       tops.push(
         await onPage(
-          `<div style="width: 640px">${reply(above.container)}${reply(below.container)}</div>`,
+          `<div style="width: 640px">${first!.outerHTML}${second!.outerHTML}</div>`,
           async (page) =>
             page
               .locator(".message.assistant")
@@ -791,19 +852,37 @@ describe("a reply at work, as a browser draws it", () => {
               .evaluate((el) => el.getBoundingClientRect().top),
         ),
       );
+    };
+    expect(replies()).toHaveLength(2);
+    // Before its first token, then calling without a word yet.
     await measure();
-    await above.say(words("我先看看配置"), call("a"), call("b"), call("c"));
-    await below.say(words("我去查日志"), call("x"), call("y"));
+    await above(call("a"));
+    expect(saidLine(replies()[0])?.textContent ?? "").toBe("");
     await measure();
-    await above.say(
-      words("我先看看配置"),
+    // It speaks, adds steps, then says something long in place of what it said.
+    await above(call("a"), words("我先看看配置"), call("b"));
+    expect(saidLine(replies()[0])?.textContent).toBe("我先看看配置");
+    await measure();
+    await above(
       call("a"),
+      words("我先看看配置"),
       call("b"),
+      thought,
+      call("c"),
+    );
+    await measure();
+    await above(
+      call("a"),
+      words("我先看看配置"),
+      call("b"),
+      thought,
       call("c"),
       words(long),
       call("d"),
     );
+    expect(saidLine(replies()[0])?.textContent).toBe(long);
     await measure();
+    expect(tops[0]).toBeGreaterThan(200);
     expect(new Set(tops).size).toBe(1);
   });
 
