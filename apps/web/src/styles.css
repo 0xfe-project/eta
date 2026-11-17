@@ -1060,8 +1060,8 @@
   .tool-step + .tool-step .tool-card {
     border-top: 0;
   }
-  /* In a group the steps sit in one fixed-height frame that scrolls: the frame carries the border,
-     the steps only the hairlines between them. */
+  /* While a reply works its steps sit in one fixed-height frame that scrolls: the frame carries
+     the border, the steps only the hairlines between them. */
   .process-box {
     height: 176px;
     overflow-y: auto;
@@ -1091,35 +1091,10 @@
   .process-fold-body > :last-child .tool-card:last-child {
     border-bottom-width: 0;
   }
-  /* Once the reply is at its final text the frame folds into one row; opened, the steps stack
-     under it in the same frame, at their natural height. */
+  /* Once the run is over the frame folds into one row; opened, the steps stack under it in the
+     same frame, at their natural height. */
   .process-fold {
     border: 1px solid var(--border);
-  }
-  /* What the reply said last on its way: one line, cut short, in the reader's type. Over the
-     frame it holds its line even before anything is said, so the reply does not grow when it is. */
-  .process-said {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-family: var(--font-sans);
-    letter-spacing: normal;
-    text-transform: none;
-  }
-  .thinking-block-header .process-said {
-    flex: 1;
-    font-size: 12px;
-  }
-  /* Over the frame it is the reply's own words, so it reads as them (`.message-content`). */
-  .process-said-line {
-    align-self: stretch;
-    height: 1lh;
-    margin: 0 0 6px;
-    padding: 0 2px;
-    font-size: 14px;
-    line-height: 1.75;
-    color: var(--foreground);
   }
   .process-fold-body {
     border-top: 1px solid var(--border);

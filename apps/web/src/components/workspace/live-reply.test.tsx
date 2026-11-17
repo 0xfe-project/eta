@@ -140,13 +140,13 @@ describe.each(["group", "direct"] as const)(
       await stream(said(10, [{ type: "text", text: "我先看看" }]));
       expect(paragraph(container, "我先看看")).toBe(shown);
 
-      // A call follows the words: they were said on the way, and stay in place as the line over
-      // the process box, not a step that scrolls away inside it.
+      // A call follows the words: they stay where they are, in the process box, as the step
+      // before it.
       const first = said(10, [{ type: "text", text: "我先看看" }, call]);
       await stream(first);
       const step = paragraph(container, "我先看看");
-      expect(step.classList.contains("process-said-line")).toBe(true);
-      expect(processBox(container)?.contains(step)).toBe(false);
+      expect(step).toBe(shown);
+      expect(processBox(container)?.contains(step)).toBe(true);
       // The message lands in the transcript, and the tool it called runs and answers.
       await commit([entry(2, first)]);
       expect(paragraph(container, "我先看看")).toBe(step);
@@ -163,16 +163,15 @@ describe.each(["group", "direct"] as const)(
       ]);
       expect(paragraph(container, "我先看看")).toBe(step);
 
-      // The next turn's words are a block of their own, under the folded process.
+      // The next turn's words are a block of their own, in the box after the call, however long
+      // no call follows them: the run is not over.
       await stream(said(20, [{ type: "text", text: "看完了" }]));
+      const next = paragraph(container, "看完了");
       await flush(1600);
-      const fold = processFold(container);
-      // Folded, the process has them as its first step, and its row ends with them.
-      expect(fold?.contains(paragraph(container, "我先看看"))).toBe(true);
-      expect(fold?.querySelector(":scope > summary")?.textContent).toContain(
-        "我先看看",
-      );
-      expect(fold?.contains(paragraph(container, "看完了"))).toBe(false);
+      expect(paragraph(container, "看完了")).toBe(next);
+      expect(processBox(container)?.contains(next)).toBe(true);
+      expect(paragraph(container, "我先看看")).toBe(step);
+      expect(processFold(container)).toBeNull();
     });
 
     // The row goes to work before the view has the message that started the run: for a moment the
