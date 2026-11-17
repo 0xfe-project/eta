@@ -105,10 +105,65 @@ describe("the workspace a v0.3.0 browser saved, read by this one", () => {
     expect(useWorkspaceStore.getState().workspace).toEqual(KEPT);
   });
 
+  describe("a known field that fails its own schema costs only itself", () => {
+    // A hand edit, or a build that wrote a field badly: the field goes, its siblings stay.
+    const cases: [string, Record<string, unknown>][] = [
+      ["customFont that is not a string", { customFont: 42 }],
+      ["customFont over 64 characters", { customFont: "a".repeat(65) }],
+      ["customMonoFont that is not a string", { customMonoFont: 42 }],
+      ["customMonoFont over 64 characters", { customMonoFont: "a".repeat(65) }],
+      ["chatWidth outside its choices", { chatWidth: "wide" }],
+      ["recentDirectories that is a list", { recentDirectories: ["/code"] }],
+      ["selectedGroupId that is a number", { selectedGroupId: 5 }],
+    ];
+    for (const [name, bad] of cases) {
+      it(name, async () => {
+        localStorage.setItem(
+          storageKey,
+          JSON.stringify({ ...WRITTEN_BY_0_3_0_WITH_FONTS, ...bad }),
+        );
+        await useWorkspaceStore.persist.rehydrate();
+        const workspace = useWorkspaceStore.getState().workspace;
+        const [field] = Object.keys(bad);
+        const rest = Object.fromEntries(
+          Object.entries(KEPT_WITH_FONTS).filter(([key]) => key !== field),
+        );
+        expect(workspace).toEqual(rest);
+        expect(field! in workspace).toBe(false);
+        if (field !== "selectedGroupId") {
+          expect(workspace.selectedGroupId).toBe("grp-eta");
+        }
+      });
+    }
+
+    it("several bad fields each cost only themselves", async () => {
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          ...WRITTEN_BY_0_3_0_WITH_FONTS,
+          customFont: 42,
+          customMonoFont: "a".repeat(65),
+          chatWidth: "wide",
+        }),
+      );
+      await useWorkspaceStore.persist.rehydrate();
+      const rest = Object.fromEntries(
+        Object.entries(KEPT_WITH_FONTS).filter(
+          ([key]) =>
+            !["customFont", "customMonoFont", "chatWidth"].includes(key),
+        ),
+      );
+      expect(useWorkspaceStore.getState().workspace).toEqual(rest);
+      expect(useWorkspaceStore.getState().workspace.selectedGroupId).toBe(
+        "grp-eta",
+      );
+    });
+  });
+
   it("ignores what a crashed tab left instead of clearing the state", async () => {
     // A browser writes a value it was in the middle of four times a session; the half of one that
     // reached storage must not take the good state with it.
-    for (const broken of ['{"chatWidth":', "", "null", "[]"]) {
+    for (const broken of ['{"chatWidth":', "", "null", "[]", '"x"', "42"]) {
       localStorage.setItem(storageKey, broken);
       useWorkspaceStore.setState({ workspace: KEPT });
       await useWorkspaceStore.persist.rehydrate();
