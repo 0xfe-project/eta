@@ -712,7 +712,7 @@ export interface ProjectArgs {
 /** A directory inside the one listed. Names only: no file is ever listed or read. */
 export interface DirectoryEntry {
   name: string;
-  /** The name starts with a dot. */
+  /** Hidden by the machine's own convention: a dot name, Windows junction, or Windows H/S attribute. */
   hidden: boolean;
   /** It holds a `.git`: a code repository. */
   git: boolean;

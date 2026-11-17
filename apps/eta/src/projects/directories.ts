@@ -42,30 +42,47 @@ export class DirectoryError extends Error {
 /**
  * What is missing behind a directory that cannot be searched is hidden, not missing, so the nearest
  * path that exists says which of the two it is. Visible names come first, so a cap cuts dot
- * directories before anything the list shows by default.
+ * directories, Windows junctions and Windows hidden/system directories before anything the list
+ * shows by default.
  */
-function script(path: string): string {
+function script(path: string, windows: boolean): string {
   const quoted = shellQuote(path);
-  return `if [ ! -e ${quoted} ]; then
+  const preamble = `if [ ! -e ${quoted} ]; then
   at=${quoted}
-  while [ "$at" != / ]; do
-    at=\${at%/*}
-    at=\${at:-/}
-    [ -e "$at" ] && break
+  while [ ! -e "$at" ]; do
+    next=$(dirname "$at")
+    [ "$next" = "$at" ] && break
+    at=$next
   done
   [ -x "$at" ] || exit ${EXIT_DENIED}
   exit ${EXIT_MISSING}
 fi
 [ -d ${quoted} ] || exit ${EXIT_MISSING}
-cd -- ${quoted} 2>/dev/null && [ -r . ] || exit ${EXIT_DENIED}
+cd -- ${quoted} 2>/dev/null && [ -r . ] || exit ${EXIT_DENIED}`;
+  const hiddenNames = windows
+    ? `hidden_names=$(attrib //d 2>/dev/null | tr -d '\\r' | awk 'substr($0, 1, 21) ~ /[HS]/ { path=substr($0, 22); for (i=length(path); i>0; i--) if (substr(path, i, 1) == "\\\\") { path=substr(path, i+1); break } print path }')`
+    : "";
+  const markHidden = windows
+    ? `  case "
+$hidden_names
+" in *"
+$entry
+"*) hidden=h ;; esac
+  [ -L "$entry" ] && hidden=h`
+    : "";
+  const entries = `${hiddenNames}
 count=0
 for entry in * .[!.]* ..?*; do
   [ -d "$entry" ] || continue
+  case "$entry" in .*) hidden=h ;; *) hidden=v ;; esac
+${markHidden}
   if [ -e "$entry/.git" ]; then mark=g; else mark=-; fi
-  printf '%s%s\\0' "$mark" "$entry"
+  printf '%s%s%s\\0' "$hidden" "$mark" "$entry"
   count=$((count + 1))
   [ "$count" -le ${MAX_ENTRIES} ] || break
 done`;
+  return `${preamble}
+${entries}`;
 }
 
 /**
@@ -85,7 +102,11 @@ function absolutePath(
   path: typeof posix,
 ): string | undefined {
   const expanded =
-    raw === "~" || raw.startsWith("~/") ? `${home}${raw.slice(1)}` : raw;
+    raw === "~" ||
+    raw.startsWith("~/") ||
+    (path === win32 && raw.startsWith("~\\"))
+      ? `${home}${raw.slice(1)}`
+      : raw;
   // `/` is the machine's root on POSIX and the Git Bash root on Windows. Keep it textual so the
   // chooser's cross-machine result shape does not turn the root into the current drive.
   if (expanded === "/") return "/";
@@ -108,20 +129,22 @@ export async function listDirectories(
 ): Promise<ProjectResults["directories"]> {
   const home = transport.home;
   const pathModule = pathsOf(home);
+  const windows = pathModule === win32;
   const path = absolutePath(raw ?? home, home, pathModule);
   if (path === undefined) throw new DirectoryError("not_found");
-  const result = await transport.run(script(path), { timeoutMs: TIMEOUT_MS });
+  const command = script(path, windows);
+  const result = await transport.run(command, { timeoutMs: TIMEOUT_MS });
   if (result.code === EXIT_MISSING) throw new DirectoryError("not_found");
   if (result.code === EXIT_DENIED) throw new DirectoryError("denied");
   // A cut link, a deadline, a machine that would not run it: nobody answered the question.
   if (result.code !== 0) throw new DirectoryError("offline");
-  const names = result.stdout.split("\0").filter((line) => line.length > 1);
+  const names = result.stdout.split("\0").filter((line) => line.length > 2);
   const entries = names.slice(0, MAX_ENTRIES).map((line) => {
-    const name = line.slice(1);
+    const name = line.slice(2);
     return {
       name,
-      hidden: name.startsWith("."),
-      git: line.startsWith("g"),
+      hidden: line.startsWith("h"),
+      git: line[1] === "g",
       projectId: projectAt.get(pathModule.join(path, name)) ?? null,
     };
   });

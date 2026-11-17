@@ -3,9 +3,11 @@
  * else, and why when it cannot say.
  */
 import type { DirectoryEntry, ProjectResults } from "@eta/client-contracts";
+import { execFile } from "node:child_process";
 import { chmod, mkdir, symlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { connect } from "./support/client";
 import { tempDir, testHost } from "./support/host";
@@ -30,6 +32,9 @@ const problem = async (w: Caller, path: string, machineId?: string) =>
   )) as string | undefined;
 
 const names = (entries: DirectoryEntry[]) => entries.map((entry) => entry.name);
+const run = promisify(execFile);
+const linkDirectory = (target: string, path: string) =>
+  symlink(target, path, process.platform === "win32" ? "junction" : "dir");
 
 /** A directory that nobody may read; put back afterwards, or the temp directory cannot go. */
 const locked: string[] = [];
@@ -50,9 +55,11 @@ describe("projects.directories", () => {
     await mkdir(join(dir, "with space"));
     await writeFile(join(dir, "notes.txt"), "secret");
     await writeFile(join(dir, "Beta.md"), "secret");
-    await symlink(join(dir, "zeta"), join(dir, "link-to-dir"));
-    await symlink(join(dir, "notes.txt"), join(dir, "link-to-file"));
-    await symlink(join(dir, "gone"), join(dir, "broken"));
+    await linkDirectory(join(dir, "zeta"), join(dir, "link-to-dir"));
+    if (process.platform !== "win32") {
+      await symlink(join(dir, "notes.txt"), join(dir, "link-to-file"));
+      await symlink(join(dir, "gone"), join(dir, "broken"));
+    }
     const w = await world();
     const listing = await listed(w, dir);
     expect(names(listing.entries)).toEqual([
@@ -61,6 +68,9 @@ describe("projects.directories", () => {
       "with space",
       "zeta",
     ]);
+    expect(
+      listing.entries.find((entry) => entry.name === "link-to-dir"),
+    ).toMatchObject({ hidden: process.platform === "win32" });
     // Nothing about a file crosses the wire, not even that it is there.
     const raw = JSON.stringify(listing);
     expect(raw).not.toContain("notes.txt");
@@ -86,7 +96,7 @@ describe("projects.directories", () => {
   it("normalizes a path by its text, keeping a link's own name", async () => {
     const dir = await tempDir("eta-dirs-");
     await mkdir(join(dir, "real/inner"), { recursive: true });
-    await symlink(join(dir, "real"), join(dir, "alias"));
+    await linkDirectory(join(dir, "real"), join(dir, "alias"));
     const w = await world();
     expect((await listed(w, `${dir}//real/./inner/..//`)).path).toBe(
       join(dir, "real"),
@@ -114,6 +124,22 @@ describe("projects.directories", () => {
       { name: "worktree", hidden: false, git: true, projectId: null },
     ]);
   });
+
+  it.skipIf(process.platform !== "win32")(
+    "marks Windows hidden and system directories as hidden",
+    async () => {
+      const dir = await tempDir("eta-dirs-");
+      await mkdir(join(dir, "MachineHidden"));
+      await run("attrib.exe", ["+H", "+S", join(dir, "MachineHidden")]);
+      await mkdir(join(dir, "Ordinary"));
+      const w = await world();
+      const { entries } = await listed(w, dir);
+      expect(entries).toEqual([
+        { name: "MachineHidden", hidden: true, git: false, projectId: null },
+        { name: "Ordinary", hidden: false, git: false, projectId: null },
+      ]);
+    },
+  );
 
   it("says which directories are already projects", async () => {
     const dir = await tempDir("eta-dirs-");
