@@ -269,10 +269,10 @@ export function ThinkingField({
   const levels = declared ?? FALLBACK_LEVELS;
   // The level a change of model took back, said under the field until the next choice.
   const [reset, setReset] = useState<string>();
-  const shownModel = useRef(chosenModel);
+  const shownModelRef = useRef(chosenModel);
   useEffect(() => {
-    if (shownModel.current === chosenModel) return;
-    shownModel.current = chosenModel;
+    if (shownModelRef.current === chosenModel) return;
+    shownModelRef.current = chosenModel;
     setReset(undefined);
     // Only a model known not to take the level loses it: an unknown one is asked as chosen.
     const current = form.getValues("thinkingLevel");
