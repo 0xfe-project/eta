@@ -1,18 +1,17 @@
-import { beforeEach, describe, expect, it } from "@rstest/core";
+import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
+import { applyCustomFont, watchCustomFont } from "@/lib/custom-font";
 import { storageKey, useWorkspaceStore } from "./workspace-store";
 
 /**
  * `eta.workspace.v1` across the upgrade: what a v0.3.0 build left in a browser, read by this one.
  *
  * The persisted state is the browser's, not the host's, so it only changes when a page starts
- * keeping something new — #607 adds a custom body and mono font. What has to hold then, and holds
- * now, is that a state written before a field existed still loads, keeps every value it had, and
- * comes back the same after the page has written once.
+ * keeping something new. What has to hold then, and holds now, is that a state written before a
+ * field existed still loads, keeps every value it had, and comes back the same after the page has
+ * written once — and that a field this build has no schema for costs only itself.
  *
- * #607 is not in this tree (`git grep customFont -- apps/web/src` finds nothing), so the font
- * fields are covered as an *unknown* field here — the same property, stated from the other side:
- * a field this build does not know must not cost the rest of the state. Their own assertions
- * belong here once the fields exist.
+ * #607's two font fields are known fields in this tree, so they are covered from their own side:
+ * the state a v0.3.0 build wrote, plus the fonts — two fields that build never wrote.
  */
 
 /** Exactly what a v0.3.0 build wrote: every field it kept, and two it has dropped since. */
@@ -47,7 +46,25 @@ const KEPT = {
   stickyTargets: { "grp-eta": ["agent-ada"], "grp-ops": "everyone" as const },
 };
 
+/**
+ * The same save, once #607 was in a build: two names the v0.3.0 one never wrote. They go beside
+ * `WRITTEN_BY_0_3_0` rather than in it — that shape is what 0.3.0 actually left in a browser.
+ */
+const WRITTEN_BY_0_3_0_WITH_FONTS = {
+  ...WRITTEN_BY_0_3_0,
+  customFont: "Inter",
+  customMonoFont: "JetBrains Mono",
+};
+
+const KEPT_WITH_FONTS = {
+  ...KEPT,
+  customFont: "Inter",
+  customMonoFont: "JetBrains Mono",
+};
+
 const written = (): unknown => JSON.parse(localStorage.getItem(storageKey)!);
+
+const root = (): HTMLElement => document.documentElement;
 
 describe("the workspace a v0.3.0 browser saved, read by this one", () => {
   beforeEach(async () => {
@@ -73,14 +90,15 @@ describe("the workspace a v0.3.0 browser saved, read by this one", () => {
   });
 
   it("does not let a field it does not know cost the rest of the state", async () => {
-    // The shape #607 puts in the same key, read by a build that predates it, and the reverse of
-    // it: either way the fields both builds know have to come through.
+    // The state is per browser and outlives any one build, so a newer build — or a hand edit —
+    // may have left a field this one has no schema for. The schema drops what it does not know;
+    // what it drops has to cost only itself. Named as nothing real on purpose: a field this build
+    // *does* know gets kept, which is the fonts' own story below.
     localStorage.setItem(
       storageKey,
       JSON.stringify({
         ...WRITTEN_BY_0_3_0,
-        customFont: "Inter, sans-serif",
-        customMonoFont: "JetBrains Mono, monospace",
+        someFieldOnlyAFutureBuildKeeps: "anything",
       }),
     );
     await useWorkspaceStore.persist.rehydrate();
@@ -96,5 +114,57 @@ describe("the workspace a v0.3.0 browser saved, read by this one", () => {
       await useWorkspaceStore.persist.rehydrate();
       expect(useWorkspaceStore.getState().workspace).toEqual(KEPT);
     }
+  });
+
+  describe("the fonts #607 added, read from a save that predates them", () => {
+    let stop: (() => void) | undefined;
+
+    beforeEach(() => {
+      // A bare document, so "was it applied?" below is about this test's state alone.
+      applyCustomFont({});
+    });
+
+    afterEach(() => {
+      stop?.();
+      stop = undefined;
+    });
+
+    it("loads both fonts and keeps every old value", async () => {
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify(WRITTEN_BY_0_3_0_WITH_FONTS),
+      );
+      await useWorkspaceStore.persist.rehydrate();
+      expect(useWorkspaceStore.getState().workspace).toEqual(KEPT_WITH_FONTS);
+    });
+
+    it("still has both fonts after the page writes once", async () => {
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify(WRITTEN_BY_0_3_0_WITH_FONTS),
+      );
+      await useWorkspaceStore.persist.rehydrate();
+      useWorkspaceStore.getState().setWorkspace((state) => ({
+        ...state,
+        chatWidth: "full",
+      }));
+      expect(written()).toEqual({ ...KEPT_WITH_FONTS, chatWidth: "full" });
+    });
+
+    it("keeps a name it would never apply, and costs no other value", async () => {
+      // A string the schema takes — it is a string, and under 64 — that the font's own allowlist
+      // refuses: nothing here may end up on the document, and the rest of the state is untouched.
+      const impostor = "Inter; background: red";
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({ ...WRITTEN_BY_0_3_0, customFont: impostor }),
+      );
+      await useWorkspaceStore.persist.rehydrate();
+      expect(useWorkspaceStore.getState().workspace).toMatchObject(KEPT);
+
+      stop = watchCustomFont();
+      expect(root().style.getPropertyValue("--font-sans")).toBe("");
+      expect(root().dataset.customFont).toBeUndefined();
+    });
   });
 });
