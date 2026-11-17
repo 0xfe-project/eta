@@ -233,13 +233,15 @@
  * merged from and under which terms is in THIRD_PARTY_NOTICES.md at the root) and uses it for
  * everything it says: interface, message text, everything.
  *
- * One setting can put another face in front of it: Settings → Appearance → Interface font
- * (lib/custom-font.ts). It is a single family installed on this machine, stored in this browser
- * only, and it goes ahead of this stack rather than replacing it, so whatever it lacks still comes
- * from Eta Sans and then the system. An earlier build had a free-form font field and two people
+ * Two settings can put other faces in front of it (Settings → Appearance, lib/custom-font.ts):
+ * the interface font, ahead of this stack in --font-sans and --font-mono, and a monospace font,
+ * ahead of the interface font in --font-mono only. Each is a single family installed on this
+ * machine, stored in this browser only, and goes ahead of the stack rather than replacing it, so
+ * whatever it lacks still comes from Eta Sans and then the system. With neither set, the rule
+ * below holds: one face everywhere. An earlier build had a free-form font field and two people
  * ended up looking at two different products while reporting the same bug; so a custom font is
- * also named on <html data-custom-font>, where devtools or a diagnostic can read which face a
- * window is drawn in.
+ * also named on <html> (data-custom-font, data-custom-mono-font), where devtools or a
+ * diagnostic can read which faces a window is drawn in.
  *
  * Not `inline`: the setting overrides these two on <html>, which only reaches the rules that read
  * them as var(--font-sans) / var(--font-mono). Inside `@theme inline` Tailwind writes the stack
@@ -252,8 +254,8 @@
   /* One face for everything, including the surfaces that are "mono" in the layout sense — times,
      tool-card heads, rail numbers, chips, hints, code. No system mono stack: a typographic grid
      drawn in another typeface is a second typeface in the product, which is what the shipped face
-     exists to avoid. Numbers that must line up say so per element (`tabular-nums`). A custom font
-     replaces both. */
+     exists to avoid. Numbers that must line up say so per element (`tabular-nums`). Only a
+     monospace font chosen in Appearance separates the two. */
   --font-mono: "Eta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
     "Noto Sans SC", "PingFang SC", sans-serif;
 }
