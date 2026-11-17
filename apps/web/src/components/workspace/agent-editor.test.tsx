@@ -270,7 +270,6 @@ describe("an agent's model on eta's own loop", () => {
 describe("an agent's persona and its runtime", () => {
   const persona = () =>
     document.getElementById("agent-persona") as HTMLButtonElement;
-  const hint = () => document.getElementById("agent-persona-hint");
   const choose = async (id: string, text: string) => {
     await click(document.getElementById(id) as HTMLButtonElement);
     const option = [
@@ -311,27 +310,17 @@ describe("an agent's persona and its runtime", () => {
   });
 
   it("is choosable on eta's own runtime", async () => {
-    expect(persona().disabled).toBe(false);
-    expect(hint()).toBeNull();
     expect(persona().textContent).toContain("简短");
     await choose("agent-persona", "温和");
     expect(persona().textContent).toContain("温和");
   });
 
-  it("is set aside on an external runtime, says why, and is still there on the way back", async () => {
+  it("is not offered on an external runtime, and is still there on the way back", async () => {
     await choose("agent-runtime", "Codex");
-    expect(persona().disabled).toBe(true);
-    expect(persona().textContent).toContain("简短");
-    expect(hint()?.textContent).toBe(
-      "人格只对 eta 运行时生效。外部运行时的语气请写在指令里。",
-    );
-    expect(persona().getAttribute("aria-describedby")).toBe(
-      "agent-persona-hint",
-    );
+    expect(persona()).toBeNull();
+    expect(dialogText()).not.toContain("人格");
 
     await choose("agent-runtime", "eta 内置");
-    expect(persona().disabled).toBe(false);
-    expect(hint()).toBeNull();
     expect(persona().textContent).toContain("简短");
     await choose("agent-persona", "温和");
     expect(persona().textContent).toContain("温和");

@@ -264,7 +264,9 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
               </p>
             ) : null}
             <InstructionsField form={form} autoFocus />
-            <PersonaField form={form} external={external} />
+            {/* A persona card only reaches eta's own runtime: an external one keeps its own identity, so
+                the row is left out there. The value stays in the form for the way back. */}
+            {!external ? <PersonaField form={form} /> : null}
           </>
         )}
       </div>
