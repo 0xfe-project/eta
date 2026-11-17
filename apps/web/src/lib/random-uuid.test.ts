@@ -35,7 +35,7 @@ describe("randomUUID", () => {
     Object.defineProperty(globalThis, "crypto", {
       configurable: true,
       value: {
-        getRandomValues: (arr: Uint8Array) =>
+        getRandomValues: <T extends ArrayBufferView<ArrayBuffer>>(arr: T): T =>
           originalCrypto.getRandomValues(arr),
       },
     });
