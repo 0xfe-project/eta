@@ -140,6 +140,37 @@ function StepRow(props: {
   );
 }
 
+/**
+ * What the agent said on its way, as a step: a thought's head, 「说明」, over its words in a
+ * thought's small type. Open until the reader folds it; a thought starts folded.
+ */
+function NoteRow(props: { text: string; open: boolean; onToggle: () => void }) {
+  return (
+    <View class="border-t border-border">
+      <View
+        role="button"
+        accessibilityLabel={t("chat.process.note")}
+        onPress={props.onToggle}
+        class="h-11 shrink-0 flex-row items-center gap-3 bg-surface px-4 active:bg-muted"
+      >
+        <Text class="grow basis-0 text-md leading-4 text-muted-foreground">
+          {t("chat.process.note")}
+        </Text>
+        <Icon
+          name={props.open ? "caretDown" : "caretRight"}
+          size={14}
+          color="faint"
+        />
+      </View>
+      <If when={props.open}>
+        <View class="border-t border-border px-4 py-[10px]">
+          <Markdown text={props.text} small />
+        </View>
+      </If>
+    </View>
+  );
+}
+
 /** The steps as 04 draws them. Newest at the bottom, opening there. */
 function ProcessList(props: {
   rows: readonly Row[];
@@ -243,18 +274,27 @@ function ProcessList(props: {
             </If>
             <If when={of("words")}>
               {(item) => (
-                <View class="border-t border-border px-4 py-[10px]">
-                  <If
-                    when={item().who === "agent"}
-                    else={
+                <If
+                  when={item().who === "agent"}
+                  else={
+                    <View class="border-t border-border px-4 py-[10px]">
                       <Text class="text-base leading-[23px] text-muted-foreground">
                         {item().text}
                       </Text>
+                    </View>
+                  }
+                >
+                  <NoteRow
+                    text={item().text}
+                    open={props.folds.get(item().key) !== false}
+                    onToggle={() =>
+                      props.folds.set(
+                        item().key,
+                        props.folds.get(item().key) === false,
+                      )
                     }
-                  >
-                    <Markdown text={item().text} />
-                  </If>
-                </View>
+                  />
+                </If>
               )}
             </If>
             <If when={of("note")}>

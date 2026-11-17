@@ -40,7 +40,8 @@
     "viewAll": "View more",
     "fold": "Thinking process",
     "steps": "{{count}} steps",
-    "title": "Process"
+    "title": "Process",
+    "note": "Note"
   },
   "tools": {
     "arguments": "arguments",

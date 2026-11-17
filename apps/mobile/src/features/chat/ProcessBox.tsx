@@ -1,6 +1,7 @@
 import type { RunBlock } from "@eta/client-contracts";
-import { computed, Text, View } from "nsh";
+import { computed, signal, Text, View } from "nsh";
 import { t } from "../../i18n";
+import { Icon } from "../../ui/Icon";
 import { Markdown } from "../../ui/Markdown";
 import { sentence, stepOf } from "./steps";
 
@@ -30,6 +31,10 @@ export function ProcessBox(props: {
   onViewAll: () => void;
 }) {
   const shown = computed(() => props.blocks.slice(-SHOWN));
+  // What it said is open from the start, as a step a reader folds by its head; a thought is a line.
+  const closed = signal<Record<string, boolean>>({});
+  const toggle = (id: string) =>
+    closed.update((all) => ({ ...all, [id]: all[id] !== true }));
   const steps = computed(
     () => props.blocks.filter((block) => block.type !== "text").length,
   );
@@ -80,11 +85,32 @@ export function ProcessBox(props: {
                 }
               >
                 <View class="shrink-0">
-                  <Markdown
-                    text={(block() as { text?: string }).text ?? ""}
-                    class="text-sm leading-[18px] text-foreground"
-                    streaming
-                  />
+                  <View
+                    role="button"
+                    accessibilityLabel={t("chat.process.note")}
+                    onPress={() => toggle(block().id)}
+                    class="h-[18px] flex-row items-center gap-1 active:opacity-60"
+                  >
+                    <Icon
+                      name={
+                        closed()[block().id] === true
+                          ? "caretRight"
+                          : "caretDown"
+                      }
+                      size={10}
+                      color="faint"
+                    />
+                    <Text class="text-sm leading-[18px] text-faint">
+                      {t("chat.process.note")}
+                    </Text>
+                  </View>
+                  <If when={closed()[block().id] !== true}>
+                    <Markdown
+                      text={(block() as { text?: string }).text ?? ""}
+                      small
+                      streaming
+                    />
+                  </If>
                 </View>
               </If>
             )}

@@ -63,6 +63,8 @@ test("03: a reply at work writes everything in its box, and its answer comes und
   // Its words are in the box, in order, with its calls: nothing is drawn outside it yet.
   expect(app.shows("id:process-frame")).toBe(true);
   expect(app.texts()).toContain("Now the replay path.");
+  // What it says is a step headed 说明, open as it streams.
+  expect(app.shows("role:button[说明]")).toBe(true);
   // The answer is written in the box too, as it streams, and the box stays open after it.
   await app.waitFor("text:The host replays from the last seq the client saw.", {
     timeout: 10_000,
@@ -89,6 +91,23 @@ test("04: what a reply said on its way is among its steps", async () => {
   );
   expect(app.texts()).toContain("Now the replay path.");
   expect(app.texts()).toContain("src/server/replay.ts");
+});
+
+test("04: what a reply said is a 说明 step, open until its head folds it", async () => {
+  const app = await chat("wire", "chat-said");
+  await app.waitFor("text:3 步");
+  await app.press("role:button[查看全部] >> nth=1");
+  await app.waitFor("text:Ache 的过程");
+  const said = [
+    "I'll read wire.ts first, then the replay path on the host.",
+    "Now the replay path.",
+  ];
+  await app.waitFor(`text:${said[0]}`);
+  expect(said.every((line) => app.texts().includes(line))).toBe(true);
+  await app.press("role:button[说明] >> nth=0");
+  await app.waitUntil(
+    () => said.filter((line) => app.texts().includes(line)).length === 1,
+  );
 });
 
 test("03: stop goes to the running reply", async () => {

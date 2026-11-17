@@ -714,17 +714,58 @@ describe("a reply before its first token", () => {
 
 /** The process's steps as one line each: a thought, a call, or words, in the order drawn. */
 const order = (root: ParentNode | null | undefined) =>
-  [
-    ...(root?.querySelectorAll(
-      ".thinking-block, .tool-card-label, .process-note",
-    ) ?? []),
-  ].map((step) =>
-    step.classList.contains("thinking-block")
-      ? "thinking"
-      : step.classList.contains("process-note")
-        ? `text:${step.textContent}`
-        : `tool:${step.textContent}`,
+  [...(root?.querySelectorAll(".thinking-block, .tool-card-label") ?? [])].map(
+    (step) =>
+      step.classList.contains("note-step")
+        ? `text:${step.querySelector(".note-step-content")?.textContent}`
+        : step.classList.contains("thinking-block")
+          ? "thinking"
+          : `tool:${step.textContent}`,
   );
+/** What the agent said, as steps: folds headed "说明". */
+const notes = (root: ParentNode | null | undefined) =>
+  folds(root).filter(({ head }) => head === "▶说明");
+
+describe.each(["group", "direct"] as const)(
+  "what an agent says in its process, in a %s",
+  (kind) => {
+    it("is a step headed 说明, open from the start and folded by its head, while a thought stays folded", async () => {
+      const { container, say } = await live(kind);
+      await say(thought, words("先说一句"), call("a"), words("再说一句"));
+      const box = processBox(container);
+      const [first, second] = notes(box);
+      expect(notes(box)).toHaveLength(2);
+      expect(first?.details.open).toBe(true);
+      expect(second?.details.open).toBe(true);
+      expect(drawn(first!.details, "先说一句")).toBe(1);
+      expect(thoughts(box)[0]?.details.open).toBe(false);
+      // Still open once more words stream in: a new token does not fold it back or open it twice.
+      await say(thought, words("先说一句"), call("a"), words("再说一句，接着"));
+      expect(notes(box)[1]?.details.open).toBe(true);
+      await click(first!.details.querySelector("summary"));
+      expect(first!.details.open).toBe(false);
+      expect(notes(box)[1]?.details.open).toBe(true);
+    });
+
+    it("keeps that step in the finished process, and leaves the answer under it as it was", async () => {
+      const { container, say, finish } = await live(kind);
+      const content = [thought, words("先列目录"), call("a"), words("答案")];
+      await say(...content);
+      await finish(...content);
+      const fold = processFold(container)!;
+      await click(fold.querySelector("summary"));
+      expect(notes(fold)).toHaveLength(1);
+      expect(notes(fold)[0]?.details.open).toBe(true);
+      expect(thoughts(fold)[0]?.details.open).toBe(false);
+      // The answer is not a step: no 说明 over it, drawn in the reply's own text.
+      const answer = [...container.querySelectorAll("p")].find(
+        (p) => p.textContent === "答案",
+      );
+      expect(answer?.closest(".note-step")).toBeNull();
+      expect(answer?.closest(".message-content")).not.toBeNull();
+    });
+  },
+);
 
 describe.each(["group", "direct"] as const)(
   "the words between a reply's calls, in a %s",
@@ -879,6 +920,45 @@ describe("a reply at work, as a browser draws it", () => {
     for (const markup of moments) heights.push(await height(markup));
     expect(heights[0]).toBeGreaterThan(150);
     expect(new Set(heights).size).toBe(1);
+  });
+
+  it("draws what it says in a thought's small type, headings too, and the answer at the reader's size", async ({
+    skip,
+  }) => {
+    if (!(await hasBrowser())) return skip();
+    const { container, say, finish } = await live("group");
+    const said = "# 发现\n\n- `baseUrl` 少了 /v1\n\n还要看日志";
+    const content = [thought, words(said), call("a"), words("答案")];
+    await say(...content);
+    /** Font size and colour of the note's heading, item and line, and of the answer, as drawn. */
+    const sizes = (markup: string) =>
+      onPage(`<div style="width: 640px">${markup}</div>`, async (page) =>
+        page.evaluate(() => {
+          const style = (el: Element | null | undefined) =>
+            el ? getComputedStyle(el).fontSize : null;
+          const note = document.querySelector(".note-step-content");
+          const answer = [
+            ...document.querySelectorAll(".message-content p"),
+          ].find((p) => p.textContent === "答案");
+          return {
+            heading: style(note?.querySelector("h1")),
+            item: style(note?.querySelector("li")),
+            line: style(note?.querySelector("p")),
+            answer: style(answer),
+          };
+        }),
+      );
+    const working = await sizes(reply(container));
+    expect(working).toEqual({
+      heading: "12px",
+      item: "12px",
+      line: "12px",
+      answer: null,
+    });
+    await finish(...content);
+    await click(processFold(container)?.querySelector("summary"));
+    const done = await sizes(reply(container));
+    expect(done).toEqual({ ...working, answer: "14px" });
   });
 
   it("does not move a reply under it while both work", async ({ skip }) => {

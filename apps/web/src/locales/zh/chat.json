@@ -40,7 +40,8 @@
     "viewAll": "查看全部",
     "fold": "思考过程",
     "steps": "{{count}} 步",
-    "title": "过程"
+    "title": "过程",
+    "note": "说明"
   },
   "tools": {
     "arguments": "参数",
