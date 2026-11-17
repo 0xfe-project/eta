@@ -91,6 +91,8 @@
     "phase": {
       "starting": "Getting ready",
       "downloading": "Downloading",
+      "downloadingPercent": "Downloading ({{percent}}%, {{received}} / {{total}})",
+      "downloadingBytes": "Downloading ({{received}})",
       "waiting": "Waiting for agents to finish",
       "stopping": "Stopping the service",
       "backingUp": "Backing up the database",

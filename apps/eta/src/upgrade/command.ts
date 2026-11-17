@@ -84,6 +84,45 @@ A service may not reach the keychain gh keeps its login in: then save a token un
 const errorText = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDownloadProgress(
+  received: number,
+  total: number | undefined,
+): string {
+  if (total !== undefined && total > 0) {
+    const percent = Math.min(100, Math.round((received / total) * 100));
+    return `${percent}% (${formatBytes(received)} / ${formatBytes(total)})`;
+  }
+  return formatBytes(received);
+}
+
+/** Inline TTY progress line that clears cleanly before any subsequent log line. */
+function createTerminalProgress(): {
+  update: (received: number, total: number | undefined) => void;
+  clear: () => void;
+} {
+  let shownWidth = 0;
+  const clear = () => {
+    if (shownWidth === 0 || !process.stdout.isTTY) return;
+    process.stdout.write(`\r${" ".repeat(shownWidth)}\r`);
+    shownWidth = 0;
+  };
+  const update = (received: number, total: number | undefined) => {
+    if (!process.stdout.isTTY) return;
+    const text = `Downloading: ${formatDownloadProgress(received, total)}`;
+    const pad =
+      shownWidth > text.length ? " ".repeat(shownWidth - text.length) : "";
+    process.stdout.write(`\r${text}${pad}`);
+    shownWidth = text.length;
+  };
+  return { update, clear };
+}
+
 function fail(what: string): number {
   console.error(`eta-host upgrade: ${what}\n\n${USAGE}`);
   return 2;
@@ -107,14 +146,30 @@ async function handOver(
     force,
     waitMinutes,
   });
+  const progress = createTerminalProgress();
   process.on("SIGINT", () => {
+    progress.clear();
     console.log(
       "\nThe upgrade goes on without this. `eta-host upgrade --status` shows it, `--cancel` stops it if it has not stopped the service yet.",
     );
     process.exit(0);
   });
-  return await followWorker(dataDir, id, options.log, (line) =>
-    console.error(`eta-host upgrade: ${line}`),
+  return await followWorker(
+    dataDir,
+    id,
+    (line) => {
+      progress.clear();
+      options.log(line);
+    },
+    (line) => {
+      progress.clear();
+      console.error(`eta-host upgrade: ${line}`);
+    },
+    undefined,
+    (download) => {
+      if (download === undefined) progress.clear();
+      else progress.update(download.received, download.total);
+    },
   );
 }
 
@@ -132,6 +187,7 @@ async function work(options: UpgradeOptions, id: string): Promise<number> {
       report: {
         target: (version) => writer.target(version),
         phase: (phase, busy) => writer.phase(phase, busy),
+        progress: (received, total) => writer.progress(received, total),
         cancelled: () => writer.finish("cancelled"),
       },
     });
@@ -151,9 +207,15 @@ function showStatus(dataDir: string): number {
     return 0;
   }
   const to = status.to === undefined ? "" : ` to ${status.to}`;
+  const detail =
+    status.state === "running" &&
+    status.phase === "downloading" &&
+    status.download !== undefined
+      ? ` (${formatDownloadProgress(status.download.received, status.download.total)})`
+      : "";
   console.log(
     status.state === "running"
-      ? `Upgrading from ${status.from}${to}: ${status.phase}.`
+      ? `Upgrading from ${status.from}${to}: ${status.phase}${detail}.`
       : `The upgrade from ${status.from}${to} ended: ${status.state}.`,
   );
   if (status.error !== undefined) console.log(status.error);
@@ -282,7 +344,26 @@ export async function upgradeCommand(args: string[]): Promise<number> {
         );
       }
     }
-    await upgradeHost(options);
+    const progress = createTerminalProgress();
+    try {
+      await upgradeHost({
+        ...options,
+        log: (line) => {
+          progress.clear();
+          options.log(line);
+        },
+        report: {
+          target: () => undefined,
+          phase: (phase) => {
+            if (phase !== "downloading") progress.clear();
+          },
+          progress: (received, total) => progress.update(received, total),
+          cancelled: () => progress.clear(),
+        },
+      });
+    } finally {
+      progress.clear();
+    }
     return 0;
   } catch (error) {
     console.error(`eta-host upgrade: ${errorText(error)}`);

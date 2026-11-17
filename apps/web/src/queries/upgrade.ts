@@ -43,6 +43,7 @@ export function busyLabels(busy: readonly UpgradeBusy[]): string[] {
 }
 
 const POLL_MS = 1500;
+const DOWNLOAD_POLL_MS = 500;
 const STATUS_KEY = ["upgrade", "status"];
 const CHECK_KEY = ["wire", "upgrade", "check"];
 
@@ -87,10 +88,12 @@ export function useUpgradeWatch(): UpgradeWatch | undefined {
     retry: false,
     refetchInterval: (query) => {
       const watch = query.state.data;
-      return watch !== undefined &&
-        (!watch.reachable || watch.status?.state === "running")
-        ? POLL_MS
-        : false;
+      if (
+        watch === undefined ||
+        (watch.reachable && watch.status?.state !== "running")
+      )
+        return false;
+      return watch.status?.phase === "downloading" ? DOWNLOAD_POLL_MS : POLL_MS;
     },
   });
   return data;

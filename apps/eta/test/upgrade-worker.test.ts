@@ -68,7 +68,14 @@ describe("the status on disk", () => {
     const dir = await tempDir();
     const writer = new StatusWriter(dir, "u1", "1.0.0");
     writer.target("1.1.0");
+    writer.phase("downloading");
+    writer.progress(512, 1024);
+    expect(readStatus(dir)).toMatchObject({
+      phase: "downloading",
+      download: { received: 512, total: 1024 },
+    });
     writer.phase("waiting", [busy]);
+    expect(readStatus(dir)?.download).toBeUndefined();
     expect(readStatus(dir)).toMatchObject({
       state: "running",
       phase: "waiting",

@@ -228,6 +228,34 @@ describe("Settings → 更新", () => {
     expect(button("更新到 1.1.0")?.disabled).toBe(true);
   });
 
+  it("shows download progress percentage and bar while downloading", async () => {
+    await open(
+      {},
+      {
+        ...running("downloading"),
+        download: { received: 5 * 1024 * 1024, total: 10 * 1024 * 1024 },
+      },
+    );
+    expect(hostState().words).toBe(
+      "正在更新 · 下载中（50%，5.0 MB / 10.0 MB）",
+    );
+    const bar = document.querySelector('[role="progressbar"]');
+    expect(bar?.getAttribute("aria-valuenow")).toBe("50");
+  });
+
+  it("shows received bytes while downloading without content-length", async () => {
+    await open(
+      {},
+      {
+        ...running("downloading"),
+        download: { received: 2 * 1024 * 1024 },
+      },
+    );
+    expect(hostState().words).toBe("正在更新 · 下载中（2.0 MB）");
+    const bar = document.querySelector('[role="progressbar"]');
+    expect(bar?.getAttribute("aria-valuenow")).toBeNull();
+  });
+
   it("says when the release could not be found", async () => {
     await open({ latest: null, available: false, error: "no network" });
     expect(text()).toContain("no network");

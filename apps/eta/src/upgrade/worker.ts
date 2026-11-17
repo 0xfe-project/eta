@@ -10,6 +10,7 @@
  * from the file about to be replaced, which is fine: the process keeps the file it started from.
  * On Windows it is a copy of the file: `--target` is always what is replaced.
  */
+import type { UpgradeDownloadProgress } from "@eta/client-contracts";
 import type { DetachedRunner } from "@eta/daemon";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -121,14 +122,18 @@ export async function followWorker(
   log: (line: string) => void,
   fail: (line: string) => void,
   pollMs: number = FOLLOW_MS,
+  onProgress?: (download: UpgradeDownloadProgress | undefined) => void,
 ): Promise<number> {
   let shown = 0;
   for (;;) {
     const status = readStatus(dataDir);
     if (status?.id !== id) {
+      onProgress?.(undefined);
       fail("the upgrade's status is gone");
       return 1;
     }
+    if (status.log.length > shown || status.state !== "running")
+      onProgress?.(undefined);
     for (const line of status.log.slice(shown)) log(line);
     shown = status.log.length;
     if (status.state === "done") return 0;
@@ -136,6 +141,8 @@ export async function followWorker(
       fail(status.error ?? `the upgrade ended: ${status.state}`);
       return 1;
     }
+    if (status.phase === "downloading" && status.download !== undefined)
+      onProgress?.(status.download);
     await sleep(pollMs);
   }
 }

@@ -120,6 +120,39 @@ export function UpdateNotice({
   );
 }
 
+/** Thin progress bar for desktop and host downloads; pulses when total size is unknown. */
+export function UpdateProgressBar({
+  value,
+  label,
+  className,
+}: {
+  value?: number | undefined;
+  label?: string | undefined;
+  className?: string;
+}) {
+  const percent =
+    value === undefined ? undefined : Math.max(0, Math.min(100, value));
+  return (
+    <div
+      role="progressbar"
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={percent === undefined ? undefined : Math.round(percent)}
+      className={cn("mt-1.5 h-1 w-full overflow-hidden bg-border", className)}
+    >
+      {percent === undefined ? (
+        <div className="h-full w-1/3 animate-pulse bg-state-info" />
+      ) : (
+        <div
+          className="h-full bg-state-info transition-[width] duration-200"
+          style={{ width: `${percent}%` }}
+        />
+      )}
+    </div>
+  );
+}
+
 /** A step of a running update: done, the one under way, or still to come. */
 export interface UpdateStep {
   key: string;

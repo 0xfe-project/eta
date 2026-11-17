@@ -91,6 +91,8 @@
     "phase": {
       "starting": "准备中",
       "downloading": "下载中",
+      "downloadingPercent": "下载中（{{percent}}%，{{received}} / {{total}}）",
+      "downloadingBytes": "下载中（{{received}}）",
       "waiting": "等智能体结束",
       "stopping": "正在停止服务",
       "backingUp": "正在备份数据库",

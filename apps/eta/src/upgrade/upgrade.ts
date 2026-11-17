@@ -73,6 +73,8 @@ interface UpgradeTiming {
 }
 
 const TIMING: UpgradeTiming = { pollMs: 1000, upMs: 120_000, holdMs: 5000 };
+/** How often download progress is reported to disk / terminal. */
+const PROGRESS_MS = 250;
 
 /** 1 when `version` is newer than `than`; undefined for a build outside the releases, which has no order. */
 export const versionOrder = (
@@ -101,6 +103,8 @@ interface UpgradeReport {
   /** The release is found. */
   target: (version: string) => void;
   phase: (phase: UpgradePhase, busy?: UpgradeBusy[]) => void;
+  /** Bytes downloaded so far, and expected total when known. */
+  progress?: (received: number, total: number | undefined) => void;
   /** A signal ended it before the service was touched. */
   cancelled: () => void;
 }
@@ -333,7 +337,13 @@ async function stage(
   const staged = stagedPath(execPath);
   log(`Downloading ${file.name} ${release.version}.`);
   report?.phase("downloading");
-  await downloadChecked(releases, file, staged);
+  let lastProgressAt = 0;
+  await downloadChecked(releases, file, staged, (received, total) => {
+    const now = Date.now();
+    if (now - lastProgressAt < PROGRESS_MS && received !== total) return;
+    lastProgressAt = now;
+    report?.progress?.(received, total);
+  });
 
   let says: string;
   try {

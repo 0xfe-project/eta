@@ -158,7 +158,7 @@ export class StatusWriter {
   }
 
   phase(phase: UpgradePhase, busy?: UpgradeBusy[]): void {
-    const { busy: _, ...status } = this.#status;
+    const { busy: _, download: __, ...status } = this.#status;
     this.#status = {
       ...status,
       phase,
@@ -167,9 +167,18 @@ export class StatusWriter {
     this.#save();
   }
 
-  finish(state: Exclude<UpgradeState, "running">, error?: string): void {
+  progress(received: number, total: number | undefined): void {
     this.#status = {
       ...this.#status,
+      download: total === undefined ? { received } : { received, total },
+    };
+    this.#save();
+  }
+
+  finish(state: Exclude<UpgradeState, "running">, error?: string): void {
+    const { download: _, ...status } = this.#status;
+    this.#status = {
+      ...status,
       state,
       finishedAt: Date.now(),
       ...(error === undefined ? {} : { error }),

@@ -574,6 +574,12 @@ export interface UpgradeBusy {
   number?: number;
 }
 
+/** Bytes received and expected while downloading the release. */
+export interface UpgradeDownloadProgress {
+  received: number;
+  total?: number;
+}
+
 /** An upgrade, as the process doing it reports it: on disk, so it outlasts the host. */
 export interface UpgradeStatusView {
   id: string;
@@ -584,6 +590,8 @@ export interface UpgradeStatusView {
   to?: string;
   startedAt: number;
   finishedAt?: number;
+  /** How far the download has got, in the `downloading` phase. */
+  download?: UpgradeDownloadProgress;
   /** What it is waiting for, in the `waiting` phase. */
   busy?: UpgradeBusy[];
   error?: string;
