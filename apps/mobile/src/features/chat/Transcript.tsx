@@ -7,8 +7,22 @@ import type {
 import type { ListRef } from "nsh";
 import type { Chat } from "./conversation";
 import type { Outgoing } from "./outbox";
-import { publishedRefs, withRealmCalls } from "@eta/client-contracts";
-import { computed, effect, List, signal, Text, untracked, View } from "nsh";
+import {
+  lastSaid,
+  publishedRefs,
+  splitReply,
+  withRealmCalls,
+} from "@eta/client-contracts";
+import {
+  cleanup,
+  computed,
+  effect,
+  List,
+  signal,
+  Text,
+  untracked,
+  View,
+} from "nsh";
 import { t } from "../../i18n";
 import { open } from "../../nav/stack";
 import { AgentAvatar } from "../../ui/AgentAvatar";
@@ -26,6 +40,13 @@ type Item =
   | { key: string; type: "outgoing"; outgoing: Outgoing };
 
 type StepBlock = Exclude<RunBlock, { type: "text" }>;
+
+/**
+ * How long text written after a step goes on with no step after it before it is taken for the
+ * answer (the web's `ANSWER_SETTLE_MS`). A model says a sentence before a call; the call follows
+ * within a second, and folding the box under that sentence would open it again a moment later.
+ */
+const ANSWER_SETTLE_MS = 1500;
 
 // Failures of the host or the agent's environment, which fail everything waiting at once.
 const ENVIRONMENT_FAILURES = new Set(["restart", "unavailable"]);
@@ -282,11 +303,53 @@ function Reply(props: {
   /** Nothing from the run yet: the frame holds the place. */
   const pending = () =>
     reply().live && reply().blocks.length === 0 && !waiting();
+  // A group's reply at work, as the web draws it: text after its last step is its answer only once
+  // no step has followed it for `ANSWER_SETTLE_MS`; until then it is what it just said.
+  const split = computed(() => splitReply(reply().blocks));
+  const settling = computed(() =>
+    reply().live && split().steps.length > 0
+      ? split().answer[0]?.id
+      : undefined,
+  );
+  const settled = signal<string | undefined>(undefined);
+  let settle: ReturnType<typeof setTimeout> | undefined;
+  effect(() => {
+    const key = settling();
+    clearTimeout(settle);
+    if (key !== undefined)
+      settle = setTimeout(() => settled.set(key), ANSWER_SETTLE_MS);
+  });
+  cleanup(() => clearTimeout(settle));
+  const answered = () =>
+    !reply().live ||
+    split().steps.length === 0 ||
+    (settling() !== undefined && settled() === settling());
+  const folded = () =>
+    !reply().live || (!waiting() && answered() && split().answer.length > 0);
+  /** The last thing it said on the way: one line over the box, or the end of its folded row. */
+  const said = computed(() =>
+    lastSaid(answered() ? split().steps : reply().blocks),
+  );
+  /**
+   * Its words, live, once they are its answer: under the folded box, or under the open one while it
+   * waits on the reader (it is not working then, and what it asks is read whole).
+   */
+  const liveAnswer = () =>
+    reply().live && answered() && (folded() || waiting())
+      ? split().answer.filter(isText)
+      : [];
   const answer = () =>
     !reply().live && m().text !== "" && m().status !== "failed"
       ? m().text
       : undefined;
   const boxed = () => chat.kind() === "group";
+  /**
+   * A group draws a reply that called something as its box: one line of what it said last over a
+   * frame of a fixed height, so the reply keeps one height while it works and replies written at
+   * once do not push each other. Its words are not drawn whole around the box: what it said on the
+   * way is that line (and a step on 04), and its answer goes under the box once it folds.
+   */
+  const inBox = () => boxed() && (steps().length > 0 || pending());
   const author = () =>
     chat.kind() === "group" ||
     chat.members().length > 1 ||
@@ -327,17 +390,17 @@ function Reply(props: {
           <Text class="text-sm leading-[18px] text-foreground">{author()}</Text>
         </View>
       </If>
-      <Each of={wordsBefore()} key={(block) => block.id}>
-        {(block) => <Markdown text={block().text} streaming={reply().live} />}
-      </Each>
-      <If when={boxed() && (steps().length > 0 || pending())}>
+      <If when={!inBox()}>
+        <Each of={wordsBefore()} key={(block) => block.id}>
+          {(block) => <Markdown text={block().text} streaming={reply().live} />}
+        </Each>
+      </If>
+      <If when={inBox()}>
         <ProcessBox
           steps={steps()}
           waiting={pending()}
-          folded={
-            !reply().live ||
-            (!waiting() && reply().blocks.at(-1)?.type === "text")
-          }
+          folded={folded()}
+          said={said()}
           onViewAll={viewAll}
         />
       </If>
@@ -372,9 +435,18 @@ function Reply(props: {
           )}
         </Each>
       </If>
-      <Each of={wordsAfter()} key={(block) => block.id}>
-        {(block) => <Markdown text={block().text} streaming={reply().live} />}
-      </Each>
+      <If
+        when={!inBox()}
+        else={
+          <Each of={liveAnswer()} key={(block) => block.id}>
+            {(block) => <Markdown text={block().text} streaming />}
+          </Each>
+        }
+      >
+        <Each of={wordsAfter()} key={(block) => block.id}>
+          {(block) => <Markdown text={block().text} streaming={reply().live} />}
+        </Each>
+      </If>
       <If when={answer() !== undefined}>
         <Answer id={`answer:${m().id}`} text={answer() ?? ""} chat={chat} />
       </If>
