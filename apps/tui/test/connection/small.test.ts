@@ -1,7 +1,7 @@
+import { nextRetryMs } from "@eta/client-contracts/wire";
 /** The small pure pieces of the connection layer. */
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TIMING, resolveTiming } from "../../src/connection/controller";
-import { nextRetryMs } from "../../src/connection/wire";
 import { TUI_VERSION } from "../../src/version";
 
 describe("the default timing", () => {

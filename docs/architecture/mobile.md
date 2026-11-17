@@ -4,7 +4,7 @@
 
 ## Connection
 
-The phone is just a screen: connect once to a host machine, and you can use all the machines behind it. Like the Web, it uses only a single `/ws` connection; for the rules on frames, subscriptions, and reconnection, see [wire protocol](wire-protocol.md). `src/wire/wire.ts` is the version of the Web file with the same name switched to signals.
+The phone is just a screen: connect once to a host machine, and you can use all the machines behind it. Like the Web, it uses only a single `/ws` connection; for the rules on frames, subscriptions, and reconnection, see [wire protocol](wire-protocol.md). `src/wire/wire.ts` is the shared client (`@eta/client-contracts/wire`) with its state mirrored into signals, one per target.
 
 - The token goes in the `X-Eta-Token` handshake header ([access control](access.md)): nsh's WebSocket does not allow the handshake to carry `Authorization`. When `--host` is not loopback, the token gate opens automatically.
 - Scan code: in Web, Settings → Machines → Connect phone uses `machines.phoneLink` to generate `eta://connect?address=…&token=…`; the phone connects directly after scanning it. Pasting this link into the address bar also works.
