@@ -1,11 +1,18 @@
 {
   "title": "外部 Agent",
-  "description": "智能体可以运行在其上的 ACP agent。每台机器在自己的 ~/.eta/acp.json 里各管一份；其中每一个都会作为运行方式 acp.<id>，提供给在这台机器上运行的智能体。",
+  "description": "智能体在哪台机器上运行，就能选那台机器上的外部 Agent（ACP agent）。每一个都作为运行方式 acp.<id> 提供，记在那台机器的 ~/.eta/acp.json 里。",
   "machine": {
     "label": "机器",
     "primarySuffix": "（主机器）",
-    "offline": "{{name}} 目前{{status}}。它重新上线之前，无法列出或修改它的外部 Agent。",
-    "gone": "这台机器已经不在了，请换一台。"
+    "primaryCount": "主机器 · {{count}} 个",
+    "primaryCount_one": "主机器 · {{count}} 个",
+    "primaryCount_other": "主机器 · {{count}} 个",
+    "count": "{{count}} 个",
+    "count_one": "{{count}} 个",
+    "count_other": "{{count}} 个",
+    "offline": "{{name}} 重新上线后，这里会列出它上面的外部 Agent。",
+    "addHint": "eta 会在这台机器上、用会话的工作目录启动下面的命令，经 stdio 用 ACP 和它对话。",
+    "editHint": "编辑时不能换机器。要放到别的机器上，在那台机器上新添加一个。"
   },
   "empty": {
     "title": "还没有外部 Agent",
@@ -23,12 +30,13 @@
   "actions": {
     "add": "添加 Agent",
     "test": "测试",
-    "testing": "测试中…"
+    "testing": "测试中…",
+    "copyCommand": "复制命令",
+    "more": "{{label}} 的操作"
   },
   "form": {
     "addTitle": "添加外部 Agent",
     "editTitle": "编辑 {{label}}",
-    "description": "在 {{machine}} 上：eta 在那台机器上、以会话的工作目录启动这条命令，经 stdio 用 ACP 和它对话。",
     "label": "名称",
     "labelPlaceholder": "我的 Agent",
     "id": "ID",
@@ -37,7 +45,8 @@
     "args": "参数",
     "argsHint": "一行一个。",
     "env": "环境变量",
-    "envHint": "一行一个 KEY=VALUE。"
+    "envHint": "一行一个 KEY=VALUE。",
+    "add": "添加"
   },
   "errors": {
     "labelRequired": "请填写名称。",
@@ -63,5 +72,10 @@
     "saved": "已保存 {{label}}",
     "saveFailed": "没有保存：{{message}}",
     "deleted": "已删除 {{label}}"
+  },
+  "reason": {
+    "unauthenticated": "在 {{machine}} 上登录 {{label}} 后点「测试」。",
+    "missing": "{{machine}} 上找不到 {{command}}。装好后点「测试」。",
+    "error": "修好后点「测试」。"
   }
 }

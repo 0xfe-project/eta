@@ -28,34 +28,33 @@ export interface AcpResults {
 }
 
 const TARGET = "acp";
-const NONE: AcpAgentView[] = [];
-
+const NO_LISTS: Record<string, AcpMachineList> = {};
 /**
- * One machine's ACP agents, kept live: the host pushes the list again after each change, and
- * again when the agents it started looking at have answered. A daemon's list is asked for when
- * the page comes to it (`enabled`: only while it is online). When the machine cannot read its
- * acp.json whole, `error` says so (its message names the file): that is the page's error, never
- * an empty list.
+ * Every listed machine's ACP agents, kept live: the host pushes a machine's list again after each
+ * change, and again when the agents it started looking at have answered. Each machine in
+ * `machineIds` (only the reachable ones: an offline daemon cannot be asked) is asked for its list
+ * once it is named. `lists` holds what came, by machine id; a machine missing there has not
+ * answered yet, and one whose acp.json cannot be read whole has its `error` (the message names the
+ * file), never an empty list. `error` is the target's own: the host does not have it.
  */
-export function useAcpAgents(machineId: string | undefined, enabled = true) {
+export function useAcpLists(machineIds: readonly string[]) {
   const machines = useTarget(TARGET)?.sections.machines as
     | Record<string, AcpMachineList>
     | undefined;
   const failure = usePluginError(TARGET);
+  const key = machineIds.join("\n");
   useEffect(() => {
-    if (machineId === undefined || !enabled) return;
+    if (key === "") return;
     // What it answers arrives as the section; a failure here (it went offline meanwhile) is
     // shown by the machine's own status.
-    void getWire()
-      .call(TARGET, "refresh", { machineId })
-      .catch(() => undefined);
-  }, [machineId, enabled]);
-  const list = machineId === undefined ? undefined : machines?.[machineId];
-  if (list?.error !== undefined)
-    return { agents: NONE, loaded: false, error: new Error(list.error) };
+    for (const machineId of key.split("\n"))
+      void getWire()
+        .call(TARGET, "refresh", { machineId })
+        .catch(() => undefined);
+  }, [key]);
   return {
-    agents: list?.agents ?? NONE,
-    loaded: list !== undefined,
+    lists: machines ?? NO_LISTS,
+    loaded: machines !== undefined,
     error: machines === undefined ? failure : undefined,
   };
 }

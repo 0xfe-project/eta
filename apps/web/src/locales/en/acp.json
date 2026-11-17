@@ -1,11 +1,18 @@
 {
   "title": "External agents",
-  "description": "ACP agents an agent can run on. Each machine keeps its own list in its ~/.eta/acp.json, and each agent there is offered as the runtime acp.<id> to agents that run on that machine.",
+  "description": "An agent can run on the external agents (ACP agents) of the machine it runs on. Each is offered as the runtime acp.<id> and kept in that machine's ~/.eta/acp.json.",
   "machine": {
     "label": "Machine",
     "primarySuffix": " (primary)",
-    "offline": "{{name}} is {{status}}. Its external agents can't be listed or changed until it's back online.",
-    "gone": "That machine is no longer here. Choose another."
+    "primaryCount": "primary · {{count}} agents",
+    "primaryCount_one": "primary · {{count}} agent",
+    "primaryCount_other": "primary · {{count}} agents",
+    "count": "{{count}} agents",
+    "count_one": "{{count}} agent",
+    "count_other": "{{count}} agents",
+    "offline": "The external agents on {{name}} are listed here once it's back online.",
+    "addHint": "eta starts the command below on this machine, in the session's working directory, and talks ACP to it over stdio.",
+    "editHint": "The machine can't be changed. To have it on another machine, add it there."
   },
   "empty": {
     "title": "No external agents",
@@ -23,12 +30,13 @@
   "actions": {
     "add": "Add agent",
     "test": "Test",
-    "testing": "Testing…"
+    "testing": "Testing…",
+    "copyCommand": "Copy command",
+    "more": "Actions for {{label}}"
   },
   "form": {
     "addTitle": "Add external agent",
     "editTitle": "Edit {{label}}",
-    "description": "On {{machine}}: eta starts the command there, in the session's working directory, and talks ACP to it over stdio.",
     "label": "Name",
     "labelPlaceholder": "My agent",
     "id": "ID",
@@ -37,7 +45,8 @@
     "args": "Arguments",
     "argsHint": "One per line.",
     "env": "Environment variables",
-    "envHint": "One KEY=VALUE per line."
+    "envHint": "One KEY=VALUE per line.",
+    "add": "Add"
   },
   "errors": {
     "labelRequired": "Give it a name.",
@@ -63,5 +72,10 @@
     "saved": "Saved {{label}}",
     "saveFailed": "Not saved: {{message}}",
     "deleted": "Deleted {{label}}"
+  },
+  "reason": {
+    "unauthenticated": "Sign in to {{label}} on {{machine}}, then choose Test.",
+    "missing": "{{command}} isn't on {{machine}}. Install it, then choose Test.",
+    "error": "Fix it, then choose Test."
   }
 }
