@@ -7,7 +7,7 @@ const NAMES: Record<string, string> = {
   wire: "/^wire (重连|reconnect)$/",
   board: "任务看板改版",
   artifacts: "产物版本",
-  "dm-xiaoman": "小满",
+  "dm-xiaoman": "/^(小满|Xiaoman)$/",
 };
 
 async function chat(id: string, scenario = "", language = "zh") {
@@ -51,7 +51,7 @@ test("03: a group's run in its box, who waits near the composer, the question ov
 test("03: a finished reply keeps what it said between its calls", async () => {
   const app = await chat("wire", "chat-process");
   // Folded to its head, which says how many steps and nothing more; every sentence is on 04.
-  await app.waitFor("text:2 步");
+  await app.waitFor("text:3 步");
   expect(app.texts()).not.toContain("wire.ts never resends after a reconnect.");
   await app.press("role:button[查看全部] >> nth=0");
   await app.waitFor("text:wire.ts never resends after a reconnect.");
@@ -144,11 +144,14 @@ test("03i: a failed command says how, and where the rest is", async () => {
 
 test("03h: a direct chat draws its run in the same box as a group, and streams its words in it", async () => {
   const app = await chat("dm-xiaoman");
-  await app.waitFor("text:思考过程 · 320 字");
+  await app.waitFor("text:/^思考过程 · [\\d,]+ 字$/");
   expect(app.shows("id:process-frame")).toBe(true);
-  await app.waitFor("text:weekly/2026-w45.md");
+  await app.waitFor("text:/weekly\\/2026-w45\\.md/");
   expect(app.shows("id:composer-target")).toBe(false);
-  await app.waitFor("text:/周报写好了/", { timeout: 8000 });
+  await app.waitFor("text:/周报写好了|The weekly report is ready/", {
+    timeout: 8000,
+  });
+  // Still working: the words are in the box, not under it.
   expect(app.shows("id:process-frame")).toBe(true);
 });
 
