@@ -30,6 +30,25 @@ const parts: TextViewClasses = {
   tableRow: "border-b border-border",
 };
 
+/**
+ * A step's type: what an agent said on its way, drawn as small as a thought's text. Headings are
+ * no larger than the lines around them, only heavier; lists, code and tables shrink with them.
+ */
+const SMALL = "text-sm leading-[18px] text-muted-foreground";
+const smallParts: TextViewClasses = {
+  ...parts,
+  heading: "font-semibold text-muted-foreground",
+  heading1: SMALL,
+  heading2: SMALL,
+  heading3: SMALL,
+  heading4: SMALL,
+  heading5: SMALL,
+  heading6: SMALL,
+  code: "bg-muted font-mono text-muted-foreground",
+  link: "text-muted-foreground underline",
+  tableCell: SMALL,
+};
+
 /** A fence's language as a diff: the one place the transcript's text may be red and green. */
 const isDiff = (block: TextViewCodeBlock) =>
   block.language === "diff" || block.language === "patch";
@@ -70,12 +89,18 @@ export function Markdown(props: {
   text: string;
   class?: string;
   streaming?: boolean;
+  /** A step's small type in place of a reply's body. */
+  small?: boolean;
 }) {
   return (
     <TextView
       markdown={props.text}
       options={{ streaming: props.streaming === true }}
-      classes={{ ...parts, root: `gap-2 ${props.class ?? BODY}` }}
+      classes={
+        props.small === true
+          ? { ...smallParts, root: `gap-1 ${SMALL}` }
+          : { ...parts, root: `gap-2 ${props.class ?? BODY}` }
+      }
       links="open"
       selectable
       renderCodeBlock={(block) => <CodeBlock block={block} />}

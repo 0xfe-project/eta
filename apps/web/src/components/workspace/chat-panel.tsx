@@ -88,6 +88,7 @@ import { TranscriptRail } from "./transcript-rail";
 import { AskBlock } from "./transcript/ask-block";
 import { CopyMessage } from "./transcript/copy-message";
 import { Message, SystemMessage } from "./transcript/message";
+import { NoteStep } from "./transcript/note-step";
 import { ProcessBox } from "./transcript/process-box";
 import { SlashMenu } from "./transcript/slash-menu";
 import { ThinkingBlock } from "./transcript/thinking-block";
@@ -752,11 +753,7 @@ function ProcessStepView({
         <ToolActivity block={block} sessionId={sessionId} />
       </div>
     );
-  return (
-    <div className="process-note">
-      <Markdown streaming={streaming}>{block.text}</Markdown>
-    </div>
-  );
+  return <NoteStep text={block.text} streaming={streaming} />;
 }
 
 /**
