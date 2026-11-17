@@ -1,0 +1,1 @@
+{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"seed-plugin","version":"1.0.0","description":"A made-up plugin with a secret.","license":"MIT","extensions":{"tech.0xfe.eta":{"config":{"api_key":{"type":"string","title":"API key","description":"Made up.","required":true,"secret":true},"team":{"type":"string","title":"Team"}}}}}

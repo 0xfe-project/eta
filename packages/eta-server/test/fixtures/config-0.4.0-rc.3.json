@@ -1,0 +1,125 @@
+{
+  "providers": [
+    {
+      "id": "eta-token-plan",
+      "kind": "eta",
+      "name": "Eta Token Plan",
+      "baseUrl": "https://eta.0xfe.tech/v1",
+      "apiKey": "sk-fake-eta",
+      "models": [
+        {
+          "id": "claude-sonnet-5",
+          "reasoning": true,
+          "thinkingMode": "both",
+          "reasoningEfforts": ["low", "medium", "high", "xhigh", "max"],
+          "contextWindow": 1000000,
+          "input": ["text", "image"]
+        },
+        {
+          "id": "qwen3.8-max-0902"
+        }
+      ]
+    },
+    {
+      "id": "codex",
+      "kind": "openai-codex",
+      "baseUrl": "https://chatgpt.com/backend-api",
+      "models": [
+        {
+          "id": "gpt-5.4"
+        },
+        {
+          "id": "gpt-5.3-codex-spark"
+        }
+      ]
+    },
+    {
+      "id": "kimi",
+      "kind": "kimi-coding",
+      "baseUrl": "https://api.kimi.com/coding/v1",
+      "apiKey": "sk-fake-kimi",
+      "models": [
+        {
+          "id": "k3",
+          "contextWindow": 1048576,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "thinkingMode": "only",
+          "reasoningEfforts": ["low", "high", "max"],
+          "providerDefaultEffort": "max",
+          "input": ["text", "image"]
+        },
+        {
+          "id": "kimi-for-coding"
+        }
+      ]
+    },
+    {
+      "id": "commandcode",
+      "kind": "commandcode",
+      "baseUrl": "https://api.commandcode.ai/provider/v1",
+      "apiKey": "sk-fake-cc",
+      "models": [
+        {
+          "id": "claude-sonnet-5"
+        },
+        {
+          "id": "gpt-5.4",
+          "api": "openai-responses"
+        }
+      ]
+    },
+    {
+      "id": "zai",
+      "kind": "zai",
+      "baseUrl": "https://api.z.ai/api/coding/paas/v4",
+      "apiKey": "sk-fake-zai",
+      "models": [
+        {
+          "id": "glm-5.3",
+          "reasoning": true,
+          "thinkingMode": "both",
+          "reasoningEfforts": ["low", "high", "max"]
+        }
+      ]
+    },
+    {
+      "id": "my-endpoint",
+      "kind": "openai-compatible",
+      "name": "My endpoint",
+      "baseUrl": "https://llm.example.test/v1",
+      "apiKey": "sk-fake-custom",
+      "headers": {
+        "User-Agent": "eta-smoke",
+        "X-Optional": null
+      },
+      "models": [
+        {
+          "id": "my-model",
+          "name": "My Model",
+          "contextWindow": 64000,
+          "maxTokens": 4096,
+          "reasoning": true,
+          "thinkingMode": "both",
+          "reasoningEfforts": ["low", "high"],
+          "input": ["text", "image"]
+        },
+        {
+          "id": "plain-model"
+        }
+      ]
+    },
+    {
+      "id": "legacy",
+      "baseUrl": "https://legacy.example.test/v1",
+      "apiKey": "sk-fake-legacy",
+      "models": [
+        {
+          "id": "legacy-model",
+          "reasoning": true,
+          "reasoningEfforts": ["low", "high"]
+        }
+      ]
+    }
+  ]
+}

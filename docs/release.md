@@ -33,7 +33,7 @@ Hosts that switched pre-releases on upgrade to them, so a pre-release tag is a r
 
 `release.yml` enforces the second rule: its `migrations` job compares `apps/eta/src/migrations/` with the previous `v*` tag (pre-release tags included) and fails the release if a file there was renamed, removed or changed (`scripts/check-migrations-frozen.sh`). Run it by hand before tagging: `scripts/check-migrations-frozen.sh <previous tag>`.
 
-Known gap: `upgrade-cross.yml` only tests full release → new version (`from` is the highest earlier full release). Pre-release → pre-release (rc.1 → rc.2) and pre-release → its full release (rc → 0.3.0) are not covered by any workflow; run `upgrade-cross.yml` by hand with `-f from=<rc>` when it matters.
+Where `from` comes from: the highest earlier **full** release, and — when the tag being cut is a pre-release — the pre-release before it too, as one more entry in the same Linux matrix. That second one is the upgrade people on an rc actually do (rc.3 → rc.4, not through a full release), and it used to be a known gap that had to be run by hand with `-f from=<rc>`; it needs a seed for that rc, see "Seed data" (`0.4.0-rc.3` has one). A pre-release → its own full release is the same case with `to` being the full release: `from` is then the last full release, which is what a person on the last full release has.
 
 Pipeline order:
 
@@ -41,7 +41,7 @@ Pipeline order:
 2. `check`: runs alongside the build, the full `bun run check`, not `--affected`. If it fails nothing is published and the draft stays.
    `migrations` runs alongside it too: every migration in the previous `v*` tag (pre-release tags included) must be unchanged, see "Pre-releases".
 3. `build`: each platform on its own runner, clean checkout, frozen lockfile build. The host is run separately once to check `--version`, `/up` and the page, and only then uploaded to the draft. The Linux one also writes `eta-host.json` (`eta-host --version --json`) and uploads it too.
-4. `cross`: `upgrade-cross.yml` upgrades from the previous stable release to this draft on Linux, see "Cross-version upgrade test" below. With no previous release, or if the previous one is older than the earliest seed (e.g. v0.1.0, which cannot self-upgrade), it is skipped and noted in the run summary.
+4. `cross`: `upgrade-cross.yml` upgrades from the previous stable release to this draft on Linux — and, for a pre-release tag, from the pre-release before it as well — see "Cross-version upgrade test" below. With no previous release, or if the previous one is older than the earliest seed (e.g. v0.1.0, which cannot self-upgrade), it is skipped and noted in the run summary; a skipped `cross` publishes nothing, so an rc with no seed for its predecessor is the one case worth checking by hand.
 5. `publish`: only runs if everything before it succeeded, computes `SHA256SUMS` from the draft, then publishes. If any step fails the Release stays a draft and users cannot see it.
 
 The desktop app is no longer built and WebKit and Xvfb are no longer installed, so host releases are no longer slowed down by the Ubuntu image.
@@ -144,7 +144,7 @@ gh workflow run upgrade-cross.yml --ref v0.2.1 -f platforms=all
 gh workflow run upgrade-cross.yml --ref main -f from=0.2.0 -f to=0.2.1 -f platforms=windows
 ```
 
-`to` defaults to the tag being run, `from` defaults to the highest release version smaller than it.
+`to` defaults to the tag being run, `from` defaults to the highest release version smaller than it — full releases only when `to` is a full release, and the previous pre-release as well when `to` is one. Both run in one matrix: Linux twice, the other platforms (asked for by hand) once.
 
 It downloads real files for both versions, installs `from` as a service, puts in seed data, then:
 
@@ -156,7 +156,7 @@ After each time verify: file version, service running, `/up`, page can open, see
 
 ### Seed data
 
-`test/upgrade-seed/<version>/` is a data directory (`data/`) actually left behind by a host of that version, plus the content to verify against later (`manifest.json`). Everything in it is fake data, and `data/secret.key` can only decrypt those fake values. The test picks the newest one no higher than `from`, and `from` migrates it up itself.
+`test/upgrade-seed/<version>/` is a data directory (`data/`) actually left behind by a host of that version, plus the content to verify against later (`manifest.json`). Everything in it is fake data, and `data/secret.key` can only decrypt those fake values. The test picks the newest one no higher than `from`, and `from` migrates it up itself — which is why a version that changes the schema needs its own seed: without one, `from` is handed an older shape and migrates that, so the shape people actually have is never the one tested. `0.2.0`, `0.3.0` (the first with the task board 0054 rebuilds) and `0.4.0-rc.3` (the first with ACP, and the one that makes an rc → rc run possible) are there now. `apps/eta/test/upgrade-seed.test.ts` upgrades each of them with the current code on every test run, so a seed that stopped matching fails before a release does.
 
 For versions where the schema or storage format changed, add a seed. Do it in an isolated environment; the script wipes `/tmp/eta-seed-home`:
 
@@ -167,7 +167,7 @@ bun scripts/upgrade-e2e/seed.ts ./eta-host-linux-x64 0.3.0
 docker run --rm -v "$PWD:/repo:ro" zricethezav/gitleaks detect --source /repo/test/upgrade-seed --no-git
 ```
 
-The script starts a host with this version's binary, HOME at `/tmp/eta-seed-home`, model `fake-model.ts`, then calls over the wire like the pages do: create agents, projects, conversations, send messages, have the model publish two versions of an artifact, create tasks and run them to completion, store email accounts and plugin config, register host machines, create routine tasks, change settings. After the host exits, copy the data directory over and generate `manifest.json`, then verify once more. Don't hand-write SQL, don't put in real data, and the hostname must be fake (generated in a container with `--hostname eta-seed`).
+The script starts a host with this version's binary, HOME at `/tmp/eta-seed-home`, model `fake-model.ts`, then calls over the wire like the pages do: create agents, projects, conversations, send messages, have the model publish two versions of an artifact, create tasks and run them to completion, store email accounts and plugin config, register host machines, create routine tasks, change settings. After the host exits, copy the data directory over and generate `manifest.json`, then verify once more. Don't hand-write SQL, don't put in real data, and the hostname must be fake (generated in a container with `--hostname eta-seed`). The driver speaks this checkout's wire, so an older binary needs no adapter, only patience: it mounts its plugins after `/up` answers, and a call that arrives first is retried (`unknown op`) instead of failing the seed. A build that makes a Captain for itself is seeded through the same lens the check reads it back with (`leaveOutSystemData`), or the seed's own manifest disagrees with its own check.
 
 ## No signatures
 
