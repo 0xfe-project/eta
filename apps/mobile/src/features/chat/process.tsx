@@ -296,8 +296,8 @@ function useFolds() {
 
 /**
  * 04: a reply's steps. Its thinking first, then the last ten calls, the older ones one press away.
- * What it said on its way is among them in its order, so a sentence the transcript draws only as
- * the line over its box (or not at all, once a newer one took that line) is still here.
+ * What it said on its way is among them in its order, so a sentence the folded box no longer
+ * draws is still here.
  */
 function replyRows(
   blocks: readonly RunBlock[],

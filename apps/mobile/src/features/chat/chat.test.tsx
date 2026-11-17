@@ -50,30 +50,33 @@ test("03: a group's run in its box, who waits near the composer, the question ov
 
 test("03: a finished reply keeps what it said between its calls", async () => {
   const app = await chat("wire", "chat-process");
-  // The last thing it said ends its folded row; every one of them is a step on 04.
-  await app.waitFor(
-    "text:/ 步 · wire\\.ts never resends after a reconnect\\.$/",
-  );
+  // Folded to its head, which says how many steps and nothing more; every sentence is on 04.
+  await app.waitFor("text:2 步");
   expect(app.texts()).not.toContain("wire.ts never resends after a reconnect.");
   await app.press("role:button[查看全部] >> nth=0");
   await app.waitFor("text:wire.ts never resends after a reconnect.");
 });
 
-test("03: a group's reply at work keeps one line of what it just said over its box", async () => {
+test("03: a reply at work writes everything in its box, and its answer comes under it once the run ends", async () => {
   const app = await chat("wire", "chat-said");
   await app.waitFor("text:3 步");
-  // The newest sentence is the line; the first one is not drawn whole around the box any more.
-  expect(app.shows("id:process-said")).toBe(true);
+  // Its words are in the box, in order, with its calls: nothing is drawn outside it yet.
+  expect(app.shows("id:process-frame")).toBe(true);
   expect(app.texts()).toContain("Now the replay path.");
-  expect(app.texts()).not.toContain(
-    "I'll read wire.ts first, then the replay path on the host.",
-  );
-  // Its answer: the box folds to a row that ends with the last sentence, the answer under it.
-  await app.waitFor("text:3 步 · Now the replay path.", { timeout: 10_000 });
+  // The answer is written in the box too, as it streams, and the box stays open after it.
   await app.waitFor("text:The host replays from the last seq the client saw.", {
     timeout: 10_000,
   });
-  expect(app.shows("id:process-said")).toBe(false);
+  expect(app.shows("id:process-frame")).toBe(true);
+  // The run ends: the box folds to its head, the answer under it.
+  await app.waitUntil(() => !app.shows("id:process-frame"), {
+    timeout: 10_000,
+  });
+  expect(app.texts()).toContain("3 步");
+  expect(app.texts()).toContain(
+    "The host replays from the last seq the client saw.",
+  );
+  expect(app.texts()).not.toContain("Now the replay path.");
 });
 
 test("04: what a reply said on its way is among its steps", async () => {
@@ -139,15 +142,14 @@ test("03i: a failed command says how, and where the rest is", async () => {
   await app.waitFor("id:tool-image");
 });
 
-test("03h: a direct chat draws its steps inline and streams its words", async () => {
+test("03h: a direct chat draws its run in the same box as a group, and streams its words in it", async () => {
   const app = await chat("dm-xiaoman");
   await app.waitFor("text:思考过程 · 320 字");
-  expect(app.texts()).toContain("工作中");
+  expect(app.shows("id:process-frame")).toBe(true);
   await app.waitFor("text:weekly/2026-w45.md");
   expect(app.shows("id:composer-target")).toBe(false);
   await app.waitFor("text:/周报写好了/", { timeout: 8000 });
-  await app.press("text:思考过程 · 320 字");
-  await app.waitFor("text:/这周的任务要按状态分组/");
+  expect(app.shows("id:process-frame")).toBe(true);
 });
 
 test("03a: a sent message queued behind a run can be pulled back or dropped", async () => {
