@@ -8,7 +8,7 @@
     "conversation": 1,
     "participant": 1,
     "setting": 1,
-    "usage": 12,
+    "usage": 10,
     "task": 1,
     "artifact": 1,
     "artifact_version": 2,
@@ -16,10 +16,10 @@
     "credential": 1,
     "email_account": 1,
     "plugin_config": 1,
-    "message": 9,
+    "message": 8,
     "captain_prompt_version": 7,
     "task_run": 1,
-    "task_activity": 7,
+    "task_activity": 4,
     "routine": 1,
     "routine_brief": 1
   },
@@ -42,12 +42,12 @@
     "SELECT title, status FROM task ORDER BY title": [
       {
         "title": "Seed task",
-        "status": "in_review"
+        "status": "done"
       }
     ],
     "SELECT status FROM task_run ORDER BY id": [
       {
-        "status": "failed"
+        "status": "interrupted"
       }
     ],
     "SELECT title FROM artifact ORDER BY title": [
@@ -88,7 +88,7 @@
     ]
   },
   "conversation": {
-    "id": "c72facf5-1c43-4746-9318-fc5f33222f2c",
+    "id": "4fec816e-db4a-4977-9498-96edb2a8de45",
     "said": "Is this thing on?",
     "replied": "Heard: [conversation: Seed talk]\nthe user says:\n@Ada Is this thing on?"
   },

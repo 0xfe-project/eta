@@ -1,2 +1,2 @@
-{"at":1794882874942,"action":"captain.ensure","actorAgentId":null,"data":{"agentId":"a1452f83-a3ac-46a7-9697-38f1d87a020e","createdAt":1794882874938}}
-{"at":1794882874963,"action":"captain.patrol","data":{"tasks":0,"pendingInbox":0,"pendingOperations":0}}
+{"at":1794883812551,"action":"captain.ensure","actorAgentId":null,"data":{"agentId":"01de67ed-2c4b-4ef6-9d6f-e5337b2aa48e","createdAt":1794883812546}}
+{"at":1794883812587,"action":"captain.patrol","data":{"tasks":0,"pendingInbox":0,"pendingOperations":0}}

@@ -345,6 +345,15 @@ async function generate(binary: string, version: string): Promise<void> {
   await until(() => rows("task") >= 1, 30_000);
   await until(() => rows("task_run") >= 1, 30_000);
   await settled();
+  // A task a host left in review stays put only until the next host starts on it: one whose run
+  // never delivered its summary is run again, so the seed would change under its own check every
+  // time a service started on it. Close it, the way a person would — a board at rest is what the
+  // seed is for (and a done task is what 0054's archiver is about).
+  const seeded = db
+    .query<{ id: string }, []>("SELECT id FROM task ORDER BY number LIMIT 1")
+    .get();
+  if (seeded === null) throw new Error("the seed made no task to close");
+  await call("tasks", "update", { taskId: seeded.id, status: "done" });
 
   await call("email", "saveAccount", {
     name: "Seed mail",

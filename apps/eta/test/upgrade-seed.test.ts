@@ -98,6 +98,20 @@ describe("the seeds a release upgrades", () => {
         problemsIn(manifest, db, readFileSync(join(dataDir, "secret.key"))),
       ).toEqual([]);
 
+      // A board at rest. A task left in review whose run never delivered its summary is run again
+      // by whatever host starts on the data, so a seed that ended that way would change every time
+      // a service came up on it (and its own check would call that drift).
+      expect(
+        db
+          .query<{ n: number }, []>(
+            `SELECT count(*) AS n FROM task AS t
+              WHERE t.status = 'in_review' AND (
+                SELECT status FROM task_run WHERE task_id = t.id
+                ORDER BY created_at DESC LIMIT 1) = 'failed'`,
+          )
+          .get()!.n,
+      ).toBe(0);
+
       // Everything fake, as a seed has to be: the machine a container named, and the home the
       // script used, never the runner's.
       expect(manifest.home).toBe("/tmp/eta-seed-home");
