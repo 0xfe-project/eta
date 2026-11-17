@@ -16,6 +16,7 @@ import {
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { isLongPaste, MAX_MESSAGE_CHARS, pasteFileName } from "@/lib/composer";
+import { randomUUID } from "@/lib/random-uuid";
 import { cn } from "@/lib/utils";
 import { $readDraft, $writeDraft, BlockNode } from "./composer-nodes";
 
@@ -87,7 +88,7 @@ function PastePlugin({
               }),
             ]);
           else if (isLongPaste(text))
-            blocks = [{ type: "paste", id: crypto.randomUUID(), text }];
+            blocks = [{ type: "paste", id: randomUUID(), text }];
           // Short text: the plain text editor inserts text/plain alone.
           else return false;
           event.preventDefault();

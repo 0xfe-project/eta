@@ -4,6 +4,7 @@
 // attachment of the message.
 
 import { translate } from "@/lib/i18n";
+import { randomUUID } from "@/lib/random-uuid";
 
 /**
  * A paste longer than this (in characters, counted as Unicode code points,
@@ -152,7 +153,7 @@ export function afterCommand(text: string, name: string): string {
 /** A sent message's text back as a draft, to edit and send again: long text as a block again. */
 export function draftOf(text: string): Draft {
   return isLongPaste(text)
-    ? [{ type: "paste", id: crypto.randomUUID(), text }]
+    ? [{ type: "paste", id: randomUUID(), text }]
     : plainDraft(text);
 }
 
