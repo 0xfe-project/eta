@@ -60,8 +60,8 @@ const TURNS = 50;
 let CONV = "";
 let conversations = 0;
 let n = 0;
-// A group folds a reply's process into a box; a direct conversation does not. Both draw the cards
-// the turn leaves beside its answer the same way.
+// A group and a direct conversation draw a reply's process the same way, and the cards the turn
+// leaves beside its answer too.
 let kind: "group" | "direct" = "group";
 const fresh = () => {
   n = 0;
@@ -707,12 +707,13 @@ describe("a reply that is writing", () => {
       });
       fake.handle("sessions.resync", () => ({}));
     });
-    // Its last text is written and no call followed it, so the box has folded while the row still
-    // reads as working.
-    await flush(1600);
-    const fold = processFold(container)!;
-    expect(fold.textContent).toContain("publish_artifact");
-    expect(fold.querySelectorAll('[data-testid="ref"]')).toHaveLength(0);
+    // The run is still going: its call and its words are in the box, the card beside it.
+    const box = container.querySelector<HTMLElement>(
+      '[role="region"][aria-label$="过程"]',
+    )!;
+    expect(box.textContent).toContain("publish_artifact");
+    expect(box.textContent).toContain("发布好了");
+    expect(box.querySelectorAll('[data-testid="ref"]')).toHaveLength(0);
     const card = container.querySelector('[data-testid="ref"]')!;
     expect(card.textContent).toBe("artifact:报告 #2");
     expect(card.getAttribute("data-variant")).toBe("framed");

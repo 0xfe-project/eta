@@ -14,13 +14,11 @@ import type { Outgoing, SendMode } from "@/queries/outbox";
 import type { AnsweringQuestion, Question } from "@/queries/questions";
 import type { TaskStatus } from "@/queries/tasks";
 import {
-  lastSaid,
   MAX_ATTACHMENTS,
   publishedRefs,
   runFromOf,
   savedSteps,
   savedTools,
-  splitReply,
   withRealmCalls,
 } from "@eta/client-contracts";
 import { ArrowDownIcon } from "@phosphor-icons/react/ArrowDown";
@@ -735,7 +733,7 @@ function FirstToken() {
 }
 
 /**
- * One step of a reply's process: a thought, a tool call, or what the agent said between calls.
+ * One step of a reply's process: a thought, a tool call, or something the agent said.
  * The same element for a reply at work and a finished one.
  */
 function ProcessStepView({
@@ -762,37 +760,10 @@ function ProcessStepView({
 }
 
 /**
- * How long text written after a step goes on with no step after it before it is taken for the
- * answer. A model says a sentence before a call; the call follows within a second, and folding the
- * box under that sentence would open it again a moment later, at every step.
- */
-const ANSWER_SETTLE_MS = 1500;
-
-/** `key` has stayed the same for `ANSWER_SETTLE_MS`. */
-function useSettled(key: string | undefined): boolean {
-  const [settled, setSettled] = useState<string>();
-  useEffect(() => {
-    if (key === undefined) return;
-    const timer = setTimeout(setSettled, ANSWER_SETTLE_MS, key);
-    return () => clearTimeout(timer);
-  }, [key]);
-  return key !== undefined && settled === key;
-}
-
-/**
- * A reply that is writing now: what its session has said and done in this run. Its process goes in
- * the process box, and the text at the end (`splitReply`) is its answer: drawn under the box,
- * which folds into one row. A finished reply is drawn by the same rule from its row, so the end of
- * the run moves nothing.
- *
- * Text that follows a step stays in the box, as the step's next line, until no step has followed it
- * for `ANSWER_SETTLE_MS`: until then it is as likely a sentence before the next call. Text before
- * any step is the answer at once, so a reply without tools never draws a box.
- *
- * The last thing it said (`lastSaid`) is the line over the box: the sentence before its first call
- * stays there, in place, rather than going into the box to scroll away, and a newer one between
- * calls takes its place (that one stays in the box too, as a step). Once at its answer, the line is
- * the end of the folded row instead.
+ * A reply that is writing now: everything its session has thought, said and done in this run, in
+ * the order it happened, in the process box — its words too, written there as they stream. Nothing
+ * is taken for its answer while it works: once the run is over, the row is a finished reply, and
+ * that draws the box folded with the answer under it (`savedSteps`).
  */
 function LiveReply({
   sessionId,
@@ -812,54 +783,32 @@ function LiveReply({
   time: string;
 }) {
   const blocks = useRunBlocks(sessionId, runFrom);
-  const split = splitReply(blocks);
-  const settled = useSettled(
-    split.steps.length === 0 ? undefined : split.answer[0]?.id,
-  );
-  const answered = split.steps.length === 0 || settled;
-  const steps = answered ? split.steps : blocks;
-  const answer = answered ? split.answer : [];
-  const folded = answer.length > 0;
-  const said = lastSaid(steps);
-  // What the box draws: the words before the first call are the line over it, not a step in it.
-  // Folded, the row opens to every step in its order.
-  const lead = folded ? 0 : steps.findIndex((block) => block.type !== "text");
-  const views = steps.map((block) => (
-    <ProcessStepView
-      key={block.id}
-      block={block}
-      sessionId={sessionId}
-      streaming
-    />
-  ));
   // Nothing from the run yet: the placeholder holds the place, and the first block replaces it.
   const placeholder = blocks.length === 0 && !waiting ? <FirstToken /> : null;
-  const text = answer.map((block) => (
-    <div key={block.id} className="message-content">
-      <Markdown streaming>{block.type === "text" ? block.text : ""}</Markdown>
-    </div>
-  ));
+  if (blocks.length === 0 && placeholder === null) return null;
   return (
-    <>
-      {steps.length === 0 && placeholder === null ? null : (
-        // Before the first token the box is already there, at work; its steps fill the same frame.
-        <ProcessBox
-          steps={placeholder ?? (lead > 0 ? views.slice(lead) : views)}
-          whole={placeholder ?? views}
-          count={steps.length}
-          running
-          folded={folded}
-          said={said}
-          author={author}
-          agentId={agentId}
-          sessionId={sessionId}
-          runFrom={runFrom}
-          time={time}
-          answer={text}
-        />
-      )}
-      {text}
-    </>
+    // Before the first token the box is already there, at work; its steps fill the same frame.
+    <ProcessBox
+      steps={
+        placeholder ??
+        blocks.map((block) => (
+          <ProcessStepView
+            key={block.id}
+            block={block}
+            sessionId={sessionId}
+            streaming
+          />
+        ))
+      }
+      count={blocks.length}
+      running
+      author={author}
+      agentId={agentId}
+      sessionId={sessionId}
+      runFrom={runFrom}
+      time={time}
+      answer={null}
+    />
   );
 }
 
@@ -993,7 +942,6 @@ const Turn = memo(
                 ))}
                 count={steps.length}
                 running={false}
-                folded
                 author={author}
                 agentId={message.agentId}
                 sessionId={sessionId}
@@ -1001,7 +949,6 @@ const Turn = memo(
                 callId={tools[0]?.id}
                 time={when(message.createdAt)}
                 answer={answer}
-                said={lastSaid(steps)}
               />
             )}
             {answer}

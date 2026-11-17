@@ -67,10 +67,10 @@ export function savedTools(data: Record<string, unknown>): ToolBlock[] {
 }
 
 /**
- * A reply as its process and its answer: the answer is the text at the end, after the last thought
- * or tool call; everything before it — the words between calls included — is the process, in the
- * order it happened. One rule for a reply at work and a finished one, so the end of a run moves
- * nothing: while the last thing written is text, that text is the answer and the process is folded.
+ * A finished reply as its process and its answer: the answer is the text at the end, after the
+ * last thought or tool call; everything before it — the words between calls included — is the
+ * process, in the order it happened. Only for a reply whose run has ended: while it works, every
+ * block is process, and nothing is taken for the answer until the run is over.
  */
 export function splitReply(blocks: readonly RunBlock[]): {
   steps: RunBlock[];
@@ -79,23 +79,6 @@ export function splitReply(blocks: readonly RunBlock[]): {
   let end = blocks.length;
   while (end > 0 && blocks[end - 1]!.type === "text") end -= 1;
   return { steps: blocks.slice(0, end), answer: blocks.slice(end) };
-}
-
-/**
- * The last thing a reply said on its way, as one line: the newest non-blank text among `blocks`,
- * its whitespace collapsed. Called with a reply's steps (`splitReply(...).steps`, `savedSteps`) it
- * is the sentence the reply said last before its answer; with a reply at work whose trailing text
- * is not yet taken for the answer, that text. `undefined` when it said nothing on the way: a reply
- * that only called tools, or a row written before its words were kept.
- */
-export function lastSaid(blocks: readonly RunBlock[]): string | undefined {
-  for (let at = blocks.length - 1; at >= 0; at -= 1) {
-    const block = blocks[at]!;
-    if (block.type !== "text") continue;
-    const line = block.text.replace(/\s+/g, " ").trim();
-    if (line !== "") return line;
-  }
-  return undefined;
 }
 
 /**

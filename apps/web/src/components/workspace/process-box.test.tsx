@@ -12,9 +12,10 @@ import { setWire } from "@/lib/wire";
 import { useOutbox } from "@/queries/outbox";
 import { closeBrowser, hasBrowser, onPage } from "@/test-browser";
 import { Chat } from "@/test-chat";
-import { surfaceHost } from "@/test-inbox";
+import { interactionView, surfaceHost } from "@/test-inbox";
 import {
   agentView,
+  conversationSections,
   conversationView,
   memberView,
   messageView,
@@ -68,26 +69,23 @@ afterEach(async () => {
 async function live(kind: "group" | "direct" = "group") {
   conversations += 1;
   const id = `process-box-${conversations}`;
+  const summary = conversationView({
+    id,
+    kind,
+    participants: [memberView("a1", { sessionId: "s1" })],
+  });
+  const reply = messageView({
+    id: `${id}-reply`,
+    conversationId: id,
+    author: "agent",
+    agentId: "a1",
+    status: "working",
+    text: "",
+  });
   const host = surfaceHost({
     agents: [agentView({ id: "a1", name: "研究员" })],
-    conversations: [
-      conversationView({
-        id,
-        kind,
-        participants: [memberView("a1", { sessionId: "s1" })],
-      }),
-    ],
-    messages: {
-      [id]: [
-        messageView({
-          conversationId: id,
-          author: "agent",
-          agentId: "a1",
-          status: "working",
-          text: "",
-        }),
-      ],
-    },
+    conversations: [summary],
+    messages: { [id]: [reply] },
   });
   host.target("sessions.s1", {
     core: { session: "s1", running: true },
@@ -108,7 +106,54 @@ async function live(kind: "group" | "direct" = "group") {
     );
     await flush(60);
   };
-  return { ...mounted, say };
+  /** The run ends: the host writes the reply's row as it keeps a finished one. */
+  const finish = async (...content: Record<string, unknown>[]) => {
+    const row = finished(reply, content);
+    await act(async () =>
+      host.set(`conversations.${id}`, conversationSections(summary, [row])),
+    );
+    await flush(60);
+    return row;
+  };
+  return { ...mounted, say, finish };
+}
+/**
+ * `reply` once its run wrote `content` and ended, as the host keeps it: its text is the words at
+ * the end, its process every block in order (`data.process`), its calls in `data.activity`.
+ */
+function finished(
+  reply: MessageView,
+  content: Record<string, unknown>[],
+): MessageView {
+  let end = content.length;
+  while (end > 0 && content[end - 1]!.type === "text") end -= 1;
+  return {
+    ...reply,
+    status: "done",
+    revision: reply.revision + 1,
+    text: content
+      .slice(end)
+      .map((part) => part.text)
+      .join("\n\n"),
+    data: {
+      activity: content
+        .filter((part) => part.type === "toolCall")
+        .map((part) => ({
+          id: part.id,
+          name: part.name,
+          input: part.arguments,
+          output: "ok",
+          status: "completed",
+        })),
+      process: content.map((part) =>
+        part.type === "toolCall"
+          ? { type: "tool", id: part.id }
+          : part.type === "thinking"
+            ? { type: "thinking", text: part.thinking }
+            : { type: "text", text: part.text },
+      ),
+    },
+  };
 }
 /** A group with two replies at work, one per member, each fed by its own session's run. */
 async function twoAtWork() {
@@ -227,47 +272,190 @@ describe.each(["group", "direct"] as const)(
       expect(processFold(container)).toBeNull();
     });
 
-    it("folds into a thinking process row once it writes the final text", async () => {
-      const { container, say } = await live(kind);
+    it("writes its words in the box until the run ends, then folds with the answer under it", async () => {
+      const { container, say, finish } = await live(kind);
       await say(thought, call("a"), words("正在写答案"));
-      // Until no call has followed it for a moment, the text is the box's next line.
+      // However long no call follows them, the words are the box's newest step: the run is not over.
+      await flush(1600);
       expect(processFold(container)).toBeNull();
       expect(drawn(processBox(container)!, "正在写答案")).toBe(1);
-      await flush(1600);
+      expect(drawn(container, "正在写答案")).toBe(1);
+
+      await finish(thought, call("a"), words("正在写答案"));
       expect(processBox(container)).toBeNull();
       const fold = processFold(container);
       expect(fold?.open).toBe(false);
-      expect(fold?.querySelector("summary")?.textContent).toContain("思考过程");
-      expect(fold?.querySelector("summary")?.textContent).toContain("2 步");
+      expect(fold?.querySelector("summary")?.textContent).toBe("▶思考过程2 步");
       // The text is below the row, not in it, and only once.
       expect(fold?.textContent).not.toContain("正在写答案");
       expect(drawn(container, "正在写答案")).toBe(1);
     });
 
-    it("keeps a sentence before a call in the box, where it stays: the box does not fold for it", async () => {
+    it("keeps a sentence before a call in the box, where it stays", async () => {
       const { container, say } = await live(kind);
       await say(call("a"), words("先说一句"));
       const note = [...processBox(container)!.querySelectorAll("p")].find(
         (p) => p.textContent === "先说一句",
       );
       expect(note).toBeDefined();
-      expect(processFold(container)).toBeNull();
       await say(call("a"), words("先说一句"), call("b"));
       expect(processFold(container)).toBeNull();
       expect(processBox(container)?.contains(note!)).toBe(true);
       expect(toolCards(processBox(container))).toHaveLength(2);
-      await say(call("a"), words("先说一句"), call("b"), words("最终"));
-      await flush(1600);
-      expect(processBox(container)).toBeNull();
-      expect(processFold(container)).not.toBeNull();
     });
 
-    it("draws text before any step as the answer at once, with no box", async () => {
-      const { container, say } = await live(kind);
+    it("writes a reply with only words in the box too, and draws them whole once the run ends", async () => {
+      const { container, say, finish } = await live(kind);
       await say(words("直接回答"));
+      await flush(1600);
+      expect(drawn(processBox(container)!, "直接回答")).toBe(1);
+      expect(drawn(container, "直接回答")).toBe(1);
+
+      await finish(words("直接回答"));
+      // Nothing on the way to fold: the answer alone.
       expect(processBox(container)).toBeNull();
       expect(processFold(container)).toBeNull();
       expect(drawn(container, "直接回答")).toBe(1);
+    });
+
+    it("draws nothing of what it writes outside the box while it works", async () => {
+      const { container, say } = await live(kind);
+      const outside = () =>
+        [
+          ...container.querySelectorAll<HTMLElement>(
+            ".message.assistant p, .message.assistant .message-content",
+          ),
+        ].filter((element) => !processBox(container)?.contains(element));
+      const moments = [
+        [words("先看看")],
+        [words("先看看"), call("a")],
+        [words("先看看"), call("a"), thought, words("再看日志")],
+        [words("先看看"), call("a"), thought, words("再看日志"), call("b")],
+        [
+          words("先看看"),
+          call("a"),
+          thought,
+          words("再看日志"),
+          call("b"),
+          words("答案是这样"),
+        ],
+      ];
+      for (const moment of moments) {
+        await say(...moment);
+        await flush(1600);
+        expect(outside()).toEqual([]);
+        expect(processFold(container)).toBeNull();
+      }
+    });
+
+    it("draws a finished reply the same whether its run just ended or the page was opened after", async () => {
+      const content = [
+        thought,
+        words("先列目录"),
+        call("a"),
+        words("再看文件"),
+        call("b"),
+        words("答案"),
+      ];
+      const { container, say, finish } = await live(kind);
+      await say(...content);
+      const row = await finish(...content);
+      const ended = container.querySelector(`#msg-${row.id}`)!.innerHTML;
+      await cleanup();
+      setWire(undefined);
+
+      const summary = conversationView({
+        id: row.conversationId,
+        kind,
+        participants: [memberView("a1", { sessionId: "s1" })],
+      });
+      surfaceHost({
+        agents: [agentView({ id: "a1", name: "研究员" })],
+        conversations: [summary],
+        messages: { [row.conversationId]: [row] },
+      });
+      const reopened = await mount(
+        <Chat conversationId={row.conversationId} />,
+      );
+      await flush();
+      expect(
+        reopened.container.querySelector(`#msg-${row.id}`)!.innerHTML,
+      ).toBe(ended);
+      expect(
+        processFold(reopened.container)?.querySelector("summary")?.textContent,
+      ).toBe("▶思考过程5 步");
+      expect(drawn(reopened.container, "答案")).toBe(1);
+    });
+
+    it("keeps the question it asks the reader in full view under the box", async () => {
+      conversations += 1;
+      const id = `process-box-${conversations}`;
+      const host = surfaceHost({
+        interactions: [
+          interactionView({
+            id: "i1",
+            agentId: "a1",
+            conversationId: id,
+            prompt: "删掉这个分支？",
+            options: ["删", "留"],
+          }),
+        ],
+        agents: [agentView({ id: "a1", name: "研究员" })],
+        conversations: [
+          conversationView({
+            id,
+            kind,
+            participants: [
+              memberView("a1", {
+                sessionId: "s1",
+                status: "waiting_for_input",
+              }),
+            ],
+          }),
+        ],
+        messages: {
+          [id]: [
+            messageView({
+              conversationId: id,
+              author: "agent",
+              agentId: "a1",
+              status: "waiting_for_input",
+              text: "",
+            }),
+          ],
+        },
+      });
+      host.target("sessions.s1", {
+        core: { session: "s1", running: true },
+        transcript: {
+          messages: [
+            {
+              entryId: "e1",
+              seq: 1,
+              at: 1,
+              message: {
+                role: "assistant",
+                timestamp: 1,
+                content: [
+                  { type: "text", text: "分支已经合进去了，可以删。" },
+                  call("ask"),
+                ],
+              },
+            },
+          ],
+        },
+      });
+      host.handle("sessions.resync", () => ({}));
+      const { container } = await mount(<Chat conversationId={id} />);
+      await flush();
+      const box = processBox(container);
+      expect(drawn(box!, "分支已经合进去了，可以删。")).toBe(1);
+      const card = container.querySelector('section[aria-label="确认请求"]');
+      expect(card?.textContent).toContain("删掉这个分支？");
+      expect(box?.contains(card!)).toBe(false);
+      expect(
+        [...card!.querySelectorAll("button")].map((b) => b.textContent),
+      ).toEqual(expect.arrayContaining(["删", "留"]));
     });
 
     it("is a folded row once finished, and opens in place to its steps", async () => {
@@ -510,13 +698,12 @@ describe("a reply before its first token", () => {
     expect(thoughts(processBox(container))).toHaveLength(1);
   });
 
-  it("holds the process box in a direct chat too, gone once text arrives", async () => {
+  it("holds the process box in a direct chat too, its words written in it", async () => {
     const { container, say } = await live("direct");
     expect(processBox(container)?.contains(placeholder(container)!)).toBe(true);
     await say(words("开始写"));
     expect(placeholder(container)).toBeUndefined();
-    expect(processBox(container)).toBeNull();
-    expect(container.textContent).toContain("开始写");
+    expect(drawn(processBox(container)!, "开始写")).toBe(1);
   });
 
   it("is not on a finished reply", async () => {
@@ -542,15 +729,18 @@ const order = (root: ParentNode | null | undefined) =>
 describe.each(["group", "direct"] as const)(
   "the words between a reply's calls, in a %s",
   (kind) => {
-    it("go into the process in their order while it works, and the answer under it", async () => {
-      const { container, say } = await live(kind);
-      await say(
+    it("go into the process in their order while it works, the last ones too, and stay there once it ends", async () => {
+      const { container, say, finish } = await live(kind);
+      const content = [
         thought,
         words("先列目录"),
         call("a"),
         words("再看文件"),
         call("b"),
-      );
+        words("答案"),
+      ];
+      await say(...content);
+      await flush(1600);
       const running = order(processBox(container));
       expect(running).toEqual([
         "thinking",
@@ -558,20 +748,15 @@ describe.each(["group", "direct"] as const)(
         "tool:shell · a",
         "text:再看文件",
         "tool:shell · b",
+        "text:答案",
       ]);
-      await say(
-        thought,
-        words("先列目录"),
-        call("a"),
-        words("再看文件"),
-        call("b"),
-        words("答案"),
-      );
-      await flush(1600);
+      await finish(...content);
       const fold = processFold(container);
       expect(fold?.querySelector("summary")?.textContent).toContain("5 步");
-      expect(order(fold)).toEqual(running);
+      // The words at the end are the answer now, under the row; the rest is as it was.
+      expect(order(fold)).toEqual(running.slice(0, -1));
       expect(fold?.textContent).not.toContain("答案");
+      expect(drawn(container, "答案")).toBe(1);
     });
 
     it("are where they were once the reply is finished, read from its row", async () => {
@@ -631,154 +816,13 @@ describe.each(["group", "direct"] as const)(
   },
 );
 
-/** The line over a reply's box: what it said last, on its way. */
-const saidLine = (root: ParentNode | null | undefined) =>
-  root?.querySelector<HTMLElement>(".process-said-line") ?? null;
-
 describe.each(["group", "direct"] as const)(
-  "what a reply said on its way, in a %s",
+  "a finished reply's folded row, in a %s",
   (kind) => {
-    it("stays over the box from the first call on, and the newest sentence takes its place", async () => {
-      const { container, say } = await live(kind);
-      // Before any step, words are the reply: no box, no line.
-      await say(words("我先看看配置"));
-      expect(processBox(container)).toBeNull();
-      expect(saidLine(container)).toBeNull();
-      expect(drawn(container, "我先看看配置")).toBe(1);
-
-      // The first call: the sentence stays, as the line over the box, and is not a step in it.
-      await say(words("我先看看配置"), call("a"));
-      expect(saidLine(container)?.textContent).toBe("我先看看配置");
-      expect(order(processBox(container))).toEqual(["tool:shell · a"]);
-      expect(container.textContent?.split("我先看看配置")).toHaveLength(2);
-
-      // More calls: the line holds.
-      await say(words("我先看看配置"), call("a"), thought, call("b"));
-      expect(saidLine(container)?.textContent).toBe("我先看看配置");
-
-      // A new sentence between calls takes the line, and stays in the box as a step too.
-      await say(
-        words("我先看看配置"),
-        call("a"),
-        thought,
-        call("b"),
-        words("再查日志"),
-        call("c"),
-      );
-      expect(saidLine(container)?.textContent).toBe("再查日志");
-      expect(order(processBox(container))).toEqual([
-        "tool:shell · a",
-        "thinking",
-        "tool:shell · b",
-        "text:再查日志",
-        "tool:shell · c",
-      ]);
-      expect(processFold(container)).toBeNull();
-
-      // The answer: the box folds to one row that ends with the last sentence, and the line goes.
-      await say(
-        words("我先看看配置"),
-        call("a"),
-        thought,
-        call("b"),
-        words("再查日志"),
-        call("c"),
-        words("答案是这样"),
-      );
-      // Not yet the answer: it is what was said last.
-      expect(saidLine(container)?.textContent).toBe("答案是这样");
-      await flush(1600);
-      expect(saidLine(container)).toBeNull();
-      expect(processBox(container)).toBeNull();
-      const head = processFold(container)?.querySelector("summary");
-      expect(head?.textContent).toBe("▶思考过程· 6 步 ·再查日志");
-      expect(head?.querySelector(".process-said")?.textContent).toBe(
-        "再查日志",
-      );
-      expect(drawn(container, "答案是这样")).toBe(1);
-      // Opened, the row has every step in its order, the first sentence included.
-      expect(order(processFold(container))).toEqual([
-        "text:我先看看配置",
-        "tool:shell · a",
-        "thinking",
-        "tool:shell · b",
-        "text:再查日志",
-        "tool:shell · c",
-      ]);
-    });
-
-    it("keeps the sentence over the box in the whole process the dialog opens", async () => {
-      const { container, say } = await live(kind);
-      await say(words("我先看看配置"), call("a"));
-      await click(
-        [...container.querySelectorAll("button")].find(
-          (button) => button.textContent === "查看全部",
-        ),
-      );
-      expect(order(document.querySelector('[role="dialog"]'))).toEqual([
-        "text:我先看看配置",
-        "tool:shell · a",
-      ]);
-    });
-
-    it("holds its line before anything is said, so a reply that calls first keeps its height when it speaks", async () => {
-      const { container, say } = await live(kind);
-      // Before the first token the line is already there, empty.
-      expect(saidLine(container)?.textContent).toBe("");
-      await say(call("a"));
-      const line = saidLine(container);
-      expect(line?.textContent).toBe("");
-      await say(call("a"), words("看下一个"), call("b"));
-      // The same element, now with words.
-      expect(saidLine(container)).toBe(line);
-      expect(line?.textContent).toBe("看下一个");
-    });
-
-    it("ends a finished reply's folded row, read from its row", async () => {
-      conversations += 1;
-      const id = `process-box-${conversations}`;
-      surfaceHost({
-        agents: [agentView({ id: "a1", name: "研究员" })],
-        conversations: [
-          conversationView({
-            id,
-            kind,
-            participants: [memberView("a1", { sessionId: "s1" })],
-          }),
-        ],
-        messages: {
-          [id]: [
-            messageView({
-              conversationId: id,
-              author: "agent",
-              agentId: "a1",
-              text: "答案",
-              data: {
-                activity: activity(2),
-                process: [
-                  { type: "text", text: "先列目录" },
-                  { type: "tool", id: "t0" },
-                  { type: "text", text: "再看\n文件" },
-                  { type: "tool", id: "t1" },
-                  { type: "text", text: "答案" },
-                ],
-              },
-            }),
-          ],
-        },
-      });
-      const { container } = await mount(<Chat conversationId={id} />);
-      await flush();
-      const head = processFold(container)?.querySelector("summary");
-      expect(head?.textContent).toBe("▶思考过程· 4 步 ·再看 文件");
-      expect(saidLine(container)).toBeNull();
-    });
-
-    it("leaves an old reply's folded row as it was when its row kept no words", async () => {
+    it("says how many steps it took and nothing more", async () => {
       const { container } = await start(kind, 3);
       const head = processFold(container)?.querySelector("summary");
       expect(head?.textContent).toBe("▶思考过程4 步");
-      expect(head?.querySelector(".process-said")).toBeNull();
       expect(container.textContent).toContain("最终答案");
     });
   },
@@ -804,14 +848,18 @@ describe("a reply at work, as a browser draws it", () => {
     [...root.querySelectorAll(".message.assistant")].at(-1)!.outerHTML;
   const long =
     "这是一句很长很长的话，长到一行放不下：先确认 baseUrl 有没有带 /v1，再看 CPA 的日志里 401 是哪一步返回的，最后对一下 key 是不是过期了，然后再决定要不要重启。";
+  /** Words that take many lines: more than the frame holds. */
+  const many = Array.from<string>({ length: 6 }).fill(long).join("\n\n");
 
-  it("keeps one height from its first call on, through new calls and new sentences", async ({
+  it("keeps one height from its first token on, through its words, calls and long answer", async ({
     skip,
   }) => {
     if (!(await hasBrowser())) return skip();
     const { container, say } = await live("group");
     const moments: string[] = [];
-    // Before its first token, the frame and its line already hold the place.
+    // Before its first token, the frame already holds the place.
+    moments.push(reply(container));
+    await say(words("我先看看配置"));
     moments.push(reply(container));
     await say(words("我先看看配置"), call("a"));
     moments.push(reply(container));
@@ -823,42 +871,14 @@ describe("a reply at work, as a browser draws it", () => {
       thought,
       call("b"),
       call("c"),
-      words(long),
-      call("d"),
+      words(many),
     );
+    expect(drawn(processBox(container)!, long)).toBe(6);
     moments.push(reply(container));
-    expect(saidLine(container)?.textContent).toBe(long);
     const heights = [];
     for (const markup of moments) heights.push(await height(markup));
-    expect(heights[0]).toBeGreaterThan(200);
+    expect(heights[0]).toBeGreaterThan(150);
     expect(new Set(heights).size).toBe(1);
-  });
-
-  it("draws what it just said as one visible line, cut with an ellipsis", async ({
-    skip,
-  }) => {
-    if (!(await hasBrowser())) return skip();
-    const { container, say } = await live("group");
-    await say(words(long), call("a"));
-    const line = await onPage(
-      `<div style="width: 640px">${reply(container)}</div>`,
-      async (page) =>
-        page.locator(".process-said-line").evaluate((el) => {
-          const style = getComputedStyle(el);
-          return {
-            height: el.getBoundingClientRect().height,
-            lineHeight: Number.parseFloat(style.lineHeight),
-            visible: style.display !== "none" && style.visibility !== "hidden",
-            cut: el.scrollWidth > el.clientWidth,
-            ellipsis: style.textOverflow,
-          };
-        }),
-    );
-    expect(line.visible).toBe(true);
-    expect(line.height).toBeGreaterThan(0);
-    expect(line.height).toBeCloseTo(line.lineHeight, 0);
-    expect(line.cut).toBe(true);
-    expect(line.ellipsis).toBe("ellipsis");
   });
 
   it("does not move a reply under it while both work", async ({ skip }) => {
@@ -869,11 +889,13 @@ describe("a reply at work, as a browser draws it", () => {
     await say("s2", words("我去查日志"), call("x"));
     const replies = () => [...container.querySelectorAll(".message.assistant")];
     const tops: number[] = [];
-    const measure = async () => {
+    /** Where the reply under starts, with what the one above has written so far in its box. */
+    const measure = async (newest?: string) => {
       const [first, second] = replies();
-      expect(second?.querySelector(".process-said-line")?.textContent).toBe(
-        "我去查日志",
-      );
+      // Both feeds reach their replies: a dead one would leave nothing to move.
+      expect(drawn(processBox(second)!, "我去查日志")).toBe(1);
+      if (newest !== undefined)
+        expect(drawn(processBox(first)!, newest)).toBeGreaterThan(0);
       tops.push(
         await onPage(
           `<div style="width: 640px">${first!.outerHTML}${second!.outerHTML}</div>`,
@@ -889,12 +911,10 @@ describe("a reply at work, as a browser draws it", () => {
     // Before its first token, then calling without a word yet.
     await measure();
     await above(call("a"));
-    expect(saidLine(replies()[0])?.textContent ?? "").toBe("");
     await measure();
-    // It speaks, adds steps, then says something long in place of what it said.
+    // It speaks, adds steps, then writes something many lines long.
     await above(call("a"), words("我先看看配置"), call("b"));
-    expect(saidLine(replies()[0])?.textContent).toBe("我先看看配置");
-    await measure();
+    await measure("我先看看配置");
     await above(
       call("a"),
       words("我先看看配置"),
@@ -902,31 +922,18 @@ describe("a reply at work, as a browser draws it", () => {
       thought,
       call("c"),
     );
-    await measure();
+    await measure("我先看看配置");
     await above(
       call("a"),
       words("我先看看配置"),
       call("b"),
       thought,
       call("c"),
-      words(long),
-      call("d"),
+      words(many),
     );
-    expect(saidLine(replies()[0])?.textContent).toBe(long);
-    await measure();
-    expect(tops[0]).toBeGreaterThan(200);
+    await measure(long);
+    expect(tops[0]).toBeGreaterThan(150);
     expect(new Set(tops).size).toBe(1);
-  });
-
-  it("does not grow when a reply that called first says something", async ({
-    skip,
-  }) => {
-    if (!(await hasBrowser())) return skip();
-    const { container, say } = await live("direct");
-    await say(call("a"));
-    const silent = reply(container);
-    await say(call("a"), words(long), call("b"));
-    expect(await height(reply(container))).toBe(await height(silent));
   });
 });
 
@@ -947,7 +954,6 @@ describe("following a running reply", () => {
       steps={Array.from({ length: n }, (_, i) => <div key={i}>step {i}</div>)}
       count={n}
       running
-      folded={false}
       time="12:00"
       answer={null}
     />
