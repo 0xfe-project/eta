@@ -29,21 +29,6 @@ export const MODEL_THINKING_LEVELS = [
 
 export type ModelInput = "text" | "image";
 
-/**
- * Kinds with no built-in endpoint: the user supplies the URL, the key and the model list. Both
- * custom kinds speak OpenAI's wire protocols and differ only in which one: `openai-responses`
- * posts to `/responses`, `openai-compatible` to `/chat/completions`.
- */
-export function isCustomKind(kind: ProviderKind | undefined): boolean {
-  // A config entry written before kinds existed has none, and the historical reading of that is
-  // the custom Chat Completions endpoint — the same default the normaliser applies.
-  return (
-    kind === undefined ||
-    kind === "openai-compatible" ||
-    kind === "openai-responses"
-  );
-}
-
 /** Provider-owned capabilities. Missing metadata is unknown, not a negative claim. */
 export interface ModelCapabilities {
   name?: string;

@@ -1,6 +1,7 @@
 import type { ProviderKind } from "@eta/client-contracts";
 import type { ReactNode } from "react";
 import type { AccountSource, ProviderSource, Source } from "@/queries/sources";
+import { isCustomKind, signsIn } from "@eta/client-contracts";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -29,9 +30,7 @@ import {
 } from "@/queries/llm";
 import {
   discoveryCodeText,
-  isCustomKind,
   providerErrorMessage,
-  signsIn,
   useCheckProviders,
   useDeleteProvider,
   useSaveProvider,

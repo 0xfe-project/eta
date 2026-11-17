@@ -4,7 +4,7 @@ import type {
   ProviderLogosResult,
 } from "@eta/client-contracts";
 import type { Source } from "@/queries/sources";
-import { BUILTIN_PROVIDER_PRESETS } from "@eta/client-contracts";
+import { MODEL_SOURCES, modelSource } from "@eta/client-contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { getWire } from "@/lib/wire";
@@ -36,6 +36,15 @@ const ETA_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="300 300 1
 
 const NONE: Record<string, string> = {};
 
+/** How the host finds a source's logo: its kind's own, else by its address. */
+function logoOfKind(
+  kind: ProviderKind,
+  baseUrl: string,
+): Pick<ProviderLogoRequest, "id" | "baseUrl"> {
+  const logo = modelSource(kind)?.logo;
+  return logo === undefined ? { baseUrl } : { id: logo };
+}
+
 /** A listed source's logo, when there is one. */
 export function logoOf(
   logos: Readonly<Record<string, string>>,
@@ -66,21 +75,17 @@ export function useSourceLogos(): Record<string, string> {
             },
           ],
     ),
-    ...Object.entries(BUILTIN_PROVIDER_PRESETS)
-      .filter(([kind]) => kind !== "eta")
-      .map(([kind, preset]) => ({
-        key: logoKey.kind(kind as ProviderKind),
-        ...(kind === "openai-codex"
-          ? { id: "openai" }
-          : { baseUrl: preset.baseUrl }),
+    ...(Object.keys(MODEL_SOURCES) as ProviderKind[])
+      .filter((kind) => kind !== "eta" && modelSource(kind)?.baseUrl)
+      .map((kind) => ({
+        key: logoKey.kind(kind),
+        ...logoOfKind(kind, modelSource(kind)?.baseUrl ?? ""),
       })),
     ...(data?.providers ?? [])
       .filter((provider) => provider.kind !== "eta")
       .map((provider) => ({
         key: logoKey.provider(provider.id),
-        ...(provider.kind === "openai-codex"
-          ? { id: "openai" }
-          : { baseUrl: provider.baseUrl }),
+        ...logoOfKind(provider.kind, provider.baseUrl),
       })),
   ];
   // Eta's own sources draw Eta's mark; the host is not asked for it.

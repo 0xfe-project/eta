@@ -14,24 +14,24 @@
  * Public data only: the request carries no account credentials, no headers of the user's, and
  * follows no redirects.
  */
-import type { ProviderKind } from "@eta/client-contracts";
+import type { ModelSource, ProviderKind } from "@eta/client-contracts";
 import type { ModelCapabilities } from "./config-types";
-import { BUILTIN_PROVIDER_PRESETS } from "@eta/client-contracts";
+import { MODEL_SOURCES, modelSource } from "@eta/client-contracts";
 import { MODEL_THINKING_LEVELS } from "./config-types";
 
 export const MODELS_DEV_URL = "https://models.dev/api.json";
 
 // Exact official endpoints, not provider names or arbitrary compatible proxies.
-const ENDPOINTS: Record<string, string> = {
-  [BUILTIN_PROVIDER_PRESETS.deepseek.baseUrl]: "deepseek",
-  [BUILTIN_PROVIDER_PRESETS["kimi-coding"].baseUrl]: "kimi-code-plan-cn",
-  [BUILTIN_PROVIDER_PRESETS["zai-coding-cn"].baseUrl]: "zhipuai-coding-plan",
-  [BUILTIN_PROVIDER_PRESETS.zai.baseUrl]: "zai-coding-plan",
-  [BUILTIN_PROVIDER_PRESETS.opencode.baseUrl]: "opencode",
-  [BUILTIN_PROVIDER_PRESETS["opencode-go"].baseUrl]: "opencode-go",
-  [BUILTIN_PROVIDER_PRESETS.commandcode.baseUrl]: "commandcode",
-  "https://api.openai.com/v1": "openai",
-};
+const ENDPOINTS: Record<string, string> = Object.fromEntries([
+  ...(Object.values(MODEL_SOURCES) as ModelSource[]).flatMap((source) =>
+    source.baseUrl === undefined ||
+    source.modelsDev === undefined ||
+    source.modelsDev === "by-model-id"
+      ? []
+      : [[source.baseUrl, source.modelsDev]],
+  ),
+  ["https://api.openai.com/v1", "openai"],
+]);
 
 /** The models.dev entry an exact official endpoint is listed under, when it is one. */
 export function officialModelsDevId(baseUrl: string): string | undefined {
@@ -315,8 +315,9 @@ export async function publicModelMetadata(
     throw new Error("Invalid endpoint for public model metadata");
   }
   const endpoint = url.href.replace(/\/+$/, "");
-  if (args.kind === "eta")
-    return endpoint === BUILTIN_PROVIDER_PRESETS.eta.baseUrl
+  const source = modelSource(args.kind);
+  if (source?.modelsDev === "by-model-id")
+    return endpoint === source.baseUrl
       ? {
           models: modelsDevByModelId(
             await fetchModelsDev(send, signal),
@@ -325,17 +326,11 @@ export async function publicModelMetadata(
         }
       : { models: [] };
   const providerId = ENDPOINTS[endpoint];
-  const preset =
-    BUILTIN_PROVIDER_PRESETS[
-      args.kind as keyof typeof BUILTIN_PROVIDER_PRESETS
-    ];
+  // A kind with an endpoint of its own gets facts for that endpoint only.
   if (
     !providerId ||
-    (!preset &&
-      args.kind !== "openai-compatible" &&
-      args.kind !== "openai-responses") ||
-    (preset && preset.baseUrl !== endpoint) ||
-    args.kind === "openai-codex"
+    source === undefined ||
+    (source.baseUrl !== undefined && source.baseUrl !== endpoint)
   )
     return { models: [] };
 

@@ -110,10 +110,6 @@ export {
 } from "./plugins";
 export { ETA_USER_AGENT } from "./providers/attribution";
 export {
-  catalogModelsFor,
-  parseProviderModelCatalog,
-  type ProviderCatalogEntry,
-  providerDefinitionForKind,
   providerModelCatalog,
   providerModelDefinition,
   type ProviderReference,
@@ -125,7 +121,6 @@ export {
   type EtaConfig,
   type EtaModelConfig,
   type EtaProviderConfig,
-  isCustomKind,
   type ModelCapabilities,
   modelThinkingLevels,
   providerSummary,
@@ -133,7 +128,6 @@ export {
 } from "./providers/config-types";
 export {
   discoverModels,
-  discoversModels,
   type DiscoveryOptions,
   type DiscoveryResult,
 } from "./providers/discovery";

@@ -71,10 +71,12 @@
     "accountReady_one": "已连上 {{name}}，带来 {{count}} 个模型。",
     "accountReady_other": "已连上 {{name}}，带来 {{count}} 个模型。",
     "recommended": "推荐",
-    "getEtaKey": "获取 key",
-    "commandCode": {
-      "getKey": "去 Studio 创建 key",
-      "plans": "Go 计划没有 API 权限；GOAT、Pro、Max、Team 和 Provider 计划可以用。Claude 模型只走 Anthropic 协议，eta 暂不支持。"
+    "getKey": "获取 key",
+    "sources": {
+      "commandcode": {
+        "getKey": "去 Studio 创建 key",
+        "note": "Go 计划没有 API 权限；GOAT、Pro、Max、Team 和 Provider 计划可以用。Claude 模型只走 Anthropic 协议，eta 暂不支持。"
+      }
     }
   },
   "detail": {

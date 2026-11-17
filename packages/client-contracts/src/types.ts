@@ -6,6 +6,7 @@ import type {
   ThinkingLevel,
   Usage,
 } from "./data";
+import type { ProviderKind } from "./providers";
 /**
  * The shapes a client draws with. These are *data contracts*, not the pipe: the protocol
  * itself (calls, state, events) is in `@eta/client-wire-proto` and knows nothing about sessions, git or
@@ -182,20 +183,6 @@ export interface SidebarSession {
 }
 
 /* ------------------------------------------------------------------ providers */
-
-/** Kinds with a built-in endpoint; the rest take one from the user. */
-export type ProviderKind =
-  | "eta"
-  | "kimi-coding"
-  | "deepseek"
-  | "zai-coding-cn"
-  | "zai"
-  | "opencode"
-  | "opencode-go"
-  | "commandcode"
-  | "openai-codex"
-  | "openai-compatible"
-  | "openai-responses";
 
 /**
  * Extra request headers for one provider. A `null` value means "do not send this header", which

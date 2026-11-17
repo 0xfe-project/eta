@@ -6,11 +6,7 @@ import type {
   UnsupportedModel,
 } from "@eta/client-contracts";
 import type { ReactNode } from "react";
-import {
-  BUILTIN_PROVIDER_PRESETS,
-  COMMAND_CODE_KEYS_URL,
-  ETA_TOKEN_PLAN_KEYS_URL,
-} from "@eta/client-contracts";
+import { MODEL_SOURCES, modelSource } from "@eta/client-contracts";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -61,33 +57,28 @@ type SourcePreset =
 
 const LOCAL_URL = "http://127.0.0.1:11434/v1";
 
-const keyPreset = (kind: keyof typeof BUILTIN_PROVIDER_PRESETS) => ({
-  id: kind,
-  group: "key" as const,
-  kind,
-  baseUrl: BUILTIN_PROVIDER_PRESETS[kind].baseUrl,
-});
+/** The key sources whose models come from where `models` says: makers first, then gateways. */
+const keyPresets = (models: string): SourcePreset[] =>
+  (Object.keys(MODEL_SOURCES) as ProviderKind[])
+    .filter((kind) => {
+      const source = modelSource(kind);
+      return source?.auth === "key" && source.models === models;
+    })
+    .map((kind) => ({
+      id: kind,
+      // Eta's own gateway: one key, on top of every group.
+      group: kind === "eta" ? "recommended" : "key",
+      kind,
+      baseUrl: modelSource(kind)?.baseUrl ?? "",
+    }));
 
-/** Eta's own gateway: one key, on top of every group. */
-const ETA_PRESET: SourcePreset = {
-  id: "eta",
-  group: "recommended",
-  kind: "eta",
-  baseUrl: BUILTIN_PROVIDER_PRESETS.eta.baseUrl,
-};
-
-const SOURCE_PRESETS: readonly SourcePreset[] = [
-  ETA_PRESET,
+/** Read when drawn, so a kind added to the definition is a card without anything else. */
+const sourcePresets = (): readonly SourcePreset[] => [
   { id: "codex", group: "subscription", connector: "codex" },
   { id: "xai", group: "subscription", connector: "xai" },
-  keyPreset("deepseek"),
-  keyPreset("kimi-coding"),
-  keyPreset("zai-coding-cn"),
-  keyPreset("zai"),
+  ...keyPresets("endpoint"),
   { id: "gemini", group: "key", connector: "gemini" },
-  keyPreset("opencode"),
-  keyPreset("opencode-go"),
-  keyPreset("commandcode"),
+  ...keyPresets("models-dev"),
   {
     id: "custom",
     group: "custom",
@@ -129,9 +120,7 @@ function presetName(
     return translate("providers:add.presets.custom");
   if (preset.custom === "local")
     return translate("providers:add.presets.local");
-  return BUILTIN_PROVIDER_PRESETS[
-    preset.kind as keyof typeof BUILTIN_PROVIDER_PRESETS
-  ].name;
+  return modelSource(preset.kind)?.name ?? preset.kind;
 }
 
 /** A name as an id: the provider's address in the config, and the front of its model ids. */
@@ -203,7 +192,7 @@ function PresetGrid({ onPick }: { onPick: (preset: SourcePreset) => void }) {
   const { t: translateText } = useTranslation(["providers"] as const);
   const llm = useLlm();
   const logos = useSourceLogos();
-  const offered = SOURCE_PRESETS.filter(
+  const offered = sourcePresets().filter(
     (preset) =>
       !("connector" in preset) ||
       llm.connectors.some((connector) => connector.id === preset.connector),
@@ -414,7 +403,7 @@ export function AddSourceDialog({
   const llm = useLlm();
   const save = useSaveProvider();
   const check = useCheckProviders();
-  const found = SOURCE_PRESETS.find((entry) => entry.id === initialPreset);
+  const found = sourcePresets().find((entry) => entry.id === initialPreset);
   const initial =
     found === undefined || "connector" in found ? undefined : found;
   const [step, setStep] = useState(initial === undefined ? 0 : 1);
@@ -518,6 +507,11 @@ export function AddSourceDialog({
   ];
   const keyRequired =
     preset !== undefined && !("connector" in preset) && custom === undefined;
+  const keysUrl = modelSource(kind)?.keysUrl;
+  // A source may say more about its keys in the locales (`add.sources.<kind>.note`).
+  const note = translateText(`add.sources.${kind}.note` as "add.getKey", {
+    defaultValue: "",
+  });
 
   let body: ReactNode;
   let primary: ReactNode = null;
@@ -629,31 +623,22 @@ export function AddSourceDialog({
               setError(undefined);
             }}
           />
-          {kind === "eta" ? (
+          {keysUrl === undefined ? null : (
             <a
-              href={ETA_TOKEN_PLAN_KEYS_URL}
+              href={keysUrl}
               target="_blank"
               rel="noreferrer"
               className="justify-self-start text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
             >
-              {translateText("add.getEtaKey")}
+              {/* A source may name its key page in the locales (`add.sources.<kind>.getKey`). */}
+              {translateText(`add.sources.${kind}.getKey` as "add.getKey", {
+                defaultValue: translateText("add.getKey"),
+              })}
             </a>
-          ) : null}
-          {kind === "commandcode" ? (
-            <>
-              <a
-                href={COMMAND_CODE_KEYS_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="justify-self-start text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
-              >
-                {translateText("add.commandCode.getKey")}
-              </a>
-              <p className="text-[11px] text-muted-foreground">
-                {translateText("add.commandCode.plans")}
-              </p>
-            </>
-          ) : null}
+          )}
+          {note === "" ? null : (
+            <p className="text-[11px] text-muted-foreground">{note}</p>
+          )}
         </div>
         {error === undefined ? null : (
           <p role="alert" className="text-xs text-destructive">

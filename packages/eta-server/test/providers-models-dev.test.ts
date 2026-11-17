@@ -18,11 +18,10 @@ import type { EtaModelConfig } from "../src/providers/config-types";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BUILTIN_PROVIDER_PRESETS } from "@eta/client-contracts";
+import { MODEL_SOURCES } from "@eta/client-contracts";
 import { Context } from "cordis";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { providersPlugin } from "../src/bundled/providers";
-import { providerDefinitionForKind } from "../src/providers/catalog";
 import { providerSummary } from "../src/providers/config-types";
 import { discoverModels } from "../src/providers/discovery";
 import {
@@ -60,11 +59,11 @@ function serving(body: unknown) {
 
 const ZEN = {
   kind: "opencode" as const,
-  baseUrl: BUILTIN_PROVIDER_PRESETS.opencode.baseUrl,
+  baseUrl: MODEL_SOURCES.opencode.baseUrl,
 };
 const GO = {
   kind: "opencode-go" as const,
-  baseUrl: BUILTIN_PROVIDER_PRESETS["opencode-go"].baseUrl,
+  baseUrl: MODEL_SOURCES["opencode-go"].baseUrl,
 };
 
 function count<T>(items: readonly T[], key: (item: T) => string) {
@@ -159,13 +158,11 @@ describe("the OpenCode presets", () => {
         (snapshot as unknown as Catalog & Record<string, { api: string }>)[id]!
           .api,
       );
-      const definition = providerDefinitionForKind(reference.kind);
-      expect(definition?.discovery).toEqual({
-        adapter: "models-dev",
-        provider: id,
-        requireContextWindow: false,
+      expect(MODEL_SOURCES[reference.kind]).toMatchObject({
+        auth: "key",
+        models: "models-dev",
+        modelsDev: id,
       });
-      expect(definition?.auth.required).toBe(true);
     }
   });
 

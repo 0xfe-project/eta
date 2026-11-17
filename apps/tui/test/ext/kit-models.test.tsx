@@ -11,7 +11,7 @@ import type {
 } from "@eta/client-contracts";
 import type { Model } from "../../src/ext/kit/models";
 import { describe, expect, it } from "vitest";
-import { buildModels, keyMissing } from "../../src/ext/kit/models";
+import { buildModels } from "../../src/ext/kit/models";
 
 function provider(
   fields: Partial<ProviderSummary> & Pick<ProviderSummary, "id" | "kind">,
@@ -50,21 +50,6 @@ const ACCOUNTS: LlmAccounts = {
 };
 
 const ids = (models: Model[] | undefined) => models?.map((m) => m.id);
-
-describe("providerLabel and keyMissing", () => {
-  it.each([
-    ["deepseek", false, true],
-    ["deepseek", true, false],
-    ["kimi-coding", false, true],
-    ["zai", false, true],
-    ["zai-coding-cn", false, true],
-    ["openai-codex", false, false],
-    ["openai-compatible", false, false],
-    ["openai-responses", false, false],
-  ] as const)("%s with key %s: missing %s", (kind, hasApiKey, missing) => {
-    expect(keyMissing({ kind, hasApiKey })).toBe(missing);
-  });
-});
 
 describe("buildModels", () => {
   it("is undefined until the providers' config has come", () => {

@@ -5,10 +5,13 @@ import type {
   AgentRuntimeInfo,
   LlmAccounts,
   LlmModel,
-  ProviderSummary,
   ProvidersView,
 } from "@eta/client-contracts";
-import { LLM_PROVIDER_ID } from "@eta/client-contracts";
+import {
+  keyMissing,
+  LLM_PROVIDER_ID,
+  providerLabel,
+} from "@eta/client-contracts";
 import { wire } from "../../app/session";
 import { useTarget } from "../../wire/target";
 
@@ -21,24 +24,6 @@ export interface Model {
   /** Not while its provider lacks a key it cannot run without. */
   available: boolean;
 }
-
-const PRESET_NAMES: Partial<Record<ProviderSummary["kind"], string>> = {
-  "openai-codex": "Codex",
-  "kimi-coding": "Kimi for Coding",
-  deepseek: "DeepSeek",
-  "zai-coding-cn": "GLM Coding Plan (CN)",
-  zai: "GLM Coding Plan (Global)",
-};
-
-const providerLabel = (provider: ProviderSummary): string =>
-  provider.name ?? PRESET_NAMES[provider.kind] ?? provider.id;
-
-/** Custom endpoints may run without a key, and Codex signs in instead of holding one. */
-const keyMissing = (provider: ProviderSummary): boolean =>
-  !provider.hasApiKey &&
-  provider.kind !== "openai-codex" &&
-  provider.kind !== "openai-compatible" &&
-  provider.kind !== "openai-responses";
 
 function modelsOf(view: ProvidersView): Model[] {
   return view.providers.flatMap((provider) =>

@@ -11,12 +11,9 @@
  * Nothing here reaches commandcode.ai or models.dev.
  */
 import type { AssistantMessage, Context } from "@earendil-works/pi-ai";
-import { BUILTIN_PROVIDER_PRESETS } from "@eta/client-contracts";
+import { MODEL_SOURCES } from "@eta/client-contracts";
 import { describe, expect, it, vi } from "vitest";
-import {
-  catalogCompat,
-  providerDefinitionForKind,
-} from "../src/providers/catalog";
+import { catalogCompat } from "../src/providers/catalog";
 import { providerSummary } from "../src/providers/config-types";
 import { discoverModels, listProviderModels } from "../src/providers/discovery";
 import { officialModelsDevId } from "../src/providers/metadata";
@@ -25,7 +22,7 @@ import snapshot from "./fixtures/models-dev-commandcode.json";
 
 const COMMAND_CODE = {
   kind: "commandcode" as const,
-  baseUrl: BUILTIN_PROVIDER_PRESETS.commandcode.baseUrl,
+  baseUrl: MODEL_SOURCES.commandcode.baseUrl,
 };
 
 const listed = snapshot.commandcode.models as Record<
@@ -44,7 +41,7 @@ function serving(body: unknown) {
 
 describe("the Command Code preset", () => {
   it("is called Command Code and points at the address models.dev lists", () => {
-    expect(BUILTIN_PROVIDER_PRESETS.commandcode).toEqual({
+    expect(MODEL_SOURCES.commandcode).toMatchObject({
       name: "Command Code",
       baseUrl: "https://api.commandcode.ai/provider/v1",
     });
@@ -52,26 +49,12 @@ describe("the Command Code preset", () => {
     expect(officialModelsDevId(COMMAND_CODE.baseUrl)).toBe("commandcode");
   });
 
-  it("has a catalog entry: models from models.dev, Chat Completions, a key it cannot run without", () => {
-    const definition = providerDefinitionForKind("commandcode");
-    expect(definition).toMatchObject({
-      id: "commandcode",
-      auth: {
-        adapter: "api-key",
-        required: true,
-        missingError: "key_required",
-      },
-      discovery: {
-        adapter: "models-dev",
-        provider: "commandcode",
-        requireContextWindow: false,
-      },
-      runtime: { adapter: "openai-chat" },
-      restrictToListedModels: true,
+  it("lists its models from models.dev and speaks Chat Completions, without OpenAI-only fields", () => {
+    expect(MODEL_SOURCES.commandcode).toMatchObject({
+      auth: "key",
+      models: "models-dev",
+      modelsDev: "commandcode",
     });
-    // Nothing is written down: the list is models.dev's.
-    expect(definition?.models.size).toBe(0);
-    // A gateway, not OpenAI itself: none of the OpenAI-only fields go out.
     expect(catalogCompat("commandcode")).toEqual({
       supportsDeveloperRole: false,
       supportsStore: false,

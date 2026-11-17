@@ -6,16 +6,15 @@ import type {
   ProviderCheck,
   ProviderSummary,
 } from "@eta/client-contracts";
-import { useMemo } from "react";
-import { useLlm } from "@/queries/llm";
 import {
   isCustomKind,
   keyMissing,
   providerLabel,
   signsIn,
-  useProviderChecks,
-  useProviders,
-} from "@/queries/providers";
+} from "@eta/client-contracts";
+import { useMemo } from "react";
+import { useLlm } from "@/queries/llm";
+import { useProviderChecks, useProviders } from "@/queries/providers";
 
 // Model sources: one list for everything a model can come from. A provider in `config.json` (an
 // API key, a custom endpoint, a model server on this machine) and an account the LLM gateway holds

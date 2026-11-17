@@ -3,12 +3,10 @@ import { describe, expect, it } from "@rstest/core";
 import { WireError } from "@/lib/wire";
 import {
   discoveryErrorMessage,
-  keyMissing,
   modelAvailability,
   modelGroups,
   modelsOf,
   providerErrorMessage,
-  providerLabel,
 } from "./providers";
 
 const provider = (
@@ -28,38 +26,6 @@ const view = (
   revision: "r1",
   providers,
   ...extra,
-});
-
-describe("what a provider is called", () => {
-  it("prefers its own name, then its kind's, then its id", () => {
-    expect(providerLabel({ id: "a", kind: "deepseek", name: "公司" })).toBe(
-      "公司",
-    );
-    expect(providerLabel({ id: "a", kind: "deepseek" })).toBe("DeepSeek");
-    expect(providerLabel({ id: "mine", kind: "openai-compatible" })).toBe(
-      "mine",
-    );
-  });
-});
-
-describe("a missing key", () => {
-  it("matters for the kinds that cannot run without one", () => {
-    expect(keyMissing({ kind: "deepseek", hasApiKey: false })).toBe(true);
-    expect(keyMissing({ kind: "deepseek", hasApiKey: true })).toBe(false);
-    expect(keyMissing({ kind: "opencode", hasApiKey: false })).toBe(true);
-    expect(keyMissing({ kind: "opencode-go", hasApiKey: false })).toBe(true);
-    expect(keyMissing({ kind: "commandcode", hasApiKey: false })).toBe(true);
-  });
-
-  it("claims nothing for custom endpoints, which may be open, or for Codex, which signs in", () => {
-    expect(keyMissing({ kind: "openai-compatible", hasApiKey: false })).toBe(
-      false,
-    );
-    expect(keyMissing({ kind: "openai-responses", hasApiKey: false })).toBe(
-      false,
-    );
-    expect(keyMissing({ kind: "openai-codex", hasApiKey: false })).toBe(false);
-  });
 });
 
 describe("the models a picker lists", () => {
