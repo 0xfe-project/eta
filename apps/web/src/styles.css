@@ -238,8 +238,8 @@
  * only, and it goes ahead of this stack rather than replacing it, so whatever it lacks still comes
  * from Eta Sans and then the system. An earlier build had a free-form font field and two people
  * ended up looking at two different products while reporting the same bug; so a custom font is
- * named wherever the version is (Settings → Update) and on <html data-custom-font>, and a
- * screenshot or a report says which face it was drawn in.
+ * also named on <html data-custom-font>, where devtools or a diagnostic can read which face a
+ * window is drawn in.
  *
  * Not `inline`: the setting overrides these two on <html>, which only reaches the rules that read
  * them as var(--font-sans) / var(--font-mono). Inside `@theme inline` Tailwind writes the stack
