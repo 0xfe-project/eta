@@ -6,7 +6,6 @@ import { BellIcon } from "@phosphor-icons/react/Bell";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
-import { SpinnerIcon } from "@phosphor-icons/react/Spinner";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -76,12 +75,13 @@ function Confirmation({ interaction }: { interaction: InteractionView }) {
   const [headline, ...rest] = interaction.prompt.split("\n");
   const details = rest.join("\n").trim();
   const onError = (error: Error) => toast.error(error.message);
-  const chosen = (option: string) => {
-    const response = mine ? answer.variables?.response : undefined;
-    return (
-      response?.kind === "selection" && response.selections.includes(option)
-    );
-  };
+  // Which options this question is waiting on, if the answer on its way is a selection.
+  const sending =
+    mine && answer.variables?.response.kind === "selection"
+      ? answer.variables.response.selections
+      : undefined;
+  const selected = (option: string) =>
+    picked.includes(option) || sending?.includes(option) === true;
   const conversationName = groups.find(
     (g) => g.id === interaction.conversationId,
   )?.name;
@@ -165,10 +165,11 @@ function Confirmation({ interaction }: { interaction: InteractionView }) {
               <Button
                 key={option}
                 variant={
-                  index === 0 || picked.includes(option) ? "default" : "outline"
+                  selected(option) || (!interaction.multi && index === 0)
+                    ? "default"
+                    : "outline"
                 }
                 disabled={answer.isPending}
-                aria-busy={chosen(option) || undefined}
                 onClick={() =>
                   interaction.multi
                     ? setPicked(
@@ -179,12 +180,6 @@ function Confirmation({ interaction }: { interaction: InteractionView }) {
                     : choose(interaction, [option], { onError })
                 }
               >
-                {chosen(option) ? (
-                  <SpinnerIcon
-                    aria-hidden="true"
-                    className="motion-safe:animate-spin"
-                  />
-                ) : null}
                 {option}
               </Button>
             ))}

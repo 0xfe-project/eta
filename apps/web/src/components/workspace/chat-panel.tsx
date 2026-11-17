@@ -11,7 +11,7 @@ import type { WorkspaceState } from "./workspace-store";
 import type { Draft, FilePart, PasteRange } from "@/lib/composer";
 import type { ComposerTarget, StickyTarget } from "@/lib/mentions";
 import type { Outgoing, SendMode } from "@/queries/outbox";
-import type { Question } from "@/queries/questions";
+import type { AnsweringQuestion, Question } from "@/queries/questions";
 import type { TaskStatus } from "@/queries/tasks";
 import {
   MAX_ATTACHMENTS,
@@ -862,6 +862,7 @@ const Turn = memo(
     author,
     sessionId,
     question,
+    answering,
     nobody,
     joined,
     taskRowsOf,
@@ -874,6 +875,8 @@ const Turn = memo(
     sessionId?: string | undefined;
     /** What the reply is waiting on the user for. */
     question?: Question | undefined;
+    /** The answer currently being sent for this question. */
+    answering?: AnsweringQuestion | undefined;
     /** The user message woke nobody. */
     nobody: boolean;
     /** Who the user message joined the turn of. */
@@ -996,6 +999,7 @@ const Turn = memo(
           <AskBlock
             question={question}
             who={author}
+            pending={answering}
             onChoose={(q, selections) =>
               actions.current.onChoose(q, selections)
             }
@@ -1114,6 +1118,7 @@ export function ChatPanel({
   loadingOlder,
   onLoadOlder,
   questions,
+  answering,
   draft,
   onDraftChange: setDraft,
   onSend,
@@ -1151,6 +1156,8 @@ export function ChatPanel({
   onLoadOlder: () => void;
   /** Every question waiting for the user, in any conversation. */
   questions: readonly Question[];
+  /** The question whose answer is being sent, and what was selected. */
+  answering?: AnsweringQuestion | undefined;
   draft: Draft;
   onDraftChange: (draft: Draft) => void;
   onSend: (
@@ -1689,6 +1696,12 @@ export function ChatPanel({
                           message.status === "waiting_for_input" &&
                           message.agentId !== null
                             ? questionByAgent.get(message.agentId)
+                            : undefined
+                        }
+                        answering={
+                          questionByAgent.get(message.agentId ?? "")?.id ===
+                          answering?.id
+                            ? answering
                             : undefined
                         }
                         nobody={

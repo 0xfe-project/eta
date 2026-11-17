@@ -1603,8 +1603,23 @@
     background: transparent;
     cursor: pointer;
   }
-  .ask-option:hover {
+  .ask-option[aria-pressed="true"] {
+    border-color: var(--primary);
+    color: var(--primary-foreground);
+    background: var(--primary);
+  }
+  .ask-option:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+  .ask-option[aria-pressed="true"]:disabled {
+    opacity: 1;
+  }
+  .ask-option:hover:not(:disabled) {
     background: var(--overlay-hover);
+  }
+  .ask-option[aria-pressed="true"]:hover:not(:disabled) {
+    background: var(--primary);
   }
 }
 
