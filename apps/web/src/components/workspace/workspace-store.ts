@@ -7,8 +7,8 @@ import { translate } from "@/lib/i18n";
 
 export const storageKey = "eta.workspace.v1";
 
-// Local UI state only; everything else lives in the control plane. Zod
-// drops fields this schema does not have.
+// Local UI state only; everything else lives in the control plane. Read one
+// field at a time (readWorkspace): what this schema does not have is dropped.
 const workspaceSchema = z.object({
   selectedGroupId: z.string().max(64).optional(),
   selectedAgentId: z.string().max(64).optional(),
@@ -99,14 +99,37 @@ function apply<T>(update: Update<T>, state: T): T {
 
 type Persisted = Pick<WorkspaceStore, "workspace">;
 
-// The bare workspace object under its key, validated on load.
+/**
+ * The saved workspace, read one field at a time: a field that fails its own
+ * schema costs only itself, and a field this schema does not have is dropped.
+ * Null when the saved value is not an object at all (a torn write, `[]`,
+ * `null`), so the caller keeps the state it has. Silent: the value may be a
+ * hand edit or an older build's, and there is nothing for the user to do.
+ */
+function readWorkspace(saved: unknown): WorkspaceState | null {
+  if (typeof saved !== "object" || saved === null || Array.isArray(saved)) {
+    return null;
+  }
+  const fields = saved as Record<string, unknown>;
+  const workspace: Record<string, unknown> = {};
+  for (const [key, schema] of Object.entries(workspaceSchema.shape)) {
+    if (!Object.hasOwn(fields, key)) continue;
+    const result = schema.safeParse(fields[key]);
+    if (result.success && result.data !== undefined) {
+      workspace[key] = result.data;
+    }
+  }
+  return workspace as WorkspaceState;
+}
+
+// The bare workspace object under its key, validated field by field on load.
 const storage: PersistStorage<Persisted> = {
   getItem: (name) => {
     try {
       const saved = localStorage.getItem(name);
       if (!saved) return null;
-      const result = workspaceSchema.safeParse(JSON.parse(saved));
-      return result.success ? { state: { workspace: result.data } } : null;
+      const workspace = readWorkspace(JSON.parse(saved));
+      return workspace ? { state: { workspace } } : null;
     } catch {
       return null; // Storage may be unavailable in private browsing.
     }

@@ -22,6 +22,7 @@ describe("workspace store persistence", () => {
   });
 
   it("ignores saved data that does not validate", async () => {
+    // Its only field fails its schema, so nothing is left; a field costs only itself.
     localStorage.setItem(key, JSON.stringify({ selectedGroupId: 5 }));
     await useWorkspaceStore.persist.rehydrate();
     expect(useWorkspaceStore.getState().workspace).toEqual({});
@@ -65,13 +66,14 @@ describe("workspace store persistence", () => {
     );
   });
 
-  it("ignores a saved target that is neither everyone nor a list", async () => {
+  it("drops a saved target that is neither everyone nor a list, and keeps the rest", async () => {
+    // The bad targets cost only themselves: the model chosen beside them stays.
     localStorage.setItem(
       key,
       JSON.stringify({ ...saved, stickyTargets: { g1: "a1" } }),
     );
     await useWorkspaceStore.persist.rehydrate();
-    expect(useWorkspaceStore.getState().workspace).toEqual({});
+    expect(useWorkspaceStore.getState().workspace).toEqual(saved);
   });
 
   it("drops a task scope saved before the board had none", async () => {
