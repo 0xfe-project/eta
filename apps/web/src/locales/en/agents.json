@@ -83,8 +83,7 @@
   },
   "persona": {
     "default": "Project default",
-    "label": "Persona",
-    "etaOnly": "Personas only apply to the eta runtime. For an external runtime, set its tone in Instructions."
+    "label": "Persona"
   },
   "machine": {
     "label": "Runs on",

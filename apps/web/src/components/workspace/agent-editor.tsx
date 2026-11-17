@@ -275,7 +275,9 @@ function AgentEditorForm({
                 external={runtime !== "eta"}
               />
               <ThinkingField form={form} />
-              <PersonaField form={form} external={runtime !== "eta"} />
+              {/* A persona card only reaches eta's own runtime: an external one keeps its own identity, so
+                  the row is left out there. The value stays in the form for the way back. */}
+              {runtime === "eta" ? <PersonaField form={form} /> : null}
             </>
           ) : tab === "instructions" ? (
             <InstructionsField form={form} />

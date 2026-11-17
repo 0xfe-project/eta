@@ -83,8 +83,7 @@
   },
   "persona": {
     "default": "项目默认",
-    "label": "人格",
-    "etaOnly": "人格只对 eta 运行时生效。外部运行时的语气请写在指令里。"
+    "label": "人格"
   },
   "machine": {
     "label": "运行机器",
