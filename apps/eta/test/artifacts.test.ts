@@ -441,7 +441,7 @@ describe("publish_artifact from a task's session", () => {
     expect(r.timeline(task.id)).toEqual([]);
   });
 
-  it("comes from where the task is now, or failing that where it came from", async () => {
+  it("comes from where the task is now, and from no conversation once the task is unlinked", async () => {
     const r = await tasks();
     const elsewhere = await r.w.group(r.project.id, [r.ada.id], "elsewhere");
     const moved = await r.run(
@@ -458,9 +458,10 @@ describe("publish_artifact from a task's session", () => {
       taskId: moved.task.id,
       conversationId: elsewhere.id,
     });
+    // Unlinked, the task is in no conversation, whatever it was proposed in.
     expect(named("Unlinked")).toMatchObject({
       taskId: unlinked.task.id,
-      conversationId: r.group.id,
+      conversationId: null,
     });
   });
 

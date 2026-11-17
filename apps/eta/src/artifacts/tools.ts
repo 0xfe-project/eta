@@ -27,6 +27,7 @@ import {
   SEARCH_LIMIT_MAX,
   searchArtifacts,
   searchLine,
+  taskInScope,
 } from "./reading";
 
 /** The tool needs nothing from the run: where it reads is the session's own directory. */
@@ -253,17 +254,20 @@ export function artifactSessionTools(deps: {
       parameters: searchParameters(),
       async execute(args) {
         try {
+          const where = scope();
           let taskId: string | undefined;
           if (args.task !== undefined) {
-            taskId = deps.board.find(args.task)?.id;
-            if (taskId === undefined)
+            const task = deps.board.find(args.task);
+            // A task out of scope is not there either: its number says nothing.
+            if (task === undefined || !taskInScope(task, where))
               throw new ArtifactError(`no such task: ${args.task}`);
+            taskId = task.id;
           }
           const limit = Math.min(
             SEARCH_LIMIT_MAX,
             Math.max(1, Math.floor(args.limit ?? SEARCH_LIMIT)),
           );
-          const hits = await searchArtifacts(reading, scope(), {
+          const hits = await searchArtifacts(reading, where, {
             query: args.query,
             taskId,
             limit,

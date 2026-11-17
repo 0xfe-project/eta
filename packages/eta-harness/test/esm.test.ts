@@ -154,6 +154,30 @@ describe("esmrun", () => {
     session.stop();
   });
 
+  it("attaches at most 8 images to one result, and says how many it left out", async () => {
+    const { session } = await open([
+      call("esmrun", {
+        script:
+          'import eta from "eta";\nfor (let i = 0; i < 10; i++) await eta.platform.picture({});\n"ok"',
+      }),
+      stop(),
+    ]);
+    session.kernel.nextRun(userMsg("go"));
+    await session.runner.run();
+    const result = session.runner
+      .getTranscript()
+      .find((m) => m.role === "toolResult" && m.toolCallId === "c-esmrun") as
+      | { content: { type: string; text?: string }[] }
+      | undefined;
+    expect(
+      result?.content.filter((part) => part.type === "image"),
+    ).toHaveLength(8);
+    expect(result?.content[0]?.text).toContain(
+      "images: the tools answered with 10; the first 8 are attached, 2 left out.",
+    );
+    session.stop();
+  });
+
   it("an error is a tool error, not a crash", async () => {
     const { session } = await open([
       call("esmrun", { script: "throw new Error('boom')" }),
