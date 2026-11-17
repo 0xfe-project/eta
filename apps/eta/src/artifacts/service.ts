@@ -145,9 +145,15 @@ export class ArtifactService {
 
   /** The file a version opens at, as a path inside it: `index.html` for a site. */
   entryOf(version: VersionRecord): string {
-    return (
-      this.kindOf(version)?.entry(JSON.parse(version.manifest)) || "index.html"
-    );
+    try {
+      return (
+        this.kindOf(version)?.entry(JSON.parse(version.manifest)) ||
+        "index.html"
+      );
+    } catch {
+      // A manifest that does not parse still has its files: the usual page is the best guess.
+      return "index.html";
+    }
   }
 
   /** Every file of a version, as its name in the site and its size, sorted by name. */

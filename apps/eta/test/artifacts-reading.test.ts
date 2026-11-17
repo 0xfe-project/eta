@@ -61,13 +61,14 @@ async function bench() {
     id: string,
     number: number,
     conversationId: string | null,
+    originConversationId: string | null = conversationId,
   ): TaskRecord => {
     const made = {
       id,
       number,
       title: `Task ${number}`,
       conversationId,
-      originConversationId: conversationId,
+      originConversationId,
     } as TaskRecord;
     tasks.set(id, made);
     return made;
@@ -207,6 +208,27 @@ describe("what a session can see", () => {
     ]);
   });
 
+  it("is only its own for a task unlinked from the group it came from, and the group no longer sees it", async () => {
+    const s = await scene();
+    // Proposed in the group, then unlinked (`board.link(id, null)`): the origin stays.
+    const unlinked = s.task("t-unlinked", 5, null, GROUP);
+    const own = await s.publish("Unlinked task page", {
+      conversationId: GROUP,
+      taskId: unlinked.id,
+    });
+    expect(ids(await s.as(taskKey(unlinked.id)).search())).toEqual([own.id]);
+    expect(
+      (await s.as(taskKey(unlinked.id)).read({ artifactId: s.a.group.id }))
+        .isError,
+    ).toBe(true);
+    expect(ids(await s.as(GROUP).search()).sort()).toEqual(
+      [s.a.group.id, s.a.groupTask.id].sort(),
+    );
+    expect(textOf(await s.as(GROUP).read({ artifactId: own.id }))).toBe(
+      `no such artifact: ${own.id}`,
+    );
+  });
+
   it("is nothing for a routine that is not Captain's, or a task that is gone", async () => {
     const s = await scene();
     expect(textOf(await s.as(routineKey("r1"), "ada").search())).toBe(
@@ -264,13 +286,18 @@ describe("what a session can see", () => {
     expect(ids(await s.as(GROUP).search({ task: "#1" }))).toEqual([
       s.a.groupTask.id,
     ]);
-    expect(textOf(await s.as(GROUP).search({ task: "#2" }))).toBe(
-      "No artifacts.",
-    );
+    // A task out of scope is answered the same as one that does not exist.
+    expect(await s.as(GROUP).search({ task: "#2" })).toMatchObject({
+      isError: true,
+      content: [{ text: "no such task: #2" }],
+    });
     expect(await s.as(GROUP).search({ task: "#99" })).toMatchObject({
       isError: true,
       content: [{ text: "no such task: #99" }],
     });
+    expect(ids(await s.as(GROUP, CAPTAIN).search({ task: "#2" }))).toEqual([
+      s.a.otherTask.id,
+    ]);
   });
 });
 
@@ -349,13 +376,11 @@ describe("search_artifacts", () => {
 
   it("lists the newest first without a query, up to the limit, at most 50", async () => {
     const b = await bench();
-    const made: string[] = [];
-    for (let i = 0; i < 3; i++)
-      made.push((await b.publish(`A${i}`, { conversationId: GROUP })).id);
-    // Updated at the same millisecond: the store's order is the tie-break.
-    const listed = ids(await b.as(GROUP).search({ limit: 2 }));
-    expect(listed).toHaveLength(2);
-    expect(ids(await b.as(GROUP).search({ limit: 500 }))).toHaveLength(3);
+    for (let i = 0; i < 55; i++)
+      await b.publish(`A${i}`, { conversationId: GROUP });
+    expect(ids(await b.as(GROUP).search({ limit: 2 }))).toHaveLength(2);
+    expect(ids(await b.as(GROUP).search())).toHaveLength(20);
+    expect(ids(await b.as(GROUP).search({ limit: 500 }))).toHaveLength(50);
   });
 
   it("reads the words out of HTML", () => {
@@ -481,6 +506,14 @@ describe("read_artifact", () => {
     expect(old).toContain("<p>line 1</p>");
     expect(textOf(await s.read({ artifactId: s.a.id, version: 9 }))).toBe(
       `no such version: ${s.a.id} has versions 2, 1`,
+    );
+  });
+
+  it("opens index.html when a version's manifest does not parse", async () => {
+    const s = await site();
+    s.db.query("UPDATE artifact_version SET manifest = '{broken'").run();
+    expect(textOf(await s.read({ artifactId: s.a.id }))).toContain(
+      "     1\t<p>line 1</p>",
     );
   });
 

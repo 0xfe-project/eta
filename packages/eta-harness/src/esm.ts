@@ -57,6 +57,8 @@ const NOT_MIRRORED = new Set<string>([...ESM_TOOL_NAMES, "finish_task"]);
 
 /** Past this, a result goes to a file and the model is handed the path. */
 const RESULT_CHARS = 20_000;
+/** Images one esmrun result carries at most; the rest are named in its text. */
+const RESULT_IMAGES = 8;
 /** A nested turn that keeps calling tools is stopped here; the text so far is returned. */
 const ASK_TURNS = 50;
 
@@ -594,11 +596,16 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
       sections.push(`eta.ask [${one.status}] ${one.stack.join(" > ")}`);
     if (effects.length > 0)
       sections.push(`effects:\n${effects.map(effectLine).join("\n")}`);
+    const images = frame.images.slice(0, RESULT_IMAGES);
+    if (frame.images.length > images.length)
+      sections.push(
+        `images: the tools answered with ${frame.images.length}; the first ${images.length} are attached, ${frame.images.length - images.length} left out. Fetch fewer per script to see the rest.`,
+      );
     sections.push(`script: ${file}`);
     return {
       content: [
         { type: "text", text: sections.join("\n\n") },
-        ...frame.images.map((image) => ({ type: "image" as const, ...image })),
+        ...images.map((image) => ({ type: "image" as const, ...image })),
       ],
       details: {
         file,

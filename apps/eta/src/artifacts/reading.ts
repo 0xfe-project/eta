@@ -34,12 +34,14 @@ export type ArtifactScope =
   | { kind: "task"; taskId: string }
   | { kind: "none" };
 
-/** The conversation a task is in: the one it is linked to, else the one it was proposed in. */
+/**
+ * The conversation a task is in now: the one it is linked to. Not the one it was proposed in: a
+ * task unlinked from its group (`board.link(id, null)`) is in no conversation, and sees and is
+ * seen as one.
+ */
 export const conversationOfTask = (task: {
   conversationId: string | null;
-  originConversationId: string | null;
-}): string | undefined =>
-  task.conversationId ?? task.originConversationId ?? undefined;
+}): string | undefined => task.conversationId ?? undefined;
 
 /** What the session held in `key`, run by `agentId`, may find and read. Read at each call. */
 export function scopeOf(
@@ -85,6 +87,20 @@ function inScope(
         return conversationOfTask(task) === scope.conversationId;
       return artifact.conversationId === scope.conversationId;
     }
+  }
+}
+
+/** Whether a task is one a scope can see: a task out of scope is answered as one that is not there. */
+export function taskInScope(task: TaskRecord, scope: ArtifactScope): boolean {
+  switch (scope.kind) {
+    case "all":
+      return true;
+    case "none":
+      return false;
+    case "task":
+      return task.id === scope.taskId;
+    case "conversation":
+      return conversationOfTask(task) === scope.conversationId;
   }
 }
 
