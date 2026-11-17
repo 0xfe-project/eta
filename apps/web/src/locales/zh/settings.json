@@ -14,6 +14,9 @@
     "chatWidthNarrow": "窄",
     "chatWidthStandard": "标准",
     "chatWidthFull": "全宽",
+    "customFont": "界面字体",
+    "customFontHint": "填本机已安装字体的名称，整个应用都用它；它缺的字由 Eta Sans 补上。留空即用 Eta Sans。只保存在这个浏览器里。",
+    "customFontInvalid": "只能填一个字体名：字母、数字、空格、- _ 和 .，最多 64 个字符。未保存。",
     "transcriptRail": "会话导航轨道",
     "transcriptRailHint": "打开后聊天区右边缘显示一列导航：方块是智能体的回复，圆点是你发的消息，点一下跳过去。"
   },
@@ -153,7 +156,8 @@
       "hours": "{{count}} 小时前检查过",
       "hours_one": "{{count}} 小时前检查过",
       "hours_other": "{{count}} 小时前检查过"
-    }
+    },
+    "customFont": "界面字体：{{font}}（自定义，在这个浏览器的外观设置里设的；缺字由 Eta Sans 补上）"
   },
   "host": {
     "local": "在这台电脑上运行",

@@ -1,10 +1,11 @@
 import type { SettingsSection } from "./workspace-store";
-import { lazy, Suspense, useId } from "react";
+import { lazy, Suspense, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageSettings } from "@/components/language-settings";
 import { Loading } from "@/components/states";
 import { Switch } from "@/components/ui/switch";
 import { useTheme } from "@/components/use-theme";
+import { customFontMaxLength, normalizeCustomFont } from "@/lib/custom-font";
 import { elementPickerDefault, setElementPicker } from "@/lib/element-picker";
 import { translate } from "@/lib/i18n";
 import { host } from "@/lib/native";
@@ -88,6 +89,71 @@ const chatWidths = [
   },
 ] as const;
 
+/**
+ * The interface font: a name typed in, saved when the field is left or Enter is pressed. A name the
+ * check refuses stays in the field with the reason under the label and is not saved.
+ */
+function CustomFontSetting() {
+  const { t: translateText } = useTranslation(["settings"] as const);
+  const saved = useWorkspaceStore((s) => s.workspace.customFont ?? "");
+  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
+  const [draft, setDraft] = useState(saved);
+  const [invalid, setInvalid] = useState(false);
+  const inputId = useId();
+  const errorId = useId();
+  const commit = () => {
+    const name = normalizeCustomFont(draft);
+    if (name === null) {
+      setInvalid(true);
+      return;
+    }
+    setInvalid(false);
+    setDraft(name);
+    if (name === saved) return;
+    setWorkspace((state) => {
+      const { customFont: _previous, ...rest } = state;
+      return name === "" ? rest : { ...rest, customFont: name };
+    });
+  };
+  return (
+    <div className="settings-row">
+      <div className="settings-row-label">
+        <label htmlFor={inputId}>
+          {translateText("appearance.customFont")}
+        </label>
+        {invalid ? (
+          <p id={errorId} role="alert" className="!text-destructive">
+            {translateText("appearance.customFontInvalid")}
+          </p>
+        ) : (
+          <p>{translateText("appearance.customFontHint")}</p>
+        )}
+      </div>
+      <div className="settings-control">
+        <input
+          id={inputId}
+          type="text"
+          value={draft}
+          maxLength={customFontMaxLength * 2}
+          spellCheck={false}
+          autoComplete="off"
+          placeholder="Eta Sans"
+          aria-invalid={invalid}
+          aria-describedby={invalid ? errorId : undefined}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            if (invalid) setInvalid(false);
+          }}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") commit();
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function AppearanceSettings() {
   const { t: translateText } = useTranslation(["settings", "common"] as const);
   const workspace = useWorkspaceStore((s) => s.workspace);
@@ -165,6 +231,7 @@ function AppearanceSettings() {
           ))}
         </div>
       </div>
+      <CustomFontSetting />
       <div className="settings-row">
         <div className="settings-row-label">
           <div>{translateText("appearance.transcriptRail")}</div>

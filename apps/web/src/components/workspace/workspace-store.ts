@@ -20,6 +20,8 @@ const workspaceSchema = z.object({
   transcriptRail: z.boolean().optional(),
   // How wide the chat's content runs (chat-panel.tsx); unset is standard.
   chatWidth: z.enum(["extra-narrow", "narrow", "standard", "full"]).optional(),
+  // A font put in front of Eta Sans (lib/custom-font.ts); unset is the shipped face.
+  customFont: z.string().max(64).optional(),
   // The sidebar's agent section, folded down to its heading.
   agentsCollapsed: z.boolean().optional(),
   // Directories chosen on each machine, newest first (directory-picker.tsx).
