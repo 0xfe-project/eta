@@ -492,7 +492,11 @@ describe("从项目里新建", () => {
     await back();
     expect(onMembers()).toBe(false);
     const crumbs = [...document.querySelectorAll("nav button")];
-    expect(crumbs.map((crumb) => crumb.textContent)).toEqual(["~", "house"]);
+    expect(crumbs.map((crumb) => crumb.textContent)).toEqual([
+      "/",
+      "~",
+      "house",
+    ]);
   });
 
   it("开在哪个项目就在哪个项目，即使它不是第一个", async () => {
