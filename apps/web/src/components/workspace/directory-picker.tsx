@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { shortenPath } from "@/lib/projects";
+import { joinPath, parentPath, pathCrumbs, shortenPath } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 import { useMachines } from "@/queries/projects";
 import { StatusDot } from "./machine-settings";
@@ -25,25 +25,6 @@ const PROBLEM_TEXT = {
   denied: "chat:new.picker.problems.denied",
   offline: "chat:new.picker.problems.offline",
 } as const;
-
-/** The path as steps to click: from `~` inside the home, from `/` outside it. */
-function crumbsOf(path: string, home: string | undefined) {
-  const inside =
-    home !== undefined &&
-    home !== "/" &&
-    (path === home || path.startsWith(`${home}/`));
-  const root = inside ? home : "/";
-  const crumbs = [{ name: inside ? "~" : "/", path: root }];
-  let at = inside ? home : "";
-  for (const name of path.slice(root.length).split("/")) {
-    if (name === "") continue;
-    at = `${at}/${name}`;
-    crumbs.push({ name, path: at });
-  }
-  return crumbs;
-}
-
-const parentOf = (path: string) => path.slice(0, path.lastIndexOf("/")) || "/";
 
 const ROW =
   "flex min-h-8 w-full items-center gap-2 px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-1 focus-visible:ring-ring/50 focus-visible:ring-inset pointer-coarse:min-h-10";
@@ -183,7 +164,7 @@ export function DirectoryPicker({
           .sort((a, b) => used(a) - used(b))
       : [];
   const up =
-    current === undefined || current === "/" ? undefined : parentOf(current);
+    listed?.parent ?? (current === undefined ? undefined : parentPath(current));
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 px-4 py-3">
@@ -230,7 +211,7 @@ export function DirectoryPicker({
               aria-label={translateText("chat:new.picker.crumbs")}
               className="flex min-w-0 flex-1 items-center overflow-x-auto font-mono text-xs whitespace-nowrap [scrollbar-width:none]"
             >
-              {crumbsOf(current ?? "/", home).map((crumb, index, crumbs) => {
+              {pathCrumbs(current ?? "/", home).map((crumb, index, crumbs) => {
                 const last = index === crumbs.length - 1;
                 return (
                   <span key={crumb.path} className="flex items-center">
@@ -352,7 +333,10 @@ export function DirectoryPicker({
                       onOpen={() => onProject(project)}
                     >
                       <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
-                        {shortenPath(parentOf(project.path), listed.home)}
+                        {shortenPath(
+                          parentPath(project.path) ?? project.path,
+                          listed.home,
+                        )}
                       </span>
                     </Row>
                   ))}
@@ -365,7 +349,7 @@ export function DirectoryPicker({
                   name={entry.name}
                   onOpen={() =>
                     go({
-                      path: `${listed.path === "/" ? "" : listed.path}/${entry.name}`,
+                      path: joinPath(listed.path, entry.name),
                     })
                   }
                 >

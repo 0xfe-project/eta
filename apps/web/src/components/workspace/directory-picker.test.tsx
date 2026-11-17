@@ -1,4 +1,5 @@
 import type { DirectoryEntry, ProjectResults } from "@eta/client-contracts";
+import { posix, win32 } from "node:path";
 import {
   afterEach,
   beforeEach,
@@ -33,6 +34,7 @@ const entry = (
 });
 
 const HOME = "/home/me";
+const WINDOWS_HOME = "C:\\Users\\me";
 const tree: Record<string, DirectoryEntry[]> = {
   [HOME]: [entry(".config"), entry("Developer"), entry("Documents")],
   [`${HOME}/Developer`]: [
@@ -42,6 +44,12 @@ const tree: Record<string, DirectoryEntry[]> = {
   ],
   [`${HOME}/Developer/notes`]: [],
   "/srv": [entry("data")],
+};
+const windowsTree: Record<string, DirectoryEntry[]> = {
+  "C:\\": [entry("Users"), entry("Windows")],
+  "C:\\Users": [entry("me")],
+  [WINDOWS_HOME]: [entry("Desktop"), entry("Documents")],
+  "C:\\Users\\me\\Desktop": [entry("eta")],
 };
 
 class Problem extends Error {
@@ -59,6 +67,8 @@ function machineHost({
   machines = [primary],
   projects = [] as ReturnType<typeof projectView>[],
   failing = {} as Record<string, string>,
+  home = HOME,
+  directories = tree,
 } = {}) {
   const fake = productHost({
     machines,
@@ -66,16 +76,20 @@ function machineHost({
     agents: [agentView({ id: "a1", name: "乐子人" })],
   });
   fake.handle("projects.directories", (raw) => {
-    const { path = HOME } = raw as { path?: string };
-    const asked = path.startsWith("~") ? `${HOME}${path.slice(1)}` : path;
+    const { path = home } = raw as { path?: string };
+    const pathModule = /^[a-z]:[\\/]/i.test(home) ? win32 : posix;
+    const asked = pathModule.resolve(
+      path.startsWith("~") ? `${home}${path.slice(1)}` : path,
+    );
     const code = failing[asked];
     if (code !== undefined) throw new Problem(code);
-    const entries = tree[asked];
+    const entries = directories[asked];
     if (entries === undefined) throw new Problem("not_found");
     const result: ProjectResults["directories"] = {
       path: asked,
-      home: HOME,
-      parent: asked.slice(0, asked.lastIndexOf("/")) || "/",
+      home,
+      parent:
+        pathModule.dirname(asked) === asked ? null : pathModule.dirname(asked),
       entries,
       truncated: false,
     };
@@ -175,14 +189,14 @@ describe("走目录", () => {
       action: "directories",
       args: { machineId: "m1" },
     });
-    expect(crumbs()).toEqual(["~"]);
+    expect(crumbs()).toEqual(["/", "~"]);
     expect(rows()).toEqual(["Developer", "Documents"]);
   });
 
   it("opens where it was sent", async () => {
     machineHost();
     await open({ start: `${HOME}/Developer` });
-    expect(crumbs()).toEqual(["~", "Developer"]);
+    expect(crumbs()).toEqual(["/", "~", "Developer"]);
   });
 
   it("goes in on one click, and marks repositories and projects", async () => {
@@ -190,11 +204,11 @@ describe("走目录", () => {
     await open();
     await click(row("Developer"));
     await flush();
-    expect(crumbs()).toEqual(["~", "Developer"]);
+    expect(crumbs()).toEqual(["/", "~", "Developer"]);
     expect(rows()).toEqual(["billinggit", "etagit已添加", "notes"]);
     await click(row("notes"));
     await flush();
-    expect(crumbs()).toEqual(["~", "Developer", "notes"]);
+    expect(crumbs()).toEqual(["/", "~", "Developer", "notes"]);
     expect(document.body.textContent).toContain("这里没有子目录");
   });
 
@@ -203,7 +217,7 @@ describe("走目录", () => {
     await open({ start: `${HOME}/Developer/notes` });
     await click(crumb("~"));
     await flush();
-    expect(crumbs()).toEqual(["~"]);
+    expect(crumbs()).toEqual(["/", "~"]);
     expect(rows()).toEqual(["Developer", "Documents"]);
   });
 
@@ -211,6 +225,43 @@ describe("走目录", () => {
     machineHost();
     await open({ start: "/srv" });
     expect(crumbs()).toEqual(["/", "srv"]);
+  });
+
+  it("shows the Windows drive above the home and walks to its root", async () => {
+    machineHost({ home: WINDOWS_HOME, directories: windowsTree });
+    await open();
+    expect(crumbs()).toEqual(["C:", "~"]);
+    expect(rows()).toEqual(["Desktop", "Documents"]);
+
+    await click(crumb("C:"));
+    await flush();
+    expect(crumbs()).toEqual(["C:"]);
+    expect(rows()).toEqual(["Users", "Windows"]);
+
+    await click(row("Users"));
+    await flush();
+    expect(crumbs()).toEqual(["C:", "Users"]);
+    expect(rows()).toEqual(["me"]);
+  });
+
+  it("walks and shortens Windows project paths with backslashes", async () => {
+    const project = projectView({
+      id: "pw",
+      name: "windows-app",
+      path: "C:\\Users\\me\\Desktop\\eta",
+    });
+    machineHost({
+      home: WINDOWS_HOME,
+      directories: windowsTree,
+      projects: [project],
+    });
+    await open();
+    expect(rows()[0]).toBe("windows-app~/Desktop");
+
+    await click(row("Desktop"));
+    await flush();
+    expect(crumbs()).toEqual(["C:", "~", "Desktop"]);
+    expect(rows()).toEqual(["eta"]);
   });
 
   it("filters this list only, and forgets the filter on the way in", async () => {
@@ -277,8 +328,18 @@ describe("输入路径", () => {
     await type(box, " ~/Developer ");
     await press(box, "Enter");
     expect(pathBox()).toBeNull();
-    expect(crumbs()).toEqual(["~", "Developer"]);
+    expect(crumbs()).toEqual(["/", "~", "Developer"]);
     expect(rows()).toHaveLength(3);
+  });
+
+  it("takes a typed Windows path", async () => {
+    machineHost({ home: WINDOWS_HOME, directories: windowsTree });
+    await open();
+    const box = await openBox();
+    await type(box, "C:\\Users\\me\\Desktop");
+    await press(box, "Enter");
+    expect(crumbs()).toEqual(["C:", "~", "Desktop"]);
+    expect(rows()).toEqual(["eta"]);
   });
 
   it("stays in the box with what was typed when the path does not work", async () => {
@@ -308,7 +369,7 @@ describe("输入路径", () => {
     await type(box, "/srv");
     await click(button(document.body, "取消"));
     expect(pathBox()).toBeNull();
-    expect(crumbs()).toEqual(["~"]);
+    expect(crumbs()).toEqual(["/", "~"]);
   });
 });
 
@@ -321,7 +382,7 @@ describe("读不了的时候", () => {
     );
     await click(button(document.body, "回到上一级"));
     await flush();
-    expect(crumbs()).toEqual(["~", "Developer"]);
+    expect(crumbs()).toEqual(["/", "~", "Developer"]);
   });
 
   it("says so when a directory is gone", async () => {
@@ -390,7 +451,7 @@ describe("几台机器", () => {
     await click(chip("gpu"));
     await flush();
     expect(fake.calls.at(-1)!.args).toEqual({ machineId: "m2" });
-    expect(crumbs()).toEqual(["~"]);
+    expect(crumbs()).toEqual(["/", "~"]);
   });
 });
 
