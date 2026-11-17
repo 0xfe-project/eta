@@ -68,12 +68,14 @@ function setup(
     /** Replaces members of every session the runtime opens. */
     patch?: (session: Session) => Partial<Session>;
     manualCompaction?: ManualCompaction;
+    listModels?: Runtime["listModels"];
   } = {},
 ) {
   const {
     refuses = false,
     patch,
     manualCompaction,
+    listModels,
     ...managerOptions
   } = options;
   const turns: ScriptedTurn[] = [];
@@ -91,9 +93,12 @@ function setup(
   const runtime: Runtime = {
     ...scripted,
     session: async (installation, sessionOptions, context) => {
+      // The scripted runtime lists no effort levels of its own and refuses any effort: with a
+      // stand-in list, what eta asked for is recorded below and the script runs without it.
+      const { effort: _effort, ...withoutEffort } = sessionOptions;
       const session = await scripted.session(
         installation,
-        sessionOptions,
+        listModels === undefined ? sessionOptions : withoutEffort,
         context,
       );
       const seen =
@@ -105,6 +110,7 @@ function setup(
       ? { refusedSessionOptions: { appendSystemPrompt: "not on this one" } }
       : {}),
     ...(manualCompaction === undefined ? {} : { manualCompaction }),
+    ...(listModels === undefined ? {} : { listModels }),
   };
   const warnings: string[] = [];
   const runtimes = createOarRuntimes({
@@ -579,6 +585,51 @@ describe("a session on an external runtime", () => {
       (row) => row.id === managed.meta.id,
     );
     expect(meta?.ok && meta.meta.runtimeSession).toBeTruthy();
+    await manager.closeAll();
+  });
+
+  it("opens the runtime with `ultra` where the model lists it, and with nothing where it does not", async () => {
+    const { manager, opened } = setup((turn) => turn.say("ok"), {
+      listModels: async () => ({
+        kind: "ok",
+        models: [
+          {
+            id: "astra",
+            effortLevels: ["low", "medium", "high", "xhigh", "max", "ultra"],
+          },
+          { id: "sol", effortLevels: ["low", "medium", "high"] },
+        ],
+      }),
+    });
+    const managed = await manager.create({
+      cwd: "/work",
+      runtime: "claude",
+      model: "claude:astra",
+    });
+    const config = managed.session.kernel.config;
+    const effortOf = () =>
+      (
+        managed.session.journaling.transcript().at(-1) as {
+          effort?: unknown;
+        }
+      ).effort;
+    config.update({ thinkingLevel: "ultra", thinkingAsked: "ultra" });
+    // The first run is what asks the runtime for its models: until then its levels are unknown,
+    // and the level goes as it was chosen.
+    expect((await run(managed, "first")).status).toBe("completed");
+    expect(opened.at(-1)!.options.effort).toBe("ultra");
+    expect(effortOf()).toEqual({ asked: "ultra", sent: "ultra" });
+    // Known now, and listed: still `ultra`.
+    expect((await run(managed, "think hard")).status).toBe("completed");
+    expect(opened.at(-1)!.options.effort).toBe("ultra");
+    expect(effortOf()).toEqual({ asked: "ultra", sent: "ultra" });
+
+    // A model that does not list it: nothing is passed (never `max`), the runtime's default runs.
+    config.update({ model: { provider: "claude", modelId: "sol" } });
+    expect((await run(managed, "again")).status).toBe("completed");
+    expect(opened.at(-1)!.options.model).toBe("sol");
+    expect(opened.at(-1)!.options).not.toHaveProperty("effort");
+    expect(effortOf()).toEqual({ asked: "ultra", sent: null });
     await manager.closeAll();
   });
 

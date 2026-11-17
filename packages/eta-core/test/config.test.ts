@@ -1,3 +1,4 @@
+import type { RecordedAssistantMessage } from "../src/index";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import {
@@ -238,6 +239,34 @@ describe("the runner reads config live", () => {
     expect(fake.calls[1]!.options).not.toMatchObject({
       reasoning: expect.anything(),
     });
+    void kernel.dispose();
+  });
+
+  it("never hands the provider layer `ultra`, and records what each reply asked and sent", async () => {
+    const kernel = Kernel.create({
+      config: {
+        model: { provider: "p", modelId: "m" },
+        thinkingLevel: "ultra",
+        thinkingAsked: "ultra",
+      },
+    });
+    const fake = fakeModels([assistantMessage(), assistantMessage()]);
+    const runner = new Runner(kernel, { models: fake });
+    kernel.inject(userMsg("go"));
+    await runner.run();
+    // pi-ai has no `ultra`: the request goes without a reasoning field, on the model's default.
+    expect(fake.calls[0]!.options).not.toHaveProperty("reasoning");
+    expect(
+      (runner.getTranscript().at(-1) as RecordedAssistantMessage).effort,
+    ).toEqual({ asked: "ultra", sent: null });
+
+    kernel.config.update({ thinkingLevel: "high", thinkingAsked: "high" });
+    kernel.inject(userMsg("again"));
+    await runner.run();
+    expect(fake.calls[1]!.options).toMatchObject({ reasoning: "high" });
+    expect(
+      (runner.getTranscript().at(-1) as RecordedAssistantMessage).effort,
+    ).toEqual({ asked: "high", sent: "high" });
     void kernel.dispose();
   });
 });

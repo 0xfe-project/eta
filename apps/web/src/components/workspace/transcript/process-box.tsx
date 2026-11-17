@@ -1,10 +1,12 @@
+import type { ThinkingRecord } from "@/lib/thinking";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { revealBlock } from "@/lib/run-display";
+import { effortDiffers } from "@/lib/thinking";
 import { cn } from "@/lib/utils";
-import { useNow, useReplyTiming } from "@/queries/sessions";
+import { useNow, useReplyEffort, useReplyTiming } from "@/queries/sessions";
 import { RunHeader } from "./run-timeline";
 import { TranscriptDialog } from "./transcript-dialog";
 
@@ -197,13 +199,45 @@ function ReplyHeader({
 }) {
   const now = useNow(running);
   const timing = useReplyTiming(sessionId, runFrom, now, callId);
+  const effort = useReplyEffort(sessionId, runFrom, running, callId);
   return (
     <RunHeader
       agentId={agentId}
       name={name}
-      status={<time className="font-mono text-[10px]">{time}</time>}
+      status={
+        <>
+          <time className="font-mono text-[10px]">{time}</time>
+          {effort === undefined ? null : <EffortNote record={effort} />}
+        </>
+      }
       timing={timing}
       onPick={(step) => revealBlock(bodyRef.current, step.blocks)}
     />
+  );
+}
+
+/**
+ * The thinking level of a reply's run: what was asked → what was actually sent ("ultra → ultra",
+ * "ultra → model default (not supported)"), or just "the model's default" when nothing was asked
+ * and nothing sent. Only a run that sent something else than it was asked for is a warning.
+ */
+function EffortNote({ record }: { record: ThinkingRecord }) {
+  const { t: translateText } = useTranslation("chat");
+  const followed = record.asked === null && record.sent === null;
+  const value = followed
+    ? translateText("effort.default")
+    : `${record.asked ?? translateText("effort.default")} → ${
+        record.sent ??
+        (record.asked === null
+          ? translateText("effort.default")
+          : translateText("effort.fellBack"))
+      }`;
+  return (
+    <span
+      data-testid="run-effort"
+      className={cn("truncate", effortDiffers(record) && "text-state-warning")}
+    >
+      · {translateText("effort.label", { value })}
+    </span>
   );
 }

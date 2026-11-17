@@ -656,6 +656,16 @@ describe("an agent's model and thinking level on a remote session", () => {
       model: "fake:second",
       thinkingLevel: "medium",
     });
+
+    // Back to the model's default is an edit too: the session drops the level it had.
+    await r.client.call("agents", "update", {
+      agentId: agents[0]!.id,
+      thinkingLevel: null,
+    });
+    expect(await configOf(r, session)).toEqual({
+      model: "fake:second",
+      thinkingLevel: "off",
+    });
   });
 
   it("an edit while the machine is offline is a warning, not an error", async () => {

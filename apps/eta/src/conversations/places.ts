@@ -90,7 +90,8 @@ export interface SessionPlace {
 /** The settings of an agent that its sessions carry as their own. */
 export interface SessionSettings {
   model?: string;
-  thinkingLevel?: ThinkingLevel;
+  /** `null` is back to the model's default. */
+  thinkingLevel?: ThinkingLevel | null;
 }
 
 export const messageOf = (error: unknown): string =>
@@ -234,8 +235,10 @@ export class LocalPlace implements SessionPlace {
     });
     input.created(id);
     if (agent.thinkingLevel !== null) {
+      // The agent's level was saved without knowing what the model takes: one it does not take
+      // is kept as the ask, and the session runs on the model's default.
       await sessions
-        .thinkingLevel(id, agent.thinkingLevel)
+        .thinkingLevel(id, agent.thinkingLevel, { fallback: true })
         .catch((error: unknown) => this.#warn(`[eta] ${messageOf(error)}`));
     }
     const handle = new LocalHandle(sessions, (await sessions.open(id)).managed);
@@ -253,7 +256,9 @@ export class LocalPlace implements SessionPlace {
     if (settings.model !== undefined)
       await sessions.modelSet(sessionId, settings.model);
     if (settings.thinkingLevel !== undefined)
-      await sessions.thinkingLevel(sessionId, settings.thinkingLevel);
+      await sessions.thinkingLevel(sessionId, settings.thinkingLevel, {
+        fallback: true,
+      });
   }
 
   /**

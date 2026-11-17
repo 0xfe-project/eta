@@ -2,6 +2,7 @@ import type { AgentRuntimeInfo } from "@eta/client-contracts";
 import type { UseFormReturn } from "react-hook-form";
 import type { AgentForm } from "./agent-form";
 import type { Model } from "@/queries/providers";
+import { useEffect, useRef, useState } from "react";
 import { useFormState, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatLocale } from "@/lib/i18n";
-import { THINKING_LEVELS } from "@/lib/thinking";
+import { FALLBACK_LEVELS, levelSupport } from "@/lib/thinking";
 import { usePersonas } from "@/queries/personas";
 import { DESCRIPTION_MAX } from "./agent-form";
 import { ModelSelect } from "./model-select";
@@ -253,9 +254,46 @@ export function ModelField({
  * How hard the agent thinks before it answers. The first choice, "the model's own", leaves the
  * level unset, which is a level too: it is what a model does when nobody asked for more or less.
  */
-export function ThinkingField({ form }: { form: Form }) {
+export function ThinkingField({
+  form,
+  models,
+}: {
+  form: Form;
+  /** The models the agent can choose, as the model field has them: what each declares. */
+  models: Model[] | null | undefined;
+}) {
   const { t: translateText } = useTranslation(["agents", "common"] as const);
   const value = useWatch({ control: form.control, name: "thinkingLevel" });
+  const chosenModel = useWatch({ control: form.control, name: "model" });
+  const declared = models?.find((model) => model.id === chosenModel)?.thinking;
+  const levels = declared ?? FALLBACK_LEVELS;
+  // The level a change of model took back, said under the field until the next choice.
+  const [reset, setReset] = useState<string>();
+  const shownModel = useRef(chosenModel);
+  useEffect(() => {
+    if (shownModel.current === chosenModel) return;
+    shownModel.current = chosenModel;
+    setReset(undefined);
+    // Only a model known not to take the level loses it: an unknown one is asked as chosen.
+    const current = form.getValues("thinkingLevel");
+    if (current !== "" && levelSupport(declared, current) === "unsupported") {
+      form.setValue("thinkingLevel", "", { shouldDirty: true });
+      setReset(current);
+    }
+  }, [chosenModel, declared, form]);
+  const support = value === "" ? undefined : levelSupport(declared, value);
+  const hint =
+    reset !== undefined && value === ""
+      ? {
+          warn: true,
+          text: translateText("agents:thinking.reset", { level: reset }),
+        }
+      : support === "unsupported"
+        ? { warn: true, text: translateText("agents:thinking.unsupported") }
+        : // Not while the models load: that is not knowing yet, not unknown.
+          support === "unknown" && models !== undefined
+          ? { warn: false, text: translateText("agents:thinking.unknown") }
+          : undefined;
   return (
     <div className="space-y-1.5">
       <Label htmlFor="agent-thinking">
@@ -265,23 +303,39 @@ export function ThinkingField({ form }: { form: Form }) {
         id="agent-thinking"
         className="w-full"
         value={value}
-        onValueChange={(value) =>
-          form.setValue("thinkingLevel", value, { shouldDirty: true })
+        aria-describedby={
+          hint === undefined ? undefined : "agent-thinking-hint"
         }
+        onValueChange={(value) => {
+          setReset(undefined);
+          form.setValue("thinkingLevel", value, { shouldDirty: true });
+        }}
       >
         <SelectOption value="">
           {translateText("agents:thinking.default")}
         </SelectOption>
-        {value !== "" &&
-        !(THINKING_LEVELS as readonly string[]).includes(value) ? (
+        {/* A saved level this model does not offer is still shown: the user changes it. */}
+        {value !== "" && !(levels as readonly string[]).includes(value) ? (
           <SelectOption value={value}>{value}</SelectOption>
         ) : null}
-        {THINKING_LEVELS.map((level) => (
+        {levels.map((level) => (
           <SelectOption key={level} value={level}>
             {level}
           </SelectOption>
         ))}
       </Select>
+      {hint === undefined ? null : (
+        <p
+          id="agent-thinking-hint"
+          className={
+            hint.warn
+              ? "text-xs text-state-warning"
+              : "text-xs text-muted-foreground"
+          }
+        >
+          {hint.text}
+        </p>
+      )}
     </div>
   );
 }

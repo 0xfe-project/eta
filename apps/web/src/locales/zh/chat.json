@@ -274,7 +274,9 @@
     "removedLabel": "移除："
   },
   "effort": {
-    "ultracodeHelp": "ultracode · xhigh 推理强度 + 动态工作流，尽可能全面"
+    "label": "思考档 {{value}}",
+    "default": "跟随模型默认",
+    "fellBack": "模型默认（不支持）"
   },
   "rail": {
     "replies": "智能体的回复",

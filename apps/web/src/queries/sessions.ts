@@ -9,6 +9,7 @@ import type {
   ViewMessageRow,
 } from "@eta/client-contracts";
 import type { RunTiming } from "@/lib/run-timing";
+import type { ThinkingRecord } from "@/lib/thinking";
 import { logBlocks, runBlocks } from "@eta/client-contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
@@ -320,23 +321,54 @@ export function useReplyTiming(
   const live = now !== undefined;
   const streaming = live ? (streamed ?? session?.core?.streaming) : undefined;
   return useMemo(() => {
-    if (rows === undefined) return undefined;
-    const runFrom =
-      savedRunFrom ??
-      (live || callId === undefined ? undefined : runFromOfCall(rows, callId));
-    // A run that started before the oldest row the view holds is not all there.
-    if (runFrom !== undefined && (rows[0]?.seq ?? 0) > runFrom + 1)
-      return undefined;
-    const own =
-      runFrom !== undefined
-        ? replyRows(rows, runFrom)
-        : live
-          ? rows.slice(lastUserIndex(rows))
-          : undefined;
+    const own = ownRows(rows, savedRunFrom, live, callId);
     return own === undefined
       ? undefined
       : runTiming(own, { streaming, ...(live ? { now } : {}) });
   }, [rows, savedRunFrom, callId, live, streaming, now]);
+}
+
+/** A reply's rows in its member's session, found the way `useReplyTiming` finds them. */
+function ownRows(
+  rows: readonly ViewMessageRow[] | undefined,
+  savedRunFrom: number | undefined,
+  live: boolean,
+  callId: string | undefined,
+): ViewMessageRow[] | undefined {
+  if (rows === undefined) return undefined;
+  const runFrom =
+    savedRunFrom ??
+    (live || callId === undefined ? undefined : runFromOfCall(rows, callId));
+  // A run that started before the oldest row the view holds is not all there.
+  if (runFrom !== undefined && (rows[0]?.seq ?? 0) > runFrom + 1)
+    return undefined;
+  return runFrom !== undefined
+    ? replyRows(rows, runFrom)
+    : live
+      ? rows.slice(lastUserIndex(rows))
+      : undefined;
+}
+
+/**
+ * The thinking level a group reply's run asked for and the one it actually sent, as the run
+ * wrote it on its messages (the newest one that says); undefined when none does.
+ */
+export function useReplyEffort(
+  sessionId: string | undefined,
+  savedRunFrom: number | undefined,
+  live: boolean,
+  callId?: string | undefined,
+): ThinkingRecord | undefined {
+  const rows = useSession(sessionId)?.transcript?.messages;
+  return useMemo(() => {
+    const own = ownRows(rows, savedRunFrom, live, callId) ?? [];
+    for (let at = own.length - 1; at >= 0; at -= 1) {
+      const message = own[at]!.message;
+      if (message.role === "assistant" && message.effort !== undefined)
+        return message.effort;
+    }
+    return undefined;
+  }, [rows, savedRunFrom, live, callId]);
 }
 
 /** Where the newest user message is (the briefing of the run in flight); 0 when there is none. */

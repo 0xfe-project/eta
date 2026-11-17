@@ -28,7 +28,8 @@ export type ThinkingLevel =
   | "medium"
   | "high"
   | "xhigh"
-  | "max";
+  | "max"
+  | "ultra";
 
 /** A compaction summary standing in for the history it replaced. */
 export interface CompactionSummaryMessage {

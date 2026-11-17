@@ -307,6 +307,8 @@ export class OarDelegate implements RunDelegate {
       if (context.signal.aborted) return { status: "aborted" };
       const settings = this.#settings(context.config());
       const opened = await this.#ensure(context, settings);
+      // The effort the runtime session was opened with is what this run hands it.
+      context.recordThinking(opened.effort);
       // The host's tools as they are now: a set that changed since the last run is served anew.
       if (this.#served !== undefined) await this.#serve(context);
       this.#calls = new HostCalls(this.#options.runtime, this.#hostTools);

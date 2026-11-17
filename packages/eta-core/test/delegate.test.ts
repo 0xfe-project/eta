@@ -7,6 +7,7 @@
  */
 import type {
   AgentMessage,
+  RecordedAssistantMessage,
   RunDelegate,
   RunDelegateContext,
 } from "../src/index";
@@ -158,6 +159,50 @@ describe("a delegated run", () => {
     kernel.nextRun("go");
     await runner.run();
     expect(textOf(runner.getTranscript().at(-1)!)).toBe("HI");
+    dispose();
+  });
+
+  it("writes the run's thinking record on its replies: asked, and what the delegate sent", async () => {
+    const effortOf = (message: AgentMessage | undefined) =>
+      (message as RecordedAssistantMessage | undefined)?.effort;
+    let sent: string | undefined = "ultra";
+    const { kernel, runner, dispose } = setup({
+      run: async (context) => {
+        context.recordThinking(sent);
+        context.push(reply("done"));
+        return { status: "completed" };
+      },
+    });
+    kernel.config.update({ thinkingLevel: "ultra", thinkingAsked: "ultra" });
+    kernel.nextRun("go");
+    await runner.run();
+    expect(effortOf(runner.getTranscript().at(-1))).toEqual({
+      asked: "ultra",
+      sent: "ultra",
+    });
+
+    // A model that does not take it: the session runs on `off`, the runtime gets nothing.
+    sent = undefined;
+    kernel.config.update({ thinkingLevel: "off", thinkingAsked: "ultra" });
+    kernel.nextRun("again");
+    await runner.run();
+    expect(effortOf(runner.getTranscript().at(-1))).toEqual({
+      asked: "ultra",
+      sent: null,
+    });
+    dispose();
+  });
+
+  it("leaves no record on the replies of a delegate that says nothing of what it sent", async () => {
+    const { kernel, runner, dispose } = setup({
+      run: async (context) => {
+        context.push(reply("done"));
+        return { status: "completed" };
+      },
+    });
+    kernel.nextRun("go");
+    await runner.run();
+    expect(runner.getTranscript().at(-1)).not.toHaveProperty("effort");
     dispose();
   });
 });

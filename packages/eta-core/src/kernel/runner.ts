@@ -38,6 +38,12 @@ import type { KernelTool, ToolService } from "./tools";
 import { kernelEmit } from "../types/events";
 import { AbortRequested, cancellationOf, createGate } from "./effect-gate";
 import { generateWithRetry } from "./generation";
+import {
+  askedThinking,
+  kernelThinking,
+  reasoningOption,
+  recordThinking,
+} from "./providers";
 import { isAbortError } from "./tools";
 
 /**
@@ -281,10 +287,9 @@ export class Runner {
                   ? {}
                   : { maxTokens: askOptions.maxTokens }),
                 // "off" means no reasoning field at all, as everywhere else.
-                ...(askOptions?.reasoning === undefined ||
-                askOptions.reasoning === "off"
+                ...(askOptions?.reasoning === undefined
                   ? {}
-                  : { reasoning: askOptions.reasoning }),
+                  : reasoningOption(askOptions.reasoning)),
               },
             ),
         };
@@ -638,6 +643,9 @@ export class Runner {
   ): Promise<RunResult> {
     let status: RunResult["status"] = "completed";
     let error: string | undefined;
+    // What the delegate said it sent its runtime; `false` until it says (a delegate that never
+    // does leaves its messages without a record rather than with a guessed one).
+    let sent: string | undefined | false = false;
     this.currentRunId = runId;
     try {
       const outcome = await this.track(
@@ -647,7 +655,17 @@ export class Runner {
           signal: gate.signal,
           emit: this.emit,
           noteTurn: () => this.kernel.noteTurn(),
-          push: (message) => this.push(message),
+          push: (message) => {
+            if (message.role === "assistant" && sent !== false)
+              recordThinking(message, {
+                asked: askedThinking(this.config.get()),
+                sent: sent ?? null,
+              });
+            this.push(message);
+          },
+          recordThinking: (effort) => {
+            sent = effort;
+          },
           take: ({ followUps }) => {
             const { steers, followUps: taken } = this.kernel.takeAtBoundary({
               followUpWhenNoTrigger: followUps,
@@ -882,6 +900,8 @@ export class Runner {
       assistant.stopReason !== "error" &&
       assistant.stopReason !== "aborted"
     ) {
+      // What this request asked for and carried, read off the configuration it was sent on.
+      recordThinking(assistant, kernelThinking(config));
       // The subscriber records this and writes the usage row for the turn.
       this.transcript.push(assistant);
       this.emit("message:end", { runId, message: assistant });

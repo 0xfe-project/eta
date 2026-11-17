@@ -340,7 +340,7 @@ describe.each(["group", "direct"] as const)(
 describe("a reply's process dialog", () => {
   const T = 1_800_000_000_000;
   /** A finished group reply whose run is still in its member's session, with times. */
-  async function timed(runFrom: number | undefined = 1) {
+  async function timed(runFrom: number | undefined = 1, effort?: object) {
     conversations += 1;
     const id = `process-box-${conversations}`;
     const host = surfaceHost({
@@ -391,6 +391,7 @@ describe("a reply's process dialog", () => {
           row(2, 100, { role: "user", content: "这一次", timestamp: T + 100 }),
           row(3, 3000, {
             role: "assistant",
+            ...(effort === undefined ? {} : { effort }),
             timestamp: T + 105,
             content: [
               {
@@ -411,6 +412,7 @@ describe("a reply's process dialog", () => {
           }),
           row(5, 11_000, {
             role: "assistant",
+            ...(effort === undefined ? {} : { effort }),
             timestamp: T + 9005,
             content: [{ type: "text", text: "最终答案" }],
           }),
@@ -448,6 +450,36 @@ describe("a reply's process dialog", () => {
     expect(
       dialog.querySelector('[role="toolbar"]')?.getAttribute("aria-label"),
     ).toBe("3 步，用时 0:10");
+  });
+
+  describe("says the run's thinking level: what was asked → what was sent", () => {
+    const note = (dialog: HTMLElement) =>
+      dialog.querySelector<HTMLElement>('[data-testid="run-effort"]');
+
+    it("as it is when the model took it (or its levels were unknown and it was passed)", async () => {
+      const dialog = await timed(1, { asked: "ultra", sent: "ultra" });
+      expect(note(dialog)?.textContent).toBe("· 思考档 ultra → ultra");
+      expect(note(dialog)?.className).not.toContain("text-state-warning");
+    });
+
+    it("in the warning colour when the model did not take it", async () => {
+      const dialog = await timed(1, { asked: "ultra", sent: null });
+      expect(note(dialog)?.textContent).toBe(
+        "· 思考档 ultra → 模型默认（不支持）",
+      );
+      expect(note(dialog)?.className).toContain("text-state-warning");
+    });
+
+    it("as the model's default when nothing was asked", async () => {
+      const dialog = await timed(1, { asked: null, sent: null });
+      expect(note(dialog)?.textContent).toBe("· 思考档 跟随模型默认");
+      expect(note(dialog)?.className).not.toContain("text-state-warning");
+    });
+
+    it("not at all for a run that wrote no record", async () => {
+      const dialog = await timed();
+      expect(note(dialog)).toBeNull();
+    });
   });
 
   it("sends the dialog to the step picked", async () => {

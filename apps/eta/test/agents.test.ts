@@ -101,6 +101,12 @@ describe("creating an agent", () => {
       instructions: "Count.",
       model: "fake:other",
     });
+    // `ultra` is a level like any other: kept whatever the model takes (the form says so).
+    const ultra = (await w.client.call("agents", "update", {
+      agentId: agent.id,
+      thinkingLevel: "ultra",
+    })) as { agent: AgentView };
+    expect(ultra.agent.thinkingLevel).toBe("ultra");
     // A field that was not sent stays, and `null` clears one.
     const cleared = (await w.client.call("agents", "update", {
       agentId: agent.id,

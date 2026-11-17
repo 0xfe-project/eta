@@ -36,6 +36,12 @@ export interface RunDelegateContext {
   /** Add a message to the transcript and the journal, exactly like one the loop produced. */
   push: (message: AgentMessage) => void;
   /**
+   * Say what effort this run actually hands its runtime (`undefined`: none, the runtime's
+   * default). Its assistant messages carry it from then on, beside the level the session asked
+   * for, as the run's thinking record.
+   */
+  recordThinking: (effort: string | undefined) => void;
+  /**
    * Take what the inbox holds for a boundary: steering always, follow-ups when `followUps` (the
    * runtime would otherwise stop). What is taken is adopted into the transcript and the journal.
    */

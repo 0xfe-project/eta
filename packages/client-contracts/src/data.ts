@@ -97,6 +97,12 @@ export interface AssistantMessage {
   responseId?: string;
   /** Exact provider-native effort level used for this response. Absent for legacy or unmanaged responses. */
   providerThinkingLevel?: string;
+  /**
+   * The run's thinking level: the one the session asked for (`null`: none, the model's default)
+   * and the value actually handed to the model or runtime (`null`: none, its default). Absent on
+   * messages written before it was recorded.
+   */
+  effort?: { asked: ThinkingLevel | null; sent: string | null };
   diagnostics?: AssistantMessageDiagnostic[];
   usage: Usage;
   stopReason: StopReason;
@@ -137,7 +143,8 @@ export type ThinkingLevel =
   | "medium"
   | "high"
   | "xhigh"
-  | "max";
+  | "max"
+  | "ultra";
 
 /** A compaction summary standing in for the history it replaced. */
 export interface CompactionSummaryMessage {
