@@ -131,7 +131,7 @@ export function UpdateNotice({
 }
 
 /** Thin progress bar for desktop and host downloads; pulses when total size is unknown. */
-export function UpdateProgressBar({
+function UpdateProgressBar({
   value,
   label,
   className,
