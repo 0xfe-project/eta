@@ -267,6 +267,82 @@ describe("an agent's model on eta's own loop", () => {
   });
 });
 
+describe("an agent's persona and its runtime", () => {
+  const persona = () =>
+    document.getElementById("agent-persona") as HTMLButtonElement;
+  const hint = () => document.getElementById("agent-persona-hint");
+  const choose = async (id: string, text: string) => {
+    await click(document.getElementById(id) as HTMLButtonElement);
+    const option = [
+      ...document.querySelectorAll<HTMLElement>('[role="option"]'),
+    ].find((candidate) => candidate.textContent?.includes(text))!;
+    await click(option as unknown as HTMLButtonElement);
+  };
+
+  beforeEach(async () => {
+    await act(async () =>
+      useWorkspaceStore
+        .getState()
+        .setAgentEditor({ open: false, agentId: null }),
+    );
+    host.handle("agents.runtimes", () => ({
+      runtimes: [
+        { id: "codex", label: "Codex", status: "available", models: [] },
+      ],
+    }));
+    host.set("personas", {
+      cards: [
+        { id: "terse", name: "简短", description: "话少", custom: false },
+        { id: "warm", name: "温和", description: "耐心", custom: false },
+      ],
+    });
+    host.set("agents", {
+      list: [
+        agentView({ id: "a1", name: "审查", model: "c:m1", persona: "terse" }),
+      ],
+    });
+    await settle();
+    await act(async () =>
+      useWorkspaceStore
+        .getState()
+        .setAgentEditor({ open: true, agentId: "a1" }),
+    );
+    await settle();
+  });
+
+  it("is choosable on eta's own runtime", async () => {
+    expect(persona().disabled).toBe(false);
+    expect(hint()).toBeNull();
+    expect(persona().textContent).toContain("简短");
+    await choose("agent-persona", "温和");
+    expect(persona().textContent).toContain("温和");
+  });
+
+  it("is set aside on an external runtime, says why, and is still there on the way back", async () => {
+    await choose("agent-runtime", "Codex");
+    expect(persona().disabled).toBe(true);
+    expect(persona().textContent).toContain("简短");
+    expect(hint()?.textContent).toBe(
+      "人格只对 eta 运行时生效。外部运行时的语气请写在指令里。",
+    );
+    expect(persona().getAttribute("aria-describedby")).toBe(
+      "agent-persona-hint",
+    );
+
+    await choose("agent-runtime", "eta 内置");
+    expect(persona().disabled).toBe(false);
+    expect(hint()).toBeNull();
+    expect(persona().textContent).toContain("简短");
+    await choose("agent-persona", "温和");
+    expect(persona().textContent).toContain("温和");
+
+    // Saved as it is: the runtime does not clear it.
+    await choose("agent-runtime", "Codex");
+    await save();
+    expect(updates()[0]).toMatchObject({ runtime: "codex", persona: "warm" });
+  });
+});
+
 describe("an agent's machine and its runtimes", () => {
   // The host's own runtimes; another machine is asked over its link, and the daemon here is off.
   const runtimes = [

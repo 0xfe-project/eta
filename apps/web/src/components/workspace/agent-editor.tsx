@@ -275,7 +275,7 @@ function AgentEditorForm({
                 external={runtime !== "eta"}
               />
               <ThinkingField form={form} />
-              <PersonaField form={form} />
+              <PersonaField form={form} external={runtime !== "eta"} />
             </>
           ) : tab === "instructions" ? (
             <InstructionsField form={form} />

@@ -351,10 +351,14 @@ function PersonaSelect({
   value,
   onChange,
   invalid,
+  disabled,
+  describedBy,
 }: {
   value: string;
   onChange: (next: string) => void;
   invalid?: boolean;
+  disabled?: boolean;
+  describedBy?: string;
 }) {
   const { t: translateText } = useTranslation([
     "agents",
@@ -367,6 +371,8 @@ function PersonaSelect({
       id="agent-persona"
       className="w-full"
       aria-invalid={invalid}
+      aria-describedby={describedBy}
+      disabled={disabled}
       value={value}
       onValueChange={onChange}
     >
@@ -385,8 +391,21 @@ function PersonaSelect({
   );
 }
 
-/** The persona row in the editor form: label + PersonaSelect wired to react-hook-form. */
-export function PersonaField({ form }: { form: Form }) {
+/**
+ * The persona row in the editor form: label + PersonaSelect wired to react-hook-form.
+ *
+ * A persona card only reaches eta's own runtime, whose system prompt we write whole. An external
+ * runtime brings its own base prompt with its own identity, and we only append to it, so a card
+ * there would stack a second identity on the first: the row stays, disabled, and says where that
+ * runtime's tone goes instead. The value is kept, so going back to eta finds it as it was.
+ */
+export function PersonaField({
+  form,
+  external = false,
+}: {
+  form: Form;
+  external?: boolean;
+}) {
   const { t: translateText } = useTranslation(["agents", "common"] as const);
   const persona = useWatch({ control: form.control, name: "persona" });
   const { errors } = useFormState({ control: form.control, name: "persona" });
@@ -401,7 +420,14 @@ export function PersonaField({ form }: { form: Form }) {
           form.setValue("persona", next, { shouldDirty: true })
         }
         invalid={Boolean(errors.persona)}
+        disabled={external}
+        describedBy={external ? "agent-persona-hint" : undefined}
       />
+      {external ? (
+        <p id="agent-persona-hint" className="text-xs text-muted-foreground">
+          {translateText("agents:persona.etaOnly")}
+        </p>
+      ) : null}
     </div>
   );
 }
