@@ -1,11 +1,11 @@
-import type { RunBlock, ToolBlock } from "@eta/client-contracts";
+import type { RunBlock } from "@eta/client-contracts";
 import { computed, Text, View } from "nsh";
 import { t } from "../../i18n";
-import { Icon } from "../../ui/Icon";
+import { Markdown } from "../../ui/Markdown";
 import { sentence, stepOf } from "./steps";
 
-/** How many steps the box shows: what fits its 92 of height. */
-const SHOWN = 3;
+/** How many blocks the frame draws: its newest, which is all its 92 of height can show. */
+const SHOWN = 4;
 
 const stepLine = (block: Exclude<RunBlock, { type: "text" }>) =>
   block.type === "thinking"
@@ -15,34 +15,32 @@ const stepLine = (block: Exclude<RunBlock, { type: "text" }>) =>
     : sentence(stepOf(block));
 
 /**
- * A reply's process in a group: a frame that is the same size before the first token, while steps
- * come and until the reply reaches its final text, when it folds to its head. The box never grows,
- * so a long run does not push the conversation away.
- *
- * Over the frame, one line of what the reply said last on its way (`said`), held from the first
- * token on even before anything is said, so the reply does not grow when it speaks; folded, the
- * head ends with it instead.
+ * A reply's process, in any conversation: while the run is in flight, a frame of one size from
+ * before the first token to the end, holding everything the run has written in order — its
+ * thoughts and calls as a line each, its words whole, written as they stream — with the newest at
+ * the bottom. The frame never grows, so a long run does not push the conversation away and replies
+ * written at once do not push each other. Once the run is over it folds to its head, and the answer
+ * is drawn under it.
  */
 export function ProcessBox(props: {
-  steps: Exclude<RunBlock, { type: "text" }>[];
+  blocks: RunBlock[];
   /** Nothing from the run yet: the frame is already there, at work. */
   waiting: boolean;
   folded: boolean;
-  /** The last thing it said on the way, as one line (`lastSaid`). */
-  said?: string | undefined;
   onViewAll: () => void;
 }) {
-  const shown = computed(() => props.steps.slice(-SHOWN));
+  const shown = computed(() => props.blocks.slice(-SHOWN));
+  const steps = computed(
+    () => props.blocks.filter((block) => block.type !== "text").length,
+  );
   const head = (
     <View
       class={`h-8 shrink-0 flex-row items-center px-[10px] ${props.folded ? "" : "border-b border-border"}`}
     >
       <Text class="truncate grow basis-0 text-sm leading-4 text-muted-foreground">
-        {props.waiting
+        {!props.folded && steps() === 0
           ? t("chat.thinking.now")
-          : props.folded && props.said !== undefined
-            ? `${t("chat.process.steps", { count: props.steps.length })} · ${props.said}`
-            : t("chat.process.steps", { count: props.steps.length })}
+          : t("chat.process.steps", { count: steps() })}
       </Text>
       <View
         role="button"
@@ -57,65 +55,41 @@ export function ProcessBox(props: {
     </View>
   );
   return (
-    <View class="gap-1">
+    <View class="border border-border" testID="process-box">
+      {head}
       <If when={!props.folded}>
-        <Text
-          class="h-[23px] truncate text-base leading-[23px] text-foreground"
-          testID="process-said"
+        <View
+          class="h-[92px] shrink-0 justify-end gap-1 overflow-hidden px-[10px] py-[6px]"
+          testID="process-frame"
         >
-          {props.said ?? ""}
-        </Text>
-      </If>
-      <View class="border border-border" testID="process-box">
-        {head}
-        <If when={!props.folded}>
-          <View class="h-[92px] shrink-0 justify-end gap-1 overflow-hidden px-[10px] py-[6px]">
-            <If when={props.waiting}>
-              <View class="h-[18px] flex-row items-center">
-                <View class="h-2 grow basis-0 bg-muted" />
-              </View>
-            </If>
-            <Each of={shown()} key={(step) => step.id}>
-              {(step, index) => (
-                <Text
-                  class={`truncate text-sm leading-[18px] ${index() === shown().length - 1 ? "text-foreground" : "text-muted-foreground"}`}
-                >
-                  {stepLine(step())}
-                </Text>
-              )}
-            </Each>
-          </View>
-        </If>
-      </View>
-    </View>
-  );
-}
-
-/** One step of a direct chat's reply (03h): a framed line of its own. */
-export function ToolRow(props: { block: ToolBlock; onPress: () => void }) {
-  const step = computed(() => stepOf(props.block));
-  return (
-    <View
-      role="button"
-      accessibilityLabel={sentence(step())}
-      onPress={props.onPress}
-      class="h-9 shrink-0 flex-row items-center gap-3 border border-border px-[10px] active:bg-muted"
-    >
-      <Text
-        class={`min-w-[28px] shrink-0 text-sm leading-4 ${step().refused ? "text-state-error" : "text-muted-foreground"}`}
-      >
-        {step().verb}
-      </Text>
-      <Text class="truncate grow basis-0 text-md leading-4 text-foreground">
-        {step().text}
-      </Text>
-      <Counts added={step().added} removed={step().removed} />
-      <If when={step().note !== undefined}>
-        <Text
-          class={`text-sm leading-4 ${step().failed ? "text-state-error" : "text-muted-foreground"}`}
-        >
-          {step().note}
-        </Text>
+          <If when={props.waiting}>
+            <View class="h-[18px] flex-row items-center">
+              <View class="h-2 grow basis-0 bg-muted" />
+            </View>
+          </If>
+          <Each of={shown()} key={(block) => block.id}>
+            {(block, index) => (
+              <If
+                when={block().type === "text"}
+                else={
+                  <Text
+                    class={`shrink-0 truncate text-sm leading-[18px] ${index() === shown().length - 1 ? "text-foreground" : "text-muted-foreground"}`}
+                  >
+                    {stepLine(block() as Exclude<RunBlock, { type: "text" }>)}
+                  </Text>
+                }
+              >
+                <View class="shrink-0">
+                  <Markdown
+                    text={(block() as { text?: string }).text ?? ""}
+                    class="text-sm leading-[18px] text-foreground"
+                    streaming
+                  />
+                </View>
+              </If>
+            )}
+          </Each>
+        </View>
       </If>
     </View>
   );
@@ -135,40 +109,5 @@ export function Counts(props: {
         <Text class="text-sm leading-4 text-state-error">−{props.removed}</Text>
       </If>
     </>
-  );
-}
-
-/** What a reply worked through: folded, with its size on the line. */
-export function ThinkingRow(props: {
-  text: string;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <View class="border border-border">
-      <View
-        role="button"
-        onPress={props.onToggle}
-        class="h-9 shrink-0 flex-row items-center gap-2 px-[10px] active:bg-muted"
-      >
-        <Icon
-          name={props.open ? "caretDown" : "caretRight"}
-          size={14}
-          color="faint"
-        />
-        <Text class="text-sm leading-4 text-muted-foreground">
-          {t("chat.thinking.fold", {
-            count: props.text.length.toLocaleString("en-US"),
-          })}
-        </Text>
-      </View>
-      <If when={props.open}>
-        <View class="border-t border-border px-[10px] py-2">
-          <Text class="text-sm leading-[18px] text-muted-foreground">
-            {props.text}
-          </Text>
-        </View>
-      </If>
-    </View>
   );
 }

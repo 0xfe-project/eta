@@ -3,7 +3,7 @@
 // 03h, `board` a run with a failed test (03i). The rest are variants of `wire`, by scenario:
 // chat-queue (03a), chat-errors (03f), chat-empty, chat-loading, chat-archived, chat-no-members,
 // chat-no-model, chat-elsewhere (03g), chat-process (a finished reply that spoke between its calls),
-// chat-said (a reply at work that says a sentence, calls, says another, calls, then answers).
+// chat-said (a reply at work that says a sentence, calls, says another, calls, answers, then ends).
 
 import type {
   AgentMessage,
@@ -310,6 +310,43 @@ function saidRun(from: number): ViewMessageRow[] {
       },
     ]),
   ]);
+}
+
+/** chat-said's reply once its run is over: its answer the row's text, the rest its process. */
+function saidReply(): Partial<MessageView> {
+  const read = (id: string, path: string): ToolActivity => ({
+    id,
+    name: "read",
+    input: { path },
+    status: "completed",
+    output: "…",
+  });
+  return {
+    status: "done",
+    text: SAID_ANSWER,
+    data: {
+      runFrom: 40,
+      activity: [
+        read("w1", "src/lib/wire.ts"),
+        {
+          id: "w2",
+          name: "grep",
+          input: { pattern: "last_seq" },
+          status: "completed",
+          output: "…",
+        },
+        read("w3", "src/server/replay.ts"),
+      ],
+      process: [
+        { type: "text", text: SAID_FIRST },
+        { type: "tool", id: "w1" },
+        { type: "tool", id: "w2" },
+        { type: "text", text: SAID_NEXT },
+        { type: "tool", id: "w3" },
+        { type: "text", text: SAID_ANSWER },
+      ],
+    },
+  };
 }
 
 function boardRun(from: number): ViewMessageRow[] {
@@ -1105,11 +1142,19 @@ export function installChat(host: FakeHost): void {
     ({ conversationId, seq }: { conversationId: string; seq: number }) => {
       const conversation = conversationOf(conversationId);
       conversation.patchSummary({ readSeq: seq, unread: 0 });
-      // chat-said's reply writes its answer once someone is there to see it.
+      // chat-said's reply writes its answer once someone is there to see it, and a moment after
+      // the last word its run ends: the row is written as the host keeps a finished reply.
       if (conversationId === "wire" && scenario === "chat-said" && !streamed) {
         streamed = true;
+        const end = () => {
+          conversation.replace("wire-11", saidReply());
+          conversation.publish();
+        };
         // nsh's setTimeout passes no extra arguments to its callback.
-        const answer = () => stream("sessions.session-agent-ache", SAID_ANSWER);
+        const answer = () =>
+          stream("sessions.session-agent-ache", SAID_ANSWER, () =>
+            setTimeout(end, 1500),
+          );
         setTimeout(answer, 1000);
       }
       // 03h's reply goes on writing once someone is there to see it.
