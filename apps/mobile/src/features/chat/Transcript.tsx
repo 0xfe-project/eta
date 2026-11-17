@@ -1,8 +1,13 @@
-import type { AttachmentView, MessageView } from "@eta/client-contracts";
+import type {
+  AttachmentView,
+  MessageView,
+  RunBlock,
+  ToolBlock,
+} from "@eta/client-contracts";
 import type { ListRef } from "nsh";
 import type { Chat } from "./conversation";
 import type { Outgoing } from "./outbox";
-import type { RunBlock, ToolBlock } from "./run";
+import { publishedRefs, withRealmCalls } from "@eta/client-contracts";
 import { computed, effect, List, signal, Text, untracked, View } from "nsh";
 import { t } from "../../i18n";
 import { open } from "../../nav/stack";
@@ -14,7 +19,6 @@ import { agentName, replyBlocks } from "./conversation";
 import { discard, edit, outgoing, retry } from "./outbox";
 import { ProcessScreen } from "./process";
 import { ProcessBox, ThinkingRow, ToolRow } from "./ProcessBox";
-import { publishedRefs } from "./run";
 import { ToolScreen } from "./ToolScreen";
 
 type Item =
@@ -267,15 +271,12 @@ function Reply(props: {
   );
   const firstStep = () =>
     reply().blocks.findIndex((block) => block.type !== "text");
+  // What it said on the way: a finished reply kept it on its row, so it stays where it was drawn.
   const wordsBefore = computed(() =>
-    reply().live && firstStep() > 0
-      ? reply().blocks.slice(0, firstStep()).filter(isText)
-      : [],
+    firstStep() > 0 ? reply().blocks.slice(0, firstStep()).filter(isText) : [],
   );
   const wordsAfter = computed(() =>
-    reply().live
-      ? reply().blocks.slice(Math.max(firstStep(), 0)).filter(isText)
-      : [],
+    reply().blocks.slice(Math.max(firstStep(), 0)).filter(isText),
   );
   const waiting = () => m().status === "waiting_for_input";
   /** Nothing from the run yet: the frame holds the place. */
@@ -293,7 +294,9 @@ function Reply(props: {
       ? agentName(m().agentId)
       : undefined;
   const under = () => chat.grouped().under.get(m().id) ?? [];
-  const artifacts = computed(() => publishedRefs(reply().blocks));
+  const artifacts = computed(() =>
+    publishedRefs(withRealmCalls(reply().blocks)),
+  );
   const viewAll = () => {
     const id = m().id;
     open(`process:${id}`, () => <ProcessScreen chat={chat} messageId={id} />);
@@ -325,7 +328,7 @@ function Reply(props: {
         </View>
       </If>
       <Each of={wordsBefore()} key={(block) => block.id}>
-        {(block) => <Markdown text={block().text} streaming />}
+        {(block) => <Markdown text={block().text} streaming={reply().live} />}
       </Each>
       <If when={boxed() && (steps().length > 0 || pending())}>
         <ProcessBox
@@ -370,7 +373,7 @@ function Reply(props: {
         </Each>
       </If>
       <Each of={wordsAfter()} key={(block) => block.id}>
-        {(block) => <Markdown text={block().text} streaming />}
+        {(block) => <Markdown text={block().text} streaming={reply().live} />}
       </Each>
       <If when={answer() !== undefined}>
         <Answer id={`answer:${m().id}`} text={answer() ?? ""} chat={chat} />

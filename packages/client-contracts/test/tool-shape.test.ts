@@ -1,5 +1,5 @@
-import type { ToolBlock } from "./run";
-import { describe, expect, it } from "@rstest/core";
+import type { ToolBlock } from "../src/run";
+import { describe, expect, it } from "vitest";
 import {
   childrenOf,
   exitCodeOf,
@@ -7,7 +7,7 @@ import {
   patchCounts,
   shapeOf,
   withoutAnsi,
-} from "./tool-shape";
+} from "../src/tool-shape";
 
 const block = (name: string, input: unknown, details?: unknown): ToolBlock => ({
   type: "tool",

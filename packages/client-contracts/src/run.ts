@@ -1,10 +1,9 @@
-import type {
-  AgentMessage,
-  ToolActivity,
-  ViewMessageRow,
-} from "@eta/client-contracts";
+import type { AgentMessage } from "./data";
+import type { ProcessStep, ToolActivity } from "./product";
+import type { ViewMessageRow } from "./types";
 
-// Ported from apps/web/src/lib/run.ts: keep the two in step.
+// How a reply reads, for every client: the web, the TUI and the phone draw what these return and
+// only decide how it looks.
 //
 // What a member's session is doing in the run that is in flight, as the blocks a reply is drawn
 // from. The timeline's reply row only gets its text when the run ends, so while it works the
@@ -65,6 +64,64 @@ export function savedTools(data: Record<string, unknown>): ToolBlock[] {
         ]
       : [],
   );
+}
+
+/**
+ * A reply as its process and its answer: the answer is the text at the end, after the last thought
+ * or tool call; everything before it — the words between calls included — is the process, in the
+ * order it happened. One rule for a reply at work and a finished one, so the end of a run moves
+ * nothing: while the last thing written is text, that text is the answer and the process is folded.
+ */
+export function splitReply(blocks: readonly RunBlock[]): {
+  steps: RunBlock[];
+  answer: RunBlock[];
+} {
+  let end = blocks.length;
+  while (end > 0 && blocks[end - 1]!.type === "text") end -= 1;
+  return { steps: blocks.slice(0, end), answer: blocks.slice(end) };
+}
+
+/**
+ * The process a finished reply kept on its row, as the blocks its run drew: its thoughts, its words
+ * and its calls in order (`data.process`, the calls themselves from `data.activity`), without the
+ * answer at the end, which is the row's text. A row written before the order was kept has only its
+ * last thought and its calls.
+ */
+export function savedSteps(message: {
+  thinking: string;
+  data: Record<string, unknown>;
+}): RunBlock[] {
+  const tools = savedTools(message.data);
+  const saved = message.data.process;
+  if (!Array.isArray(saved))
+    return [
+      ...(message.thinking === ""
+        ? []
+        : [
+            {
+              type: "thinking" as const,
+              id: "thinking",
+              text: message.thinking,
+            },
+          ]),
+      ...tools,
+    ];
+  const byId = new Map(tools.map((tool) => [tool.id, tool]));
+  const blocks = saved.flatMap(
+    (step: Partial<ProcessStep> | null, at): RunBlock[] => {
+      if (step?.type === "tool") {
+        // A step whose call `data.activity` does not hold (malformed, or dropped from it) has
+        // nothing to draw: it is left out on purpose, the rest of the order still stands.
+        const tool = byId.get(String(step.id));
+        return tool === undefined ? [] : [tool];
+      }
+      return (step?.type === "thinking" || step?.type === "text") &&
+        typeof step.text === "string"
+        ? [{ type: step.type, id: `step${at}`, text: step.text }]
+        : [];
+    },
+  );
+  return splitReply(blocks).steps;
 }
 
 /** Where a reply's run starts in its session (`data.runFrom`), when its row says. */
@@ -136,6 +193,14 @@ export function runBlocks(
   streaming: AgentMessage | undefined,
   runFrom?: number | undefined,
 ): RunBlock[] {
+  return blocksFrom(rows, streaming, runStart(rows, runFrom)) as RunBlock[];
+}
+
+/** Where the run in flight starts among its session's rows: after `runFrom` and the last user message. */
+export function runStart(
+  rows: readonly ViewMessageRow[],
+  runFrom: number | undefined,
+): number {
   let start = 0;
   rows.forEach((row, index) => {
     if (
@@ -144,7 +209,25 @@ export function runBlocks(
     )
       start = index + 1;
   });
-  return blocksFrom(rows, streaming, start) as RunBlock[];
+  return start;
+}
+
+/**
+ * Whether the streamed message is drawn after `rows`: only while it is newer than every assistant
+ * message they committed, so only then is a block still being written.
+ */
+export function streamDrawn(
+  rows: readonly ViewMessageRow[],
+  streaming: AgentMessage | undefined,
+): streaming is AgentMessage {
+  if (streaming?.role !== "assistant") return false;
+  const stamp = stampOf(streaming);
+  return (
+    stamp > 0 &&
+    rows.every(
+      (row) => row.message.role !== "assistant" || stampOf(row.message) < stamp,
+    )
+  );
 }
 
 /** What a user message said, in a log: the first one is the briefing and is not shown. */
@@ -229,9 +312,9 @@ function blocksFrom(
         text: errorMessage ?? "",
       });
   };
-  let newest = 0;
   let briefed = false;
-  for (const row of rows.slice(start)) {
+  const run = rows.slice(start);
+  for (const row of run) {
     const message = row.message;
     if (message.role === "user") {
       const content = (message as { content?: unknown }).content;
@@ -246,7 +329,6 @@ function blocksFrom(
         });
       briefed = true;
     } else if (message.role === "assistant") {
-      newest = Math.max(newest, stampOf(message));
       add(row.entryId, message);
     } else if (message.role === "toolResult") {
       const call = tools.get(message.toolCallId);
@@ -269,9 +351,57 @@ function blocksFrom(
       });
     }
   }
-  if (streaming?.role === "assistant" && stampOf(streaming) > newest)
-    add("stream", streaming);
+  if (streamDrawn(run, streaming)) add("stream", streaming);
   return blocks;
+}
+
+/** A run of calls to one tool, drawn as one row that opens to them. */
+export interface ToolGroup {
+  type: "group";
+  id: string;
+  name: string;
+  tools: ToolBlock[];
+}
+
+/** How many calls in a row it takes to fold them: two side by side still read as two. */
+const GROUP_FROM = 3;
+
+/**
+ * The log's blocks with runs of the same tool folded into groups: twelve `Read`s in a row are one
+ * thing the agent did (it looked around), and a line each pushes what it found off the screen.
+ * Commands are never folded, because each one is a separate decision worth reading.
+ */
+export function groupBlocks(
+  blocks: readonly LogBlock[],
+): (LogBlock | ToolGroup)[] {
+  const out: (LogBlock | ToolGroup)[] = [];
+  let run: ToolBlock[] = [];
+  const flush = () => {
+    if (run.length >= GROUP_FROM)
+      out.push({
+        type: "group",
+        id: `group:${run[0]!.id}`,
+        name: run[0]!.name,
+        tools: run,
+      });
+    else out.push(...run);
+    run = [];
+  };
+  for (const block of blocks) {
+    const foldable =
+      block.type === "tool" &&
+      block.status !== "running" &&
+      commandOf(block.input) === undefined;
+    if (foldable && (run.length === 0 || run[0]!.name === block.name)) {
+      run.push(block);
+      continue;
+    }
+    flush();
+    if (foldable) run.push(block as ToolBlock);
+    else out.push(block);
+  }
+  flush();
+  return out;
 }
 
 /** The shell command a call ran, when its input says it ran one. */
@@ -290,7 +420,7 @@ export function commandOf(input: unknown): string | undefined {
  * The host tools a script called through `eta.platform`, as the blocks a direct call would have
  * left: an artifact published from code is still an artifact.
  */
-function withRealmCalls(blocks: readonly RunBlock[]): RunBlock[] {
+export function withRealmCalls(blocks: readonly RunBlock[]): RunBlock[] {
   return blocks.flatMap((block): RunBlock[] => {
     if (
       block.type !== "tool" ||
@@ -324,6 +454,7 @@ function withRealmCalls(blocks: readonly RunBlock[]): RunBlock[] {
   });
 }
 
+/** An artifact a reply published: the call that did, and the version it made. */
 export interface ArtifactRef {
   id: string;
   artifactId: string;
@@ -331,9 +462,13 @@ export interface ArtifactRef {
   version: number;
 }
 
-/** What a reply's tool calls published, one per publish, in the order it published them. */
+/**
+ * What a reply's tool calls published, one per publish, in the order it published them. A call that
+ * has not finished publishing (or failed) has no artifact to point at. A script's calls count only
+ * once `withRealmCalls` has spelled them out.
+ */
 export function publishedRefs(blocks: readonly RunBlock[]): ArtifactRef[] {
-  return withRealmCalls(blocks).flatMap((block) => {
+  return blocks.flatMap((block) => {
     if (
       block.type !== "tool" ||
       block.name !== "publish_artifact" ||

@@ -1,3 +1,4 @@
+import type { ToolBlock } from "@eta/client-contracts";
 /**
  * How a reply's folded steps are drawn: the one line in each of its three states and both
  * languages, its colours, its mark folded and unfolded, a long title cut to the width, and what
@@ -8,7 +9,6 @@ import type {
   RenderOptions,
   TranscriptItem,
 } from "../../src/ext/conversation/contract";
-import type { ToolBlock } from "../../src/ext/conversation/model/run";
 import { stripVTControlCharacters } from "node:util";
 import stringWidth from "string-width";
 import { describe, expect, it, vi } from "vitest";

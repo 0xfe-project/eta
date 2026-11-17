@@ -1,4 +1,4 @@
-import type { RunBlock, ToolBlock } from "./run";
+import type { RunBlock, ToolBlock } from "@eta/client-contracts";
 import { computed, Text, View } from "nsh";
 import { t } from "../../i18n";
 import { Icon } from "../../ui/Icon";

@@ -9,7 +9,8 @@
     ".": "./src/index.ts",
     "./connect-link": "./src/connect-link.ts",
     "./desktop": "./src/desktop.ts",
-    "./plugin-fields": "./src/plugin-fields.ts"
+    "./plugin-fields": "./src/plugin-fields.ts",
+    "./tool-shape": "./src/tool-shape.ts"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -20,6 +21,7 @@
   },
   "dependencies": {
     "@eta/client-wire-proto": "*",
+    "diff": "^9.0.0",
     "re2js": "2.9.1"
   },
   "devDependencies": {

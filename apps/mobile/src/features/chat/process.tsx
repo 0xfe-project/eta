@@ -1,10 +1,13 @@
 import type {
+  LogBlock,
+  RunBlock,
   SessionHistoryResult,
+  ToolBlock,
   ViewMessageRow,
 } from "@eta/client-contracts";
 import type { Chat } from "./conversation";
-import type { LogBlock, RunBlock, ToolBlock } from "./run";
 import type { Step } from "./steps";
+import { shapeOf, withoutAnsi } from "@eta/client-contracts/tool-shape";
 import { computed, List, signal, Text, untracked, View } from "nsh";
 import { t } from "../../i18n";
 import { open } from "../../nav/stack";
@@ -19,7 +22,6 @@ import { agentName, replyBlocks } from "./conversation";
 import { Counts } from "./ProcessBox";
 import { useSessions } from "./session";
 import { stepOf } from "./steps";
-import { shapeOf, withoutAnsi } from "./tool-shape";
 import { ToolScreen } from "./ToolScreen";
 
 /** How many of the last steps 04 shows before 「Earlier N steps」. */

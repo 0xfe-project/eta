@@ -1,4 +1,5 @@
 import type {
+  ArtifactRef,
   BoardTaskStatus,
   MessageView,
   TaskCardData,
@@ -7,7 +8,6 @@ import type {
 } from "@eta/client-contracts";
 import type { TextKey } from "../../i18n";
 import type { Chat } from "./conversation";
-import type { ArtifactRef } from "./run";
 import { draftStatus } from "@eta/client-contracts";
 import { Text, View } from "nsh";
 import { t } from "../../i18n";

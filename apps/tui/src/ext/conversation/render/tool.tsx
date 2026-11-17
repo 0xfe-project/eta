@@ -1,9 +1,20 @@
+import type { ToolBlock } from "@eta/client-contracts";
+import type {
+  FilePatch,
+  PlanItem,
+  ToolShape,
+} from "@eta/client-contracts/tool-shape";
 import type { ReactNode } from "react";
 import type { ToolItem } from "../contract";
-import type { ToolBlock } from "../model/run";
-import type { FilePatch, PlanItem, ToolShape } from "../model/tool-shape";
 import type { DrawContext, DrawnItem } from "./context";
 import type { Lines } from "./lines";
+import {
+  exitCodeOf,
+  fullOutputOf,
+  patchCounts,
+  shapeOf,
+  summarizeArgs,
+} from "@eta/client-contracts/tool-shape";
 import { Box, Text } from "ink";
 import stringWidth from "string-width";
 import {
@@ -11,12 +22,6 @@ import {
   languageForPath,
 } from "../../../ui/gemini/code-colorizer";
 import { DiffRenderer } from "../../../ui/gemini/diff-renderer";
-import {
-  exitCodeOf,
-  fullOutputOf,
-  patchCounts,
-  shapeOf,
-} from "../model/tool-shape";
 import {
   concat,
   draw,
@@ -28,7 +33,6 @@ import {
 } from "./lines";
 import { Prefixed } from "./prefixed";
 import { countLines, imageLabel, linesLabel, terminalText } from "./text";
-import { summarizeArgs } from "./tool-summary";
 
 /**
  * What a program printed, not drawn yet: its lines without the blank ones at either end, and how

@@ -6,9 +6,12 @@
  * and the view scrolls, searches and selects over those lines; so an item's lines depend only on
  * the item and the options, never on the items around it.
  */
-import type { AttachmentView } from "@eta/client-contracts";
+import type {
+  AttachmentView,
+  RunImage,
+  ToolBlock,
+} from "@eta/client-contracts";
 import type { Locale, Theme } from "../../config/types";
-import type { RunImage, ToolBlock } from "./model/run";
 
 /** A folded paste in a user's text: `[start, end)` in UTF-16 offsets, as `send` takes them. */
 export type PasteRange = [number, number];

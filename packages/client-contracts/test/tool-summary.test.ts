@@ -1,5 +1,5 @@
-import { describe, expect, it } from "@rstest/core";
-import { summarizeArgs } from "./tool-summary";
+import { describe, expect, it } from "vitest";
+import { summarizeArgs } from "../src/tool-shape";
 
 describe("工具调用的一句话摘要", () => {
   it("优先引用命令、路径这类人真正在看的参数", () => {

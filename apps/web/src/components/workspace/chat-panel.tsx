@@ -3,16 +3,25 @@ import type {
   AttachmentView,
   ConversationSummary,
   MessageView,
+  RunBlock,
+  ToolBlock,
 } from "@eta/client-contracts";
 import type { CSSProperties, ReactNode } from "react";
 import type { WorkspaceState } from "./workspace-store";
 import type { Draft, FilePart, PasteRange } from "@/lib/composer";
 import type { ComposerTarget, StickyTarget } from "@/lib/mentions";
-import type { RunBlock, ToolBlock } from "@/lib/run";
 import type { Outgoing, SendMode } from "@/queries/outbox";
 import type { Question } from "@/queries/questions";
 import type { TaskStatus } from "@/queries/tasks";
-import { MAX_ATTACHMENTS } from "@eta/client-contracts";
+import {
+  MAX_ATTACHMENTS,
+  publishedRefs,
+  runFromOf,
+  savedSteps,
+  savedTools,
+  splitReply,
+  withRealmCalls,
+} from "@eta/client-contracts";
 import { ArrowDownIcon } from "@phosphor-icons/react/ArrowDown";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { PaperclipIcon } from "@phosphor-icons/react/Paperclip";
@@ -51,7 +60,6 @@ import { buildMenu, hashAt, mentionAt } from "@/lib/composer-menu";
 import { translate } from "@/lib/i18n";
 import { mentionLabel } from "@/lib/mentions";
 import { firstVisible } from "@/lib/rail";
-import { runFromOf, savedSteps, savedTools, splitReply } from "@/lib/run";
 import { readTheme, setTheme } from "@/lib/theme";
 import {
   ACTIVE_STATUSES,
@@ -326,45 +334,6 @@ function MemberPicker({
   );
 }
 
-/**
- * The host tools a script called through `eta.platform`, as the blocks a direct call would have
- * left. `esmrun` puts them in its `details.calls`; a card (an artifact, an email proposal) that
- * only knew tool blocks would otherwise vanish when the model calls the tool from code.
- */
-function withRealmCalls(blocks: readonly RunBlock[]): RunBlock[] {
-  return blocks.flatMap((block): RunBlock[] => {
-    if (
-      block.type !== "tool" ||
-      (block.name !== "esmrun" && block.name !== "esmrunandkeep")
-    )
-      return [block];
-    const calls = (block.details as { calls?: unknown } | undefined)?.calls;
-    if (!Array.isArray(calls)) return [block];
-    return [
-      block,
-      ...calls.flatMap((call, at): RunBlock[] => {
-        const { tool, details, isError } = (call ?? {}) as {
-          tool?: unknown;
-          details?: unknown;
-          isError?: unknown;
-        };
-        return typeof tool === "string"
-          ? [
-              {
-                type: "tool",
-                id: `${block.id}.${at}`,
-                name: tool,
-                input: undefined,
-                details,
-                status: isError === true ? "failed" : "completed",
-              },
-            ]
-          : [];
-      }),
-    ];
-  });
-}
-
 /** What a `show_widget` call draws: the code its result kept, or, while it streams, its argument. */
 function widgetOf(block: ToolBlock) {
   if (block.name !== "show_widget") return undefined;
@@ -378,47 +347,6 @@ function widgetOf(block: ToolBlock) {
     code: source.widget_code,
     streaming: block.status === "running",
   };
-}
-
-/** What `publish_artifact` returns in its result's `details`. */
-function publishedArtifact(block: ToolBlock) {
-  if (block.name !== "publish_artifact" || block.status !== "completed")
-    return undefined;
-  const { artifactId, title, version } = (block.details ?? {}) as {
-    artifactId?: unknown;
-    title?: unknown;
-    version?: unknown;
-  };
-  return typeof artifactId === "string" &&
-    typeof title === "string" &&
-    typeof version === "number"
-    ? { artifactId, title, version }
-    : undefined;
-}
-
-/** What a reply's tool calls published, as the card values they turn into: one per publish, in the
- *  order it published them. A call that has not finished publishing (or failed) has no artifact to
- *  point at. */
-function publishedRefs(blocks: readonly RunBlock[]) {
-  return blocks.flatMap((block) => {
-    const artifact =
-      block.type === "tool" ? publishedArtifact(block) : undefined;
-    return artifact === undefined
-      ? []
-      : [
-          {
-            id: block.id,
-            ref: {
-              kind: "artifact" as const,
-              id: artifact.artifactId,
-              title: artifact.title,
-              // The card says which version it opens, so a reply that published the same thing
-              // twice reads as that.
-              number: artifact.version,
-            },
-          },
-        ];
-  });
 }
 
 function emailProposalIds(blocks: readonly RunBlock[]): string[] {
@@ -462,7 +390,17 @@ function TurnCards({
 }) {
   const live = useRunBlocks(sessionId, runFrom);
   const blocks = withRealmCalls(sessionId === undefined ? saved : live);
-  const published = publishedRefs(blocks);
+  // The card says which version it opens, so a reply that published the same thing twice reads
+  // as that.
+  const published = publishedRefs(blocks).map(({ id, ...artifact }) => ({
+    id,
+    ref: {
+      kind: "artifact" as const,
+      id: artifact.artifactId,
+      title: artifact.title,
+      number: artifact.version,
+    },
+  }));
   const widgets = blocks.flatMap((block) => {
     const widget = block.type === "tool" ? widgetOf(block) : undefined;
     return widget === undefined ? [] : [{ id: block.id, ...widget }];

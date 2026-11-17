@@ -1,6 +1,13 @@
-import type { AgentMessage, ViewMessageRow } from "@eta/client-contracts";
-import { describe, expect, it } from "@rstest/core";
-import { groupBlocks, logBlocks, runBlocks, savedTools } from "./run";
+import type { AgentMessage, ViewMessageRow } from "../src/index";
+import { describe, expect, it } from "vitest";
+import {
+  groupBlocks,
+  logBlocks,
+  runBlocks,
+  savedSteps,
+  savedTools,
+  splitReply,
+} from "../src/index";
 
 let seq = 0;
 const row = (message: object): ViewMessageRow => {
@@ -279,6 +286,152 @@ const result = (id: string, content: object[], extra: object = {}) =>
     timestamp: 3,
     ...extra,
   });
+
+describe("a finished reply's process", () => {
+  const activity = [
+    { id: "t1", name: "bash", input: { command: "ls" }, status: "completed" },
+  ];
+
+  it("is its thoughts, words and calls in order; the text at the end is the answer, not a step", () => {
+    const steps = savedSteps({
+      thinking: "then answer",
+      data: {
+        activity,
+        process: [
+          { type: "thinking", text: "look first" },
+          { type: "text", text: "Listing the files." },
+          { type: "tool", id: "t1" },
+          { type: "thinking", text: "then answer" },
+          { type: "text", text: "the answer" },
+          { type: "text", text: "and a second paragraph" },
+        ],
+      },
+    });
+    expect(
+      steps.map((block) =>
+        block.type === "tool"
+          ? `tool ${block.id}`
+          : `${block.type} ${block.text}`,
+      ),
+    ).toEqual([
+      "thinking look first",
+      "text Listing the files.",
+      "tool t1",
+      "thinking then answer",
+    ]);
+  });
+
+  it("of a row written before the order was kept is its last thought, then its calls", () => {
+    const steps = savedSteps({ thinking: "a thought", data: { activity } });
+    expect(
+      steps.map((block) =>
+        block.type === "tool"
+          ? `tool ${block.id}`
+          : `${block.type} ${block.text}`,
+      ),
+    ).toEqual(["thinking a thought", "tool t1"]);
+    expect(savedSteps({ thinking: "", data: {} })).toEqual([]);
+  });
+
+  it("splits a reply at work the same way: trailing text is the answer, words before a call are steps", () => {
+    const tool = {
+      type: "tool" as const,
+      id: "t1",
+      name: "bash",
+      input: {},
+      status: "completed" as const,
+    };
+    const said = { type: "text" as const, id: "a", text: "on my way" };
+    const answer = { type: "text" as const, id: "b", text: "done" };
+    expect(splitReply([said, tool, answer])).toEqual({
+      steps: [said, tool],
+      answer: [answer],
+    });
+    expect(splitReply([said])).toEqual({ steps: [], answer: [said] });
+  });
+});
+
+describe("where a reply's answer starts", () => {
+  const tool = {
+    type: "tool" as const,
+    id: "t1",
+    name: "bash",
+    input: {},
+    status: "completed" as const,
+  };
+  const thought = { type: "thinking" as const, id: "h", text: "hmm" };
+  const text = (id: string) => ({ type: "text" as const, id, text: id });
+
+  it("has no answer when the reply ends on a call or a thought: everything is process", () => {
+    expect(splitReply([text("a"), tool])).toEqual({
+      steps: [text("a"), tool],
+      answer: [],
+    });
+    expect(splitReply([tool, thought])).toEqual({
+      steps: [tool, thought],
+      answer: [],
+    });
+    expect(splitReply([])).toEqual({ steps: [], answer: [] });
+  });
+
+  it("takes every paragraph after the last call or thought as the answer, and none before it", () => {
+    expect(
+      splitReply([text("a"), thought, text("b"), tool, text("c"), text("d")]),
+    ).toEqual({
+      steps: [text("a"), thought, text("b"), tool],
+      answer: [text("c"), text("d")],
+    });
+  });
+
+  it("of a finished reply that only called tools is its calls, in its process's order", () => {
+    const steps = savedSteps({
+      thinking: "",
+      data: {
+        activity: [
+          { id: "t1", name: "bash", input: {}, status: "completed" },
+          { id: "t2", name: "read", input: {}, status: "failed" },
+        ],
+        process: [
+          { type: "tool", id: "t2" },
+          { type: "tool", id: "t1" },
+        ],
+      },
+    });
+    expect(steps.map((block) => block.id)).toEqual(["t2", "t1"]);
+  });
+
+  it("leaves out a step naming a call its activity does not hold, and keeps the rest in order", () => {
+    const steps = savedSteps({
+      thinking: "",
+      data: {
+        activity: [{ id: "t1", name: "bash", input: {}, status: "completed" }],
+        process: [
+          { type: "text", text: "first" },
+          { type: "tool", id: "gone" },
+          { type: "tool", id: "t1" },
+          { type: "text", text: "the answer" },
+        ],
+      },
+    });
+    expect(
+      steps.map((block) => (block.type === "tool" ? block.id : block.text)),
+    ).toEqual(["first", "t1"]);
+  });
+
+  it("of a finished reply that only wrote text has no process", () => {
+    expect(
+      savedSteps({
+        thinking: "",
+        data: {
+          process: [
+            { type: "text", text: "one" },
+            { type: "text", text: "two" },
+          ],
+        },
+      }),
+    ).toEqual([]);
+  });
+});
 
 describe("a run's log", () => {
   it("keeps the pictures a tool result carried, with where to fetch them", () => {

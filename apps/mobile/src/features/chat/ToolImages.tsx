@@ -1,5 +1,4 @@
-import type { SessionImage } from "@eta/client-contracts";
-import type { RunImage } from "./run";
+import type { RunImage, SessionImage } from "@eta/client-contracts";
 import { Image, signal, Text, View } from "nsh";
 import { t } from "../../i18n";
 import { call } from "../../wire/target";

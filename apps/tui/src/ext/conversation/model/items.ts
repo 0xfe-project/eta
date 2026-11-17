@@ -3,6 +3,7 @@ import type {
   AgentView,
   AttachmentView,
   ConversationKind,
+  LogBlock,
   MemberView,
   MessageView,
   ViewMessageRow,
@@ -10,11 +11,16 @@ import type {
 import type { Locale } from "../../../config/types";
 import type { Translate } from "../../../i18n/messages";
 import type { TranscriptItem } from "../contract";
-import type { LogBlock } from "./run";
+import {
+  logBlocks,
+  runFromOf,
+  runStart,
+  savedSteps,
+  streamDrawn,
+} from "@eta/client-contracts";
 import { translatorFor } from "../../../i18n/messages";
 import { feedMessages } from "../feed/messages";
 import { pasteBlocksOf } from "./paste-blocks";
-import { logBlocks, runFromOf, savedTools } from "./run";
 import { foldSteps } from "./steps";
 import { RUNNING_STATUSES } from "./timeline";
 
@@ -220,21 +226,23 @@ function sessionOf(
 }
 
 function finishedItems(row: MessageView): TranscriptItem[] {
-  const items: TranscriptItem[] = [];
-  if (row.thinking !== "")
-    items.push({
-      kind: "thinking",
-      key: `${row.id}:thinking`,
-      text: row.thinking,
-      streaming: false,
-    });
-  for (const tool of savedTools(row.data))
-    items.push({
-      kind: "tool",
-      key: `${row.id}:${tool.id}`,
-      tool,
-      progress: undefined,
-    });
+  // What it thought, said and did on the way, in the order the run showed it.
+  const items = savedSteps(row).map(
+    (block): TranscriptItem =>
+      block.type === "tool"
+        ? {
+            kind: "tool",
+            key: `${row.id}:${block.id}`,
+            tool: block,
+            progress: undefined,
+          }
+        : {
+            kind: block.type,
+            key: `${row.id}:${block.id}`,
+            text: block.text,
+            streaming: false,
+          },
+  );
   if (row.text !== "" && row.status !== "failed")
     items.push({
       kind: "text",
@@ -259,48 +267,6 @@ function finishedItems(row: MessageView): TranscriptItem[] {
       text: row.text,
     });
   return items;
-}
-
-/**
- * Where the run starts among the session's rows: after `runFrom` and after the last user message,
- * the same start as `runBlocks` in apps/web/src/lib/run.ts.
- */
-function runStart(
-  rows: readonly ViewMessageRow[],
-  runFrom: number | undefined,
-): number {
-  let start = 0;
-  rows.forEach((sessionRow, index) => {
-    if (
-      sessionRow.message.role === "user" ||
-      (runFrom !== undefined && sessionRow.seq <= runFrom)
-    )
-      start = index + 1;
-  });
-  return start;
-}
-
-function stampOf(message: AgentMessage | undefined): number {
-  const stamp = (message as { timestamp?: unknown } | undefined)?.timestamp;
-  return typeof stamp === "number" ? stamp : 0;
-}
-
-/**
- * The stream is drawn only while it is newer than every assistant message the run has committed
- * (`logBlocks` leaves it out otherwise), so only then is a block still being written.
- */
-function streamDrawn(
-  run: readonly ViewMessageRow[],
-  streaming: AgentMessage | undefined,
-): boolean {
-  if (streaming?.role !== "assistant") return false;
-  const newest = Math.max(
-    0,
-    ...run
-      .filter((sessionRow) => sessionRow.message.role === "assistant")
-      .map((sessionRow) => stampOf(sessionRow.message)),
-  );
-  return stampOf(streaming) > newest;
 }
 
 function liveItems(row: MessageView, session: SessionLive): TranscriptItem[] {

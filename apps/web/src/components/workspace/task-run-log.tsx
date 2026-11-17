@@ -1,12 +1,12 @@
+import type { LogBlock, ToolGroup } from "@eta/client-contracts";
 import type { RefObject } from "react";
-import type { LogBlock, ToolGroup } from "@/lib/run";
 import type { SessionLog } from "@/queries/sessions";
 import type { TaskRun } from "@/queries/tasks";
+import { groupBlocks } from "@eta/client-contracts";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Markdown } from "@/components/markdown";
 import { Loading } from "@/components/states";
-import { groupBlocks } from "@/lib/run";
 import { isActive } from "./task-format";
 import { ImageStrip } from "./transcript/image-strip";
 import { ThinkingBlock } from "./transcript/thinking-block";

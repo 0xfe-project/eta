@@ -1,4 +1,4 @@
-import type { ToolBlock } from "@/lib/run";
+import type { ToolBlock } from "@eta/client-contracts";
 import { afterEach, describe, expect, it } from "@rstest/core";
 import { act } from "react";
 import { cleanup, mount } from "@/test-render";

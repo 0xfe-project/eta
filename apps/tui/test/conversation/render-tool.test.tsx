@@ -1,3 +1,4 @@
+import type { ToolBlock } from "@eta/client-contracts";
 /**
  * How a tool call is drawn: the title by the shape of the call, the body under it, how a long body
  * folds to `previewLines`, and what copying the call gives.
@@ -7,7 +8,6 @@ import type {
   RenderOptions,
   TranscriptItem,
 } from "../../src/ext/conversation/contract";
-import type { ToolBlock } from "../../src/ext/conversation/model/run";
 import process from "node:process";
 import { stripVTControlCharacters } from "node:util";
 import stringWidth from "string-width";
