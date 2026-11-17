@@ -31,10 +31,11 @@ import { useArtifacts } from "@/queries/artifacts";
 import { useCaptain } from "@/queries/captain";
 import { useConversationActions } from "@/queries/conversations";
 import { useModels } from "@/queries/providers";
-import { useSession } from "@/queries/sessions";
 import { useTasks } from "@/queries/tasks";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels, memberStatusLabel } from "./agent-status";
+import { MemberRing } from "./member-ring";
+import { MemberStats } from "./member-stats";
 import { useOpenAgent } from "./use-agents";
 import { useChatList } from "./use-chat-list";
 import { useGroups, useOpenGroup } from "./use-groups";
@@ -65,10 +66,11 @@ function humanizeAge(at: number): string {
 /**
  * Captain, at the head of the sidebar and outside the list that scrolls.
  *
- * It keeps that place of its own, but nothing else sets it apart: it is one agent, drawn the way
- * every agent row below is — the same face, the same type, the same hover. Captain has no colour of
- * its own; its name and its face say who it is. What the session is spending and how fast it is
- * going are in the row's title, not on the row: the row says whether to look, the panel says at what.
+ * It keeps that place of its own, and the card is what sets it apart: a section head, ordered the
+ * way the groups below are not. The gauge around its face and the numbers at the end of the row
+ * are the conversation's own session — what it has spent, and how fast it is going right now. The
+ * task and artifact counts are the only thing left in the title: they are a second-order question,
+ * and the row has one line to give.
  */
 export function CaptainSection({ rail }: { rail: boolean }) {
   const { t: translateText } = useTranslation([
@@ -89,10 +91,10 @@ export function CaptainSection({ rail }: { rail: boolean }) {
   const { tasks: board } = useTasks();
   const { artifacts } = useArtifacts();
   const conversationId = captain.identity?.conversationId ?? null;
-  // The conversation's own member row: its session is what the rate in the title reads from.
+  // The conversation's own member row: its session is what the ring and the numbers read from.
   const member = groups.find((each) => each.id === conversationId)
     ?.participants[0];
-  const session = useSession(member?.sessionId ?? undefined);
+  const sessionId = member?.sessionId ?? undefined;
 
   // The host makes Captain whole when it starts, conversation included (`CaptainService.ensure`),
   // so a Captain without one is only the moment before the first state arrives.
@@ -106,12 +108,12 @@ export function CaptainSection({ rail }: { rail: boolean }) {
   const captainArtifacts = artifacts.filter(
     (art) => art.conversationId === conversationId,
   );
+  const agentId = captain.identity.agentId;
   const name = captain.identity.name;
   const active = current?.id === conversationId;
-  const rate = Math.round((session?.metrics?.tokensPerSec ?? 0) * 10) / 10;
-  const title = [
-    name,
-    rate === 0 ? null : `${rate} tok/s`,
+  // What the card no longer draws, since it is one row: the counts live in the tooltip. Still the
+  // same numbers, still off the same query — just not a third and fourth line.
+  const counts = [
     captainTasks.length === 0
       ? null
       : `${captainTasks.length} ${translateText("navigation:sections.tasks")}`,
@@ -141,61 +143,91 @@ export function CaptainSection({ rail }: { rail: boolean }) {
         </span>
       </>
     );
-  const face = (
-    <AgentAvatar
-      agent={{ id: captain.identity.agentId }}
-      animate
-      className={rail ? "size-6" : "size-6 shrink-0"}
-    />
+  const face = (size: string) => (
+    <AgentAvatar agent={{ id: agentId }} animate className={size} />
   );
 
-  return (
-    <SidebarGroup
-      data-section="captain"
-      aria-label={name}
-      className="shrink-0 p-0"
-    >
-      <SidebarMenu>
-        <SidebarMenuItem
-          className={cn(
-            "relative transition-colors duration-75",
-            active && "bg-sidebar-accent",
-          )}
+  // The rail is 4rem: the glyph and the name under it, as every other card there.
+  if (rail) {
+    return (
+      <SidebarGroup
+        data-section="captain"
+        aria-label={name}
+        className="shrink-0 border-b px-0 pt-2 pb-2"
+      >
+        <button
+          type="button"
+          data-sidebar="menu-button"
+          data-active={active}
+          aria-current={active ? "true" : undefined}
+          onClick={() => open(conversationId)}
+          title={name}
+          className="relative mx-auto flex cursor-pointer flex-col items-center gap-1 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
         >
-          <button
-            type="button"
-            data-sidebar="menu-button"
-            data-active={active}
-            aria-current={active ? "true" : undefined}
-            onClick={() => open(conversationId)}
-            title={title}
-            className={cn(
-              "flex w-full cursor-pointer transition-colors duration-75 hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden",
-              rail
-                ? "flex-col items-center gap-1 px-1 py-1.5"
-                : "items-center gap-2 px-4 py-1.5 text-left",
-            )}
-          >
-            {face}
-            {rail ? (
-              <span className="w-full truncate text-center text-[10px] leading-tight">
-                {name}
-              </span>
-            ) : (
-              <>
-                <span className="min-w-0 truncate text-sm">{name}</span>
-                {member === undefined ? null : (
-                  <span className="shrink-0 text-xs text-faint">
-                    {memberStatusLabel(member.status)}
-                  </span>
-                )}
-                <span className="ml-auto" />
-              </>
-            )}
-            {count}
-          </button>
-        </SidebarMenuItem>
-      </SidebarMenu>
+          {sessionId === undefined ? (
+            face("size-10")
+          ) : (
+            <MemberRing sessionId={sessionId} size={48}>
+              {face("size-10")}
+            </MemberRing>
+          )}
+          <span className="w-full truncate text-center text-[10px] leading-tight">
+            {name}
+          </span>
+          {count}
+        </button>
+      </SidebarGroup>
+    );
+  }
+
+  return (
+    <SidebarGroup data-section="captain" aria-label={name} className="shrink-0">
+      {/* No label above the card: the card says what it is. A heading that repeats the name the
+          card already shows is one more line between the window's top edge and the list.
+          The card is one row, top to bottom: face, name, state, and the session's numbers all on
+          the same baseline. A block of stats under the name made this the tallest thing in the
+          sidebar, which is the one thing a section head must not be. */}
+      <div
+        className={cn(
+          "mx-2 mt-2 border transition-colors duration-75",
+          active && "bg-sidebar-accent",
+        )}
+      >
+        <button
+          type="button"
+          data-sidebar="menu-button"
+          data-active={active}
+          aria-current={active ? "true" : undefined}
+          onClick={() => open(conversationId)}
+          title={counts === "" ? undefined : counts}
+          className="flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+        >
+          {sessionId === undefined ? (
+            face("size-10")
+          ) : (
+            // 48px ring around a 40px face: big enough that the gauge reads as a gauge, small
+            // enough that it stays a section head and not a poster.
+            <MemberRing sessionId={sessionId} size={48}>
+              {face("size-10")}
+            </MemberRing>
+          )}
+          <span className="shrink-0 truncate text-sm font-medium">{name}</span>
+          {member === undefined ? null : (
+            <span className="shrink-0 text-xs text-faint">
+              {memberStatusLabel(member.status)}
+            </span>
+          )}
+          {count}
+          {/* The numbers end the same line rather than starting a new block: what is left of the
+              row is theirs, and it truncates from the tail, so a narrow sidebar costs a few digits
+              and never the name of the agent the card is about. */}
+          <MemberStats
+            sessionId={sessionId}
+            inline
+            className="ml-auto min-w-0 justify-end"
+          />
+        </button>
+      </div>
     </SidebarGroup>
   );
 }

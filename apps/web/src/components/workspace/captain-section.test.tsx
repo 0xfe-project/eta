@@ -44,9 +44,9 @@ rstest.mock("@tanstack/react-router", () => ({
 /**
  * Captain's row at the head of the sidebar.
  *
- * It keeps its own place at the top, and nothing else sets it apart: it is an agent row like the
- * ones below — the same face, the same hover, no frame, no colour of its own. The session's rate
- * and counts are in the title, and what it holds for a person is a plain number.
+ * It keeps its own place at the top, and the card is what sets it apart. The ring around its face
+ * is the session's own gauge, the numbers at the end of the row are what that session has spent and
+ * how fast it is going, and the task/artifact counts are the only thing left in the title.
  */
 
 let host: ReturnType<typeof productHost>;
@@ -136,21 +136,48 @@ async function section(rail = false) {
 }
 
 describe("Captain 在左栏顶上", () => {
-  it("和其他智能体同一种行：一个按钮，写着名字和它在做什么", async () => {
+  it("是那个会话自己的面板：一个有框的卡片，写着名字和它在做什么", async () => {
     const container = await section();
-    const button = container.querySelector('[data-section="captain"] button')!;
+    const card = container.querySelector(
+      '[data-section="captain"] > div',
+    ) as HTMLElement;
+    expect(card.className).toContain("border");
+    const button = card.querySelector("button")!;
     const text = button.textContent ?? "";
     expect(text).toContain("Captain");
     expect(text).toContain("空闲");
   });
 
-  it("速度和用量不在行上：tok/s 挪进悬停提示，也不用成功绿", async () => {
+  it("速度和用量在行上：tok/s 结尾，成功绿，不藏进提示", async () => {
     const container = await section();
     const button = container.querySelector('[data-section="captain"] button')!;
-    expect(button.textContent).not.toContain("tok/s");
-    expect(button.textContent).not.toContain("12.3k");
-    expect(button.getAttribute("title")).toBe("Captain · 12 tok/s");
-    expect(container.innerHTML).not.toContain("state-success");
+    const text = button.textContent ?? "";
+    expect(text).toContain("12 tok/s");
+    expect(text).toContain("12.3k");
+    expect(text).toContain("678");
+    expect(button.getAttribute("title")).toBeNull();
+    const rate = [...button.querySelectorAll("span")].find(
+      (each) => each.textContent === "12 tok/s",
+    );
+    expect(rate?.className).toContain("state-success");
+  });
+
+  it("头像比列表里的行大一档：环是 48px 的框", async () => {
+    const container = await section();
+    const ring = container.querySelector(
+      '[data-section="captain"] span[title]',
+    ) as HTMLElement | null;
+    expect(ring?.style.width).toBe("48px");
+    expect(ring?.style.height).toBe("48px");
+  });
+
+  it("模型是名字不是计数：落在提示里，不挤在数字中间", async () => {
+    const container = await section();
+    const text = container.textContent ?? "";
+    expect(text).not.toContain("p:m1");
+    expect(
+      container.querySelector('[data-section="captain"] span[title="p:m1"]'),
+    ).not.toBeNull();
   });
 
   it("点了打开 Captain 的会话", async () => {
