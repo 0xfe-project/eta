@@ -1,5 +1,6 @@
 import type { WorkspaceView } from "./types";
 
+import type { AnsweringQuestion } from "@/queries/questions";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -99,7 +100,16 @@ export function Workspace({
   const { targetOf, remember } = useComposerTarget(group, agents);
   const { stop, read } = useConversationActions();
   const { compact, goal: setGoal } = useSessionActions();
-  const { choose, abort } = useAnswerQuestion();
+  const { choose, abort, answer } = useAnswerQuestion();
+  const answering: AnsweringQuestion | undefined =
+    answer.isPending && answer.variables !== undefined
+      ? {
+          id: answer.variables.id,
+          ...(answer.variables.response.kind === "selection"
+            ? { selections: answer.variables.response.selections }
+            : {}),
+        }
+      : undefined;
   // Which session a goal set from the composer lands on: the member being talked to, or the first
   // one that has a conversation. A group has one goal per member; the composer speaks for the one
   // you are addressing.
@@ -290,6 +300,7 @@ export function Workspace({
               loadingOlder={conversation.loadingOlder}
               onLoadOlder={conversation.loadOlder}
               questions={questions}
+              answering={answering}
               connectionLost={connectionLost}
               outgoing={outgoing}
               onRetry={outbox.retry}

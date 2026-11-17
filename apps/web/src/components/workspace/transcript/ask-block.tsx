@@ -1,4 +1,4 @@
-import type { Question } from "@/queries/questions";
+import type { AnsweringQuestion, Question } from "@/queries/questions";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -13,18 +13,24 @@ import { useTranslation } from "react-i18next";
 export function AskBlock({
   question,
   who,
+  pending,
   onChoose,
   onAbort,
 }: {
   question: Question;
   /** Who is asking; in a group that is the first thing you need to know. */
   who?: string | undefined;
+  /** The answer on its way to the host, once one has been submitted. */
+  pending?: AnsweringQuestion | undefined;
   onChoose: (question: Question, selections: string[]) => void;
   onAbort: (question: Question) => void;
 }) {
   const { t: translateText } = useTranslation(["chat", "common"] as const);
   const [picked, setPicked] = useState<string[]>([]);
   const [text, setText] = useState("");
+  const busy = pending !== undefined;
+  const sending = (option: string) =>
+    pending?.selections?.includes(option) === true;
   return (
     <section
       className="ask-block"
@@ -44,7 +50,8 @@ export function AskBlock({
               key={option}
               type="button"
               className="ask-option"
-              aria-pressed={picked.includes(option)}
+              aria-pressed={picked.includes(option) || sending(option)}
+              disabled={busy}
               onClick={() =>
                 setPicked(
                   picked.includes(option)
@@ -60,6 +67,8 @@ export function AskBlock({
               key={option}
               type="button"
               className="ask-option"
+              aria-pressed={sending(option)}
+              disabled={busy}
               onClick={() => onChoose(question, [option])}
             >
               {option}
@@ -77,10 +86,11 @@ export function AskBlock({
             <input
               value={text}
               onChange={(event) => setText(event.target.value)}
+              disabled={busy}
               aria-label={translateText("confirmations.requestLabel")}
               className="min-w-0 flex-1 border border-border bg-transparent px-2 text-xs outline-none focus:border-border-strong"
             />
-            <button type="submit" className="ask-option">
+            <button type="submit" className="ask-option" disabled={busy}>
               {translateText("common:actions.send")}
             </button>
           </form>
@@ -89,7 +99,7 @@ export function AskBlock({
           <button
             type="button"
             className="ask-option"
-            disabled={picked.length === 0}
+            disabled={busy || picked.length === 0}
             onClick={() => onChoose(question, picked)}
           >
             {translateText("common:actions.send")}
@@ -98,6 +108,7 @@ export function AskBlock({
         <button
           type="button"
           className="ask-option text-muted-foreground"
+          disabled={busy}
           onClick={() => onAbort(question)}
         >
           {translateText("confirmations.giveUp")}

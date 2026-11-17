@@ -17,6 +17,13 @@ export interface Question {
   multi: boolean;
 }
 
+/** The answer currently on its way to the host, for the question that is showing it. */
+export interface AnsweringQuestion {
+  id: string;
+  /** The selected options while a selection is being sent. */
+  selections?: readonly string[];
+}
+
 const NONE: Question[] = [];
 
 /** Every question waiting for the user in a conversation, or only those of one. */
