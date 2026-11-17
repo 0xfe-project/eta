@@ -41,8 +41,7 @@ import { kernelOn } from "@eta/core";
 import { lastSeq, LinkError, listen } from "@eta/daemon";
 import { parseModelId } from "@eta/server";
 import { explainRunError, missingModel } from "../agents/model";
-import { isRoutineSession } from "../routines/session-key";
-import { isTaskSession } from "../tasks/session-key";
+import { heldIn } from "../session-owner";
 import { viewOf as attachmentView } from "./attachments";
 import { briefing } from "./briefing";
 import { LocalPlace, messageOf } from "./places";
@@ -429,7 +428,7 @@ export class Engine {
    * process, or a daemon over the link.
    *
    * `key` is what the session is held in and `existing` the session to carry on in
-   * (`tasks/session-key.ts`): a run that continues another one passes the key that session was made
+   * (`session-owner.ts`): a run that continues another one passes the key that session was made
    * with, since that is what the machine holding it files its journal, prompt and tools under.
    */
   async openRunSession(input: {
@@ -1387,15 +1386,6 @@ function withAway(prompt: string, away: string | undefined): string {
 }
 
 /** Who an agent is here and what it was told: its system prompt's platform section, not its base. */
-/** What a session is held in, from its key: a conversation, a task, or a routine's run. */
-function heldIn(
-  conversationId: string | undefined,
-): "conversation" | "task" | "routine" {
-  if (isTaskSession(conversationId)) return "task";
-  if (isRoutineSession(conversationId)) return "routine";
-  return "conversation";
-}
-
 function agentPromptOf(
   agent: AgentRecord,
   held: "conversation" | "task" | "routine" = "conversation",

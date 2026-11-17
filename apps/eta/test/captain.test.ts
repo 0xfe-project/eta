@@ -12,6 +12,7 @@ import type {
   InteractionView,
 } from "@eta/client-contracts";
 import { describe, expect, it, vi } from "vitest";
+import { taskKey } from "../src/session-owner";
 import { until } from "./support/client";
 import { call, HANG, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";
@@ -508,13 +509,7 @@ describe("captain controls", () => {
       paused: true,
     });
     expect(
-      w.host.product.captain.memoryEnabled({
-        id: "session",
-        createdAt: Date.now(),
-        cwd: project.path,
-        conversationId: group.id,
-        agentId: ada.id,
-      }),
+      w.host.product.captain.memoryEnabled({ conversationId: group.id }),
     ).toBe(false);
 
     await w.client.call("captain", "setMemoryPaused", {
@@ -524,11 +519,7 @@ describe("captain controls", () => {
     });
     expect(
       w.host.product.captain.memoryEnabled({
-        id: "task-session",
-        createdAt: Date.now(),
-        cwd: project.path,
-        conversationId: `task:${task.id}`,
-        agentId: ada.id,
+        conversationId: taskKey(task.id),
       }),
     ).toBe(false);
   });

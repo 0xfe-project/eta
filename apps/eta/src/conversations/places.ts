@@ -51,7 +51,7 @@ export interface SessionHandle {
 /** What a place needs to find or make an agent's session in a conversation. */
 export interface EnsureInput {
   /**
-   * What the session is held in: a conversation, or a task (`tasks/session-key.ts`). Its id is the
+   * What the session is held in: a conversation, or a task (`session-owner.ts`). Its id is the
    * session's `conversationId`; its name is the session's title.
    */
   conversation: { id: string; name: string };

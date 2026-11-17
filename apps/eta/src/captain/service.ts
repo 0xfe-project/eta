@@ -38,7 +38,7 @@ import { checkModel } from "../agents/model";
 import { agentHome } from "../agents/store";
 import { openDirect } from "../conversations/direct";
 import { effectiveSteward } from "../conversations/views";
-import { isTaskSession, taskOfKey } from "../tasks/session-key";
+import { conversationOf, ownerOf, taskKey } from "../session-owner";
 import { executorOf } from "../tasks/store";
 import { CaptainProposals } from "./proposals";
 import { agentProposals, listPersonaCards } from "./propose-agent";
@@ -465,28 +465,23 @@ export class CaptainService {
     this.#deps.store.refreshAssignments();
   }
 
-  /** Whether long-term/project memory is disabled for the scope of this session. */
-  memoryEnabled(meta: SessionMeta): boolean {
-    const key = meta.conversationId;
-    if (key === undefined) return true;
-    if (isTaskSession(key)) {
-      const taskId = taskOfKey(
-        key,
-        (runId) => this.#deps.runs.get(runId)?.taskId,
-      );
-      if (
-        taskId !== undefined &&
-        this.#deps.store.isMemoryPaused("task", taskId)
-      )
-        return false;
-      const origin = this.#deps.tasks.get(taskId ?? "")?.originConversationId;
-      return (
-        origin === null ||
-        origin === undefined ||
-        !this.#deps.store.isMemoryPaused("conversation", origin)
-      );
-    }
-    return !this.#deps.store.isMemoryPaused("conversation", key);
+  /**
+   * Whether long-term/project memory is on for this session: off when its task is paused, or the
+   * conversation it is held in or its task came from.
+   */
+  memoryEnabled(meta: Pick<SessionMeta, "conversationId">): boolean {
+    const { store, runs, tasks } = this.#deps;
+    const owner = ownerOf(meta.conversationId, (id) => runs.get(id)?.taskId);
+    if (owner?.kind === "task" && owner.taskId !== undefined)
+      if (store.isMemoryPaused("task", owner.taskId)) return false;
+    const conversation = conversationOf(
+      owner,
+      (id) => tasks.get(id)?.originConversationId,
+    );
+    return (
+      conversation === undefined ||
+      !store.isMemoryPaused("conversation", conversation)
+    );
   }
 
   setMemoryPaused(input: {
@@ -1012,7 +1007,7 @@ export class CaptainService {
 
       const scopes = new Set([
         conversation.id,
-        ...relatedTasks.map((task) => `task:${task.id}`),
+        ...relatedTasks.map((task) => taskKey(task.id)),
       ]);
       const pendingInbox = inbox.filter(
         (item) =>

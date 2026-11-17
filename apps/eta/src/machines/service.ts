@@ -35,7 +35,7 @@ export interface LinkServiceDeps {
   /**
    * The task run a session works in now (a task's session outlives the run that made it), as the
    * primary's rows know it: whose agent and machine it is, what directory it works in, and what the
-   * session is held in (`tasks/session-key.ts`, which the daemon files its prompt and tools under).
+   * session is held in (`session-owner.ts`, which the daemon files its prompt and tools under).
    */
   taskRun: (
     session: string,

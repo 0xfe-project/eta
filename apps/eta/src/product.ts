@@ -91,17 +91,21 @@ import { routinesPlugin } from "./routines/plugin";
 import { INTERRUPTED, RoutineRunner } from "./routines/runner";
 import { Scheduler } from "./routines/scheduler";
 import { RoutineService } from "./routines/service";
-import { isRoutineSession } from "./routines/session-key";
 import { RoutineStore } from "./routines/store";
 import { loadSecretKey } from "./secret";
 import { combineSessionHooks } from "./session-hooks";
+import {
+  conversationOf,
+  ownerOf,
+  sessionKeyOf,
+  taskKey,
+} from "./session-owner";
 import { TaskArchiver } from "./tasks/archiver";
 import { TaskBoard } from "./tasks/board";
 import { TaskCards } from "./tasks/cards";
 import { tasksPlugin } from "./tasks/plugin";
 import { TaskRunner } from "./tasks/runner";
 import { TaskRunStore } from "./tasks/runs";
-import { isTaskSession, sessionKeyOf, taskOfKey } from "./tasks/session-key";
 import { executorOf, TaskStore } from "./tasks/store";
 import { taskSessionTools } from "./tasks/tools";
 import { workspaceChooser } from "./tasks/workspace";
@@ -359,25 +363,18 @@ export function createProduct(options: {
       },
     },
   });
-  // The task board's rows. A task's session is held in `task:<id>` (`tasks/session-key.ts`), which
-  // its runs share; what counts it, asks about it or remembers it knows it by the conversation the
-  // task came from.
+  // The task board's rows. What counts a session, asks about it or remembers it knows it by the
+  // conversation it is held in, or the one its task came from (`session-owner.ts`).
   const taskRows = new TaskStore(db);
   const runRows = new TaskRunStore(db);
-  const originOf = (meta: SessionMeta): SessionMeta => {
-    // A routine run is held in no conversation, and is counted and asked from none.
-    if (isRoutineSession(meta.conversationId))
-      return { ...meta, conversationId: undefined };
-    const taskId = taskOfKey(
-      meta.conversationId,
-      (runId) => runRows.get(runId)?.taskId,
-    );
-    if (taskId === undefined) return meta;
-    return {
-      ...meta,
-      conversationId: taskRows.get(taskId)?.originConversationId ?? undefined,
-    };
-  };
+  const taskOfRun = (runId: string) => runRows.get(runId)?.taskId;
+  const originOf = (meta: SessionMeta): SessionMeta => ({
+    ...meta,
+    conversationId: conversationOf(
+      ownerOf(meta.conversationId, taskOfRun),
+      (taskId) => taskRows.get(taskId)?.originConversationId,
+    ),
+  });
   // A model request ended, for a session of this host or of a daemon: count it.
   const generated = (meta: SessionMeta, message: AssistantMessage): void => {
     try {
@@ -585,34 +582,16 @@ export function createProduct(options: {
     warn,
     { publicUrl: options.publicUrl },
   );
-  const memoryPausedForSessionKey = (key: string | undefined): boolean => {
-    if (key === undefined) return false;
-    if (isTaskSession(key)) {
-      const taskId = taskOfKey(key, (runId) => runRows.get(runId)?.taskId);
-      if (taskId === undefined) return false;
-      if (captainStore.isMemoryPaused("task", taskId)) return true;
-      const origin = taskRows.get(taskId)?.originConversationId;
-      return (
-        origin !== null &&
-        origin !== undefined &&
-        captainStore.isMemoryPaused("conversation", origin)
-      );
-    }
-    return captainStore.isMemoryPaused("conversation", key);
-  };
   const runHooks = combineRunHooks(
     memory === undefined
       ? []
       : [
           memoryRunHooks(memory, (run) => {
+            // A task's run is said in the conversation the task came from, but is the task's.
             const taskRun = runRows.get(run.replyId);
-            if (taskRun !== undefined) {
-              if (captainStore.isMemoryPaused("task", taskRun.taskId))
-                return false;
-            }
-            return !captainStore.isMemoryPaused(
-              "conversation",
-              run.conversationId,
+            const key = taskRun ? taskKey(taskRun.taskId) : run.conversationId;
+            return (
+              made.captain?.memoryEnabled({ conversationId: key }) !== false
             );
           }),
         ],
@@ -633,7 +612,7 @@ export function createProduct(options: {
     pluginStamp: (agent) => plugins.stampOf(agent.id),
     pluginsRead: () => plugins.registry.refresh(),
     sessionStamp: (conversationId) =>
-      `${memoryPausedForSessionKey(conversationId) ? ":memory-paused" : ""}:base:${
+      `${made.captain?.memoryEnabled({ conversationId }) === false ? ":memory-paused" : ""}:base:${
         captainStore.latestPrompt("global", "base")?.version ?? 0
       }`,
     runHooks,
@@ -842,7 +821,7 @@ export function createProduct(options: {
         artifacts,
         board,
         limits,
-        taskOfRun: (runId) => runRows.get(runId)?.taskId,
+        taskOfRun,
       }),
     },
     {

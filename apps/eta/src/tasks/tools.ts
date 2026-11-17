@@ -14,7 +14,7 @@ import type { ToolResult } from "@eta/harness";
  * Registered on each session when it opens, so a tool knows which agent it speaks for and where
  * without being told. An agent in a conversation proposes work (`draft_task`) or, when asked to,
  * makes it (`create_task`); the agent that made a task executes it, in a session of its own
- * (`task:` in `session-key.ts`), and that session reports with `comment_task` and `finish_task`. An
+ * (`task:` in `session-owner.ts`), and that session reports with `comment_task` and `finish_task`. An
  * agent the user mentions on a task answers in a session of its own on it, with `comment_task` only.
  * Which run of the task that session is working on is asked when a tool is called, not when the
  * session opened: a session outlives its runs, since a comment that arrives later wakes another one
@@ -42,7 +42,7 @@ import {
 } from "@eta/client-contracts";
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
-import { taskOfKey } from "./session-key";
+import { taskOf } from "../session-owner";
 import { executorOf } from "./store";
 
 /** A failure the model can act on, from anything the board refused. */
@@ -93,7 +93,7 @@ export function taskSessionTools(
     if (meta.agentId === undefined || meta.conversationId === undefined)
       return [];
     if (deps.captain?.isCaptain(meta.agentId)) return [];
-    const taskId = taskOfKey(
+    const taskId = taskOf(
       meta.conversationId,
       (runId) => deps.runner.runOf(runId)?.taskId,
     );
