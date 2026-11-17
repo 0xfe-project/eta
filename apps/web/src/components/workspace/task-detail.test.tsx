@@ -9,11 +9,17 @@ import {
   rstest,
 } from "@rstest/core";
 import { act } from "react";
+import { i18n } from "@/lib/i18n";
 import { setWire } from "@/lib/wire";
-import { agentView, productHost, taskDetail } from "@/test-product";
+import {
+  agentView,
+  machineView,
+  productHost,
+  taskDetail,
+} from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
 import { TaskBoard } from "./task-board";
-import { FlowBar } from "./task-detail";
+import { FlowBar, QueueReason } from "./task-detail";
 import { NewTaskDialog } from "./task-new";
 import { useNewTask } from "./task-new-store";
 import { TaskPickList } from "./task-picker";
@@ -296,6 +302,108 @@ describe("the queue sentence's bold lead", () => {
     // A colon inside a word (a time, a URL) is not a lead.
     expect(sentenceLead("Starts at 12:30")).toBeUndefined();
     expect(sentenceLead("在等空位")).toBeUndefined();
+  });
+
+  /** One queued task: waiting for "A" to be delivered, or, past it, held by its machine. */
+  type Held = "machine_full" | "machine_offline" | undefined;
+  const queued = (held: Held) => {
+    const full = held !== undefined;
+    const a = taskDetail({
+      id: "a",
+      number: 1,
+      title: "A",
+      status: "in_progress",
+    });
+    const edge = {
+      taskId: "a",
+      number: 1,
+      title: "A",
+      status: full ? ("done" as const) : ("in_progress" as const),
+      requireDone: false,
+      state: full ? ("resolved" as const) : ("waiting" as const),
+    };
+    const task = taskDetail({
+      id: "b",
+      number: 2,
+      title: "B",
+      dependsOn: [edge],
+      waitingOn: full
+        ? []
+        : [{ ...edge, status: "in_progress", state: "waiting", via: null }],
+      runs: full
+        ? [
+            {
+              id: "r1",
+              agentId: null,
+              status: "queued",
+              queueReason: held,
+              machineId: "m1",
+              sessionId: null,
+              continuesRunId: null,
+              workspace: null,
+              nudged: false,
+              error: null,
+              createdAt: 1,
+              startedAt: null,
+              finishedAt: null,
+            },
+          ]
+        : [],
+    });
+    return { task: { ...task, activity: [] }, all: [a, task] };
+  };
+
+  /** What the rendered sentence sets in bold, and all of it. */
+  const rendered = async (held?: Held, language: "zh" | "en" = "zh") => {
+    await act(() => i18n.changeLanguage(language));
+    productHost({ machines: [machineView({ id: "m1", name: "gpu-box" })] });
+    const { task, all } = queued(held);
+    const { container } = await mount(<QueueReason task={task} all={all} />);
+    await flush();
+    const line = container.querySelector("[data-queue] p > span")!;
+    return {
+      bold: [...line.querySelectorAll("b")].map((b) => b.textContent),
+      text: line.textContent,
+    };
+  };
+
+  afterEach(async () => {
+    await act(() => i18n.changeLanguage("zh"));
+  });
+
+  it("renders the Chinese lead in bold and the rest of the sentence plain", async () => {
+    const { bold, text } = await rendered();
+    expect(bold).toEqual(["还不能开始："]);
+    expect(text).toBe(
+      "还不能开始：在等「A」交付。它一进入待验收，你 就会自动开始这个任务。",
+    );
+  });
+
+  it("renders the English lead in bold and the rest of the sentence plain", async () => {
+    const { bold, text } = await rendered(undefined, "en");
+    expect(bold).toEqual(["Can’t start yet: "]);
+    expect(text).toBe(
+      "Can’t start yet: waiting for “A” to be delivered. Once it is in review, you starts this task.",
+    );
+  });
+
+  it("bolds a full machine's two-part sentence up to the room's colon", async () => {
+    expect(await rendered("machine_full")).toEqual({
+      bold: ["前置都好了，在等空位："],
+      text: "前置都好了，在等空位：gpu-box 上已有 2 个在跑",
+    });
+    await cleanup();
+    expect(await rendered("machine_full", "en")).toEqual({
+      bold: ["Everything it waits for is there; waiting for room: "],
+      text: "Everything it waits for is there; waiting for room: gpu-box already runs 2",
+    });
+  });
+
+  it("sets nothing in bold when the sentence has no lead", async () => {
+    expect(await rendered("machine_offline", "en")).toEqual({
+      bold: [],
+      text: "Waiting for gpu-box to connect; it starts then",
+    });
   });
 });
 
