@@ -17,7 +17,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { host, shellUpdate, shellUpdateAction } from "@/lib/native";
 import { busyLabels, useUpgradeCheck } from "@/queries/upgrade";
-import { UpdateNotice, UpdateStatusBar } from "./update-status";
+import {
+  UpdateNotice,
+  UpdateProgressBar,
+  UpdateStatusBar,
+} from "./update-status";
 
 // Settings → Update, the desktop app's own part: its version and its update, apart from the host's.
 // Every step is a press here; the app neither checks nor installs by itself
@@ -170,6 +174,9 @@ export function DesktopUpdate() {
         state={bar.state}
         actions={bar.actions}
       />
+      {view.state === "downloading" && (
+        <UpdateProgressBar value={view.progress} label={bar.state} />
+      )}
       {view.state === "failed" && (
         <UpdateNotice tone="error">
           <p>

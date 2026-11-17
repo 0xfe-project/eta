@@ -50,6 +50,7 @@ import {
   ReleaseNotes,
   UpdateGroup,
   UpdateNotice,
+  UpdateProgressBar,
   UpdateRow,
   UpdateStatusBar,
   UpdateSteps,
@@ -71,6 +72,12 @@ const blockKeys = {
 const CANCELLABLE = new Set(["starting", "downloading", "waiting"]);
 
 const showError = (error: Error) => toast.error(wireErrorMessage(error));
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 /** Where updates come from, with the warning that goes with it. A failed save stays open to fix. */
 function UpstreamDialog({
@@ -389,6 +396,27 @@ function HostUpdate() {
     </Button>
   );
 
+  const download =
+    running && status.phase === "downloading" ? status.download : undefined;
+  const downloadPercent =
+    download?.total !== undefined && download.total > 0
+      ? Math.min(100, Math.round((download.received / download.total) * 100))
+      : undefined;
+  const runningPhaseLabel =
+    download === undefined
+      ? running
+        ? translateText(`update.phase.${phaseKeys[status.phase]}`)
+        : ""
+      : downloadPercent !== undefined && download.total !== undefined
+        ? translateText("update.phase.downloadingPercent", {
+            percent: downloadPercent,
+            received: formatBytes(download.received),
+            total: formatBytes(download.total),
+          })
+        : translateText("update.phase.downloadingBytes", {
+            received: formatBytes(download.received),
+          });
+
   // One state, in the order they matter: what is happening, what went wrong, what can be done.
   const bar: {
     tone: UpdateTone;
@@ -400,7 +428,7 @@ function HostUpdate() {
     ? {
         tone: "info",
         state: translateText("update.state.running", {
-          phase: translateText(`update.phase.${phaseKeys[status.phase]}`),
+          phase: runningPhaseLabel,
         }),
         target: status.to,
         primary: CANCELLABLE.has(status.phase) ? (
@@ -505,6 +533,9 @@ function HostUpdate() {
           current={stepOf[status.phase]}
           failing={status.phase === "rolling-back"}
         >
+          {status.phase === "downloading" && (
+            <UpdateProgressBar value={downloadPercent} label={bar.state} />
+          )}
           {status.busy !== undefined && status.busy.length > 0 && (
             <p className="mt-1.5 text-xs text-muted-foreground">
               {translateText("update.waitingFor", {
