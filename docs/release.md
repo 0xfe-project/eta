@@ -169,6 +169,21 @@ docker run --rm -v "$PWD:/repo:ro" zricethezav/gitleaks detect --source /repo/te
 
 The script starts a host with this version's binary, HOME at `/tmp/eta-seed-home`, model `fake-model.ts`, then calls over the wire like the pages do: create agents, projects, conversations, send messages, have the model publish two versions of an artifact, create tasks and run them to completion, store email accounts and plugin config, register host machines, create routine tasks, change settings. After the host exits, copy the data directory over and generate `manifest.json`, then verify once more. Don't hand-write SQL, don't put in real data, and the hostname must be fake (generated in a container with `--hostname eta-seed`). The driver speaks this checkout's wire, so an older binary needs no adapter, only patience: it mounts its plugins after `/up` answers, and a call that arrives first is retried (`unknown op`) instead of failing the seed. A build that makes a Captain for itself is seeded through the same lens the check reads it back with (`leaveOutSystemData`), or the seed's own manifest disagrees with its own check.
 
+### A client from the last release, against this one
+
+The wire protocol only ever grows, and a release has to keep the clients already out there working: an old phone, an old TUI, a browser tab left open across the upgrade. `scripts/upgrade-e2e/wire-client.ts` drives one version's client against another version's host, both real processes:
+
+```sh
+# an rc.3 client (that tree's apps/tui/src/connection/wire.ts) against this build's host
+git worktree add /tmp/rc3 v0.4.0-rc.3 && (cd /tmp/rc3 && bun install)
+bun apps/eta/src/main.ts --port 18922 --no-web --allow-origin http://127.0.0.1:18922 &
+(cd /tmp/rc3 && bun <this repo>/scripts/upgrade-e2e/wire-client.ts apps/tui/src/connection/wire.ts 18922 talk <conversationId> <agentId>)
+```
+
+`hello` prints what the host advertises, `talk` sends one message and waits for the reply, `degrade` calls an op the other side lacks and checks the connection survives it. For v0.4.0-rc.4: rc.3's client on this build's host and this build's client on rc.3's host both reached `replied: true`, and the only difference in the ops was two the newer host has (`acp.refresh`, `tasks.workspaceFor`) — an unknown op comes back as an error that leaves the connection open, which is what `degrade` shows.
+
+Rows written before `data.process` existed (v0.3.0 kept a reply's calls as `data.activity` alone) still draw as their last thought and their calls: `savedSteps` in `packages/client-contracts`, tested there.
+
 ## No signatures
 
 None of these files are signed or notarized. Desktop app updates are triggered by the user in settings (see "The desktop app's own updates"), and builds without a configured update URL can only be re-downloaded and reinstalled. macOS and Windows both block them on first open; once allowed, they work normally.
