@@ -59,12 +59,14 @@ export const stepSizes = (lines: readonly SplitLine[]): number[] => {
 
 /**
  * The batch `tasks.create` is sent: the lines as subtasks of an existing task (`parent` is then
- * the call's), or, with `top`, under a new task made first in the same write.
+ * the call's), or, with `top`, under a new task made first in the same write. `base` is where the
+ * first step's lines start; a later line goes on from what it waits for, as the host derives it.
  */
 export function splitBatch(
   lines: readonly SplitLine[],
   assignee: string,
   top?: { title: string; description?: string },
+  base?: string,
 ): NewTaskArgs[] {
   const shift = top === undefined ? 0 : 1;
   const subtasks = lines.map(
@@ -72,7 +74,9 @@ export function splitBatch(
       title: line.title,
       assignee,
       ...(line.after.length === 0
-        ? {}
+        ? base === undefined
+          ? {}
+          : { base }
         : { after: line.after.map((i) => i + shift) }),
       ...(top === undefined ? {} : { under: 0 }),
     }),

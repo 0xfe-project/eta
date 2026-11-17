@@ -1,3 +1,4 @@
+import type { BaseChoice } from "./task-base";
 import type { NewTaskPreset } from "./task-new-store";
 import type { Task } from "@/queries/tasks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
@@ -27,8 +28,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useAgentList } from "@/queries/agents";
 import { useConversationList } from "@/queries/conversations";
-import { useCreateTasks, useTasks } from "@/queries/tasks";
+import { useCreateTasks, useNewTaskWorkspace, useTasks } from "@/queries/tasks";
 import { wireErrorMessage } from "@/queries/wire";
+import {
+  baseArg,
+  baseCandidates,
+  branchOf,
+  derivedBase,
+  shownBase,
+} from "./task-base";
 import { JoinHint } from "./task-detail";
 import { useProjectOf } from "./task-hooks";
 import { newTaskMode, newTaskStartsAtHead, splitJoinSteps } from "./task-join";
@@ -157,6 +165,7 @@ function NewTaskForm({ preset }: { preset: NewTaskPreset }) {
   );
   const [dependsOn, setDependsOn] = useState(preset.dependsOn ?? []);
   const [start, setStart] = useState<"todo" | "backlog">("todo");
+  const [baseChoice, setBaseChoice] = useState<BaseChoice>({ kind: "auto" });
   const parent = all.find((task) => task.id === parentId);
   const open = conversations.filter((c) => !c.archived);
   const [conversationId, setConversationId] = useState<string | undefined>(
@@ -187,9 +196,36 @@ function NewTaskForm({ preset }: { preset: NewTaskPreset }) {
   const sizes = stepSizes(parsed);
   const byId = new Map(all.map((task) => [task.id, task]));
   // A join (two or more prerequisites) in a worktree project starts at the project's HEAD.
-  const mode = newTaskMode(parent, projectId, all, projectOf);
-  const joinSteps = split ? splitJoinSteps(mode, parsed) : [];
-  const joinsAtHead = !split && newTaskStartsAtHead(mode, dependsOn.length);
+  // The host says where it will work (`tasks.workspaceFor`); until it answers, what the board shows.
+  const asked = useNewTaskWorkspace(
+    parentId === null ? { conversationId } : { parent: parentId },
+  );
+  const workspace = asked ?? newTaskMode(parent, projectId, all, projectOf);
+  const joinSteps = split ? splitJoinSteps(workspace, parsed) : [];
+
+  // Where the worktree starts, for a project that gives its tasks one. A split has no
+  // prerequisites of its own here: its first step starts from HEAD unless the user says otherwise.
+  const prerequisites = split
+    ? []
+    : dependsOn.flatMap((d) => byId.get(d.id) ?? []);
+  const candidates = baseCandidates(prerequisites, all, projectId, projectOf);
+  const derived = derivedBase(prerequisites, candidates);
+  const shown = shownBase(baseChoice, candidates);
+  const derivedValue =
+    derived.kind === "task" ? `task:${derived.task.id}` : "head";
+  const baseValue =
+    shown.kind === "auto"
+      ? derivedValue
+      : shown.kind === "task"
+        ? `task:${shown.taskId}`
+        : shown.kind;
+  const base =
+    workspace === "worktree" ? baseArg(baseChoice, candidates) : undefined;
+  // Left to the host, a join starts at HEAD: say so (#135), and that 起点 can change it.
+  const joinsAtHead =
+    !split &&
+    shown.kind === "auto" &&
+    newTaskStartsAtHead(workspace, dependsOn.length);
 
   const ready =
     assignee !== undefined &&
@@ -207,6 +243,7 @@ function NewTaskForm({ preset }: { preset: NewTaskPreset }) {
           parent === undefined
             ? { title: title.trim(), description: description.trim() }
             : undefined,
+          base,
         )
       : [
           {
@@ -217,6 +254,7 @@ function NewTaskForm({ preset }: { preset: NewTaskPreset }) {
               task: d.id,
               requireDone: d.requireDone,
             })),
+            ...(base === undefined ? {} : { base }),
           },
         ];
     make.mutate(
@@ -439,10 +477,80 @@ function NewTaskForm({ preset }: { preset: NewTaskPreset }) {
             </TaskPicker>
           </Row>
         )}
-        {joinsAtHead ? (
-          <div className="pl-19">
-            <JoinHint>{t("join.startsAtHead")}</JoinHint>
-          </div>
+        {workspace === "worktree" ? (
+          <Row label={t("create.base")} id="new-task-base">
+            <Select
+              value={baseValue}
+              onValueChange={(value) =>
+                setBaseChoice(
+                  value === "head"
+                    ? { kind: "head" }
+                    : value === "custom"
+                      ? { kind: "custom", value: "" }
+                      : { kind: "task", taskId: value.slice("task:".length) },
+                )
+              }
+            >
+              <SelectTrigger
+                aria-labelledby="new-task-base"
+                size="sm"
+                className="h-7 max-w-full min-w-32 text-xs"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {candidates.map((task) => (
+                  <SelectItem key={task.id} value={`task:${task.id}`}>
+                    {t("create.baseTask", { title: task.title })}{" "}
+                    <code className="text-muted-foreground">
+                      {branchOf(task)}
+                    </code>
+                    {derivedValue === `task:${task.id}` ? (
+                      <span className="text-muted-foreground">
+                        {` ${t("create.baseAuto")}`}
+                      </span>
+                    ) : null}
+                  </SelectItem>
+                ))}
+                <SelectItem value="head">
+                  {t("create.baseHead")}
+                  {derivedValue === "head" ? (
+                    <span className="text-muted-foreground">
+                      {` ${t("create.baseAuto")}`}
+                    </span>
+                  ) : null}
+                </SelectItem>
+                <SelectItem value="custom">{t("create.baseCustom")}</SelectItem>
+              </SelectContent>
+            </Select>
+            {shown.kind === "custom" ? (
+              <Input
+                aria-label={t("create.baseCustom")}
+                autoFocus
+                maxLength={200}
+                className="h-7 w-44 text-xs"
+                placeholder={t("create.baseCustomPlaceholder")}
+                value={shown.value}
+                onChange={(e) =>
+                  setBaseChoice({ kind: "custom", value: e.target.value })
+                }
+              />
+            ) : null}
+            {joinsAtHead ? (
+              <div className="basis-full space-y-0.5">
+                <JoinHint>{t("join.startsAtHead")}</JoinHint>
+                {candidates.length > 1 ? (
+                  <p className="pl-5.5 text-xs leading-5 text-muted-foreground">
+                    {t("create.baseMany")}
+                  </p>
+                ) : null}
+              </div>
+            ) : split ? (
+              <span className="basis-full text-xs text-muted-foreground">
+                {t("create.baseSplit")}
+              </span>
+            ) : null}
+          </Row>
         ) : null}
         <Row label={t("create.start")} id="new-task-start">
           <Segments

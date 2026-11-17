@@ -458,7 +458,15 @@
     "startBacklog": "先放积压",
     "createSubtasks": "创建 {{count}} 个子任务",
     "createSubtasks_one": "创建 {{count}} 个子任务",
-    "createSubtasks_other": "创建 {{count}} 个子任务"
+    "createSubtasks_other": "创建 {{count}} 个子任务",
+    "base": "起点",
+    "baseTask": "「{{title}}」的分支",
+    "baseHead": "项目当前的提交（HEAD）",
+    "baseCustom": "其他分支或提交…",
+    "baseCustomPlaceholder": "分支、提交或 #N",
+    "baseAuto": "· 自动",
+    "baseMany": "可以在「起点」里改成接在其中一个前置后面。",
+    "baseSplit": "这里只管第 1 步的子任务；后面的按它们等的任务自动决定。"
   },
   "queue": {
     "label": "排队",

@@ -85,6 +85,14 @@ function indexesOf(value: unknown, what: string): number[] | undefined {
   return value as number[];
 }
 
+/** A task's `base`: a string, the empty one being HEAD; absent is derived. */
+function baseOf(value: unknown, i: number): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string")
+    throw new TypeError(`tasks.create: tasks[${i}].base must be a string`);
+  return value;
+}
+
 /** `create`'s `tasks`: what each one is, as the board reads it (`NewTaskInput`). */
 function newTasksOf(call: CallFrame): NewTaskInput[] {
   const raw = (call.args as Record<string, unknown> | undefined)?.tasks;
@@ -110,6 +118,7 @@ function newTasksOf(call: CallFrame): NewTaskInput[] {
       }),
       after: indexesOf(entry.after, `tasks[${i}].after`),
       under: args.optionalInteger("under"),
+      base: baseOf(entry.base, i),
     };
   });
 }
@@ -314,6 +323,21 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
             USER,
           );
           return { result: { tasks: made } };
+        }),
+
+        wire.handle("tasks", "workspaceFor", async (call) => {
+          const args = new Args(call);
+          const parent = args.optionalString("parent");
+          if (parent !== undefined && parent.trim() !== "")
+            return { result: { mode: board.workspaceOf(parent) } };
+          const conversationId = args.optionalString("conversationId");
+          if (conversationId === undefined)
+            throw new TypeError(
+              "tasks.workspaceFor needs a parent or a conversationId",
+            );
+          const mode =
+            (await workspaceFor?.(conversationId, undefined)) ?? "local";
+          return { result: { mode } };
         }),
 
         wire.handle("tasks", "confirmDraft", (call) => {
