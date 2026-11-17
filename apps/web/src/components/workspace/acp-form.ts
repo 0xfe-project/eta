@@ -117,3 +117,16 @@ export function checkAcpDraft(
     },
   };
 }
+
+const SHELL_SAFE = /^[\w@%+=:,./-]+$/;
+
+/** The command and its arguments as one shell line, each word quoted where a shell would split it. */
+export function acpCommandLine(
+  agent: Pick<AcpAgentConfig, "command" | "args">,
+): string {
+  return [agent.command, ...agent.args]
+    .map((word) =>
+      SHELL_SAFE.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`,
+    )
+    .join(" ");
+}

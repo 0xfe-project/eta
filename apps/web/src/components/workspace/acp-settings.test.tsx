@@ -59,8 +59,6 @@ const byText = (text: string, root: ParentNode = document) =>
   [...root.querySelectorAll<HTMLButtonElement>("button")].find(
     (button) => button.textContent === text,
   );
-const labelled = (name: string) =>
-  document.querySelector<HTMLElement>(`button[aria-label="${name}"]`);
 const dialog = () => document.querySelector("[role=dialog]");
 const alerts = () =>
   [...document.querySelectorAll("[role=dialog] [role=alert]")].map(
@@ -128,9 +126,9 @@ const publish = (
   lists: Record<string, AcpMachineList>,
 ) => fake.set("acp", { machines: lists });
 
-/** Choose a machine in the selector at the top. */
+/** Choose a machine in the open dialog's machine field. */
 async function chooseMachine(name: string) {
-  await click(document.querySelector<HTMLButtonElement>('[role="combobox"]')!);
+  await click(dialog()!.querySelector<HTMLButtonElement>('[role="combobox"]')!);
   const option = [
     ...document.querySelectorAll<HTMLElement>('[role="option"]'),
   ].find((candidate) => candidate.textContent?.startsWith(name))!;
@@ -138,34 +136,105 @@ async function chooseMachine(name: string) {
   await flush();
 }
 
+/** The agent's row in its machine's group. */
+const row = (machine: string, label: string) =>
+  [
+    ...document.querySelectorAll<HTMLElement>(
+      `ul[aria-label="${machine} 上的外部 Agent"] > li`,
+    ),
+  ].find((item) => item.querySelector("p")?.textContent === label);
+
+/** Open the agent's ⋯ menu (in `machine`'s group, or the only one) and choose an item. */
+async function fromMenu(label: string, item: string, machine?: string) {
+  const root = machine === undefined ? document : row(machine, label)!;
+  const trigger = root.querySelector<HTMLElement>(
+    `[aria-label="${label} 的操作"]`,
+  )!;
+  await act(async () => {
+    trigger.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  const entry = [
+    ...document.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+  ].find((candidate) => candidate.textContent === item);
+  expect(entry, item).toBeDefined();
+  await act(async () => entry!.click());
+  await flush();
+}
+
+/** The groups as their headings read: the machine, then what it holds. */
+const groups = () =>
+  [...document.querySelectorAll("section h3")].map((heading) =>
+    [...heading.children].map((part) => part.textContent).join(" | "),
+  );
+
 describe("Settings → External agents", () => {
-  it("lists each agent with its runtime id, status, version and detail", async () => {
+  it("lists each agent with its runtime id and version, its status, and a reason only when it cannot be used", async () => {
     host([
       view({
         id: "demo",
         label: "Demo",
         args: ["--acp"],
         version: "1.2.0",
+        detail: "Checking…",
       }),
       view({
         id: "gem",
         label: "Gem",
+        command: "gem",
         status: "unauthenticated",
-        detail: "run `gem login`",
+        detail:
+          "is not signed in. Sign in from a terminal on this machine first.",
       }),
-      view({ id: "gone", label: "Gone", status: "missing" }),
+      view({
+        id: "gone",
+        label: "Gone",
+        command: "gone-acp",
+        status: "missing",
+      }),
+      view({
+        id: "bad",
+        label: "Bad",
+        status: "error",
+        detail: "could not open a session: boom.",
+      }),
     ]);
     await mount(<AcpSettings />);
     await flush();
-    expect(text()).toContain("acp.demo");
-    expect(text()).toContain("demo-agent --acp");
-    expect(text()).toContain("可用");
-    expect(text()).toContain("1.2.0");
+    const lines = (label: string) =>
+      [...row("studio", label)!.querySelectorAll("p")].map(
+        (line) => line.textContent,
+      );
+    // By name; the command is not in the list.
+    expect(
+      [...document.querySelectorAll("ul > li > div > div > p:first-child")].map(
+        (name) => name.textContent,
+      ),
+    ).toEqual(["Bad", "Demo", "Gem", "Gone"]);
+    expect(text()).not.toContain("demo-agent --acp");
+    expect(lines("Demo")).toEqual(["Demo", "acp.demo · v1.2.0"]);
+    expect(row("studio", "Demo")!.textContent).toContain("可用");
+    expect(lines("Gem")).toEqual([
+      "Gem",
+      "acp.gem",
+      "在 studio 上登录 Gem 后点「测试」。",
+    ]);
+    expect(row("studio", "Gem")!.textContent).toContain("未登录");
+    expect(lines("Gone")).toEqual([
+      "Gone",
+      "acp.gone",
+      "studio 上找不到 gone-acp。装好后点「测试」。",
+    ]);
+    expect(lines("Bad")).toEqual([
+      "Bad",
+      "acp.bad",
+      "could not open a session: boom. 修好后点「测试」。",
+    ]);
+    expect(row("studio", "Bad")!.textContent).toContain("出错");
     // No auto-allow badge: every permission request is answered yes.
     expect(text()).not.toContain("自动允许");
-    expect(text()).toContain("未登录");
-    expect(text()).toContain("run `gem login`");
-    expect(text()).toContain("未安装");
   });
 
   it("says when there are none", async () => {
@@ -204,7 +273,8 @@ describe("Settings → External agents", () => {
       "/home/me/.eta/acp.json is not valid JSON",
     );
     expect(text()).not.toContain("还没有外部 Agent");
-    expect(byText("添加 Agent")).toBeUndefined();
+    // Nowhere to add to.
+    expect(byText("添加 Agent")?.disabled).toBe(true);
   });
 
   it("adds an agent: the id follows the name, args and env one per line, and the list refreshes", async () => {
@@ -224,12 +294,12 @@ describe("Settings → External agents", () => {
     await fill("命令", " npx ");
     await fill("参数", "-y\n\n@example/agent \n--acp");
     await fill("环境变量", "API_KEY=a=b\n# a comment\nDEBUG=1");
-    // Neither a working directory nor auto-allow is asked for.
+    // The machine first; neither a working directory nor auto-allow is asked for.
     expect(
       [...document.querySelectorAll("[role=dialog] label")].map(
         (label) => label.textContent,
       ),
-    ).toEqual(["名称", "ID", "命令", "参数", "环境变量"]);
+    ).toEqual(["机器", "名称", "ID", "命令", "参数", "环境变量"]);
     expect(dialog()!.querySelector("[role=switch]")).toBeNull();
     await submit();
     expect(fake.calls.at(-1)).toEqual({
@@ -325,7 +395,7 @@ describe("Settings → External agents", () => {
     );
     await mount(<AcpSettings />);
     await flush();
-    await click(labelled("编辑 Demo"));
+    await fromMenu("Demo", "编辑");
     expect(value("名称")).toBe("Demo");
     expect(value("ID")).toBe("demo");
     expect(value("参数")).toBe("--acp");
@@ -349,7 +419,7 @@ describe("Settings → External agents", () => {
       },
     });
 
-    await click(labelled("编辑 Demo"));
+    await fromMenu("Demo", "编辑");
     await fill("ID", "demo-renamed");
     await submit();
     expect(fake.calls.at(-1)).toMatchObject({
@@ -368,7 +438,7 @@ describe("Settings → External agents", () => {
     });
     await mount(<AcpSettings />);
     await flush();
-    await click(labelled("删除 Demo"));
+    await fromMenu("Demo", "删除");
     expect(text()).toContain("删除 Demo？");
     expect(fake.calls.filter((call) => call.action === "delete")).toEqual([]);
     await click(
@@ -385,7 +455,7 @@ describe("Settings → External agents", () => {
 
     refuse = false;
     await flush();
-    await click(labelled("删除 Demo"));
+    await fromMenu("Demo", "删除");
     await click(
       byText(
         "删除",
@@ -413,7 +483,7 @@ describe("Settings → External agents", () => {
     });
     await mount(<AcpSettings />);
     await flush();
-    await click(labelled("测试 Demo"));
+    await fromMenu("Demo", "测试");
     // The stored config is sent, not the listed view.
     expect(fake.calls.at(-1)).toEqual({
       target: "acp",
@@ -451,79 +521,135 @@ describe("Settings → External agents", () => {
   });
 });
 
-describe("Settings → External agents, one machine at a time", () => {
-  it("starts on the primary, lists every daemon, and marks the offline one", async () => {
-    host([view({ id: "demo", label: "Demo" })], {
-      machines: [BOX, PRIMARY, ATTIC],
-    });
-    await mount(<AcpSettings />);
-    await flush();
-    const trigger = document.querySelector('[role="combobox"]')!;
-    expect(trigger.textContent).toContain("studio（主机器）");
-    expect(text()).toContain("acp.demo");
-    await click(trigger as HTMLButtonElement);
-    expect(
-      [...document.querySelectorAll('[role="option"]')].map(
-        (option) => option.textContent,
-      ),
-    ).toEqual(["studio（主机器）", "box", "attic · 离线"]);
-  });
-
-  it("lists, adds, tests and deletes on the chosen daemon, naming it in every call", async () => {
-    const fake = host([view({ id: "demo", label: "Demo" })], {
-      machines: [PRIMARY, BOX],
-    });
+describe("Settings → External agents, every machine at once", () => {
+  /** The primary with `demo` and `claude`; box answers its refresh with `far` and `claude`. */
+  function fleet(machines: MachineView[] = [BOX, PRIMARY, ATTIC]) {
+    const primaryAgents = [
+      view({ id: "demo", label: "Demo", args: ["--acp", "a b"] }),
+      view({ id: "claude", label: "Claude Code", version: "1.2.0" }),
+    ];
+    const boxAgents = [
+      view({ id: "far", label: "Far", version: "v0.0.1" }),
+      view({ id: "claude", label: "Claude Code", status: "unauthenticated" }),
+    ];
+    const fake = host(primaryAgents, { machines });
+    const lists: Record<string, AcpMachineList> = {
+      [PRIMARY.id]: { agents: primaryAgents },
+    };
     fake.handle("acp.refresh", (args) => {
       const { machineId } = args as { machineId: string };
-      if (machineId === BOX.id)
-        publish(fake, {
-          [PRIMARY.id]: { agents: [view({ id: "demo", label: "Demo" })] },
-          [BOX.id]: { agents: [view({ id: "far", label: "Far" })] },
-        });
+      if (machineId === BOX.id) {
+        lists[BOX.id] = { agents: boxAgents };
+        publish(fake, lists);
+      }
       return {};
     });
+    return { fake, lists };
+  }
+
+  it("groups the agents by machine, the primary first and an offline one on its own, asking only the reachable", async () => {
+    const { fake } = fleet();
+    await mount(<AcpSettings />);
+    await flush();
+    // No machine to choose at the top.
+    expect(document.querySelector('[role="combobox"]')).toBeNull();
+    expect(groups()).toEqual([
+      "studio | 主机器 · 2 个",
+      "box | 2 个",
+      "attic | 离线",
+    ]);
+    // The same acp.claude on two machines is two agents, one in each group.
+    expect(row("studio", "Claude Code")!.textContent).toContain(
+      "acp.claude · v1.2.0",
+    );
+    expect(row("box", "Claude Code")!.textContent).toContain("未登录");
+    expect(row("box", "Far")!.textContent).toContain("acp.far · v0.0.1");
+    // A row does not repeat its machine.
+    expect(row("box", "Far")!.textContent).not.toContain("box");
+    const offline = [...document.querySelectorAll("section")].at(-1)!;
+    expect(offline.querySelector("[role=status]")?.textContent).toBe(
+      "attic 重新上线后，这里会列出它上面的外部 Agent。",
+    );
+    expect(offline.querySelector("ul")).toBeNull();
+    const refreshed = fake.calls
+      .filter((call) => call.action === "refresh")
+      .map((call) => (call.args as { machineId: string }).machineId);
+    expect(new Set(refreshed)).toEqual(new Set([PRIMARY.id, BOX.id]));
+  });
+
+  it("tests, edits, copies and deletes from the ⋯ menu, on the agent's own machine", async () => {
+    const { fake } = fleet();
+    fake.handle("acp.test", () => ({ ok: true, status: "available" }));
     fake.handle("acp.save", (args) =>
       view((args as { agent: AcpAgentView }).agent),
     );
-    fake.handle("acp.test", () => ({ ok: true, status: "available" }));
     fake.handle("acp.delete", () => ({}));
+    const copied: string[] = [];
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: (value: string) => {
+          copied.push(value);
+          return Promise.resolve();
+        },
+      },
+    });
     await mount(<AcpSettings />);
     await flush();
-    await chooseMachine("box");
-    expect(fake.calls).toContainEqual({
-      target: "acp",
-      action: "refresh",
-      args: { machineId: BOX.id },
-    });
-    expect(text()).toContain("acp.far");
-    expect(text()).not.toContain("acp.demo");
 
-    await click(labelled("测试 Far"));
+    await fromMenu("Claude Code", "测试", "box");
     expect(fake.calls.at(-1)).toMatchObject({
       action: "test",
-      args: { machineId: BOX.id, agent: { id: "far" } },
+      args: { machineId: BOX.id, agent: { id: "claude" } },
     });
 
-    // The primary has `demo`; on this machine the id is free.
-    await click(byText("添加 Agent"));
-    expect(dialog()!.textContent).toContain("在 box 上");
-    await fill("名称", "Demo");
-    await fill("命令", "demo");
+    // The menu's items, delete last.
+    const trigger = row("studio", "Demo")!.querySelector<HTMLElement>(
+      '[aria-label="Demo 的操作"]',
+    )!;
+    await act(async () => {
+      trigger.dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const menu = document.querySelector('[role="menu"]')!;
+    expect(
+      [...menu.querySelectorAll('[role="menuitem"], [role="separator"]')].map(
+        (item) => item.textContent || "—",
+      ),
+    ).toEqual(["测试", "编辑", "复制命令", "—", "删除"]);
+    await act(async () => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+    await flush();
+
+    await fromMenu("Demo", "复制命令", "studio");
+    expect(copied).toEqual(["demo-agent --acp 'a b'"]);
+    expect(toasts.message).toHaveBeenCalledWith("已复制");
+
+    await fromMenu("Far", "编辑", "box");
+    // The machine is shown, not chosen.
+    expect(dialog()!.querySelector('[role="combobox"]')).toBeNull();
+    const machineField = document.getElementById(
+      fieldId("机器"),
+    ) as HTMLInputElement;
+    expect(machineField.readOnly).toBe(true);
+    expect(machineField.value).toBe("box");
+    await fill("名称", "Far Two");
     await submit();
     expect(fake.calls.at(-1)).toMatchObject({
       action: "save",
-      args: { machineId: BOX.id, agent: { id: "demo" } },
+      args: {
+        machineId: BOX.id,
+        agent: { id: "far", label: "Far Two" },
+        previousId: "far",
+      },
     });
 
-    // Its own ids are taken.
-    await click(byText("添加 Agent"));
-    await fill("名称", "Far");
-    await fill("命令", "far");
-    await submit();
-    expect(alerts()).toEqual(["这台机器上已有外部 Agent 使用这个 ID。"]);
-    await click(byText("取消", dialog()!));
-
-    await click(labelled("删除 Far"));
+    await fromMenu("Claude Code", "删除", "box");
     await click(
       byText(
         "删除",
@@ -532,50 +658,74 @@ describe("Settings → External agents, one machine at a time", () => {
     );
     expect(fake.calls.at(-1)).toMatchObject({
       action: "delete",
-      args: { machineId: BOX.id, id: "far" },
+      args: { machineId: BOX.id, id: "claude" },
     });
   });
 
-  it("keeps an offline daemon chosen and says so, showing nothing of the primary's", async () => {
-    const fake = host([view({ id: "demo", label: "Demo" })], {
-      machines: [PRIMARY, ATTIC],
+  it("adds on the machine chosen first: the primary by default, never an offline one, ids checked on that machine", async () => {
+    const { fake, lists } = fleet();
+    fake.handle("acp.save", (args) => {
+      const { machineId, agent } = args as {
+        machineId: string;
+        agent: AcpAgentView;
+      };
+      const saved = view(agent);
+      lists[machineId] = {
+        agents: [...(lists[machineId]?.agents ?? []), saved],
+      };
+      publish(fake, lists);
+      return saved;
     });
     await mount(<AcpSettings />);
     await flush();
-    await chooseMachine("attic");
-    expect(document.querySelector('[role="combobox"]')!.textContent).toContain(
-      "attic",
-    );
-    expect(document.querySelector("[role=status]")?.textContent).toBe(
-      "attic 目前离线。它重新上线之前，无法列出或修改它的外部 Agent。",
-    );
-    expect(text()).not.toContain("acp.demo");
-    expect(byText("添加 Agent")?.disabled).toBe(true);
-    // An offline machine is not asked.
+    await click(byText("添加 Agent"));
+    const trigger = dialog()!.querySelector('[role="combobox"]')!;
+    expect(trigger.textContent).toBe("studio（主机器）");
+    await click(trigger as HTMLButtonElement);
+    const options = [...document.querySelectorAll('[role="option"]')];
+    expect(options.map((option) => option.textContent)).toEqual([
+      "studio（主机器）",
+      "box",
+      "attic · 离线",
+    ]);
     expect(
-      fake.calls.filter((call) => call.action === "refresh"),
-    ).not.toContainEqual(
-      expect.objectContaining({ args: { machineId: ATTIC.id } }),
-    );
+      options.map((option) => option.getAttribute("aria-disabled") === "true"),
+    ).toEqual([false, false, true]);
+    await act(async () => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+
+    // `far` is box's: free on the primary, taken once box is chosen.
+    await fill("名称", "Far");
+    await fill("命令", "far");
+    await chooseMachine("box");
+    await submit();
+    expect(alerts()).toEqual(["这台机器上已有外部 Agent 使用这个 ID。"]);
+    await fill("ID", "far2");
+    await submit();
+    expect(fake.calls.at(-1)).toMatchObject({
+      action: "save",
+      args: { machineId: BOX.id, agent: { id: "far2" } },
+    });
+    expect(dialog()).toBeNull();
+    // It shows up in box's group.
+    expect(row("box", "Far")).toBeDefined();
+    expect(groups()[1]).toBe("box | 3 个");
   });
 
-  it("stays on a daemon that goes offline", async () => {
-    const fake = host([view({ id: "demo", label: "Demo" })], {
-      machines: [PRIMARY, BOX],
-      lists: { [BOX.id]: { agents: [view({ id: "far", label: "Far" })] } },
-    });
+  it("turns a daemon that goes offline into its offline group", async () => {
+    const { fake } = fleet([PRIMARY, BOX]);
     await mount(<AcpSettings />);
     await flush();
-    await chooseMachine("box");
-    expect(text()).toContain("acp.far");
+    expect(row("box", "Far")).toBeDefined();
     await act(async () =>
       fake.set("machines", { list: [PRIMARY, { ...BOX, status: "offline" }] }),
     );
     await flush();
-    expect(document.querySelector("[role=status]")?.textContent).toContain(
-      "box 目前离线",
-    );
+    expect(groups()).toEqual(["studio | 主机器 · 2 个", "box | 离线"]);
     expect(text()).not.toContain("acp.far");
-    expect(text()).not.toContain("acp.demo");
+    expect(text()).toContain("box 重新上线后");
   });
 });

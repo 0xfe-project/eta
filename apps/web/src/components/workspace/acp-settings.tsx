@@ -1,10 +1,12 @@
 import type {
   AcpAgentConfig,
   AcpAgentView,
+  AcpMachineList,
   AcpTestResult,
   MachineView,
 } from "@eta/client-contracts";
 import type { AcpDraft, AcpDraftProblems } from "./acp-form";
+import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { useId, useState } from "react";
@@ -21,7 +23,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,25 +32,39 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import {
-  useAcpAgents,
+  useAcpLists,
   useDeleteAcpAgent,
   useSaveAcpAgent,
   useTestAcpAgent,
 } from "@/queries/acp";
 import { useMachines } from "@/queries/projects";
 import { wireErrorMessage } from "@/queries/wire";
-import { acpDraftOf, acpSlug, checkAcpDraft, emptyAcpDraft } from "./acp-form";
+import {
+  acpCommandLine,
+  acpDraftOf,
+  acpSlug,
+  checkAcpDraft,
+  emptyAcpDraft,
+} from "./acp-form";
 import { Select, SelectOption } from "./select-field";
 
-// Settings → External agents: one machine at a time, the ACP agents in that machine's own
-// ~/.eta/acp.json, each a runtime an agent on that machine can run on as `acp.<id>`. The machine
-// keeps the file and checks every change; this page lists what it says, and sends a whole config
-// to save, an id to delete, or a config (saved or not) to try, always naming the machine. A
-// daemon that is offline stays chosen and says so: nothing goes to the primary instead.
+// Settings → External agents: every machine's ACP agents at once, grouped by machine. Each machine
+// keeps its own ~/.eta/acp.json, and each agent there is a runtime an agent on that machine can
+// run on as `acp.<id>`. The page asks every reachable machine for its list and shows them
+// together; every save, delete and test names the machine its agent is on. An offline daemon
+// keeps its group and says it cannot be read: nothing goes to another machine instead.
 
 const showError = (error: Error) => toast.error(wireErrorMessage(error));
 
@@ -64,21 +79,27 @@ function configOf({
   return config;
 }
 
-function StatusBadge({ status }: { status: AcpAgentView["status"] }) {
-  const { t: translateText } = useTranslation(["acp"] as const);
-  return (
-    <Badge
-      variant={
-        status === "available"
-          ? "default"
-          : status === "error"
-            ? "destructive"
-            : "outline"
-      }
-    >
-      {translateText(`status.${status}`)}
-    </Badge>
-  );
+/** The primary and every daemon not revoked: the primary first, then by name. */
+function acpMachines(machines: readonly MachineView[]): MachineView[] {
+  return machines
+    .filter(
+      (machine) =>
+        (machine.kind === "primary" || machine.kind === "daemon") &&
+        machine.status !== "revoked",
+    )
+    .sort(
+      (a, b) =>
+        Number(b.kind === "primary") - Number(a.kind === "primary") ||
+        a.name.localeCompare(b.name),
+    );
+}
+
+/** A machine that can be asked: the primary always, a daemon while it is online. */
+const reachable = (machine: MachineView) =>
+  machine.kind === "primary" || machine.status === "online";
+
+function machineName(machine: MachineView, primarySuffix: string): string {
+  return `${machine.name}${machine.kind === "primary" ? primarySuffix : ""}`;
 }
 
 /** A test's outcome as one toast: what answered, or why nothing did. */
@@ -110,24 +131,35 @@ function FieldError({ id, text }: { id: string; text: string | undefined }) {
   );
 }
 
-/** Add or edit one agent. `agent` is the one being edited; none adds. */
+/**
+ * Add or edit one agent. `agent` is the one being edited, on `machineId`, which then cannot
+ * change; none adds, on the machine chosen first (`machineId` to begin with). Only a machine
+ * whose list came whole can be chosen.
+ */
 function AgentDialog({
-  machine,
+  machines,
+  lists,
+  machineId: initialMachineId,
   agent,
-  taken,
   onClose,
 }: {
-  machine: MachineView;
+  machines: readonly MachineView[];
+  lists: Record<string, AcpMachineList>;
+  machineId: string;
   agent: AcpAgentView | undefined;
-  /** Ids in use by the machine's other agents. */
-  taken: readonly string[];
   onClose: () => void;
 }) {
-  const { t: translateText } = useTranslation(["acp", "common"] as const);
+  const { t: translateText } = useTranslation([
+    "acp",
+    "machines",
+    "common",
+  ] as const);
   const save = useSaveAcpAgent();
   const test = useTestAcpAgent();
   const report = useReportTest();
   const baseId = useId();
+  const [machineId, setMachineId] = useState(initialMachineId);
+  const machine = machines.find((item) => item.id === machineId);
   const [draft, setDraft] = useState<AcpDraft>(() =>
     agent === undefined ? emptyAcpDraft : acpDraftOf(agent),
   );
@@ -135,6 +167,11 @@ function AgentDialog({
   const [idTouched, setIdTouched] = useState(agent !== undefined);
   const [problems, setProblems] = useState<AcpDraftProblems>({});
   const [failure, setFailure] = useState<string>();
+  const primarySuffix = translateText("machine.primarySuffix");
+  // The chosen machine's ids only: another machine may have the same one.
+  const taken = (lists[machineId]?.agents ?? [])
+    .map((item) => item.id)
+    .filter((id) => id !== agent?.id);
 
   const change = <K extends keyof AcpDraft>(key: K, value: AcpDraft[K]) => {
     setDraft((current) => {
@@ -149,6 +186,13 @@ function AgentDialog({
         if (key === "label" && !idTouched) delete rest.id;
         return rest;
       });
+  };
+
+  const chooseMachine = (next: string) => {
+    setMachineId(next);
+    setFailure(undefined);
+    // A clash was with the other machine's ids.
+    setProblems(({ id: _id, ...rest }) => rest);
   };
 
   const problemText = (field: keyof AcpDraftProblems) => {
@@ -179,7 +223,7 @@ function AgentDialog({
     // The promise, not mutate's callbacks: a rename's new list can close this dialog first.
     save
       .mutateAsync({
-        machineId: machine.id,
+        machineId,
         agent: config,
         // An edit always names the agent it edits: without `previousId` the host takes it for a
         // new one, and refuses the id it already has.
@@ -201,7 +245,7 @@ function AgentDialog({
     const config = checked();
     if (config === undefined) return;
     test.mutate(
-      { machineId: machine.id, agent: config },
+      { machineId, agent: config },
       {
         onSuccess: (result) => report(config.label, result),
         onError: showError,
@@ -223,6 +267,8 @@ function AgentDialog({
   const id = field("id");
   const command = field("command");
   const env = field("env");
+  const machineFieldId = `${baseId}-machine`;
+  const machineHintId = `${baseId}-machine-hint`;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -233,9 +279,6 @@ function AgentDialog({
               ? translateText("form.addTitle")
               : translateText("form.editTitle", { label: agent.label })}
           </DialogTitle>
-          <DialogDescription>
-            {translateText("form.description", { machine: machine.name })}
-          </DialogDescription>
         </DialogHeader>
         <form
           noValidate
@@ -243,6 +286,63 @@ function AgentDialog({
           aria-label={translateText("form.addTitle")}
           onSubmit={onSubmit}
         >
+          <div className="space-y-1.5">
+            <Label htmlFor={machineFieldId}>
+              {translateText("machine.label")}
+            </Label>
+            {agent === undefined ? (
+              <Select
+                id={machineFieldId}
+                aria-describedby={machineHintId}
+                className="w-full"
+                value={machineId}
+                onValueChange={chooseMachine}
+              >
+                {machines.map((item) => {
+                  const list = lists[item.id];
+                  const usable =
+                    reachable(item) &&
+                    list !== undefined &&
+                    list.error === undefined;
+                  return (
+                    <SelectOption
+                      key={item.id}
+                      value={item.id}
+                      disabled={!usable}
+                    >
+                      {machineName(item, primarySuffix)}
+                      {reachable(item) ? null : (
+                        <span className="text-muted-foreground">
+                          {" · "}
+                          {translateText(`machines:status.${item.status}`)}
+                        </span>
+                      )}
+                    </SelectOption>
+                  );
+                })}
+              </Select>
+            ) : (
+              <Input
+                id={machineFieldId}
+                readOnly
+                aria-describedby={machineHintId}
+                className="text-muted-foreground"
+                value={
+                  machine === undefined
+                    ? machineId
+                    : machineName(machine, primarySuffix)
+                }
+              />
+            )}
+            <DialogDescription
+              id={machineHintId}
+              className="text-xs text-muted-foreground"
+            >
+              {agent === undefined
+                ? translateText("machine.addHint")
+                : translateText("machine.editHint")}
+            </DialogDescription>
+          </div>
           <div className="space-y-1.5">
             <Label htmlFor={label.id}>{translateText("form.label")}</Label>
             <Input
@@ -369,7 +469,9 @@ function AgentDialog({
             <Button type="submit" disabled={save.isPending}>
               {save.isPending
                 ? translateText("common:states.saving")
-                : translateText("common:actions.save")}
+                : agent === undefined
+                  ? translateText("form.add")
+                  : translateText("common:actions.save")}
             </Button>
           </DialogFooter>
         </form>
@@ -378,12 +480,40 @@ function AgentDialog({
   );
 }
 
+/** A dot and one word: whether the agent can be used. */
+function AgentStatus({ status }: { status: AcpAgentView["status"] }) {
+  const { t: translateText } = useTranslation(["acp"] as const);
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1.5 text-xs whitespace-nowrap",
+        status === "available" && "text-muted-foreground",
+        (status === "unauthenticated" || status === "missing") &&
+          "text-state-warning-ink",
+        status === "error" && "text-state-error-ink",
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          "size-1.5 shrink-0",
+          status === "available" && "bg-state-success",
+          (status === "unauthenticated" || status === "missing") &&
+            "bg-state-warning",
+          status === "error" && "bg-state-error",
+        )}
+      />
+      {translateText(`status.${status}`)}
+    </span>
+  );
+}
+
 function AgentRow({
-  machineId,
+  machine,
   agent,
   onEdit,
 }: {
-  machineId: string;
+  machine: MachineView;
   agent: AcpAgentView;
   onEdit: () => void;
 }) {
@@ -392,76 +522,96 @@ function AgentRow({
   const remove = useDeleteAcpAgent();
   const report = useReportTest();
   const [deleting, setDeleting] = useState(false);
-  const commandLine = [agent.command, ...agent.args].join(" ");
+  const version =
+    agent.version === undefined || agent.version === ""
+      ? undefined
+      : /^v\d/i.test(agent.version)
+        ? agent.version
+        : `v${agent.version}`;
+  // What is wrong and what to do next, only when it cannot be used.
+  const reason =
+    agent.status === "available"
+      ? undefined
+      : agent.status === "error"
+        ? [agent.detail, translateText("reason.error")]
+            .filter(Boolean)
+            .join(" ")
+        : translateText(`reason.${agent.status}`, {
+            machine: machine.name,
+            label: agent.label,
+            command: agent.command,
+          });
+  const runTest = () =>
+    test.mutate(
+      { machineId: machine.id, agent: configOf(agent) },
+      {
+        onSuccess: (result) => report(agent.label, result),
+        onError: showError,
+      },
+    );
+  const copyCommand = () =>
+    void navigator.clipboard.writeText(acpCommandLine(agent)).then(
+      () => toast(translateText("common:feedback.copied")),
+      () => toast.error(translateText("common:errors.clipboardBlocked")),
+    );
   return (
-    <li className="flex items-start gap-3 px-3 py-2 text-sm">
-      <div className="min-w-0 flex-1 space-y-0.5">
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
-          {agent.label}
-          <span className="font-mono text-xs font-normal text-muted-foreground">
-            {agent.runtime}
-          </span>
-          <StatusBadge status={agent.status} />
-          {agent.version ? (
-            <span className="text-xs font-normal text-muted-foreground">
-              {agent.version}
-            </span>
-          ) : null}
-        </p>
-        <p className="truncate font-mono text-xs text-muted-foreground">
-          {commandLine}
-        </p>
-        {agent.detail ? (
-          <p
-            className={
-              agent.status === "available"
-                ? "text-xs break-words text-muted-foreground"
-                : "text-xs break-words text-destructive"
-            }
-          >
-            {agent.detail}
+    <li className="px-3 py-2">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm">{agent.label}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {version === undefined
+              ? agent.runtime
+              : `${agent.runtime} · ${version}`}
           </p>
-        ) : null}
+        </div>
+        <AgentStatus status={agent.status} />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="-mr-1.5 text-muted-foreground"
+              aria-label={translateText("actions.more", { label: agent.label })}
+            >
+              <DotsThreeIcon aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-36">
+            <DropdownMenuItem disabled={test.isPending} onSelect={runTest}>
+              {test.isPending
+                ? translateText("actions.testing")
+                : translateText("actions.test")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={onEdit}>
+              {translateText("common:actions.edit")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={copyCommand}>
+              {translateText("actions.copyCommand")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              disabled={remove.isPending}
+              onSelect={() => setDeleting(true)}
+            >
+              {translateText("common:actions.delete")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
-      <div className="flex shrink-0 flex-wrap justify-end gap-1">
-        <Button
-          size="sm"
-          variant="ghost"
-          aria-label={`${translateText("actions.test")} ${agent.label}`}
-          disabled={test.isPending}
-          onClick={() =>
-            test.mutate(
-              { machineId, agent: configOf(agent) },
-              {
-                onSuccess: (result) => report(agent.label, result),
-                onError: showError,
-              },
-            )
-          }
+      {reason === undefined ? null : (
+        <p
+          className={cn(
+            "mt-0.5 text-xs break-words",
+            agent.status === "error"
+              ? "text-state-error-ink"
+              : "text-state-warning-ink",
+          )}
         >
-          {test.isPending
-            ? translateText("actions.testing")
-            : translateText("actions.test")}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          aria-label={`${translateText("common:actions.edit")} ${agent.label}`}
-          onClick={onEdit}
-        >
-          {translateText("common:actions.edit")}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="text-destructive"
-          aria-label={`${translateText("common:actions.delete")} ${agent.label}`}
-          disabled={remove.isPending}
-          onClick={() => setDeleting(true)}
-        >
-          {translateText("common:actions.delete")}
-        </Button>
-      </div>
+          {reason}
+        </p>
+      )}
       <AlertDialog open={deleting} onOpenChange={setDeleting}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -481,15 +631,17 @@ function AgentRow({
               // The promise, not mutate's callbacks: the host's new list drops this row, and an
               // unmounted row's callbacks never run.
               onClick={() =>
-                void remove.mutateAsync({ machineId, id: agent.id }).then(
-                  () =>
-                    toast(
-                      translateText("feedback.deleted", {
-                        label: agent.label,
-                      }),
-                    ),
-                  showError,
-                )
+                void remove
+                  .mutateAsync({ machineId: machine.id, id: agent.id })
+                  .then(
+                    () =>
+                      toast(
+                        translateText("feedback.deleted", {
+                          label: agent.label,
+                        }),
+                      ),
+                    showError,
+                  )
               }
             >
               {translateText("common:actions.delete")}
@@ -501,181 +653,180 @@ function AgentRow({
   );
 }
 
-/** The machines that can run ACP agents: the primary and every daemon not revoked. */
-function acpMachines(machines: readonly MachineView[]): MachineView[] {
-  return machines
-    .filter(
-      (machine) =>
-        (machine.kind === "primary" || machine.kind === "daemon") &&
-        machine.status !== "revoked",
-    )
-    .sort(
-      (a, b) => Number(b.kind === "primary") - Number(a.kind === "primary"),
-    );
-}
-
-/** Which machine's agents the page shows: every one is listed, an offline one as offline. */
-function MachineSelect({
-  machines,
-  value,
-  onChange,
+/** One machine's group: its name, what it holds, and its agents or why they cannot be shown. */
+function MachineGroup({
+  machine,
+  list,
+  onEdit,
 }: {
-  machines: readonly MachineView[];
-  value: string;
-  onChange: (machineId: string) => void;
+  machine: MachineView;
+  list: AcpMachineList | undefined;
+  onEdit: (agentId: string) => void;
 }) {
   const { t: translateText } = useTranslation(["acp", "machines"] as const);
-  const baseId = useId();
+  const headingId = useId();
+  const online = reachable(machine);
+  const agents = list?.agents;
+  const meta = !online
+    ? translateText(`machines:status.${machine.status}`)
+    : agents === undefined
+      ? machine.kind === "primary"
+        ? translateText("machines:kinds.primary")
+        : undefined
+      : machine.kind === "primary"
+        ? translateText("machine.primaryCount", { count: agents.length })
+        : translateText("machine.count", { count: agents.length });
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Label id={`${baseId}-machine`} className="text-xs">
-        {translateText("machine.label")}
-      </Label>
-      <Select
-        aria-labelledby={`${baseId}-machine`}
-        size="sm"
-        className="h-7 min-w-48 text-xs"
-        value={value}
-        onValueChange={onChange}
-      >
-        {machines.map((machine) => (
-          <SelectOption key={machine.id} value={machine.id}>
-            {machineName(machine, translateText("machine.primarySuffix"))}
-            {machine.status === "online" ? null : (
-              <span className="text-muted-foreground">
-                {" · "}
-                {translateText(`machines:status.${machine.status}`)}
-              </span>
-            )}
-          </SelectOption>
-        ))}
-      </Select>
-    </div>
+    <section aria-labelledby={headingId} className="space-y-1.5">
+      <h3 className="flex min-w-0 items-baseline gap-2 text-xs">
+        <span id={headingId} className="truncate font-medium">
+          {machine.name}
+        </span>
+        {meta === undefined ? null : (
+          <span className="shrink-0 text-muted-foreground">{meta}</span>
+        )}
+      </h3>
+      {!online ? (
+        <p
+          role="status"
+          className="border bg-[repeating-linear-gradient(-45deg,var(--background)_0_7px,var(--muted)_7px_8px)] px-3 py-3 text-xs text-muted-foreground"
+        >
+          {translateText("machine.offline", { name: machine.name })}
+        </p>
+      ) : list === undefined ? (
+        <Loading rows={1} />
+      ) : list.error !== undefined ? (
+        <p
+          role="alert"
+          className="border px-3 py-2 text-xs break-words text-destructive"
+        >
+          {list.error}
+        </p>
+      ) : list.agents.length === 0 ? null : (
+        <ul
+          aria-label={translateText("list.label", { machine: machine.name })}
+          className="divide-y border"
+        >
+          {[...list.agents]
+            .sort((a, b) => a.label.localeCompare(b.label))
+            .map((agent) => (
+              <AgentRow
+                key={agent.id}
+                machine={machine}
+                agent={agent}
+                onEdit={() => onEdit(agent.id)}
+              />
+            ))}
+        </ul>
+      )}
+    </section>
   );
-}
-
-function machineName(machine: MachineView, primarySuffix: string): string {
-  return `${machine.name}${machine.kind === "primary" ? primarySuffix : ""}`;
 }
 
 /** Settings → External agents. */
 export function AcpSettings() {
-  const { t: translateText } = useTranslation([
-    "acp",
-    "machines",
-    "common",
-  ] as const);
+  const { t: translateText } = useTranslation(["acp", "common"] as const);
   const { machines, loaded: machinesLoaded } = useMachines();
   const listed = acpMachines(machines);
-  const primary = listed.find((machine) => machine.kind === "primary");
-  // The primary until another is chosen; a chosen machine stays chosen whatever its status.
-  const [chosen, setChosen] = useState<string>();
-  const machineId = chosen ?? primary?.id;
-  const machine = listed.find((item) => item.id === machineId);
-  const reachable =
-    machine !== undefined &&
-    (machine.kind === "primary" || machine.status === "online");
-  const { agents, loaded, error } = useAcpAgents(machineId, reachable);
-  // undefined: no dialog; null: adding; an id: editing that one.
-  const [editing, setEditing] = useState<string | null>();
-  const edited =
-    typeof editing === "string"
-      ? agents.find((agent) => agent.id === editing)
-      : undefined;
-  const choose = (next: string) => {
-    setChosen(next);
-    setEditing(undefined);
-  };
-  const add = (
-    <Button
-      size="sm"
-      variant="outline"
-      disabled={!loaded || !reachable}
-      onClick={() => setEditing(null)}
-    >
-      <PlusIcon aria-hidden="true" data-icon="inline-start" />
-      {translateText("actions.add")}
-    </Button>
+  // The ones that can be asked first, then each one that cannot, in a group of its own.
+  const ordered = [
+    ...listed.filter(reachable),
+    ...listed.filter((machine) => !reachable(machine)),
+  ];
+  const asked = listed.filter(reachable).map((machine) => machine.id);
+  const { lists, loaded, error } = useAcpLists(asked);
+  // undefined: no dialog; agentId null: adding (from that machine); an id: editing that one.
+  const [editing, setEditing] = useState<{
+    machineId: string;
+    agentId: string | null;
+  }>();
+  // Where a new agent goes unless another is chosen: the primary, or the first that can take one.
+  const addable = listed.find(
+    (machine) =>
+      reachable(machine) &&
+      lists[machine.id] !== undefined &&
+      lists[machine.id]!.error === undefined,
   );
+  const editedMachine = listed.find(
+    (machine) => machine.id === editing?.machineId,
+  );
+  const edited =
+    typeof editing?.agentId === "string"
+      ? lists[editing.machineId]?.agents?.find(
+          (agent) => agent.id === editing.agentId,
+        )
+      : undefined;
+  const everyListCame = asked.every(
+    (machineId) => lists[machineId] !== undefined,
+  );
+  const none =
+    everyListCame &&
+    asked.every(
+      (machineId) =>
+        lists[machineId]?.error === undefined &&
+        lists[machineId]?.agents?.length === 0,
+    );
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">{translateText("title")}</h2>
-        {error ? null : add}
+        {error ? null : (
+          <Button
+            size="sm"
+            disabled={addable === undefined}
+            onClick={() =>
+              addable && setEditing({ machineId: addable.id, agentId: null })
+            }
+          >
+            <PlusIcon aria-hidden="true" data-icon="inline-start" />
+            {translateText("actions.add")}
+          </Button>
+        )}
       </div>
       <p className="text-xs text-muted-foreground">
         {translateText("description")}
       </p>
-      {machine === undefined ? (
-        machinesLoaded && chosen !== undefined ? (
-          <p role="status" className="border px-3 py-2 text-sm">
-            {translateText("machine.gone")}
-          </p>
-        ) : (
-          <Loading rows={3} />
-        )
+      {error ? (
+        <LoadError what={translateText("title")} error={error} />
+      ) : !machinesLoaded || !loaded ? (
+        <Loading rows={3} />
       ) : (
-        <>
-          <MachineSelect
-            machines={listed}
-            value={machine.id}
-            onChange={choose}
-          />
-          {!reachable ? (
-            <p
-              role="status"
-              className="border px-3 py-2 text-sm text-muted-foreground"
-            >
-              {translateText("machine.offline", {
-                name: machine.name,
-                status: translateText(`machines:status.${machine.status}`),
-              })}
-            </p>
-          ) : error ? (
-            <LoadError what={translateText("title")} error={error} />
-          ) : !loaded ? (
-            <Loading rows={3} />
-          ) : agents.length === 0 ? (
+        <div className="space-y-4">
+          {none ? (
             <Empty
               icon={PlugsConnectedIcon}
               title={translateText("empty.title")}
             >
               {translateText("empty.description")}
             </Empty>
-          ) : (
-            <ul
-              aria-label={translateText("list.label", {
-                machine: machineName(
-                  machine,
-                  translateText("machine.primarySuffix"),
-                ),
-              })}
-              className="divide-y border"
-            >
-              {agents.map((agent) => (
-                <AgentRow
-                  key={agent.id}
-                  machineId={machine.id}
-                  agent={agent}
-                  onEdit={() => setEditing(agent.id)}
-                />
-              ))}
-            </ul>
-          )}
-          {reachable && (editing === null || edited !== undefined) ? (
-            <AgentDialog
-              key={machine.id}
-              machine={machine}
-              agent={edited}
-              // This machine's ids only: another machine may have the same one.
-              taken={agents
-                .map((agent) => agent.id)
-                .filter((id) => id !== edited?.id)}
-              onClose={() => setEditing(undefined)}
-            />
           ) : null}
-        </>
+          {ordered
+            .filter((machine) => !(none && reachable(machine)))
+            .map((machine) => (
+              <MachineGroup
+                key={machine.id}
+                machine={machine}
+                list={lists[machine.id]}
+                onEdit={(agentId) =>
+                  setEditing({ machineId: machine.id, agentId })
+                }
+              />
+            ))}
+        </div>
       )}
+      {editing !== undefined &&
+      editedMachine !== undefined &&
+      reachable(editedMachine) &&
+      (editing.agentId === null || edited !== undefined) ? (
+        <AgentDialog
+          key={`${editing.machineId}/${editing.agentId ?? ""}`}
+          machines={ordered}
+          lists={lists}
+          machineId={editing.machineId}
+          agent={edited}
+          onClose={() => setEditing(undefined)}
+        />
+      ) : null}
     </div>
   );
 }
