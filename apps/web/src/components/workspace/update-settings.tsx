@@ -54,6 +54,7 @@ import {
   UpdateStatusBar,
   UpdateSteps,
 } from "./update-status";
+import { useWorkspaceStore } from "./workspace-store";
 
 // Settings → Update: which version this host is, whether there is a newer one, and the button,
 // in one bar at the top (`update-status.tsx`); under it, what goes wrong or how far an update has
@@ -251,12 +252,34 @@ function tokenNotes(
  * host's alone otherwise, as in a browser.
  */
 export function UpdateSettings() {
-  if (!hasCapability("shell-update")) return <HostUpdate />;
+  if (!hasCapability("shell-update"))
+    return (
+      <div className="space-y-3">
+        <HostUpdate />
+        <CustomFontNote />
+      </div>
+    );
   return (
     <div className="space-y-3">
       <DesktopUpdate />
       <HostUpdate />
+      <CustomFontNote />
     </div>
+  );
+}
+
+/**
+ * The interface font, said where the version is when it is not the shipped one: a screenshot of
+ * this page is what a bug report carries, and two windows drawn in two faces should say so.
+ */
+function CustomFontNote() {
+  const { t: translateText } = useTranslation(["settings"] as const);
+  const font = useWorkspaceStore((s) => s.workspace.customFont);
+  if (font === undefined) return null;
+  return (
+    <p className="text-xs text-muted-foreground" data-testid="custom-font-note">
+      {translateText("update.customFont", { font })}
+    </p>
   );
 }
 

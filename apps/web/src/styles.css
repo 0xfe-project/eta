@@ -228,6 +228,36 @@
   }
 }
 
+/*
+ * The app ships one face (public/AKRDWGSCNFM-Regular.woff2, declared in index.html: what it is
+ * merged from and under which terms is in THIRD_PARTY_NOTICES.md at the root) and uses it for
+ * everything it says: interface, message text, everything.
+ *
+ * One setting can put another face in front of it: Settings → Appearance → Interface font
+ * (lib/custom-font.ts). It is a single family installed on this machine, stored in this browser
+ * only, and it goes ahead of this stack rather than replacing it, so whatever it lacks still comes
+ * from Eta Sans and then the system. An earlier build had a free-form font field and two people
+ * ended up looking at two different products while reporting the same bug; so a custom font is
+ * named wherever the version is (Settings → Update) and on <html data-custom-font>, and a
+ * screenshot or a report says which face it was drawn in.
+ *
+ * Not `inline`: the setting overrides these two on <html>, which only reaches the rules that read
+ * them as var(--font-sans) / var(--font-mono). Inside `@theme inline` Tailwind writes the stack
+ * itself into every rule and an override changes nothing.
+ */
+@theme {
+  --font-sans:
+    "Eta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
+    "PingFang SC", sans-serif;
+  /* One face for everything, including the surfaces that are "mono" in the layout sense — times,
+     tool-card heads, rail numbers, chips, hints, code. No system mono stack: a typographic grid
+     drawn in another typeface is a second typeface in the product, which is what the shipped face
+     exists to avoid. Numbers that must line up say so per element (`tabular-nums`). A custom font
+     replaces both. */
+  --font-mono: "Eta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Noto Sans SC", "PingFang SC", sans-serif;
+}
+
 @theme inline {
   /* The one width page bodies and the chat column stop at (max-w-content). */
   --container-content: 60rem;
@@ -262,20 +292,6 @@
      iPhone's home indicator. The real inset is a later task, and it changes this one line. */
   --bottom-inset: 34px;
   --font-heading: var(--font-sans);
-  /* The app ships one face (public/AKRDWGSCNFM-Regular.woff2, declared in index.html: what it is
-     merged from and under which terms is in THIRD_PARTY_NOTICES.md at the root) and uses it
-     for everything it says: interface, message text, everything. There is deliberately no setting
-     that swaps it — the previous build let a person type a font name into settings, and the result
-     was two people looking at two different products while reporting the same bug. */
-  --font-sans:
-    "Eta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
-    "PingFang SC", sans-serif;
-  /* One face for everything, including the surfaces that are "mono" in the layout sense — times,
-     tool-card heads, rail numbers, chips, hints, code. No system mono stack: a typographic grid
-     drawn in another typeface is a second typeface in the product, which is what the shipped face
-     exists to avoid. Numbers that must line up say so per element (`tabular-nums`). */
-  --font-mono: "Eta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
-    "Noto Sans SC", "PingFang SC", sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);

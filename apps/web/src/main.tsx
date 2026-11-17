@@ -6,6 +6,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import { startTransition, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { useWorkspaceStore } from "@/components/workspace/workspace-store";
+import { watchCustomFont } from "@/lib/custom-font";
 import { savedElementPicker, setElementPicker } from "@/lib/element-picker";
 import {
   applyDocumentLanguage,
@@ -42,6 +43,8 @@ async function start() {
     useWorkspaceStore.persist.rehydrate(),
     useOutbox.persist.rehydrate(),
   ]);
+  // The interface font, on the document before the first paint and on it whenever it changes.
+  watchCustomFont();
   void i18n.changeLanguage(resolveLanguage(readLanguagePreference()));
   applyDocumentLanguage();
   // index.html painted the mode before the bundle; this is what keeps it true afterwards

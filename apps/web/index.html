@@ -27,8 +27,9 @@
     <style>
       /* Document-relative on purpose: the page is served from the vite root in a tab and from a
          directory in a packaged build, and both resolve this to the copy sitting next to
-         index.html. One face for the whole app — interface and message text alike — and no
-         setting that replaces it: the terminal chrome below is the only thing in mono. */
+         index.html. One face for the whole app — interface and message text alike. A custom
+         interface font (Settings → Appearance) only goes in front of it; see the note on
+         --font-sans in src/styles.css. */
       @font-face {
         font-family: "Eta Sans";
         src: url("AKRDWGSCNFM-Regular.woff2") format("woff2");

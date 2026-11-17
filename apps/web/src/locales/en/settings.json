@@ -14,6 +14,9 @@
     "chatWidthNarrow": "Narrow",
     "chatWidthStandard": "Standard",
     "chatWidthFull": "Full",
+    "customFont": "Interface font",
+    "customFontHint": "The name of a font installed on this computer, used for everything in the app. Characters it lacks come from Eta Sans. Leave empty for Eta Sans. Saved in this browser only.",
+    "customFontInvalid": "One font name only: letters, digits, spaces, - _ and . (up to 64 characters). Not saved.",
     "transcriptRail": "Conversation rail",
     "transcriptRailHint": "When on, the chat's right edge shows a rail of replies (squares) and your messages (circles); click one to jump to it."
   },
@@ -153,7 +156,8 @@
       "hours": "Checked {{count}} hours ago",
       "hours_one": "Checked {{count}} hour ago",
       "hours_other": "Checked {{count}} hours ago"
-    }
+    },
+    "customFont": "Interface font: {{font}} (custom, set in Appearance in this browser; characters it lacks come from Eta Sans)"
   },
   "host": {
     "local": "Running on this computer",
