@@ -2,6 +2,7 @@ import type { AgentMessage, ViewMessageRow } from "../src/index";
 import { describe, expect, it } from "vitest";
 import {
   groupBlocks,
+  lastSaid,
   logBlocks,
   runBlocks,
   savedSteps,
@@ -618,5 +619,95 @@ describe("folding a log", () => {
       "g",
       "h",
     ]);
+  });
+});
+
+describe("the last thing a reply said on its way", () => {
+  const tool = (id: string) => ({
+    type: "tool" as const,
+    id,
+    name: "bash",
+    input: {},
+    status: "completed" as const,
+  });
+  const thought = { type: "thinking" as const, id: "h", text: "hmm" };
+  const text = (id: string, said = id) => ({
+    type: "text" as const,
+    id,
+    text: said,
+  });
+  /** What the line over a reply's box reads: from its steps, as the box draws them. */
+  const said = (blocks: Parameters<typeof splitReply>[0]) =>
+    lastSaid(splitReply(blocks).steps);
+
+  it("is nothing before any step: words alone are the answer", () => {
+    expect(said([])).toBeUndefined();
+    expect(said([text("I will look at the config.")])).toBeUndefined();
+  });
+
+  it("is the sentence said before the first call, once the call comes", () => {
+    expect(said([text("a", "I will look at the config."), tool("t1")])).toBe(
+      "I will look at the config.",
+    );
+  });
+
+  it("is the newest sentence said between calls, not the first", () => {
+    expect(
+      said([text("a", "first"), tool("t1"), text("b", "second"), tool("t2")]),
+    ).toBe("second");
+    // A thought after it does not replace it: only words are said.
+    expect(said([text("a", "first"), tool("t1"), thought])).toBe("first");
+  });
+
+  it("is the last sentence before the answer once the answer starts, not the answer", () => {
+    expect(
+      said([
+        text("a", "first"),
+        tool("t1"),
+        text("b", "second"),
+        tool("t2"),
+        text("c", "the answer"),
+      ]),
+    ).toBe("second");
+    // A reply at work whose trailing text is not yet the answer reads that text.
+    expect(lastSaid([text("a", "first"), tool("t1"), text("c", "next")])).toBe(
+      "next",
+    );
+  });
+
+  it("is one line, skipping text that has nothing in it yet", () => {
+    expect(
+      lastSaid([
+        text("a", "  Two\n\nlines  here "),
+        tool("t1"),
+        text("b", " \n"),
+      ]),
+    ).toBe("Two lines here");
+  });
+
+  it("is nothing for a reply that only called tools, or a row that kept no words", () => {
+    expect(said([tool("t1"), thought, tool("t2")])).toBeUndefined();
+    const activity = [
+      { id: "t1", name: "bash", input: {}, status: "completed" },
+    ];
+    expect(
+      lastSaid(savedSteps({ thinking: "a thought", data: { activity } })),
+    ).toBeUndefined();
+    expect(lastSaid(savedSteps({ thinking: "", data: {} }))).toBeUndefined();
+    expect(
+      lastSaid(
+        savedSteps({
+          thinking: "",
+          data: {
+            activity,
+            process: [
+              { type: "text", text: "Looking first." },
+              { type: "tool", id: "t1" },
+              { type: "text", text: "the answer" },
+            ],
+          },
+        }),
+      ),
+    ).toBe("Looking first.");
   });
 });

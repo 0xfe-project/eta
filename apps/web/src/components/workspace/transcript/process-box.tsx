@@ -16,9 +16,15 @@ import { TranscriptDialog } from "./transcript-dialog";
  * for a finished one) the frame folds into one "thinking process" row that opens in place.
  * "View more" opens the whole process, with the answer, in the same fixed frame a task run's log
  * is read in.
+ *
+ * What the reply said last on its way (`said`) is one line over the frame while it works, and the
+ * end of the folded row once it is at its answer, so a sentence said before a call does not scroll
+ * away with the steps. The line is there while the frame is, said or not yet: from the first step
+ * on, a reply at work keeps one height, and replies written at once do not push each other.
  */
 export function ProcessBox({
   steps,
+  whole = steps,
   count,
   running,
   folded,
@@ -29,9 +35,12 @@ export function ProcessBox({
   callId,
   time,
   answer,
+  said,
 }: {
   /** The thinking blocks and tool cards, in order. */
   steps: React.ReactNode;
+  /** Every step, for the dialog, when the frame draws fewer (the words over it are not in it). */
+  whole?: React.ReactNode;
   /** How many steps there are: a new one is what the frame follows. 0 before the first one. */
   count: number;
   running: boolean;
@@ -48,6 +57,8 @@ export function ProcessBox({
   time: string;
   /** The reply's text, shown under the whole process in the dialog. */
   answer: React.ReactNode;
+  /** The last thing it said on the way, as one line (`lastSaid`): nothing said yet, or kept. */
+  said?: string | undefined;
 }) {
   const { t: translateText } = useTranslation("chat");
   const [open, setOpen] = useState(false);
@@ -92,15 +103,23 @@ export function ProcessBox({
               ▶
             </span>
             {translateText("process.fold")}
-            <span className="ml-auto">
-              {translateText("process.steps", { count })}
-            </span>
+            {said === undefined ? (
+              <span className="ml-auto">
+                {translateText("process.steps", { count })}
+              </span>
+            ) : (
+              <>
+                <span>· {translateText("process.steps", { count })} ·</span>
+                <span className="process-said">{said}</span>
+              </>
+            )}
           </summary>
           <div className="process-fold-body">{steps}</div>
           <div className="flex justify-end">{viewAll}</div>
         </details>
       ) : (
         <div className="flex flex-col items-end">
+          <p className="process-said process-said-line">{said ?? ""}</p>
           <div
             ref={boxRef}
             role="region"
@@ -145,7 +164,7 @@ export function ProcessBox({
         bodyRef={bodyRef}
         bodyClassName="message assistant"
       >
-        {steps}
+        {whole}
         {answer}
       </TranscriptDialog>
     </>

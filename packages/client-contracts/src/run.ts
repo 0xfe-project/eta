@@ -82,6 +82,23 @@ export function splitReply(blocks: readonly RunBlock[]): {
 }
 
 /**
+ * The last thing a reply said on its way, as one line: the newest non-blank text among `blocks`,
+ * its whitespace collapsed. Called with a reply's steps (`splitReply(...).steps`, `savedSteps`) it
+ * is the sentence the reply said last before its answer; with a reply at work whose trailing text
+ * is not yet taken for the answer, that text. `undefined` when it said nothing on the way: a reply
+ * that only called tools, or a row written before its words were kept.
+ */
+export function lastSaid(blocks: readonly RunBlock[]): string | undefined {
+  for (let at = blocks.length - 1; at >= 0; at -= 1) {
+    const block = blocks[at]!;
+    if (block.type !== "text") continue;
+    const line = block.text.replace(/\s+/g, " ").trim();
+    if (line !== "") return line;
+  }
+  return undefined;
+}
+
+/**
  * The process a finished reply kept on its row, as the blocks its run drew: its thoughts, its words
  * and its calls in order (`data.process`, the calls themselves from `data.activity`), without the
  * answer at the end, which is the row's text. A row written before the order was kept has only its
