@@ -67,6 +67,7 @@ import { DownloadError, downloadHost } from "./download";
 import { HOST_WRAPPER } from "./host";
 import { hostHome, recordedHost, runningHost } from "./installed";
 import { capabilities, startNativeBridge } from "./native";
+import { configureToolbarDrag } from "./platform/mac/toolbar-drag";
 import { configureWindowsWindow } from "./platform/windows";
 import { pagePreload, relayedRequest, relayToBridge } from "./preload";
 import { probeRemote, remoteHealth, remotePage, watchRemote } from "./remote";
@@ -640,6 +641,7 @@ function open(view: View, frame = DEFAULT_FRAME): BrowserWindow {
   created.on("close", () => {
     if (current === created) current = undefined;
   });
+  if (isMac) configureToolbarDrag(created, bridge.token);
   // Windows pays for the missing title bar in three places; none of them are Electrobun's.
   if (process.platform === "win32") void configureWindowsWindow(created);
   return created;

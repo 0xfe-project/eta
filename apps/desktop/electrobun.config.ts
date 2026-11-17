@@ -28,6 +28,7 @@ export default {
     // Closing the last window keeps the app (and its host) alive; Dock brings the window back.
     exitOnLastWindowClosed: false,
   },
+  scripts: { preBuild: "scripts/build-native.ts" },
   build: {
     mainProcess: "bun",
     bun: {
@@ -46,6 +47,12 @@ export default {
       },
     },
     copy: {
+      ...(process.platform === "darwin"
+        ? {
+            ".hutch/native/libToolbarDrag.dylib":
+              "views/mainview/libToolbarDrag.dylib",
+          }
+        : {}),
       "src/mainview/index.html": "views/mainview/index.html",
       // The Windows window icon: `win.icon` below is what Explorer and the taskbar shortcut wear,
       // but the HWND of a running window needs its own copy, and the shell loads it out of the

@@ -13,6 +13,8 @@
  * request has no `Origin`; what stands in for it is the token, which only the page above has.
  */
 
+import { TOOLBAR_DRAG_PRELOAD } from "./platform/mac/toolbar-drag-preload";
+
 interface PreloadOptions {
   /** `window.__ETA_HOST__`; `nativeApiBase` and `nativeToken` are the bridge's. */
   facts: { nativeApiBase: string; nativeToken: string } & Record<
@@ -33,6 +35,7 @@ export function pagePreload({ facts, origin, shellToken }: PreloadOptions) {
   return `if (${ours}) {
   const facts = ${JSON.stringify(facts)};
   window.__ETA_HOST__ = facts;
+  ${TOOLBAR_DRAG_PRELOAD}
   ${shellToken === undefined ? "" : `window.__ETA_SHELL__ = ${JSON.stringify({ token: shellToken })};`}
   if (location.protocol === "https:") {
     const base = facts.nativeApiBase + "/";
