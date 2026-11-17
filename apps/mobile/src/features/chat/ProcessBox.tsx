@@ -18,12 +18,18 @@ const stepLine = (block: Exclude<RunBlock, { type: "text" }>) =>
  * A reply's process in a group: a frame that is the same size before the first token, while steps
  * come and until the reply reaches its final text, when it folds to its head. The box never grows,
  * so a long run does not push the conversation away.
+ *
+ * Over the frame, one line of what the reply said last on its way (`said`), held from the first
+ * token on even before anything is said, so the reply does not grow when it speaks; folded, the
+ * head ends with it instead.
  */
 export function ProcessBox(props: {
   steps: Exclude<RunBlock, { type: "text" }>[];
   /** Nothing from the run yet: the frame is already there, at work. */
   waiting: boolean;
   folded: boolean;
+  /** The last thing it said on the way, as one line (`lastSaid`). */
+  said?: string | undefined;
   onViewAll: () => void;
 }) {
   const shown = computed(() => props.steps.slice(-SHOWN));
@@ -31,10 +37,12 @@ export function ProcessBox(props: {
     <View
       class={`h-8 shrink-0 flex-row items-center px-[10px] ${props.folded ? "" : "border-b border-border"}`}
     >
-      <Text class="grow basis-0 text-sm leading-4 text-muted-foreground">
+      <Text class="truncate grow basis-0 text-sm leading-4 text-muted-foreground">
         {props.waiting
           ? t("chat.thinking.now")
-          : t("chat.process.steps", { count: props.steps.length })}
+          : props.folded && props.said !== undefined
+            ? `${t("chat.process.steps", { count: props.steps.length })} · ${props.said}`
+            : t("chat.process.steps", { count: props.steps.length })}
       </Text>
       <View
         role="button"
@@ -49,26 +57,36 @@ export function ProcessBox(props: {
     </View>
   );
   return (
-    <View class="border border-border" testID="process-box">
-      {head}
+    <View class="gap-1">
       <If when={!props.folded}>
-        <View class="h-[92px] shrink-0 justify-end gap-1 overflow-hidden px-[10px] py-[6px]">
-          <If when={props.waiting}>
-            <View class="h-[18px] flex-row items-center">
-              <View class="h-2 grow basis-0 bg-muted" />
-            </View>
-          </If>
-          <Each of={shown()} key={(step) => step.id}>
-            {(step, index) => (
-              <Text
-                class={`truncate text-sm leading-[18px] ${index() === shown().length - 1 ? "text-foreground" : "text-muted-foreground"}`}
-              >
-                {stepLine(step())}
-              </Text>
-            )}
-          </Each>
-        </View>
+        <Text
+          class="h-[23px] truncate text-base leading-[23px] text-foreground"
+          testID="process-said"
+        >
+          {props.said ?? ""}
+        </Text>
       </If>
+      <View class="border border-border" testID="process-box">
+        {head}
+        <If when={!props.folded}>
+          <View class="h-[92px] shrink-0 justify-end gap-1 overflow-hidden px-[10px] py-[6px]">
+            <If when={props.waiting}>
+              <View class="h-[18px] flex-row items-center">
+                <View class="h-2 grow basis-0 bg-muted" />
+              </View>
+            </If>
+            <Each of={shown()} key={(step) => step.id}>
+              {(step, index) => (
+                <Text
+                  class={`truncate text-sm leading-[18px] ${index() === shown().length - 1 ? "text-foreground" : "text-muted-foreground"}`}
+                >
+                  {stepLine(step())}
+                </Text>
+              )}
+            </Each>
+          </View>
+        </If>
+      </View>
     </View>
   );
 }

@@ -294,7 +294,11 @@ function useFolds() {
   };
 }
 
-/** 04: a reply's steps. Its thinking first, then the last ten, the older ones one press away. */
+/**
+ * 04: a reply's steps. Its thinking first, then the last ten calls, the older ones one press away.
+ * What it said on its way is among them in its order, so a sentence the transcript draws only as
+ * the line over its box (or not at all, once a newer one took that line) is still here.
+ */
 function replyRows(
   blocks: readonly RunBlock[],
   all: boolean,
@@ -321,18 +325,45 @@ function replyRows(
     ...(hidden === 0
       ? []
       : [{ key: "earlier", type: "earlier" as const, count: hidden }]),
-    ...tools.slice(hidden).map(
-      (block, index): Row => ({
-        key: block.id,
-        type: "step",
-        step: stepOf(block),
-        first: index === 0 && thinking.length === 0 && hidden === 0,
-      }),
+    ...shownSteps(blocks, hidden).map(
+      (block, index): Row =>
+        block.type === "tool"
+          ? {
+              key: block.id,
+              type: "step",
+              step: stepOf(block),
+              first: index === 0 && thinking.length === 0 && hidden === 0,
+            }
+          : {
+              key: block.id,
+              type: "words",
+              id: block.id,
+              text: block.text,
+              who: "agent",
+            },
     ),
     ...(question === undefined
       ? []
       : [{ key: "stop", type: "stop" as const, prompt: question }]),
   ];
+}
+
+/** Its calls and its words in order, from the first call not hidden behind 「Earlier N steps」. */
+function shownSteps(
+  blocks: readonly RunBlock[],
+  hidden: number,
+): (ToolBlock | Extract<RunBlock, { type: "text" }>)[] {
+  const ordered = blocks.filter(
+    (block): block is ToolBlock | Extract<RunBlock, { type: "text" }> =>
+      block.type === "tool" ||
+      (block.type === "text" && block.text.trim() !== ""),
+  );
+  if (hidden === 0) return ordered;
+  let calls = 0;
+  const from = ordered.findIndex(
+    (block) => block.type === "tool" && calls++ === hidden,
+  );
+  return from === -1 ? [] : ordered.slice(from);
 }
 
 /** 04 for a reply in a conversation. */

@@ -50,7 +50,42 @@ test("03: a group's run in its box, who waits near the composer, the question ov
 
 test("03: a finished reply keeps what it said between its calls", async () => {
   const app = await chat("wire", "chat-process");
+  // The last thing it said ends its folded row; every one of them is a step on 04.
+  await app.waitFor(
+    "text:/ 步 · wire\\.ts never resends after a reconnect\\.$/",
+  );
+  expect(app.texts()).not.toContain("wire.ts never resends after a reconnect.");
+  await app.press("role:button[查看全部] >> nth=0");
   await app.waitFor("text:wire.ts never resends after a reconnect.");
+});
+
+test("03: a group's reply at work keeps one line of what it just said over its box", async () => {
+  const app = await chat("wire", "chat-said");
+  await app.waitFor("text:3 步");
+  // The newest sentence is the line; the first one is not drawn whole around the box any more.
+  expect(app.shows("id:process-said")).toBe(true);
+  expect(app.texts()).toContain("Now the replay path.");
+  expect(app.texts()).not.toContain(
+    "I'll read wire.ts first, then the replay path on the host.",
+  );
+  // Its answer: the box folds to a row that ends with the last sentence, the answer under it.
+  await app.waitFor("text:3 步 · Now the replay path.", { timeout: 10_000 });
+  await app.waitFor("text:The host replays from the last seq the client saw.", {
+    timeout: 10_000,
+  });
+  expect(app.shows("id:process-said")).toBe(false);
+});
+
+test("04: what a reply said on its way is among its steps", async () => {
+  const app = await chat("wire", "chat-said");
+  await app.waitFor("text:3 步");
+  await app.press("role:button[查看全部] >> nth=1");
+  await app.waitFor("text:Ache 的过程");
+  await app.waitFor(
+    "text:I'll read wire.ts first, then the replay path on the host.",
+  );
+  expect(app.texts()).toContain("Now the replay path.");
+  expect(app.texts()).toContain("src/server/replay.ts");
 });
 
 test("03: stop goes to the running reply", async () => {

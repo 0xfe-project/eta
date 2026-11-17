@@ -746,6 +746,67 @@ describe("a reply at work, as a browser draws it", () => {
     expect(new Set(heights).size).toBe(1);
   });
 
+  it("draws what it just said as one visible line, cut with an ellipsis", async ({
+    skip,
+  }) => {
+    if (!(await hasBrowser())) return skip();
+    const { container, say } = await live("group");
+    await say(words(long), call("a"));
+    const line = await onPage(
+      `<div style="width: 640px">${reply(container)}</div>`,
+      async (page) =>
+        page.locator(".process-said-line").evaluate((el) => {
+          const style = getComputedStyle(el);
+          return {
+            height: el.getBoundingClientRect().height,
+            lineHeight: Number.parseFloat(style.lineHeight),
+            visible: style.display !== "none" && style.visibility !== "hidden",
+            cut: el.scrollWidth > el.clientWidth,
+            ellipsis: style.textOverflow,
+          };
+        }),
+    );
+    expect(line.visible).toBe(true);
+    expect(line.height).toBeGreaterThan(0);
+    expect(line.height).toBeCloseTo(line.lineHeight, 0);
+    expect(line.cut).toBe(true);
+    expect(line.ellipsis).toBe("ellipsis");
+  });
+
+  it("does not move a reply under it while both work", async ({ skip }) => {
+    if (!(await hasBrowser())) return skip();
+    const above = await live("group");
+    const below = await live("group");
+    await above.say(words("我先看看配置"), call("a"));
+    await below.say(words("我去查日志"), call("x"));
+    const tops: number[] = [];
+    const measure = async () =>
+      tops.push(
+        await onPage(
+          `<div style="width: 640px">${reply(above.container)}${reply(below.container)}</div>`,
+          async (page) =>
+            page
+              .locator(".message.assistant")
+              .last()
+              .evaluate((el) => el.getBoundingClientRect().top),
+        ),
+      );
+    await measure();
+    await above.say(words("我先看看配置"), call("a"), call("b"), call("c"));
+    await below.say(words("我去查日志"), call("x"), call("y"));
+    await measure();
+    await above.say(
+      words("我先看看配置"),
+      call("a"),
+      call("b"),
+      call("c"),
+      words(long),
+      call("d"),
+    );
+    await measure();
+    expect(new Set(tops).size).toBe(1);
+  });
+
   it("does not grow when a reply that called first says something", async ({
     skip,
   }) => {

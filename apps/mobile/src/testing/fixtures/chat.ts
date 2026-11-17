@@ -2,7 +2,8 @@
 // answered as apps/eta/src/conversations answers them. `wire` is 03, `artifacts` 03d, `dm-xiaoman`
 // 03h, `board` a run with a failed test (03i). The rest are variants of `wire`, by scenario:
 // chat-queue (03a), chat-errors (03f), chat-empty, chat-loading, chat-archived, chat-no-members,
-// chat-no-model, chat-elsewhere (03g), chat-process (a finished reply that spoke between its calls).
+// chat-no-model, chat-elsewhere (03g), chat-process (a finished reply that spoke between its calls),
+// chat-said (a reply at work that says a sentence, calls, says another, calls, then answers).
 
 import type {
   AgentMessage,
@@ -278,6 +279,34 @@ function wireRun(from: number): ViewMessageRow[] {
       {
         type: "text",
         text: "The migration will lock the message table for about 40 seconds; you'll need to decide.",
+      },
+    ]),
+  ]);
+}
+
+/** chat-said: a sentence, two calls, another sentence, a call; its answer is streamed once read. */
+const SAID_FIRST = "I'll read wire.ts first, then the replay path on the host.";
+const SAID_NEXT = "Now the replay path.";
+const SAID_ANSWER = "The host replays from the last seq the client saw.";
+function saidRun(from: number): ViewMessageRow[] {
+  return transcript(from, [
+    assistant([{ type: "text", text: SAID_FIRST }]),
+    ...calls([
+      {
+        id: "w1",
+        name: "read",
+        input: { path: "src/lib/wire.ts" },
+        output: "…",
+      },
+      { id: "w2", name: "grep", input: { pattern: "last_seq" }, output: "…" },
+    ]),
+    assistant([{ type: "text", text: SAID_NEXT }]),
+    ...calls([
+      {
+        id: "w3",
+        name: "read",
+        input: { path: "src/server/replay.ts" },
+        output: "…",
       },
     ]),
   ]);
@@ -725,6 +754,10 @@ export function installChat(host: FakeHost): void {
     if (scenario === "chat-errors") return errorRows();
     if (scenario === "chat-empty") return [];
     if (scenario === "chat-process") return wireRows(true);
+    if (scenario === "chat-said")
+      return wireRows().map((row) =>
+        row.id === "wire-11" ? { ...row, status: "working" as const } : row,
+      );
     return wireRows();
   };
 
@@ -828,7 +861,13 @@ export function installChat(host: FakeHost): void {
 
   const runs: Record<string, ViewMessageRow[]> = {
     "session-agent-ache":
-      scenario === "chat-queue" ? queueRun() : isVariant ? [] : wireRun(40),
+      scenario === "chat-queue"
+        ? queueRun()
+        : scenario === "chat-said"
+          ? saidRun(40)
+          : isVariant
+            ? []
+            : wireRun(40),
     "session-agent-mori": boardRun(0),
     "session-agent-xiaoman": dmRun(0),
   };
@@ -1066,6 +1105,13 @@ export function installChat(host: FakeHost): void {
     ({ conversationId, seq }: { conversationId: string; seq: number }) => {
       const conversation = conversationOf(conversationId);
       conversation.patchSummary({ readSeq: seq, unread: 0 });
+      // chat-said's reply writes its answer once someone is there to see it.
+      if (conversationId === "wire" && scenario === "chat-said" && !streamed) {
+        streamed = true;
+        // nsh's setTimeout passes no extra arguments to its callback.
+        const answer = () => stream("sessions.session-agent-ache", SAID_ANSWER);
+        setTimeout(answer, 1000);
+      }
       // 03h's reply goes on writing once someone is there to see it.
       if (conversationId === "dm-xiaoman" && !streamed) {
         streamed = true;
