@@ -17,7 +17,7 @@ import type { ArtifactKind } from "./kinds/kind";
  */
 import type { ArtifactRecord, ArtifactStore, VersionRecord } from "./store";
 import { randomBytes } from "node:crypto";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { CAPABILITY_TTL_MS, sign, verify } from "./capability";
 import { ArtifactError, checkFiles, packSite } from "./files";
@@ -141,6 +141,35 @@ export class ArtifactService {
     const base = join(this.#versionDir(version), "files");
     const target = resolve(base, name);
     return target.startsWith(base + sep) ? target : undefined;
+  }
+
+  /** The file a version opens at, as a path inside it: `index.html` for a site. */
+  entryOf(version: VersionRecord): string {
+    return (
+      this.kindOf(version)?.entry(JSON.parse(version.manifest)) || "index.html"
+    );
+  }
+
+  /** Every file of a version, as its name in the site and its size, sorted by name. */
+  async filesOf(
+    version: VersionRecord,
+  ): Promise<{ name: string; size: number }[]> {
+    const base = join(this.#versionDir(version), "files");
+    const names = await readdir(base, { recursive: true }).catch(
+      () => [] as string[],
+    );
+    const files: { name: string; size: number }[] = [];
+    for (const name of names) {
+      const info = await stat(join(base, name)).catch(() => undefined);
+      if (info?.isFile() === true)
+        files.push({
+          name: name.split(sep).join("/"),
+          size: info.size,
+        });
+    }
+    return files.sort((a, b) =>
+      a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
+    );
   }
 
   archiveOf(version: VersionRecord): string {

@@ -1,7 +1,8 @@
 import type { TaskActor } from "@eta/client-contracts";
 import type { KernelTool } from "@eta/core";
 /**
- * Publishing from a session: the `publish_artifact` tool.
+ * Artifacts from a session: `publish_artifact`, and the read-only `search_artifacts` and
+ * `read_artifact` (`reading.ts` says what each session may see).
  *
  * The directory is read from this machine's disk, relative to the session's working directory. What
  * is packed is judged by the service (`kinds/site.ts`) and stored as a new version. A version published
@@ -18,6 +19,15 @@ import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
 import { heldIn, taskOf } from "../session-owner";
 import { ArtifactError, collectSite } from "./files";
+import {
+  conversationOfTask,
+  readArtifact,
+  scopeOf,
+  SEARCH_LIMIT,
+  SEARCH_LIMIT_MAX,
+  searchArtifacts,
+  searchLine,
+} from "./reading";
 
 /** The tool needs nothing from the run: where it reads is the session's own directory. */
 type Context = Record<string, never>;
@@ -52,12 +62,69 @@ const parameters = () =>
     ),
   });
 
+const searchParameters = () =>
+  Type.Object({
+    query: Type.Optional(
+      Type.String({
+        description:
+          "Words to find in titles and in the newest version's text, ignoring case. Leave it out to list the newest artifacts",
+      }),
+    ),
+    task: Type.Optional(
+      Type.String({
+        description:
+          "Only the artifacts of this task: its number (12 or #12) or id",
+      }),
+    ),
+    limit: Type.Optional(
+      Type.Integer({
+        description: `How many to return: ${SEARCH_LIMIT} by default, at most ${SEARCH_LIMIT_MAX}`,
+        minimum: 1,
+      }),
+    ),
+  });
+
+const readParameters = () =>
+  Type.Object({
+    artifactId: Type.String({
+      description: "The artifact: its id, or its exact title",
+    }),
+    version: Type.Optional(
+      Type.Integer({
+        description: "Which version; the newest by default",
+        minimum: 1,
+      }),
+    ),
+    path: Type.Optional(
+      Type.String({
+        description:
+          "The file in the version, as listed in the result's header; its entry page (usually index.html) by default",
+      }),
+    ),
+    offset: Type.Optional(
+      Type.Integer({
+        description: "The first line to read, from 1; 1 by default",
+        minimum: 1,
+      }),
+    ),
+    limit: Type.Optional(
+      Type.Integer({
+        description: "How many lines to read; 400 by default",
+        minimum: 1,
+      }),
+    ),
+  });
+
 export function artifactSessionTools(deps: {
   artifacts: ArtifactService;
   board: TaskBoard;
   limits: SiteLimits;
   /** The task a run is an attempt at, for a session held in a run's key. */
   taskOfRun: (runId: string) => string | undefined;
+  /** Captain sees every artifact. */
+  isCaptain: (agentId: string) => boolean;
+  /** An agent's name, for who published what. */
+  agentName: (agentId: string) => string | undefined;
 }): NonNullable<SessionHooks["sessionTools"]> {
   return ({ meta }) => {
     const { agentId, conversationId } = meta;
@@ -101,7 +168,9 @@ export function artifactSessionTools(deps: {
           // A routine run is held in no conversation, and has none to file it under.
           const where =
             held === "task"
-              ? (own?.conversationId ?? own?.originConversationId ?? undefined)
+              ? own === undefined
+                ? undefined
+                : conversationOfTask(own)
               : held === "routine"
                 ? undefined
                 : conversationId;
@@ -158,7 +227,88 @@ export function artifactSessionTools(deps: {
       },
     });
 
-    return [toKernelTool(publish, contextOf)] as KernelTool[];
+    // Who the session is decides what it sees, read at each call: a task can move.
+    const scope = () =>
+      scopeOf(conversationId, agentId, {
+        isCaptain: deps.isCaptain,
+        findTask: (id) => deps.board.find(id),
+        taskOfRun: deps.taskOfRun,
+      });
+    const reading = {
+      artifacts: deps.artifacts,
+      findTask: (id: string) => deps.board.find(id),
+      agentName: deps.agentName,
+    };
+
+    const search = defineTool<Context, ReturnType<typeof searchParameters>>({
+      name: "search_artifacts",
+      label: "search_artifacts",
+      description:
+        "Find published artifacts you can see: those of this conversation and of the tasks in " +
+        "it (a task's session sees the conversation its task is in). `query` matches titles and " +
+        "the text of the newest version's files (HTML without its tags), ignoring case; without " +
+        "it, the newest artifacts are listed. Each line gives the id, title, newest version, " +
+        "when it was updated, who published it, its task and the matching text. Read one with " +
+        "read_artifact.",
+      parameters: searchParameters(),
+      async execute(args) {
+        try {
+          let taskId: string | undefined;
+          if (args.task !== undefined) {
+            taskId = deps.board.find(args.task)?.id;
+            if (taskId === undefined)
+              throw new ArtifactError(`no such task: ${args.task}`);
+          }
+          const limit = Math.min(
+            SEARCH_LIMIT_MAX,
+            Math.max(1, Math.floor(args.limit ?? SEARCH_LIMIT)),
+          );
+          const hits = await searchArtifacts(reading, scope(), {
+            query: args.query,
+            taskId,
+            limit,
+          });
+          if (hits.length === 0)
+            return text(
+              args.query === undefined || args.query.trim() === ""
+                ? "No artifacts."
+                : `No artifact matches "${args.query}".`,
+              { count: 0 },
+            );
+          return text(hits.map(searchLine).join("\n"), {
+            count: hits.length,
+          });
+        } catch (error) {
+          if (error instanceof ArtifactError) return toolError(error.message);
+          throw error;
+        }
+      },
+    });
+
+    const read = defineTool<Context, ReturnType<typeof readParameters>>({
+      name: "read_artifact",
+      label: "read_artifact",
+      description:
+        "Read a file of a published artifact you can see (search_artifacts finds them). The " +
+        "result starts with the artifact's title, version, publisher, task and its files. A " +
+        "text file comes as its source with line numbers (HTML as HTML), `limit` lines from " +
+        "`offset`; an image comes as an image you can look at; other files only say their size.",
+      parameters: readParameters(),
+      async execute(args) {
+        try {
+          return await readArtifact(reading, scope(), args);
+        } catch (error) {
+          if (error instanceof ArtifactError) return toolError(error.message);
+          throw error;
+        }
+      },
+    });
+
+    return [
+      toKernelTool(publish, contextOf),
+      toKernelTool(search, contextOf),
+      toKernelTool(read, contextOf),
+    ] as KernelTool[];
   };
 }
 

@@ -95,6 +95,8 @@ interface Frame {
   /** Details of the platform calls this script made, for the cards a UI draws. */
   calls: { tool: string; details: unknown; isError: boolean }[];
   asks: { stack: string[]; text: string; status: string }[];
+  /** Images the platform calls of this script answered with: they go back to the model with its result. */
+  images: { data: string; mimeType: string }[];
   seq: number;
 }
 const userMessage = (text: string): Message => ({
@@ -108,23 +110,42 @@ const textOf = (message: AssistantMessage): string =>
     .flatMap((part) => (part.type === "text" ? [part.text] : []))
     .join("");
 
-/** A tool result's text, whatever shape the tool answered with. */
+/**
+ * A tool result's text, whatever shape the tool answered with, and its images. A script gets the
+ * text; the images are attached to the esmrun result, where the model sees them.
+ */
 function resultText(raw: unknown): {
   text: string;
+  images: { data: string; mimeType: string }[];
   isError: boolean;
   details: unknown;
 } {
   const message = toToolResultMessage({ id: "", name: "" }, raw) as {
-    content: { type: string; text?: string }[];
+    content: {
+      type: string;
+      text?: string;
+      data?: string;
+      mimeType?: string;
+    }[];
     isError?: boolean;
     details?: unknown;
   };
+  const images = message.content.flatMap((part) =>
+    part.type === "image" &&
+    typeof part.data === "string" &&
+    typeof part.mimeType === "string"
+      ? [{ data: part.data, mimeType: part.mimeType }]
+      : [],
+  );
   return {
     text: message.content
       .flatMap((part) =>
-        part.type === "text" ? [part.text ?? ""] : ["[image]"],
+        part.type === "text"
+          ? [part.text ?? ""]
+          : ["[image: attached to this esmrun result]"],
       )
       .join("\n"),
+    images,
     isError: message.isError === true,
     details: message.details,
   };
@@ -324,6 +345,7 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
           ...(frame?.signal === undefined ? {} : { signal: frame.signal }),
         });
         const result = resultText(raw);
+        frame?.images.push(...result.images);
         frame?.calls.push({
           tool: tool.name,
           details: result.details,
@@ -528,6 +550,7 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
       console: [],
       calls: [],
       asks: [],
+      images: [],
       seq: 0,
     };
     const parts: string[] = [];
@@ -573,7 +596,10 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
       sections.push(`effects:\n${effects.map(effectLine).join("\n")}`);
     sections.push(`script: ${file}`);
     return {
-      content: [{ type: "text", text: sections.join("\n\n") }],
+      content: [
+        { type: "text", text: sections.join("\n\n") },
+        ...frame.images.map((image) => ({ type: "image" as const, ...image })),
+      ],
       details: {
         file,
         effects,

@@ -822,6 +822,8 @@ export function createProduct(options: {
         board,
         limits,
         taskOfRun,
+        isCaptain: (agentId) => captain.identity()?.agentId === agentId,
+        agentName: (agentId) => agents.get(agentId)?.name,
       }),
     },
     {
