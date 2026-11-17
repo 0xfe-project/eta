@@ -44,10 +44,13 @@ beforeEach(() => {
   stop = watchCustomFont();
 });
 
+const realFetch = globalThis.fetch;
+
 afterEach(async () => {
   stop?.();
-  useWorkspaceStore.setState({ workspace: {} });
   await cleanup();
+  globalThis.fetch = realFetch;
+  useWorkspaceStore.setState({ workspace: {} });
   setWire(undefined);
   useWorkspaceStore.getState().setSettings({ open: false, section: "agents" });
 });
@@ -146,6 +149,9 @@ describe("界面字体", () => {
   });
 
   it("更新页写出当前的自定义字体，没设就不写", async () => {
+    // The page also asks the host for an update in progress: none.
+    globalThis.fetch = (async () =>
+      Response.json({ state: "idle" })) as unknown as typeof globalThis.fetch;
     await open("update");
     expect(
       document.querySelector('[data-testid="custom-font-note"]'),
