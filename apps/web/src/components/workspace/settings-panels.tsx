@@ -90,12 +90,17 @@ const chatWidths = [
 ] as const;
 
 /**
- * The interface font: a name typed in, saved when the field is left or Enter is pressed. A name the
- * check refuses stays in the field with the reason under the label and is not saved.
+ * A font field — the interface font or the mono one: a name typed in, saved when the field is left
+ * or Enter is pressed. A name the check refuses stays in the field with the reason under the label
+ * and is not saved.
  */
-function CustomFontSetting() {
+function CustomFontSetting({
+  field,
+}: {
+  field: "customFont" | "customMonoFont";
+}) {
   const { t: translateText } = useTranslation(["settings"] as const);
-  const saved = useWorkspaceStore((s) => s.workspace.customFont ?? "");
+  const saved = useWorkspaceStore((s) => s.workspace[field] ?? "");
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const [draft, setDraft] = useState(saved);
   const [invalid, setInvalid] = useState(false);
@@ -111,22 +116,32 @@ function CustomFontSetting() {
     setDraft(name);
     if (name === saved) return;
     setWorkspace((state) => {
-      const { customFont: _previous, ...rest } = state;
-      return name === "" ? rest : { ...rest, customFont: name };
+      const { [field]: _previous, ...rest } = state;
+      return name === "" ? rest : { ...rest, [field]: name };
     });
   };
+  const text =
+    field === "customFont"
+      ? {
+          label: translateText("appearance.customFont"),
+          hint: translateText("appearance.customFontHint"),
+          placeholder: "Eta Sans",
+        }
+      : {
+          label: translateText("appearance.customMonoFont"),
+          hint: translateText("appearance.customMonoFontHint"),
+          placeholder: translateText("appearance.customMonoFontPlaceholder"),
+        };
   return (
     <div className="settings-row">
       <div className="settings-row-label">
-        <label htmlFor={inputId}>
-          {translateText("appearance.customFont")}
-        </label>
+        <label htmlFor={inputId}>{text.label}</label>
         {invalid ? (
           <p id={errorId} role="alert" className="!text-destructive">
             {translateText("appearance.customFontInvalid")}
           </p>
         ) : (
-          <p>{translateText("appearance.customFontHint")}</p>
+          <p>{text.hint}</p>
         )}
       </div>
       <div className="settings-control">
@@ -137,7 +152,7 @@ function CustomFontSetting() {
           maxLength={customFontMaxLength * 2}
           spellCheck={false}
           autoComplete="off"
-          placeholder="Eta Sans"
+          placeholder={text.placeholder}
           aria-invalid={invalid}
           aria-describedby={invalid ? errorId : undefined}
           onChange={(event) => {
@@ -231,7 +246,8 @@ function AppearanceSettings() {
           ))}
         </div>
       </div>
-      <CustomFontSetting />
+      <CustomFontSetting field="customFont" />
+      <CustomFontSetting field="customMonoFont" />
       <div className="settings-row">
         <div className="settings-row-label">
           <div>{translateText("appearance.transcriptRail")}</div>

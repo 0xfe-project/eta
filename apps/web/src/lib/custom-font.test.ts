@@ -16,7 +16,7 @@ const mono = () => root().style.getPropertyValue("--font-mono");
 beforeEach(() => {
   localStorage.clear();
   useWorkspaceStore.setState({ workspace: {} });
-  applyCustomFont(undefined);
+  applyCustomFont({});
 });
 
 describe("normalizeCustomFont", () => {
@@ -54,8 +54,8 @@ describe("normalizeCustomFont", () => {
 });
 
 describe("applyCustomFont", () => {
-  it("puts the font in front of the shipped stack, for sans and mono", () => {
-    applyCustomFont("Inter");
+  it("puts the interface font in front of the shipped stack, for sans and mono", () => {
+    applyCustomFont({ sans: "Inter" });
     expect(customFontStack("Inter")).toBe(`"Inter", ${defaultFontStack}`);
     expect(sans()).toBe(customFontStack("Inter"));
     expect(mono()).toBe(customFontStack("Inter"));
@@ -63,22 +63,47 @@ describe("applyCustomFont", () => {
   });
 
   it("empty or unset goes back to the stylesheet's default", () => {
-    applyCustomFont("Inter");
-    applyCustomFont("");
+    applyCustomFont({ sans: "Inter" });
+    applyCustomFont({ sans: "" });
     expect(sans()).toBe("");
     expect(mono()).toBe("");
     expect(root().dataset.customFont).toBeUndefined();
-    applyCustomFont("Inter");
-    applyCustomFont(undefined);
+    applyCustomFont({ sans: "Inter" });
+    applyCustomFont({});
     expect(sans()).toBe("");
   });
 
   it("a stored value that fails the check is not applied", () => {
-    applyCustomFont("Inter");
-    applyCustomFont('x"; background: url(evil)');
+    applyCustomFont({ sans: "Inter" });
+    applyCustomFont({ sans: 'x"; background: url(evil)' });
     expect(sans()).toBe("");
     expect(root().dataset.customFont).toBeUndefined();
     expect(root().getAttribute("style") ?? "").not.toContain("url(");
+  });
+
+  it("a mono font changes only --font-mono, in front of the interface font", () => {
+    applyCustomFont({ mono: "JetBrains Mono" });
+    expect(sans()).toBe("");
+    expect(mono()).toBe(`"JetBrains Mono", ${defaultFontStack}`);
+    expect(root().dataset.customMonoFont).toBe("JetBrains Mono");
+    expect(root().dataset.customFont).toBeUndefined();
+
+    applyCustomFont({ sans: "Inter", mono: "JetBrains Mono" });
+    expect(sans()).toBe(customFontStack("Inter"));
+    expect(mono()).toBe(`"JetBrains Mono", "Inter", ${defaultFontStack}`);
+
+    // Mono cleared: it follows the interface font again.
+    applyCustomFont({ sans: "Inter", mono: "" });
+    expect(mono()).toBe(customFontStack("Inter"));
+    expect(root().dataset.customMonoFont).toBeUndefined();
+  });
+
+  it("a mono value that fails the check is not applied either", () => {
+    applyCustomFont({ mono: "Mono; } * { font: 0/0 url(x)" });
+    expect(mono()).toBe("");
+    expect(root().getAttribute("style") ?? "").not.toContain("url(");
+    applyCustomFont({ sans: "Inter", mono: "a,b" });
+    expect(mono()).toBe(customFontStack("Inter"));
   });
 
   it("falls back to Eta Sans before the system faces", () => {
@@ -112,7 +137,7 @@ describe("watchCustomFont", () => {
     // A reload: the document starts bare and the store from what was saved.
     stop();
     const saved = localStorage.getItem("eta.workspace.v1")!;
-    applyCustomFont(undefined);
+    applyCustomFont({});
     useWorkspaceStore.setState({ workspace: {} });
     localStorage.setItem("eta.workspace.v1", saved);
     await useWorkspaceStore.persist.rehydrate();
@@ -122,5 +147,29 @@ describe("watchCustomFont", () => {
 
     useWorkspaceStore.getState().setWorkspace({});
     expect(sans()).toBe("");
+  });
+
+  it("follows the mono setting on its own and survives a reload", async () => {
+    stop = watchCustomFont();
+    useWorkspaceStore
+      .getState()
+      .setWorkspace({ customFont: "Inter", customMonoFont: "Fira Code" });
+    expect(mono()).toBe(`"Fira Code", "Inter", ${defaultFontStack}`);
+
+    stop();
+    const saved = localStorage.getItem("eta.workspace.v1")!;
+    applyCustomFont({});
+    useWorkspaceStore.setState({ workspace: {} });
+    localStorage.setItem("eta.workspace.v1", saved);
+    await useWorkspaceStore.persist.rehydrate();
+    stop = watchCustomFont();
+    expect(useWorkspaceStore.getState().workspace.customMonoFont).toBe(
+      "Fira Code",
+    );
+    expect(mono()).toBe(`"Fira Code", "Inter", ${defaultFontStack}`);
+
+    useWorkspaceStore.getState().setWorkspace({ customMonoFont: "Fira Code" });
+    expect(sans()).toBe("");
+    expect(mono()).toBe(`"Fira Code", ${defaultFontStack}`);
   });
 });

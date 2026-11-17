@@ -69,9 +69,9 @@ async function open(section: "appearance") {
   await flush();
 }
 
-function field() {
+function field(key: "customFont" | "customMonoFont" = "customFont") {
   const label = [...document.querySelectorAll("label")].find(
-    (l) => l.textContent === translate("settings:appearance.customFont"),
+    (l) => l.textContent === translate(`settings:appearance.${key}`),
   );
   const input = document.getElementById(label?.htmlFor ?? "");
   expect(input).toBeInstanceOf(HTMLInputElement);
@@ -97,6 +97,8 @@ async function leave(input: HTMLInputElement) {
 
 const sans = () =>
   document.documentElement.style.getPropertyValue("--font-sans");
+const mono = () =>
+  document.documentElement.style.getPropertyValue("--font-mono");
 
 describe("界面字体", () => {
   it("填了就用作界面字体，存到本地；清空回到默认", async () => {
@@ -143,5 +145,42 @@ describe("界面字体", () => {
 
     await type(input, "Inter Display");
     expect(input.getAttribute("aria-invalid")).toBe("false");
+  });
+
+  it("等宽字体单独设置，只改 --font-mono；清空后跟随界面字体", async () => {
+    useWorkspaceStore.getState().setWorkspace({ customFont: "Inter" });
+    await open("appearance");
+    const input = field("customMonoFont");
+    expect(input.value).toBe("");
+    expect(input.placeholder).toBe(
+      translate("settings:appearance.customMonoFontPlaceholder"),
+    );
+    expect(mono()).toBe(customFontStack("Inter"));
+
+    await type(input, "Fira Code");
+    await leave(input);
+    expect(useWorkspaceStore.getState().workspace.customMonoFont).toBe(
+      "Fira Code",
+    );
+    expect(sans()).toBe(customFontStack("Inter"));
+    expect(mono()).toBe(`"Fira Code", ${customFontStack("Inter")}`);
+    expect(
+      JSON.parse(localStorage.getItem("eta.workspace.v1") ?? "{}"),
+    ).toMatchObject({ customFont: "Inter", customMonoFont: "Fira Code" });
+
+    await type(input, "Fira Code; color: red");
+    await leave(input);
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(useWorkspaceStore.getState().workspace.customMonoFont).toBe(
+      "Fira Code",
+    );
+
+    await type(input, "");
+    await leave(input);
+    expect("customMonoFont" in useWorkspaceStore.getState().workspace).toBe(
+      false,
+    );
+    expect(mono()).toBe(customFontStack("Inter"));
+    expect(useWorkspaceStore.getState().workspace.customFont).toBe("Inter");
   });
 });

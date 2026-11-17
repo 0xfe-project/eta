@@ -17,6 +17,9 @@
     "customFont": "Interface font",
     "customFontHint": "The name of a font installed on this computer, used for everything in the app. Characters it lacks come from Eta Sans. Leave empty for Eta Sans. Saved in this browser only.",
     "customFontInvalid": "One font name only: letters, digits, spaces, - _ and . (up to 64 characters). Not saved.",
+    "customMonoFont": "Monospace font",
+    "customMonoFontHint": "Used where the app lines things up: times, code, tool-call heads, labels. Characters it lacks come from the interface font, then Eta Sans. Leave empty to follow the interface font. Saved in this browser only.",
+    "customMonoFontPlaceholder": "Same as interface",
     "transcriptRail": "Conversation rail",
     "transcriptRailHint": "When on, the chat's right edge shows a rail of replies (squares) and your messages (circles); click one to jump to it."
   },

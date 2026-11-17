@@ -17,6 +17,9 @@
     "customFont": "界面字体",
     "customFontHint": "填本机已安装字体的名称，整个应用都用它；它缺的字由 Eta Sans 补上。留空即用 Eta Sans。只保存在这个浏览器里。",
     "customFontInvalid": "只能填一个字体名：字母、数字、空格、- _ 和 .，最多 64 个字符。未保存。",
+    "customMonoFont": "等宽字体",
+    "customMonoFontHint": "用在需要对齐的地方：时间、代码、工具调用标题、标签。它缺的字先用界面字体补，再用 Eta Sans 补。留空则跟随界面字体。只保存在这个浏览器里。",
+    "customMonoFontPlaceholder": "跟随界面字体",
     "transcriptRail": "会话导航轨道",
     "transcriptRailHint": "打开后聊天区右边缘显示一列导航：方块是智能体的回复，圆点是你发的消息，点一下跳过去。"
   },
