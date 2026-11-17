@@ -55,12 +55,23 @@ const open = async (
       details: { echoed: args.text },
     }),
   });
+  const picture = defineTool({
+    name: "picture",
+    description: "A picture, with a caption.",
+    parameters: Type.Object({}),
+    execute: () => ({
+      content: [
+        { type: "text", text: "a dot" },
+        { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+      ],
+    }),
+  });
   const session = await openSession({
     storage,
     models: models as never,
     cwd,
     esm: { root },
-    tools: [echo as never],
+    tools: [echo as never, picture as never],
   });
   return { session, models, root, cwd, storage };
 };
@@ -115,6 +126,31 @@ describe("esmrun", () => {
         { turn: 1, toolCallId: "r" },
       ),
     ).toMatchObject({ content: [{ text: "k: v" }] });
+    session.stop();
+  });
+
+  it("hands the model the images a mirrored tool answered with, beside the script's result", async () => {
+    const { session } = await open([
+      call("esmrun", {
+        script: 'import eta from "eta";\nawait eta.platform.picture({})',
+      }),
+      stop(),
+    ]);
+    session.kernel.nextRun(userMsg("go"));
+    await session.runner.run();
+    const result = session.runner
+      .getTranscript()
+      .find((m) => m.role === "toolResult" && m.toolCallId === "c-esmrun") as
+      | { content: { type: string; text?: string; data?: string }[] }
+      | undefined;
+    expect(result?.content[0]?.text).toContain(
+      "a dot\n[image: attached to this esmrun result]",
+    );
+    expect(result?.content[1]).toEqual({
+      type: "image",
+      data: "iVBORw0KGgo=",
+      mimeType: "image/png",
+    });
     session.stop();
   });
 
