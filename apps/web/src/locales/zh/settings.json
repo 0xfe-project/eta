@@ -156,8 +156,7 @@
       "hours": "{{count}} 小时前检查过",
       "hours_one": "{{count}} 小时前检查过",
       "hours_other": "{{count}} 小时前检查过"
-    },
-    "customFont": "界面字体：{{font}}（自定义，在这个浏览器的外观设置里设的；缺字由 Eta Sans 补上）"
+    }
   },
   "host": {
     "local": "在这台电脑上运行",
