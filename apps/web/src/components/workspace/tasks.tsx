@@ -228,7 +228,7 @@ function TaskRow({ task, all }: { task: Task; all: readonly Task[] }) {
               {actorName(
                 {
                   kind: "agent",
-                  agentId: executorOf(task) ?? task.createdBy.agentId,
+                  agentId: executorOf(task),
                 },
                 agents,
               )}
@@ -1171,9 +1171,8 @@ function RunLogButton({ task, run }: { task: TaskDetail; run: TaskRun }) {
     (other) => other.agentId === run.agentId && other.status !== "queued",
   );
   const attempt = attempts.length > 1 ? attempts.indexOf(run) + 1 : undefined;
-  const agentId =
-    run.agentId ??
-    (task.createdBy.kind === "agent" ? task.createdBy.agentId : null);
+  // The agent the run's session is: a mentioned agent's own, else the task's executor.
+  const agentId = run.agentId ?? executorOf(task);
   return (
     <TranscriptDialog
       open={open}

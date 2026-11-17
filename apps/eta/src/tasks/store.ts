@@ -35,6 +35,18 @@ export interface TaskRecord extends BoardTaskView {
   originConversationId: string | null;
 }
 
+/**
+ * The agent that executes a task — runs it, on whose machine, in whose session: the assignee when
+ * one was named, else the maker. A task the user made has only its assignee; a task made before
+ * assignees existed has only its maker. Everything that asks "who runs this" asks here.
+ */
+export function executorOf(task: {
+  assigneeAgentId: string | null;
+  createdBy: { agentId: string | null };
+}): string | null {
+  return task.assigneeAgentId ?? task.createdBy.agentId;
+}
+
 export interface NewTask {
   title: string;
   description?: string | undefined;

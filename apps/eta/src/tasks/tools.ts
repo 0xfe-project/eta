@@ -43,6 +43,7 @@ import {
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
 import { taskOfKey } from "./session-key";
+import { executorOf } from "./store";
 
 /** A failure the model can act on, from anything the board refused. */
 function failure(error: unknown): ToolResult {
@@ -104,7 +105,7 @@ export function taskSessionTools(
     // A session of the task that is not its executor's is an agent mentioned on it: the
     // executor is the assignee when one was named, which is not always the maker.
     const task = deps.board.find(taskId);
-    const executor = task?.assigneeAgentId ?? task?.createdBy.agentId;
+    const executor = task === undefined ? undefined : executorOf(task);
     return executor === meta.agentId
       ? runTools(deps, { agentId: meta.agentId, taskId })
       : mentionedTools(deps, { agentId: meta.agentId, taskId });

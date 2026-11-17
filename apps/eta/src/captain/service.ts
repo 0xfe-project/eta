@@ -39,6 +39,7 @@ import { agentHome } from "../agents/store";
 import { openDirect } from "../conversations/direct";
 import { effectiveSteward } from "../conversations/views";
 import { isTaskSession, taskOfKey } from "../tasks/session-key";
+import { executorOf } from "../tasks/store";
 import { CaptainProposals } from "./proposals";
 import { agentProposals, listPersonaCards } from "./propose-agent";
 import { groupProposals } from "./propose-group";
@@ -823,7 +824,7 @@ export class CaptainService {
           task.originConversationId === null
             ? undefined
             : this.#deps.conversations.get(task.originConversationId);
-        const executor = task.assigneeAgentId ?? task.createdBy.agentId;
+        const executor = executorOf(task);
         if (origin?.kind === "group" && executor !== null) {
           await this.#deps.engine.send({
             conversationId: origin.id,
