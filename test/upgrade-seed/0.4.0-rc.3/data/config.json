@@ -1,0 +1,1 @@
+{"providers":[{"id":"fake","kind":"openai-compatible","baseUrl":"http://127.0.0.1:19901/v1","apiKey":"not-a-real-key","models":[{"id":"m1","name":"m1","contextWindow":128000}]}]}

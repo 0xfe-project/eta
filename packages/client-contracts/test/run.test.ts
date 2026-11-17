@@ -333,6 +333,47 @@ describe("a finished reply's process", () => {
     expect(savedSteps({ thinking: "", data: {} })).toEqual([]);
   });
 
+  it("reads a 0.3.0 reply's row, which kept calls as `activity` and nothing else", () => {
+    // The shape a v0.3.0 board holds (checked against a real one: 311 such rows, none of them
+    // blank): `data` is `{activity}` alone, an entry is `{id, name, input, status, output}` and
+    // some carry `details`. The order of the steps was not kept, so the calls stand in their own
+    // order and the words the agent thought are the one thought the row did keep.
+    const activity = [
+      {
+        id: "old-1",
+        name: "Bash",
+        input: { command: "ls" },
+        status: "completed",
+        output: "a.txt",
+      },
+      {
+        id: "old-2",
+        name: "update_task",
+        input: { taskId: "t1" },
+        status: "failed",
+        details: { code: "denied" },
+      },
+    ];
+    const withoutThought = savedSteps({ thinking: "", data: { activity } });
+    expect(
+      withoutThought.map((block) =>
+        block.type === "tool"
+          ? `tool ${block.id} ${block.status}`
+          : `${block.type} ${block.text}`,
+      ),
+    ).toEqual(["tool old-1 completed", "tool old-2 failed"]);
+    const withThought = savedSteps({
+      thinking: "the last thought",
+      data: { activity },
+    });
+    expect(withThought[0]).toEqual({
+      type: "thinking",
+      id: "thinking",
+      text: "the last thought",
+    });
+    expect(withThought).toHaveLength(3);
+  });
+
   it("splits a reply at work the same way: trailing text is the answer, words before a call are steps", () => {
     const tool = {
       type: "tool" as const,

@@ -273,8 +273,28 @@ async function generate(binary: string, version: string): Promise<void> {
 
   const client = await connect(`ws://127.0.0.1:${SEED_PORT}/ws`, { origin });
   await client.hello();
-  const call = <T>(target: string, action: string, args?: unknown) =>
-    client.call(target, action, args) as Promise<T>;
+  /**
+   * A call, waiting for the host to have the op. `/up` answers as soon as the host is listening,
+   * and a host mounts its plugins one by one after that, so the hello a client connects with can
+   * be missing half of them: an older build (0.3.0) is slow enough to lose that race, and every
+   * call then fails `unknown op`. An op that is not mounted has not run, so asking again is safe.
+   */
+  const call = async <T>(
+    target: string,
+    action: string,
+    args?: unknown,
+  ): Promise<T> => {
+    const missing = `unknown op: ${target}.${action}`;
+    for (const until = Date.now() + 60_000; ; ) {
+      try {
+        return (await client.call(target, action, args)) as T;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!message.includes(missing) || Date.now() > until) throw error;
+        await Bun.sleep(100);
+      }
+    }
+  };
 
   const { agent } = await call<{ agent: { id: string } }>("agents", "create", {
     name: "Ada",
@@ -325,6 +345,15 @@ async function generate(binary: string, version: string): Promise<void> {
   await until(() => rows("task") >= 1, 30_000);
   await until(() => rows("task_run") >= 1, 30_000);
   await settled();
+  // A task a host left in review stays put only until the next host starts on it: one whose run
+  // never delivered its summary is run again, so the seed would change under its own check every
+  // time a service started on it. Close it, the way a person would — a board at rest is what the
+  // seed is for (and a done task is what 0054's archiver is about).
+  const seeded = db
+    .query<{ id: string }, []>("SELECT id FROM task ORDER BY number LIMIT 1")
+    .get();
+  if (seeded === null) throw new Error("the seed made no task to close");
+  await call("tasks", "update", { taskId: seeded.id, status: "done" });
 
   await call("email", "saveAccount", {
     name: "Seed mail",
@@ -363,6 +392,11 @@ async function generate(binary: string, version: string): Promise<void> {
   const stopped = new Database(join(data, "eta.sqlite"));
   stopped.exec("PRAGMA journal_mode = DELETE");
   stopped.exec("VACUUM");
+  // The manifest is what the check will read back, so it is read through the same lens: what a
+  // host makes for itself (a Captain and its direct conversation, a system agent) is left out of
+  // both, because the upgraded host makes its own. A build that has a Captain would otherwise
+  // write a seed its own check calls wrong.
+  leaveOutSystemData(stopped);
   const reply = stopped
     .query<{ text: string }, []>(
       "SELECT text FROM message WHERE agent_id IS NOT NULL AND text LIKE 'Heard:%' ORDER BY seq LIMIT 1",

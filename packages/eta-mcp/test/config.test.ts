@@ -61,6 +61,39 @@ describe("parseMcpServers", () => {
     expect(issues.join("\n")).toContain('ignored malformed "lifecycle"');
     expect(issues.join("\n")).toContain('ignored malformed "args"');
   });
+
+  /**
+   * A file from 0.3.0, where `auth` and the override list did not exist yet (they came with the
+   * plugin-server work). Nothing in it may be read as a claim about authorization: the settings
+   * page asks for a login only for `auth: "oauth"` (`McpService#authOf`), so a server that says
+   * nothing shows no button and connects as it always did.
+   */
+  it("reads a 0.3.0-shaped file as it did, without claiming anything about auth", () => {
+    const { servers, issues } = parseMcpServers({
+      mcpServers: {
+        fs: {
+          command: "npx",
+          args: ["-y", "@scope/fs"],
+          env: { ROOT: "/tmp" },
+        },
+        remote: { url: "https://example.com/mcp" },
+      },
+    });
+    expect(issues).toEqual([]);
+    expect(servers.fs).toEqual({
+      command: "npx",
+      args: ["-y", "@scope/fs"],
+      env: { ROOT: "/tmp" },
+    });
+    expect(servers.remote).toEqual({ url: "https://example.com/mcp" });
+    expect(servers.remote?.auth).toBeUndefined();
+    // An `auth` a hand-edit made up is dropped, not guessed at.
+    expect(
+      parseMcpServers({
+        mcpServers: { odd: { url: "https://x", auth: "oauth2" } },
+      }).servers.odd?.auth,
+    ).toBeUndefined();
+  });
 });
 
 describe("resolveServers", () => {

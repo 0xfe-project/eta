@@ -57,35 +57,71 @@ jobs:
         run: |
           to=${TO#v}
           from=${FROM#v}
+          # Every host release, and whether it is a prerelease: the desktop app's desktop-v* ones
+          # are not hosts. Non-draft only — a draft is not something anyone has installed.
+          hosts=$(mktemp)
+          gh api "repos/$GH_REPO/releases" --paginate \
+            --jq '.[] | select(.draft == false and (.tag_name | test("^v[0-9]"))) | "\(.prerelease) \(.tag_name)"' \
+            > "$hosts"
+          # The host a person upgrading *to* `to` most likely has: the highest one below it, over
+          # the versions given. Nothing when there is none.
+          below() { { cat; echo "$to"; } | sort -uV | grep -Fx -B1 -- "$to" | grep -Fxv -- "$to" || true; }
+          stable() { awk '$1 == "false" { print substr($2, 2) }' "$hosts"; }
+          any() { awk '{ print substr($2, 2) }' "$hosts"; }
+
+          extra=
           if [[ -z $from ]]; then
-            # Published and not a prerelease, the highest host below this one: the desktop app's
-            # desktop-v* releases are not hosts.
-            from=$( { gh api "repos/$GH_REPO/releases" --paginate \
-                        --jq '.[] | select(.draft == false and .prerelease == false and (.tag_name | test("^v[0-9]"))) | .tag_name' \
-                        | sed 's/^v//'; echo "$to"; } \
-                      | sort -uV | grep -Fx -B1 -- "$to" | grep -Fxv -- "$to" || true)
+            from=$(stable | below)
+            # A prerelease is installed over the prerelease before it: people on an rc upgrade to
+            # the next rc, not through a stable, so that is the upgrade they will really do. The
+            # stable one above is still tested — one more entry on this runner, not another job.
+            # This is the rc → rc gap docs/release.md used to leave to a hand-run workflow.
+            if [[ $to == *-* ]]; then
+              extra=$(any | below)
+              [[ $extra == "$from" ]] && extra=
+            fi
           fi
           # A build older than the first seed has no data to be tested on: v0.1.0 cannot upgrade at all.
           oldest=$(ls test/upgrade-seed | sort -V | head -1)
-          if [[ -z $from ]]; then
-            why="$to has no release before it"
-          elif [[ $(printf '%s\n' "$from" "$oldest" | sort -V | head -1) != "$oldest" ]]; then
+          tooOld() { [[ $(printf '%s\n' "$1" "$oldest" | sort -V | head -1) != "$oldest" ]]; }
+          why=
+          if [[ -n $from ]] && tooOld "$from"; then
             why="$from is older than the first seed, $oldest"
             from=
+          fi
+          if [[ -n $extra ]] && tooOld "$extra"; then
+            extra=
+          fi
+          # The first seed cannot be the one that is too old, and nothing else may be left to test.
+          if [[ -z $from && -n $extra ]]; then
+            from=$extra
+            extra=
+          elif [[ -z $from && -z $why ]]; then
+            why="$to has no release before it"
           fi
           if [[ -z $from ]]; then
             echo "::notice::$why, so there is no upgrade to test."
             echo "$why: the upgrade was not tested." >> "$GITHUB_STEP_SUMMARY"
+          elif [[ -n $extra ]]; then
+            echo "Upgrading from $from to $to, and from $extra as well." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Upgrading from $from to $to." >> "$GITHUB_STEP_SUMMARY"
           fi
           linux='{"os":"ubuntu-latest","platform":"linux-x64"}'
           mac='{"os":"macos-latest","platform":"darwin-arm64"}'
           windows='{"os":"windows-latest","platform":"windows-x64","exe":".exe"}'
           case $PLATFORMS in
-            all) matrix="[$linux,$mac,$windows]" ;;
-            macos) matrix="[$mac]" ;;
-            windows) matrix="[$windows]" ;;
-            *) matrix="[$linux]" ;;
+            all) base="[$linux,$mac,$windows]" ;;
+            macos) base="[$mac]" ;;
+            windows) base="[$windows]" ;;
+            *) base="[$linux]" ;;
           esac
+          # Each entry carries the version it upgrades from, so an rc's own predecessor is one more
+          # line in the same matrix (on Linux, the only platform release.yml asks for anyway).
+          matrix=$(jq -cn --argjson base "$base" --arg from "$from" --arg extra "$extra" '
+            (if $from == "" then [] else ($base | map(. + { from: $from })) end)
+            + (if $extra == "" then []
+               else ($base | map(select(.platform == "linux-x64") | . + { from: $extra })) end)')
           {
             echo "from=$from"
             echo "to=$to"
@@ -109,7 +145,7 @@ jobs:
     env:
       BUILDS: ${{ github.workspace }}/e2e-builds
       ASSET: eta-host-${{ matrix.platform }}${{ matrix.exe }}
-      ETA_E2E_FROM: ${{ needs.versions.outputs.from }}
+      ETA_E2E_FROM: ${{ matrix.from }}
       ETA_E2E_TO: ${{ needs.versions.outputs.to }}
     steps:
       # The seed is read as it is in git: Windows runners would check out CRLF.
@@ -185,6 +221,6 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
-          name: upgrade-cross-${{ matrix.platform }}
+          name: upgrade-cross-${{ matrix.platform }}-from-${{ matrix.from }}
           path: e2e-logs
           retention-days: 14
