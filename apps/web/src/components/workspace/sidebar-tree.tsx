@@ -184,9 +184,8 @@ export function CaptainSection({ rail }: { rail: boolean }) {
     <SidebarGroup data-section="captain" aria-label={name} className="shrink-0">
       {/* No label above the card: the card says what it is. A heading that repeats the name the
           card already shows is one more line between the window's top edge and the list.
-          The card is one row, top to bottom: face, name, state, and the session's numbers all on
-          the same baseline. A block of stats under the name made this the tallest thing in the
-          sidebar, which is the one thing a section head must not be. */}
+          Two lines, one idea each: who it is and what it is doing, then what it has spent. Both
+          wanted the same row, and a sidebar is not wide enough to give them one. */}
       <div
         className={cn(
           "mx-2 mt-2 border transition-colors duration-75",
@@ -211,21 +210,22 @@ export function CaptainSection({ rail }: { rail: boolean }) {
               {face("size-10")}
             </MemberRing>
           )}
-          <span className="shrink-0 truncate text-sm font-medium">{name}</span>
-          {member === undefined ? null : (
-            <span className="shrink-0 text-xs text-faint">
-              {memberStatusLabel(member.status)}
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="min-w-0 truncate text-sm font-medium">
+                {name}
+              </span>
+              {member === undefined ? null : (
+                <span className="shrink-0 text-xs text-faint">
+                  {memberStatusLabel(member.status)}
+                </span>
+              )}
+              {count === null ? null : <span className="ml-auto">{count}</span>}
             </span>
-          )}
-          {count}
-          {/* The numbers end the same line rather than starting a new block: what is left of the
-              row is theirs, and it truncates from the tail, so a narrow sidebar costs a few digits
-              and never the name of the agent the card is about. */}
-          <MemberStats
-            sessionId={sessionId}
-            inline
-            className="ml-auto min-w-0 justify-end"
-          />
+            {/* Under the name and starting where the name starts: the numbers are the same
+                session the ring is drawn from, and they belong to that line, not to the face. */}
+            <MemberStats sessionId={sessionId} inline className="min-w-0" />
+          </span>
         </button>
       </div>
     </SidebarGroup>

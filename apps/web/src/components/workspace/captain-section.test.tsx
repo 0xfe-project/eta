@@ -162,6 +162,22 @@ describe("Captain 在左栏顶上", () => {
     expect(rate?.className).toContain("state-success");
   });
 
+  it("两行：一行是谁和它在做什么，一行是它花了多少", async () => {
+    const container = await section();
+    const card = container.querySelector(
+      '[data-section="captain"] > div',
+    ) as HTMLElement;
+    const row = card.querySelector("button")!;
+    // The face, then one column holding both lines.
+    const column = row.lastElementChild as HTMLElement;
+    expect(column.children.length).toBe(2);
+    const [head, numbers] = [...column.children] as HTMLElement[];
+    expect(head.textContent).toContain("Captain");
+    expect(head.textContent).toContain("空闲");
+    expect(numbers.textContent).toContain("12.3k");
+    expect(numbers.textContent).toContain("12 tok/s");
+  });
+
   it("头像比列表里的行大一档：环是 48px 的框", async () => {
     const container = await section();
     const ring = container.querySelector(
