@@ -274,7 +274,9 @@
     "removedLabel": "removed: "
   },
   "effort": {
-    "ultracodeHelp": "ultracode · xhigh effort + dynamic workflows for maximum thoroughness"
+    "label": "Thinking {{value}}",
+    "default": "model default",
+    "fellBack": "model default (not supported)"
   },
   "rail": {
     "replies": "Agent replies",

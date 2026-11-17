@@ -24,6 +24,13 @@ export interface ModelIdentity {
 export interface ModelConfig {
   model: ModelIdentity;
   thinkingLevel: ThinkingLevel;
+  /**
+   * The level the session was asked for, when it differs in meaning from `thinkingLevel`: a level
+   * this model does not take (the session runs on `off`, the model's default, and keeps the ask
+   * for the next model and for the run record), or `null` for no choice at all. Absent on a
+   * session that only ever had `thinkingLevel` set.
+   */
+  thinkingAsked?: ThinkingLevel | null;
   /** Names the session may call; the tool registry decides what exists. */
   activeToolNames: string[];
 }
@@ -98,6 +105,7 @@ export function defaultKernelConfig(
 export const CONFIG_PROPERTIES = [
   "model",
   "thinkingLevel",
+  "thinkingAsked",
   "activeToolNames",
   "compaction",
   "retryPolicy",

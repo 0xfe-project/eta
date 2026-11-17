@@ -902,6 +902,64 @@ describe("choosing how the next turn is generated", () => {
     await h.unload();
   });
 
+  it("keeps an agent's level the model does not take as the ask, and asks the next model again", async () => {
+    const models = fakeModels([]);
+    // Two models: one whose map names `ultra`, one that says nothing of it.
+    models.getModel = (provider, id) =>
+      provider !== "fake"
+        ? undefined
+        : ({
+            provider: "fake",
+            id,
+            api: "openai-completions",
+            reasoning: true,
+            ...(id === "astra"
+              ? { thinkingLevelMap: { ultra: "ultra", max: "max" } }
+              : {}),
+          } as never);
+    const h = await harness(models);
+    await h.load();
+    const { session } = (await h.call("sessions", "create", {
+      cwd: "/work/eta",
+    })) as { session: string };
+    const config = () =>
+      h.manager.openSessions().find((entry) => entry.meta.id === session)
+        ?.session.config;
+    await h.call("sessions", "modelSet", { session, model: "fake:sol" });
+
+    // `ultra` is a level: the plain op refuses it for a model that does not take it…
+    await expect(
+      h.call("sessions", "thinkingLevel", { session, level: "ultra" }),
+    ).rejects.toThrow(/does not support thinking level ultra/);
+    // …and an agent's level is kept as the ask while the session runs on the model's default.
+    expect(
+      await h.call("sessions", "thinkingLevel", {
+        session,
+        level: "ultra",
+        fallback: true,
+      }),
+    ).toEqual({ session, level: "off" });
+    expect(config()).toMatchObject({
+      thinkingLevel: "off",
+      thinkingAsked: "ultra",
+    });
+
+    // A model that takes it gets it; one that does not falls back again.
+    await h.call("sessions", "modelSet", { session, model: "fake:astra" });
+    expect(config()?.thinkingLevel).toBe("ultra");
+    await h.call("sessions", "modelSet", { session, model: "fake:sol" });
+    expect(config()?.thinkingLevel).toBe("off");
+
+    // No level at all: the model's default, and no ask left for the next model.
+    expect(
+      await h.call("sessions", "thinkingLevel", { session, level: null }),
+    ).toEqual({ session, level: "off" });
+    expect(config()?.thinkingAsked).toBeNull();
+    await h.call("sessions", "modelSet", { session, model: "fake:astra" });
+    expect(config()?.thinkingLevel).toBe("off");
+    await h.unload();
+  });
+
   it("takes a queued input back, and says which of the three things happened", async () => {
     const models = fakeModels([
       assistantMessage({

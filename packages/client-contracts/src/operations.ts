@@ -136,7 +136,11 @@ export interface SessionArgs {
   answer: Session & { questionId: string; response?: JsonValue };
   askAbort: Session & { questionId: string };
   modelSet: Session & { model: string };
-  thinkingLevel: Session & { level: ThinkingLevel };
+  /**
+   * `null` follows the model's default. `fallback` keeps a level the model does not take as the
+   * session's ask and runs on the model's default instead of refusing it (an agent's level).
+   */
+  thinkingLevel: Session & { level: ThinkingLevel | null; fallback?: boolean };
   /**
    * Take one queued input back out of the lane. The answer says whether it was still there: a run
    * drains the queue at tool boundaries, so "the chip is gone" proves nothing and the caller has to

@@ -8,6 +8,7 @@ import type {
 import type { Model } from "@/queries/providers";
 import { queryOptions, useQueries, useQuery } from "@tanstack/react-query";
 import { translate } from "@/lib/i18n";
+import { declaredLevels } from "@/lib/thinking";
 import { getWire } from "@/lib/wire";
 import { useMachines } from "@/queries/projects";
 import { useModels } from "@/queries/providers";
@@ -117,6 +118,7 @@ function runtimeModelsOf(info: AgentRuntimeInfo): Model[] {
     providerName: info.label,
     name: model.name,
     available: info.status === "available",
+    thinking: declaredLevels({ efforts: model.efforts }),
   }));
 }
 

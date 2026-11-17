@@ -245,7 +245,7 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
               onOpenProviders={openProviders}
               external={external}
             />
-            <ThinkingField form={form} />
+            <ThinkingField form={form} models={models} />
           </>
         ) : (
           <>

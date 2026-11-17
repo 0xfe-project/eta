@@ -8,6 +8,7 @@ import type {
   ProviderInput,
   ProviderRefreshResult,
   ProvidersView,
+  ThinkingLevel,
 } from "@eta/client-contracts";
 import {
   keyMissing,
@@ -18,6 +19,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { translate } from "@/lib/i18n";
 import { llmProblemText } from "@/lib/llm-problem";
+import { declaredLevels } from "@/lib/thinking";
 import { getWire, WireError } from "@/lib/wire";
 import { NEEDS_ACTION, useLlm } from "@/queries/llm";
 import {
@@ -82,6 +84,8 @@ export interface Model {
   unavailableReason?: string | undefined;
   /** Its provider's catalog no longer lists it: it may stop working. */
   delisted?: boolean | undefined;
+  /** The thinking levels it declares (`declaredLevels`); undefined when they are not known. */
+  thinking?: readonly ThinkingLevel[] | undefined;
 }
 
 export function modelsOf(view: ProvidersView): Model[] {
@@ -97,6 +101,10 @@ export function modelsOf(view: ProvidersView): Model[] {
         contextWindow: model.contextWindow,
         available: !missing,
         ...(model.delisted === true ? { delisted: true } : {}),
+        thinking: declaredLevels({
+          efforts: model.reasoningEfforts,
+          thinkingMode: model.thinkingMode,
+        }),
       }),
     );
   });

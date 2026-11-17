@@ -28,7 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { listSeparator } from "@/lib/i18n";
 import { llmProblemText } from "@/lib/llm-problem";
-import { THINKING_LEVELS } from "@/lib/thinking";
+import { levelsFor } from "@/lib/thinking";
 import { cn } from "@/lib/utils";
 import { useLlm } from "@/queries/llm";
 import {
@@ -47,12 +47,12 @@ import { useAgents } from "./use-agents";
 // Turning a model off takes it out of `config.json`; it stays in the table, and a refreshed list
 // offers it again.
 
-/** The levels a model can be set to: the ones it declares, else every level the pickers offer. */
-function levelsOf(model: EtaModelConfig): readonly string[] {
-  const efforts = model.reasoningEfforts ?? [];
-  if (efforts.length === 0) return THINKING_LEVELS;
-  return [...(model.thinkingMode === "both" ? ["off"] : []), ...efforts];
-}
+/** The levels a model can be set to: the ones it declares, else the levels every model is offered. */
+const levelsOf = (model: EtaModelConfig): readonly string[] =>
+  levelsFor({
+    efforts: model.reasoningEfforts,
+    thinkingMode: model.thinkingMode,
+  });
 
 function Th({
   children,

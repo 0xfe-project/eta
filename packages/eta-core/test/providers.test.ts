@@ -1,7 +1,14 @@
 import type { AssistantMessage, Model } from "@earendil-works/pi-ai";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { THINKING_LEVELS, thinkingLevelsFor } from "../src/kernel/providers";
+import {
+  askedThinking,
+  kernelThinking,
+  providerReasoning,
+  reasoningOption,
+  THINKING_LEVELS,
+  thinkingLevelsFor,
+} from "../src/kernel/providers";
 
 describe("models seam", () => {
   it("accepts a scripted fake and replays it in order, recording calls", async () => {
@@ -140,6 +147,61 @@ describe("thinking levels a model accepts", () => {
       thinkingLevelsFor(
         model({ thinkingLevelMap: { minimal: "low", max: "high" } }),
       ),
-    ).toEqual([...THINKING_LEVELS]);
+    ).toEqual(THINKING_LEVELS.filter((level) => level !== "ultra"));
+  });
+
+  it("has `ultra` in its vocabulary, after `max`", () => {
+    expect(THINKING_LEVELS.slice(-2)).toEqual(["max", "ultra"]);
+  });
+
+  it("offers `ultra` only to a model whose map names it", () => {
+    // No provider map mentions it by default, so "unmentioned" cannot mean "supported" here.
+    expect(thinkingLevelsFor(model({}))).not.toContain("ultra");
+    expect(
+      thinkingLevelsFor(model({ thinkingLevelMap: { max: "max" } })),
+    ).not.toContain("ultra");
+    expect(
+      thinkingLevelsFor(model({ thinkingLevelMap: { ultra: null } })),
+    ).not.toContain("ultra");
+    expect(
+      thinkingLevelsFor(model({ thinkingLevelMap: { ultra: "ultra" } })),
+    ).toContain("ultra");
+    // Nothing known about the model: every level, passed as it is.
+    expect(thinkingLevelsFor(undefined)).toContain("ultra");
+  });
+});
+
+describe("what a provider request carries", () => {
+  it("sends no reasoning at `off`, nor at a level pi-ai has no word for", () => {
+    expect(providerReasoning("off")).toBeUndefined();
+    expect(providerReasoning("ultra")).toBeUndefined();
+    expect(reasoningOption("ultra")).toEqual({});
+    expect(reasoningOption("max")).toEqual({ reasoning: "max" });
+    expect(providerReasoning("high")).toBe("high");
+  });
+
+  it("records what a run asked for and what it sent", () => {
+    // Asked and taken.
+    expect(
+      kernelThinking({ thinkingLevel: "high", thinkingAsked: "high" }),
+    ).toEqual({ asked: "high", sent: "high" });
+    // Asked for a level the model does not take: the session runs on `off`, the default.
+    expect(
+      kernelThinking({ thinkingLevel: "off", thinkingAsked: "ultra" }),
+    ).toEqual({ asked: "ultra", sent: null });
+    // Nothing asked.
+    expect(
+      kernelThinking({ thinkingLevel: "off", thinkingAsked: null }),
+    ).toEqual({ asked: null, sent: null });
+    // `off` chosen is `off` sent (the kernel's spelling of it).
+    expect(
+      kernelThinking({ thinkingLevel: "off", thinkingAsked: "off" }),
+    ).toEqual({ asked: "off", sent: "off" });
+    // A session from before the ask was kept: its level is the ask, `off` is no choice.
+    expect(kernelThinking({ thinkingLevel: "medium" })).toEqual({
+      asked: "medium",
+      sent: "medium",
+    });
+    expect(askedThinking({ thinkingLevel: "off" })).toBeNull();
   });
 });

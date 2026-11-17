@@ -79,7 +79,10 @@
   },
   "thinking": {
     "label": "Thinking level",
-    "default": "Model default"
+    "default": "Model default",
+    "unsupported": "The current model does not take this level; it runs on the model's default",
+    "unknown": "This model's levels are not known right now; the level is passed as chosen",
+    "reset": "The new model does not take {{level}}; set back to the model's default."
   },
   "persona": {
     "default": "Project default",

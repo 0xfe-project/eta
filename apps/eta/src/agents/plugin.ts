@@ -177,8 +177,8 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
               ...(agent.model !== null && agent.model !== before.model
                 ? { model: agent.model }
                 : {}),
-              ...(agent.thinkingLevel !== null &&
-              agent.thinkingLevel !== before.thinkingLevel
+              // Back to the model's default is a change too: the sessions drop the old level.
+              ...(agent.thinkingLevel !== before.thinkingLevel
                 ? { thinkingLevel: agent.thinkingLevel }
                 : {}),
             });

@@ -36,6 +36,7 @@ import {
   STOP_STREAM,
 } from "./assistant";
 import { classifyFailure, describeFailure } from "./failure";
+import { reasoningOption } from "./providers";
 import {
   normalizedRetryPolicy,
   retryDelayMs,
@@ -169,10 +170,9 @@ export async function generateWithRetry(
       {
         ...options.streamOptions,
         signal: attemptSignal,
-        // "off" is the kernel's spelling for "no reasoning field at all".
-        ...(options.thinkingLevel === "off"
-          ? {}
-          : { reasoning: options.thinkingLevel }),
+        // "off" is the kernel's spelling for "no reasoning field at all"; a level the provider
+        // layer has no word for is not sent either (`providerReasoning`).
+        ...reasoningOption(options.thinkingLevel),
       },
     );
     let interrupt = undefined as GenerationInterrupt | undefined;

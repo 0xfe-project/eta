@@ -274,7 +274,7 @@ function AgentEditorForm({
                 onOpenProviders={openProviders}
                 external={runtime !== "eta"}
               />
-              <ThinkingField form={form} />
+              <ThinkingField form={form} models={models} />
               {/* A persona card only reaches eta's own runtime: an external one keeps its own identity, so
                   the row is left out there. The value stays in the form for the way back. */}
               {runtime === "eta" ? <PersonaField form={form} /> : null}

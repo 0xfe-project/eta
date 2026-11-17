@@ -32,6 +32,7 @@ const THINKING_LEVEL_SET = {
   high: true,
   xhigh: true,
   max: true,
+  ultra: true,
 } satisfies Record<ThinkingLevel, true>;
 
 /** Every thinking level, in the host's order. */

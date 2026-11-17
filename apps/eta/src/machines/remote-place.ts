@@ -227,6 +227,7 @@ export class RemotePlace implements SessionPlace {
       await this.#deps.forward("thinkingLevel", {
         session: sessionId,
         level: settings.thinkingLevel,
+        fallback: true,
       });
   }
 

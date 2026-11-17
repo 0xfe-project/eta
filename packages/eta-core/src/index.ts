@@ -66,9 +66,15 @@ export {
 } from "./kernel/kernel";
 export { PersonaService } from "./kernel/persona";
 export {
+  askedThinking,
   type KernelModels,
+  kernelThinking,
+  providerReasoning,
+  type RecordedAssistantMessage,
+  recordThinking,
   THINKING_LEVELS,
   thinkingLevelsFor,
+  type ThinkingRecord,
 } from "./kernel/providers";
 export {
   type AgentRetryPolicy,

@@ -582,7 +582,9 @@ export class DaemonNode {
       args.thinkingLevel === undefined
         ? Promise.resolve()
         : sessions
-            .thinkingLevel(id, args.thinkingLevel as ThinkingLevel)
+            .thinkingLevel(id, args.thinkingLevel as ThinkingLevel, {
+              fallback: true,
+            })
             .catch((error: unknown) =>
               this.#warn(`[eta-daemon] ${messageOf(error)}`),
             );

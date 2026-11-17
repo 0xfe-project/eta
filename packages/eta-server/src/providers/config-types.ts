@@ -27,6 +27,9 @@ export const MODEL_THINKING_LEVELS = [
   "max",
 ] as const satisfies readonly ThinkingLevel[];
 
+/** The effort levels a configured model can name: eta's own models never take `ultra`. */
+type ModelEffort = Exclude<(typeof MODEL_THINKING_LEVELS)[number], "off">;
+
 export type ModelInput = "text" | "image";
 
 /** Provider-owned capabilities. Missing metadata is unknown, not a negative claim. */
@@ -37,8 +40,8 @@ export interface ModelCapabilities {
   input?: ModelInput[];
   reasoning?: boolean;
   thinkingMode?: "only" | "both" | "no";
-  reasoningEfforts?: Exclude<ThinkingLevel, "off">[];
-  providerDefaultEffort?: Exclude<ThinkingLevel, "off">;
+  reasoningEfforts?: ModelEffort[];
+  providerDefaultEffort?: ModelEffort;
 }
 
 /** A model as the config file holds it: capabilities plus the user's own choices. */
@@ -51,7 +54,7 @@ export interface EtaModelConfig extends ModelCapabilities {
   /** No longer listed by the provider's catalog: kept so an agent using it hears about it. */
   delisted?: boolean;
   /** User preference; omission follows the provider default. */
-  defaultThinking?: ThinkingLevel;
+  defaultThinking?: (typeof MODEL_THINKING_LEVELS)[number];
   /** Manual corrections for custom endpoints, kept across discovery refreshes. */
   overrides?: ModelCapabilities;
 }

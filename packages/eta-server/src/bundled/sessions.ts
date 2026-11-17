@@ -385,11 +385,15 @@ export class SessionsService extends Service implements SessionsApi {
     if (resolved === undefined) throw new Error(`model_unavailable: ${model}`);
     // A model that cannot think cannot be asked to: clamp instead of sending a level it does
     // not have (and keep the level otherwise — the choice was the user's, not the model's).
+    // A level the session was asked for and kept (one the old model did not take, or none)
+    // is asked of the new model again.
     const supported = thinkingLevelsFor(resolved);
-    const current =
-      attached.managed.session.kernel.config.read("thinkingLevel");
-    const level: ThinkingLevel = supported.includes(current) ? current : "off";
-    attached.managed.session.kernel.config.update({
+    const config = attached.managed.session.kernel.config;
+    const current = config.read("thinkingLevel");
+    const asked = config.read("thinkingAsked");
+    const wanted = asked === undefined ? current : (asked ?? "off");
+    const level: ThinkingLevel = supported.includes(wanted) ? wanted : "off";
+    config.update({
       model: identity,
       ...(level === current ? {} : { thinkingLevel: level }),
     });
@@ -399,27 +403,38 @@ export class SessionsService extends Service implements SessionsApi {
     return { model: formatModelId(identity), thinkingLevel: level };
   }
 
-  /** How much thinking the model should do — checked against what this model accepts. */
+  /**
+   * How much thinking the model should do — checked against what this model accepts.
+   *
+   * `null` is no choice: the session follows the model's default. With `fallback` (an agent's
+   * level, which was saved without knowing what the model takes) a level the model does not
+   * accept is kept as the ask and the session runs on the model's default; without it, such a
+   * level is refused. Answers the level the session now runs on.
+   */
   async thinkingLevel(
     id: string,
-    level: ThinkingLevel,
+    level: ThinkingLevel | null,
+    options: { fallback?: boolean } = {},
   ): Promise<ThinkingLevel> {
     const attached = await this.open(id);
-    const identity = attached.managed.session.kernel.config.read("model");
+    const config = attached.managed.session.kernel.config;
+    const identity = config.read("model");
     const supported = thinkingLevelsFor(
       attached.managed.session.models.getModel(
         identity.provider,
         identity.modelId,
       ),
     );
-    if (!supported.includes(level)) {
+    if (level !== null && !supported.includes(level) && !options.fallback) {
       throw new Error(
         `${identity.provider}:${identity.modelId} does not support thinking level ${level}`,
       );
     }
-    attached.managed.session.kernel.config.update({ thinkingLevel: level });
+    const effective: ThinkingLevel =
+      level !== null && supported.includes(level) ? level : "off";
+    config.update({ thinkingLevel: effective, thinkingAsked: level });
     this.wire.pushNow(`sessions.${id}`);
-    return level;
+    return effective;
   }
 
   /**
@@ -1095,7 +1110,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
         );
         registrations.push(
           routed("thinkingLevel", async (call) => {
-            const { session, level } = (call.args ?? {}) as Partial<
+            const { session, level, fallback } = (call.args ?? {}) as Partial<
               SessionArgs["thinkingLevel"]
             >;
             if (session === undefined || level === undefined) {
@@ -1103,12 +1118,14 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
                 "sessions.thinkingLevel needs a session and a level",
               );
             }
-            if (!THINKING_LEVELS.includes(level))
+            if (level !== null && !THINKING_LEVELS.includes(level))
               throw new Error(`unknown thinking level: ${level}`);
             return {
               result: {
                 session,
-                level: await service.thinkingLevel(session, level),
+                level: await service.thinkingLevel(session, level, {
+                  fallback: fallback === true,
+                }),
               },
             };
           }),

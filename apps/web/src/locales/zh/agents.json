@@ -79,7 +79,10 @@
   },
   "thinking": {
     "label": "思考档",
-    "default": "跟随模型默认"
+    "default": "跟随模型默认",
+    "unsupported": "当前模型不支持，按模型默认运行",
+    "unknown": "暂时拿不到这个模型的能力，会按你选的原样传",
+    "reset": "新模型不支持 {{level}}，已改回跟随模型默认。"
   },
   "persona": {
     "default": "项目默认",

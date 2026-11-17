@@ -512,6 +512,10 @@ export class AcpDelegate implements RunDelegate {
     const sessionId = this.#native;
     if (sessionId === undefined) return;
     const config = context.config();
+    const effort = effortFor(
+      config.thinkingLevel,
+      this.#choices.effort?.values.map((item) => item.value) ?? [],
+    );
     const wanted: [choice: AcpChoices["model"], value: string | undefined][] = [
       [
         this.#choices.model,
@@ -519,13 +523,7 @@ export class AcpDelegate implements RunDelegate {
           ? config.model.modelId
           : undefined,
       ],
-      [
-        this.#choices.effort,
-        effortFor(
-          config.thinkingLevel,
-          this.#choices.effort?.values.map((item) => item.value) ?? [],
-        ),
-      ],
+      [this.#choices.effort, effort],
     ];
     for (const [choice, value] of wanted) {
       if (choice === undefined || value === undefined) continue;
@@ -542,6 +540,10 @@ export class AcpDelegate implements RunDelegate {
         );
       }
     }
+    // Set only where the agent offers the choice; otherwise nothing was asked of it.
+    context.recordThinking(
+      this.#choices.effort === undefined ? undefined : effort,
+    );
   }
 
   #blocks(opened: Opened, input: Input): ContentBlock[] {
