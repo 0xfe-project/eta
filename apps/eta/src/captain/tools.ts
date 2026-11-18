@@ -2,6 +2,9 @@ import type {
   BoardTaskDetail,
   CaptainPromptKind,
   InboxResponse,
+  LlmAccounts,
+  LlmModel,
+  ProvidersView,
 } from "@eta/client-contracts";
 import type { KernelTool } from "@eta/core";
 import type { AssembledServer, SessionMeta } from "@eta/server";
@@ -17,7 +20,13 @@ import type { TaskRecord, TaskStore } from "../tasks/store";
 import type { CaptainMemory } from "./memory";
 import type { CaptainService } from "./service";
 import { readFile } from "node:fs/promises";
-import { AGENT_RUNTIMES, isAgentRuntime } from "@eta/client-contracts";
+import {
+  AGENT_RUNTIMES,
+  isAgentRuntime,
+  keyMissing,
+  LLM_PROVIDER_ID,
+  providerLabel,
+} from "@eta/client-contracts";
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
 import { interactionId } from "../inbox/store";
@@ -445,6 +454,22 @@ export function captainSessionTools(
       },
     });
 
+    const listModels = defineTool({
+      name: "list_models",
+      description:
+        "List every configured provider model and gateway subscription model (llm:<id>) with its id (provider:modelId), name, providerName, and availability. Call this before ask_user when offering model choices for propose_agent.",
+      parameters: Type.Object({}),
+      execute() {
+        try {
+          return text(json(availableModels(deps.server())));
+        } catch (error) {
+          return toolError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    });
+
     const listPersonaCards = defineTool({
       name: "list_persona_cards",
       description:
@@ -466,7 +491,7 @@ export function captainSessionTools(
       description: [
         "Propose a new agent. Nothing is created yet: the proposal appears as a card in this conversation, and only the user's confirmation creates the agent, its workspace and its first instructions and persona versions. Every proposal needs that confirmation.",
         "Before proposing, call list_persona_cards and pick the single card that fits the work best: persona must be one of those ids. Never write a card and never invent one — the agent wears the card you name.",
-        "model has no default: ask the user which model the agent should run with ask_user, offering the configured models, and propose the one they choose.",
+        "model has no default: call list_models first, then ask the user which model the agent should run with ask_user, offering the available models, and propose the one they choose.",
         "name must not be the name of an agent that already exists. purpose is one sentence: what the agent is responsible for, and when it should be retired. instructions is what it is told to do, and cannot be empty.",
         "Several agents can be proposed in one turn; each gets its own card. Do not wait for the decision: once everything is proposed, end your turn. When the user decides, you are told the outcome in that conversation as a message that starts your next turn. Only a proposal you made is reported back — an agent the user creates in the agent dialog is not yours to track.",
       ].join(" "),
@@ -1352,6 +1377,7 @@ export function captainSessionTools(
       readAttachment,
       assign,
       proposeGroup,
+      listModels,
       listPersonaCards,
       proposeAgent,
       controlTask,
@@ -1378,6 +1404,43 @@ export function captainSessionTools(
       updateRoutine,
     ].map((tool) => toKernelTool(tool, () => undefined)) as KernelTool[];
   };
+}
+
+export function availableModels(server: AssembledServer | undefined) {
+  if (server === undefined) return [];
+  const providers = server.wire.snapshot("providers")?.sections.config as
+    | ProvidersView
+    | undefined;
+  const configured = (providers?.providers ?? []).flatMap((provider) => {
+    const providerName = providerLabel(provider);
+    const missing = keyMissing(provider);
+    return provider.models.map((model) => ({
+      id: `${provider.id}:${model.id}`,
+      provider: provider.id,
+      providerName,
+      name: model.name ?? model.id,
+      available: !missing,
+    }));
+  });
+  const llmSections = server.wire.snapshot("llm")?.sections;
+  const accounts = llmSections?.accounts as LlmAccounts | undefined;
+  const connectorNames = new Map(
+    accounts?.connectors.map((connector) => [connector.id, connector.name]) ??
+      [],
+  );
+  const llmModels = ((llmSections?.models as LlmModel[] | undefined) ?? []).map(
+    (model) => ({
+      id: `${LLM_PROVIDER_ID}:${model.id}`,
+      provider: LLM_PROVIDER_ID,
+      providerName: connectorNames.get(model.connector) ?? model.connector,
+      name: model.name,
+      available: model.available,
+      ...(model.reason === undefined
+        ? {}
+        : { unavailableReason: model.reason.code }),
+    }),
+  );
+  return [...configured, ...llmModels];
 }
 
 function assignmentText(result: {
