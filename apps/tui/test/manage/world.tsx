@@ -111,8 +111,9 @@ export async function manageWorld(
   respond: Respond = () => {
     throw new Error("nobody should be asked");
   },
+  overrides: Parameters<typeof hostWorld>[1] = {},
 ) {
-  const world = await hostWorld(respond);
+  const world = await hostWorld(respond, overrides);
   // Followed only once a test reads them: the interface has to follow what it needs itself.
   const followed = new Set<string>();
   const follow = (target: string) => {

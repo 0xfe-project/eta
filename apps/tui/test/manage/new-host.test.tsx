@@ -1,31 +1,25 @@
 /**
- * `/new` on a real host: where (an existing project, a typed path, or a directory browsed to), who
- * (members and steward), and starting (the project made first when there is none, then the conversation, the
- * new tab opened). Directory listings come from a temporary tree (see `directories.ts`); the
- * projects and conversations are the host's.
+ * `/new` on a real host: where (a directory on a machine, found by the shared places flow:
+ * searched, browsed, cloned or made), who (members and steward), and starting (the project made
+ * first when there is none, then the conversation, the new tab opened). The primary's places are
+ * answered by the real host from a temporary home; the projects and conversations are the host's.
  */
 import type { ProjectView } from "@eta/client-contracts";
 import type { RenderedApp } from "../ui-support/app";
-import { mkdir } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { chmod, mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { promisify } from "node:util";
+import { Places } from "@eta/places";
 import { describe, expect, it } from "vitest";
 import { screenShows } from "../conversation/view-host-world";
 import { tempDir, until } from "../support/temp";
 import { KEYS, plain, realDelay } from "../ui-support/render";
-import { listDirectories } from "./directories";
 import { askedStarting, enter, manageWorld, statusLine, tabBar } from "./world";
 
 const TITLE = "New conversation";
-
-/**
- * `/new` lists the most recently updated project first. Two projects made in one millisecond tie,
- * and which leads is then the host's order (by name, and the names are random temp directories):
- * a test that needs one to be newer waits for the clock to move first.
- */
-async function nextMillisecond(): Promise<void> {
-  const now = Date.now();
-  while (Date.now() === now) await new Promise((r) => setTimeout(r, 1));
-}
+const exec = promisify(execFile);
 
 /** Whether the layer's title line shows; the home screen's `/new` hint carries the same words. */
 function showsLayer(screen: string): boolean {
@@ -45,21 +39,6 @@ function lineWith(r: RenderedApp, text: string): string {
   );
 }
 
-/** The layer's row that starts with `name`, past the cursor mark. */
-function rowOf(r: Pick<RenderedApp, "lastFrame">, name: string): string {
-  return (
-    plain(r)
-      .split("\n")
-      .map((line) =>
-        line
-          .replace(/[│┌┐└┘─]/g, "")
-          .replace(/^\s*›?\s*/, "")
-          .trimEnd(),
-      )
-      .find((line) => line === name || line.startsWith(`${name} `)) ?? ""
-  );
-}
-
 /** The layer's text, from its title down. */
 function layer(r: RenderedApp): string {
   const lines = plain(r).split("\n");
@@ -67,33 +46,72 @@ function layer(r: RenderedApp): string {
   return start === -1 ? "" : lines.slice(start).join("\n");
 }
 
+/** The row the cursor is on. */
+function cursorRow(r: RenderedApp): string {
+  return (
+    plain(r)
+      .split("\n")
+      .map((line) => line.replace(/[│┌┐└┘─]/g, "").trim())
+      // The box's line comes first and starts the same way: the list's is the last.
+      .filter((line) => line.startsWith("› "))
+      .at(-1)
+      ?.slice(2)
+      .trim() ?? ""
+  );
+}
+
 /**
- * A home with `work/` in it: `app` (a git repository), `lib`, `.secret` (hidden) and `proj` (a
- * project on the host already).
+ * A host whose primary answers places from a temporary home with `work/` in it: `app` (a git
+ * repository), `lib`, `.secret` (hidden) and `proj` (a project on the host already).
  */
-async function tree(world: Awaited<ReturnType<typeof manageWorld>>) {
-  const home = await tempDir("eta-tui-home-");
+async function placesWorld() {
+  const home = await realpath(await tempDir("eta-tui-home-"));
   const work = join(home, "work");
   for (const dir of ["app/.git", "lib", ".secret", "proj"])
     await mkdir(join(work, dir), { recursive: true });
+  const w = await manageWorld(undefined, {
+    places: new Places({ home, os: "linux" }),
+  });
   const proj = (
-    await world.raw.call<{ project: ProjectView }>("projects", "create", {
+    await w.raw.call<{ project: ProjectView }>("projects", "create", {
       path: join(work, "proj"),
     })
   ).project;
-  world.answerOn(
-    "projects.directories",
-    listDirectories({ home, projects: new Map([[proj.path, proj.id]]) }),
-  );
-  return { home, work, proj };
+  return { w, home, work, proj };
 }
 
-/** From the first step, opens browsing: its line comes after the projects and "Type a path…". */
-async function openBrowsing(r: RenderedApp, projects: number) {
-  await screenShows(r, "Browse a directory…");
-  for (let i = 0; i <= projects; i += 1) await r.press(KEYS.down);
+/** From the ways, into a way: Search, Browse, GitHub and New are the first to fourth lines. */
+async function way(r: RenderedApp, name: string) {
+  await screenShows(r, "How do you want to add it?");
+  // Until the machine has said what it can do, the ways that need it are closed.
+  await screenShows(
+    r,
+    (screen) =>
+      screen.includes("New directory") &&
+      !screen.includes("checking this machine"),
+  );
+  const order = [
+    "Search directories",
+    "Browse…",
+    "Clone from GitHub",
+    "New directory",
+  ];
+  for (let i = 0; i < order.indexOf(name); i += 1) await r.press(KEYS.down);
   await r.press(KEYS.enter);
-  await screenShows(r, "Use this directory");
+}
+
+/** Types into the page's box and waits for a row that shows `expected`, then puts the cursor on it. */
+async function search(r: RenderedApp, text: string, expected: string) {
+  await r.type(text);
+  await screenShows(r, (screen) =>
+    screen
+      .split("\n")
+      .slice(4)
+      .some((line) => line.replace(/[│›]/g, "").trim().startsWith(expected)),
+  );
+  for (let i = 0; i < 10 && !cursorRow(r).startsWith(expected); i += 1)
+    await r.press(KEYS.down);
+  expect(cursorRow(r).startsWith(expected), plain(r)).toBe(true);
 }
 
 /** The conversations the host has now beyond those listed in `before`. */
@@ -115,83 +133,77 @@ describe("/new with no agents", () => {
   }, 60_000);
 });
 
-describe("/new, first step", () => {
-  it("lists the projects a conversation can start in, newest first, then browsing", async () => {
-    const w = await manageWorld();
-    const ada = await w.agent("Ada");
-    const older = await w.project();
-    await nextMillisecond();
-    const newer = await w.project();
-    await nextMillisecond();
-    const archived = await w.project();
-    await w.raw.call("projects", "update", {
-      projectId: archived.id,
-      archived: true,
-    });
+describe("/new, the ways", () => {
+  it("starts on the four ways when there is one machine, each saying what it can do", async () => {
+    const { w } = await placesWorld();
+    await w.agent("Ada");
     const r = await w.showHome();
     await w.agentsArrived(1);
     await enter(r, "/new");
-    await screenShows(r, newer.name);
+    await screenShows(r, "Clone from GitHub");
     const text = layer(r);
-    expect(text).toContain(older.name);
-    expect(text).toContain(newer.path);
-    expect(text.indexOf(newer.name)).toBeLessThan(text.indexOf(older.name));
-    expect(text.indexOf(older.name)).toBeLessThan(text.indexOf("Type a path…"));
-    expect(text.indexOf("Type a path…")).toBeLessThan(
-      text.indexOf("Browse a directory…"),
+    expect(text).toContain("How do you want to add it?");
+    expect(text.indexOf("Search directories")).toBeLessThan(
+      text.indexOf("Browse…"),
     );
-    expect(text).not.toContain(archived.name);
-    // Ada's workspace is a project of the agent_home kind: not offered.
-    expect(text).not.toContain(ada.home);
+    expect(text.indexOf("Browse…")).toBeLessThan(
+      text.indexOf("Clone from GitHub"),
+    );
+    expect(text.indexOf("Clone from GitHub")).toBeLessThan(
+      text.indexOf("New directory"),
+    );
+    expect(cursorRow(r)).toBe("Search directories");
   }, 60_000);
 
-  it("starts in the project chosen with the only agent, without asking who", async () => {
-    const w = await manageWorld();
-    const ada = await w.agent("Ada");
-    await w.project();
-    await nextMillisecond();
-    const newer = await w.project();
+  it("chooses a machine first when there are several, greys an SSH one out with the reason", async () => {
+    const { w, proj } = await placesWorld();
+    await w.agent("Ada");
+    w.host.db
+      .query(
+        "INSERT INTO machine (id, kind, name, status, home, os, created_at) VALUES ('m-nas', 'ssh', 'nas', 'online', '/home/nas', 'linux', 1)",
+      )
+      .run();
+    // A machine put in by hand is told about with the next change the host makes.
+    await w.raw.call("projects", "update", {
+      projectId: proj.id,
+      name: "proj",
+    });
+    await until(() => w.machines().length === 2, 10_000, "the SSH machine");
     const r = await w.showHome();
     await w.agentsArrived(1);
-    const before = w.conversations().length;
     await enter(r, "/new");
-    await screenShows(r, newer.name);
+    await screenShows(r, "Choose a machine");
+    await screenShows(r, "nas");
+    expect(lineWith(r, "nas")).toContain("SSH machines are not supported yet");
+    // The cursor steps over it.
+    await r.press(KEYS.down);
+    expect(cursorRow(r)).not.toContain("nas");
     await r.press(KEYS.enter);
-    await until(
-      () => newConversations(w, before).length === 1,
-      10_000,
-      "the new conversation",
-    );
-    const made = newConversations(w, before)[0]!;
-    expect(made.projectId).toBe(newer.id);
-    expect(made.participants.map((p) => p.agentId)).toEqual([ada.id]);
-    // A tab's name is cut at 20 columns.
-    await screenShows(r, `1:${made.name.slice(0, 10)}`);
+    await screenShows(r, "How do you want to add it?");
+    await r.press(KEYS.escape);
+    await screenShows(r, "Choose a machine");
+    await r.press(KEYS.escape);
+    await realDelay(100);
     expect(showsLayer(plain(r))).toBe(false);
-    expect(statusLine(r)).toContain(`Started ${made.name}`);
-    expect(askedStarting(w.wire, "projects.create")).toEqual([]);
-    expect(askedStarting(w.wire, "conversations.create")).toEqual([
-      {
-        op: "conversations.create",
-        args: { projectId: newer.id, agentIds: [ada.id], stewardId: ada.id },
-      },
-    ]);
   }, 60_000);
 
-  it("closes on Esc and leaves nothing on the host", async () => {
-    const w = await manageWorld();
+  it("closes on Esc a page at a time and leaves nothing on the host", async () => {
+    const { w } = await placesWorld();
     await w.agent("Ada");
     await w.agent("Ben");
-    await w.project();
     const r = await w.showHome();
     await w.agentsArrived(2);
     const before = w.conversations().length;
     await enter(r, "/new");
-    await screenShows(r, "Browse a directory…");
+    await way(r, "Search directories");
+    await search(r, "proj", "~/work/proj");
     await r.press(KEYS.enter); // into the second step
     await screenShows(r, "steward");
-    await r.press(KEYS.escape); // back to the first
-    await screenShows(r, "Browse a directory…");
+    await r.press(KEYS.escape); // back to the first, as it was
+    await screenShows(r, "Search by name, or type a path");
+    expect(lineWith(r, "› proj")).toContain("proj");
+    await r.press(KEYS.escape);
+    await screenShows(r, "How do you want to add it?");
     await r.press(KEYS.escape);
     await realDelay(100);
     expect(showsLayer(plain(r))).toBe(false);
@@ -201,191 +213,28 @@ describe("/new, first step", () => {
   }, 60_000);
 });
 
-describe("/new, browsing", () => {
-  it("lists the visible subdirectories with their marks, goes in and back up", async () => {
-    const w = await manageWorld();
-    await w.agent("Ada");
-    const r = await w.showHome();
-    await w.agentsArrived(1);
-    const { work, home } = await tree(w);
-    await enter(r, "/new");
-    await openBrowsing(r, 1); // proj is the one project
-    await r.press(KEYS.down); // work, the only directory at home
-    await r.press(KEYS.enter);
-    await screenShows(
-      r,
-      (screen) => rowOf({ lastFrame: () => screen }, "lib") === "lib",
-    );
-    const text = layer(r);
-    expect(text).toContain(work);
-    expect(rowOf(r, "app")).toMatch(/^app\s+git$/);
-    expect(rowOf(r, "lib")).toBe("lib");
-    expect(rowOf(r, "proj")).toMatch(/^proj\s+project$/);
-    expect(text).not.toContain(".secret");
-    expect(text.indexOf("Use this directory")).toBeLessThan(
-      text.indexOf("app"),
-    );
-
-    await r.press(KEYS.down);
-    await r.press(KEYS.down); // lib
-    await r.press(KEYS.enter);
-    await screenShows(r, join(work, "lib"));
-    await r.press(KEYS.left);
-    await screenShows(
-      r,
-      (screen) => screen.includes(work) && !screen.includes(join(work, "lib")),
-    );
-    await r.press(KEYS.backspace);
-    await screenShows(
-      r,
-      (screen) => rowOf({ lastFrame: () => screen }, "work") === "work",
-    );
-    expect(
-      askedStarting(w.wire, "projects.directories").map((a) => a.args),
-    ).toEqual([
-      {},
-      { path: work },
-      { path: join(work, "lib") },
-      { path: work },
-      { path: home },
-    ]);
-  }, 60_000);
-
-  it("says why a listing failed and that a path can be typed instead", async () => {
-    const w = await manageWorld();
-    await w.agent("Ada");
-    const r = await w.showHome();
-    await w.agentsArrived(1);
-    const home = join(await tempDir("eta-tui-gone-"), "nowhere");
-    w.answerOn("projects.directories", listDirectories({ home }));
-    await enter(r, "/new");
-    await screenShows(r, "Browse a directory…");
-    await r.press(KEYS.down);
-    await r.press(KEYS.enter);
-    await screenShows(r, "You can type a path instead");
-    expect(lineWith(r, "You can type a path instead")).toContain(
-      "No such directory: ~",
-    );
-  }, 60_000);
-
-  it("does not go above a root", async () => {
-    const w = await manageWorld();
-    await w.agent("Ada");
-    const r = await w.showHome();
-    await w.agentsArrived(1);
-    const root = join(await tempDir("eta-tui-root-"), "x");
-    await mkdir(root);
-    w.answerOn("projects.directories", async () => ({
-      path: root,
-      home: root,
-      parent: null,
-      entries: [],
-      truncated: false,
-    }));
-    await enter(r, "/new");
-    await openBrowsing(r, 0);
-    const asked = askedStarting(w.wire, "projects.directories").length;
-    await r.press(KEYS.left);
-    await realDelay(100);
-    expect(askedStarting(w.wire, "projects.directories")).toHaveLength(asked);
-  }, 60_000);
-
-  it("says when the listing was cut short", async () => {
-    const w = await manageWorld();
-    await w.agent("Ada");
-    const r = await w.showHome();
-    await w.agentsArrived(1);
-    const home = await tempDir("eta-tui-home-");
-    for (const dir of ["a", "b", "c"]) await mkdir(join(home, dir));
-    w.answerOn("projects.directories", listDirectories({ home, limit: 2 }));
-    await enter(r, "/new");
-    await openBrowsing(r, 0);
-    await screenShows(r, "More directories are not listed");
-    expect(layer(r)).not.toMatch(/\bc\b/);
-  }, 60_000);
-
-  it("makes the project for a directory browsed to, then the conversation, and opens it", async () => {
-    const w = await manageWorld();
+describe("/new, searching", () => {
+  it("lists the projects first, and starts in the one chosen with the only agent", async () => {
+    const { w, proj } = await placesWorld();
     const ada = await w.agent("Ada");
     const r = await w.showHome();
     await w.agentsArrived(1);
-    const { work } = await tree(w);
     const before = w.conversations().length;
     await enter(r, "/new");
-    await openBrowsing(r, 1);
-    await r.press(KEYS.down); // work
+    await way(r, "Search directories");
+    await screenShows(r, "~/work/proj");
+    expect(lineWith(r, "~/work/proj")).toContain("project");
     await r.press(KEYS.enter);
-    await screenShows(
-      r,
-      (screen) => rowOf({ lastFrame: () => screen }, "lib") === "lib",
-    );
-    await r.press(KEYS.down);
-    await r.press(KEYS.down); // lib
-    await r.press(KEYS.enter);
-    await screenShows(r, join(work, "lib"));
-    await r.press(KEYS.enter); // use it
     await until(
       () => newConversations(w, before).length === 1,
       10_000,
       "the new conversation",
     );
     const made = newConversations(w, before)[0]!;
-    const project = w.projects().find((p) => p.id === made.projectId);
-    await until(
-      () => w.projects().some((p) => p.id === made.projectId),
-      10_000,
-      "the project",
-    );
-    const madeProject =
-      project ?? w.projects().find((p) => p.id === made.projectId)!;
-    expect(madeProject.path).toBe(join(work, "lib"));
-    const primary = w.machines().find((m) => m.kind === "primary")!;
-    expect(
-      w.wire.asked
-        .filter((a) => a.op.endsWith(".create"))
-        .map((a) => ({ op: a.op, args: a.args })),
-    ).toEqual([
-      {
-        op: "projects.create",
-        args: { path: join(work, "lib"), machineId: primary.id },
-      },
-      {
-        op: "conversations.create",
-        args: {
-          projectId: madeProject.id,
-          agentIds: [ada.id],
-          stewardId: ada.id,
-        },
-      },
-    ]);
+    expect(made.projectId).toBe(proj.id);
     await screenShows(r, `1:${made.name.slice(0, 10)}`);
-  }, 60_000);
-
-  it("takes a directory that is a project already as that project", async () => {
-    const w = await manageWorld();
-    const ada = await w.agent("Ada");
-    const r = await w.showHome();
-    await w.agentsArrived(1);
-    const { work, proj } = await tree(w);
-    const before = w.conversations().length;
-    await enter(r, "/new");
-    await openBrowsing(r, 1);
-    await r.press(KEYS.down); // work
-    await r.press(KEYS.enter);
-    await screenShows(
-      r,
-      (screen) => rowOf({ lastFrame: () => screen }, "lib") === "lib",
-    );
-    for (let i = 0; i < 3; i += 1) await r.press(KEYS.down); // proj
-    await r.press(KEYS.enter);
-    await screenShows(r, join(work, "proj"));
-    await r.press(KEYS.enter);
-    await until(
-      () => newConversations(w, before).length === 1,
-      10_000,
-      "the new conversation",
-    );
-    expect(newConversations(w, before)[0]!.projectId).toBe(proj.id);
+    expect(showsLayer(plain(r))).toBe(false);
+    expect(statusLine(r)).toContain(`Started ${made.name}`);
     expect(askedStarting(w.wire, "projects.create")).toEqual([]);
     expect(askedStarting(w.wire, "conversations.create")).toEqual([
       {
@@ -395,43 +244,126 @@ describe("/new, browsing", () => {
     ]);
   }, 60_000);
 
-  it("/new with the path of a project takes that project, without browsing", async () => {
-    const w = await manageWorld();
-    const ada = await w.agent("Ada");
+  it("finds directories under the machine's home by name and makes the project there", async () => {
+    const { w, work } = await placesWorld();
+    await w.agent("Ada");
     const r = await w.showHome();
     await w.agentsArrived(1);
-    const { work, proj } = await tree(w);
-    // Taken as typed: no listing said it is a project, the project list does.
-    await enter(r, `/new ${join(work, "proj")}`);
+    await enter(r, "/new");
+    await way(r, "Search directories");
+    await search(r, "lib", "~/work/lib");
+    await r.press(KEYS.enter);
     await until(
       () => askedStarting(w.wire, "conversations.create").length === 1,
       10_000,
       "the create",
     );
-    expect(askedStarting(w.wire, "projects.create")).toEqual([]);
-    expect(askedStarting(w.wire, "projects.directories")).toEqual([]);
-    expect(askedStarting(w.wire, "conversations.create")[0]?.args).toEqual({
-      projectId: proj.id,
-      agentIds: [ada.id],
-      stewardId: ada.id,
-    });
+    const primary = w.machines().find((m) => m.kind === "primary")!;
+    expect(askedStarting(w.wire, "projects.create")).toEqual([
+      {
+        op: "projects.create",
+        args: { path: join(work, "lib"), machineId: primary.id },
+      },
+    ]);
   }, 60_000);
-});
 
-describe("/new, typing a path", () => {
-  it("makes the project at a typed directory, then the conversation", async () => {
-    const w = await manageWorld();
+  it("offers a typed path first, checks it on the machine, and says when it is not there", async () => {
+    const { w, home } = await placesWorld();
     await w.agent("Ada");
     const r = await w.showHome();
     await w.agentsArrived(1);
-    const dir = await tempDir("eta-tui-typed-");
+    await enter(r, "/new");
+    await way(r, "Search directories");
+    await search(r, "~/nowhere", "Open ~/nowhere");
+    expect(cursorRow(r)).toBe("Open ~/nowhere");
+    expect(lineWith(r, "Open ~/nowhere")).not.toBe("");
+    await r.press(KEYS.enter);
+    await screenShows(r, "That directory does not exist");
+    expect(askedStarting(w.wire, "places.resolve")).toEqual([
+      expect.objectContaining({
+        args: expect.objectContaining({ path: "~/nowhere" }),
+      }),
+    ]);
+    expect(askedStarting(w.wire, "projects.create")).toEqual([]);
+    expect(showsLayer(plain(r))).toBe(true);
+    expect(existsSync(join(home, "nowhere"))).toBe(false);
+  }, 60_000);
+});
+
+describe("/new, browsing", () => {
+  it("lists the visible subdirectories with their marks, Tab shows the hidden ones, ← goes up", async () => {
+    const { w } = await placesWorld();
+    await w.agent("Ada");
+    const r = await w.showHome();
+    await w.agentsArrived(1);
+    await enter(r, "/new");
+    await way(r, "Browse…");
+    await screenShows(r, "Use this directory");
+    await screenShows(r, "work");
+    await r.press(KEYS.down);
+    await r.press(KEYS.enter);
+    await screenShows(r, "~/work");
+    await screenShows(r, "lib");
+    expect(lineWith(r, "app")).toContain("git");
+    expect(lineWith(r, "proj")).toContain("project");
+    expect(layer(r)).not.toContain(".secret");
+    await r.press(KEYS.tab);
+    await screenShows(r, ".secret");
+    await r.press(KEYS.left);
+    await screenShows(r, (screen) => !screen.includes(" lib"));
+  }, 60_000);
+
+  it.skipIf(process.getuid?.() === 0)(
+    "says why a directory cannot be read, and ← goes back to the one that could",
+    async () => {
+      const { w, work } = await placesWorld();
+      await mkdir(join(work, "locked"));
+      await chmod(join(work, "locked"), 0o000);
+      try {
+        await w.agent("Ada");
+        const r = await w.showHome();
+        await w.agentsArrived(1);
+        await enter(r, "/new");
+        await way(r, "Browse…");
+        await screenShows(r, "work");
+        await r.press(KEYS.down);
+        await r.press(KEYS.enter);
+        await screenShows(r, "locked");
+        await r.type("lo");
+        await screenShows(r, (screen) => !screen.includes(" lib"));
+        await r.press(KEYS.down);
+        await r.press(KEYS.enter);
+        await screenShows(r, "No permission to read that directory");
+        await r.press(KEYS.left);
+        // Back in work/, as it was left: filtered to `lo`.
+        await screenShows(r, (screen) => !screen.includes("No permission"));
+        expect(lineWith(r, "› lo")).toBe("› lo");
+        await screenShows(r, "~/work");
+      } finally {
+        await chmod(join(work, "locked"), 0o755);
+      }
+    },
+    60_000,
+  );
+
+  it("makes the project for a directory browsed to, then the conversation, and opens it", async () => {
+    const { w, work } = await placesWorld();
+    const ada = await w.agent("Ada");
+    const r = await w.showHome();
+    await w.agentsArrived(1);
     const before = w.conversations().length;
     await enter(r, "/new");
-    await screenShows(r, "Type a path…");
-    await r.press(KEYS.enter); // no projects: the first line
-    await screenShows(r, "Enter use this path");
-    await r.type(`  ${dir} `);
+    await way(r, "Browse…");
+    await screenShows(r, "work");
+    await r.press(KEYS.down); // work
     await r.press(KEYS.enter);
+    await screenShows(r, "lib");
+    await r.type("lib");
+    await screenShows(r, (screen) => !screen.includes("proj"));
+    await r.press(KEYS.down); // lib, past "Use this directory"
+    await r.press(KEYS.enter);
+    await screenShows(r, "~/work/lib");
+    await r.press(KEYS.enter); // use it
     await until(
       () => newConversations(w, before).length === 1,
       10_000,
@@ -443,69 +375,75 @@ describe("/new, typing a path", () => {
       10_000,
       "the project",
     );
-    expect(w.projects().find((p) => p.id === made.projectId)?.path).toBe(dir);
-    const primary = w.machines().find((m) => m.kind === "primary")!;
-    expect(askedStarting(w.wire, "projects.create")).toEqual([
-      {
-        op: "projects.create",
-        args: { path: dir, machineId: primary.id },
-      },
-    ]);
-    expect(askedStarting(w.wire, "projects.directories")).toEqual([]);
-    await screenShows(r, (screen) => !showsLayer(screen));
+    expect(w.projects().find((p) => p.id === made.projectId)!.path).toBe(
+      join(work, "lib"),
+    );
+    expect(
+      askedStarting(w.wire, "conversations.create")[0]?.args,
+    ).toMatchObject({
+      agentIds: [ada.id],
+    });
+    await screenShows(r, `1:${made.name.slice(0, 10)}`);
   }, 60_000);
+});
 
-  it("shows the host's refusal of a directory that does not exist in the layer, and starts nothing", async () => {
-    const w = await manageWorld();
-    await w.agent("Ada");
+describe("/new <path>", () => {
+  it("with the path of a project takes that project", async () => {
+    const { w, work, proj } = await placesWorld();
+    const ada = await w.agent("Ada");
     const r = await w.showHome();
     await w.agentsArrived(1);
-    const missing = join(await tempDir("eta-tui-typed-"), "nowhere");
-    const before = w.conversations().length;
-    await enter(r, `/new ${missing}`);
+    await enter(r, `/new ${join(work, "proj")}`);
     await until(
-      () => askedStarting(w.wire, "projects.create").length === 1,
+      () => askedStarting(w.wire, "conversations.create").length === 1,
       10_000,
-      "the project create",
+      "the create",
     );
-    await screenShows(r, `no such directory: ${missing}`);
-    expect(lineWith(r, "no such directory")).toBe(
-      `no such directory: ${missing}`,
-    );
-    expect(showsLayer(plain(r))).toBe(true);
-    expect(askedStarting(w.wire, "conversations.create")).toEqual([]);
-    expect(w.conversations()).toHaveLength(before);
-    expect(w.projects().some((p) => p.path === missing)).toBe(false);
+    expect(askedStarting(w.wire, "projects.create")).toEqual([]);
+    expect(askedStarting(w.wire, "conversations.create")[0]?.args).toEqual({
+      projectId: proj.id,
+      agentIds: [ada.id],
+      stewardId: ada.id,
+    });
   }, 60_000);
 
-  it("does nothing for a blank path, and goes back to the projects on Esc", async () => {
-    const w = await manageWorld();
+  it("reads ~ as the machine's home: `/new ~/work/lib` is that directory, not a refusal", async () => {
+    const { w, work } = await placesWorld();
     await w.agent("Ada");
     const r = await w.showHome();
     await w.agentsArrived(1);
-    await enter(r, "/new");
-    await screenShows(r, "Type a path…");
-    await r.press(KEYS.enter);
-    await screenShows(r, "Enter use this path");
-    await r.type("   ");
-    await r.press(KEYS.enter);
-    await realDelay(100);
-    expect(plain(r)).toContain("Enter use this path");
-    expect(askedStarting(w.wire, "projects.create")).toEqual([]);
-    await r.press(KEYS.escape);
-    await screenShows(r, "Browse a directory…");
-    expect(plain(r)).not.toContain("Enter use this path");
-    expect(showsLayer(plain(r))).toBe(true);
+    await enter(r, "/new ~/work/lib");
+    await until(
+      () => askedStarting(w.wire, "conversations.create").length === 1,
+      10_000,
+      "the create",
+    );
+    expect(askedStarting(w.wire, "projects.create")[0]?.args).toMatchObject({
+      path: join(work, "lib"),
+    });
+    expect(plain(r)).not.toContain("absolute");
   }, 60_000);
 
-  it("/new with a path asks who next when there are several agents", async () => {
-    const w = await manageWorld();
+  it("says a directory that does not exist is not there, and starts nothing", async () => {
+    const { w, home } = await placesWorld();
+    await w.agent("Ada");
+    const r = await w.showHome();
+    await w.agentsArrived(1);
+    const before = w.conversations().length;
+    await enter(r, `/new ${join(home, "nowhere")}`);
+    await screenShows(r, "That directory does not exist");
+    expect(showsLayer(plain(r))).toBe(true);
+    expect(askedStarting(w.wire, "projects.create")).toEqual([]);
+    expect(w.conversations()).toHaveLength(before);
+  }, 60_000);
+
+  it("asks who next when there are several agents", async () => {
+    const { w, work } = await placesWorld();
     const ada = await w.agent("Ada");
     const ben = await w.agent("Ben");
     const r = await w.showHome();
     await w.agentsArrived(2);
-    const dir = await tempDir("eta-tui-typed-");
-    await enter(r, `/new ${dir}`);
+    await enter(r, `/new ${join(work, "lib")}`);
     await screenShows(r, "Space add or drop");
     expect(lineWith(r, "Ada")).toMatch(/\[x\]\s+Ada\s+steward/);
     await r.press(KEYS.down);
@@ -517,12 +455,121 @@ describe("/new, typing a path", () => {
       "the create",
     );
     expect(askedStarting(w.wire, "projects.create")[0]?.args).toEqual({
-      path: dir,
+      path: join(work, "lib"),
       machineId: w.machines().find((m) => m.kind === "primary")!.id,
     });
     expect(
       askedStarting(w.wire, "conversations.create")[0]?.args,
     ).toMatchObject({ agentIds: [ada.id, ben.id], stewardId: ada.id });
+  }, 60_000);
+});
+
+describe("/new, a new directory", () => {
+  it("chooses where, names it, makes it on the machine and starts there", async () => {
+    const { w, home } = await placesWorld();
+    await w.agent("Ada");
+    const r = await w.showHome();
+    await w.agentsArrived(1);
+    await enter(r, "/new");
+    await way(r, "New directory");
+    await screenShows(r, "Where should the new directory go?");
+    await search(r, "~/wo", "~/work");
+    while (cursorRow(r) !== "~/work") await r.press(KEYS.down);
+    await r.press(KEYS.enter);
+    await screenShows(r, "Name of the new directory in ~/work");
+    await r.type("fresh");
+    await screenShows(r, "Create ~/work/fresh");
+    await r.press(KEYS.enter);
+    await until(
+      () => askedStarting(w.wire, "conversations.create").length === 1,
+      10_000,
+      "the create",
+    );
+    expect(existsSync(join(home, "work/fresh"))).toBe(true);
+    expect(askedStarting(w.wire, "projects.create")[0]?.args).toMatchObject({
+      path: join(home, "work/fresh"),
+    });
+  }, 60_000);
+});
+
+describe("/new, cloning", () => {
+  it("lists the account's repositories before anything is typed when gh is signed in there", async () => {
+    const home = await realpath(await tempDir("eta-tui-home-"));
+    const run = async (command: string, args: readonly string[]) => {
+      if (command === "git")
+        return { code: 0, stdout: "git version 2", stderr: "" };
+      if (args[0] === "repo")
+        return {
+          code: 0,
+          stdout: JSON.stringify([
+            {
+              nameWithOwner: "octocat/Hello-World",
+              description: "My first repository",
+              updatedAt: null,
+              url: "",
+            },
+          ]),
+          stderr: "",
+        };
+      return { code: 0, stdout: "", stderr: "" };
+    };
+    const w = await manageWorld(undefined, {
+      places: new Places({ home, os: "linux", run }),
+    });
+    await w.agent("Ada");
+    const r = await w.showHome();
+    await w.agentsArrived(1);
+    await enter(r, "/new");
+    await way(r, "Clone from GitHub");
+    await screenShows(r, "octocat/Hello-World");
+    expect(lineWith(r, "octocat/Hello-World")).toContain("My first repository");
+  }, 60_000);
+
+  it("clones a pasted URL into the default place and starts in it", async () => {
+    const { w, home } = await placesWorld();
+    await w.agent("Ada");
+    const origin = join(home, "origin-repo");
+    await mkdir(origin);
+    await exec("git", ["init", "-q", "-b", "main", origin]);
+    await writeFile(join(origin, "README.md"), "hi");
+    await exec("git", ["-C", origin, "add", "."]);
+    await exec("git", [
+      "-C",
+      origin,
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@example.com",
+      "commit",
+      "-q",
+      "-m",
+      "one",
+    ]);
+    await mkdir(join(home, "Developer"));
+    const r = await w.showHome();
+    await w.agentsArrived(1);
+    await enter(r, "/new");
+    await way(r, "Clone from GitHub");
+    await screenShows(r, "Search repositories, or paste a URL or owner/repo");
+    await r.type(`file://${origin}`);
+    await screenShows(r, "origin-repo");
+    await r.press(KEYS.enter);
+    await screenShows(r, "Clone origin-repo into…");
+    // Where the last clone went, or ~/Developer the first time: the first line.
+    await screenShows(r, "~/Developer/origin-repo");
+    expect(cursorRow(r)).toBe("~/Developer/origin-repo");
+    await r.press(KEYS.enter);
+    await until(
+      () => askedStarting(w.wire, "conversations.create").length === 1,
+      20_000,
+      "the create",
+    );
+    expect(existsSync(join(home, "Developer/origin-repo/README.md"))).toBe(
+      true,
+    );
+    expect(askedStarting(w.wire, "projects.create")[0]?.args).toMatchObject({
+      path: join(home, "Developer/origin-repo"),
+    });
   }, 60_000);
 });
 
@@ -535,9 +582,7 @@ describe("/new, second step", () => {
     const project = await w.project();
     const r = await w.showHome();
     await w.agentsArrived(3);
-    await enter(r, "/new");
-    await screenShows(r, project.name);
-    await r.press(KEYS.enter);
+    await enter(r, `/new ${project.path}`);
     await screenShows(r, "Space add or drop");
     return { w, r, ada, ben, cleo, project };
   }
@@ -688,9 +733,7 @@ describe("/new, starting", () => {
     const r = await w.showHome();
     await w.agentsArrived(1);
     const held = w.holdOn("conversations.create");
-    await enter(r, "/new");
-    await screenShows(r, project.name);
-    await r.press(KEYS.enter);
+    await enter(r, `/new ${project.path}`);
     await held.asked;
     await screenShows(r, "Starting…");
     await r.press(KEYS.enter);
@@ -703,18 +746,19 @@ describe("/new, starting", () => {
   }, 60_000);
 
   it("keeps the layer with the error when starting fails, and makes the project only once on a retry", async () => {
-    const w = await manageWorld();
+    const { w, work } = await placesWorld();
     const ada = await w.agent("Ada");
     const r = await w.showHome();
     await w.agentsArrived(1);
-    const { work } = await tree(w);
     w.failOn("conversations.create", "the host is busy");
     const before = w.conversations().length;
     await enter(r, `/new ${join(work, "lib")}`);
     await screenShows(r, "the host is busy");
     expect(showsLayer(plain(r))).toBe(true);
     expect(tabBar(r)).not.toContain("1:");
-    // The path stays typed in: Enter tries again.
+    // Chosen again: the project made the first time is the one used.
+    await way(r, "Search directories");
+    await search(r, "~/work/lib", "~/work/lib");
     await r.press(KEYS.enter);
     await until(
       () => newConversations(w, before).length === 1,
@@ -760,59 +804,6 @@ describe("/new, projects that cannot take a new conversation", () => {
       10_000,
       "the project back",
     );
-  }, 60_000);
-
-  it("makes a browsed directory whose entry names an archived project again", async () => {
-    const w = await manageWorld();
-    await w.agent("Ada");
-    const r = await w.showHome();
-    await w.agentsArrived(1);
-    const { work, proj } = await tree(w);
-    await w.raw.call("projects", "update", {
-      projectId: proj.id,
-      archived: true,
-    });
-    await enter(r, "/new");
-    await openBrowsing(r, 0); // proj is archived: no project line
-    await r.press(KEYS.down); // work
-    await r.press(KEYS.enter);
-    await screenShows(
-      r,
-      (screen) => rowOf({ lastFrame: () => screen }, "lib") === "lib",
-    );
-    for (let i = 0; i < 3; i += 1) await r.press(KEYS.down); // proj
-    await r.press(KEYS.enter);
-    await screenShows(r, join(work, "proj"));
-    await r.press(KEYS.enter); // use it
-    await until(
-      () => askedStarting(w.wire, "conversations.create").length === 1,
-      10_000,
-      "the create",
-    );
-    expect(askedStarting(w.wire, "projects.create")[0]?.args).toMatchObject({
-      path: join(work, "proj"),
-    });
-    expect(
-      askedStarting(w.wire, "conversations.create")[0]?.args,
-    ).toMatchObject({ projectId: proj.id });
-  }, 60_000);
-});
-
-describe("/new, the cursor of the first step", () => {
-  it("stays on the line it was on when a project comes in above it", async () => {
-    const w = await manageWorld();
-    await w.agent("Ada");
-    const older = await w.project();
-    const r = await w.showHome();
-    await w.agentsArrived(1);
-    await enter(r, "/new");
-    await screenShows(r, older.name);
-    await r.press(KEYS.down); // Type a path…
-    const newer = await w.project();
-    await screenShows(r, newer.name);
-    await r.press(KEYS.enter);
-    await screenShows(r, "Enter use this path");
-    expect(askedStarting(w.wire, "conversations.create")).toEqual([]);
   }, 60_000);
 });
 
@@ -862,10 +853,8 @@ describe("/new, an agent's own workspace", () => {
     const r = await w.showHome();
     await w.agentsArrived(2);
     await enter(r, "/new");
-    await screenShows(r, "Type a path…");
-    await r.press(KEYS.enter);
-    await screenShows(r, "Enter use this path");
-    await r.type(ada.home);
+    await way(r, "Search directories");
+    await search(r, ada.home, `Open ${ada.home}`);
     await r.press(KEYS.enter);
     await screenShows(r, REFUSAL);
     expect(plain(r)).not.toContain("Space add or drop");
@@ -927,12 +916,14 @@ describe("/new on an 80×24 terminal", () => {
     const r = await w.showHome(SIZE);
     await w.agentsArrived(names.length);
     await enter(r, "/new");
-    await screenShows(r, "Browse a directory…");
+    await screenShows(r, "New directory");
+    await realDelay(50);
     const first = layerBox(r);
     expect(first.height).toBeLessThan(MAIN_AREA_80X24);
     expectAsTallAsContent(r);
-    expect(first.inside.join("\n")).toContain(project.name);
 
+    await r.press(KEYS.enter);
+    await search(r, project.name, project.display);
     await r.press(KEYS.enter);
     await screenShows(r, "Space add or drop");
     await realDelay(50);
@@ -942,9 +933,11 @@ describe("/new on an 80×24 terminal", () => {
     expectAsTallAsContent(r);
     for (const name of names) expect(lineWith(r, name)).toContain(name);
 
-    // Back to the first step: the frame shrinks to it again.
+    // Back to the first step, and back to the ways: the frame shrinks to them again.
     await r.press(KEYS.escape);
-    await screenShows(r, "Browse a directory…");
+    await screenShows(r, "Search by name, or type a path");
+    await r.press(KEYS.escape);
+    await screenShows(r, "New directory");
     await realDelay(50);
     expect(layerBox(r).height).toBe(first.height);
     expectAsTallAsContent(r);
@@ -958,18 +951,18 @@ describe("/new on an 80×24 terminal", () => {
     const r = await w.showHome(SIZE);
     await w.agentsArrived(1);
     await enter(r, "/new");
-    await screenShows(r, projects.at(-1)!.name);
+    await way(r, "Search directories");
+    await screenShows(r, projects.at(-1)!.display);
     await realDelay(50);
     expect(layerBox(r).height).toBeLessThanOrEqual(MAIN_AREA_80X24);
     expectAsTallAsContent(r);
     expect(plain(r).trimEnd().split("\n").length).toBeLessThanOrEqual(24);
-    // The last line, Browse a directory…, is out of the list's window until the cursor gets there.
-    expect(plain(r)).not.toContain("Browse a directory…");
-    for (let i = 0; i < projects.length + 1; i += 1) await r.press(KEYS.down);
-    await screenShows(r, "Browse a directory…");
-    expect(lineWith(r, "Browse a directory…")).toMatch(
-      /^› Browse a directory…/,
-    );
+    // The oldest is out of the list's window until the cursor gets there.
+    const oldest = projects[0]!.display;
+    expect(plain(r)).not.toContain(oldest);
+    for (let i = 0; i < projects.length - 1; i += 1) await r.press(KEYS.down);
+    await screenShows(r, oldest);
+    expect(cursorRow(r)).toContain(oldest);
     expect(layerBox(r).height).toBeLessThanOrEqual(MAIN_AREA_80X24);
     expectAsTallAsContent(r);
   }, 120_000);

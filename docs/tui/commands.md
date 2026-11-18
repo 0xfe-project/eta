@@ -190,11 +190,11 @@ Start a new conversation: where, then who
 
 ### Arguments
 
-- `path` (optional): The absolute path of a directory on the host's machine to start the conversation in
+- `path` (optional): A directory on the host's machine to start the conversation in: absolute, or under ~ (that machine's home)
 
 ### Examples
 
-- `/new`: Choose a project, type a path or browse to a directory
+- `/new`: Choose the machine, then search, browse, clone from GitHub or make a new directory
 - `/new /home/me/code/site`: Start a conversation in this absolute path on the host's machine
 
 ## /open

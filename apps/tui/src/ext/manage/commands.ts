@@ -402,8 +402,8 @@ const newCommand: SlashCommand = {
       name: "path",
       required: false,
       summary: {
-        en: "The absolute path of a directory on the host's machine to start the conversation in",
-        zh: "在 host 所在机器上的这个目录里新建对话，写绝对路径",
+        en: "A directory on the host's machine to start the conversation in: absolute, or under ~ (that machine's home)",
+        zh: "在 host 所在机器上的这个目录里新建对话：绝对路径，或 ~ 开头（那台机器的家目录）",
       },
     },
   ],
@@ -415,8 +415,8 @@ const newCommand: SlashCommand = {
     {
       input: "/new",
       summary: {
-        en: "Choose a project, type a path or browse to a directory",
-        zh: "选一个项目，输入路径，或浏览到一个目录",
+        en: "Choose the machine, then search, browse, clone from GitHub or make a new directory",
+        zh: "先选机器，再搜索目录、浏览、从 GitHub 克隆或新建目录",
       },
     },
     {
