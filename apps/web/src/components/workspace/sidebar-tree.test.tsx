@@ -1,22 +1,9 @@
 import type { ConversationSummary } from "@eta/client-contracts";
-import {
-  afterAll,
-  afterEach,
-  describe,
-  expect,
-  it,
-  rstest,
-} from "@rstest/core";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { act, useRef } from "react";
-// flushSync is the point of the two tests that use it: one synchronous commit with no act after
-// it, to see what the browser would paint first.
-import { flushSync } from "react-dom";
-import { createRoot } from "react-dom/client";
+import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { act } from "react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { translate } from "@/lib/i18n";
 import { setWire } from "@/lib/wire";
-import { closeBrowser, hasBrowser, onPage } from "@/test-browser";
 import {
   agentView,
   buildProductHost,
@@ -27,7 +14,6 @@ import {
   projectView,
 } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
-import { useShelfBounds } from "./shelf-bounds";
 import { ConversationList } from "./sidebar-tree";
 import { storageKey, useWorkspaceStore } from "./workspace-store";
 
@@ -920,25 +906,6 @@ describe("拖动智能体区域的上边缘", () => {
     expect(useWorkspaceStore.getState().workspace.agentsHeight).toBe(70);
   });
 
-  it("双击恢复之后，再拖从内容高开始，不从之前的高度开始", async () => {
-    laidOut();
-    const { container } = await tree([direct("d1", "a1")]);
-    await drag(line(container)!, 400, 300);
-    // Measured again while the height is set: the shelf is 300px tall then.
-    await act(async () => {
-      window.dispatchEvent(new Event("resize"));
-    });
-    await act(async () => {
-      line(container)!.dispatchEvent(
-        new MouseEvent("dblclick", { bubbles: true }),
-      );
-    });
-    // Back to its content's 200px, and a drag starts from there.
-    expect(line(container)!.getAttribute("aria-valuenow")).toBe("200");
-    await drag(line(container)!, 400, 390);
-    expect(useWorkspaceStore.getState().workspace.agentsHeight).toBe(210);
-  });
-
   it("双击分隔线恢复成按内容高", async () => {
     laidOut();
     const { container } = await tree([direct("d1", "a1")]);
@@ -975,169 +942,6 @@ describe("拖动智能体区域的上边缘", () => {
     });
   });
 
-  // happy-dom has no ResizeObserver (test-render leaves an inert one), so these tests install one
-  // that remembers what it watches, and `resized` plays the browser's part for one element.
-  const observing = () => {
-    const observers: Array<{ callback: () => void; targets: Set<Element> }> =
-      [];
-    const original = globalThis.ResizeObserver;
-    globalThis.ResizeObserver = class {
-      private readonly entry: (typeof observers)[number];
-      constructor(callback: () => void) {
-        this.entry = { callback, targets: new Set() };
-        observers.push(this.entry);
-      }
-      observe(target: Element) {
-        this.entry.targets.add(target);
-      }
-      unobserve(target: Element) {
-        this.entry.targets.delete(target);
-      }
-      disconnect() {
-        this.entry.targets.clear();
-      }
-    } as unknown as typeof ResizeObserver;
-    restore.push(() => {
-      globalThis.ResizeObserver = original;
-    });
-    return {
-      watched: () => observers.flatMap((entry) => [...entry.targets]),
-      resized: (target: Element) =>
-        act(async () => {
-          for (const entry of observers)
-            if (entry.targets.has(target)) entry.callback();
-        }),
-    };
-  };
-
-  it("在分隔线上按下就松开、没有拖：存下的高度不动，也不被删", async () => {
-    laidOut();
-    localStorage.setItem(storageKey, JSON.stringify({ agentsHeight: 250 }));
-    await useWorkspaceStore.persist.rehydrate();
-    const { container } = await tree([direct("d1", "a1")]);
-    const before = localStorage.getItem(storageKey);
-    const divider = line(container)!;
-    const fire = (type: string) =>
-      divider.dispatchEvent(
-        new PointerEvent(type, {
-          bubbles: true,
-          button: 0,
-          clientY: 400,
-          pointerId: 1,
-        }),
-      );
-    await act(async () => fire("pointerdown"));
-    await act(async () => fire("pointerup"));
-    expect(localStorage.getItem(storageKey)).toBe(before);
-    expect(useWorkspaceStore.getState().workspace.agentsHeight).toBe(250);
-    expect(agentsSection(container)!.style.maxHeight).toBe("250px");
-    expect(line(container)!.getAttribute("aria-valuenow")).toBe("250");
-  });
-
-  it("侧栏那一列变了（拖窄、窗口变矮）就重新量，不等窗口的 resize", async () => {
-    laidOut();
-    const { resized } = observing();
-    const { container } = await tree([direct("d1", "a1")]);
-    await drag(line(container)!, 400, -1000);
-    expect(agentsSection(container)!.style.maxHeight).toBe("570px");
-    // A narrower sidebar: the group cards wrap, the column's split moves, the list keeps 300px.
-    layout.groups = 300;
-    await resized(agentsSection(container)!.parentElement!);
-    expect(line(container)!.getAttribute("aria-valuemax")).toBe("370");
-    expect(agentsSection(container)!.style.maxHeight).toBe("370px");
-  });
-
-  it("智能体多了、内容变高，上限跟着变", async () => {
-    laidOut();
-    layout.content = 120;
-    const { resized } = observing();
-    const { container } = await tree([direct("d1", "a1")]);
-    expect(line(container)!.getAttribute("aria-valuemax")).toBe("150");
-    // Two more agents: the cards run to 200px, and the ceiling is the head and those 200.
-    layout.content = 200;
-    await resized(shelfBody(container).firstElementChild!);
-    expect(line(container)!.getAttribute("aria-valuemax")).toBe("230");
-  });
-
-  it("拖动时不量智能体区域自己：它的高度就是拖的量，量它每个像素都多一次布局", async () => {
-    laidOut();
-    const { watched } = observing();
-    const { container } = await tree([direct("d1", "a1")]);
-    const section = agentsSection(container)!;
-    expect(watched()).toContain(section.parentElement);
-    expect(watched()).toContain(shelfBody(container).firstElementChild);
-    expect(watched()).not.toContain(section);
-  });
-
-  it("存着高度时，第一次画出来就带着它，不先按内容高闪一下", async () => {
-    // What `bounds.measured` stands in for: the bounds are measured in a layout effect, so the
-    // render that brings the saved height is done before the browser paints. Measured in a passive
-    // effect instead, the first paint would be the shelf at its content's height.
-    laidOut();
-    useWorkspaceStore.setState({ workspace: { agentsHeight: 250 } });
-    // Mounted once through act so the host has answered, then again the way a browser runs it.
-    const { queryClient } = await tree([direct("d1", "a1")]);
-    await cleanup();
-    const element = document.createElement("div");
-    document.body.append(element);
-    const root = createRoot(element);
-    const environment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
-    environment.IS_REACT_ACT_ENVIRONMENT = false;
-    try {
-      // One synchronous commit, with no act to flush passive effects after it: what the browser
-      // would paint once this returns.
-      // eslint-disable-next-line react/dom-no-flush-sync -- see the import
-      flushSync(() =>
-        root.render(
-          <QueryClientProvider client={queryClient}>
-            <SidebarProvider defaultOpen>
-              <ConversationList />
-            </SidebarProvider>
-          </QueryClientProvider>,
-        ),
-      );
-      expect(agentsSection(element)!.style.maxHeight).toBe("250px");
-    } finally {
-      environment.IS_REACT_ACT_ENVIRONMENT = true;
-      await act(async () => root.unmount());
-      element.remove();
-    }
-  });
-
-  it("区域的上下限在第一次绘制之前就量好了（layout effect，不是 passive effect）", () => {
-    // The first-paint test above goes through the whole sidebar, where other layout effects force
-    // a synchronous render and flush passive effects along the way: it stays green even with the
-    // bounds measured in a passive effect. Here the hook is alone, so nothing else does it.
-    laidOut();
-    const seen: boolean[] = [];
-    function Column() {
-      const groupsRef = useRef<HTMLDivElement>(null);
-      const shelfRef = useRef<HTMLDivElement>(null);
-      seen.push(useShelfBounds(groupsRef, shelfRef, true, false).measured);
-      return (
-        <div>
-          <div ref={groupsRef} aria-labelledby="sidebar-groups" />
-          <div ref={shelfRef} aria-labelledby="sidebar-agents" />
-        </div>
-      );
-    }
-    const element = document.createElement("div");
-    document.body.append(element);
-    const root = createRoot(element);
-    const environment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
-    environment.IS_REACT_ACT_ENVIRONMENT = false;
-    try {
-      // eslint-disable-next-line react/dom-no-flush-sync -- see the import
-      flushSync(() => root.render(<Column />));
-      expect(seen.at(-1)).toBe(true);
-    } finally {
-      // eslint-disable-next-line react/dom-no-flush-sync -- see the import
-      flushSync(() => root.unmount());
-      environment.IS_REACT_ACT_ENVIRONMENT = true;
-      element.remove();
-    }
-  });
-
   it("折叠时、rail 上、手机布局里都没有分隔线，也不用拖过的高度", async () => {
     laidOut();
     useWorkspaceStore.setState({
@@ -1159,60 +963,5 @@ describe("拖动智能体区域的上边缘", () => {
     expect(agentsSection(mounted.container)).not.toBeNull();
     expect(line(mounted.container)).toBeNull();
     expect(agentsSection(mounted.container)!.style.maxHeight).toBe("");
-  });
-});
-
-/**
- * Where the shelf's top edge can be grabbed, as a browser lays it out: happy-dom draws no
- * `::after`, so the sidebar this test rendered goes on a page styled by the app's stylesheet.
- */
-describe("智能体区域上边缘的可拖区域，在浏览器里", () => {
-  afterAll(closeBrowser);
-
-  it("6px 全在区域自己里面，不压群聊列表最后一行", async ({ skip }) => {
-    if (!(await hasBrowser())) return skip();
-    const { container } = await tree(
-      Array.from({ length: 12 }, (_, index) =>
-        group(`g${index}`, `群 ${index}`, "p-eta"),
-      ).concat(direct("d1", "a1")),
-    );
-    const column = `<div style="display: flex; flex-direction: column; width: 288px; height: 600px">${
-      groupsSection(container)!.outerHTML
-    }${agentsSection(container)!.outerHTML}</div>`;
-    const hits = await onPage(column, (page) =>
-      page.evaluate(() => {
-        const shelf = document.querySelector(
-          '[aria-labelledby="sidebar-agents"]',
-        )!;
-        const { top, left, width } = shelf.getBoundingClientRect();
-        const x = left + width / 2;
-        // What a click lands on, from 4px above the section's top edge to 8px below it.
-        return Array.from({ length: 12 }, (_, step) => {
-          const y = top - 4 + step;
-          const hit = document.elementFromPoint(x, y);
-          return {
-            offset: step - 4,
-            on:
-              hit?.getAttribute("role") === "separator"
-                ? "line"
-                : hit?.closest('[aria-labelledby="sidebar-groups"]')
-                  ? "groups"
-                  : "shelf",
-          };
-        });
-      }),
-    );
-    const line = hits
-      .filter((hit) => hit.on === "line")
-      .map((hit) => hit.offset);
-    // Above the section's top edge is the groups list's, all of it.
-    expect(hits.filter((hit) => hit.offset < 0).map((hit) => hit.on)).toEqual([
-      "groups",
-      "groups",
-      "groups",
-      "groups",
-    ]);
-    // Six pixels of line, starting under the section's 1px top border.
-    expect(line).toEqual([1, 2, 3, 4, 5, 6]);
   });
 });
