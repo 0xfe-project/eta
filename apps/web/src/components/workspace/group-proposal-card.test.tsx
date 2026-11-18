@@ -107,6 +107,13 @@ async function show(
 }
 
 describe("a group Captain proposes", () => {
+  it("says when it would have no steward", async () => {
+    const { container } = await show(proposed({ stewardId: null }), [
+      operation({}),
+    ]);
+    expect(container.textContent).toContain("主理人没有主理人");
+  });
+
   it("says what it would be, and waits for create or reject", async () => {
     const { container, host } = await show(proposed(), [operation({})]);
     for (const shown of [

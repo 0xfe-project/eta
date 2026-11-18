@@ -29,13 +29,6 @@ export function useCreateProject() {
   );
 }
 
-export function useSetProjectSteward() {
-  return useWireMutation<
-    ProjectArgs["setSteward"],
-    ProjectResults["setSteward"]
-  >("projects", "setSteward");
-}
-
 /**
  * The directories in a directory of a machine, with `path` left out for its home. Kept for a moment
  * so stepping back into a directory just left is instant; a failure says why in `problem.code`.

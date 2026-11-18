@@ -232,6 +232,27 @@ describe("what the timeline says besides words", () => {
     );
   });
 
+  it("says a steward that left the group left it with none", async () => {
+    history = [
+      row({
+        kind: "system",
+        author: "system",
+        text: "A left the group, which has no steward now.",
+        data: { event: "steward", from: "a2", to: null, reason: "left" },
+      }),
+      row({
+        kind: "system",
+        author: "system",
+        text: "A is no longer the steward.",
+        data: { event: "steward", from: AGENT, to: null },
+      }),
+    ];
+    const { container } = await start();
+    await flush();
+    expect(container.textContent).toContain("装配检查 退出了群，现在没有主理人。");
+    expect(container.textContent).toContain("研究员 不再是主理人。");
+  });
+
   it("says the wake budget in the reader's language", async () => {
     history = [
       row({
@@ -350,7 +371,7 @@ describe("what the timeline says besides words", () => {
     history = [row({ text: "有人吗", data: { woke: [], joined: [] } })];
     const { container } = await start([memberView(AGENT), memberView("a2")]);
     await flush();
-    expect(container.textContent).toContain("没有叫醒任何人");
+    expect(container.textContent).toContain("没有 @ 人，这个群也没有主理人");
   });
 
   it("does not, when someone was woken", async () => {

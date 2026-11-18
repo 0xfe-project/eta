@@ -42,6 +42,8 @@ const openAgentCalls: string[] = [];
 const roster = rstest.hoisted(() => [
   { id: "a1", name: "小明", status: "idle" },
   { id: "a2", name: "一个名字非常非常非常长的智能体助手", status: "working" },
+  // Not in the group: the steward menu does not offer it.
+  { id: "a3", name: "局外人", status: "idle" },
 ]);
 rstest.mock("./use-agents", () => ({
   // The header's avatars open an agent's own conversation.
@@ -59,13 +61,11 @@ beforeEach(() => {
         id: "p1",
         name: "eta",
         path: "/Users/me/Desktop/eta",
-        stewardId: "a2",
       }),
     ],
     conversations: groups,
   });
   host.handle("conversations.setSteward", () => ({}));
-  host.handle("projects.setSteward", () => ({}));
 });
 
 const items = () => [
@@ -180,14 +180,12 @@ describe("桌面 header", () => {
 });
 
 describe("主理人芯片", () => {
-  it("switches the steward of this conversation, or hands it back to the project", async () => {
+  it("offers the group's members and no steward, and nothing else", async () => {
     const info = {
       ...conversationSections(groups[2]!).info,
       stewardId: "a2",
-      stewardOverrideId: "a2",
-      noSteward: false,
     };
-    const project = projectView({ id: "p1", name: "eta", stewardId: "a1" });
+    const project = projectView({ id: "p1", name: "eta" });
     const { container } = await mount(
       <ChatHeader group={groups[2]} info={info} project={project} />,
     );
@@ -195,29 +193,60 @@ describe("主理人芯片", () => {
     const chip = container.querySelector<HTMLElement>(
       '[aria-label^="主理人："]',
     )!;
-    await act(async () => {
-      chip.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
-      );
-    });
-    const labels = items().map((item) => item.textContent);
-    expect(labels[0]).toContain("跟随项目");
+    const openMenu = async () =>
+      act(async () => {
+        chip.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+        );
+      });
+    await openMenu();
+    // The members, then "no steward": no project, no "follow", nobody from outside the group.
+    expect(items().map((item) => item.textContent)).toEqual([
+      "小明",
+      "一个名字非常非常非常长的智能体助手",
+      "没有主理人",
+    ]);
+    expect(document.body.textContent).not.toContain("跟随项目");
+    expect(document.body.textContent).not.toContain("项目「");
+    // The current one is marked.
+    expect(
+      items()[1]!.querySelector('[aria-label="当前"]'),
+    ).not.toBeNull();
     await click(items().find((item) => item.textContent?.includes("小明")));
     await flush();
     expect(
       host.calls.find((call) => call.action === "setSteward")?.args,
     ).toEqual({ conversationId: "g1", agentId: "a1" });
 
+    await openMenu();
+    await click(items().find((item) => item.textContent === "没有主理人"));
+    await flush();
+    expect(
+      host.calls.filter((call) => call.action === "setSteward").at(-1)?.args,
+    ).toEqual({ conversationId: "g1", agentId: null });
+  });
+
+  it("says when the group has no steward, and marks that in the menu", async () => {
+    const info = {
+      ...conversationSections(groups[2]!).info,
+      stewardId: null,
+    };
+    const { container } = await mount(
+      <ChatHeader group={groups[2]} info={info} />,
+    );
+    await flush();
+    const chip = container.querySelector<HTMLElement>(
+      '[aria-label="主理人：没有主理人"]',
+    )!;
+    expect(chip).not.toBeNull();
     await act(async () => {
       chip.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
       );
     });
-    await click(items().find((item) => item.textContent?.includes("跟随项目")));
-    await flush();
     expect(
-      host.calls.filter((call) => call.action === "setSteward").at(-1)?.args,
-    ).toEqual({ conversationId: "g1", agentId: null });
+      items().at(-1)!.querySelector('[aria-label="当前"]'),
+    ).not.toBeNull();
   });
 
   it("is not there in a private chat, which has only its agent", async () => {
