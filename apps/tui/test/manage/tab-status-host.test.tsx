@@ -13,7 +13,7 @@ import { manageWorld, tabBar } from "./world";
 async function twoTabs(respond: Parameters<typeof manageWorld>[0]) {
   const w = await manageWorld(respond);
   const ada = await w.agent("Ada");
-  const project = await w.project(ada.id);
+  const project = await w.project();
   const front = await w.conversation(project.id, [ada.id], "Front");
   const behind = await w.conversation(project.id, [ada.id], "Behind");
   const r = await w.show({

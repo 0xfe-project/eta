@@ -15,7 +15,7 @@ async function group() {
   const ben = await world.agent("Ben");
   const cleo = await world.agent("Cleo");
   const dora = await world.agent("Dora");
-  const project = await world.project(ada.id);
+  const project = await world.project();
   const chat = await world.conversation(
     project.id,
     [ada.id, ben.id],
@@ -112,27 +112,34 @@ describe("/remove without a name", () => {
 });
 
 describe("/steward without an argument", () => {
-  it("lists the members, following the project and no steward, marking following as current", async () => {
+  it("lists the group's members, then no steward, marking the first member as current", async () => {
     const w = await group();
     const r = await w.showFront(w.chat.id);
     await w.agentsArrived(4);
     await enter(r, "/steward");
     await screenShows(r, "(current)");
-    expect(lineWith(r, "Follow the project's steward")).toContain("(current)");
-    expect(lineWith(r, "Ada")).not.toContain("(current)");
+    expect(lineWith(r, "Ada")).toContain("(current)");
+    expect(lineWith(r, "Ben")).not.toContain("(current)");
     expect(lineWith(r, "No steward")).not.toContain("(current)");
-    const lines = layerLines(r, "Steward of Release notes").join("\n");
-    expect(lines).not.toContain("Cleo");
-    expect(lines.indexOf("Ada")).toBeLessThan(lines.indexOf("Ben"));
-    expect(lines.indexOf("Ben")).toBeLessThan(
-      lines.indexOf("Follow the project's steward"),
-    );
-    expect(lines.indexOf("Follow the project's steward")).toBeLessThan(
-      lines.indexOf("No steward"),
-    );
+    const lines = layerLines(r, "Steward of Release notes");
+    const text = lines.join("\n");
+    expect(text).not.toContain("Cleo");
+    expect(text).not.toContain("Dora");
+    expect(text).not.toContain("project");
+    // Ada, Ben and No steward, then the footer: nothing else to choose.
+    const choices = lines
+      .map((line) => line.replace(/[│┌┐└┘─›]/g, "").trim())
+      .filter((line) => line !== "")
+      .slice(0, 4);
+    expect(choices).toEqual([
+      "Ada (current)",
+      "Ben",
+      "No steward",
+      "↑↓ move · Enter choose · Esc close",
+    ]);
   }, 60_000);
 
-  it("marks the conversation's own steward as current, and makes the one chosen steward", async () => {
+  it("marks the group's steward as current, and makes the one chosen steward", async () => {
     const w = await group();
     await w.raw.call("conversations", "setSteward", {
       conversationId: w.chat.id,
@@ -143,15 +150,11 @@ describe("/steward without an argument", () => {
     await enter(r, "/steward");
     await screenShows(r, "(current)");
     expect(lineWith(r, "Ben")).toContain("(current)");
-    expect(lineWith(r, "Follow the project's steward")).not.toContain(
-      "(current)",
-    );
+    expect(lineWith(r, "Ada")).not.toContain("(current)");
     // Ada is the first line.
     await r.press(KEYS.enter);
     await until(
-      async () =>
-        (await w.infoOf(w.chat.id)).stewardOverrideId === w.ada.id ||
-        (await w.infoOf(w.chat.id)).stewardId === w.ada.id,
+      async () => (await w.infoOf(w.chat.id)).stewardId === w.ada.id,
       10_000,
       "Ada as steward",
     );
@@ -164,34 +167,30 @@ describe("/steward without an argument", () => {
     ]);
   }, 60_000);
 
-  it("marks no steward as current, and follows the project when that is chosen", async () => {
+  it("marks no steward as current, and makes a member steward again", async () => {
     const w = await group();
     await w.raw.call("conversations", "setSteward", {
       conversationId: w.chat.id,
       agentId: null,
-      none: true,
     });
     const r = await w.showFront(w.chat.id);
     await w.agentsArrived(4);
     await enter(r, "/steward");
     await screenShows(r, "(current)");
     expect(lineWith(r, "No steward")).toContain("(current)");
-    await r.press(KEYS.down);
+    expect(lineWith(r, "Ada")).not.toContain("(current)");
     await r.press(KEYS.down);
     await r.press(KEYS.enter);
-    await screenShows(r, "Release notes follows its project's steward now");
+    await screenShows(r, "Ben is the steward of Release notes now");
     await until(
-      async () => {
-        const info = await w.infoOf(w.chat.id);
-        return !info.noSteward && info.stewardOverrideId === null;
-      },
+      async () => (await w.infoOf(w.chat.id)).stewardId === w.ben.id,
       10_000,
-      "following the project",
+      "Ben as steward",
     );
     expect(askedStarting(w.wire, "conversations.setSteward")).toEqual([
       {
         op: "conversations.setSteward",
-        args: { conversationId: w.chat.id, agentId: null },
+        args: { conversationId: w.chat.id, agentId: w.ben.id },
       },
     ]);
   }, 60_000);
@@ -202,13 +201,18 @@ describe("/steward without an argument", () => {
     await w.agentsArrived(4);
     await enter(r, "/steward");
     await screenShows(r, "Steward of Release notes");
-    for (let i = 0; i < 3; i += 1) await r.press(KEYS.down);
+    for (let i = 0; i < 2; i += 1) await r.press(KEYS.down);
     await r.press(KEYS.enter);
     await screenShows(r, "Release notes has no steward now");
+    await until(
+      async () => (await w.infoOf(w.chat.id)).stewardId === null,
+      10_000,
+      "no steward",
+    );
     expect(askedStarting(w.wire, "conversations.setSteward")).toEqual([
       {
         op: "conversations.setSteward",
-        args: { conversationId: w.chat.id, agentId: null, none: true },
+        args: { conversationId: w.chat.id, agentId: null },
       },
     ]);
   }, 60_000);

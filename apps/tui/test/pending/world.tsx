@@ -170,11 +170,10 @@ export async function pendingWorld() {
         model: "fake:fake-model",
       })
     ).agent;
-  const project = async (stewardId: string) =>
+  const project = async () =>
     (
       await ask<{ project: ProjectView }>("projects", "create", {
         path: await tempDir("eta-tui-project-"),
-        stewardId,
       })
     ).project;
   const conversation = async (
@@ -204,7 +203,7 @@ export async function pendingWorld() {
   /** An agent and a conversation it stewards, alone in its project. */
   const room = async (agentName: string, conversationName: string) => {
     const member = await agent(agentName);
-    const place = await project(member.id);
+    const place = await project();
     const group = await conversation(place.id, [member.id], conversationName);
     return { agent: member, group };
   };

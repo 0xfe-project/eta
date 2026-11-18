@@ -104,7 +104,7 @@ describe("with a conversation in front", () => {
     });
     const ada = await world.agent("Ada");
     const ben = await world.agent("Ben");
-    const project = await world.project(ada.id);
+    const project = await world.project();
     const group = await world.conversation(project.id, [ada.id, ben.id]);
     const sent = await world.send(group.id, "start working");
     const reply = sent.replies[0]!.id;
@@ -198,7 +198,7 @@ describe("/open", () => {
   it("lists the names it could mean when several match", async () => {
     const world = await hostWorld(() => say("ok"));
     const ada = await world.agent("Ada");
-    const project = await world.project(ada.id);
+    const project = await world.project();
     await world.conversation(project.id, [ada.id], "Release notes");
     await world.conversation(project.id, [ada.id], "Release planning");
     const r = await world.show({ tabs: [], activeTab: undefined });

@@ -13,6 +13,7 @@ export const feedMessages = defineMessages({
     stewardChanged: "{to} is now the steward, taking over from {from}.",
     stewardSet: "{to} is now the steward.",
     stewardCleared: "{from} is no longer the steward.",
+    stewardLeft: "{from} left the group; it has no steward now.",
     wakeBudget:
       "This message has used its {budget} wake-ups; later @mentions stay in the conversation and wake nobody until you write again.",
     taskDraft: "Task draft: {title}",
@@ -32,6 +33,7 @@ export const feedMessages = defineMessages({
     stewardChanged: "{to} 成为主理人，接替 {from}。",
     stewardSet: "{to} 成为主理人。",
     stewardCleared: "{from} 不再是主理人。",
+    stewardLeft: "{from} 退出了群，现在没有主理人。",
     wakeBudget:
       "这条消息已经用完 {budget} 次唤醒；之后的 @ 只记入对话，等你再发言才会唤醒。",
     taskDraft: "任务草稿：{title}",

@@ -67,14 +67,18 @@ async function connected(models: Models) {
         model: "fake:fake-model",
       })
     ).agent;
-  const project = async (stewardId?: string) =>
+  const project = async () =>
     (
       await ask<{ project: ProjectView }>("projects", "create", {
         path: await tempDir("eta-tui-project-"),
-        ...(stewardId === undefined ? {} : { stewardId }),
       })
     ).project;
-  const conversation = async (projectId: string, agentIds: string[]) =>
+  /** Left out, `stewardId` is the first member; null is none. */
+  const conversation = async (
+    projectId: string,
+    agentIds: string[],
+    stewardId?: string | null,
+  ) =>
     (
       await ask<{ conversation: ConversationSummary }>(
         "conversations",
@@ -82,6 +86,7 @@ async function connected(models: Models) {
         {
           projectId,
           agentIds,
+          ...(stewardId === undefined ? {} : { stewardId }),
         },
       )
     ).conversation;
@@ -90,11 +95,11 @@ async function connected(models: Models) {
   return { host, raw, wire, agent, project, conversation, send };
 }
 
-/** One agent who is her project's steward, and a conversation with her. */
+/** One agent, the steward of a conversation with her. */
 async function withAda(models: Models) {
   const world = await connected(models);
   const ada = await world.agent("Ada");
-  const project = await world.project(ada.id);
+  const project = await world.project();
   const group = await world.conversation(project.id, [ada.id]);
   return { ...world, ada, group };
 }
@@ -308,7 +313,7 @@ describe("the feed on a real host", () => {
     const ben = await world.agent("Ben");
     // No steward and two members: a message wakes nobody, so each send is one row.
     const project = await world.project();
-    const group = await world.conversation(project.id, [ada.id, ben.id]);
+    const group = await world.conversation(project.id, [ada.id, ben.id], null);
     for (let i = 1; i <= 55; i += 1) await world.send(group.id, `message ${i}`);
     const feed = feedFor(world.wire, group.id);
     follow(feed);

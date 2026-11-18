@@ -12,7 +12,7 @@ export const conversationMessages = defineMessages({
     steerKey: "{key} to steer",
     nameSeparator: ", ",
     nobody:
-      "Nobody took this message: this conversation has no steward, so name a member with @",
+      "Nobody was @mentioned and this group has no steward. Name a member with @, or choose a steward",
     openFirst: "Open a conversation first",
     noSuchConversation: "No conversation called {name}",
     severalConversations:
@@ -28,7 +28,7 @@ export const conversationMessages = defineMessages({
     stopKey: "{key} 停止",
     steerKey: "{key} 插话",
     nameSeparator: "、",
-    nobody: "没有人接这条消息：这个对话没有主理人，用 @ 指定成员",
+    nobody: "没有 @ 人，这个群也没有主理人。用 @ 指定成员，或设一位主理人",
     openFirst: "先打开一个对话",
     noSuchConversation: "没有叫 {name} 的对话",
     severalConversations: "有几个对话都匹配 {name}：{names}。名字写全一些。",

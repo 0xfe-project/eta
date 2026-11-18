@@ -327,7 +327,6 @@ const removeCommand = membershipCommand(
 );
 
 /** What `/steward` takes besides a member's name. */
-const FOLLOW_PROJECT = "project";
 const NO_STEWARD = "none";
 
 const stewardCommand: SlashCommand = {
@@ -337,8 +336,8 @@ const stewardCommand: SlashCommand = {
       name: "agent",
       required: false,
       summary: {
-        en: "A member's name, “project” to follow the project's steward, or “none”",
-        zh: "成员的名字；“project” 表示跟随项目的主理人；“none” 表示不要主理人",
+        en: "A member's name, or “none” for no steward",
+        zh: "成员的名字；“none” 表示这个群没有主理人",
       },
     },
   ],
@@ -356,15 +355,11 @@ const stewardCommand: SlashCommand = {
       summary: { en: "Make Ada the steward", zh: "让 Ada 当主理人" },
     },
     {
-      input: "/steward project",
-      summary: {
-        en: "Follow the project's steward",
-        zh: "跟随项目的主理人",
-      },
-    },
-    {
       input: "/steward none",
-      summary: { en: "Have no steward", zh: "不要主理人" },
+      summary: {
+        en: "This group has no steward",
+        zh: "这个群没有主理人",
+      },
     },
   ],
   requiredOps: ["conversations.setSteward"],
@@ -376,8 +371,7 @@ const stewardCommand: SlashCommand = {
     const members = membersOf(state, summary);
     if (argText !== "") {
       let choice: StewardChoice | undefined;
-      if (argText === FOLLOW_PROJECT) choice = { kind: "project" };
-      else if (argText === NO_STEWARD) choice = { kind: "none" };
+      if (argText === NO_STEWARD) choice = { kind: "none" };
       else {
         const agent = namedAgent(ctx, members, argText);
         choice = agent === undefined ? undefined : { kind: "agent", agent };

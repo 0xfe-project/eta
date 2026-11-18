@@ -96,23 +96,29 @@ export async function hostWorld(respond: Respond) {
         model: "fake:fake-model",
       })
     ).agent;
-  const project = async (stewardId?: string) =>
+  const project = async () =>
     (
       await ask<{ project: ProjectView }>("projects", "create", {
         path: await tempDir("eta-tui-project-"),
-        ...(stewardId === undefined ? {} : { stewardId }),
       })
     ).project;
+  /** Left out, `stewardId` is the first member; null is none. */
   const conversation = async (
     projectId: string,
     agentIds: string[],
     name?: string,
+    stewardId?: string | null,
   ) =>
     (
       await ask<{ conversation: ConversationSummary }>(
         "conversations",
         "create",
-        { projectId, agentIds, ...(name === undefined ? {} : { name }) },
+        {
+          projectId,
+          agentIds,
+          ...(name === undefined ? {} : { name }),
+          ...(stewardId === undefined ? {} : { stewardId }),
+        },
       )
     ).conversation;
   const send = (conversationId: string, text: string) =>
@@ -170,11 +176,11 @@ export async function hostWorld(respond: Respond) {
   };
 }
 
-/** One agent, Ada, who is her project's steward, and a conversation with her. */
+/** One agent, Ada, and a conversation with her, its steward. */
 export async function withAda(respond: Respond, name?: string) {
   const world = await hostWorld(respond);
   const ada = await world.agent("Ada");
-  const project = await world.project(ada.id);
+  const project = await world.project();
   const group = await world.conversation(project.id, [ada.id], name);
   return { ...world, ada, project, group };
 }
@@ -192,7 +198,12 @@ export async function quietGroup(
   const ada = await world.agent("Ada");
   const ben = await world.agent("Ben");
   const project = await world.project();
-  const group = await world.conversation(project.id, [ada.id, ben.id]);
+  const group = await world.conversation(
+    project.id,
+    [ada.id, ben.id],
+    undefined,
+    null,
+  );
   return { ...world, ada, ben, project, group };
 }
 

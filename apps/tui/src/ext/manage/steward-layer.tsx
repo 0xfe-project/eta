@@ -11,19 +11,18 @@ import { conversationTarget } from "../conversation/facts";
 import { manageMessages } from "./messages";
 import { PickLayer } from "./pick-layer";
 
+/** The key of the "No steward" row; an agent id never looks like it. */
+const NONE = "\0none";
+
 /** Which row is the steward now, from the conversation's own facts; undefined before they arrive. */
-function currentChoice(
-  info: ConversationInfo | undefined,
-): StewardChoice["kind"] | string | undefined {
+function currentChoice(info: ConversationInfo | undefined): string | undefined {
   if (info === undefined) return undefined;
-  if (info.noSteward) return "none";
-  if (info.stewardOverrideId === null) return "project";
-  return info.stewardOverrideId;
+  return info.stewardId ?? NONE;
 }
 
 /**
- * The members, then following the project's steward, then no steward; the one in effect is
- * marked current once the conversation's facts arrive, which the layer follows while open.
+ * The group's members, then no steward; the one in effect is marked current once the
+ * conversation's facts arrive, which the layer follows while open.
  */
 export function StewardLayer({
   conversationId,
@@ -52,7 +51,6 @@ export function StewardLayer({
     key === current ? `${text}${t("current")}` : text;
   const choices: StewardChoice[] = [
     ...members.map((agent): StewardChoice => ({ kind: "agent", agent })),
-    { kind: "project" },
     { kind: "none" },
   ];
   const rows: Row[] = choices.map((choice) => {
@@ -61,9 +59,7 @@ export function StewardLayer({
         key: choice.agent.id,
         label: label(choice.agent.name, choice.agent.id),
       };
-    return choice.kind === "project"
-      ? { key: "project", label: label(t("followProject"), "project") }
-      : { key: "none", label: label(t("noSteward"), "none") };
+    return { key: NONE, label: label(t("noSteward"), NONE) };
   });
   return (
     <PickLayer

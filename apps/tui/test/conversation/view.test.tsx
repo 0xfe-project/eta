@@ -75,8 +75,6 @@ function info(patch: Partial<ConversationInfo> = {}): ConversationInfo {
     decided: "",
     archived: false,
     stewardId: "a1",
-    stewardOverrideId: null,
-    noSteward: false,
     readSeq: 0,
     lastSeq: 0,
     createdAt: 0,
