@@ -58,7 +58,13 @@ const agents = [
   agentView({ id: "a2", name: "装配检查", persona: "", model: null }),
 ];
 const projects = [
-  projectView({ id: "p-eta", name: "eta", path: "/Users/me/Desktop/eta" }),
+  // `display` is the host's: the path as its machine writes it, `~` being that machine's home.
+  projectView({
+    id: "p-eta",
+    name: "eta",
+    path: "/Users/me/Desktop/eta",
+    display: "~/Desktop/eta",
+  }),
   // Outside the primary's home: nothing to shorten, so the path is the whole path.
   projectView({ id: "p-house", name: "house", path: "/srv/house" }),
   projectView({
@@ -79,6 +85,7 @@ const projects = [
     machineId: "m2",
     name: "training",
     path: "/home/eric/training",
+    display: "~/training",
   }),
 ];
 const machines = [
@@ -243,7 +250,7 @@ describe("侧边栏的两块", () => {
     expect(groupsSection(container)?.textContent).not.toContain("group-id");
   });
 
-  it("别的机器上的目录带着机器名，按那台机器的 home 缩写", async () => {
+  it("别的机器上的目录带着机器名，按那台机器写的路径缩写", async () => {
     const now = Date.now();
     const { container } = await tree([
       group("g1", "eta", "p-eta", { lastMessageAt: now - 60_000 }),

@@ -333,6 +333,89 @@
         "denied": "No permission to read this directory",
         "offline": "Can't reach this machine"
       }
+    },
+    "places": {
+      "keys": "↑↓ to move · Enter to choose · Esc to go back",
+      "open": "Open {{path}}",
+      "useHere": "Use {{path}}",
+      "create": "Create {{path}}",
+      "cloneTo": "Clone into",
+      "cloning": "Cloning into {{path}}… Esc stops it",
+      "parentIs": "in {{path}}",
+      "via": "Clone over {{protocol}}",
+      "steps": {
+        "machine": "Machine"
+      },
+      "machineKinds": {
+        "primary": "This host",
+        "daemon": "Remote",
+        "ssh": "SSH"
+      },
+      "closed": {
+        "offline": "Offline",
+        "ssh": "SSH machines are not supported yet"
+      },
+      "methods": {
+        "search": "Search directories",
+        "browse": "Browse…",
+        "github": "Clone from GitHub",
+        "new": "New directory"
+      },
+      "methodDetails": {
+        "search": "Find a directory on {{name}}",
+        "browse": "Walk the folders one level at a time",
+        "github": "Search your repositories",
+        "new": "Make an empty directory"
+      },
+      "notes": {
+        "checking": "Checking this machine…",
+        "noGit": "git is not installed on this machine",
+        "pasteOnly": "gh is not signed in: paste a URL or owner/repo",
+        "update": "Update this machine's daemon to use this",
+        "native": "Opens the system folder dialog"
+      },
+      "placeholders": {
+        "machine": "Choose a machine…",
+        "method": "How do you want to add it?",
+        "search": "Search by name, or type a path…",
+        "browse": "Filter…",
+        "github": "Search repositories, or paste a URL or owner/repo…",
+        "cloneLocation": "Where should it go? Search or type a path…",
+        "newParent": "Where should the new directory go?",
+        "newName": "Name of the new directory"
+      },
+      "sections": {
+        "typed": "Typed path",
+        "recent": "Recent",
+        "suggested": "Suggested",
+        "found": "On this machine",
+        "inside": "Inside",
+        "repos": "Your repositories",
+        "typedRepo": "Typed"
+      },
+      "empty": {
+        "search": "Type to search this machine",
+        "github": "Type a URL or owner/repo",
+        "newName": "Type a name"
+      },
+      "problems": {
+        "offline": "This machine is offline",
+        "timeout": "The machine took too long to answer",
+        "unsupported": "This machine cannot do this yet. Update its daemon; SSH machines are not supported.",
+        "notFound": "That directory does not exist",
+        "denied": "No permission to read this directory",
+        "notDirectory": "That is not a directory",
+        "exists": "Something with that name is already there",
+        "invalid": "That is not a valid path or name on this machine",
+        "notAbsolute": "Type a full path: starting with / or ~ (or a drive like C:\\ on Windows)",
+        "auth": "Authentication failed. Sign in with gh on that machine, or check its SSH key.",
+        "network": "Network problem: could not reach the repository",
+        "repoNotFound": "Repository not found, or you have no access to it",
+        "cancelled": "Clone stopped",
+        "noGit": "git is not installed on this machine",
+        "ghSignedOut": "gh is not signed in on this machine",
+        "other": "Something went wrong"
+      }
     }
   },
   "chat": {},

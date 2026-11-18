@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AgentAvatar } from "./agent-identity";
 import { runtimeName } from "./agent-pick";
-import { Tag } from "./directory-picker";
+import { Tag } from "./place-picker";
 
 /**
  * One agent in a list to pick several from: a tick, its avatar, its name and what it runs on, the

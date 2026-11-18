@@ -29,7 +29,8 @@ const workspaceSchema = z.object({
   // The most height that section takes, dragged on its top edge (sidebar-tree.tsx); unset is
   // its content's height, up to two fifths of the screen.
   agentsHeight: z.number().int().positive().max(10_000).optional(),
-  // Directories chosen on each machine, newest first (directory-picker.tsx).
+  // Directories chosen on each machine, newest first, from before the host kept them
+  // (`places.recent`). Read only to hand them over once (import-recent.ts), then removed.
   recentDirectories: z
     .record(z.string().max(64), z.array(z.string().max(4096)).max(5))
     .optional(),
