@@ -352,7 +352,7 @@ export function captainSessionTools(
     const assign = defineTool({
       name: "assign_in_group",
       description:
-        "Send a visible Captain instruction to one or more members of an existing group. With no agentIds, speak to the group's steward, like a user message without mentions. This only chats and authorizes work; the target agents create and execute their own tasks. For staged work, ask for a task tree: a parent task per stage, subtasks under it (create_task parent), and dependsOn between them (a later stage depends on the earlier stage's parent; requireDone when it must wait until the earlier work is done, not only in review).",
+        "Send a visible Captain instruction to one or more members of an existing group. With no agentIds, speak to the group's steward (or its only member when it has none), like a user message without mentions; a group with several members and no steward needs agentIds. This only chats and authorizes work; the target agents create and execute their own tasks. For staged work, ask for a task tree: a parent task per stage, subtasks under it (create_task parent), and dependsOn between them (a later stage depends on the earlier stage's parent; requireDone when it must wait until the earlier work is done, not only in review).",
       parameters: Type.Object({
         conversationId: Type.String(),
         text: Type.String(),
@@ -396,7 +396,7 @@ export function captainSessionTools(
         "Propose a new group conversation. Nothing is created yet: the proposal appears as a card in this conversation, and only the user's confirmation creates the group (adding the directory as a project first when it is not one). Every proposal needs that confirmation.",
         "Before proposing, call list_conversations: if a suitable group already exists, use it with assign_in_group instead. A group with the same name in the same project is a conflict; the error returns that group's conversationId.",
         "Directory: give projectId for an existing project, or path (absolute) plus optional machineId (default: the primary machine) for a directory that must already exist on that machine, e.g. a repository you just cloned. An agent's own workspace or an archived project is refused.",
-        "memberIds needs at least one agent and must not include you; stewardId must be one of the members.",
+        "memberIds needs at least one agent and must not include you. stewardId is the member who takes messages that name nobody: one of memberIds, or null for none; left out, it is the first member. Nobody is ever added to a group for that.",
         "Several groups can be proposed in one turn; each gets its own card. Do not wait for the decision: once everything is proposed, end your turn. For each proposal the user confirms or rejects, a message in this conversation tells you the outcome and, if created, the new group's conversationId; then assign work there with assign_in_group.",
       ].join(" "),
       parameters: Type.Object({
@@ -417,9 +417,12 @@ export function captainSessionTools(
           }),
         ),
         memberIds: Type.Array(Type.String(), { minItems: 1 }),
-        stewardId: Type.String({
-          description: "The member who takes messages that name nobody.",
-        }),
+        stewardId: Type.Optional(
+          Type.Union([Type.String(), Type.Null()], {
+            description:
+              "The member who takes messages that name nobody, or null for none. Default: the first member.",
+          }),
+        ),
         goal: Type.Optional(Type.String()),
       }),
       execute: async (args) => {

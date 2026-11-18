@@ -110,7 +110,7 @@ describe("a task of a pinned agent", () => {
     );
     const r = await named({ models });
     const ada = await r.agent("Ada", { machineId: r.daemon.machineId });
-    const project = await r.project({ stewardId: ada.id });
+    const project = await r.project();
     const group = await r.group(project.id, [ada.id]);
     const task = r.host.product.board.create(
       {
@@ -191,7 +191,7 @@ describe("where a task runs: its executor's machine", () => {
       // Ada follows the project (the primary's); Bob is pinned to the laptop.
       const ada = await r.agent("Ada");
       const bob = await r.agent("Bob", { machineId: r.daemon.machineId });
-      const project = await r.project({ stewardId: ada.id });
+      const project = await r.project();
       const group = await r.group(project.id, [ada.id, bob.id]);
       const task = r.host.product.board.create(
         {
@@ -219,7 +219,7 @@ describe("where a task runs: its executor's machine", () => {
   it("a task the user made for a pinned agent runs on that agent's machine", async () => {
     const { r, row } = await ran(async (r) => {
       const bob = await r.agent("Bob", { machineId: r.daemon.machineId });
-      const project = await r.project({ stewardId: bob.id });
+      const project = await r.project();
       const group = await r.group(project.id, [bob.id]);
       const [task] = r.host.product.board.make(
         {
@@ -241,7 +241,7 @@ describe("where a task runs: its executor's machine", () => {
       // The maker is pinned away; the executor is not, so the run is the project's.
       const ada = await r.agent("Ada", { machineId: r.daemon.machineId });
       const bob = await r.agent("Bob");
-      const project = await r.project({ stewardId: ada.id });
+      const project = await r.project();
       const group = await r.group(project.id, [ada.id, bob.id]);
       const task = r.host.product.board.create(
         {
@@ -267,7 +267,7 @@ describe("where a task runs: its executor's machine", () => {
   it("an agent's own task, with no assignee, runs on the maker's machine as before", async () => {
     const { r, row } = await ran(async (r) => {
       const ada = await r.agent("Ada", { machineId: r.daemon.machineId });
-      const project = await r.project({ stewardId: ada.id });
+      const project = await r.project();
       const group = await r.group(project.id, [ada.id]);
       const task = r.host.product.board.create(
         {

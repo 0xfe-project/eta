@@ -523,11 +523,7 @@ export function createProduct(options: {
     warn,
   });
 
-  const targets = new ConversationTargets({
-    conversations,
-    projects,
-    timeline,
-  });
+  const targets = new ConversationTargets({ conversations, timeline });
   const created = (id: string): void => targets.add(id);
 
   // The task board, and the artifacts its cards list.

@@ -80,7 +80,7 @@ describe("createAgent", () => {
     expect(agent).toMatchObject({ name: "Scout", persona: "Executor" });
     expect(project).toMatchObject({
       kind: "agent_home",
-      stewardId: agent.id,
+      ownerAgentId: agent.id,
       name: "Scout",
     });
     expect(await readdir(join(d.dataDir, "agents"))).toEqual([agent.id]);

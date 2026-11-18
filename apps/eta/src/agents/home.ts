@@ -1,6 +1,6 @@
 /**
  * An agent's home: its workspace directory under the data directory (`agentHome`) and the project
- * on the primary machine that stands for it (kind `agent_home`, stewarded by the agent).
+ * on the primary machine that stands for it (kind `agent_home`, owned by the agent: `ownerAgentId`).
  *
  * The project is made with the agent (`createAgent`, `createCaptainIdentity`). Everything else
  * finds it here, and only `ensureHome` makes one besides — for a Captain an older build made
@@ -45,7 +45,7 @@ export function ensureHome(
     path: agentHome(deps.dataDir, agent.id),
     name: agent.name,
     kind: "agent_home",
-    stewardId: agent.id,
+    ownerAgentId: agent.id,
   });
 }
 

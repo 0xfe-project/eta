@@ -2,7 +2,7 @@
  * Making an agent: the rules `agents.create` applies, in one place, so the user's dialog and
  * Captain's confirmed proposal make the same kind of agent.
  *
- * An agent comes with a workspace directory and a home project (kind `agent_home`, stewarded by the
+ * An agent comes with a workspace directory and a home project (kind `agent_home`, owned by the
  * agent) on the primary machine. The agent, the project and its plugins are written in one
  * transaction; a failure takes the directory away again. Its first instructions and persona start
  * their prompt histories, recorded as whoever asked for it (the user, or Captain).
@@ -155,7 +155,7 @@ async function writeAgent(
         path: home,
         name,
         kind: "agent_home",
-        stewardId: id,
+        ownerAgentId: id,
       });
       if (wanted !== undefined) plugins.rows.setEnabled(id, [...wanted]);
       for (const kind of ["instructions", "persona"] as const)

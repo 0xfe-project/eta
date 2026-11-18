@@ -28,16 +28,16 @@ export interface World {
   /** A directory (a fresh one unless `path` is given) registered as a project. */
   project: (fields?: {
     path?: string;
-    stewardId?: string | null;
     name?: string;
     /** A machine other than the primary. */
     machineId?: string;
   }) => Promise<ProjectView>;
-  /** A group conversation in a project. */
+  /** A group conversation in a project; its steward is the first member unless one is given. */
   group: (
     projectId: string,
     agentIds: string[],
     name?: string,
+    stewardId?: string | null,
   ) => Promise<ConversationSummary>;
   /** Messages written but not in the conversation yet. */
   held: (conversationId: string) => MessageView[];
@@ -120,21 +120,19 @@ export async function world(
           ...(fields.machineId === undefined
             ? {}
             : { machineId: fields.machineId }),
-          ...(fields.stewardId === undefined
-            ? {}
-            : { stewardId: fields.stewardId }),
           ...(fields.name === undefined ? {} : { name: fields.name }),
         },
       );
       return project;
     },
-    async group(projectId, agentIds, name) {
+    async group(projectId, agentIds, name, stewardId) {
       const { conversation } = await call<{
         conversation: ConversationSummary;
       }>("conversations", "create", {
         projectId,
         agentIds,
         ...(name === undefined ? {} : { name }),
+        ...(stewardId === undefined ? {} : { stewardId }),
       });
       return conversation;
     },

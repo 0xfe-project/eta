@@ -167,7 +167,7 @@ describe("email wire", () => {
       eta: null,
     });
     const agent = await w.agent("Mailer");
-    const project = await w.project({ stewardId: agent.id });
+    const project = await w.project();
 
     const assigned = (await w.client.call("email", "assign", {
       threadIds: [thread.id],

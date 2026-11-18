@@ -577,10 +577,6 @@ describe("what the primary sends with a session", () => {
       "You are Zed, who answers only in haiku about the sea.",
     );
     const zed = await r.agent("Zed", { persona: "Zed" });
-    await r.client.call("projects", "setSteward", {
-      projectId: r.remoteProject.id,
-      agentId: zed.id,
-    });
     const group = await r.group(r.remoteProject.id, [zed.id]);
     await r.watch(group.id);
     const sent = await r.send(group.id, "hello");

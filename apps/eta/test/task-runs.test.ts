@@ -79,7 +79,6 @@ async function room(
   });
   const project = await w.project({
     ...(options.dir === undefined ? {} : { path: options.dir }),
-    stewardId: ada.id,
   });
   const group = await w.group(project.id, [ada.id], "login");
   await w.watch(group.id);
@@ -190,7 +189,7 @@ describe("a task run", () => {
     });
     const w = await world({ models });
     const ada = await w.agent("Ada", { instructions: "Answer in one line." });
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "login");
     await w.watch(group.id);
     const sent = await w.send(group.id, "we should fix login");
@@ -284,7 +283,7 @@ describe("a task run", () => {
       });
       const w = await world({ models });
       const ada = await w.agent("Ada");
-      const project = await w.project({ stewardId: ada.id });
+      const project = await w.project();
       const group = await w.group(project.id, [ada.id], "db");
       await w.watch(group.id);
       const sent = await w.send(group.id, "we will need to move the db");
@@ -879,7 +878,7 @@ describe("a comment that wakes the task", () => {
     });
     const w = await world({ models });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "login");
     await w.watch(group.id);
     await w.send(group.id, "hello");
@@ -1144,7 +1143,7 @@ describe("stopping and running again", () => {
     );
     const first = await world({ dataDir, models, captain: false });
     const ada = await first.agent("Ada");
-    const project = await first.project({ stewardId: ada.id });
+    const project = await first.project();
     const group = await first.group(project.id, [ada.id]);
     const task = first.host.product.board.create(
       {

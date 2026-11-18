@@ -200,8 +200,13 @@ describe("captain assignment", () => {
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
     const bola = await w.agent("Bola");
-    const project = await w.project({ stewardId: ada.id });
-    const group = await w.group(project.id, [bola.id], "steward-default");
+    const project = await w.project();
+    const group = await w.group(
+      project.id,
+      [ada.id, bola.id],
+      "steward-default",
+      bola.id,
+    );
     await w.watch(group.id);
 
     const assigned = await w.host.product.captain.assign({
@@ -210,21 +215,48 @@ describe("captain assignment", () => {
     });
     await w.settled(group.id, assigned.replyIds[0]!);
     expect(assigned.assignment.targets.map((target) => target.agentId)).toEqual(
-      [ada.id],
+      [bola.id],
     );
     expect(
       w.host.product.captain.store
         .assignment(assigned.assignment.id)!
         .targets.map((target) => target.agentId),
-    ).toEqual([ada.id]);
-    expect(
-      w.host.db
-        .query<{ n: number }, [string, string]>(
-          `SELECT COUNT(*) AS n FROM participant
-            WHERE conversation_id = ? AND agent_id = ?`,
-        )
-        .get(group.id, ada.id)!.n,
-    ).toBe(1);
+    ).toEqual([bola.id]);
+  });
+
+  it("with no steward, addresses the only member, and refuses a larger group without pulling anyone in", async () => {
+    const { models } = scriptedModels(() => say("On it."));
+    const w = await world({ ...options, models });
+    const ada = await w.agent("Ada");
+    const bola = await w.agent("Bola");
+    const cy = await w.agent("Cy");
+    const project = await w.project();
+    const solo = await w.group(project.id, [ada.id], "solo", null);
+    const crowd = await w.group(project.id, [bola.id, cy.id], "crowd", null);
+    await w.watch(solo.id);
+
+    const assigned = await w.host.product.captain.assign({
+      conversationId: solo.id,
+      text: "Please handle this.",
+    });
+    await w.settled(solo.id, assigned.replyIds[0]!);
+    expect(assigned.assignment.targets.map((target) => target.agentId)).toEqual(
+      [ada.id],
+    );
+
+    await expect(
+      w.host.product.captain.assign({
+        conversationId: crowd.id,
+        text: "Someone take this.",
+      }),
+    ).rejects.toThrow(/no steward/);
+    const members = w.host.db
+      .query<{ agent_id: string }, [string]>(
+        "SELECT agent_id FROM participant WHERE conversation_id = ? ORDER BY invited_at",
+      )
+      .all(crowd.id)
+      .map((row) => row.agent_id);
+    expect([...members].sort()).toEqual([bola.id, cy.id].sort());
   });
 
   it("lets Captain omit agentIds and address the steward through its tool", async () => {
@@ -241,7 +273,7 @@ describe("captain assignment", () => {
     });
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "captain-tool-steward");
     targetGroupId = group.id;
     await w.watch(group.id);
@@ -273,7 +305,7 @@ describe("captain assignment", () => {
     );
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "release");
     await w.watch(group.id);
 
@@ -339,7 +371,7 @@ describe("captain assignment", () => {
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
     const bola = await w.agent("Bola");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id, bola.id], "parallel");
     await w.watch(group.id);
 
@@ -383,7 +415,7 @@ describe("captain assignment", () => {
     });
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "handoff");
     await w.watch(group.id);
     const result = await w.host.product.captain.assign({
@@ -415,7 +447,7 @@ describe("captain assignment", () => {
     );
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "draft-work");
     await w.watch(group.id);
     const assigned = await w.host.product.captain.assign({
@@ -492,7 +524,7 @@ describe("captain controls", () => {
   it("pauses memory for conversations and task runs", async () => {
     const { w } = await captainWorld();
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "memory");
     const task = w.host.product.board.create(
       {
@@ -691,7 +723,7 @@ describe("captain controls", () => {
     const { models } = scriptedModels(() => say("I will continue."));
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "continued");
     await w.watch(group.id);
     const task = w.host.product.board.create(
@@ -729,7 +761,7 @@ describe("captain controls", () => {
   it("stops automatic retries after five consecutive failures", async () => {
     const { w } = await captainWorld();
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "retry");
     const task = w.host.product.board.create(
       {
@@ -770,7 +802,7 @@ describe("captain controls", () => {
   it("asks Captain immediately for a non-retryable task failure", async () => {
     const { w } = await captainWorld();
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "credentials");
     const task = w.host.product.board.create(
       {
@@ -838,7 +870,7 @@ describe("captain controls", () => {
   it("marks an inactive task stuck and reserves proactive wake events", async () => {
     const { w } = await captainWorld();
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "stuck");
     const task = w.host.product.board.create(
       {
@@ -875,7 +907,7 @@ describe("captain controls", () => {
   it("distinguishes a stopped task from a run with no progress", async () => {
     const { w } = await captainWorld();
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "stuck-run");
     const task = w.host.product.board.create(
       {
@@ -917,7 +949,7 @@ describe("captain controls", () => {
   it("does not call a long run stuck while its journal is still moving", async () => {
     const { w } = await captainWorld();
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "long-build");
     const task = w.host.product.board.create(
       {
@@ -973,7 +1005,7 @@ describe("captain controls", () => {
   it("diagnoses offline machines before calling their runs stuck", async () => {
     const { w } = await captainWorld();
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "offline-runs");
     const offlineId = crypto.randomUUID();
     const lastSeenAt = Date.now() - 60_000;
@@ -1064,7 +1096,7 @@ describe("captain controls", () => {
     const { models } = scriptedModels(() => say("Verified."));
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "settled");
     await w.watch(group.id);
     const assigned = await w.host.product.captain.assign({
@@ -1119,7 +1151,7 @@ describe("captain controls", () => {
     const { models } = scriptedModels(() => say("Done."));
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "grouped");
     await w.watch(group.id);
     const store = w.host.product.captain.store;
@@ -1156,7 +1188,7 @@ describe("captain controls", () => {
     const { models } = scriptedModels(() => say("Done."));
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "assignment-window");
     await w.watch(group.id);
     const store = w.host.product.captain.store;
@@ -1258,7 +1290,7 @@ describe("captain controls", () => {
     });
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "relay-inbox");
     await w.watch(group.id);
     w.client.subscribe("inbox");
@@ -1402,7 +1434,7 @@ describe("captain controls", () => {
     });
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "relay-cancel");
     await w.watch(group.id);
     w.client.subscribe("inbox");
@@ -1473,7 +1505,7 @@ describe("captain controls", () => {
     const { models } = scriptedModels(() => say("Still here."));
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "silent");
     await w.watch(group.id);
     const assigned = await w.host.product.captain.assign({
@@ -1533,7 +1565,7 @@ describe("captain controls", () => {
     const { models } = scriptedModels(() => say("Reviewed."));
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "reviewed");
     await w.watch(group.id);
     const assigned = await w.host.product.captain.assign({
@@ -1583,7 +1615,7 @@ describe("captain controls", () => {
     const { models } = scriptedModels(() => say("Blocked."));
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "blocked-then-stalled");
     await w.watch(group.id);
     const assigned = await w.host.product.captain.assign({
@@ -1631,7 +1663,7 @@ describe("captain controls", () => {
   it("does not advance a conversation checkpoint when its review failed", async () => {
     const { w } = await captainWorld();
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "review-retry");
     const assigned = await w.host.product.captain.assign({
       conversationId: group.id,

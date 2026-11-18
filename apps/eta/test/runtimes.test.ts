@@ -232,7 +232,7 @@ describe("eta's tools, called by an agent on Claude Code", () => {
       runtime: "claude",
       model: "claude:sonnet",
     });
-    const project = await w.project({ stewardId: agent.id });
+    const project = await w.project();
     await mkdir(join(project.path, "site"), { recursive: true });
     await writeFile(join(project.path, "site", "index.html"), "<h1>hi</h1>");
     const group = await w.group(project.id, [agent.id]);
@@ -287,7 +287,7 @@ describe("eta's tools, called by an agent on Claude Code", () => {
       runtime: "claude",
       model: "claude:sonnet",
     });
-    const project = await w.project({ stewardId: agent.id });
+    const project = await w.project();
     for (const dir of ["site", "other"]) {
       await mkdir(join(project.path, dir), { recursive: true });
       await writeFile(join(project.path, dir, "index.html"), `<h1>${dir}</h1>`);
@@ -357,7 +357,7 @@ describe("eta's tools, called by an agent on Claude Code", () => {
       runtime: "claude",
       model: "claude:sonnet",
     });
-    const project = await w.project({ stewardId: agent.id });
+    const project = await w.project();
     await mkdir(join(project.path, "site"), { recursive: true });
     await writeFile(join(project.path, "site", "index.html"), "<h1>hi</h1>");
     const group = await w.group(project.id, [agent.id]);
@@ -602,7 +602,7 @@ describe("a turn Claude Code opens itself, on a background task's notification",
       runtime: "claude",
       model: "claude:opus",
     });
-    const project = await w.project({ stewardId: agent.id });
+    const project = await w.project();
     await mkdir(join(project.path, "report"), { recursive: true });
     await writeFile(join(project.path, "report", "index.html"), "<h1>ok</h1>");
     const group = await w.group(project.id, [agent.id]);

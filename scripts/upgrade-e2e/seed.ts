@@ -301,6 +301,9 @@ async function generate(binary: string, version: string): Promise<void> {
     model: "fake:m1",
   });
   await call("agents", "create", { name: "Bob", model: "fake:m1" });
+  // Ada stewards the group. A host before 0.5 kept that on the project (its `stewardId`, which
+  // the group followed); a later one keeps it on the group and ignores the project's. Both are
+  // sent, so a seed of either kind has Ada there to answer a message that names nobody.
   const { project: made } = await call<{ project: { id: string } }>(
     "projects",
     "create",
@@ -309,7 +312,12 @@ async function generate(binary: string, version: string): Promise<void> {
   const { conversation } = await call<{ conversation: { id: string } }>(
     "conversations",
     "create",
-    { projectId: made.id, agentIds: [agent.id], name: "Seed talk" },
+    {
+      projectId: made.id,
+      agentIds: [agent.id],
+      stewardId: agent.id,
+      name: "Seed talk",
+    },
   );
   const say = async (text: string): Promise<void> => {
     await call("conversations", "send", {

@@ -416,7 +416,7 @@ describe("on an agent's session", () => {
       web: { searxngUrl: searxUrl },
     });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id]);
     await w.watch(group.id);
     const sent = await w.send(group.id, "look it up");
@@ -432,7 +432,7 @@ describe("on an agent's session", () => {
     const none = scriptedModels(() => say("ok"));
     const bare = await world({ models: none.models, tasks: { runs: false } });
     const bob = await bare.agent("Bob");
-    const theirs = await bare.project({ stewardId: bob.id });
+    const theirs = await bare.project();
     const chat = await bare.group(theirs.id, [bob.id]);
     await bare.watch(chat.id);
     const hello = await bare.send(chat.id, "hi");

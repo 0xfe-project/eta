@@ -80,7 +80,7 @@ describe("a private chat made while the host is up", () => {
     });
     const agent = await w.agent("Mailer");
     // Another project than the agent's home, so its private chat there is new.
-    const project = await w.project({ stewardId: agent.id });
+    const project = await w.project();
     expect(directs(w, agent.id, project.id)).toEqual([]);
     const { conversationId } = (await w.client.call("email", "assign", {
       threadIds: [thread.id],

@@ -2,7 +2,6 @@ import type {
   AgentCall,
   ConversationCall,
   MessageView,
-  ProjectCall,
   SendResult,
 } from "../src/index";
 import { describe, expect, it } from "vitest";
@@ -47,12 +46,12 @@ describe("the product's targets on the generic pipe", () => {
       action: "direct",
       args: { agentId: "a1" },
     };
-    const steward: ProjectCall = {
+    const steward: ConversationCall = {
       op: "call",
-      target: "projects",
+      target: "conversations",
       action: "setSteward",
-      // Null is a real answer: the project follows nobody.
-      args: { projectId: "p1", agentId: null },
+      // Null is a real answer: the group has no steward.
+      args: { conversationId: "c1", agentId: null },
     };
     for (const call of [send, direct, steward]) {
       expect(JSON.parse(JSON.stringify(call))).toEqual(call);

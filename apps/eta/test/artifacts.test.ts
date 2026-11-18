@@ -38,7 +38,7 @@ async function room(options: Parameters<typeof world>[0] = {}) {
   const w = await world({ models, tasks: { runs: false }, ...options });
   const ada = await w.agent("Ada");
   const bob = await w.agent("Bob");
-  const project = await w.project({ stewardId: ada.id });
+  const project = await w.project();
   const group = await w.group(project.id, [ada.id, bob.id]);
   await w.watch(group.id);
   w.client.subscribe("artifacts");
@@ -312,7 +312,7 @@ describe("publish_artifact from a task's session", () => {
     const w = await world({ models });
     const ada = await w.agent("Ada");
     const bea = await w.agent("Bea");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id, bea.id], "ui");
     await w.watch(group.id);
     w.client.subscribe("artifacts");

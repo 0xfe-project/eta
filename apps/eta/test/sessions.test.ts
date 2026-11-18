@@ -19,7 +19,7 @@ describe("an agent's session in a conversation", () => {
       persona: "Executor",
       thinkingLevel: "low",
     });
-    const project = await w.project({ stewardId: ada.id, name: "the repo" });
+    const project = await w.project({ name: "the repo" });
     const group = await w.group(project.id, [ada.id], "plans");
     await w.watch(group.id);
     // Nothing is made until somebody is woken.
@@ -61,7 +61,7 @@ describe("an agent's session in a conversation", () => {
     );
     const w = await world({ models });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const one = await w.group(project.id, [ada.id]);
     const two = await w.group(project.id, [ada.id]);
     await w.watch(one.id);
@@ -91,7 +91,7 @@ describe("an agent's session in a conversation", () => {
       instructions: "Be brief.",
       model: "fake:first",
     });
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id]);
     await w.watch(group.id);
     const talk = async (text: string) => {
@@ -149,7 +149,7 @@ describe("an agent's session in a conversation", () => {
       model: "fake:first",
       thinkingLevel: "low",
     });
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id]);
     await w.watch(group.id);
     const talk = async (text: string) => {

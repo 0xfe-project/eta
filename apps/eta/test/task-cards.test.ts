@@ -28,7 +28,7 @@ async function drafted() {
   );
   const w = await world({ models, tasks: { runs: false } });
   const ada = await w.agent("Ada");
-  const project = await w.project({ stewardId: ada.id });
+  const project = await w.project();
   const group = await w.group(project.id, [ada.id], "login");
   await w.watch(group.id);
   const sent = await w.send(group.id, "we should fix login");

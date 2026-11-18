@@ -245,7 +245,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
           return {
             result: {
               conversation: summaryOf(
-                { conversations, projects, timeline },
+                { conversations, timeline },
                 conversation,
               ),
             },

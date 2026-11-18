@@ -14,7 +14,7 @@ import { world } from "./support/world";
 /** One agent who is the project's steward, and a conversation she is in. */
 async function ada(w: World) {
   const agent = await w.agent("Ada");
-  const project = await w.project({ stewardId: agent.id });
+  const project = await w.project();
   const group = await w.group(project.id, [agent.id]);
   await w.watch(group.id);
   return { agent, project, group };
@@ -293,7 +293,7 @@ describe("插入当前这一轮（steerHeld）", () => {
     const w = await world({ models });
     const ada = await w.agent("Ada");
     const bo = await w.agent("Bo");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id, bo.id]);
     await w.watch(group.id);
 

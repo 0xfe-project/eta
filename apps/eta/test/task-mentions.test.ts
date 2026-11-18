@@ -62,7 +62,7 @@ async function room(options: { silent?: boolean } = {}) {
   const ada = await w.agent("Ada");
   const bea = await w.agent("Bea");
   const cy = await w.agent("Cy");
-  const project = await w.project({ stewardId: ada.id });
+  const project = await w.project();
   const group = await w.group(project.id, [ada.id, bea.id], "ui");
   await w.watch(group.id);
   const task: BoardTaskDetail = w.host.product.board.create(

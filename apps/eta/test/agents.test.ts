@@ -51,7 +51,7 @@ describe("creating an agent", () => {
     expect(home).toMatchObject({
       path: agent.home,
       kind: "agent_home",
-      stewardId: agent.id,
+      ownerAgentId: agent.id,
       archived: false,
       name: "Ada",
     });
@@ -177,7 +177,7 @@ describe("the private chat", () => {
     await w.watch(first.conversation.id);
     expect(
       w.client.section(`conversations.${first.conversation.id}`, "info"),
-    ).toMatchObject({ kind: "direct", stewardOverrideId: null });
+    ).toMatchObject({ kind: "direct", stewardId: agent.id });
   });
 
   it("cannot take or lose members", async () => {
@@ -305,7 +305,7 @@ describe("deleting an agent", () => {
     const ada = await w.agent("Ada");
     const bob = await w.agent("Bob");
     await writeFile(join(ada.home, "notes.md"), "kept");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id, bob.id], "plans");
     const chat = (
       (await w.client.call("agents", "direct", { agentId: ada.id })) as {
@@ -330,7 +330,6 @@ describe("deleting an agent", () => {
           ?.every((entry) => entry.id !== ada.id) === true,
     );
     const projects = w.client.section<ProjectView[]>("projects", "list")!;
-    expect(projects.find((p) => p.id === project.id)?.stewardId).toBeNull();
     // Her workspace is put away, not forgotten.
     expect(projects.find((p) => p.id === ada.homeProjectId)?.archived).toBe(
       true,

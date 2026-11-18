@@ -68,10 +68,10 @@ const projectRow = (w: World, id: string) =>
     path: string;
     name: string;
     kind: string;
-    stewardId: string;
+    ownerAgentId: string;
   }>(
     w,
-    `SELECT machine_id AS machineId, path, name, kind, steward_id AS stewardId
+    `SELECT machine_id AS machineId, path, name, kind, owner_agent_id AS ownerAgentId
        FROM project WHERE id = ?`,
     id,
   );
@@ -128,7 +128,7 @@ describe("propose_agent is Captain's", () => {
   it("is offered to Captain's session and to no other agent's", async () => {
     const { models, requests } = scriptedModels(() => say("Hello."));
     const { w, ada, captain } = await setup(models);
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id]);
     await w.watch(group.id);
     for (const id of [group.id, captain]) {
@@ -247,7 +247,7 @@ describe("an agent Captain proposes", () => {
       path: agentHome(w.host.dataDir, result.agentId),
       name: "Scout",
       kind: "agent_home",
-      stewardId: result.agentId,
+      ownerAgentId: result.agentId,
     });
     expect(
       (await stat(agentHome(w.host.dataDir, result.agentId))).isDirectory(),
@@ -437,7 +437,7 @@ describe("the persona of an agent Captain proposed", () => {
     const decided = await decide(w, operation.id, "approve");
     const { agentId } = decided.result as { agentId: string };
 
-    const project = await w.project({ stewardId: agentId });
+    const project = await w.project();
     const group = await w.group(project.id, [agentId]);
     await w.watch(group.id);
     const sent = await w.send(group.id, "Look at this change.");

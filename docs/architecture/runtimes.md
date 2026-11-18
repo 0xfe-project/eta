@@ -51,8 +51,8 @@ file behind four link calls (`acpList`, `acpSave`, `acpDelete`, `acpTest`). A da
 online is an error; nothing falls back to the primary. A daemon's list is in `machines` once
 `refresh` asked for it, and is asked again after each change there. Whether an agent still runs on
 `acp.<id>` is the primary's to answer, per machine, before a rename or a delete: an agent pinned
-to that machine, or one pinned to none whose projects (its home, the projects it stewards, the
-conversations it is in) include one on that machine.
+to that machine, or one pinned to none whose projects (its home, found by `owner_agent_id`, and
+the conversations it is in) include one on that machine.
 
 The file may be edited by hand, and `save` and `delete` rewrite it whole, so a file that is there
 but cannot be read whole is an error, never an empty or shorter list. That covers a file that

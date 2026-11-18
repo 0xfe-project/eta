@@ -70,7 +70,7 @@ describe("the host", () => {
     const dataDir = await tempDir();
     const first = await world({ dataDir });
     const agent = await first.agent("Ada");
-    const project = await first.project({ stewardId: agent.id });
+    const project = await first.project();
     const group = await first.group(project.id, [agent.id]);
     await first.host.close();
 

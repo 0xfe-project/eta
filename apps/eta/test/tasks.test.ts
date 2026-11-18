@@ -31,7 +31,7 @@ async function seed(w: World) {
   let found = seeded.get(w);
   if (found === undefined) {
     const agent = await w.agent("Ada");
-    const project = await w.project({ stewardId: agent.id });
+    const project = await w.project();
     const group = await w.group(project.id, [agent.id]);
     found = { agentId: agent.id, conversationId: group.id };
     seeded.set(w, found);

@@ -154,7 +154,7 @@ async function room(
   });
   const w = await world({ models, ...options });
   const ada = await w.agent("Ada");
-  const project = await w.project({ stewardId: ada.id });
+  const project = await w.project();
   const bo = await w.agent("Bo");
   const group = await w.group(project.id, [ada.id, bo.id], "plan");
   const make = (

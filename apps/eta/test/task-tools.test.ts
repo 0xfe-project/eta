@@ -37,7 +37,7 @@ describe("the task tools", () => {
     const { models, requests } = scriptedModels(() => say("ok"));
     const w = await world({ models, tasks: { runs: false } });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id]);
     await w.watch(group.id);
     const sent = await w.send(group.id, "hi");
@@ -68,7 +68,7 @@ describe("the task tools", () => {
     ]);
     const w = await world({ models, tasks: { runs: false } });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id]);
     await w.watch(group.id);
     w.client.subscribe("tasks");
@@ -145,7 +145,7 @@ describe("the task tools", () => {
     ]);
     const w = await world({ models, tasks: { runs: false } });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id]);
     await w.watch(group.id);
     const sent = await w.send(group.id, "go");
@@ -175,7 +175,7 @@ describe("the task tools", () => {
     ]);
     const w = await world({ models, tasks: { runs: false } });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id]);
     await w.watch(group.id);
     const sent = await w.send(group.id, "go");
@@ -208,7 +208,7 @@ describe("the task tools", () => {
     });
     const w = await world({ models, tasks: { runs: false } });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id]);
     await w.watch(group.id);
 

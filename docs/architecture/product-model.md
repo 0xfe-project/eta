@@ -4,20 +4,22 @@
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------- |
 | Agent (persona) | Global config: name, instructions, persona card, model and thinking level. **Not a container**, it owns no sessions or conversations                       | `agent`                                  | `agents`                              |
 | machine         | Which computer the session runs on: the primary where host lives, plus the other machines running daemons                                                  | `machine`                                | `machines`                            |
-| project         | A directory on one machine, with a steward                                                                                                                 | `project`                                | `projects`                            |
+| project         | A directory on one machine                                                                                                                                 | `project`                                | `projects`                            |
 | Conversation    | A timeline belonging to one project, whose members are several agents                                                                                      | `conversation`, `participant`, `message` | `conversations`, `conversations.<id>` |
 | session         | A session of the upstream harness, one per (agent × conversation), with cwd set to the project's directory and running on the machine the project lives on | Upstream files (see [data](data.md))     | `sessions.<id>`                       |
 
 ## Agents
 
 - Fields: `name`, `instructions` (appended after the base of every session's system prompt for this agent), `persona` (the name of a persona card; an empty string is the project's default card, which differs from "no persona"), `model` (`provider:modelId`, empty means follow settings), `thinking_level`.
-- On creation it gets its own workspace on the primary node, `<data directory>/agents/<id>/`, which is also a project of kind `agent_home` whose steward is itself, and both appear together in one transaction. Renaming moves the directory.
+- On creation it gets its own workspace on the primary node, `<data directory>/agents/<id>/`, which is also a project of kind `agent_home` owned by it (`project.owner_agent_id`), and both appear together in one transaction. Renaming moves the directory.
 - A **DM** is the `direct` conversation in its workspace whose only member is itself (`agents.direct` gets or restores it).
 - Deleting an agent first stops the reply it is writing; the lines it wrote on the timeline are kept.
 
 ## Projects and stewards
 
-project = machine + directory (unique per path on the same machine). `steward_id` is the steward: messages that don't @ anyone go to it. A conversation can have its own steward (`conversation.steward_id`); when empty, the project's is used. Effective steward = the conversation's ?? the project's (`effectiveSteward`).
+project = machine + directory (unique per path on the same machine). A project has no steward; `owner_agent_id` is set only on an `agent_home` and says whose workspace it is (Captain's memory and the ACP machine list find an agent's workspace by it).
+
+The **steward** belongs to a group: `conversation.steward_id` is one of its members, or NULL for none. Messages that don't @ anyone go to it. It is chosen when the group is made (`conversations.create`: a member, null for none, left out the first member) and changed with `conversations.setSteward`, which takes only a member or null. A steward that leaves the group (`conversations.remove`) leaves it with none, and a `system` line says so ("X left the group, which has no steward now."). A private chat's steward is its agent. Migration 0055 wrote each group's former effective steward (its own, else its project's, unless `no_steward`) onto the group, and none when that agent was not a member.
 
 **File list** (`projects.files`, used by the composer's `@` menu): listed by a shell script on the machine the project lives on (the local machine via the process's own shell, a daemon via the link's `exec`, so there is only one implementation): in a git checkout it takes the files git knows about (tracked, not ignored), otherwise a `find` with depth ≤ 8; then filters out `node_modules`, `.git`, `.eta`, `dist`, `build` and similar directories, sorts shallow-first, defaults to 2000 and at most 5000 entries, with `truncated` when it overflows. Paths are relative to the project directory, i.e. the agent's working directory. In the menu, members come first and files after.
 
@@ -44,9 +46,11 @@ Who gets woken (`conversations/routing.ts`, pure rules):
 
 1. Members @-mentioned in the user message (only members count).
 2. No @ and it's a DM: the one and only agent.
-3. No @ and there is an effective steward: the steward (joined first if not yet a member).
+3. No @ and the group has a steward: the steward.
 4. No steward and only one member: that member.
-5. Everything else: nobody is woken, and the sender is told — no guessing.
+5. Everything else: nobody is woken, and the sender is told under the message ("nobody was @mentioned and this group has no steward") — no guessing.
+
+Routing never adds anyone to a conversation.
 
 Agents hand work to each other with the `mention` tool (by name or id; an unknown name is reported back to the agent): the named agent is woken, the initiator does not wait. **Five-wake budget**: agent-to-agent mentions triggered by one user message total at most 5 across all branches (`WAKE_BUDGET`); the 5th still wakes and carries a reminder, after that it is only context, until the user speaks again and the count resets.
 

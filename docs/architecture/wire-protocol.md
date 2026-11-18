@@ -44,7 +44,7 @@ Product plugins (`apps/eta`, all are cordis plugins, injecting `wire` and `sessi
 | ------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | agents        | `agents`（eager）                                           | `create` `update` `delete` `direct`                                                                             |
 | machines      | `machines`（eager）                                         | `enroll` `approve` `revoke` `rename` `setMaxActiveRuns`                                                         |
-| projects      | `projects` (eager)                                          | `create` `update` `setSteward` `files` (archive via `update`)                                                   |
+| projects      | `projects` (eager)                                          | `create` `update` `files` `directories` (archive via `update`)                                                  |
 | conversations | `conversations`、`conversations.<id>`                       | `create` `update` `invite` `remove` `setSteward` `send` `stop` `read` `history` `attach` `unattach`             |
 | inbox         | `inbox`                                                     | `answer` `setApprovals`                                                                                         |
 | email         | `email`、`email.<thread-id>`                                | `saveAccount` `removeAccount` `verifyAccount` `refresh` `markRead` `assign` `confirmProposal` `discardProposal` |

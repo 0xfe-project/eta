@@ -41,10 +41,9 @@ const one = <T>(w: World, sql: string, id: string): T | undefined =>
   w.host.db.query<T, [string]>(sql).get(id) ?? undefined;
 
 const projectRow = (w: World, id: string) =>
-  one<{ machineId: string; path: string; name: string; stewardId: string }>(
+  one<{ machineId: string; path: string; name: string }>(
     w,
-    `SELECT machine_id AS machineId, path, name, steward_id AS stewardId
-       FROM project WHERE id = ?`,
+    `SELECT machine_id AS machineId, path, name FROM project WHERE id = ?`,
     id,
   );
 
@@ -121,7 +120,7 @@ describe("propose_group is Captain's", () => {
   it("is offered to Captain's session and to no other agent's", async () => {
     const { models, requests } = scriptedModels(() => say("Hello."));
     const { w, ada, captain } = await setup(models);
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id]);
     await w.watch(group.id);
     for (const id of [group.id, captain]) {
@@ -174,7 +173,7 @@ describe("a group Captain proposes", () => {
     const script = captainScript(() => proposal);
     const { w, ada, captain } = await setup(script.models);
     const bola = await w.agent("Bola");
-    const project = await w.project({ stewardId: ada.id, name: "Repo" });
+    const project = await w.project({ name: "Repo" });
     proposal = {
       name: "Launch",
       projectId: project.id,
@@ -256,7 +255,7 @@ describe("a group Captain proposes", () => {
     let proposal: Record<string, unknown> = {};
     const script = captainScript(() => proposal);
     const { w, ada, captain } = await setup(script.models);
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     proposal = {
       name: "Docs",
       projectId: project.id,
@@ -288,7 +287,7 @@ describe("a group of the same name", () => {
     let proposal: Record<string, unknown> = {};
     const script = captainScript(() => proposal);
     const { w, ada, captain, propose } = await setup(script.models);
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const existing = await w.group(project.id, [ada.id], "Launch");
     proposal = {
       name: " Launch ",
@@ -322,7 +321,7 @@ describe("a group of the same name", () => {
 
   it("stops the confirmation when one appeared in the meantime", async () => {
     const { w, ada, propose } = await setup();
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const { operation } = await propose({
       name: "Launch",
       projectId: project.id,
@@ -361,7 +360,7 @@ describe("what a proposal is refused for", () => {
     });
     const adaHome = one<{ id: string }>(
       w,
-      "SELECT id FROM project WHERE kind = 'agent_home' AND steward_id = ?",
+      "SELECT id FROM project WHERE kind = 'agent_home' AND owner_agent_id = ?",
       ada.id,
     )!;
     const start = counts(w);
@@ -403,8 +402,49 @@ describe("what a proposal is refused for", () => {
   });
 });
 
+describe("the steward of a proposed group", () => {
+  it("is the one Captain chose among the members, nobody, or else the first member", async () => {
+    const { w, ada, propose } = await setup();
+    const bola = await w.agent("Bola");
+    const projectId = (await w.project()).id;
+    const stewardOf = async (
+      name: string,
+      fields: Partial<GroupProposalInput>,
+    ) => {
+      const { operation } = await propose({
+        name,
+        projectId,
+        memberIds: [ada.id, bola.id],
+        ...fields,
+      });
+      const decided = await decide(w, operation.id, "approve");
+      return {
+        proposed: (operation.payload as { stewardId: string | null }).stewardId,
+        group: one<{ steward_id: string | null }>(
+          w,
+          "SELECT steward_id FROM conversation WHERE id = ?",
+          (decided.result as { conversationId: string }).conversationId,
+        )!.steward_id,
+      };
+    };
+    expect(await stewardOf("Chosen", { stewardId: bola.id })).toEqual({
+      proposed: bola.id,
+      group: bola.id,
+    });
+    expect(await stewardOf("Nobody", { stewardId: null })).toEqual({
+      proposed: null,
+      group: null,
+    });
+    // Left out (the setup's default is overridden with nothing): the first member.
+    expect(await stewardOf("Default", { stewardId: undefined })).toEqual({
+      proposed: ada.id,
+      group: ada.id,
+    });
+  });
+});
+
 describe("a new directory", () => {
-  it("becomes a project stewarded by the group's steward when the user creates the group", async () => {
+  it("becomes a project when the user creates the group, whose steward is the group's own", async () => {
     const { w, ada, propose } = await setup();
     const dir = join(await tempDir("eta-captain-"), "small-repo");
     await mkdir(dir);
@@ -426,21 +466,20 @@ describe("a new directory", () => {
     expect(projectRow(w, result.projectId)).toMatchObject({
       path: dir,
       name: "small-repo",
-      stewardId: ada.id,
       machineId: w.host.db
         .query<{ id: string }, []>(
           "SELECT id FROM machine WHERE kind = 'primary'",
         )
         .get()!.id,
     });
-    // The steward is the project's, followed rather than copied, as the dialog makes it.
+    // The steward is the group's, as the dialog makes it: the project has none.
     expect(
       one(
         w,
         "SELECT steward_id, project_id FROM conversation WHERE id = ?",
         result.conversationId,
       ),
-    ).toEqual({ steward_id: null, project_id: result.projectId });
+    ).toEqual({ steward_id: ada.id, project_id: result.projectId });
   });
 
   it("fails at confirmation when the directory went away or a member was deleted", async () => {
@@ -462,7 +501,7 @@ describe("a new directory", () => {
   });
 
   it("is checked on the machine it is on", async () => {
-    const { w, ada, propose } = await setup();
+    const { w, propose } = await setup();
     const daemon = await startDaemon(w.host, w.client, { name: "gpu-box" });
     await approve(w.client, daemon);
     const machineId = daemon.machineId;
@@ -478,7 +517,7 @@ describe("a new directory", () => {
     const decided = await decide(w, operation.id, "approve");
     expect(
       projectRow(w, (decided.result as { projectId: string }).projectId),
-    ).toMatchObject({ machineId, path: there, stewardId: ada.id });
+    ).toMatchObject({ machineId, path: there });
 
     // Offline, the machine cannot say, so the proposal is refused.
     await daemon.stop();
@@ -504,7 +543,7 @@ describe("a group proposal written before proposals shared one mechanism", () =>
    * state; a pending one must still be confirmable.
    */
   async function legacy(w: World, captain: string, adaId: string) {
-    const project = await w.project({ stewardId: adaId, name: "old repo" });
+    const project = await w.project({ name: "old repo" });
     const machineId = w.host.db
       .query<{ id: string }, []>(
         "SELECT id FROM machine WHERE kind = 'primary'",
