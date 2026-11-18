@@ -216,9 +216,11 @@ afterEach(async () => {
 
 describe("inserting into a message being answered", () => {
   it("offers Insert only on the message a reply is being written to", async () => {
-    const { container: c, asked, earlier } = await opened((args) =>
-      written(args, {}),
-    );
+    const {
+      container: c,
+      asked,
+      earlier,
+    } = await opened((args) => written(args, {}));
     const offered = insertButtons(c);
     expect(offered).toHaveLength(1);
     expect(offered[0]!.closest("[data-mid]")?.getAttribute("data-mid")).toBe(
@@ -233,7 +235,11 @@ describe("inserting into a message being answered", () => {
   });
 
   it("sends to everyone answering it, and the words join the message, not the transcript", async () => {
-    const { container: c, asked, sends } = await opened((args) =>
+    const {
+      container: c,
+      asked,
+      sends,
+    } = await opened((args) =>
       written(args, { into: args.into, joined: [ADA, BO], woke: [] }),
     );
     await click(insertButtons(c)[0]);
@@ -296,9 +302,11 @@ describe("inserting into a message being answered", () => {
 
   it("sends it as a new message, and says so, when the turn ended before it got there", async () => {
     const said = vi.spyOn(toast, "message").mockImplementation(() => 0);
-    const { container: c, asked, sends } = await opened((args) =>
-      written(args, { woke: [ADA], joined: [] }),
-    );
+    const {
+      container: c,
+      asked,
+      sends,
+    } = await opened((args) => written(args, { woke: [ADA], joined: [] }));
     await click(insertButtons(c)[0]);
     await typeInto(insertBox()!, "晚了一步");
     await enterIn(insertBox()!);
@@ -312,9 +320,7 @@ describe("inserting into a message being answered", () => {
   });
 
   it("marks in the process window where the run took the inserted words", async () => {
-    const { container: c, replies } = await opened((args) =>
-      written(args, {}),
-    );
+    const { container: c, replies } = await opened((args) => written(args, {}));
     const process = turn(c, replies[0]!.id);
     expect(process.textContent).toContain("— 收到你插入的消息 —");
     // The trace sits between what came before it and after it, and does not repeat the words.
@@ -328,9 +334,11 @@ describe("inserting into a message being answered", () => {
 
 describe("stopping", () => {
   it("stops one reply from its own process window, and says it is stopping", async () => {
-    const { container: c, host, replies } = await opened((args) =>
-      written(args, {}),
-    );
+    const {
+      container: c,
+      host,
+      replies,
+    } = await opened((args) => written(args, {}));
     const stops = [...c.querySelectorAll("button")].filter(
       (b) => b.textContent === "停止",
     );
@@ -347,9 +355,11 @@ describe("stopping", () => {
   });
 
   it("reads Stopping… while the stop is on its way, and can be pressed again", async () => {
-    const { container: c, host, replies } = await opened((args) =>
-      written(args, {}),
-    );
+    const {
+      container: c,
+      host,
+      replies,
+    } = await opened((args) => written(args, {}));
     await act(async () =>
       host.set(`conversations.${CONV}`, {
         timeline: {

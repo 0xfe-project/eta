@@ -231,21 +231,21 @@ function finishedItems(row: MessageView): TranscriptItem[] {
   const items = savedSteps(row)
     .filter((block) => block.type !== "steer")
     .map(
-    (block): TranscriptItem =>
-      block.type === "tool"
-        ? {
-            kind: "tool",
-            key: `${row.id}:${block.id}`,
-            tool: block,
-            progress: undefined,
-          }
-        : {
-            kind: block.type,
-            key: `${row.id}:${block.id}`,
-            text: block.text,
-            streaming: false,
-          },
-  );
+      (block): TranscriptItem =>
+        block.type === "tool"
+          ? {
+              kind: "tool",
+              key: `${row.id}:${block.id}`,
+              tool: block,
+              progress: undefined,
+            }
+          : {
+              kind: block.type,
+              key: `${row.id}:${block.id}`,
+              text: block.text,
+              streaming: false,
+            },
+    );
   if (row.text !== "" && row.status !== "failed")
     items.push({
       kind: "text",
