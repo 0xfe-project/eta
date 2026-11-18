@@ -1,7 +1,7 @@
 import type { MessageView, SteerHeldResult } from "@eta/client-contracts";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
 import { toast } from "sonner";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { agentView, productHost } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
@@ -82,7 +82,7 @@ afterEach(async () => {
   await cleanup();
   setWire(undefined);
   pulled.length = 0;
-  rstest.restoreAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe("排队中的消息", () => {
@@ -164,7 +164,7 @@ describe("排队中的消息", () => {
   });
 
   it("已经被读走：不再发送，只提示已经读到这条了", async () => {
-    const said = rstest.spyOn(toast, "message").mockImplementation(() => 0);
+    const said = vi.spyOn(toast, "message").mockImplementation(() => 0);
     const { container } = await start([held("再写个摘要")], {
       steer: () => steered({ steered: false, reason: "taken", joined: [] }),
     });
@@ -182,7 +182,7 @@ describe("排队中的消息", () => {
   });
 
   it("同一块上飞快连点两次插入：只调一次 steerHeld，也不多弹提示", async () => {
-    const said = rstest.spyOn(toast, "message").mockImplementation(() => 0);
+    const said = vi.spyOn(toast, "message").mockImplementation(() => 0);
     let answer!: (result: SteerHeldResult) => void;
     const { container } = await start([held("再写个摘要")], {
       steer: () =>

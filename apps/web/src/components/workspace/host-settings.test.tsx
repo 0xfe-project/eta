@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { i18n } from "@/lib/i18n";
 import { buildProductHost } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
@@ -39,7 +39,7 @@ describe("connection settings", () => {
 
   it("asks the shell for its page, and sends nothing else", async () => {
     shell({ connection: "local" });
-    const fetch = rstest.fn(async () => new Response(null, { status: 202 }));
+    const fetch = vi.fn(async () => new Response(null, { status: 202 }));
     globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
     await mount(<HostSettings />);
     await click(document.querySelector("button")!);

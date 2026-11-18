@@ -1,14 +1,7 @@
 import type { ProjectView, RecentPlace } from "@eta/client-contracts";
 import type { FakePlaces } from "@/test-places";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  rstest,
-} from "@rstest/core";
 import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { fakePlaces } from "@/test-places";
 import {
@@ -22,11 +15,11 @@ import { button, cleanup, click, flush, mount } from "@/test-render";
 import { NewConversationDialog } from "./new-conversation-dialog";
 import { useWorkspaceStore } from "./workspace-store";
 
-const state = rstest.hoisted(() => ({
-  navigate: rstest.fn(),
+const state = vi.hoisted(() => ({
+  navigate: vi.fn(),
 }));
 
-rstest.mock("@tanstack/react-router", () => ({
+vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => state.navigate,
 }));
 

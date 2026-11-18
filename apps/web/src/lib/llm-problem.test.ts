@@ -1,5 +1,5 @@
 import { LLM_CODES } from "@eta/client-contracts";
-import { afterEach, describe, expect, it } from "@rstest/core";
+import { afterEach, describe, expect, it } from "vitest";
 import { i18n } from "@/lib/i18n";
 import { llmProblemText } from "@/lib/llm-problem";
 import { WireError } from "@/lib/wire";

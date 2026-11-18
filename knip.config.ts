@@ -56,7 +56,7 @@ export default {
       entry: ["src/routes/**/*.{ts,tsx}", "public/sw.js"],
       // The router plugin writes it during vite build, which turbo may not
       // have run (or finished) when knip starts.
-      ignoreUnresolved: ["./routeTree.gen"],
+      ignoreUnresolved: ["./routeTree.gen", "@/routeTree.gen"],
       // Generated from the shadcn registry; unused exports there are
       // expected.
       ignore: ["src/components/ui/**"],

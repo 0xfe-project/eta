@@ -1,4 +1,4 @@
-import { describe, expect, it } from "@rstest/core";
+import { describe, expect, it } from "vitest";
 import { baseArg, baseCandidates, derivedBase, shownBase } from "./task-base";
 import { release } from "./task-tree-fixture";
 

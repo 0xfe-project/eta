@@ -1,11 +1,11 @@
-import { afterEach, beforeAll, expect, it, rstest } from "@rstest/core";
+import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { watchForUpdates } from "./update";
 
-const { toast } = rstest.hoisted(() => ({ toast: rstest.fn() }));
-rstest.mock("sonner", () => ({ toast }));
+const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
+vi.mock("sonner", () => ({ toast }));
 
 function serve(build: string) {
-  const fetch = rstest.fn(async () => new Response(build));
+  const fetch = vi.fn(async () => new Response(build));
   globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
   return fetch;
 }

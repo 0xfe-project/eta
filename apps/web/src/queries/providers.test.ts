@@ -1,5 +1,5 @@
 import type { ProviderSummary, ProvidersView } from "@eta/client-contracts";
-import { describe, expect, it } from "@rstest/core";
+import { describe, expect, it } from "vitest";
 import { WireError } from "@/lib/wire";
 import {
   discoveryErrorMessage,

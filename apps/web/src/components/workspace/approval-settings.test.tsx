@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "@rstest/core";
 import { NuqsTestingAdapter } from "nuqs/adapters/testing";
+import { afterEach, describe, expect, it } from "vitest";
 import { setWire } from "@/lib/wire";
 import { surfaceHost } from "@/test-inbox";
 import { agentView, conversationView, memberView } from "@/test-product";

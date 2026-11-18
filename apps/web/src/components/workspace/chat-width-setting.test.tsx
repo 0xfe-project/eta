@@ -1,14 +1,7 @@
 import { readFileSync } from "node:fs";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  rstest,
-} from "@rstest/core";
 import { NuqsTestingAdapter } from "nuqs/adapters/testing";
 import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { translate } from "@/lib/i18n";
 import { setWire } from "@/lib/wire";
 import { agentView, buildProductHost, productHost } from "@/test-product";
@@ -21,7 +14,7 @@ import { useWorkspaceStore } from "./workspace-store";
 // over the composer and the composer. happy-dom does not lay anything out, so the pixels are
 // checked here as the value on the section and the three places that read it.
 
-rstest.mock("@tanstack/react-router", () => ({
+vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children?: React.ReactNode }) => <a>{children}</a>,
   useRouterState: (options?: { select?: (state: unknown) => unknown }) =>
     options?.select
@@ -33,7 +26,7 @@ rstest.mock("@tanstack/react-router", () => ({
     options?.select ? options.select({ pathname: "/" }) : { pathname: "/" },
 }));
 
-rstest.mock("./use-groups", () => ({
+vi.mock("./use-groups", () => ({
   useGroups: () => ({ groups: [], current: undefined }),
   useOpenGroup: () => () => undefined,
 }));

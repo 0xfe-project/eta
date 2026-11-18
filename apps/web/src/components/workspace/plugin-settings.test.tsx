@@ -4,27 +4,20 @@ import type {
   PluginFieldView,
   PluginView,
 } from "@eta/client-contracts";
-import {
-  afterAll,
-  afterEach,
-  describe,
-  expect,
-  it,
-  rstest,
-} from "@rstest/core";
 import { act } from "react";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { closeBrowser, hasBrowser, onPage } from "@/test-browser";
 import { buildProductHost } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
 import { PluginSettings } from "./plugin-settings";
 
-const toasts = rstest.hoisted(() => ({
-  message: rstest.fn(),
-  success: rstest.fn(),
-  error: rstest.fn(),
+const toasts = vi.hoisted(() => ({
+  message: vi.fn(),
+  success: vi.fn(),
+  error: vi.fn(),
 }));
-rstest.mock("sonner", () => ({
+vi.mock("sonner", () => ({
   toast: Object.assign(toasts.message, {
     success: toasts.success,
     error: toasts.error,
@@ -371,7 +364,7 @@ describe("the plugin cards", () => {
   it("opens the full Git source without a host call and copies it unshortened", async () => {
     const built = host([displayPlugin(), git]);
     const { container } = await mount(<PluginSettings />);
-    const writeText = rstest.fn().mockResolvedValue(undefined);
+    const writeText = vi.fn().mockResolvedValue(undefined);
     const previous = Object.getOwnPropertyDescriptor(navigator, "clipboard");
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,

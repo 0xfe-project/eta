@@ -1,11 +1,11 @@
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { translate } from "@/lib/i18n";
 import { setWire } from "@/lib/wire";
 import { agentView, productHost } from "@/test-product";
 import { cleanup, mount } from "@/test-render";
 import { ChatPanel } from "./chat-panel";
 
-rstest.mock("@tanstack/react-router", () => ({
+vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children?: React.ReactNode }) => <a>{children}</a>,
   useRouterState: (options?: { select?: (state: unknown) => unknown }) =>
     options?.select
@@ -17,7 +17,7 @@ rstest.mock("@tanstack/react-router", () => ({
     options?.select ? options.select({ pathname: "/" }) : { pathname: "/" },
 }));
 
-rstest.mock("./use-groups", () => ({
+vi.mock("./use-groups", () => ({
   useGroups: () => ({ groups: [], current: undefined }),
   useOpenGroup: () => () => undefined,
 }));

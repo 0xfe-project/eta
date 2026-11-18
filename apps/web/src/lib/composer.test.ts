@@ -1,5 +1,5 @@
 import type { Draft } from "./composer";
-import { describe, expect, it } from "@rstest/core";
+import { describe, expect, it } from "vitest";
 import {
   afterCommand,
   charCount,

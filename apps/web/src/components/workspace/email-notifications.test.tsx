@@ -1,20 +1,20 @@
 import type { EmailThreadView } from "@eta/client-contracts";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { buildProductHost } from "@/test-product";
 import { cleanup, flush, mount } from "@/test-render";
 import { useEtaMailNotifications } from "./email-notifications";
 
-const mocks = rstest.hoisted(() => ({
-  navigate: rstest.fn(),
-  toast: rstest.fn(),
+const mocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  toast: vi.fn(),
 }));
 
-rstest.mock("@tanstack/react-router", () => ({
+vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mocks.navigate,
 }));
 
-rstest.mock("sonner", () => ({ toast: mocks.toast }));
+vi.mock("sonner", () => ({ toast: mocks.toast }));
 
 const thread = (
   fields: Partial<EmailThreadView> & Pick<EmailThreadView, "id">,

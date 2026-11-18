@@ -3,7 +3,7 @@ import type {
   ConversationSummary,
   MemberView,
 } from "@eta/client-contracts";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { translate } from "@/lib/i18n";
 import { setWire } from "@/lib/wire";
 import {
@@ -16,11 +16,11 @@ import { cleanup, mount } from "@/test-render";
 import { agentStatusLabels } from "./agent-status";
 import { GroupList } from "./groups";
 
-const groups = rstest.hoisted(() => ({ list: [] as ConversationSummary[] }));
+const groups = vi.hoisted(() => ({ list: [] as ConversationSummary[] }));
 
-rstest.mock("./use-groups", () => ({
+vi.mock("./use-groups", () => ({
   useGroups: () => ({ groups: groups.list }),
-  useOpenGroup: () => rstest.fn(),
+  useOpenGroup: () => vi.fn(),
 }));
 
 const agents: AgentView[] = [];

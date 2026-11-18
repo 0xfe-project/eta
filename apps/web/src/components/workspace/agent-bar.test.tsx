@@ -1,13 +1,6 @@
 import type { ConversationSummary } from "@eta/client-contracts";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  rstest,
-} from "@rstest/core";
 import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import {
   agentView,
@@ -39,13 +32,13 @@ const groups: ConversationSummary[] = [
   }),
 ];
 const openAgentCalls: string[] = [];
-const roster = rstest.hoisted(() => [
+const roster = vi.hoisted(() => [
   { id: "a1", name: "小明", status: "idle" },
   { id: "a2", name: "一个名字非常非常非常长的智能体助手", status: "working" },
   // Not in the group: the steward menu does not offer it.
   { id: "a3", name: "局外人", status: "idle" },
 ]);
-rstest.mock("./use-agents", () => ({
+vi.mock("./use-agents", () => ({
   // The header's avatars open an agent's own conversation.
   useOpenAgent: () => (id: string) => openAgentCalls.push(id),
 }));

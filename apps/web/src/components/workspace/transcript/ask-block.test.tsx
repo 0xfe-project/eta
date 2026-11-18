@@ -1,5 +1,5 @@
 import type { Question } from "@/queries/questions";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { button, cleanup, click, mount } from "@/test-render";
 import { AskBlock } from "./ask-block";
 
@@ -16,7 +16,7 @@ const question: Question = {
 
 describe("AskBlock", () => {
   it("marks a multi-select option before the answer is sent", async () => {
-    const onChoose = rstest.fn();
+    const onChoose = vi.fn();
     const { container } = await mount(
       <AskBlock
         question={{ ...question, multi: true }}
@@ -58,7 +58,7 @@ describe("AskBlock", () => {
   });
 
   it("submits a single-choice answer on the first click", async () => {
-    const onChoose = rstest.fn();
+    const onChoose = vi.fn();
     const { container } = await mount(
       <AskBlock question={question} onChoose={onChoose} onAbort={() => {}} />,
     );

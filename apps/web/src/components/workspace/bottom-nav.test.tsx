@@ -1,13 +1,13 @@
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { QueryClient } from "@tanstack/react-query";
 import { act } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { cleanup, mount } from "@/test-render";
 import { BottomNav } from "./app-shell";
 import { useWorkspaceStore } from "./workspace-store";
 
-const state = rstest.hoisted(() => ({ pathname: "/" }));
-rstest.mock("@tanstack/react-router", () => ({
+const state = vi.hoisted(() => ({ pathname: "/" }));
+vi.mock("@tanstack/react-router", () => ({
   Link: ({
     to,
     children,
@@ -25,7 +25,7 @@ rstest.mock("@tanstack/react-router", () => ({
     select({ location: { pathname: state.pathname } }),
   useNavigate: () => () => undefined,
 }));
-rstest.mock("./use-attention", () => ({
+vi.mock("./use-attention", () => ({
   useAttention: () => ({ total: 2 }),
 }));
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "@rstest/core";
+import { describe, expect, it } from "vitest";
 import { firstVisible, preview, railRows } from "./rail";
 
 const numbers = (total: number, focus: number) =>

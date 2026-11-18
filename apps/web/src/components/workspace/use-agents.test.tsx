@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import {
   agentView,
@@ -10,8 +10,8 @@ import { cleanup, click, flush, mount } from "@/test-render";
 import { useOpenAgent } from "./use-agents";
 import { useWorkspaceStore } from "./workspace-store";
 
-const navigation = rstest.hoisted(() => ({ open: rstest.fn() }));
-rstest.mock("./use-groups", () => ({
+const navigation = vi.hoisted(() => ({ open: vi.fn() }));
+vi.mock("./use-groups", () => ({
   useOpenGroup: () => navigation.open,
 }));
 

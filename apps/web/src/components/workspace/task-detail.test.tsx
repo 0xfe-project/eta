@@ -1,14 +1,7 @@
 import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { Task } from "@/queries/tasks";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  rstest,
-} from "@rstest/core";
 import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { i18n } from "@/lib/i18n";
 import { setWire } from "@/lib/wire";
 import {
@@ -33,14 +26,14 @@ import { Tasks } from "./tasks";
 // for and what waits for it, why it has not started, why it is stuck, how far a piece of work is),
 // the new-task form and its split (08), the one picker (09), and the side panel's groups (10).
 
-const navigation = rstest.hoisted(() => ({
+const navigation = vi.hoisted(() => ({
   task: null as string | null,
-  set: rstest.fn(),
+  set: vi.fn(),
 }));
-rstest.mock("./task-nav", () => ({
+vi.mock("./task-nav", () => ({
   useTaskNav: () => [navigation, navigation.set],
 }));
-rstest.mock("./use-groups", () => ({
+vi.mock("./use-groups", () => ({
   useGroups: () => ({ groups: [], current: undefined, groupId: null }),
   useOpenGroup: () => () => {},
 }));
@@ -750,7 +743,7 @@ describe("where the new task starts", () => {
 describe("the picker (09)", () => {
   it("greys what would close a cycle, saying so, and keeps a parent's own work out of its parents", async () => {
     host();
-    const picked = rstest.fn();
+    const picked = vi.fn();
     await mount(
       <TaskPickList
         mode="dependsOn"

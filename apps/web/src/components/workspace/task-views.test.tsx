@@ -1,13 +1,6 @@
 import type { Task } from "@/queries/tasks";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  rstest,
-} from "@rstest/core";
 import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { useOutbox } from "@/queries/outbox";
 import { agentView, productHost, taskDetail } from "@/test-product";
@@ -18,26 +11,26 @@ import { board, release } from "./task-tree-fixture";
 import { emptyFilter, useTaskView } from "./task-view";
 import { useWorkspaceStore } from "./workspace-store";
 
-const navigation = rstest.hoisted(() => ({
+const navigation = vi.hoisted(() => ({
   task: null as string | null,
-  set: rstest.fn(),
+  set: vi.fn(),
 }));
-rstest.mock("./task-nav", () => ({
+vi.mock("./task-nav", () => ({
   useTaskNav: () => [navigation, navigation.set],
 }));
-const opened = rstest.hoisted(() => ({ group: rstest.fn() }));
-const toasts = rstest.hoisted(() => ({
-  show: rstest.fn(),
-  error: rstest.fn(),
+const opened = vi.hoisted(() => ({ group: vi.fn() }));
+const toasts = vi.hoisted(() => ({
+  show: vi.fn(),
+  error: vi.fn(),
 }));
-rstest.mock("sonner", () => ({
+vi.mock("sonner", () => ({
   toast: Object.assign(toasts.show, {
     error: toasts.error,
-    success: rstest.fn(),
-    warning: rstest.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
   }),
 }));
-rstest.mock("./use-groups", () => ({
+vi.mock("./use-groups", () => ({
   useGroups: () => ({ groups: [], current: undefined, groupId: null }),
   useOpenGroup: () => opened.group,
 }));
@@ -428,7 +421,7 @@ describe("the tasks page's views", () => {
     /** Drag from one node's handle onto another, as the pointer does. */
     async function drag(container: HTMLElement, from: string, to: string) {
       const target = container.querySelector(`[data-plan-node="${to}"]`)!;
-      const elementFromPoint = rstest
+      const elementFromPoint = vi
         .spyOn(document, "elementFromPoint")
         .mockImplementation(() => target);
       const pointer = (type: string, x: number) =>

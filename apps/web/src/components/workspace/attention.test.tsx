@@ -1,7 +1,6 @@
 import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { InteractionView } from "@/queries/inbox";
 import type { SurfaceSeed } from "@/test-inbox";
-import { afterEach, describe, expect, it } from "@rstest/core";
 import { QueryClient } from "@tanstack/react-query";
 import {
   createMemoryHistory,
@@ -11,6 +10,7 @@ import {
 } from "@tanstack/react-router";
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
+import { afterEach, describe, expect, it } from "vitest";
 import { setWire } from "@/lib/wire";
 import { interactionView, surfaceHost } from "@/test-inbox";
 import {

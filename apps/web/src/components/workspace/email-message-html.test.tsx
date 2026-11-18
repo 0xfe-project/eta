@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "@rstest/core";
+import { afterEach, describe, expect, it } from "vitest";
 import { setWire } from "@/lib/wire";
 import { cleanup, mount } from "@/test-render";
 import { EmailMessageHtml } from "./email-message-html";

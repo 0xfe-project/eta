@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { productHost, taskDetail } from "@/test-product";
 import { cleanup, flush, mount } from "@/test-render";
 import { TaskProperties } from "./tasks";
 
-rstest.mock("./use-groups", () => ({
+vi.mock("./use-groups", () => ({
   useGroups: () => ({
     groups: [{ id: "g1", name: "任务讨论", archived: false }],
   }),

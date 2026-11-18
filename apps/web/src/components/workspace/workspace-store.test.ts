@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "@rstest/core";
+import { beforeEach, describe, expect, it } from "vitest";
 import { useWorkspaceStore } from "./workspace-store";
 
 const key = "eta.workspace.v1";

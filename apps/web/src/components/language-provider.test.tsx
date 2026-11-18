@@ -1,6 +1,6 @@
-import { afterEach, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
 import { useTranslation } from "react-i18next";
+import { afterEach, expect, it, vi } from "vitest";
 import {
   i18n,
   languageStorageKey,
@@ -15,7 +15,7 @@ import { AgentStatus } from "./workspace/agent-identity";
 
 afterEach(async () => {
   await cleanup();
-  rstest.restoreAllMocks();
+  vi.restoreAllMocks();
   setLanguagePreference("system");
   localStorage.removeItem(languageStorageKey);
 });
@@ -43,7 +43,7 @@ async function mount() {
 
 it("detects the system language and switches settings and shared components immediately", async () => {
   localStorage.removeItem(languageStorageKey);
-  rstest.spyOn(navigator, "languages", "get").mockReturnValue(["zh-CN"]);
+  vi.spyOn(navigator, "languages", "get").mockReturnValue(["zh-CN"]);
   const container = await mount();
   expect(container.querySelector("h1")?.textContent).toBe("设置");
   expect(container.textContent).toContain("正在加载…");
@@ -71,7 +71,7 @@ it("detects the system language and switches settings and shared components imme
 
 it("restores the saved choice and synchronizes changes from another tab", async () => {
   localStorage.setItem(languageStorageKey, JSON.stringify("en"));
-  rstest.spyOn(navigator, "languages", "get").mockReturnValue(["zh-CN"]);
+  vi.spyOn(navigator, "languages", "get").mockReturnValue(["zh-CN"]);
   const container = await mount();
   expect(container.querySelector("h1")?.textContent).toBe("Settings");
   await act(async () => {
@@ -91,7 +91,7 @@ it("restores the saved choice and synchronizes changes from another tab", async 
 
 it("follows system changes while keeping an explicit preference", async () => {
   localStorage.removeItem(languageStorageKey);
-  const languages = rstest
+  const languages = vi
     .spyOn(navigator, "languages", "get")
     .mockReturnValue(["fr-FR"]);
   const container = await mount();

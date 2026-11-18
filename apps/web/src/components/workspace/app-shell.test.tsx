@@ -4,9 +4,9 @@ import type {
   ConversationSummary,
   EmailAccountView,
 } from "@eta/client-contracts";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { QueryClient } from "@tanstack/react-query";
 import { act } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { setWire } from "@/lib/wire";
@@ -25,10 +25,10 @@ import { Sidebar, SidebarShell } from "./app-shell";
 import { GroupList } from "./groups";
 import { useWorkspaceStore } from "./workspace-store";
 
-const state = rstest.hoisted(() => ({
+const state = vi.hoisted(() => ({
   agents: [] as { id: string; name: string; status: string }[],
   groups: [] as ConversationSummary[],
-  openAgent: rstest.fn(),
+  openAgent: vi.fn(),
   pathname: "/",
 }));
 /** The board, for the count the rail has to keep. */
@@ -41,7 +41,7 @@ const verified: string[] = [];
 let emailUnread = 0;
 /** Captain, when a test is about where its block sits; mounted only then. */
 let captainIdentity: CaptainIdentityView | null = null;
-rstest.mock("./use-agents", () => ({
+vi.mock("./use-agents", () => ({
   useAgents: () => ({
     agents: state.agents,
     loaded: true,
@@ -53,12 +53,12 @@ rstest.mock("./use-agents", () => ({
   }),
   useOpenAgent: () => state.openAgent,
 }));
-rstest.mock("./use-groups", () => ({
+vi.mock("./use-groups", () => ({
   useGroups: () => ({ groups: state.groups, current: undefined }),
   useOpenGroup: () => () => undefined,
 }));
 // The sidebar links through the router; this test is about the list, so the link is a plain one.
-rstest.mock("@tanstack/react-router", () => ({
+vi.mock("@tanstack/react-router", () => ({
   Link: ({
     children,
     to,

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "@rstest/core";
 import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
 import { Markdown } from "./markdown";
 
 function render(source: string, streaming = false) {

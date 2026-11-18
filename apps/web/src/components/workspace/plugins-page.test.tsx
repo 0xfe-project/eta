@@ -1,10 +1,10 @@
-import { afterAll, afterEach, describe, expect, it } from "@rstest/core";
 import {
   createMemoryHistory,
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
 import { act } from "react";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { languageStorageKey } from "@/lib/i18n";
 import { createQueryClient } from "@/lib/query-client";
 import { setWire } from "@/lib/wire";

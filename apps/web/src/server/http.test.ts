@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
-import { expect, it } from "@rstest/core";
+import { expect, it } from "vitest";
 import { webApiMiddleware } from "./http.ts";
 
 /** One request through the dev server's middleware: what it wrote, or that it passed it on. */

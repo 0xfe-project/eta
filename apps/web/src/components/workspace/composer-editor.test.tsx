@@ -1,6 +1,6 @@
 import type { Draft, FilePart } from "@/lib/composer";
-import { afterEach, describe, expect, it } from "@rstest/core";
 import { act } from "react";
+import { afterEach, describe, expect, it } from "vitest";
 import { LONG_PASTE, MAX_MESSAGE_CHARS } from "@/lib/composer";
 import { cleanup, mount } from "@/test-render";
 import { ComposerEditor } from "./composer-editor";

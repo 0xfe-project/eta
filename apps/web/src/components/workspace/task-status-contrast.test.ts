@@ -1,6 +1,6 @@
 import type { TaskStatus } from "@/queries/tasks";
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "@rstest/core";
+import { describe, expect, it } from "vitest";
 import { statusTone } from "./task-format";
 
 // A status label's words are 12px text on a tint of their own colour. Read from the tokens in

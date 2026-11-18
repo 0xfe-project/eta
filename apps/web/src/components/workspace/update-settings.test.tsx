@@ -3,8 +3,8 @@ import type {
   UpgradeCheckView,
   UpgradeStatusView,
 } from "@eta/client-contracts";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { buildProductHost } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
@@ -66,20 +66,20 @@ async function open(
 ) {
   globalThis.fetch = (async () =>
     Response.json(status)) as unknown as typeof globalThis.fetch;
-  const start = rstest.fn((_args: unknown) => ({ id: "u1" }));
-  const cancel = rstest.fn((_args: unknown) => ({ cancelled: true }));
-  const setUpstream = rstest.fn((args: unknown) => {
+  const start = vi.fn((_args: unknown) => ({ id: "u1" }));
+  const cancel = vi.fn((_args: unknown) => ({ cancelled: true }));
+  const setUpstream = vi.fn((args: unknown) => {
     if ((args as UpgradeArgs["setUpstream"]).upstream === "nonsense")
       throw new Error("not a repository");
     return checked.upstream;
   });
-  const setToken = rstest.fn((_args: unknown) => ({ saved: "github.com" }));
+  const setToken = vi.fn((_args: unknown) => ({ saved: "github.com" }));
   let prerelease = check.prerelease ?? false;
-  const setPrerelease = rstest.fn((args: unknown) => {
+  const setPrerelease = vi.fn((args: unknown) => {
     ({ prerelease } = args as UpgradeArgs["setPrerelease"]);
     return { prerelease };
   });
-  const checks = rstest.fn(() => ({ ...checked, ...check, prerelease }));
+  const checks = vi.fn(() => ({ ...checked, ...check, prerelease }));
   const host = buildProductHost({}, ["upgrade"])
     .handle("upgrade.check", checks)
     .handle("upgrade.start", start)

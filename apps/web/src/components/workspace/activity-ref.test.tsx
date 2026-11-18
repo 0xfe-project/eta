@@ -1,5 +1,4 @@
 import type { ActivityRef } from "./activity-ref";
-import { afterEach, describe, expect, it } from "@rstest/core";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -8,6 +7,7 @@ import {
 } from "@tanstack/react-router";
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, flush, mount as render } from "@/test-render";
 import { ActivityRefCard } from "./activity-ref";
 

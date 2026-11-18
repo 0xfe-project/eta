@@ -3,13 +3,13 @@ import type {
   CaptainOperationView,
   MessageView,
 } from "@eta/client-contracts";
-import { afterEach, describe, expect, it } from "@rstest/core";
 import {
   createMemoryHistory,
   createRootRoute,
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
+import { afterEach, describe, expect, it } from "vitest";
 import { setWire } from "@/lib/wire";
 import { buildProductHost, machineView, messageView } from "@/test-product";
 import { button, cleanup, click, flush, mount } from "@/test-render";

@@ -1,13 +1,6 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  rstest,
-} from "@rstest/core";
 import { NuqsTestingAdapter } from "nuqs/adapters/testing";
 import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { translate } from "@/lib/i18n";
 import { setWire } from "@/lib/wire";
 import { agentView, buildProductHost, productHost } from "@/test-product";
@@ -19,11 +12,11 @@ import { useWorkspaceStore } from "./workspace-store";
 // The chat's right-edge rail is off until 设置 → 外观 turns it on. The rail itself is stood in for:
 // what it draws is transcript-rail.test.tsx's business, whether it is there at all is this file's.
 
-rstest.mock("./transcript-rail", () => ({
+vi.mock("./transcript-rail", () => ({
   TranscriptRail: () => <div data-testid="transcript-rail" />,
 }));
 
-rstest.mock("@tanstack/react-router", () => ({
+vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children?: React.ReactNode }) => <a>{children}</a>,
   useRouterState: (options?: { select?: (state: unknown) => unknown }) =>
     options?.select
@@ -35,7 +28,7 @@ rstest.mock("@tanstack/react-router", () => ({
     options?.select ? options.select({ pathname: "/" }) : { pathname: "/" },
 }));
 
-rstest.mock("./use-groups", () => ({
+vi.mock("./use-groups", () => ({
   useGroups: () => ({ groups: [], current: undefined }),
   useOpenGroup: () => () => undefined,
 }));

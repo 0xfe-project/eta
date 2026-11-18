@@ -3,15 +3,8 @@ import type {
   InteractionView,
   MessageView,
 } from "@eta/client-contracts";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  rstest,
-} from "@rstest/core";
 import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { plainDraft } from "@/lib/composer";
 import { setWire } from "@/lib/wire";
 import { useOutbox } from "@/queries/outbox";
@@ -28,8 +21,8 @@ import { cleanup, click, flush, mount } from "@/test-render";
 
 // Each text block a row renders goes through Markdown: counting its calls
 // counts the rows that rendered.
-const renders = rstest.hoisted(() => [] as string[]);
-rstest.mock("@/components/markdown", () => ({
+const renders = vi.hoisted(() => [] as string[]);
+vi.mock("@/components/markdown", () => ({
   Markdown: ({ children }: { children: string }) => {
     renders.push(children);
     return <p>{children}</p>;
@@ -38,7 +31,7 @@ rstest.mock("@/components/markdown", () => ({
 
 // The ref cards link into the app (a router and a search adapter); here they only say what they
 // point at, and which version of it. Their own rendering is activity-ref.test.tsx.
-rstest.mock("./activity-ref", () => ({
+vi.mock("./activity-ref", () => ({
   ActivityRefCard: ({
     value,
     variant,

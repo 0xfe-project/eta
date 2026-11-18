@@ -4,8 +4,8 @@ import type {
   SendResult,
 } from "@eta/client-contracts";
 import type { FakeHost } from "@/test-wire";
-import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { plainDraft } from "@/lib/composer";
 import { setWire } from "@/lib/wire";
 import { useOutbox } from "@/queries/outbox";

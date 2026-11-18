@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyCustomFont, watchCustomFont } from "@/lib/custom-font";
 import { storageKey, useWorkspaceStore } from "./workspace-store";
 

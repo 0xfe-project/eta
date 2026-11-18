@@ -1,13 +1,6 @@
 import type { MessageView } from "@eta/client-contracts";
-import {
-  afterAll,
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-} from "@rstest/core";
 import { act } from "react";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setWire } from "@/lib/wire";
 import { useOutbox } from "@/queries/outbox";
 import { closeBrowser, hasBrowser, onPage } from "@/test-browser";

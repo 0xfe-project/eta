@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 import { act, createElement } from "react";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanup, mount } from "@/test-render";
 import { useFold } from "./fold";
 

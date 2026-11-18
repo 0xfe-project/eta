@@ -1,6 +1,6 @@
 import type { ConversationSummary } from "@eta/client-contracts";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { translate } from "@/lib/i18n";
 import { setWire } from "@/lib/wire";
@@ -17,8 +17,8 @@ import { cleanup, click, flush, mount } from "@/test-render";
 import { ConversationList } from "./sidebar-tree";
 import { storageKey, useWorkspaceStore } from "./workspace-store";
 
-const navigation = rstest.hoisted(() => ({ navigate: rstest.fn() }));
-rstest.mock("nuqs", () => {
+const navigation = vi.hoisted(() => ({ navigate: vi.fn() }));
+vi.mock("nuqs", () => {
   const parser = ({ parse }: { parse: (value: string | null) => unknown }) => {
     const self = {
       parse,
@@ -34,7 +34,7 @@ rstest.mock("nuqs", () => {
     useQueryState: () => [null],
   };
 });
-rstest.mock("@tanstack/react-router", () => ({
+vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigation.navigate,
 }));
 

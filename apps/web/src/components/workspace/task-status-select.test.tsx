@@ -1,6 +1,6 @@
 import type { TaskDetail } from "@/queries/tasks";
-import { afterEach, describe, expect, it } from "@rstest/core";
 import { act } from "react";
+import { afterEach, describe, expect, it } from "vitest";
 import { setWire } from "@/lib/wire";
 import { productHost, taskDetail } from "@/test-product";
 import { cleanup, flush, mount } from "@/test-render";

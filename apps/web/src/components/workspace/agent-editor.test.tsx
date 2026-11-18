@@ -1,13 +1,6 @@
 import type { AgentView, PluginView } from "@eta/client-contracts";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  rstest,
-} from "@rstest/core";
 import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { agentView, machineView } from "@/test-product";
 import { cleanup, flush, mount } from "@/test-render";
@@ -32,8 +25,8 @@ const providers = {
   ],
 };
 
-rstest.mock("./agent-identity", () => ({ AgentAvatar: () => <span /> }));
-rstest.mock("sonner", () => ({
+vi.mock("./agent-identity", () => ({ AgentAvatar: () => <span /> }));
+vi.mock("sonner", () => ({
   toast: { success: () => {}, error: () => {} },
 }));
 

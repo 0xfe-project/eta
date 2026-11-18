@@ -1,5 +1,5 @@
 import type { UpgradeStatusView } from "@eta/client-contracts";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { buildProductHost } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
@@ -11,7 +11,7 @@ afterEach(async () => {
   await cleanup();
   setWire(undefined);
   globalThis.fetch = realFetch;
-  rstest.useRealTimers();
+  vi.useRealTimers();
   document.body.innerHTML = "";
 });
 
@@ -101,7 +101,7 @@ describe("the screen over an upgrade", () => {
     await poll();
     expect(text()).toContain("正在检查新版本");
 
-    const reload = rstest
+    const reload = vi
       .spyOn(window.location, "reload")
       .mockImplementation(() => {});
     state.now = upgrade({ state: "done" });

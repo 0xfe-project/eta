@@ -1,12 +1,5 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  rstest,
-} from "@rstest/core";
 import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import {
   agentView,
@@ -18,14 +11,14 @@ import {
 import { cleanup, click, flush, mount } from "@/test-render";
 import { GroupMembers } from "./groups";
 
-const summary = rstest.hoisted(() => ({
+const summary = vi.hoisted(() => ({
   current: undefined as unknown,
 }));
-rstest.mock("./use-groups", () => ({
+vi.mock("./use-groups", () => ({
   useGroups: () => ({ groups: [], current: summary.current }),
   useOpenGroup: () => () => undefined,
 }));
-rstest.mock("./use-agents", () => ({
+vi.mock("./use-agents", () => ({
   useAgents: () => ({
     agents: [
       { id: "a1", name: "乐子人", status: "idle" },

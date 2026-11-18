@@ -1,5 +1,5 @@
-import { afterEach, expect, it, rstest } from "@rstest/core";
 import { act, useState } from "react";
+import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, mount } from "@/test-render";
 import { Select, SelectGroup, SelectOption } from "./select-field";
 
@@ -10,7 +10,7 @@ const trigger = (container: HTMLElement) =>
   container.querySelector<HTMLButtonElement>('[role="combobox"]')!;
 
 it("preserves explicit empty choices and disabled grouped options", async () => {
-  const change = rstest.fn();
+  const change = vi.fn();
   const { container } = await mount(
     <Select aria-label="工作位置" value="workspace" open onValueChange={change}>
       <SelectOption value="">选择工作位置</SelectOption>
@@ -59,7 +59,7 @@ it("does not report a value it has no option for as cleared", async () => {
   // falls back to "" for a value with no option yet (models before their
   // services load) and reports that as a change: the agent editor then set
   // its default model again, until React gave up (#185).
-  const change = rstest.fn();
+  const change = vi.fn();
   const form = (value: string) => (
     <form>
       <Select aria-label="模型" value={value} onValueChange={change}>

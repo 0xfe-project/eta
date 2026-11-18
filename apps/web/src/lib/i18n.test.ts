@@ -1,8 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { setI18n } from "react-i18next";
 import ts from "typescript";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { agentFormSchema } from "@/components/workspace/agent-form";
 import { describeSchedule } from "@/components/workspace/routine-format";
 import { ago, statusLabel } from "@/components/workspace/task-format";
@@ -21,7 +21,7 @@ import {
 import { mentionedMembers } from "./mentions";
 
 afterEach(() => {
-  rstest.restoreAllMocks();
+  vi.restoreAllMocks();
   localStorage.removeItem(languageStorageKey);
   setLanguagePreference("system");
   localStorage.removeItem(languageStorageKey);
@@ -42,7 +42,7 @@ describe("language detection and preferences", () => {
   });
 
   it("uses browser languages by default and honors saved choices", () => {
-    rstest.spyOn(navigator, "languages", "get").mockReturnValue(["zh-CN"]);
+    vi.spyOn(navigator, "languages", "get").mockReturnValue(["zh-CN"]);
     expect(readLanguagePreference()).toBe("system");
     expect(resolveLanguage("system")).toBe("zh");
     setLanguagePreference("en");
@@ -64,7 +64,7 @@ describe("language detection and preferences", () => {
   );
 
   it("can switch and retain the choice when storage is blocked", () => {
-    rstest.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new Error("blocked");
     });
     setLanguagePreference("zh");

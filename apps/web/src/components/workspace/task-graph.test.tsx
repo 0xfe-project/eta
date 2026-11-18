@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { productHost, taskActivity, taskDetail } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
@@ -7,14 +7,14 @@ import { queueReasonLabel } from "./task-format";
 
 // The board shows what a task waits for, and gives a task a cancelled dependency blocked a way out.
 
-const navigation = rstest.hoisted(() => ({
+const navigation = vi.hoisted(() => ({
   task: null as string | null,
-  set: rstest.fn(),
+  set: vi.fn(),
 }));
-rstest.mock("./task-nav", () => ({
+vi.mock("./task-nav", () => ({
   useTaskNav: () => [navigation, navigation.set],
 }));
-rstest.mock("./use-groups", () => ({
+vi.mock("./use-groups", () => ({
   useGroups: () => ({ groups: [], current: undefined, groupId: null }),
   useOpenGroup: () => () => {},
 }));

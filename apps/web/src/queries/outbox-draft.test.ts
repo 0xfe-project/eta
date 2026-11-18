@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { useOutbox } from "./outbox";
 
 // The draft is the thing a person loses when a chat switches away and back, so what is being
