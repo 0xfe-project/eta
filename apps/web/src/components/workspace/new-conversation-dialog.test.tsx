@@ -284,10 +284,7 @@ describe("第一步：目录", () => {
     await walkInto("fresh");
     await begin();
     expect(calls()).toEqual([
-      [
-        "projects.create",
-        { path: `${HOME}/fresh`, machineId: "m1" },
-      ],
+      ["projects.create", { path: `${HOME}/fresh`, machineId: "m1" }],
       [
         "conversations.create",
         { projectId: "made", agentIds: ["a1"], stewardId: "a1" },

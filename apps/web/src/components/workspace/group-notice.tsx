@@ -28,17 +28,17 @@ export function GroupNotice({ message }: { message: MessageView }) {
     runId,
     title,
   } = message.data as {
-      event?: string;
-      from?: string | null;
-      to?: string | null;
-      /** `left`: the steward left the group, which has none now. */
-      reason?: string;
-      budget?: number;
-      routineId?: string;
-      routineName?: string;
-      runId?: string;
-      title?: string | null;
-    };
+    event?: string;
+    from?: string | null;
+    to?: string | null;
+    /** `left`: the steward left the group, which has none now. */
+    reason?: string;
+    budget?: number;
+    routineId?: string;
+    routineName?: string;
+    runId?: string;
+    title?: string | null;
+  };
   const proposal = captainProposalOf(message);
   if (proposal !== undefined)
     return <ProposalCard message={message} row={proposal} />;
