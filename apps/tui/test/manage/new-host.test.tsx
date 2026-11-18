@@ -119,11 +119,11 @@ describe("/new, first step", () => {
   it("lists the projects a conversation can start in, newest first, then browsing", async () => {
     const w = await manageWorld();
     const ada = await w.agent("Ada");
-    const older = await w.project(ada.id);
+    const older = await w.project();
     await nextMillisecond();
-    const newer = await w.project(ada.id);
+    const newer = await w.project();
     await nextMillisecond();
-    const archived = await w.project(ada.id);
+    const archived = await w.project();
     await w.raw.call("projects", "update", {
       projectId: archived.id,
       archived: true,
@@ -148,9 +148,9 @@ describe("/new, first step", () => {
   it("starts in the project chosen with the only agent, without asking who", async () => {
     const w = await manageWorld();
     const ada = await w.agent("Ada");
-    await w.project(ada.id);
+    await w.project();
     await nextMillisecond();
-    const newer = await w.project(ada.id);
+    const newer = await w.project();
     const r = await w.showHome();
     await w.agentsArrived(1);
     const before = w.conversations().length;
@@ -180,9 +180,9 @@ describe("/new, first step", () => {
 
   it("closes on Esc and leaves nothing on the host", async () => {
     const w = await manageWorld();
-    const ada = await w.agent("Ada");
+    await w.agent("Ada");
     await w.agent("Ben");
-    await w.project(ada.id);
+    await w.project();
     const r = await w.showHome();
     await w.agentsArrived(2);
     const before = w.conversations().length;
@@ -347,11 +347,7 @@ describe("/new, browsing", () => {
     ).toEqual([
       {
         op: "projects.create",
-        args: {
-          path: join(work, "lib"),
-          machineId: primary.id,
-          stewardId: ada.id,
-        },
+        args: { path: join(work, "lib"), machineId: primary.id },
       },
       {
         op: "conversations.create",
@@ -425,7 +421,7 @@ describe("/new, browsing", () => {
 describe("/new, typing a path", () => {
   it("makes the project at a typed directory, then the conversation", async () => {
     const w = await manageWorld();
-    const ada = await w.agent("Ada");
+    await w.agent("Ada");
     const r = await w.showHome();
     await w.agentsArrived(1);
     const dir = await tempDir("eta-tui-typed-");
@@ -452,7 +448,7 @@ describe("/new, typing a path", () => {
     expect(askedStarting(w.wire, "projects.create")).toEqual([
       {
         op: "projects.create",
-        args: { path: dir, machineId: primary.id, stewardId: ada.id },
+        args: { path: dir, machineId: primary.id },
       },
     ]);
     expect(askedStarting(w.wire, "projects.directories")).toEqual([]);
@@ -520,9 +516,9 @@ describe("/new, typing a path", () => {
       10_000,
       "the create",
     );
-    expect(askedStarting(w.wire, "projects.create")[0]?.args).toMatchObject({
+    expect(askedStarting(w.wire, "projects.create")[0]?.args).toEqual({
       path: dir,
-      stewardId: ada.id,
+      machineId: w.machines().find((m) => m.kind === "primary")!.id,
     });
     expect(
       askedStarting(w.wire, "conversations.create")[0]?.args,
@@ -536,7 +532,7 @@ describe("/new, second step", () => {
     const ada = await w.agent("Ada");
     const ben = await w.agent("Ben");
     const cleo = await w.agent("Cleo");
-    const project = await w.project(ben.id);
+    const project = await w.project();
     const r = await w.showHome();
     await w.agentsArrived(3);
     await enter(r, "/new");
@@ -546,53 +542,11 @@ describe("/new, second step", () => {
     return { w, r, ada, ben, cleo, project };
   }
 
-  it("starts with the project's steward checked as steward", async () => {
-    const { r } = await three();
-    expect(lineWith(r, "Ben")).toMatch(/\[x\]\s+Ben\s+steward/);
-    expect(lineWith(r, "Ada")).toMatch(/\[ \]\s+Ada$/);
-    expect(lineWith(r, "Cleo")).toMatch(/\[ \]\s+Cleo$/);
-  }, 60_000);
-
-  it("starts with the first agent when the project has no steward", async () => {
-    const w = await manageWorld();
-    await w.agent("Ada");
-    await w.agent("Ben");
-    const project = await w.project();
-    const r = await w.showHome();
-    await w.agentsArrived(2);
-    await enter(r, "/new");
-    await screenShows(r, project.name);
-    await r.press(KEYS.enter);
-    await screenShows(r, "Space add or drop");
-    expect(lineWith(r, "Ada")).toMatch(/\[x\]\s+Ada\s+steward/);
-    expect(lineWith(r, "Ben")).toMatch(/\[ \]\s+Ben$/);
-  }, 60_000);
-
-  it("checks with Space, makes a checked one steward with s, ignores s on an unchecked one", async () => {
-    const { r } = await three();
-    await r.press(" "); // Ada checked
-    expect(lineWith(r, "Ada")).toMatch(/\[x\]\s+Ada$/);
-    await r.press(KEYS.down);
-    await r.press(KEYS.down); // Cleo, unchecked
-    await r.press("s");
-    expect(lineWith(r, "Cleo")).toMatch(/\[ \]\s+Cleo$/);
-    expect(lineWith(r, "Ben")).toMatch(/steward/);
-    await r.press(KEYS.up);
-    await r.press(KEYS.up); // Ada
-    await r.press("s");
-    expect(lineWith(r, "Ada")).toMatch(/\[x\]\s+Ada\s+steward/);
-    expect(lineWith(r, "Ben")).toMatch(/\[x\]\s+Ben$/);
-  }, 60_000);
-
-  it("hands the steward to the first checked one left when the steward is dropped", async () => {
-    const { w, r, ada, ben, cleo, project } = await three();
-    await r.press(KEYS.down);
-    await r.press(KEYS.down);
-    await r.press(" "); // Cleo checked
-    await r.press(KEYS.up);
-    await r.press(" "); // Ben, the steward, dropped
-    expect(lineWith(r, "Ben")).toMatch(/\[ \]\s+Ben$/);
-    expect(lineWith(r, "Cleo")).toMatch(/\[x\]\s+Cleo\s+steward/);
+  /** Enter, and the conversation the host made of it. */
+  async function startIt(
+    w: Awaited<ReturnType<typeof three>>["w"],
+    r: RenderedApp,
+  ) {
     const before = w.conversations().length;
     await r.press(KEYS.enter);
     await until(
@@ -600,7 +554,110 @@ describe("/new, second step", () => {
       10_000,
       "the new conversation",
     );
-    const made = newConversations(w, before)[0]!;
+    return newConversations(w, before)[0]!;
+  }
+
+  it("starts with the first agent checked as steward, then a no-steward line", async () => {
+    const { r } = await three();
+    expect(lineWith(r, "Ada")).toMatch(/\[x\]\s+Ada\s+steward/);
+    expect(lineWith(r, "Ben")).toMatch(/\[ \]\s+Ben$/);
+    expect(lineWith(r, "Cleo")).toMatch(/\[ \]\s+Cleo$/);
+    expect(lineWith(r, "No steward")).toMatch(/^›?\s*No steward$/);
+    const text = layer(r);
+    expect(text.indexOf("Cleo")).toBeLessThan(text.indexOf("No steward"));
+  }, 60_000);
+
+  it("keeps the first one chosen as steward when more are checked", async () => {
+    const { w, r, ada, ben, project } = await three();
+    await r.press(KEYS.down);
+    await r.press(" "); // Ben checked
+    expect(lineWith(r, "Ben")).toMatch(/\[x\]\s+Ben$/);
+    expect(lineWith(r, "Ada")).toMatch(/\[x\]\s+Ada\s+steward/);
+    const made = await startIt(w, r);
+    expect(new Set(made.participants.map((p) => p.agentId))).toEqual(
+      new Set([ada.id, ben.id]),
+    );
+    expect(made.stewardId).toBe(ada.id);
+    expect(askedStarting(w.wire, "conversations.create")[0]?.args).toEqual({
+      projectId: project.id,
+      agentIds: [ada.id, ben.id],
+      stewardId: ada.id,
+    });
+    await screenShows(r, `1:${made.name.slice(0, 10)}`);
+  }, 60_000);
+
+  it("makes the one checked first the steward after nobody was checked", async () => {
+    const { w, r, ben, cleo, project } = await three();
+    await r.press(" "); // Ada dropped: nobody left
+    for (const name of ["Ada", "Ben", "Cleo"])
+      expect(lineWith(r, name)).not.toMatch(/steward$/);
+    await r.press(KEYS.down);
+    await r.press(KEYS.down);
+    await r.press(" "); // Cleo checked first
+    await r.press(KEYS.up);
+    await r.press(" "); // then Ben
+    expect(lineWith(r, "Cleo")).toMatch(/\[x\]\s+Cleo\s+steward/);
+    expect(lineWith(r, "Ben")).toMatch(/\[x\]\s+Ben$/);
+    const made = await startIt(w, r);
+    expect(made.stewardId).toBe(cleo.id);
+    expect(askedStarting(w.wire, "conversations.create")[0]?.args).toEqual({
+      projectId: project.id,
+      agentIds: [ben.id, cleo.id],
+      stewardId: cleo.id,
+    });
+  }, 60_000);
+
+  it("checks with Space, makes a checked one steward with s, ignores s on an unchecked one", async () => {
+    const { w, r, ada, ben, project } = await three();
+    await r.press(KEYS.down);
+    await r.press(" "); // Ben checked
+    await r.press(KEYS.down); // Cleo, unchecked
+    await r.press("s");
+    expect(lineWith(r, "Cleo")).toMatch(/\[ \]\s+Cleo$/);
+    expect(lineWith(r, "Ada")).toMatch(/steward/);
+    await r.press(KEYS.up); // Ben
+    await r.press("s");
+    expect(lineWith(r, "Ben")).toMatch(/\[x\]\s+Ben\s+steward/);
+    expect(lineWith(r, "Ada")).toMatch(/\[x\]\s+Ada$/);
+    const made = await startIt(w, r);
+    expect(made.stewardId).toBe(ben.id);
+    expect(askedStarting(w.wire, "conversations.create")[0]?.args).toEqual({
+      projectId: project.id,
+      agentIds: [ada.id, ben.id],
+      stewardId: ben.id,
+    });
+  }, 60_000);
+
+  it("starts with no steward chosen on the last line", async () => {
+    const { w, r, ada, ben, project } = await three();
+    await r.press(KEYS.down);
+    await r.press(" "); // Ben checked
+    await r.press(KEYS.down);
+    await r.press(KEYS.down); // No steward
+    await r.press("s");
+    expect(lineWith(r, "No steward")).toContain("No steward (current)");
+    for (const name of ["Ada", "Ben"])
+      expect(lineWith(r, name)).not.toMatch(/steward$/);
+    const made = await startIt(w, r);
+    expect(made.stewardId).toBeNull();
+    expect(askedStarting(w.wire, "conversations.create")[0]?.args).toEqual({
+      projectId: project.id,
+      agentIds: [ada.id, ben.id],
+      stewardId: null,
+    });
+  }, 60_000);
+
+  it("hands the steward to the first checked one left when the steward is dropped", async () => {
+    const { w, r, cleo, project } = await three();
+    await r.press(KEYS.down);
+    await r.press(KEYS.down);
+    await r.press(" "); // Cleo checked
+    await r.press(KEYS.up);
+    await r.press(KEYS.up);
+    await r.press(" "); // Ada, the steward, dropped
+    expect(lineWith(r, "Ada")).toMatch(/\[ \]\s+Ada$/);
+    expect(lineWith(r, "Cleo")).toMatch(/\[x\]\s+Cleo\s+steward/);
+    const made = await startIt(w, r);
     expect(made.participants.map((p) => p.agentId)).toEqual([cleo.id]);
     expect(made.stewardId).toBe(cleo.id);
     expect(askedStarting(w.wire, "conversations.create")[0]?.args).toEqual({
@@ -608,14 +665,12 @@ describe("/new, second step", () => {
       agentIds: [cleo.id],
       stewardId: cleo.id,
     });
-    expect(ada.id).not.toBe(ben.id);
   }, 60_000);
 
   it("refuses to start with nobody checked", async () => {
     const { w, r } = await three();
-    await r.press(KEYS.down);
-    await r.press(" "); // Ben dropped: nobody left
-    expect(lineWith(r, "Ben")).toMatch(/\[ \]\s+Ben$/);
+    await r.press(" "); // Ada dropped: nobody left
+    expect(lineWith(r, "Ada")).toMatch(/\[ \]\s+Ada$/);
     for (const name of ["Ada", "Ben", "Cleo"])
       expect(lineWith(r, name)).not.toMatch(/steward$/);
     await r.press(KEYS.enter);
@@ -623,35 +678,13 @@ describe("/new, second step", () => {
     expect(showsLayer(plain(r))).toBe(true);
     expect(askedStarting(w.wire, "conversations.create")).toEqual([]);
   }, 60_000);
-
-  it("starts with every checked agent and the steward", async () => {
-    const { w, r, ada, ben, project } = await three();
-    await r.press(" "); // Ada checked
-    const before = w.conversations().length;
-    await r.press(KEYS.enter);
-    await until(
-      () => newConversations(w, before).length === 1,
-      10_000,
-      "the new conversation",
-    );
-    const made = newConversations(w, before)[0]!;
-    expect(new Set(made.participants.map((p) => p.agentId))).toEqual(
-      new Set([ada.id, ben.id]),
-    );
-    expect(askedStarting(w.wire, "conversations.create")[0]?.args).toEqual({
-      projectId: project.id,
-      agentIds: [ada.id, ben.id],
-      stewardId: ben.id,
-    });
-    await screenShows(r, `1:${made.name.slice(0, 10)}`);
-  }, 60_000);
 });
 
 describe("/new, starting", () => {
   it("sends once while the start is on its way", async () => {
     const w = await manageWorld();
-    const ada = await w.agent("Ada");
-    const project = await w.project(ada.id);
+    await w.agent("Ada");
+    const project = await w.project();
     const r = await w.showHome();
     await w.agentsArrived(1);
     const held = w.holdOn("conversations.create");
@@ -701,8 +734,8 @@ describe("/new, starting", () => {
 describe("/new, projects that cannot take a new conversation", () => {
   it("makes a typed path of an archived project again, which brings it back, and starts there", async () => {
     const w = await manageWorld();
-    const ada = await w.agent("Ada");
-    const project = await w.project(ada.id);
+    await w.agent("Ada");
+    const project = await w.project();
     await w.raw.call("projects", "update", {
       projectId: project.id,
       archived: true,
@@ -768,14 +801,14 @@ describe("/new, projects that cannot take a new conversation", () => {
 describe("/new, the cursor of the first step", () => {
   it("stays on the line it was on when a project comes in above it", async () => {
     const w = await manageWorld();
-    const ada = await w.agent("Ada");
-    const older = await w.project(ada.id);
+    await w.agent("Ada");
+    const older = await w.project();
     const r = await w.showHome();
     await w.agentsArrived(1);
     await enter(r, "/new");
     await screenShows(r, older.name);
     await r.press(KEYS.down); // Type a path…
-    const newer = await w.project(ada.id);
+    const newer = await w.project();
     await screenShows(r, newer.name);
     await r.press(KEYS.enter);
     await screenShows(r, "Enter use this path");
@@ -919,9 +952,9 @@ describe("/new on an 80×24 terminal", () => {
 
   it("with more projects than the main area holds, the list opens a window that follows the cursor, the frame within the main area", async () => {
     const w = await manageWorld();
-    const ada = await w.agent("Ada");
+    await w.agent("Ada");
     const projects: ProjectView[] = [];
-    for (let i = 0; i < 18; i += 1) projects.push(await w.project(ada.id));
+    for (let i = 0; i < 18; i += 1) projects.push(await w.project());
     const r = await w.showHome(SIZE);
     await w.agentsArrived(1);
     await enter(r, "/new");

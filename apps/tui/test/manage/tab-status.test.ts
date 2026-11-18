@@ -72,8 +72,6 @@ function info(readSeq: number): ConversationInfo {
     decided: "",
     archived: false,
     stewardId: null,
-    stewardOverrideId: null,
-    noSteward: false,
     readSeq,
     lastSeq: 0,
     createdAt: 0,

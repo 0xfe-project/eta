@@ -66,7 +66,7 @@ it("answers a question from another conversation without leaving the one in fron
     const { project } = await ask<{ project: ProjectView }>(
       "projects",
       "create",
-      { path: await tempDir("eta-tui-project-"), stewardId: agent.id },
+      { path: await tempDir("eta-tui-project-") },
     );
     const { conversation } = await ask<{ conversation: ConversationSummary }>(
       "conversations",

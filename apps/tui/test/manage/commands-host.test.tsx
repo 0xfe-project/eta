@@ -10,13 +10,13 @@ import { until } from "../support/temp";
 import { plain, realDelay } from "../ui-support/render";
 import { askedStarting, enter, manageWorld, statusLine, tabBar } from "./world";
 
-/** Ada and Ben in a group named "Release notes" in a project whose steward is Ada; Cleo outside it. */
+/** Ada and Ben in a group named "Release notes", Ada its steward (the first member); Cleo outside it. */
 async function group() {
   const world = await manageWorld();
   const ada = await world.agent("Ada");
   const ben = await world.agent("Ben");
   const cleo = await world.agent("Cleo");
-  const project = await world.project(ada.id);
+  const project = await world.project();
   const chat = await world.conversation(
     project.id,
     [ada.id, ben.id],
@@ -285,36 +285,24 @@ describe("/remove with a name", () => {
 });
 
 describe("/steward with an argument", () => {
-  it("makes a member the steward, then follows the project, then has none", async () => {
+  it("makes a member the steward, then has none", async () => {
     const w = await group();
     const r = await w.showFront(w.chat.id);
     await w.agentsArrived(3);
+    expect((await w.infoOf(w.chat.id)).stewardId).toBe(w.ada.id);
 
     await enter(r, "/steward Ben");
     await screenShows(r, "Ben is the steward of Release notes now");
-    let info = await w.infoOf(w.chat.id);
     await until(
-      async () => (await w.infoOf(w.chat.id)).stewardOverrideId === w.ben.id,
+      async () => (await w.infoOf(w.chat.id)).stewardId === w.ben.id,
       10_000,
       "Ben as steward",
     );
 
-    await enter(r, "/steward project");
-    await screenShows(r, "Release notes follows its project's steward now");
-    await until(
-      async () => {
-        info = await w.infoOf(w.chat.id);
-        return info.stewardOverrideId === null && !info.noSteward;
-      },
-      10_000,
-      "following the project",
-    );
-    expect(info.stewardId).toBe(w.ada.id);
-
     await enter(r, "/steward none");
     await screenShows(r, "Release notes has no steward now");
     await until(
-      async () => (await w.infoOf(w.chat.id)).noSteward,
+      async () => (await w.infoOf(w.chat.id)).stewardId === null,
       10_000,
       "no steward",
     );
@@ -328,11 +316,17 @@ describe("/steward with an argument", () => {
         op: "conversations.setSteward",
         args: { conversationId: w.chat.id, agentId: null },
       },
-      {
-        op: "conversations.setSteward",
-        args: { conversationId: w.chat.id, agentId: null, none: true },
-      },
     ]);
+  }, 60_000);
+
+  it("takes “project” for an agent's name, not a choice of its own", async () => {
+    const w = await group();
+    const r = await w.showFront(w.chat.id);
+    await w.agentsArrived(3);
+    await enter(r, "/steward project");
+    await screenShows(r, "No agent called “project”");
+    expect(askedStarting(w.wire, "conversations.setSteward")).toEqual([]);
+    expect((await w.infoOf(w.chat.id)).stewardId).toBe(w.ada.id);
   }, 60_000);
 
   it("looks among the members only", async () => {

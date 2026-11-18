@@ -90,10 +90,9 @@ export async function remove(
   );
 }
 
-/** A member, the project's steward, or none at all. */
+/** A member of the group, or none. */
 export type StewardChoice =
   | { kind: "agent"; agent: NamedAgent }
-  | { kind: "project" }
   | { kind: "none" };
 
 export async function setSteward(
@@ -101,25 +100,20 @@ export async function setSteward(
   conversationId: string,
   choice: StewardChoice,
 ): Promise<void> {
-  const args =
-    choice.kind === "agent"
-      ? { conversationId, agentId: choice.agent.id }
-      : choice.kind === "project"
-        ? { conversationId, agentId: null }
-        : { conversationId, agentId: null, none: true };
   const { conversation } = await ctx.wire.call<Updated>(
     "conversations",
     "setSteward",
-    args,
+    {
+      conversationId,
+      agentId: choice.kind === "agent" ? choice.agent.id : null,
+    },
   );
   const t = texts(ctx);
   const name = conversation.name;
   ctx.notify(
     choice.kind === "agent"
       ? t("stewardSet", { name: choice.agent.name, conversation: name })
-      : choice.kind === "project"
-        ? t("stewardFollows", { conversation: name })
-        : t("stewardNone", { conversation: name }),
+      : t("stewardNone", { conversation: name }),
     "info",
   );
 }

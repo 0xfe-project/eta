@@ -12,7 +12,7 @@ async function twoNamedAlike() {
   const w = await manageWorld();
   const ada = await w.agent("Ada");
   const ben = await w.agent("Ben");
-  const project = await w.project(ada.id);
+  const project = await w.project();
   const first = await w.conversation(project.id, [ada.id], "demo");
   const second = await w.conversation(project.id, [ada.id, ben.id], "demo");
   const r = await w.show({
@@ -51,11 +51,7 @@ describe("conversation tabs of the same name", () => {
 
   it("goes by id for a conversation without a steward", async () => {
     const { r, second, ask } = await twoNamedAlike();
-    await ask("setSteward", {
-      conversationId: second.id,
-      agentId: null,
-      none: true,
-    });
+    await ask("setSteward", { conversationId: second.id, agentId: null });
     await screenShows(
       r,
       bar(`1:demo (Ada)  2:demo (${second.id.slice(0, 6)})`),

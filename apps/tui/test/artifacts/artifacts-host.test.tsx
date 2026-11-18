@@ -46,7 +46,7 @@ async function publishing() {
     });
   });
   const ada = await w.agent("Ada");
-  const project = await w.project(ada.id);
+  const project = await w.project();
   await mkdir(join(project.path, "dist"), { recursive: true });
   await writeFile(join(project.path, "dist", "index.html"), "<h1>hello</h1>");
   const group = await w.conversation(project.id, [ada.id], "Site work");

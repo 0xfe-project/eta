@@ -39,7 +39,7 @@ type Translate = TranslateOf<keyof (typeof manageMessages)["en"]>;
 
 /** Where the conversation goes: a project the host has, or a directory to make one of. */
 type Place =
-  | { kind: "project"; projectId: string; stewardId: string | null }
+  | { kind: "project"; projectId: string }
   | { kind: "directory"; path: string };
 
 type WhereView = "projects" | "type" | "browse";
@@ -53,6 +53,9 @@ const COMMAND = "new";
 const TYPE_LINE = "\0type";
 const BROWSE_LINE = "\0browse";
 const USE_LINE = "\0use";
+
+/** The key of the second step's last line, no steward: an agent id cannot look like it. */
+const NO_STEWARD_LINE = "\0none";
 
 /**
  * The project a conversation can start in at exactly `path` on the primary machine. An archived
@@ -86,11 +89,7 @@ function projectAt(
 }
 
 function placeOf(project: ProjectView): Place {
-  return {
-    kind: "project",
-    projectId: project.id,
-    stewardId: project.stewardId,
-  };
+  return { kind: "project", projectId: project.id };
 }
 
 /**
@@ -179,7 +178,7 @@ export function NewConversationLayer({
   const [place, setPlace] = useState<Place | undefined>();
   const [pick, setPick] = useState<MemberPick>({
     checked: [],
-    steward: undefined,
+    steward: null,
   });
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | undefined>();
@@ -250,9 +249,6 @@ export function NewConversationLayer({
           {
             path: chosen.path,
             ...(primaryId === undefined ? {} : { machineId: primaryId }),
-            ...(members.steward === undefined
-              ? {}
-              : { stewardId: members.steward }),
           },
         );
         // An agent's workspace answers for its path: it is that agent's own, not a project.
@@ -266,9 +262,7 @@ export function NewConversationLayer({
       }>("conversations", "create", {
         projectId,
         agentIds: members.checked,
-        ...(members.steward === undefined
-          ? {}
-          : { stewardId: members.steward }),
+        stewardId: members.steward,
       });
       handle.close();
       ctx.openTab({ kind: CONVERSATION_VIEW, id: conversation.id });
@@ -309,12 +303,7 @@ export function NewConversationLayer({
       return;
     }
     setPlace(chosen);
-    setPick(
-      initialPick(
-        agentIds,
-        chosen.kind === "project" ? chosen.stewardId : undefined,
-      ),
-    );
+    setPick(initialPick(agentIds));
     setStartError(undefined);
     setStep("who");
     setCursor(0);
@@ -369,11 +358,17 @@ export function NewConversationLayer({
               }),
             ];
 
-  const whoRows: Row[] = agents.map((agent) => ({
-    key: agent.id,
-    label: `${pick.checked.includes(agent.id) ? "[x]" : "[ ]"} ${agent.name}`,
-    ...(pick.steward === agent.id ? { note: t("stewardTag") } : {}),
-  }));
+  const whoRows: Row[] = [
+    ...agents.map((agent) => ({
+      key: agent.id,
+      label: `${pick.checked.includes(agent.id) ? "[x]" : "[ ]"} ${agent.name}`,
+      ...(pick.steward === agent.id ? { note: t("stewardTag") } : {}),
+    })),
+    {
+      key: NO_STEWARD_LINE,
+      label: `${t("noSteward")}${pick.steward === null ? t("current") : ""}`,
+    },
+  ];
 
   const rows = step === "who" ? whoRows : whereRows;
   const at =
@@ -436,10 +431,13 @@ export function NewConversationLayer({
           setStep("where");
           setStartError(undefined);
           setWhereKey(undefined);
-        } else if (input === " " && agent !== undefined) {
+        } else if ((input === " " || input === "s") && agent === undefined) {
+          // The last line: no steward.
+          if (input === "s" || gateAllows(gate))
+            setPick(chooseSteward(pick, null));
+        } else if (input === " ") {
           if (gateAllows(gate)) setPick(toggleMember(pick, agentIds, agent.id));
-        } else if (input === "s" && agent !== undefined)
-          setPick(chooseSteward(pick, agent.id));
+        } else if (input === "s") setPick(chooseSteward(pick, agent.id));
         else if (key.return && place !== undefined) {
           if (!gateAllows(gate)) return;
           if (pick.checked.length === 0) setStartError(t("needMember"));

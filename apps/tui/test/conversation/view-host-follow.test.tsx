@@ -160,7 +160,7 @@ const lines = (prefix: string, count: number) =>
   Array.from({ length: count }, (_, i) => `${prefix} ${i + 1}`).join("\n");
 
 /**
- * Ada, steward of her project, in a conversation drawn 80 columns wide with `config`, on a host
+ * Ada, the steward of a conversation with her, drawn 80 columns wide with `config`, on a host
  * whose model answers by `script`.
  */
 async function liveWorld(
@@ -183,7 +183,7 @@ async function liveWorld(
   const { project } = await ask<{ project: ProjectView }>(
     "projects",
     "create",
-    { path: await tempDir("eta-tui-project-"), stewardId: ada.id },
+    { path: await tempDir("eta-tui-project-") },
   );
   const { conversation } = await ask<{ conversation: ConversationSummary }>(
     "conversations",

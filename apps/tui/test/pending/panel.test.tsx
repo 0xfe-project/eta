@@ -161,7 +161,7 @@ describe("a long panel", () => {
   it("scrolls with the cursor, a line or a screen at a time", async () => {
     const w = await pendingWorld();
     const owner = await w.agent("Owner");
-    const place = await w.project(owner.id);
+    const place = await w.project();
     const names: string[] = [];
     for (let i = 1; i <= 16; i += 1) {
       const name = `Room ${String(i).padStart(2, "0")}`;

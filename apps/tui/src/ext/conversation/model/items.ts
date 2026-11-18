@@ -333,16 +333,19 @@ interface SystemData {
   to?: unknown;
   budget?: unknown;
   title?: unknown;
+  reason?: unknown;
 }
 
 function systemText(context: Context, row: MessageView): string {
   const { t, input } = context;
-  const { event, from, to, budget, title } = row.data as SystemData;
+  const { event, from, to, budget, title, reason } = row.data as SystemData;
   const name = (id: string) => agentName(input.agents, id);
   if (event === "steward") {
     if (typeof to === "string" && typeof from === "string")
       return t("stewardChanged", { to: name(to), from: name(from) });
     if (typeof to === "string") return t("stewardSet", { to: name(to) });
+    if (typeof from === "string" && reason === "left")
+      return t("stewardLeft", { from: name(from) });
     if (typeof from === "string")
       return t("stewardCleared", { from: name(from) });
   }

@@ -324,14 +324,13 @@ Choose who takes the messages of the conversation in front that name nobody
 
 ### Arguments
 
-- `agent` (optional): A member's name, “project” to follow the project's steward, or “none”
+- `agent` (optional): A member's name, or “none” for no steward
 
 ### Examples
 
 - `/steward`: Choose from a list
 - `/steward ada`: Make Ada the steward
-- `/steward project`: Follow the project's steward
-- `/steward none`: Have no steward
+- `/steward none`: This group has no steward
 
 ## /stop
 

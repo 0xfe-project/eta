@@ -801,6 +801,10 @@ describe("a system row", () => {
     [{ event: "steward", from: null, to: BEN.id }, "Ben 成为主理人。"],
     [{ event: "steward", from: ADA.id, to: null }, "Ada 不再是主理人。"],
     [
+      { event: "steward", from: ADA.id, to: null, reason: "left" },
+      "Ada 退出了群，现在没有主理人。",
+    ],
+    [
       { event: "wake_budget", budget: 8 },
       "这条消息已经用完 8 次唤醒；之后的 @ 只记入对话，等你再发言才会唤醒。",
     ],
@@ -819,6 +823,18 @@ describe("a system row", () => {
     const found = system({ event: "steward", from: null, to: "abcdef123" });
     expect(items({ rows: [found] })[0]).toMatchObject({
       text: "abcdef is now the steward.",
+    });
+  });
+
+  it("says in English that the steward left and the group has none now", () => {
+    const found = system({
+      event: "steward",
+      from: ADA.id,
+      to: null,
+      reason: "left",
+    });
+    expect(items({ rows: [found] })[0]).toMatchObject({
+      text: "Ada left the group; it has no steward now.",
     });
   });
 });

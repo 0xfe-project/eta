@@ -324,14 +324,13 @@ eta 终端界面的斜杠命令，在首页或对话的输入框里输入。命�
 
 ### 参数
 
-- `agent` (选填): 成员的名字；“project” 表示跟随项目的主理人；“none” 表示不要主理人
+- `agent` (选填): 成员的名字；“none” 表示这个群没有主理人
 
 ### 例子
 
 - `/steward`: 从列表里选
 - `/steward ada`: 让 Ada 当主理人
-- `/steward project`: 跟随项目的主理人
-- `/steward none`: 不要主理人
+- `/steward none`: 这个群没有主理人
 
 ## /stop
 

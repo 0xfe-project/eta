@@ -109,7 +109,7 @@ describe("sending", () => {
     await r.press(KEYS.enter);
     await screenShows(
       r,
-      "Nobody took this message: this conversation has no steward, so name a member with @",
+      "Nobody was @mentioned and this group has no steward. Name a member with @, or choose a steward",
     );
     const bar = r.lastFrame().split("\n").at(-2)!;
     expect(bar).toContain("\u001B[33m"); // warning, yellow in the test theme
