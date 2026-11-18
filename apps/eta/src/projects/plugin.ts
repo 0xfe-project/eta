@@ -9,11 +9,13 @@ import type { ProjectView } from "@eta/client-contracts";
 import type { SshTransport } from "@eta/ssh";
 import type { MachineHub } from "../machines/hub";
 import type { MachineRecord, MachineStore } from "../machines/store";
+import type { MachinePlaces } from "../places/on-machine";
+import type { PlaceStore } from "../places/store";
 import type { ProjectRecord, ProjectStore } from "./store";
-import { basename, isAbsolute, resolve } from "node:path";
+import { PlaceError } from "@eta/places";
 import { transportOn } from "../machines/shell";
+import { wireFailure } from "../places/on-machine";
 import { Args, productPlugin, publish } from "../wire";
-import { checkDirectory } from "./check";
 import { DirectoryError, listDirectories } from "./directories";
 import { DEFAULT_FILE_LIMIT, listProjectFiles } from "./files";
 
@@ -21,13 +23,27 @@ export interface ProjectsDeps {
   machines: MachineStore;
   hub: MachineHub;
   projects: ProjectStore;
+  /** Recent use, which making a project is. */
+  places: PlaceStore;
+  /** Paths are the machine's: `~`, drives and backslashes are answered there. */
+  onMachine: MachinePlaces;
   changed: () => void;
 }
 
-const viewOf = (project: ProjectRecord): ProjectView => ({ ...project });
-
 export function projectsPlugin(deps: ProjectsDeps, applied: () => void) {
   const { machines, projects } = deps;
+
+  /** What a client shows: the path as its machine writes it for a person (`~/Developer/eta`). */
+  const viewOf = (project: ProjectRecord): ProjectView => {
+    const machine = machines.get(project.machineId);
+    return {
+      ...project,
+      display:
+        machine === undefined
+          ? project.path
+          : deps.onMachine.rules(machine).display(project.path),
+    };
+  };
 
   const existing = (id: string): ProjectRecord => {
     const project = projects.get(id);
@@ -60,9 +76,18 @@ export function projectsPlugin(deps: ProjectsDeps, applied: () => void) {
           const args = new Args(call);
           const machine = machineOf(args);
           const raw = args.string("path");
-          if (!isAbsolute(raw))
-            throw new Error(`the path must be absolute: ${raw}`);
-          const path = resolve(raw);
+          // By the machine's own rules, there: `C:\\code` is a path on a Windows daemon, and
+          // `~/x` is its home's, whatever this host runs on.
+          let resolved;
+          try {
+            resolved = await deps.onMachine.ask(machine, {
+              op: "resolve",
+              path: raw,
+            });
+          } catch (error) {
+            throw wireFailure(error, raw);
+          }
+          const path = resolved.path;
 
           const found = projects.byPath(machine.id, path);
           if (found !== undefined) {
@@ -70,17 +95,24 @@ export function projectsPlugin(deps: ProjectsDeps, applied: () => void) {
             const project = found.archived
               ? projects.update(found.id, { archived: false })!
               : found;
+            deps.places.remember(machine.id, path);
             deps.changed();
             return { result: { project: viewOf(project), existed: true } };
           }
-          await checkDirectory(machine, deps.hub, path);
+          if (!resolved.exists)
+            throw wireFailure(new PlaceError("not_found"), path);
+          if (!resolved.directory)
+            throw wireFailure(new PlaceError("not_directory"), path);
           const name = args.optionalString("name")?.trim();
           const project = projects.create({
             machineId: machine.id,
             path,
             name:
-              name === undefined || name === "" ? basename(path) || path : name,
+              name === undefined || name === ""
+                ? deps.onMachine.rules(machine).name(path)
+                : name,
           });
+          deps.places.remember(machine.id, path);
           deps.changed();
           return { result: { project: viewOf(project), existed: false } };
         }),

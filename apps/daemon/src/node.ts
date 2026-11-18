@@ -6,7 +6,7 @@
  * the sessions plugin) and nothing else: no providers, no settings, no database, no product
  * plugins. The primary reaches it over the link as the client of an ordinary eta pipe, so
  * `sessions.*` means here what it means anywhere, and `machine.*` is the little that a machine
- * adds: facts, a directory check, a script runner, and the two calls that bring a session in line
+ * adds: facts, its directories (`@eta/places`), a script runner, and the two calls that bring a session in line
  * with an agent and run it.
  *
  * Sessions belong to this machine, not to the link. A link that drops leaves them (and their
@@ -39,13 +39,13 @@ import type { Peer } from "./link/peer";
 import type { ActivePlugin } from "./plugin-launch";
 import { Buffer } from "node:buffer";
 import { existsSync, mkdirSync } from "node:fs";
-import { stat } from "node:fs/promises";
 import { homedir, hostname, platform } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { join } from "node:path";
 import process from "node:process";
 import { LINK_PROTOCOL } from "@eta/client-contracts";
 import { kernelOn } from "@eta/core";
 import { createRefreshDedupingFetch } from "@eta/mcp";
+import { Places } from "@eta/places";
 import { AcpAdmin, createAcpRuntimes } from "@eta/runtime-acp";
 import { createOarRuntimes } from "@eta/runtime-oar";
 import {
@@ -106,6 +106,8 @@ export interface DaemonNodeOptions {
   mcpFetch?: McpManagerOptions["fetch"] | undefined;
   /** Overrides of the MCP library's manager, for a test. */
   mcp?: Partial<McpManagerOptions> | undefined;
+  /** This machine's directories; a test hands in a Windows filesystem or a scripted git. */
+  places?: Places | undefined;
 }
 
 /** What the primary last said about one agent's session in one conversation. */
@@ -155,6 +157,8 @@ export class DaemonNode {
   readonly #mcp: McpHost;
   /** The plugins the primary sent, by contents. */
   readonly #plugins: PluginStore;
+  /** This machine's directories, answered here (`@eta/places`), as the primary answers its own. */
+  readonly #places: Places;
   /** The openings the primary sent, by `conversation:agent`; read when a session opens. */
   readonly #openings = new Map<string, Opening>();
   /** What happened to the questions; kept for the next link when there is none. */
@@ -181,6 +185,7 @@ export class DaemonNode {
     });
     const home = options.home ?? homedir();
     this.#plugins = new PluginStore(join(options.dataDir, "plugins", "store"));
+    this.#places = options.places ?? new Places({ home, os: platform() });
     const acp =
       options.acp ??
       (options.runtimes === undefined
@@ -399,6 +404,19 @@ export class DaemonNode {
         signal,
       });
     });
+    // A clone streams its progress and stops when the primary cancels the call.
+    peer.handle("places", async (raw, { signal, emit }) => {
+      return await this.#places.serve(raw as DaemonServiceParams["places"], {
+        signal,
+        emit: (event) => {
+          try {
+            emit(event);
+          } catch {
+            // A dying link loses the progress, not the clone.
+          }
+        },
+      });
+    });
     peer.handle("upgrade", async (raw) => {
       const wanted = raw as DaemonServiceParams["upgrade"];
       if (this.#options.upgrade === undefined)
@@ -493,23 +511,14 @@ export class DaemonNode {
     } = {
       info: () => ({
         hostname: hostname(),
-        home: homedir(),
-        os: platform(),
+        // What places answers by, so the primary writes this machine's paths its way.
+        home: this.#places.rules.home,
+        os: this.#places.os,
         version: this.#options.version,
         protocol: LINK_PROTOCOL,
         platform: daemonPlatform(),
         install: this.#options.install ?? installKind(),
       }),
-      stat: async ({ path }) => {
-        if (!isAbsolute(path))
-          return { ok: false, reason: `not absolute: ${path}` };
-        const found = await stat(path).catch(() => undefined);
-        if (found === undefined)
-          return { ok: false, reason: `no such directory: ${path}` };
-        if (!found.isDirectory())
-          return { ok: false, reason: `not a directory: ${path}` };
-        return { ok: true };
-      },
       open: (args) => this.#open(args),
       catalog: ({ models }) => {
         for (const spec of models) this.#catalog.add(spec);

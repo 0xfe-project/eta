@@ -69,6 +69,7 @@ export const projectView = (
 ): ProjectView => ({
   machineId: "m1",
   path: `/work/${fields.id}`,
+  display: fields.path ?? `/work/${fields.id}`,
   name: fields.id,
   kind: "project",
   ownerAgentId: null,

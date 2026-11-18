@@ -178,6 +178,8 @@ export interface RecentPlace extends PlaceRef {
   machineId: string;
   /** The project there, when it is one. */
   projectId: string | null;
+  /** The directory it is in, as places to put something new beside it; null at a root. */
+  parent: PlaceRef | null;
   /** When it was last used; projects never used here count from when they were made. */
   usedAt: number;
 }

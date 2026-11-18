@@ -1,3 +1,4 @@
+import type { Places } from "@eta/places";
 import type { AcpRuntimes } from "@eta/runtime-acp";
 import type {
   AssembledServer,
@@ -77,6 +78,8 @@ export interface HostOptions {
   models?: AssembleOptions["models"];
   /** Where the agent's home is, for personas. Defaults to the real one. */
   home?: string;
+  /** The primary's directories (`@eta/places`); a test hands in one with a home of its own. */
+  places?: Places;
   /**
    * MCP for the sessions this host runs (`~/.eta/mcp.json`, the project's `.mcp.json`) is always
    * on; this is a test's tuning (the library's fetch pointed at a fake, and its manager without
@@ -217,6 +220,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
         : { web: options.web === true ? {} : options.web }),
       hostname,
       ...(options.home === undefined ? {} : { home: options.home }),
+      ...(options.places === undefined ? {} : { places: options.places }),
       ...(runtimes === undefined
         ? {}
         : { runtimes: async (fresh) => await runtimes.catalog.list(fresh) }),

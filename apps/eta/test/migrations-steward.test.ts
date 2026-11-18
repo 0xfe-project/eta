@@ -26,7 +26,8 @@ import { ProjectStore } from "../src/projects/store";
 import { tempDir } from "./support/host";
 
 const NEWEST = "0055-steward-only-in-groups";
-const ALL = loadMigrations();
+// The migrations as far as 0055: what came after it (0056-places) is not this test's business.
+const ALL = loadMigrations().filter((migration) => migration.id <= NEWEST);
 const BEFORE = ALL.filter((migration) => migration.id < NEWEST);
 
 const open: Database[] = [];
