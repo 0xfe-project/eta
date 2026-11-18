@@ -57,7 +57,7 @@ function billed(
 
 async function ada(w: World, name = "Ada") {
   const agent = await w.agent(name);
-  const project = await w.project({ stewardId: agent.id });
+  const project = await w.project();
   const group = await w.group(project.id, [agent.id]);
   await w.watch(group.id);
   return { agent, project, group };

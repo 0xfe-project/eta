@@ -12,7 +12,7 @@ import { world } from "./support/world";
 /** One agent as the project's steward, and a conversation she is in. */
 async function chat(w: World) {
   const agent = await w.agent("Ada");
-  const project = await w.project({ stewardId: agent.id });
+  const project = await w.project();
   const group = await w.group(project.id, [agent.id]);
   await w.watch(group.id);
   return { group };

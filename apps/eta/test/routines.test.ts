@@ -511,7 +511,7 @@ describe("a run is Captain's", () => {
       ]),
     );
     const ada = await t.w.agent("Ada");
-    const project = await t.w.project({ stewardId: ada.id });
+    const project = await t.w.project();
     group = (await t.w.group(project.id, [ada.id], "Room")).id;
     await t.w.watch(group);
     const routine = await t.create({ brief: "Post the weekly note in Room." });

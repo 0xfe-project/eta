@@ -22,7 +22,7 @@ describe("routeUserMessage", () => {
   it("wakes the members named, once each, in the order named", () => {
     expect(
       routeUserMessage({ ...base, mentions: ["c", "a", "c"], steward: "b" }),
-    ).toEqual({ targets: ["c", "a"], addSteward: false, named: ["c", "a"] });
+    ).toEqual({ targets: ["c", "a"], named: ["c", "a"] });
   });
 
   it("ignores names that are not members", () => {
@@ -32,20 +32,26 @@ describe("routeUserMessage", () => {
     // Naming only strangers is naming nobody.
     expect(
       routeUserMessage({ ...base, mentions: ["z"], steward: "a" }),
-    ).toEqual({ targets: ["a"], addSteward: false, named: [] });
+    ).toEqual({ targets: ["a"], named: [] });
   });
 
-  it("goes to the steward when nobody is named, and brings a steward who is not a member", () => {
+  it("goes to the steward when nobody is named", () => {
     expect(routeUserMessage({ ...base, mentions: [], steward: "b" })).toEqual({
       targets: ["b"],
-      addSteward: false,
       named: [],
     });
+  });
+
+  it("never brings in a steward who is not a member: that is no steward", () => {
+    // Several members: nobody is woken, and nobody is added.
     expect(routeUserMessage({ ...base, mentions: [], steward: "z" })).toEqual({
-      targets: ["z"],
-      addSteward: true,
+      targets: [],
       named: [],
     });
+    // One member: the only reader, not the outsider.
+    expect(
+      routeUserMessage({ ...base, members: ["a"], mentions: [], steward: "z" }),
+    ).toEqual({ targets: ["a"], named: [] });
   });
 
   it("goes to the only member when there is no steward", () => {
@@ -57,7 +63,6 @@ describe("routeUserMessage", () => {
   it("wakes nobody when there is no steward and more than one member", () => {
     expect(routeUserMessage({ ...base, mentions: [] })).toEqual({
       targets: [],
-      addSteward: false,
       named: [],
     });
     expect(
@@ -73,7 +78,7 @@ describe("routeUserMessage", () => {
         mentions: [],
         steward: "someone-else",
       }),
-    ).toEqual({ targets: ["a"], addSteward: false, named: [] });
+    ).toEqual({ targets: ["a"], named: [] });
   });
 });
 

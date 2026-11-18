@@ -68,7 +68,7 @@ describe("ensureHome", () => {
       path: agentHome(d.dataDir, old.id),
       name: "Captain",
       kind: "agent_home",
-      stewardId: old.id,
+      ownerAgentId: old.id,
       machineId: d.machines.primary()!.id,
     });
     expect(ensureHome(d, old).id).toBe(made.id);

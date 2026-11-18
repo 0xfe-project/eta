@@ -51,7 +51,7 @@ async function upload(
 
 async function ada(w: World, path?: string) {
   const agent = await w.agent("Ada");
-  const project = await w.project({ stewardId: agent.id, path });
+  const project = await w.project({ path });
   const group = await w.group(project.id, [agent.id]);
   await w.watch(group.id);
   return { agent, project, group };

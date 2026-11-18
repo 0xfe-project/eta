@@ -28,6 +28,8 @@ export function openDirect(
       kind: "direct",
       name: agent.name,
       agentIds: [agent.id],
+      // The only one there is to talk to; the composer shows it as who a message goes to.
+      stewardId: agent.id,
     });
     deps.created?.(made.id);
     deps.changed?.([made.id]);

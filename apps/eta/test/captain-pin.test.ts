@@ -55,7 +55,7 @@ describe("captain's tool pin", () => {
   it("is every one of them a name an ordinary agent session really gets", async () => {
     const w = await world({ captain: true, tasks: { runs: false } });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "Group");
     const { identity } = (await w.client.call("captain", "ensure", {})) as {
       identity: { agentId: string };
@@ -100,7 +100,7 @@ describe("captain's tool pin", () => {
   it("narrows a Captain session's pin on the way in, and only Captain's", async () => {
     const w = await world({ captain: true, tasks: { runs: false } });
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "Group");
     const { identity } = (await w.client.call("captain", "ensure", {})) as {
       identity: { agentId: string };

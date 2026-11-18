@@ -1,7 +1,7 @@
 /**
  * Captain proposes a group (`propose_group`); confirming it adds the directory as a project when it
- * is not one, stewarded by the group's steward as the dialog does it, then makes the group, its goal
- * and the line that says who made it (`createGroup`, the dialog's own rules).
+ * is not one, then makes the group with the steward Captain chose among its members (or none), its
+ * goal and the line that says who made it (`createGroup`, the dialog's own rules).
  */
 import type {
   CaptainGroupProposal,
@@ -24,7 +24,8 @@ export interface GroupProposalInput {
   path?: string | undefined;
   machineId?: string | undefined;
   memberIds: readonly string[];
-  stewardId: string;
+  /** One of `memberIds`, or null for none; left out, the first of them. */
+  stewardId?: string | null | undefined;
   goal?: string | undefined;
 }
 
@@ -120,7 +121,9 @@ export function groupProposals(
         if (deps.agents.get(agentId) === undefined)
           throw new Error(`member ${agentId} does not exist`);
       }
-      if (!memberIds.includes(input.stewardId))
+      const stewardId =
+        input.stewardId === undefined ? memberIds[0]! : input.stewardId;
+      if (stewardId !== null && !memberIds.includes(stewardId))
         throw new Error("the steward has to be a member");
       const { project, machine, path } = await placeOf(input);
       if (project !== undefined) {
@@ -135,7 +138,7 @@ export function groupProposals(
         name,
         goal: input.goal?.trim() || null,
         memberIds,
-        stewardId: input.stewardId,
+        stewardId,
         projectId: project?.id ?? null,
         machineId: machine.id,
         path,
@@ -164,7 +167,6 @@ export function groupProposals(
           machineId: proposal.machineId,
           path: proposal.path,
           name: proposal.projectName,
-          stewardId: proposal.stewardId,
         });
       const group = createGroup(deps, {
         projectId: project.id,

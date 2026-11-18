@@ -17,7 +17,7 @@ import type { Timeline } from "./timeline";
 import { Args, productPlugin, publish } from "../wire";
 import { createGroup } from "./groups";
 import { announceSteward } from "./steward";
-import { effectiveSteward, summaryOf } from "./views";
+import { summaryOf } from "./views";
 
 export interface ConversationsDeps {
   agents: AgentStore;
@@ -39,8 +39,8 @@ export function conversationsPlugin(
   deps: ConversationsDeps,
   applied: () => void,
 ) {
-  const { agents, projects, conversations, timeline, engine } = deps;
-  const views = { conversations, projects, timeline };
+  const { agents, conversations, timeline, engine } = deps;
+  const views = { conversations, timeline };
 
   const existing = (id: string): ConversationRecord => {
     const conversation = conversations.get(id);
@@ -83,7 +83,7 @@ export function conversationsPlugin(
           const conversation = createGroup(deps, {
             projectId: args.string("projectId"),
             agentIds: args.strings("agentIds"),
-            stewardId: args.optionalString("stewardId"),
+            stewardId: args.nullableString("stewardId"),
             name: args.optionalString("name"),
           });
           deps.created(conversation.id);
@@ -163,10 +163,19 @@ export function conversationsPlugin(
             throw new Error("a private chat is the agent and the user");
           // What the member was answering stops with it; its session stays, as a record.
           engine.stopMember(conversation.id, agentId);
-          conversations.removeParticipant(conversation.id, agentId);
-          // A steward of this conversation's own that leaves it stops being one.
-          if (conversation.stewardId === agentId)
-            conversations.setSteward(conversation.id, null);
+          // A steward that leaves takes the role with it: the group has none until someone is
+          // made one, and nobody is pulled back in for a message that names nobody.
+          if (
+            conversations.removeParticipant(conversation.id, agentId) &&
+            conversation.stewardId === agentId
+          )
+            announceSteward(
+              { agents, timeline },
+              conversation.id,
+              agentId,
+              null,
+              "left",
+            );
           deps.changed([conversation.id]);
           return {
             result: { conversation: summary(existing(conversation.id)) },
@@ -179,18 +188,20 @@ export function conversationsPlugin(
           const agentId = args.nullableString("agentId");
           if (agentId === undefined)
             throw new Error("conversations.setSteward needs agentId (or null)");
-          if (agentId !== null) agent(agentId);
-          const before = effectiveSteward(projects, conversation);
-          const changed = conversations.setSteward(
-            conversation.id,
-            agentId,
-            agentId === null && args.optionalBoolean("none") === true,
-          )!;
+          // A steward is one of the members, or there is none: nobody is added for it.
+          if (
+            agentId !== null &&
+            !conversations
+              .participants(conversation.id)
+              .some((member) => member.agentId === agent(agentId))
+          )
+            throw new Error(`${agentId} is not a member of this conversation`);
+          const changed = conversations.setSteward(conversation.id, agentId)!;
           announceSteward(
             { agents, timeline },
             conversation.id,
-            before,
-            effectiveSteward(projects, changed),
+            conversation.stewardId,
+            changed.stewardId,
           );
           deps.changed([conversation.id]);
           return { result: { conversation: summary(changed) } };

@@ -124,12 +124,50 @@ describe("the seeds a release upgrades", () => {
   it("is at 0.3.0's schema, so a 0.3.0 upgrade really runs 0054", async () => {
     const { before, applied } = await upgraded("0.3.0");
     expect(before.at(-1)).toBe("0053-routines-run-by-captain");
-    expect(applied).toEqual(["0054-task-archive"]);
+    expect(applied.slice(0, 1)).toEqual(["0054-task-archive"]);
   });
 
-  it("is already past it at 0.4.0-rc.3, which is what an rc upgrade has to do: nothing", async () => {
+  it("is already past it at 0.4.0-rc.3, which is what an rc upgrade has to do: only what came after", async () => {
     const { before, applied } = await upgraded("0.4.0-rc.3");
     expect(before.at(-1)).toBe("0054-task-archive");
-    expect(applied).toEqual([]);
+    expect(applied).toEqual(["0055-steward-only-in-groups"]);
   });
+
+  /*
+   * Every seed's group follows its project's steward (Ada, a member) and every agent has its own
+   * workspace stewarded by itself: the shape 0055 turns into a group's own steward and a
+   * workspace's owner. A message that names nobody still goes to Ada.
+   */
+  for (const version of seeds)
+    it(`${version}: keeps the group's steward, and each agent's own workspace`, async () => {
+      const { db } = await upgraded(version);
+      const ada = db
+        .query<{ id: string }, []>("SELECT id FROM agent WHERE name = 'Ada'")
+        .get()!.id;
+      expect(
+        db
+          .query<{ steward_id: string | null }, []>(
+            "SELECT steward_id FROM conversation WHERE name = 'Seed talk'",
+          )
+          .get(),
+      ).toEqual({ steward_id: ada });
+      const homes = db
+        .query<{ name: string; owner: string | null }, []>(
+          `SELECT p.name, a.name AS owner FROM project AS p
+             LEFT JOIN agent AS a ON a.id = p.owner_agent_id
+            WHERE p.kind = 'agent_home' AND p.name IN ('Ada', 'Bob') ORDER BY p.name`,
+        )
+        .all();
+      expect(homes).toEqual([
+        { name: "Ada", owner: "Ada" },
+        { name: "Bob", owner: "Bob" },
+      ]);
+      expect(
+        db
+          .query<{ n: number }, []>(
+            "SELECT count(*) AS n FROM project WHERE kind = 'project' AND owner_agent_id IS NOT NULL",
+          )
+          .get()!.n,
+      ).toBe(0);
+    });
 });

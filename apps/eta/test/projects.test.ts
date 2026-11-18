@@ -5,7 +5,6 @@
 import type {
   ConversationSummary,
   MachineView,
-  MessageView,
   ProjectView,
 } from "@eta/client-contracts";
 import { writeFile } from "node:fs/promises";
@@ -16,20 +15,19 @@ import { tempDir, testHost } from "./support/host";
 import { world } from "./support/world";
 
 describe("the primary machine", () => {
-  it("a conversation can have no steward, its project's or its own", async () => {
+  it("a conversation can have no steward, or one of its members", async () => {
     const w = await world();
     const ada = await w.agent("Ada");
-    const project = await w.project({ stewardId: ada.id });
+    const project = await w.project();
     const group = await w.group(project.id, [ada.id], "nobody leads");
     const said = (await w.client.call("conversations", "setSteward", {
       conversationId: group.id,
       agentId: null,
-      none: true,
     })) as { conversation: ConversationSummary };
     expect(said.conversation.stewardId).toBeNull();
     const back = (await w.client.call("conversations", "setSteward", {
       conversationId: group.id,
-      agentId: null,
+      agentId: ada.id,
     })) as { conversation: ConversationSummary };
     expect(back.conversation.stewardId).toBe(ada.id);
   });
@@ -95,7 +93,7 @@ describe("projects", () => {
       path,
       name: basename(path),
       kind: "project",
-      stewardId: null,
+      ownerAgentId: null,
       archived: false,
     });
     const machines = w.client.section<MachineView[]>("machines", "list")!;
@@ -124,9 +122,6 @@ describe("projects", () => {
     await expect(
       w.client.call("projects", "create", { path: dir, machineId: "nope" }),
     ).rejects.toThrow(/no such machine/);
-    await expect(
-      w.client.call("projects", "create", { path: dir, stewardId: "nobody" }),
-    ).rejects.toThrow(/no such agent/);
     // None of that left a project behind.
     expect(
       w.client
@@ -183,85 +178,19 @@ describe("projects", () => {
 });
 
 describe("a project's steward", () => {
-  it("is set at creation or later, and cleared with null", async () => {
+  it("is gone: a project has none to set, and a group made in it takes its own", async () => {
     const w = await world();
     const ada = await w.agent("Ada");
     const bob = await w.agent("Bob");
-    const project = await w.project({ stewardId: ada.id });
-    expect(project.stewardId).toBe(ada.id);
-
-    const set = (agentId: string | null) =>
+    const project = await w.project();
+    expect(project).not.toHaveProperty("stewardId");
+    await expect(
       w.client.call("projects", "setSteward", {
         projectId: project.id,
-        agentId,
-      }) as Promise<{ project: ProjectView }>;
-    expect((await set(bob.id)).project.stewardId).toBe(bob.id);
-    expect((await set(null)).project.stewardId).toBeNull();
-    await expect(set("nobody")).rejects.toThrow(/no such agent/);
-    await expect(
-      w.client.call("projects", "setSteward", { projectId: project.id }),
-    ).rejects.toThrow(/needs agentId/);
-  });
-
-  it("writes a system row into each conversation that follows the project, and only those", async () => {
-    const w = await world();
-    const ada = await w.agent("Ada");
-    const bob = await w.agent("Bob");
-    const project = await w.project({ stewardId: ada.id });
-    const following = await w.group(project.id, [ada.id], "follows");
-    const own = await w.group(project.id, [ada.id], "has its own");
-    const archived = await w.group(project.id, [ada.id], "put away");
-    await w.client.call("conversations", "setSteward", {
-      conversationId: own.id,
-      agentId: ada.id,
-    });
-    await w.client.call("conversations", "update", {
-      conversationId: archived.id,
-      archived: true,
-    });
-    const chat = (
-      (await w.client.call("agents", "direct", { agentId: ada.id })) as {
-        conversation: ConversationSummary;
-      }
-    ).conversation;
-    for (const id of [following.id, own.id, archived.id, chat.id])
-      await w.watch(id);
-    const systemRows = (id: string): MessageView[] =>
-      w.rows(id).filter((row) => row.kind === "system");
-    // Pointing `own` at the steward it already had changes nothing, so it wrote no row.
-    const ownBefore = systemRows(own.id).length;
-    expect(ownBefore).toBe(0);
-
-    await w.client.call("projects", "setSteward", {
-      projectId: project.id,
-      agentId: bob.id,
-    });
-    await until(() => systemRows(following.id).length === 1);
-    const [row] = systemRows(following.id);
-    expect(row).toMatchObject({
-      kind: "system",
-      author: "system",
-      status: "done",
-      data: { event: "steward", from: ada.id, to: bob.id },
-    });
-    expect(row?.text).toContain("Bob");
-    // A conversation with a steward of its own, a put-away one and a private chat did not change.
-    expect(systemRows(own.id)).toHaveLength(ownBefore);
-    expect(systemRows(archived.id)).toHaveLength(0);
-    expect(systemRows(chat.id)).toHaveLength(0);
-    // The old steward is still a member, and can still be mentioned.
-    expect(
-      w.client.section<{ agentId: string }[]>(
-        `conversations.${following.id}`,
-        "members",
-      ),
-    ).toEqual([expect.objectContaining({ agentId: ada.id })]);
-
-    // Setting the same steward again says nothing.
-    await w.client.call("projects", "setSteward", {
-      projectId: project.id,
-      agentId: bob.id,
-    });
-    expect(systemRows(following.id)).toHaveLength(1);
+        agentId: ada.id,
+      }),
+    ).rejects.toThrow(/unknown op/);
+    const group = await w.group(project.id, [bob.id, ada.id]);
+    expect(group.stewardId).toBe(bob.id);
   });
 });

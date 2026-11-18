@@ -109,7 +109,8 @@ export interface CaptainGroupProposal {
   name: string;
   goal: string | null;
   memberIds: string[];
-  stewardId: string;
+  /** One of `memberIds`, or null: the group has no steward. */
+  stewardId: string | null;
   /** The project it goes in; null when the directory is not a project yet. */
   projectId: string | null;
   machineId: string;

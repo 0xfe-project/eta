@@ -278,8 +278,8 @@ export class AcpService {
 }
 
 /**
- * The machines of the projects an agent is in: the ones it stewards (its own home among them)
- * and the ones of the conversations it takes part in. An agent pinned to no machine runs its
+ * The machines of the projects an agent is in: its own home (`ownerAgentId`) and the ones of the
+ * conversations it takes part in. An agent pinned to no machine runs its
  * runtime on each of them.
  */
 export function projectMachinesOf(
@@ -291,7 +291,7 @@ export function projectMachinesOf(
 ): Set<string> {
   const found = new Set<string>();
   for (const project of stores.projects.list())
-    if (project.stewardId === agentId) found.add(project.machineId);
+    if (project.ownerAgentId === agentId) found.add(project.machineId);
   for (const conversation of stores.conversations.list()) {
     if (
       !stores.conversations

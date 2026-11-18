@@ -56,11 +56,7 @@ export async function remoteWorld(
     async agents(...names) {
       const agents: AgentView[] = [];
       for (const name of names) agents.push(await w.agent(name));
-      const steward = agents[0]!;
-      await w.client.call("projects", "setSteward", {
-        projectId: remoteProject.id,
-        agentId: steward.id,
-      });
+      // The first of them is the group's steward.
       const group = await w.group(
         remoteProject.id,
         agents.map((agent) => agent.id),

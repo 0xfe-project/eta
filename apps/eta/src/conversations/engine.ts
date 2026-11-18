@@ -52,7 +52,6 @@ import {
   WAKE_BUDGET,
 } from "./routing";
 import { conversationTools } from "./tools";
-import { effectiveSteward } from "./views";
 
 /** What a reply says when the process died under it. */
 export const RESTART_TEXT = "The server restarted before this reply finished.";
@@ -637,14 +636,9 @@ export class Engine {
           .participants(conversation.id)
           .map((participant) => participant.agentId),
         mentions: input.mentions,
-        steward: this.#stewardOf(conversation),
+        steward: conversation.stewardId,
       });
       nobody = routing.targets.length === 0;
-      if (routing.addSteward)
-        this.#conversations.addParticipant(
-          conversation.id,
-          routing.targets[0]!,
-        );
       for (const agentId of routing.targets) {
         planned.push({
           agentId,
@@ -898,23 +892,25 @@ export class Engine {
   describe(conversationId: string, me: string): string {
     const conversation = this.#requireConversation(conversationId);
     const project = this.#projects.get(conversation.projectId);
-    const steward = this.#stewardOf(conversation);
-    const members = this.#conversations
-      .participants(conversationId)
-      .map((participant) => {
-        const name = this.#agents.get(participant.agentId)?.name ?? "(deleted)";
-        const marks = [
-          participant.agentId === me ? "you" : undefined,
-          participant.agentId === steward ? "steward" : undefined,
-        ].filter((mark) => mark !== undefined);
-        return marks.length === 0 ? name : `${name} (${marks.join(", ")})`;
-      });
+    const steward = conversation.stewardId;
+    const participants = this.#conversations.participants(conversationId);
+    const members = participants.map((participant) => {
+      const name = this.#agents.get(participant.agentId)?.name ?? "(deleted)";
+      const marks = [
+        participant.agentId === me ? "you" : undefined,
+        participant.agentId === steward ? "steward" : undefined,
+      ].filter((mark) => mark !== undefined);
+      return marks.length === 0 ? name : `${name} (${marks.join(", ")})`;
+    });
     return [
       `Conversation: ${conversation.name}${conversation.kind === "direct" ? " (a private chat with the user)" : ""}`,
       `Project: ${project === undefined ? "(gone)" : `${project.name}, at ${project.path}`}`,
       `Goal: ${conversation.goal === "" ? "(not set)" : conversation.goal}`,
       `Decided so far: ${conversation.decided === "" ? "(nothing yet)" : conversation.decided}`,
       `Members: ${members.join(", ")}`,
+      ...(conversation.kind === "group"
+        ? [stewardLine(steward, participants.length, this.#agents)]
+        : []),
     ].join("\n");
   }
 
@@ -1335,10 +1331,22 @@ export class Engine {
       throw new Error(`no such conversation: ${id}`);
     return conversation;
   }
+}
 
-  #stewardOf(conversation: ConversationRecord): string | null {
-    return effectiveSteward(this.#projects, conversation);
-  }
+/**
+ * Who takes a user message that names nobody, as `conversation_info` says it: the steward, the only
+ * member of a group without one, or nobody at all. Never somebody from outside the group.
+ */
+function stewardLine(
+  steward: string | null,
+  members: number,
+  agents: AgentStore,
+): string {
+  if (steward !== null)
+    return `Steward: ${agents.get(steward)?.name ?? "(deleted)"} (takes the user's messages that @mention nobody)`;
+  return members === 1
+    ? "Steward: none (the user's messages that @mention nobody go to the only member)"
+    : "Steward: none (a user message that @mentions nobody wakes nobody)";
 }
 
 /** One participant, which is one session. */

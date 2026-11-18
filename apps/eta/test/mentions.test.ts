@@ -12,7 +12,7 @@ import { world } from "./support/world";
 async function pair(w: World) {
   const ada = await w.agent("Ada");
   const bob = await w.agent("Bob");
-  const project = await w.project({ stewardId: ada.id });
+  const project = await w.project();
   const group = await w.group(project.id, [ada.id, bob.id], "plans");
   await w.watch(group.id);
   return { ada, bob, project, group };

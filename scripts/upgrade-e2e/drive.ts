@@ -593,6 +593,29 @@ async function seedHolds(
     (error: unknown) =>
       record("the conversation goes on", false, String(error)),
   );
+  // The seed's group has Ada as its steward (its project's, before 0.5): a message that names
+  // nobody still goes to her after the upgrade, and nobody else joins for it.
+  const unnamed = `Anyone there after ${after}?`;
+  const sent = (await client.call("conversations", "send", {
+    conversationId: id,
+    text: unnamed,
+  })) as { replies: { agentId: string | null }[] };
+  want(
+    "a message that names nobody goes to the steward",
+    sent.replies.map((reply) => reply.agentId),
+    [agent],
+  );
+  await until(
+    async () =>
+      (await lines()).some(
+        (text) => text.startsWith("Heard") && text.includes(unnamed),
+      ),
+    30_000,
+  ).then(
+    () => record("and the steward answers it", true, ""),
+    (error: unknown) =>
+      record("and the steward answers it", false, String(error)),
+  );
   client.close();
 }
 

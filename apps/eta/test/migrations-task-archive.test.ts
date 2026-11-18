@@ -22,7 +22,9 @@ const NEWEST = "0054-task-archive";
 
 const ALL = loadMigrations();
 /** What a v0.3.0 host ran, in order. */
-const BEFORE_0054 = ALL.filter((migration) => migration.id !== NEWEST);
+const BEFORE_0054 = ALL.filter((migration) => migration.id < NEWEST);
+/** What a host that ran 0054 had: later migrations are their own tests' business. */
+const UP_TO_0054 = ALL.filter((migration) => migration.id <= NEWEST);
 
 /**
  * The kinds a 0.3.0 host wrote. 0054 adds `archived` and `unarchived`; the CHECK is why the table
@@ -158,7 +160,7 @@ describe("0054 as an upgrade", () => {
     // Nothing archived can be written before the migration, whatever anyone tries.
     expect(columns(db, "task")).not.toContain("archived_at");
 
-    expect(applyMigrations(db, ALL)).toEqual([NEWEST]);
+    expect(applyMigrations(db, UP_TO_0054)).toEqual([NEWEST]);
 
     expect(columns(db, "task")).toEqual(
       expect.arrayContaining(["archived_at", "archived_by"]),
@@ -238,7 +240,7 @@ describe("0054 as an upgrade", () => {
   it("is a no-op on a database that has already run it, which is what rc.3 upgrades with", async () => {
     const db = await oldDatabase();
     seed(db);
-    expect(applyMigrations(db, ALL)).toEqual([NEWEST]);
+    expect(applyMigrations(db, UP_TO_0054)).toEqual([NEWEST]);
 
     const before = {
       rows: ["task", "task_activity", "task_dependency", "eta_migrations"].map(
@@ -247,8 +249,8 @@ describe("0054 as an upgrade", () => {
       entries: entries(db),
       kinds: kinds(db),
     };
-    expect(applyMigrations(db, ALL)).toEqual([]);
-    expect(applyMigrations(db, ALL)).toEqual([]);
+    expect(applyMigrations(db, UP_TO_0054)).toEqual([]);
+    expect(applyMigrations(db, UP_TO_0054)).toEqual([]);
     expect({
       rows: ["task", "task_activity", "task_dependency", "eta_migrations"].map(
         (table) => count(db, table),
@@ -264,7 +266,7 @@ describe("0054 as an upgrade", () => {
         )
         .all(),
     ).toEqual([]);
-    expect(count(db, "eta_migrations")).toBe(ALL.length);
+    expect(count(db, "eta_migrations")).toBe(UP_TO_0054.length);
     db.close();
   });
 });

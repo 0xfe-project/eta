@@ -156,7 +156,7 @@ async function room() {
   });
   const w = await world({ models });
   const ada = await w.agent("Ada");
-  const project = await w.project({ stewardId: ada.id });
+  const project = await w.project();
   const group = await w.group(project.id, [ada.id], "plan");
   const make = (
     title: string,
@@ -531,7 +531,7 @@ describe("the base of a task that builds on one other", () => {
     );
     const w = await world({ models });
     const ada = await w.agent("Ada");
-    const project = await w.project({ path: dir, stewardId: ada.id });
+    const project = await w.project({ path: dir });
     const group = await w.group(project.id, [ada.id], "plan");
     const make = (title: string, dependsOn?: { task: string }[]) =>
       w.host.product.board.create(

@@ -105,7 +105,7 @@ export interface MachineView {
 
 export type ProjectKind = "project" | "agent_home";
 
-/** A directory on a machine, with an optional steward: the agent who takes what nobody is named for. */
+/** A directory on a machine. Stewards belong to groups, not projects (`ConversationSummary.stewardId`). */
 export interface ProjectView {
   id: string;
   machineId: string;
@@ -113,7 +113,8 @@ export interface ProjectView {
   path: string;
   name: string;
   kind: ProjectKind;
-  stewardId: string | null;
+  /** The agent whose own workspace this is: set on an `agent_home`, null on any other project. */
+  ownerAgentId: string | null;
   archived: boolean;
   createdAt: number;
   updatedAt: number;
@@ -148,7 +149,11 @@ export interface ConversationSummary {
   kind: ConversationKind;
   name: string;
   archived: boolean;
-  /** Who takes a message that names nobody: the conversation's own pick, else its project's. */
+  /**
+   * Who takes a user message that names nobody: one of the members, or null for none. Nobody is
+   * ever added to the conversation for it; with none, a group of one member gives it to that one
+   * and a larger group wakes nobody.
+   */
   stewardId: string | null;
   participants: MemberView[];
   lastSeq: number;
@@ -171,12 +176,8 @@ export interface ConversationInfo {
   goal: string;
   decided: string;
   archived: boolean;
-  /** The effective steward (see `ConversationSummary.stewardId`). */
+  /** A member, or null for none (see `ConversationSummary.stewardId`). */
   stewardId: string | null;
-  /** The conversation's own pick; null means it follows its project, unless `noSteward`. */
-  stewardOverrideId: string | null;
-  /** The conversation said it has no steward: it does not follow its project either. */
-  noSteward: boolean;
   readSeq: number;
   lastSeq: number;
   createdAt: number;
@@ -688,7 +689,6 @@ export interface UpgradeResults {
 export const PROJECT_ACTIONS = [
   "create",
   "update",
-  "setSteward",
   "files",
   "directories",
 ] as const;
@@ -700,11 +700,8 @@ export interface ProjectArgs {
     path: string;
     machineId?: string;
     name?: string;
-    stewardId?: string | null;
   };
   update: { projectId: string; name?: string; archived?: boolean };
-  /** Null clears it. Writes a system row into every conversation that follows the project. */
-  setSteward: { projectId: string; agentId: string | null };
   /**
    * The project's files, relative to its directory, listed on the project's own machine. Shallow
    * files come first; `limit` (default 2000, at most 5000) caps the list.
@@ -732,7 +729,6 @@ export interface ProjectResults {
   /** `existed` when the machine already had a project at that path: that one is returned. */
   create: { project: ProjectView; existed: boolean };
   update: { project: ProjectView };
-  setSteward: { project: ProjectView };
   /** `truncated` when more files exist than were returned. */
   files: { files: string[]; truncated: boolean };
   /** `path` is normalized and absolute; `parent` is null at the root. `truncated` as for files. */
@@ -773,14 +769,14 @@ export type ConversationAction = (typeof CONVERSATION_ACTIONS)[number];
 
 export interface ConversationArgs {
   /**
-   * `stewardId` has to be one of the members. The project's own steward writes nothing, so the
-   * conversation goes on following the project; anyone else is the conversation's own.
+   * A group needs at least one member. `stewardId` has to be one of them, or null for none; left
+   * out, it is the first member.
    */
   create: {
     projectId: string;
     name?: string;
     agentIds?: string[];
-    stewardId?: string;
+    stewardId?: string | null;
   };
   /**
    * Take back a message that is still waiting for a lane. False when it is no longer held: a lane
@@ -806,15 +802,11 @@ export interface ConversationArgs {
     | { conversationId: string; agentIds: string[]; agentId?: never };
   /** Takes a member out. Not for a direct chat, which is the agent and the user. */
   remove: { conversationId: string; agentId: string };
-  /** Null makes the conversation follow its project again. */
-  /** Null follows the project; with `none` too it has no steward at all. */
-  setSteward: {
-    conversationId: string;
-    agentId: string | null;
-    none?: boolean;
-  };
+  /** A member of the group, or null for none. */
+  setSteward: { conversationId: string; agentId: string | null };
   /**
-   * Say something. `mentions` are agent ids; a message that names nobody goes to the steward.
+   * Say something. `mentions` are agent ids; a message that names nobody goes to the steward, or
+   * to the only member of a group without one (`nobody` in the result when it woke nobody).
    * `mode` is how it joins an agent that is already answering: `queue` (the default) waits for
    * that reply to end and gets one of its own, `steer` changes the turn in flight. `clientId`
    * makes a retry the same message.

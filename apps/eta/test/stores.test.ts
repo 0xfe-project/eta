@@ -150,19 +150,23 @@ describe("projects", () => {
     expect(projects.byPath(machine.id, "/work/none")).toBeUndefined();
   });
 
-  it("lose their steward when the steward is deleted, and keep everything else", () => {
-    const { projects, agents, project } = stores();
+  it("an agent's workspace loses its owner when the agent is deleted, and keeps everything else", () => {
+    const { projects, agents, machine } = stores();
     const ada = agents.create({ name: "Ada" });
-    expect(projects.setSteward(project.id, ada.id)?.stewardId).toBe(ada.id);
-    agents.remove(ada.id);
-    expect(projects.get(project.id)).toMatchObject({
-      stewardId: null,
-      name: "a",
+    const home = projects.create({
+      machineId: machine.id,
+      path: "/home/ada",
+      name: "Ada",
+      kind: "agent_home",
+      ownerAgentId: ada.id,
     });
-    expect(projects.update(project.id, { archived: true })?.archived).toBe(
-      true,
-    );
-    expect(projects.setSteward("nope", null)).toBeUndefined();
+    expect(home.ownerAgentId).toBe(ada.id);
+    agents.remove(ada.id);
+    expect(projects.get(home.id)).toMatchObject({
+      ownerAgentId: null,
+      name: "Ada",
+    });
+    expect(projects.update(home.id, { archived: true })?.archived).toBe(true);
   });
 });
 

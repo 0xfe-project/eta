@@ -1,6 +1,7 @@
 import type { ProjectKind } from "@eta/client-contracts";
 /**
- * The projects: a directory on a machine, with an optional steward.
+ * The projects: a directory on a machine. An agent's own workspace (`agent_home`) also says whose
+ * it is (`ownerAgentId`).
  *
  * A path is unique per machine, and a project is where sessions run (their working directory) and
  * where conversations belong. Whether the directory exists is the plugin's question to ask of the
@@ -14,7 +15,8 @@ export interface ProjectRecord {
   path: string;
   name: string;
   kind: ProjectKind;
-  stewardId: string | null;
+  /** The agent whose workspace this is, on an `agent_home`; null on any other project. */
+  ownerAgentId: string | null;
   archived: boolean;
   createdAt: number;
   updatedAt: number;
@@ -25,7 +27,7 @@ export interface ProjectInput {
   path: string;
   name: string;
   kind?: ProjectKind | undefined;
-  stewardId?: string | null | undefined;
+  ownerAgentId?: string | null | undefined;
 }
 
 interface Row {
@@ -34,7 +36,7 @@ interface Row {
   path: string;
   name: string;
   kind: string;
-  steward_id: string | null;
+  owner_agent_id: string | null;
   archived: number;
   created_at: number;
   updated_at: number;
@@ -46,7 +48,7 @@ const recordOf = (row: Row): ProjectRecord => ({
   path: row.path,
   name: row.name,
   kind: row.kind as ProjectKind,
-  stewardId: row.steward_id,
+  ownerAgentId: row.owner_agent_id,
   archived: row.archived === 1,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
@@ -89,7 +91,7 @@ export class ProjectStore {
     const now = Date.now();
     this.#db
       .query(
-        `INSERT INTO project (id, machine_id, path, name, kind, steward_id, archived, created_at, updated_at)
+        `INSERT INTO project (id, machine_id, path, name, kind, owner_agent_id, archived, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
       )
       .run(
@@ -98,7 +100,7 @@ export class ProjectStore {
         input.path,
         input.name,
         input.kind ?? "project",
-        input.stewardId ?? null,
+        input.ownerAgentId ?? null,
         now,
         now,
       );
@@ -122,12 +124,5 @@ export class ProjectStore {
         id,
       );
     return this.get(id);
-  }
-
-  setSteward(id: string, agentId: string | null): ProjectRecord | undefined {
-    const changed = this.#db
-      .query("UPDATE project SET steward_id = ?, updated_at = ? WHERE id = ?")
-      .run(agentId, Date.now(), id).changes;
-    return changed === 0 ? undefined : this.get(id);
   }
 }

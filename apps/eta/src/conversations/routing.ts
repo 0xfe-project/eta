@@ -4,7 +4,8 @@
  * Pure rules, so they are read and tested without a database: a user's message wakes the members
  * it names; naming nobody it goes to the steward; a conversation with no steward and a single
  * member has only one reader; anything else wakes nobody, and the sender is told so rather than
- * guessing. Agents may hand work to each other with `mention`, and a conversation must not be
+ * guessing. Routing never adds anyone: a steward is a member, and one that is not (it left) is no
+ * steward. Agents may hand work to each other with `mention`, and a conversation must not be
  * able to wake itself for ever: the budget below caps what one user message can start.
  */
 import type { ConversationKind } from "@eta/client-contracts";
@@ -13,10 +14,8 @@ import type { ConversationKind } from "@eta/client-contracts";
 export const WAKE_BUDGET = 5;
 
 export interface Routing {
-  /** Agents to wake, in the order they were named. */
+  /** Agents to wake, in the order they were named. They are all members. */
   targets: string[];
-  /** The steward is not a member yet and has to be added for the wake. */
-  addSteward: boolean;
   /** The members the message named, kept on the row. */
   named: string[];
 }
@@ -25,33 +24,22 @@ export function routeUserMessage(input: {
   kind: ConversationKind;
   members: readonly string[];
   mentions: readonly string[];
-  /** The effective steward: the conversation's own, else the project's. */
+  /** The conversation's steward, or null for none. */
   steward: string | null;
 }): Routing {
   const named = [...new Set(input.mentions)].filter((id) =>
     input.members.includes(id),
   );
-  if (named.length > 0) return { targets: named, addSteward: false, named };
+  if (named.length > 0) return { targets: named, named };
   // A private chat is the agent and the user: nobody else could be meant.
   if (input.kind === "direct") {
     const only = input.members[0];
-    return {
-      targets: only === undefined ? [] : [only],
-      addSteward: false,
-      named,
-    };
+    return { targets: only === undefined ? [] : [only], named };
   }
-  if (input.steward !== null) {
-    return {
-      targets: [input.steward],
-      addSteward: !input.members.includes(input.steward),
-      named,
-    };
-  }
-  if (input.members.length === 1) {
-    return { targets: [...input.members], addSteward: false, named };
-  }
-  return { targets: [], addSteward: false, named };
+  if (input.steward !== null && input.members.includes(input.steward))
+    return { targets: [input.steward], named };
+  if (input.members.length === 1) return { targets: [...input.members], named };
+  return { targets: [], named };
 }
 
 /** What an agent's mention may do, given how many mentions its user message has started. */

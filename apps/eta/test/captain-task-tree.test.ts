@@ -12,7 +12,7 @@ import { world } from "./support/world";
 async function setup() {
   const w = await world({ captain: true, tasks: { runs: false } });
   const ada = await w.agent("Ada");
-  const project = await w.project({ stewardId: ada.id });
+  const project = await w.project();
   const group = await w.group(project.id, [ada.id], "plan");
   const { identity } = (await w.client.call("captain", "ensure", {})) as {
     identity: { agentId: string };

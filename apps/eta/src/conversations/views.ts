@@ -7,13 +7,11 @@ import type {
   ConversationSummary,
   MemberView,
 } from "@eta/client-contracts";
-import type { ProjectStore } from "../projects/store";
 import type { ConversationRecord, ConversationStore } from "./store";
 import type { Timeline } from "./timeline";
 
 export interface ViewDeps {
   conversations: ConversationStore;
-  projects: ProjectStore;
   timeline: Timeline;
 }
 
@@ -28,22 +26,6 @@ export function defaultGroupName(
 ): string {
   if (projectName !== "") return projectName;
   return memberNames.filter((name) => name !== undefined).join(", ");
-}
-
-/**
- * Who takes a message that names nobody: the conversation's own pick, else its project's, unless
- * the conversation said it has none.
- */
-export function effectiveSteward(
-  projects: ProjectStore,
-  conversation: ConversationRecord,
-): string | null {
-  if (conversation.noSteward) return null;
-  return (
-    conversation.stewardId ??
-    projects.get(conversation.projectId)?.stewardId ??
-    null
-  );
 }
 
 export function membersOf(
@@ -70,7 +52,7 @@ export function summaryOf(
     kind: conversation.kind,
     name: conversation.name,
     archived: conversation.archived,
-    stewardId: effectiveSteward(deps.projects, conversation),
+    stewardId: conversation.stewardId,
     participants: membersOf(deps, conversation.id),
     lastSeq: conversation.lastSeq,
     readSeq: conversation.readSeq,
@@ -94,9 +76,7 @@ export function infoOf(
     goal: conversation.goal,
     decided: conversation.decided,
     archived: conversation.archived,
-    stewardId: effectiveSteward(deps.projects, conversation),
-    stewardOverrideId: conversation.stewardId,
-    noSteward: conversation.noSteward,
+    stewardId: conversation.stewardId,
     readSeq: conversation.readSeq,
     lastSeq: conversation.lastSeq,
     createdAt: conversation.createdAt,

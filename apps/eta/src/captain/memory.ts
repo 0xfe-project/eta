@@ -233,7 +233,7 @@ export class CaptainMemory {
         "agent",
       );
     for (const project of this.#projects.list()) {
-      if (project.kind === "agent_home" && project.stewardId === agentId)
+      if (project.kind === "agent_home" && project.ownerAgentId === agentId)
         paths.set(join(project.path, ".eta", "MEMORY.md"), "agent");
       const used = this.#conversations
         .list()
