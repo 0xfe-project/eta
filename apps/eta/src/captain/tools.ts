@@ -1,4 +1,8 @@
-import type { CaptainPromptKind, InboxResponse } from "@eta/client-contracts";
+import type {
+  BoardTaskDetail,
+  CaptainPromptKind,
+  InboxResponse,
+} from "@eta/client-contracts";
 import type { KernelTool } from "@eta/core";
 import type { AssembledServer, SessionMeta } from "@eta/server";
 import type { AgentStore } from "../agents/store";
@@ -9,7 +13,7 @@ import type { Inbox } from "../inbox/inbox";
 import type { RemoteSessionsRouter } from "../machines/remote-sessions";
 import type { ProjectStore } from "../projects/store";
 import type { TaskBoard } from "../tasks/board";
-import type { TaskStore } from "../tasks/store";
+import type { TaskRecord, TaskStore } from "../tasks/store";
 import type { CaptainMemory } from "./memory";
 import type { CaptainService } from "./service";
 import { readFile } from "node:fs/promises";
@@ -195,7 +199,7 @@ export function captainSessionTools(
     const listTasks = defineTool({
       name: "captain_list_tasks",
       description:
-        "List the task board with status, executor, assignment source and run status, and the task graph: parentId and subtasks (done/total) for the tree, dependsOn (each edge with its state and requireDone) and waitingOn (what its work still waits for, inherited from parents too, `via` the parent). `under` lists one tree: the task and everything below it. Archived tasks (archivedAt set; put away, usually done long ago) are left out unless `archived` asks for them.",
+        "List the task board with status, executor, assignment source and run status, and the task graph: parentId and subtasks (done/total) for the tree, dependsOn (each edge with its state and requireDone) and waitingOn (what its work still waits for, inherited from parents too, `via` the parent). `under` lists one tree: the task and everything below it. Archived tasks (archivedAt set; put away, usually done long ago) are left out unless `archived` asks for them: `only` lists them alone, last archived first (to find one for unarchive_task), `include` lists them with the rest; archivedBy says who put each away (`user`, `auto`, or the agent's id).",
       parameters: Type.Object({
         status: Type.Optional(Type.String()),
         archived: Type.Optional(
@@ -582,6 +586,142 @@ export function captainSessionTools(
             { kind: "agent", agentId: captain.agentId },
           );
           return text(`Task #${updated.number} updated.`, updated);
+        } catch (error) {
+          return toolError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    });
+
+    /** The tasks named, each once; or the names that match none. */
+    const namedTasks = (
+      names: readonly string[],
+    ): { tasks: TaskRecord[] } | { unknown: string[] } => {
+      const found = names.map((name) => [name, deps.board.find(name)] as const);
+      const unknown = found
+        .filter(([, task]) => task === undefined)
+        .map(([name]) => name);
+      if (unknown.length > 0) return { unknown };
+      const tasks = new Map<string, TaskRecord>();
+      for (const [, task] of found) tasks.set(task!.id, task!);
+      return { tasks: [...tasks.values()] };
+    };
+    const noSuchTasks = (unknown: readonly string[]) =>
+      toolError(
+        `No such task: ${unknown.join(", ")}. Nothing was changed; captain_list_tasks (with archived: "include") shows the board.`,
+      );
+    const numbers = (tasks: readonly { number: number }[]): string =>
+      tasks.map((task) => `#${task.number}`).join(", ");
+    const archiveState = (task: BoardTaskDetail) => ({
+      id: task.id,
+      number: task.number,
+      status: task.status,
+      archivedAt: task.archivedAt ?? null,
+      archivedBy: task.archivedBy ?? null,
+    });
+    const taskIds = Type.Array(
+      Type.String({ description: "A task's number (#12) or id" }),
+      { minItems: 1 },
+    );
+
+    const archiveTask = defineTool({
+      name: "archive_task",
+      description:
+        "Archive tasks: put them away from the board, each with its subtasks, the way the user's Archive does. Use it to clear finished work (done or cancelled) the user wants off the board; any status may be archived and keeps its status. An archived task is hidden from captain_list_tasks unless `archived` asks for it, and comes back by itself when anything new happens on it. If a task, or one under it, has a run that has not ended, archiving stops that run: the call then archives nothing and says which tasks are running. Ask the user first, and only with their agreement call again with stopRuns: true. Undo with unarchive_task.",
+      parameters: Type.Object({
+        taskIds,
+        stopRuns: Type.Optional(
+          Type.Boolean({
+            description:
+              "Stop the runs that have not ended, then archive. Only once the user agreed to stop them.",
+          }),
+        ),
+      }),
+      execute(args) {
+        try {
+          const named = namedTasks(args.taskIds);
+          if ("unknown" in named) return noSuchTasks(named.unknown);
+          const stopRuns = args.stopRuns === true;
+          if (!stopRuns) {
+            const running = new Map<string, TaskRecord>();
+            for (const task of named.tasks)
+              for (const t of deps.board.runningIfArchived(task.id))
+                running.set(t.id, t);
+            if (running.size > 0)
+              return toolError(
+                `${numbers([...running.values()])} ${running.size === 1 ? "is running" : "are running"}: archiving stops ${running.size === 1 ? "its run" : "their runs"}. Nothing was archived. Ask the user whether to stop ${running.size === 1 ? "it" : "them"}; only with their agreement call archive_task again with stopRuns: true.`,
+              );
+          }
+          const already = named.tasks.filter(
+            (task) => task.archivedAt !== null && task.archivedAt !== undefined,
+          );
+          const archived = named.tasks
+            .filter((task) => !already.includes(task))
+            .map((task) =>
+              deps.board.archive(
+                task.id,
+                { kind: "agent", agentId: captain.agentId },
+                { stopRuns },
+              ),
+            );
+          return text(
+            [
+              archived.length > 0 ? `Archived ${numbers(archived)}.` : "",
+              already.length > 0
+                ? `${numbers(already)} ${already.length === 1 ? "was" : "were"} archived already.`
+                : "",
+            ]
+              .filter((line) => line !== "")
+              .join(" "),
+            {
+              tasks: [
+                ...archived,
+                ...already.map((t) => deps.board.detail(t.id)!),
+              ].map(archiveState),
+            },
+          );
+        } catch (error) {
+          return toolError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    });
+
+    const unarchiveTask = defineTool({
+      name: "unarchive_task",
+      description:
+        "Bring archived tasks back to the board, each with its archived subtasks, the way the user's Restore does. Use it when the user wants archived work back in view or to work on it again; it does not change a task's status or start a run. Find archived tasks with captain_list_tasks and archived: \"only\".",
+      parameters: Type.Object({ taskIds }),
+      execute(args) {
+        try {
+          const named = namedTasks(args.taskIds);
+          if ("unknown" in named) return noSuchTasks(named.unknown);
+          const notArchived = named.tasks.filter(
+            (task) => task.archivedAt === null || task.archivedAt === undefined,
+          );
+          const back = deps.board.unarchive(
+            named.tasks
+              .filter((task) => !notArchived.includes(task))
+              .map((task) => task.id),
+            { kind: "agent", agentId: captain.agentId },
+          );
+          return text(
+            [
+              back.length > 0 ? `Restored ${numbers(back)}.` : "",
+              notArchived.length > 0
+                ? `${numbers(notArchived)} ${notArchived.length === 1 ? "was" : "were"} not archived.`
+                : "",
+            ]
+              .filter((line) => line !== "")
+              .join(" "),
+            {
+              tasks: named.tasks.map((t) =>
+                archiveState(deps.board.detail(t.id)!),
+              ),
+            },
+          );
         } catch (error) {
           return toolError(
             error instanceof Error ? error.message : String(error),
@@ -1216,6 +1356,8 @@ export function captainSessionTools(
       proposeAgent,
       controlTask,
       updateTask,
+      archiveTask,
+      unarchiveTask,
       answerInbox,
       relayInboxToUser,
       promptHistory,

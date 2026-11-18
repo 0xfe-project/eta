@@ -849,11 +849,7 @@ export class TaskBoard {
     options: { stopRuns?: boolean | undefined } = {},
   ): BoardTaskDetail {
     const task = this.#existing(id);
-    const graph = this.graph();
-    const tree = [
-      task,
-      ...graph.descendantsOf(task.id).map((t) => this.#existing(t.id)),
-    ].filter((t) => t.archivedAt === null || t.archivedAt === undefined);
+    const tree = this.#archivable(task);
     if (tree.length === 0) return this.#detailOf(task);
     const running = tree.filter((t) => this.#deps.runs.openOf(t.id).length > 0);
     if (running.length > 0 && options.stopRuns !== true)
@@ -884,6 +880,26 @@ export class TaskBoard {
         });
     })();
     return this.#detailOf(this.#existing(task.id));
+  }
+
+  /**
+   * What archiving the task would have to stop: the tasks of its tree, not archived yet, with a run
+   * that has not ended. `archive` refuses these unless `stopRuns`; this asks first, without trying.
+   */
+  runningIfArchived(id: string): TaskRecord[] {
+    return this.#archivable(this.#existing(id)).filter(
+      (t) => this.#deps.runs.openOf(t.id).length > 0,
+    );
+  }
+
+  /** The task and everything under it that is not archived yet: what `archive` puts away. */
+  #archivable(task: TaskRecord): TaskRecord[] {
+    return [
+      task,
+      ...this.graph()
+        .descendantsOf(task.id)
+        .map((t) => this.#existing(t.id)),
+    ].filter((t) => t.archivedAt === null || t.archivedAt === undefined);
   }
 
   /** Bring tasks back to the board, each with its archived subtasks. */
