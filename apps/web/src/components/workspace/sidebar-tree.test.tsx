@@ -825,6 +825,36 @@ describe("拖动智能体区域的上边缘", () => {
     expect(useWorkspaceStore.getState().workspace.agentsHeight).toBe(570);
   });
 
+  it("窗口变小再变大：高度回到拖时设的值，存的值一直没被改写", async () => {
+    laidOut();
+    const { container } = await tree([direct("d1", "a1")]);
+    const resize = async () =>
+      act(async () => {
+        window.dispatchEvent(new Event("resize"));
+      });
+    const stored = () => localStorage.getItem(storageKey);
+    // From 200 up by 250: 450, under the 570 ceiling.
+    await drag(line(container)!, 400, 150);
+    expect(agentsSection(container)!.style.maxHeight).toBe("450px");
+    const saved = stored();
+    expect(JSON.parse(saved!)).toMatchObject({ agentsHeight: 450 });
+
+    // Pressed: the groups list loses 300px, so the ceiling falls to 270, under the 450 set.
+    layout.groups = 200;
+    await resize();
+    expect(line(container)!.getAttribute("aria-valuemax")).toBe("270");
+    expect(agentsSection(container)!.style.maxHeight).toBe("270px");
+    expect(stored()).toBe(saved);
+
+    // The room comes back, and so does the height that was set.
+    layout.groups = 500;
+    await resize();
+    expect(agentsSection(container)!.style.maxHeight).toBe("450px");
+    expect(line(container)!.getAttribute("aria-valuenow")).toBe("450");
+    expect(useWorkspaceStore.getState().workspace.agentsHeight).toBe(450);
+    expect(stored()).toBe(saved);
+  });
+
   it("拖不过内容的高度：内容少时线跟着手，区域不留空白", async () => {
     laidOut();
     layout.content = 120;
