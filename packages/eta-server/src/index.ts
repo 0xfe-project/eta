@@ -195,6 +195,7 @@ export {
   SettingsStore,
   type SettingsStoreOptions,
 } from "./settings";
+export { SkillFiles } from "./skill-files";
 export {
   discoverSkillDirs,
   gitRepoChain,

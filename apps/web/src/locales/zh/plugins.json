@@ -85,5 +85,6 @@
     "option": "不是可选项",
     "minItems": "至少选 {{limit}} 项",
     "maxItems": "最多选 {{limit}} 项"
-  }
+  },
+  "categories": "插件页面分类"
 }

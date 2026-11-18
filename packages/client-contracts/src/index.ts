@@ -29,6 +29,7 @@ export * from "./product";
 export * from "./providers";
 export * from "./routines";
 export * from "./run";
+export * from "./skill-files";
 export * from "./task-order";
 export * from "./tasks";
 export type * from "./types";

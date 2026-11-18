@@ -58,6 +58,7 @@ import {
   renderSkillsBlock,
   SessionManager,
   sessionsPlugin,
+  SkillFiles,
   WireService,
 } from "@eta/server";
 import { LocalTransport } from "@eta/ssh";
@@ -143,6 +144,7 @@ interface QuestionReport {
 }
 
 export class DaemonNode {
+  readonly #skillFiles: SkillFiles;
   readonly #options: DaemonNodeOptions;
   readonly #warn: (message: string) => void;
   readonly #ctx = new Context();
@@ -186,6 +188,8 @@ export class DaemonNode {
     const home = options.home ?? homedir();
     this.#plugins = new PluginStore(join(options.dataDir, "plugins", "store"));
     this.#places = options.places ?? new Places({ home, os: platform() });
+    // Use the same home this node advertises to the primary.
+    this.#skillFiles = new SkillFiles(this.#places.rules.home);
     const acp =
       options.acp ??
       (options.runtimes === undefined
@@ -429,6 +433,9 @@ export class DaemonNode {
     });
     // The settings page's ACP agents, this machine's own. Agents (and so who still runs on an id)
     // are the primary's: it checks that before it asks for a rename or a delete.
+    peer.handle("skillFiles", (raw) =>
+      this.#skillFiles.execute(raw as DaemonServiceParams["skillFiles"]),
+    );
     peer.handle("acpList", async (raw) => {
       const { settled } = (raw ?? {}) as DaemonServiceParams["acpList"];
       const admin = this.#acpAdmin();

@@ -175,6 +175,7 @@ export interface MachineActionResults {
 
 /** What the primary asks of the daemon that may take a while (`svc` calls). */
 export interface DaemonServiceParams {
+  skillFiles: import("./skill-files").SkillFileRequest;
   /** Give the session some words as its next run and wait until it is quiet. */
   run: {
     session: string;
@@ -221,6 +222,7 @@ export interface DaemonRunEvent {
 }
 
 export interface DaemonServiceResults {
+  skillFiles: import("./skill-files").SkillFileResult;
   run: RunOutcome;
   upgrade: { ok: true } | { ok: false; reason: string };
   runtimes: { runtimes: AgentRuntimeInfo[] };
