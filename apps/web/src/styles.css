@@ -149,6 +149,37 @@
   }
 
   /*
+   * The same control lying down, on the top edge of the sidebar's agent section: the line it lays
+   * over is that section's `border-t`, so like the sidebar's edge it paints nothing at rest, and
+   * there is no header band to carry across. The 6px target is centred on the line the same way.
+   */
+  .pane-divider[aria-orientation="horizontal"] {
+    position: absolute;
+    z-index: 1;
+    inset-inline: 0;
+    top: 0;
+    width: auto;
+    height: 1px;
+    background: none;
+  }
+  .pane-divider[aria-orientation="horizontal"]::after {
+    inset-block: auto;
+    inset-inline: 0;
+    top: -3px;
+    left: 0;
+    width: auto;
+    height: 6px;
+  }
+  .pane-divider[aria-orientation="horizontal"]:hover,
+  .pane-divider[aria-orientation="horizontal"]:focus-visible,
+  .pane-divider[aria-orientation="horizontal"][data-dragging="true"] {
+    width: auto;
+    height: 2px;
+    background: var(--foreground);
+    cursor: row-resize;
+  }
+
+  /*
    * The wide sidebar: 18rem from `lg` up, until a width has been dragged.
    *
    * The provider writes the width inline on the wrapper, and the gap that holds the page content

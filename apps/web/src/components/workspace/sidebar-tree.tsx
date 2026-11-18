@@ -8,7 +8,7 @@ import type { DirectoryGroup } from "./use-chat-list";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Loading } from "@/components/states";
@@ -36,6 +36,7 @@ import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels, memberStatusLabel } from "./agent-status";
 import { MemberRing } from "./member-ring";
 import { MemberStats } from "./member-stats";
+import { usePaneSize } from "./pane";
 import { useOpenAgent } from "./use-agents";
 import { useChatList } from "./use-chat-list";
 import { useGroups, useOpenGroup } from "./use-groups";
@@ -232,8 +233,91 @@ export function CaptainSection({ rail }: { rail: boolean }) {
   );
 }
 
+/** What the shelf can be sized to: room for its head and one card, and the list's head and two. */
+interface ShelfBounds {
+  min: number;
+  max: number;
+  /** The shelf's height as its content lays it out, where a drag starts from until one lands. */
+  natural: number;
+  measured: boolean;
+}
+
+const CARD_FALLBACK = 48;
+
+/**
+ * Measures the two halves of the column: the shelf's floor is its head and one card; its ceiling
+ * is what the groups and the shelf share, less the list's head and two and a half rows, so the
+ * list always shows there is more of it — or the whole shelf, when that is shorter. Re-measured as
+ * the column resizes and as the agents come and go, so a shorter window pulls a saved height back
+ * in. Measured before paint, and `measured` stays false until then: a saved height is not applied
+ * against bounds of zero.
+ */
+function useShelfBounds(
+  groups: React.RefObject<HTMLElement | null>,
+  shelf: React.RefObject<HTMLElement | null>,
+  active: boolean,
+): ShelfBounds {
+  const [bounds, setBounds] = useState<ShelfBounds>({
+    min: 0,
+    max: 0,
+    natural: 0,
+    measured: false,
+  });
+  const measure = useCallback(() => {
+    const list = groups.current;
+    const section = shelf.current;
+    if (list === null || section === null) return;
+    const top = (element: HTMLElement, inside: HTMLElement) =>
+      element.getBoundingClientRect().top - inside.getBoundingClientRect().top;
+    const card = (inside: HTMLElement) =>
+      inside.querySelector<HTMLElement>("[data-sidebar=menu-item]")
+        ?.offsetHeight || CARD_FALLBACK;
+    const listBody = list.querySelector<HTMLElement>("[data-sidebar=menu]");
+    const shelfBody = section.querySelector<HTMLElement>("[data-shelf-body]");
+    const listHead = listBody === null ? 0 : top(listBody, list);
+    const shelfHead = shelfBody === null ? 0 : top(shelfBody, section);
+    const min = shelfHead + card(section);
+    // No taller than everything in it either: past that the line would stop following the
+    // pointer, and the way back down would start with a stretch that moves nothing.
+    const max = Math.min(
+      list.offsetHeight + section.offsetHeight - (listHead + 2.5 * card(list)),
+      shelfHead + (shelfBody?.scrollHeight ?? 0),
+    );
+    const next = { min, max, natural: section.offsetHeight, measured: true };
+    setBounds((current) =>
+      current.min === next.min &&
+      current.max === next.max &&
+      current.natural === next.natural
+        ? current
+        : next,
+    );
+  }, [groups, shelf]);
+
+  useLayoutEffect(() => {
+    if (!active) return;
+    measure();
+    window.addEventListener("resize", measure);
+    const column = shelf.current?.parentElement;
+    const observer =
+      typeof ResizeObserver === "undefined" || column == null
+        ? undefined
+        : new ResizeObserver(measure);
+    if (column != null) observer?.observe(column);
+    if (shelf.current !== null) observer?.observe(shelf.current);
+    // The cards themselves: past the cap the shelf's box stays put while its content grows.
+    const cards = shelf.current?.querySelector("[data-shelf-body] > *");
+    if (cards != null) observer?.observe(cards);
+    return () => {
+      window.removeEventListener("resize", measure);
+      observer?.disconnect();
+    };
+  }, [active, measure, shelf]);
+
+  return bounds;
+}
+
 export function ConversationList() {
-  const { t: translateText } = useTranslation(["chat"] as const);
+  const { t: translateText } = useTranslation(["chat", "navigation"] as const);
   const { directories, directs, current, loaded } = useChatList();
   const setNewConversation = useWorkspaceStore(
     (state) => state.setNewConversation,
@@ -249,9 +333,35 @@ export function ConversationList() {
   // name under it, and both halves of the list keep the same shape.
   const rail = state === "collapsed" && !isMobile;
 
+  // The shelf's top edge drags its height, where there is an edge to drag: not folded, not on the
+  // rail, not on a phone, where the sidebar is a sheet. Anywhere else the shelf is its default.
+  const resizable = !collapsed && !rail && !isMobile;
+  const groupsRef = useRef<HTMLDivElement>(null);
+  const shelfRef = useRef<HTMLDivElement>(null);
+  const bounds = useShelfBounds(groupsRef, shelfRef, resizable);
+  const savedHeight = useWorkspaceStore(
+    (state) => state.workspace.agentsHeight,
+  );
+  const shelf = usePaneSize({
+    saved: savedHeight,
+    save: (agentsHeight) =>
+      setWorkspace(({ agentsHeight: _, ...rest }) =>
+        agentsHeight === undefined ? rest : { ...rest, agentsHeight },
+      ),
+    min: bounds.min,
+    max: bounds.max,
+    fallback: bounds.natural,
+    edge: "top",
+    resettable: true,
+  });
+  // A height caps the shelf, it does not fill it: fewer agents than it holds and the shelf is as
+  // tall as they are, with no empty band above them.
+  const sized = resizable && bounds.measured && shelf.sized;
+
   return (
     <>
       <SidebarGroup
+        ref={groupsRef}
         aria-labelledby="sidebar-groups"
         className="min-h-0 flex-1 overflow-y-auto px-0 pb-0"
       >
@@ -320,9 +430,18 @@ export function ConversationList() {
         </SidebarMenu>
       </SidebarGroup>
       <SidebarGroup
+        ref={shelfRef}
         aria-labelledby="sidebar-agents"
         className="mt-auto shrink-0 border-t px-0 pb-0"
+        style={sized ? { maxHeight: shelf.size } : undefined}
       >
+        {resizable ? (
+          <div
+            aria-label={translateText("navigation:accessibility.resizeAgents")}
+            className="pane-divider"
+            {...shelf.dividerProps}
+          />
+        ) : null}
         <div
           className={cn(
             "flex items-center border-b pb-1",
@@ -374,11 +493,17 @@ export function ConversationList() {
           </button>
         </div>
         {collapsed ? null : (
-          // Never more than two fifths of the screen: the agents are who you can talk to, the
-          // groups are the work, and the work keeps the room. No horizontal padding, on the rail
-          // either: the rules between the rows run to the column's edges, and a card's corner count
-          // sits inside its row rather than overhanging the scroll box.
-          <div className="max-h-[40dvh] overflow-y-auto">
+          // Never more than two fifths of the screen until a height is dragged: the agents are who
+          // you can talk to, the groups are the work, and the work keeps the room. No horizontal
+          // padding, on the rail either: the rules between the rows run to the column's edges, and
+          // a card's corner count sits inside its row rather than overhanging the scroll box.
+          <div
+            data-shelf-body
+            className={cn(
+              "overflow-y-auto",
+              sized ? "min-h-0" : "max-h-[40dvh]",
+            )}
+          >
             <SidebarMenu className="divide-y divide-border">
               {directs.length === 0 ? (
                 loaded ? (

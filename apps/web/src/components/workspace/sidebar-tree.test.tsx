@@ -15,7 +15,7 @@ import {
 } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
 import { ConversationList } from "./sidebar-tree";
-import { useWorkspaceStore } from "./workspace-store";
+import { storageKey, useWorkspaceStore } from "./workspace-store";
 
 const navigation = rstest.hoisted(() => ({ navigate: rstest.fn() }));
 rstest.mock("nuqs", () => {
@@ -670,5 +670,246 @@ describe("卡片的右键菜单", () => {
       search: { group: "g1" },
     });
     expect(menuItems()).toHaveLength(0);
+  });
+});
+
+describe("拖动智能体区域的上边缘", () => {
+  // happy-dom lays nothing out, so the column is given one: the groups list 500px tall, the shelf
+  // 200px, every card 40px, and each section's head 30px down to its first card. That makes the
+  // floor 30 + 40 = 70 and the ceiling 500 + 200 - (30 + 2.5 × 40) = 570.
+  // The shelf's content runs to 30 + 1000px, so it is the groups' room that sets the ceiling,
+  // until a test shortens the content.
+  const layout = { groups: 500, shelf: 200, content: 1000 };
+  const restore: Array<() => void> = [];
+  const stub = <K extends keyof HTMLElement>(
+    key: K,
+    descriptor: PropertyDescriptor,
+  ) => {
+    const original = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      key,
+    );
+    Object.defineProperty(HTMLElement.prototype, key, {
+      configurable: true,
+      ...descriptor,
+    });
+    restore.push(() => {
+      if (original) Object.defineProperty(HTMLElement.prototype, key, original);
+      else delete (HTMLElement.prototype as Partial<HTMLElement>)[key];
+    });
+  };
+  const laidOut = () => {
+    stub("offsetHeight", {
+      get(this: HTMLElement) {
+        const labelled = this.getAttribute("aria-labelledby");
+        if (labelled === "sidebar-groups") return layout.groups;
+        if (labelled === "sidebar-agents") return layout.shelf;
+        return this.dataset.sidebar === "menu-item" ? 40 : 0;
+      },
+    });
+    stub("scrollHeight", {
+      get(this: HTMLElement) {
+        return this.hasAttribute("data-shelf-body") ? layout.content : 0;
+      },
+    });
+    stub("getBoundingClientRect", {
+      value(this: HTMLElement) {
+        const top =
+          this.dataset.sidebar === "menu" ||
+          this.hasAttribute("data-shelf-body")
+            ? 30
+            : 0;
+        return DOMRect.fromRect({ x: 0, y: top, width: 0, height: 0 });
+      },
+    });
+  };
+  const line = (container: HTMLElement) => {
+    const found =
+      agentsSection(container)?.querySelector<HTMLElement>(
+        '[role="separator"]',
+      );
+    if (found) {
+      found.setPointerCapture = () => undefined;
+      found.releasePointerCapture = () => undefined;
+    }
+    return found ?? null;
+  };
+  const drag = async (target: HTMLElement, from: number, to: number) => {
+    const fire = (type: string, clientY: number) =>
+      target.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          button: 0,
+          clientY,
+          pointerId: 1,
+        }),
+      );
+    await act(async () => fire("pointerdown", from));
+    await act(async () => fire("pointermove", to));
+    await act(async () => fire("pointerup", to));
+  };
+  const key = async (target: HTMLElement, name: string) =>
+    act(async () => {
+      target.dispatchEvent(
+        new KeyboardEvent("keydown", { key: name, bubbles: true }),
+      );
+    });
+  const shelfBody = (container: HTMLElement) =>
+    agentsSection(container)!.querySelector<HTMLElement>("[data-shelf-body]")!;
+
+  afterEach(() => {
+    for (const undo of restore.splice(0).reverse()) undo();
+    layout.groups = 500;
+    layout.shelf = 200;
+    layout.content = 1000;
+    localStorage.clear();
+    Object.assign(window, { innerWidth: 1024 });
+  });
+
+  it("没拖过的人布局不变：不写高度，区域按内容高、最多五分之二屏", async () => {
+    laidOut();
+    const { container } = await tree([direct("d1", "a1")]);
+    const divider = line(container)!;
+    expect(divider.getAttribute("aria-label")).toBe(
+      translate("navigation:accessibility.resizeAgents"),
+    );
+    expect(divider.getAttribute("aria-orientation")).toBe("horizontal");
+    expect(divider.className).toContain("pane-divider");
+    expect(agentsSection(container)!.style.maxHeight).toBe("");
+    expect(shelfBody(container).className).toContain("max-h-[40dvh]");
+    expect(useWorkspaceStore.getState().workspace).not.toHaveProperty(
+      "agentsHeight",
+    );
+    expect(localStorage.getItem(storageKey) ?? "").not.toContain(
+      "agentsHeight",
+    );
+  });
+
+  it("往上拖变高、往下拖变矮，落下的高度写进 workspace 状态", async () => {
+    laidOut();
+    const { container } = await tree([direct("d1", "a1")]);
+    await drag(line(container)!, 400, 300);
+    expect(agentsSection(container)!.style.maxHeight).toBe("300px");
+    expect(shelfBody(container).className).not.toContain("max-h-[40dvh]");
+    expect(useWorkspaceStore.getState().workspace.agentsHeight).toBe(300);
+    expect(JSON.parse(localStorage.getItem(storageKey)!)).toMatchObject({
+      agentsHeight: 300,
+    });
+
+    await drag(line(container)!, 300, 380);
+    expect(agentsSection(container)!.style.maxHeight).toBe("220px");
+    expect(useWorkspaceStore.getState().workspace.agentsHeight).toBe(220);
+  });
+
+  it("上下限：至少标题加一张卡，最多给群聊留下标题加两行半；窗口变小就收进来", async () => {
+    laidOut();
+    const { container } = await tree([direct("d1", "a1")]);
+    const divider = line(container)!;
+    expect(divider.getAttribute("aria-valuemin")).toBe("70");
+    expect(divider.getAttribute("aria-valuemax")).toBe("570");
+
+    await drag(divider, 400, -1000);
+    expect(useWorkspaceStore.getState().workspace.agentsHeight).toBe(570);
+    await drag(line(container)!, 400, 2000);
+    expect(useWorkspaceStore.getState().workspace.agentsHeight).toBe(70);
+
+    await drag(line(container)!, 400, -1000);
+    // A shorter window: the groups list loses 200px, so the ceiling comes down by as much.
+    layout.groups = 300;
+    await act(async () => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(line(container)!.getAttribute("aria-valuemax")).toBe("370");
+    expect(agentsSection(container)!.style.maxHeight).toBe("370px");
+    // What was chosen stays chosen, for when the window grows back.
+    expect(useWorkspaceStore.getState().workspace.agentsHeight).toBe(570);
+  });
+
+  it("拖不过内容的高度：内容少时线跟着手，区域不留空白", async () => {
+    laidOut();
+    layout.content = 120;
+    const { container } = await tree([direct("d1", "a1")]);
+    // The head's 30px and the 120px of cards: 150, under the groups' 570.
+    expect(line(container)!.getAttribute("aria-valuemax")).toBe("150");
+    await drag(line(container)!, 400, -1000);
+    expect(useWorkspaceStore.getState().workspace.agentsHeight).toBe(150);
+    // A cap, not a height: with fewer agents the section is as tall as they are.
+    expect(agentsSection(container)!.style.height).toBe("");
+  });
+
+  it("获得焦点后用上下方向键调整", async () => {
+    laidOut();
+    const { container } = await tree([direct("d1", "a1")]);
+    const divider = line(container)!;
+    expect(divider.tabIndex).toBe(0);
+    await key(divider, "ArrowUp");
+    expect(useWorkspaceStore.getState().workspace.agentsHeight).toBe(216);
+    expect(agentsSection(container)!.style.maxHeight).toBe("216px");
+    await key(line(container)!, "ArrowDown");
+    await key(line(container)!, "ArrowDown");
+    expect(useWorkspaceStore.getState().workspace.agentsHeight).toBe(184);
+    await key(line(container)!, "End");
+    expect(useWorkspaceStore.getState().workspace.agentsHeight).toBe(570);
+    await key(line(container)!, "Home");
+    expect(useWorkspaceStore.getState().workspace.agentsHeight).toBe(70);
+  });
+
+  it("双击分隔线恢复成按内容高", async () => {
+    laidOut();
+    const { container } = await tree([direct("d1", "a1")]);
+    await drag(line(container)!, 400, 300);
+    await act(async () => {
+      line(container)!.dispatchEvent(
+        new MouseEvent("dblclick", { bubbles: true }),
+      );
+    });
+    expect(useWorkspaceStore.getState().workspace).not.toHaveProperty(
+      "agentsHeight",
+    );
+    expect(localStorage.getItem(storageKey)).not.toContain("agentsHeight");
+    expect(agentsSection(container)!.style.maxHeight).toBe("");
+    expect(shelfBody(container).className).toContain("max-h-[40dvh]");
+  });
+
+  it("从 eta.workspace.v1 读回高度，坏的值不认", async () => {
+    laidOut();
+    localStorage.setItem(storageKey, JSON.stringify({ agentsHeight: 250 }));
+    await useWorkspaceStore.persist.rehydrate();
+    expect(useWorkspaceStore.getState().workspace.agentsHeight).toBe(250);
+    const { container } = await tree([direct("d1", "a1")]);
+    expect(agentsSection(container)!.style.maxHeight).toBe("250px");
+    await cleanup();
+
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify({ agentsHeight: -5, agentsCollapsed: true }),
+    );
+    await useWorkspaceStore.persist.rehydrate();
+    expect(useWorkspaceStore.getState().workspace).toEqual({
+      agentsCollapsed: true,
+    });
+  });
+
+  it("折叠时、rail 上、手机布局里都没有分隔线，也不用拖过的高度", async () => {
+    laidOut();
+    useWorkspaceStore.setState({
+      workspace: { agentsCollapsed: true, agentsHeight: 300 },
+    });
+    let mounted = await tree([direct("d1", "a1")]);
+    expect(line(mounted.container)).toBeNull();
+    expect(agentsSection(mounted.container)!.style.maxHeight).toBe("");
+    await cleanup();
+
+    useWorkspaceStore.setState({ workspace: { agentsHeight: 300 } });
+    mounted = await tree([direct("d1", "a1")], { open: false });
+    expect(line(mounted.container)).toBeNull();
+    expect(agentsSection(mounted.container)!.style.maxHeight).toBe("");
+    await cleanup();
+
+    Object.assign(window, { innerWidth: 390 });
+    mounted = await tree([direct("d1", "a1")]);
+    expect(agentsSection(mounted.container)).not.toBeNull();
+    expect(line(mounted.container)).toBeNull();
+    expect(agentsSection(mounted.container)!.style.maxHeight).toBe("");
   });
 });
