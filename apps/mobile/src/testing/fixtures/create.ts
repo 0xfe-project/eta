@@ -6,15 +6,16 @@ import type {
   AgentFields,
   AgentRuntimeInfo,
   AgentView,
+  CloneView,
   ConversationArgs,
   ConversationInfo,
   ConversationSummary,
-  DirectoryEntry,
   MachineView,
+  PlaceListing,
   ProjectArgs,
-  ProjectResults,
   ProjectView,
   ProvidersView,
+  RecentPlace,
   TimelineSection,
 } from "@eta/client-contracts";
 import type { FakeHost } from "../fake-host";
@@ -23,10 +24,15 @@ import { minutesAgo, PROJECTS } from "./base";
 
 const HOME = "/Users/eric";
 
-const dir = (
-  name: string,
-  fields: Partial<DirectoryEntry> = {},
-): DirectoryEntry => ({
+/** A directory in the tree: hidden by a dot, a repository, the project there. */
+interface Dir {
+  name: string;
+  hidden: boolean;
+  git: boolean;
+  projectId: string | null;
+}
+
+const dir = (name: string, fields: Partial<Dir> = {}): Dir => ({
   name,
   hidden: name.startsWith("."),
   git: false,
@@ -34,7 +40,7 @@ const dir = (
   ...fields,
 });
 
-const TREE: Record<string, DirectoryEntry[]> = {
+const TREE: Record<string, Dir[]> = {
   [HOME]: [
     dir(".config"),
     dir("Developer"),
@@ -43,6 +49,7 @@ const TREE: Record<string, DirectoryEntry[]> = {
     dir("locked"),
     dir("site", { git: true, projectId: "site" }),
   ],
+  [`${HOME}/.config`]: [],
   [`${HOME}/Developer`]: [
     dir("eta", { git: true, projectId: "eta" }),
     dir("hutch", { git: true, projectId: "hutch" }),
@@ -59,10 +66,27 @@ const TREE: Record<string, DirectoryEntry[]> = {
   [`${HOME}/big`]: Array.from({ length: 1000 }, (_, at) => dir(`dir-${at}`)),
 };
 
-const failure = (code: "not_found" | "denied" | "offline") =>
-  new Error(`directory: ${code}`);
+/** A failure as the host words one: the code in `problem`, which the client reads. */
+const failure = (code: string) =>
+  Object.assign(new Error(`places: ${code}`), { problem: { code } });
 
 const parentOf = (path: string) => path.slice(0, path.lastIndexOf("/")) || "/";
+const display = (path: string) =>
+  path === HOME
+    ? "~"
+    : path.startsWith(`${HOME}/`)
+      ? `~${path.slice(HOME.length)}`
+      : path;
+const ref = (path: string) => ({ path, display: display(path) });
+const resolve = (raw: string): string => {
+  const typed = raw.trim();
+  const expanded =
+    typed === "~" || typed.startsWith("~/")
+      ? `${HOME}${typed.slice(1)}`
+      : typed;
+  if (!expanded.startsWith("/")) throw failure("not_absolute");
+  return expanded.replace(/\/+$/, "") || "/";
+};
 
 const PROVIDERS: ProvidersView = {
   revision: "r1",
@@ -121,7 +145,9 @@ export function installCreate(host: FakeHost): void {
   const site = PROJECTS.find((project) => project.id === "site");
   host.patch("projects", "list", [
     ...projects().map((project) =>
-      project.id === "site" ? { ...project, path: `${HOME}/site` } : project,
+      project.id === "site"
+        ? { ...project, path: `${HOME}/site`, display: "~/site" }
+        : project,
     ),
     ...(site === undefined
       ? []
@@ -132,6 +158,7 @@ export function installCreate(host: FakeHost): void {
             name: "hutch",
             machineId: "mac-studio",
             path: `${HOME}/Developer/hutch`,
+            display: "~/Developer/hutch",
             archived: true,
           },
         ]),
@@ -139,6 +166,7 @@ export function installCreate(host: FakeHost): void {
   if (host.scenario !== "uninitialized")
     host.set("providers", { config: PROVIDERS });
   host.set("personas", { cards: PERSONAS });
+  // What a phone from before kept of recent directories: handed to the host on the next visit.
   void Storage.getItem("eta.recentDirectories").then((stored) => {
     if (stored === null || stored === undefined)
       void Storage.setItem(
@@ -286,26 +314,192 @@ export function installCreate(host: FakeHost): void {
     };
   });
 
-  host.on("projects.directories", (args: ProjectArgs["directories"]) => {
+  // `places.*`, answered for the tree above: mac-studio is the machine, gpu-box does not answer.
+  const machineOf = (args: { machineId?: string }) => {
     const machine = host
       .section<MachineView[]>("machines", "list")
       .find((each) => each.id === (args.machineId ?? "mac-studio"));
     if (machine === undefined || machine.id === "gpu-box")
       throw failure("offline");
-    const raw = args.path ?? HOME;
-    const path = raw === "~" ? HOME : raw.replace(/\/+$/, "") || "/";
+    return machine;
+  };
+  const recent = (): RecentPlace[] =>
+    host.section<RecentPlace[]>("places", "recent") ?? [];
+  const recentPlace = (
+    machineId: string,
+    path: string,
+    usedAt: number,
+  ): RecentPlace => ({
+    machineId,
+    ...ref(path),
+    projectId:
+      projects().find(
+        (each) => each.machineId === machineId && each.path === path,
+      )?.id ?? null,
+    parent: path === "/" ? null : ref(parentOf(path)),
+    usedAt,
+  });
+  host.set("places", {
+    recent: projects()
+      .filter((project) => !project.archived && project.kind === "project")
+      .map((project, at) =>
+        recentPlace(project.machineId, project.path, 100 - at),
+      ),
+    clones: [] as CloneView[],
+  });
+  host.on(
+    "places.importRecent",
+    ({ recent: given }: { recent: Record<string, string[]> }) => {
+      let added = 0;
+      const known = recent();
+      const more: RecentPlace[] = [];
+      for (const [machineId, paths] of Object.entries(given))
+        for (const path of paths)
+          if (
+            !known.some(
+              (each) => each.machineId === machineId && each.path === path,
+            )
+          ) {
+            more.push(recentPlace(machineId, path, 0));
+            added += 1;
+          }
+      host.patch("places", "recent", [...known, ...more]);
+      return { added };
+    },
+  );
+  host.on("places.remember", () => ({}));
+  host.on("places.capabilities", (args: { machineId?: string }) => {
+    machineOf(args);
+    return {
+      flavor: "posix",
+      home: HOME,
+      git: true,
+      gh: "signed_out",
+      mkdir: true,
+      cloneParent: ref(`${HOME}/Developer`),
+    };
+  });
+  host.on("places.resolve", (args: { machineId?: string; path: string }) => {
+    machineOf(args);
+    const path = resolve(args.path);
+    const there = TREE[path] !== undefined;
+    return { ...ref(path), exists: there, directory: there };
+  });
+  host.on("places.list", (args: { machineId?: string; path?: string }) => {
+    machineOf(args);
+    const path = resolve(args.path ?? "~");
     if (path === `${HOME}/locked`) throw failure("denied");
     const entries = TREE[path];
     if (entries === undefined) throw failure("not_found");
-    const result: ProjectResults["directories"] = {
-      path,
-      home: HOME,
-      parent: path === "/" ? null : parentOf(path),
-      entries,
+    const crumbs = [];
+    for (let at = path; ; at = parentOf(at)) {
+      if (at === HOME) {
+        crumbs.unshift({ name: "~", path: at });
+        break;
+      }
+      if (at === "/") {
+        crumbs.unshift({ name: "/", path: at });
+        break;
+      }
+      crumbs.unshift({ name: at.slice(at.lastIndexOf("/") + 1), path: at });
+    }
+    const result: PlaceListing = {
+      ...ref(path),
+      parent: path === "/" ? null : ref(parentOf(path)),
+      crumbs,
+      entries: entries.map((entry) => ({
+        ...entry,
+        ...ref(`${path === "/" ? "" : path}/${entry.name}`),
+      })),
       truncated: path === `${HOME}/big`,
+      drives: [],
     };
     return result;
   });
+  host.on("places.search", (args: { machineId?: string; query: string }) => {
+    machineOf(args);
+    const q = args.query.trim().toLowerCase();
+    // A typed path: what is in the directory it names, by the start of the last part.
+    if (q.startsWith("~") || q.startsWith("/")) {
+      const at = resolve(args.query);
+      const parent = parentOf(at);
+      const term = at.slice(at.lastIndexOf("/") + 1).toLowerCase();
+      const matches = (TREE[parent] ?? [])
+        .filter((entry) => entry.name.toLowerCase().startsWith(term))
+        .map(({ hidden: _, ...entry }) => ({
+          ...entry,
+          ...ref(`${parent === "/" ? "" : parent}/${entry.name}`),
+        }));
+      return { query: args.query, matches, truncated: false };
+    }
+    const matches = Object.entries(TREE)
+      .flatMap(([parent, entries]) =>
+        entries.map((entry) => ({ ...entry, path: `${parent}/${entry.name}` })),
+      )
+      .filter((entry) => !entry.hidden && entry.name.toLowerCase().includes(q))
+      .slice(0, 30)
+      .map(({ hidden: _, ...entry }) => ({ ...entry, ...ref(entry.path) }));
+    return { query: args.query, matches, truncated: false };
+  });
+  host.on(
+    "places.mkdir",
+    (args: { machineId?: string; parent: string; name: string }) => {
+      machineOf(args);
+      const parent = resolve(args.parent);
+      if (TREE[parent] === undefined) throw failure("not_found");
+      if (args.name.includes("/") || args.name.trim() === "")
+        throw failure("invalid");
+      const path = `${parent}/${args.name}`;
+      if (TREE[path] !== undefined) throw failure("exists");
+      TREE[parent] = [...TREE[parent]!, dir(args.name)];
+      TREE[path] = [];
+      return ref(path);
+    },
+  );
+  host.on("places.repos", () => ({
+    available: false,
+    reason: "gh_signed_out",
+  }));
+  host.on(
+    "places.clone",
+    (args: {
+      machineId?: string;
+      url: string;
+      parent: string;
+      protocol?: string;
+    }) => {
+      const machine = machineOf(args);
+      const name =
+        args.url
+          .replace(/\.git$/, "")
+          .split(/[/:]/)
+          .at(-1) ?? "repo";
+      const parent = resolve(args.parent);
+      const target = `${parent}/${name}`;
+      const clone: CloneView = {
+        id: id("clone"),
+        machineId: machine.id,
+        repo: args.url,
+        target: ref(target),
+        status: "running",
+        progress: { phase: "Receiving objects", percent: 40 },
+        failure: null,
+        startedAt: Date.now(),
+        endedAt: null,
+      };
+      host.patch("places", "clones", [clone]);
+      // A moment later it is there.
+      setTimeout(() => {
+        TREE[parent] = [...(TREE[parent] ?? []), dir(name, { git: true })];
+        TREE[target] = [];
+        host.patch("places", "clones", [
+          { ...clone, status: "done", progress: null, endedAt: Date.now() },
+        ]);
+      }, 300);
+      return { clone };
+    },
+  );
+  host.on("places.cancelClone", () => ({ cancelled: false }));
 
   host.on("projects.create", (args: ProjectArgs["create"]) => {
     const machineId = args.machineId ?? "mac-studio";
@@ -323,10 +517,12 @@ export function installCreate(host: FakeHost): void {
       );
       return { project: back, existed: true };
     }
+    const path = resolve(args.path);
     const project: ProjectView = {
       id: id("project"),
       machineId,
-      path: args.path,
+      path,
+      display: display(path),
       name:
         args.name?.trim() || args.path.slice(args.path.lastIndexOf("/") + 1),
       kind: "project",
