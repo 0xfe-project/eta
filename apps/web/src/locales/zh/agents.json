@@ -111,8 +111,13 @@
     "status": {
       "unauthenticated": "（未登录）",
       "missing": "（未安装）",
-      "error": "（不可用）"
-    }
+      "error": "（不可用）",
+      "timeout": "（探测超时 30s）",
+      "failed": "（探测失败）"
+    },
+    "details": "详情",
+    "retrying": "正在重新探测…",
+    "signIn": "{{runtime}} 还没登录：在终端运行 <code>{{command}}</code> 登录，再点重试。"
   },
   "plugins": {
     "empty": "还没有插件。",

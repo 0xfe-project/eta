@@ -75,7 +75,10 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
   const machineId = useWatch({ control: form.control, name: "machineId" });
   const { machines } = useMachines();
   const machine = machines.find((item) => item.id === machineId);
-  const { runtimes, models } = useAgentRuntimeChoices(runtime, machineId);
+  const { runtimes, models, refresh } = useAgentRuntimeChoices(
+    runtime,
+    machineId,
+  );
   const usable = (models ?? []).filter((item) => item.available);
   // New agents start with the last used model, else the first usable one. An external runtime
   // starts on its own default, which is no choice at all.
@@ -238,6 +241,7 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
               runtimes={runtimes}
               note={runtimeNote}
               onChange={clearRuntimeNote}
+              refresh={refresh}
             />
             <ModelField
               form={form}
