@@ -12,7 +12,11 @@
  * active unless it is disabled, and the gateway's own check (`gateway.ts`) says when the provider
  * rejects it.
  */
-import type { AuthFileEntry, CooldownView } from "@cpajs/cpa/client";
+import type {
+  AuthFileEntry,
+  CooldownReason,
+  CooldownView,
+} from "@cpajs/cpa/client";
 import type {
   LlmConnection,
   LlmModelStatus,
@@ -50,7 +54,14 @@ export function connectionView(connection: Connection): LlmConnection {
   return view;
 }
 
-const LOGIN_REJECTED = new Set(["unauthorized", "invalid_grant"]);
+/**
+ * The reasons that mean the provider rejected the login. Not `transient_rate_limit`: a short
+ * burst of 429s is the provider pacing the account, which recovers by itself.
+ */
+const LOGIN_REJECTED: ReadonlySet<string> = new Set<CooldownReason>([
+  "unauthorized",
+  "invalid_grant",
+]);
 
 /** A connection from one of CPA's credential files. */
 export function fileConnection(
@@ -128,6 +139,12 @@ export function fileConnection(
         ),
       };
     }
+    // A short burst of 429s: the account still serves once the cooldown ends, as with a
+    // transient failure; it says nothing about the login.
+    case "transient_rate_limit":
+      return { ...base, state: "degraded", retryAt, error: paced() };
+    // A failure, or a reason CPA names later: degraded until the cooldown ends.
+    case "transient_error":
     default:
       return { ...base, state: "degraded", retryAt, error: transient(status) };
   }
@@ -201,6 +218,14 @@ function transient(status: number | undefined): LlmProblem {
       );
 }
 
+/** A short burst of rate limiting (CPA's `transient_rate_limit`), which clears by itself. */
+function paced(): LlmProblem {
+  return problem(
+    "rate_limited",
+    "Too many requests for now; the account recovers by itself.",
+  );
+}
+
 export interface ModelState {
   status: LlmModelStatus;
   reason?: LlmProblem | undefined;
@@ -270,6 +295,9 @@ export function modelState(
           { provider: name },
         ),
       };
+    case "transient_rate_limit":
+      return { status: "degraded", retryAt, reason: paced() };
+    case "transient_error":
     default:
       return {
         status: "degraded",
