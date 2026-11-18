@@ -24,6 +24,8 @@ export function ProcessBox({
   steps,
   count,
   running,
+  stopping = false,
+  onStop,
   author,
   agentId,
   sessionId,
@@ -38,6 +40,10 @@ export function ProcessBox({
   count: number;
   /** The run is in flight: the frame. Over: the folded row. */
   running: boolean;
+  /** A stop was asked for and the run has not ended: the stop says so, and can be pressed again. */
+  stopping?: boolean;
+  /** Stops this reply alone: the frame's title row has the button while the run is in flight. */
+  onStop?: (() => void) | undefined;
   author?: string | undefined;
   /** Whose face heads the dialog. */
   agentId?: string | null | undefined;
@@ -102,6 +108,31 @@ export function ProcessBox({
         </details>
       ) : (
         <div className="flex flex-col items-end">
+          <div className="process-box-head">
+            <span>
+              {translateText("process.title")}
+              {count === 0
+                ? ""
+                : ` · ${translateText("process.steps", { count })}`}
+            </span>
+            {onStop === undefined ? null : (
+              <button
+                type="button"
+                className="process-stop"
+                data-stopping={stopping}
+                aria-label={
+                  author === undefined
+                    ? undefined
+                    : translateText("process.stopLabel", { name: author })
+                }
+                onClick={onStop}
+              >
+                {stopping
+                  ? translateText("process.stopping")
+                  : translateText("process.stop")}
+              </button>
+            )}
+          </div>
           <div
             ref={boxRef}
             role="region"

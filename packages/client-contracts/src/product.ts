@@ -241,7 +241,9 @@ export interface ToolActivity {
 export type ProcessStep =
   | { type: "thinking"; text: string }
   | { type: "text"; text: string }
-  | { type: "tool"; id: string };
+  | { type: "tool"; id: string }
+  /** The run took words the user put into it (a steer): where in the process they arrived. */
+  | { type: "steer" };
 
 /** One row of a conversation's timeline. */
 export interface MessageView {
@@ -267,7 +269,8 @@ export interface MessageView {
   replyToId: string | null;
   /**
    * What the row carries beyond its text. A user row has `woke` (agents given a reply row) and
-   * `joined` (agents whose turn it steered) and, when files came with it, `attachments`
+   * `joined` (agents whose turn it steered), `into` (the user row it was put into, see
+   * `ConversationArgs["send"]["into"]`) and, when files came with it, `attachments`
    * (`AttachmentView[]`) and, when the sender folded pastes in it, `blocks` (the
    * `ConversationArgs["send"]["blocks"]` pairs it sent, verbatim); a system row has the `event`
    * it records (`steward` with `from`/`to`, `wake_budget`); a failed reply has the `code` it
@@ -794,6 +797,14 @@ export interface ConversationArgs {
     text: string;
     mentions?: string[];
     mode?: "queue" | "steer";
+    /**
+     * A user message of this conversation to put this one into: it joins the turn of every agent
+     * answering that message right now (its replies in flight), whatever `mentions` and `mode`
+     * say, and the row records it as `data.into`, so it can be drawn as part of that message. With
+     * nobody answering it any more it is sent as a message of its own, as `mentions` and
+     * `mode: "queue"` would have it, and the row has no `into`.
+     */
+    into?: string;
     clientId?: string;
     /**
      * Where the sender folded a paste inside `text`: pairs of integers `[start, end)`, counted

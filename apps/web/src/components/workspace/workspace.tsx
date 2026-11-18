@@ -5,8 +5,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { compactionNotice } from "@/lib/compaction-notice";
-import { draftText, EMPTY_DRAFT } from "@/lib/composer";
+import { EMPTY_DRAFT } from "@/lib/composer";
 import { cn } from "@/lib/utils";
 import {
   useConversation,
@@ -20,7 +19,6 @@ import {
 } from "@/queries/outbox";
 import { useProjects } from "@/queries/projects";
 import { useAnswerQuestion, useQuestions } from "@/queries/questions";
-import { useSessionActions } from "@/queries/sessions";
 import { useConnectionLost } from "@/queries/wire";
 import { ChatHeader, MobileChatHeader } from "./agent-bar";
 import { AgentEditor } from "./agent-editor";
@@ -99,7 +97,6 @@ export function Workspace({
   const members = group?.participants ?? [];
   const { targetOf, remember } = useComposerTarget(group, agents);
   const { stop, read } = useConversationActions();
-  const { compact, goal: setGoal } = useSessionActions();
   const { choose, abort, answer } = useAnswerQuestion();
   const answering: AnsweringQuestion | undefined =
     answer.isPending && answer.variables !== undefined
@@ -110,16 +107,6 @@ export function Workspace({
             : {}),
         }
       : undefined;
-  // Which session a goal set from the composer lands on: the member being talked to, or the first
-  // one that has a conversation. A group has one goal per member; the composer speaks for the one
-  // you are addressing.
-  const sessionOf = (agentId: string | undefined) =>
-    members.find((member) => member.agentId === agentId)?.sessionId ??
-    undefined;
-  const goalSessionId =
-    (targetOf(draftText(draft)).ids.map(sessionOf).find(Boolean) ??
-      members.find((member) => member.sessionId !== null)?.sessionId) ||
-    undefined;
   const onError = (error: Error) => toast.error(error.message);
   const { update } = useConversationActions();
   const blocked = group?.archived ? (
@@ -316,17 +303,6 @@ export function Workspace({
                 );
               }}
               onReload={conversation.loadOlder}
-              onGoal={(action, objective) =>
-                // Through the session, like the panel's own buttons: one writer for a goal means
-                // the two can never show different ones.
-                goalSessionId === undefined
-                  ? Promise.resolve()
-                  : setGoal.mutateAsync({
-                      session: goalSessionId,
-                      action,
-                      ...(objective === undefined ? {} : { objective }),
-                    })
-              }
               error={
                 conversation.error
                   ? translateText("chat:errors.loadConversation", {
@@ -348,48 +324,6 @@ export function Workspace({
                   blocks,
                 );
                 remember(target.sticky);
-                setDraft([]);
-              }}
-              onCompact={() => {
-                const text = draftText(draft);
-                // Who the composer says it is talking to, the steward included.
-                const named = targetOf(text)
-                  .ids.map(sessionOf)
-                  .filter((id) => id !== undefined);
-                const sessions = named.length
-                  ? named
-                  : members.length === 1
-                    ? [members[0]?.sessionId]
-                    : [];
-                const session = sessions.find(
-                  (id): id is string => typeof id === "string",
-                );
-                if (session === undefined)
-                  return void toast.error(
-                    translateText("chat:commands.compactRequiresMention"),
-                  );
-                // A runtime's compaction leaves nothing in the transcript, so the toast tells it.
-                const agentId = members.find(
-                  (member) => member.sessionId === session,
-                )?.agentId;
-                const onRuntime = agents.some(
-                  (agent) => agent.id === agentId && agent.runtime !== "eta",
-                );
-                const waiting = onRuntime
-                  ? toast.loading(translateText("chat:compaction.running"))
-                  : undefined;
-                compact.mutateAsync({ session }).then(
-                  ({ runtime }) => {
-                    if (runtime === undefined) return;
-                    const { level, text } = compactionNotice(runtime);
-                    toast[level](text, { id: waiting });
-                  },
-                  (error: Error) => {
-                    // With no id this would dismiss every toast on the screen.
-                    if (waiting !== undefined) toast.dismiss(waiting);
-                    onError(error);
-                  },
-                );
                 setDraft([]);
               }}
               onStop={(messageId) => {

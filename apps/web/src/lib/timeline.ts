@@ -6,14 +6,6 @@ import { isCaptainOutcome } from "@eta/client-contracts";
 // changes in place (a reply goes queued -> working -> done), and `revision` is what tells a newer
 // copy from an older one.
 
-/** A reply that has not ended: someone is, or is about to be, answering. */
-export const ACTIVE_STATUSES: ReadonlySet<MessageStatus> = new Set([
-  "queued",
-  "working",
-  "waiting_for_input",
-  "stopping",
-]);
-
 /** A reply that is running its session now (not merely waiting its turn). */
 export const RUNNING_STATUSES: ReadonlySet<MessageStatus> = new Set([
   "working",

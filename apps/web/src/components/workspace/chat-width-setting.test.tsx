@@ -59,12 +59,10 @@ function panel() {
       draft={[]}
       onDraftChange={() => {}}
       onSend={() => {}}
-      onCompact={() => {}}
       onStop={() => {}}
       onStopAll={() => {}}
       onChoose={() => {}}
       onAbort={() => {}}
-      onGoal={async () => undefined}
       outgoing={[]}
       onRetry={() => {}}
       onEdit={() => {}}

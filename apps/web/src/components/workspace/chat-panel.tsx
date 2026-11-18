@@ -6,7 +6,8 @@ import type {
   RunBlock,
   ToolBlock,
 } from "@eta/client-contracts";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties } from "react";
+import type { SlashRow } from "./transcript/slash-menu";
 import type { WorkspaceState } from "./workspace-store";
 import type { Draft, FilePart, PasteRange } from "@/lib/composer";
 import type { ComposerTarget, StickyTarget } from "@/lib/mentions";
@@ -44,7 +45,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  afterCommand,
   charCount,
   draftFiles,
   draftText,
@@ -52,19 +52,13 @@ import {
   isBlank,
   MAX_MESSAGE_CHARS,
   pasteBlocksOf,
-  plainDraft,
   withTextAbove,
 } from "@/lib/composer";
 import { buildMenu, hashAt, mentionAt } from "@/lib/composer-menu";
 import { translate } from "@/lib/i18n";
 import { mentionLabel } from "@/lib/mentions";
 import { firstVisible } from "@/lib/rail";
-import { readTheme, setTheme } from "@/lib/theme";
-import {
-  ACTIVE_STATUSES,
-  RUNNING_STATUSES,
-  taskRowsByTurn,
-} from "@/lib/timeline";
+import { RUNNING_STATUSES, taskRowsByTurn } from "@/lib/timeline";
 import { agentName } from "@/queries/agents";
 import { beginUpload, useOutbox } from "@/queries/outbox";
 import { useProjectFiles } from "@/queries/projects";
@@ -87,6 +81,7 @@ import { StatusIcon } from "./task-status-icon";
 import { TranscriptRail } from "./transcript-rail";
 import { AskBlock } from "./transcript/ask-block";
 import { CopyMessage } from "./transcript/copy-message";
+import { InsertMessage } from "./transcript/insert-message";
 import { Message, SystemMessage } from "./transcript/message";
 import { NoteStep } from "./transcript/note-step";
 import { ProcessBox } from "./transcript/process-box";
@@ -98,80 +93,8 @@ import { useInputMethod } from "./use-input-method";
 import { WidgetFrame } from "./widget-frame";
 import { useWorkspaceStore } from "./workspace-store";
 
-type SlashName =
-  | "/stop"
-  | "/queue"
-  | "/steer"
-  | "/compact"
-  | "/goal"
-  | "/theme"
-  | "/settings"
-  | "/new";
-interface SlashCommand {
-  name: SlashName | `@${string}` | `#${string}`;
-  description: string;
-  /** Completes to `name ` for the message to follow. */
-  takesText?: boolean;
-  /** The three fields below are the row's own, for the menu that shows it (slash-menu.tsx). */
-  icon?: ReactNode;
-  status?: string;
-  ariaLabel?: string;
-}
-const SLASH_COMMANDS: SlashCommand[] = [
-  {
-    name: "/stop",
-    get description() {
-      return translate("chat:commands.stopAllDescription");
-    },
-  },
-  {
-    name: "/queue",
-    get description() {
-      return translate("chat:sendModes.afterReply");
-    },
-    takesText: true,
-  },
-  {
-    name: "/steer",
-    get description() {
-      return translate("chat:sendModes.interruptReply");
-    },
-    takesText: true,
-  },
-  {
-    name: "/compact",
-    get description() {
-      return translate("chat:commands.compactDescription");
-    },
-  },
-  // Commands that carry a payload. `takesText` is what makes `/goal ship it` complete to
-  // `/goal ` and wait for the rest, instead of firing the moment it is picked.
-  {
-    name: "/goal",
-    get description() {
-      return translate("chat:commands.goalDescription");
-    },
-    takesText: true,
-  },
-  {
-    name: "/theme",
-    get description() {
-      return translate("chat:commands.themeDescription");
-    },
-  },
-  {
-    name: "/settings",
-    get description() {
-      return translate("chat:commands.settingsDescription");
-    },
-  },
-  {
-    name: "/new",
-    get description() {
-      return translate("chat:commands.newDescription");
-    },
-  },
-];
+/** A row of the composer's menu: a member or a file after `@`, a task after `#`. */
+type MenuRow = SlashRow & { name: `@${string}` | `#${string}` };
 
 const activityText = {
   get running() {
@@ -704,6 +627,42 @@ function replyLines(messages: readonly MessageView[]) {
   return lines;
 }
 
+/**
+ * The transcript with inserted words taken out of it, and those words by the message they were put
+ * into (`data.into`), oldest first. One whose message is not loaded stays a message of its own.
+ */
+function foldInserts(messages: readonly MessageView[]) {
+  const ids = new Set(messages.map((message) => message.id));
+  const inserts = new Map<string, MessageView[]>();
+  const shown = messages.filter((message) => {
+    const into = message.data.into;
+    if (message.author !== "user" || typeof into !== "string" || !ids.has(into))
+      return true;
+    inserts.set(into, [...(inserts.get(into) ?? []), message]);
+    return false;
+  });
+  return { shown, inserts };
+}
+
+/** The agents writing a reply to each user message right now, by message, in the order woken. */
+function answeringOf(messages: readonly MessageView[]) {
+  const answering = new Map<string, string[]>();
+  for (const message of messages) {
+    if (
+      message.author !== "agent" ||
+      message.agentId === null ||
+      message.replyToId === null ||
+      (message.status !== "working" && message.status !== "waiting_for_input")
+    )
+      continue;
+    answering.set(message.replyToId, [
+      ...(answering.get(message.replyToId) ?? []),
+      message.agentId,
+    ]);
+  }
+  return answering;
+}
+
 /** The names of the agents a message went into the turns of (`steer`), for the line under it. */
 const joinedNames = (message: MessageView, agents: readonly AgentView[]) =>
   Array.isArray(message.data.joined)
@@ -733,6 +692,16 @@ function FirstToken() {
   );
 }
 
+/** Where a run took the words you inserted: a faint line in its process, not the words again. */
+function SteerTrace() {
+  const { t: translateText } = useTranslation("chat");
+  return (
+    <div data-block="steer" className="process-trace">
+      {translateText("insert.received")}
+    </div>
+  );
+}
+
 /**
  * One step of a reply's process: a thought, a tool call, or something the agent said.
  * The same element for a reply at work and a finished one.
@@ -747,6 +716,7 @@ function ProcessStepView({
   streaming?: boolean;
 }) {
   if (block.type === "thinking") return <ThinkingBlock text={block.text} />;
+  if (block.type === "steer") return <SteerTrace />;
   if (block.type === "tool")
     return (
       <div data-block={block.id} className="tool-step space-y-1">
@@ -766,6 +736,8 @@ function LiveReply({
   sessionId,
   runFrom,
   waiting,
+  stopping,
+  onStop,
   author,
   agentId,
   time,
@@ -775,6 +747,10 @@ function LiveReply({
   runFrom: number | undefined;
   /** It is waiting on the reader, not working: no first-token placeholder. */
   waiting: boolean;
+  /** A stop was asked for and the run has not ended yet. */
+  stopping: boolean;
+  /** Stop this reply, and only this one. */
+  onStop: () => void;
   author?: string | undefined;
   agentId: string | null;
   time: string;
@@ -799,6 +775,8 @@ function LiveReply({
       }
       count={blocks.length}
       running
+      stopping={stopping}
+      onStop={onStop}
       author={author}
       agentId={agentId}
       sessionId={sessionId}
@@ -822,6 +800,9 @@ const Turn = memo(
     answering,
     nobody,
     joined,
+    answeredBy,
+    answeredByNames,
+    inserts,
     taskRowsOf,
     actions,
     ...line
@@ -838,6 +819,12 @@ const Turn = memo(
     nobody: boolean;
     /** Who the user message joined the turn of. */
     joined: string;
+    /** The agents answering this user message right now, as ids joined by commas; "" for none. */
+    answeredBy?: string;
+    /** Their names, as one phrase. */
+    answeredByNames?: string;
+    /** What was inserted into this user message since, oldest first. */
+    inserts?: readonly MessageView[] | undefined;
     /** The task rows this reply wrote, and which are drawn here rather than on the timeline. */
     taskRowsOf?: readonly MessageView[] | undefined;
     actions: React.RefObject<TurnActions>;
@@ -863,12 +850,24 @@ const Turn = memo(
             role="user"
             footer={
               <>
-                {/* On your own side the line is right-aligned, so the button sits inside the
-                    time, nearer the text it copies. */}
-                <CopyMessage text={message.text} />
                 <time dateTime={new Date(message.createdAt).toISOString()}>
                   {when(message.createdAt)}
                 </time>
+                {/* Only while it is being answered: there is a turn to put words into. */}
+                {answeredBy ? (
+                  <InsertMessage
+                    conversationId={message.conversationId}
+                    messageId={message.id}
+                    agentIds={answeredBy.split(",")}
+                    names={answeredByNames ?? ""}
+                  />
+                ) : null}
+                {/* What was inserted is part of the message, so it is copied with it. */}
+                <CopyMessage
+                  text={[message.text, ...(inserts ?? []).map((i) => i.text)]
+                    .filter((text) => text.trim() !== "")
+                    .join("\n\n")}
+                />
               </>
             }
           >
@@ -877,6 +876,24 @@ const Turn = memo(
               blocks={pasteBlocksOf(message.data, message.text)}
             />
             <MessageFiles data={message.data} />
+            {(inserts ?? []).map((insert) => (
+              <div
+                key={insert.id}
+                data-insert={insert.id}
+                className="message-insert"
+              >
+                <span className="message-insert-meta">
+                  {translateText("insert.label", {
+                    time: when(insert.createdAt),
+                  })}
+                </span>
+                <UserText
+                  text={insert.text}
+                  blocks={pasteBlocksOf(insert.data, insert.text)}
+                />
+                <MessageFiles data={insert.data} />
+              </div>
+            ))}
           </Message>
           {nobody ? (
             <p role="status" className="text-xs text-state-warning">
@@ -926,6 +943,8 @@ const Turn = memo(
             sessionId={sessionId}
             runFrom={runFromOf(message.data)}
             waiting={message.status === "waiting_for_input"}
+            stopping={message.status === "stopping"}
+            onStop={() => actions.current.onStop(message.id)}
             author={author}
             agentId={message.agentId}
             time={when(message.createdAt)}
@@ -1078,7 +1097,6 @@ export function ChatPanel({
   draft,
   onDraftChange: setDraft,
   onSend,
-  onCompact,
   onStop,
   onStopAll,
   onChoose,
@@ -1095,7 +1113,6 @@ export function ChatPanel({
   onEdit,
   onDiscard,
   onResend,
-  onGoal,
   onReload,
 }: {
   groupId: string | undefined;
@@ -1122,9 +1139,9 @@ export function ChatPanel({
     files?: AttachmentView[],
     blocks?: PasteRange[],
   ) => void;
-  onCompact: () => void;
+  /** Stops one reply: the stop in its process window. */
   onStop: (replyId: string) => void;
-  /** `/stop`: stops every reply in the group. */
+  /** Esc in an empty box: stops every reply in the group. */
   onStopAll: () => void;
   onChoose: (question: Question, selections: string[]) => void;
   onAbort: (question: Question) => void;
@@ -1148,11 +1165,6 @@ export function ChatPanel({
   onResend: (text: string, agentId?: string) => void;
   /** Ask for the conversation again, when reading it failed. */
   onReload?: () => void;
-  /** The goal of this conversation, moved from the composer's `/goal`. */
-  onGoal: (
-    action: "set" | "pause" | "resume" | "clear",
-    objective?: string,
-  ) => Promise<unknown>;
 }) {
   const { t: translateText } = useTranslation([
     "chat",
@@ -1162,17 +1174,21 @@ export function ChatPanel({
     "tasks",
   ] as const);
   const formRef = useRef<HTMLFormElement>(null);
-  // The reply in progress; later ones wait behind it.
-  const active = messages.find(
+  // A reply is being written: Esc in an empty box stops them all.
+  const writing = messages.some(
     (message) =>
       message.author === "agent" &&
-      ACTIVE_STATUSES.has(message.status) &&
+      RUNNING_STATUSES.has(message.status) &&
       message.status !== "stopping",
   );
   const lines = useMemo(() => replyLines(messages), [messages]);
+  // Words inserted into one of your messages are drawn as part of it, not as messages of their own.
+  const { shown, inserts } = useMemo(() => foldInserts(messages), [messages]);
   // The task rows that say which reply wrote them are drawn inside it, so the timeline proper is
   // what is left; both lists come from one pass, in the order the rows came in.
-  const { rows, under } = useMemo(() => taskRowsByTurn(messages), [messages]);
+  const { rows, under } = useMemo(() => taskRowsByTurn(shown), [shown]);
+  // Who is answering each of your messages right now: that message offers "Insert".
+  const answeredBy = useMemo(() => answeringOf(messages), [messages]);
   const members = useMemo(
     () =>
       (group?.participants ?? []).map((member) => ({
@@ -1256,10 +1272,6 @@ export function ChatPanel({
     [rows, showRail],
   );
   const ime = useInputMethod();
-  const setSettings = useWorkspaceStore((state) => state.setSettings);
-  const setNewConversation = useWorkspaceStore(
-    (state) => state.setNewConversation,
-  );
   const listId = useId();
   const [menuIndex, setMenuIndex] = useState(0);
   const [menuDismissed, setMenuDismissed] = useState(false);
@@ -1291,8 +1303,8 @@ export function ChatPanel({
   const files = useProjectFiles(group?.projectId, mentionAt(text) !== null);
   // The board, for `#` — the same list the task page reads, so no second query.
   const { tasks: board } = useTasks();
-  // One menu, four sources (lib/composer-menu.ts): `@` offers the group's members, then the
-  // project's files, `/` offers commands, and `#` offers tasks, this group's first.
+  // One menu, three sources (lib/composer-menu.ts): `@` offers the group's members, then the
+  // project's files, and `#` offers tasks, this group's first. A `/` is just a character.
   const menu = buildMenu({
     text,
     members: members.map((member) => ({
@@ -1301,25 +1313,14 @@ export function ChatPanel({
       busy: member.status !== "idle",
     })),
     files,
-    commands: SLASH_COMMANDS,
     tasks: board,
     groupId,
     dismissed: menuDismissed || blocked !== undefined,
   });
-  const matches: SlashCommand[] =
+  const matches: MenuRow[] =
     menu === null
       ? []
-      : menu.items.map((item): SlashCommand => {
-          // A command row is the command itself, looked up by name: a copy of its fields would
-          // drop `takesText`, and `/steer` picked from the menu would then fire with no words.
-          // (The menu only ever lists SLASH_COMMANDS, so the fallback is for the type checker.)
-          if (item.kind === "command")
-            return (
-              SLASH_COMMANDS.find((entry) => entry.name === item.value) ?? {
-                name: item.value as SlashName,
-                description: item.description,
-              }
-            );
+      : menu.items.map((item): MenuRow => {
           if (item.kind === "task") {
             // `#10`, the title, and the status it is in — picking a task that already finished is
             // a mistake worth showing. The status comes off the board, so it is one of the ones
@@ -1350,31 +1351,7 @@ export function ChatPanel({
   const menuOpen = matches.length > 0;
   const menuActive = Math.min(menuIndex, matches.length - 1);
 
-  function run(name: SlashCommand["name"], rest: string) {
-    if (name === "/stop") {
-      onStopAll();
-      setDraft([]);
-    } else if (name === "/compact") {
-      onCompact();
-    } else if (name === "/goal") {
-      // A goal set from the composer is the same goal the right panel shows: it goes through the
-      // same route, so the two cannot disagree.
-      if (rest.length > 0) void onGoal("set", rest);
-      setDraft([]);
-    } else if (name === "/theme") {
-      setTheme(readTheme() === "dark" ? "light" : "dark");
-      setDraft([]);
-    } else if (name === "/settings") {
-      setSettings((state) => ({ ...state, open: true }));
-      setDraft([]);
-    } else if (name === "/new") {
-      setNewConversation({ open: true, projectId: group?.projectId });
-      setDraft([]);
-    } else if (rest.length > 0) {
-      onSend(rest, name === "/steer" ? "steer" : "queue");
-    }
-  }
-  function choose(command: SlashCommand) {
+  function choose(command: MenuRow) {
     if (command.name.startsWith("@")) {
       const next = [...draft];
       const last = next.at(-1);
@@ -1386,7 +1363,7 @@ export function ChatPanel({
       setDraft(next);
       setMenuIndex(0);
       setMenuDismissed(true);
-    } else if (command.name.startsWith("#")) {
+    } else {
       // A task number: replace exactly the `#…` being typed, which is the range hashAt reported,
       // and end with the space that closes the reference, as `@name ` does.
       const next = [...draft];
@@ -1400,31 +1377,16 @@ export function ChatPanel({
       setDraft(next);
       setMenuIndex(0);
       setMenuDismissed(true);
-    } else if (command.name === "/compact" && members.length > 1)
-      setDraft(plainDraft("/compact "));
-    else if (command.takesText) setDraft(plainDraft(`${command.name} `));
-    else run(command.name, "");
+    }
   }
   function send() {
-    if (blocked !== undefined || hold !== undefined) return;
-    // The button says STOP while a reply runs and the box is empty: eta-old's rule, and the
-    // promise has to be kept or the button lies. Saying something with text in it still sends —
-    // ⌘/Ctrl+Enter steers into the running turn instead.
-    if (isBlank(draft)) {
-      if (active !== undefined) onStop(active.id);
-      return;
-    }
-    const first = text.trimStart();
-    const space = first.search(/\s/);
-    const name = space === -1 ? first : first.slice(0, space);
-    const command = SLASH_COMMANDS.find((c) => c.name === name);
-    if (command) run(command.name, afterCommand(first, name));
-    else {
-      // The paste blocks go with the text as the ranges they occupy in it, so the transcript
-      // can fold them back into chips; a slash command's words carry none.
-      const sent = draftWithBlocks(draft);
-      onSend(sent.text, "queue", uploaded, sent.blocks);
-    }
+    // The button is always Send: an empty box sends nothing, and stopping is the process
+    // window's (one reply) or Esc's (all of them). A message to someone busy waits for them.
+    if (blocked !== undefined || hold !== undefined || isBlank(draft)) return;
+    // The paste blocks go with the text as the ranges they occupy in it, so the transcript can
+    // fold them back into chips.
+    const sent = draftWithBlocks(draft);
+    onSend(sent.text, "queue", uploaded, sent.blocks);
     // Sending jumps back to the live end, as in a terminal.
     transcript.toBottom();
     formRef.current?.querySelector<HTMLElement>("[contenteditable]")?.focus();
@@ -1449,14 +1411,6 @@ export function ChatPanel({
     onKeyDown: (event: KeyboardEvent) => {
       // An Enter that finishes an input method's word is not a send, nor a pick (use-input-method.ts).
       if (ime.owns(event)) return;
-      // ⌘/Ctrl+Enter means "send", whatever the menu is offering: steering a running turn must not
-      // depend on whether a completion menu happens to be open.
-      const forceSend = (event.metaKey || event.ctrlKey) && !event.shiftKey;
-      if (forceSend && event.key === "Enter") {
-        event.preventDefault();
-        send();
-        return;
-      }
       if (menuOpen) {
         const step = { ArrowDown: 1, ArrowUp: -1 }[event.key];
         if (step) {
@@ -1475,10 +1429,11 @@ export function ChatPanel({
           return;
         }
       }
-      const interrupt = event.key === "Escape";
-      if (interrupt && active) {
+      // Esc in an empty box stops every reply being written here; with words in it, it is not
+      // a stop (it would be too easy to lose a turn while editing).
+      if (event.key === "Escape" && writing && isBlank(draft)) {
         event.preventDefault();
-        onStop(active.id);
+        onStopAll();
       } else if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
         send();
@@ -1507,7 +1462,7 @@ export function ChatPanel({
         menu?.kind === "hash" ? translateText("composer.tasksLabel") : undefined
       }
       onHover={setMenuIndex}
-      onChoose={(row) => choose(row as SlashCommand)}
+      onChoose={(row) => choose(row as MenuRow)}
     />
   ) : null;
 
@@ -1672,6 +1627,11 @@ export function ChatPanel({
                             ? joinedNames(message, agents)
                             : ""
                         }
+                        answeredBy={answeredBy.get(message.id)?.join(",") ?? ""}
+                        answeredByNames={(answeredBy.get(message.id) ?? [])
+                          .map((id) => agentName(agents, id))
+                          .join("、")}
+                        inserts={inserts.get(message.id)}
                         {...lines.get(message.id)}
                         actions={actionsRef}
                       />
@@ -1840,9 +1800,9 @@ export function ChatPanel({
                     }}
                   />
                   <span className="composer-toolbar-hints min-w-0 truncate">
-                    {active === undefined
-                      ? translateText("composer.sendHint")
-                      : translateText("composer.workingHint")}
+                    {writing
+                      ? translateText("composer.workingHint")
+                      : translateText("composer.sendHint")}
                   </span>
                 </div>
                 <Button
@@ -1850,9 +1810,7 @@ export function ChatPanel({
                   className="composer-control composer-submit-control"
                   disabled={blocked !== undefined || hold !== undefined}
                 >
-                  {isBlank(draft) && active !== undefined
-                    ? translateText("composer.stopLabel")
-                    : translateText("common:actions.send")}
+                  {translateText("common:actions.send")}
                 </Button>
               </div>
             </fieldset>

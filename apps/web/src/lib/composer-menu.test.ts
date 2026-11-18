@@ -5,7 +5,6 @@ import {
   fuzzyScore,
   hashAt,
   mentionAt,
-  slashAt,
 } from "./composer-menu";
 
 const members = [
@@ -17,11 +16,6 @@ const files = [
   "src/index.ts",
   "README.md",
   "src/app/menu.ts",
-];
-const commands = [
-  { name: "/compact", description: "压缩" },
-  { name: "/goal", description: "设定目标" },
-  { name: "/stop", description: "停止" },
 ];
 const tasks = [
   {
@@ -55,9 +49,9 @@ const tasks = [
 ];
 
 const menu = (text: string, dismissed = false, groupId = "g1") =>
-  buildMenu({ text, members, files, commands, tasks, groupId, dismissed });
+  buildMenu({ text, members, files, tasks, groupId, dismissed });
 const noGroup = (text: string) =>
-  buildMenu({ text, members, files, commands, tasks, dismissed: false });
+  buildMenu({ text, members, files, tasks, dismissed: false });
 /** The task numbers in the menu, in the order the rows will show them. */
 const numbers = (state: ReturnType<typeof menu>) =>
   state!.items.flatMap((item) => (item.kind === "task" ? [item.number] : []));
@@ -166,7 +160,6 @@ describe("# 的任务", () => {
       text: "#",
       members,
       files,
-      commands,
       tasks: many,
       groupId: "g1",
       dismissed: false,
@@ -201,18 +194,10 @@ describe("# 的任务", () => {
   });
 });
 
-describe("/ 的命令", () => {
-  it("只有整段草稿是一个 /名称 时才当命令", () => {
-    expect(slashAt("/go")).toEqual({ query: "go", start: 0 });
-    // A slash in a sentence is a slash.
-    expect(slashAt("/goal ship it")).toBeNull();
-    expect(slashAt("看这个 /goal")).toBeNull();
-    expect(slashAt("//not-a-command")).toBeNull();
-  });
-
-  it("按前缀过滤，不是按包含", () => {
-    const state = menu("/go")!;
-    expect(state.items.map((item) => item.label)).toEqual(["/goal"]);
+describe("/ 和关掉菜单", () => {
+  it("/ 是普通字符，不弹菜单", () => {
+    expect(menu("/")).toBeNull();
+    expect(menu("/stop")).toBeNull();
   });
 
   it("Escape 关掉之后，菜单在再次输入之前不回来", () => {

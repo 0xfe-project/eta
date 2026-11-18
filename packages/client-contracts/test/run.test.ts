@@ -151,7 +151,7 @@ describe("the run in flight", () => {
     ).toMatchObject([{ text: "this one" }]);
   });
 
-  it("still starts over at a steer, after the place the row names", () => {
+  it("keeps the steps before a steer and marks where it arrived", () => {
     const before = user("first");
     const blocks = runBlocks(
       [
@@ -163,6 +163,23 @@ describe("the run in flight", () => {
       ],
       undefined,
       before.seq,
+    );
+    expect(blocks).toMatchObject([
+      { text: "going" },
+      { type: "steer" },
+      { text: "turning" },
+    ]);
+  });
+
+  it("starts over at a steer when the row names no place", () => {
+    const blocks = runBlocks(
+      [
+        user("second"),
+        assistant(2, [{ type: "text", text: "going" }]),
+        user("no, the other one"),
+        assistant(3, [{ type: "text", text: "turning" }]),
+      ],
+      undefined,
     );
     expect(blocks).toMatchObject([{ text: "turning" }]);
   });
@@ -311,7 +328,7 @@ describe("a finished reply's process", () => {
       steps.map((block) =>
         block.type === "tool"
           ? `tool ${block.id}`
-          : `${block.type} ${block.text}`,
+          : `${block.type} ${"text" in block ? block.text : ""}`,
       ),
     ).toEqual([
       "thinking look first",
@@ -321,13 +338,33 @@ describe("a finished reply's process", () => {
     ]);
   });
 
+  it("says where the run took words the user put into it", () => {
+    const steps = savedSteps({
+      thinking: "",
+      data: {
+        activity,
+        process: [
+          { type: "tool", id: "t1" },
+          { type: "steer" },
+          { type: "thinking", text: "they want more" },
+          { type: "text", text: "the answer" },
+        ],
+      },
+    });
+    expect(steps.map((block) => block.type)).toEqual([
+      "tool",
+      "steer",
+      "thinking",
+    ]);
+  });
+
   it("of a row written before the order was kept is its last thought, then its calls", () => {
     const steps = savedSteps({ thinking: "a thought", data: { activity } });
     expect(
       steps.map((block) =>
         block.type === "tool"
           ? `tool ${block.id}`
-          : `${block.type} ${block.text}`,
+          : `${block.type} ${"text" in block ? block.text : ""}`,
       ),
     ).toEqual(["thinking a thought", "tool t1"]);
     expect(savedSteps({ thinking: "", data: {} })).toEqual([]);
@@ -359,7 +396,7 @@ describe("a finished reply's process", () => {
       withoutThought.map((block) =>
         block.type === "tool"
           ? `tool ${block.id} ${block.status}`
-          : `${block.type} ${block.text}`,
+          : `${block.type} ${"text" in block ? block.text : ""}`,
       ),
     ).toEqual(["tool old-1 completed", "tool old-2 failed"]);
     const withThought = savedSteps({
@@ -455,7 +492,9 @@ describe("where a finished reply's answer starts", () => {
       },
     });
     expect(
-      steps.map((block) => (block.type === "tool" ? block.id : block.text)),
+      steps.map((block) =>
+        block.type === "tool" ? block.id : "text" in block ? block.text : "",
+      ),
     ).toEqual(["first", "t1"]);
   });
 

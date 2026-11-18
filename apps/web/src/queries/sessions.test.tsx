@@ -16,7 +16,11 @@ function Run({ id, runFrom }: { id: string; runFrom?: number }) {
     <output>
       {blocks
         .map((block) =>
-          block.type === "tool" ? `tool:${block.name}` : block.text,
+          block.type === "tool"
+            ? `tool:${block.name}`
+            : "text" in block
+              ? block.text
+              : block.type,
         )
         .join("|")}
     </output>

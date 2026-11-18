@@ -56,6 +56,20 @@ describe("activityRecorder", () => {
     expect(three).not.toHaveProperty("details");
   });
 
+  it("marks where a steer arrived, after the briefing", () => {
+    const recorder = new ActivityRecorder();
+    const said = (text: string): AgentMessage =>
+      ({ role: "user", content: text }) as never;
+    recorder.see(said("the briefing"));
+    recorder.see(asked("c1", "bash", { command: "ls" }));
+    recorder.see(answered("c1", "a b"));
+    recorder.see(said("also check the key"));
+    expect(recorder.steps()).toEqual([
+      { type: "tool", id: "c1" },
+      { type: "steer" },
+    ]);
+  });
+
   it("keeps thoughts, words and calls in the order the run took them", () => {
     const recorder = new ActivityRecorder();
     recorder.see({

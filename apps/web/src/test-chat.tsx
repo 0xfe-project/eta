@@ -74,12 +74,10 @@ export function Chat({ conversationId }: { conversationId: string }) {
           agentId ? [agentId] : targetOf(text).mentions,
         )
       }
-      onCompact={() => {}}
       onStopAll={() => stop.mutate({ conversationId })}
       onStop={(messageId) => stop.mutate({ conversationId, messageId })}
       onChoose={(question, selections) => choose(question, selections)}
       onAbort={(question) => abort(question)}
-      onGoal={async () => {}}
     />
   );
 }

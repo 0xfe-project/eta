@@ -731,10 +731,19 @@
   .message:hover .message-copy-btn,
   .captain-review:hover .message-copy-btn,
   .message-copy-btn:focus-visible,
-  .message-copy-btn[data-copied="true"] {
+  .message-copy-btn[data-copied="true"],
+  .message:hover .message-insert-btn,
+  .message-insert-btn:focus-visible,
+  .message-insert-btn[data-open="true"] {
     opacity: 1;
   }
-  .message-copy-btn {
+  /* Insert, on the message being answered: the same quiet button as copy, beside it. */
+  .message-insert-btn[data-open="true"] {
+    border-color: var(--foreground);
+    color: var(--foreground);
+  }
+  .message-copy-btn,
+  .message-insert-btn {
     border: 1px solid var(--border);
     padding: 1px 6px;
     color: var(--muted-foreground);
@@ -746,11 +755,13 @@
    * needs more than its 10px text, so an invisible square of about 40px, centred on it, takes
    * the tap; what you see stays the size of the time beside it. */
   @media (hover: none), (pointer: coarse) {
-    .message-copy-btn {
+    .message-copy-btn,
+    .message-insert-btn {
       position: relative;
       opacity: 1;
     }
-    .message-copy-btn::after {
+    .message-copy-btn::after,
+    .message-insert-btn::after {
       content: "";
       position: absolute;
       top: 50%;
@@ -759,6 +770,21 @@
       height: max(100%, 40px);
       transform: translate(-50%, -50%);
     }
+  }
+
+  /* Words inserted into a message while it was answered: under a hairline, with when. */
+  .message-insert {
+    display: block;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border);
+  }
+  .message-insert-meta {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    color: var(--faint);
   }
 
   .system-message {
@@ -1100,6 +1126,46 @@
     height: 176px;
     overflow-y: auto;
     border: 1px solid var(--border);
+  }
+  /* The frame's title row: what it is, how far it got, and the stop for this reply alone. */
+  .process-box-head {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 2px 4px 2px 10px;
+    border: 1px solid var(--border);
+    border-bottom: 0;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    color: var(--faint);
+  }
+  .process-stop {
+    border: 1px solid var(--border-strong);
+    padding: 0 7px;
+    color: var(--foreground);
+    background: var(--background);
+    cursor: pointer;
+  }
+  .process-stop:hover {
+    border-color: var(--foreground);
+  }
+  .process-stop[data-stopping="true"] {
+    color: var(--muted-foreground);
+  }
+  .process-stop:focus-visible {
+    outline: 1px solid var(--ring);
+  }
+  /* Where the run took words you inserted: one faint line, not the words again. */
+  .process-trace {
+    padding: 3px 10px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-align: center;
+    color: var(--faint);
   }
   .process-box:focus-visible {
     outline: 1px solid var(--ring);

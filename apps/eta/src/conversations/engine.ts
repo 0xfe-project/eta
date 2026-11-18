@@ -598,11 +598,37 @@ export class Engine {
     data?: Readonly<Record<string, unknown>> | undefined;
     mentions: readonly string[];
     mode: "queue" | "steer";
+    /**
+     * A user message whose turns this one is put into (`ConversationArgs["send"]["into"]`): it
+     * goes to every agent answering that message right now, whatever `mentions` and `mode` say,
+     * and is recorded as `data.into`. With nobody answering it any more, it is sent as `mentions`
+     * and `mode: "queue"` would have it, without the mark.
+     */
+    into?: string | undefined;
     clientId?: string | undefined;
     /** Ids of files uploaded to this conversation (`AttachmentStore.receive`). */
     attachments?: readonly string[] | undefined;
   }): Promise<SendResult> {
     const conversation = this.#requireConversation(input.conversationId);
+    let into: string | undefined;
+    let { mentions, mode } = input;
+    if (input.into !== undefined) {
+      const target = this.#timeline.get(input.into);
+      if (
+        target === undefined ||
+        target.conversationId !== conversation.id ||
+        target.author !== "user"
+      )
+        throw new Error(
+          `no message ${input.into} of yours in this conversation`,
+        );
+      const answering = this.answering(conversation.id, target.id);
+      if (answering.length > 0) {
+        into = target.id;
+        mentions = answering;
+        mode = "steer";
+      } else mode = "queue";
+    }
     const text = input.text.trim();
     if (text === "" && (input.attachments?.length ?? 0) === 0)
       throw new Error("conversations.send needs text (or an attachment)");
@@ -635,15 +661,14 @@ export class Engine {
         members: this.#conversations
           .participants(conversation.id)
           .map((participant) => participant.agentId),
-        mentions: input.mentions,
+        mentions,
         steward: conversation.stewardId,
       });
       nobody = routing.targets.length === 0;
       for (const agentId of routing.targets) {
         planned.push({
           agentId,
-          join:
-            input.mode === "steer" && this.#joinable(conversation.id, agentId),
+          join: mode === "steer" && this.#joinable(conversation.id, agentId),
         });
       }
       /*
@@ -677,6 +702,7 @@ export class Engine {
           ...(held ? { held: true } : {}),
           woke: planned.filter((p) => !p.join).map((p) => p.agentId),
           joined: planned.filter((p) => p.join).map((p) => p.agentId),
+          ...(into === undefined ? {} : { into }),
           // Where the sender's folded pastes sit in `text`, kept as sent (see `send`'s input).
           ...(input.blocks && input.blocks.length > 0
             ? { blocks: input.blocks }
@@ -714,8 +740,11 @@ export class Engine {
       }
     }
     if (joined.length !== planned.filter((p) => p.join).length) {
+      // A message that got a reply of its own is not part of the one it was put into any more:
+      // it reads as its own message, with that reply under it.
+      const { into: _into, ...rest } = message.data;
       this.#timeline.setData(message.id, {
-        ...message.data,
+        ...rest,
         woke: replies.map((reply) => reply.agentId),
         joined,
       });
@@ -734,6 +763,23 @@ export class Engine {
       joined,
       nobody,
     };
+  }
+
+  /**
+   * The agents answering a message right now, with a turn that can be steered: their reply in
+   * flight is the one that message woke (`replyToId`), in the order they were woken.
+   */
+  answering(conversationId: string, messageId: string): string[] {
+    return this.#timeline
+      .repliesTo(messageId)
+      .flatMap((reply) =>
+        reply.agentId !== null &&
+        this.#running.get(keyOf(conversationId, reply.agentId))?.replyId ===
+          reply.id &&
+        this.#joinable(conversationId, reply.agentId)
+          ? [reply.agentId]
+          : [],
+      );
   }
 
   /** Whether there is a turn to steer: the member's reply is running, and is not being stopped. */

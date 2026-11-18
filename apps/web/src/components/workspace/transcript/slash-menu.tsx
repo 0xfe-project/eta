@@ -39,7 +39,7 @@ export function SlashMenu({
   onHover: (index: number) => void;
 }) {
   const { t: translateText } = useTranslation("chat");
-  const heading = label ?? translateText("composer.commandsLabel");
+  const heading = label ?? translateText("composer.mentionsLabel");
   return (
     <div
       className="skill-slash-menu"

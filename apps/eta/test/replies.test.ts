@@ -116,6 +116,70 @@ describe("a message that arrives while the agent is answering", () => {
     ).toHaveLength(1);
   });
 
+  it("put into a message, it joins every agent answering that message and is marked as part of it", async () => {
+    const first = gate();
+    const { models, requests } = scriptedModels(async (request) => {
+      if (request.index < 2) {
+        await first.opened;
+        return say(`on it ${request.index}`);
+      }
+      return say("with your addition");
+    });
+    const w = await world({ models });
+    const ada = await w.agent("Ada");
+    const bob = await w.agent("Bob");
+    const cy = await w.agent("Cy");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id, bob.id, cy.id]);
+    await w.watch(group.id);
+
+    const asked = await w.send(group.id, "compare the two", {
+      mentions: [ada.id, bob.id],
+    });
+    expect(asked.replies).toHaveLength(2);
+    for (const reply of asked.replies)
+      await w.settled(group.id, reply.id, ["working"]);
+    await until(() => requests.length === 2);
+
+    // What the client names and asks for does not matter: the message's own answerers get it.
+    const inserted = await w.send(group.id, "and the price", {
+      into: asked.message.id,
+      mentions: [cy.id],
+    });
+    expect(inserted.replies).toEqual([]);
+    expect([...inserted.joined].sort()).toEqual([ada.id, bob.id].sort());
+    expect(inserted.message.data).toMatchObject({ into: asked.message.id });
+    first.open();
+    for (const reply of asked.replies) await w.settled(group.id, reply.id);
+    expect(
+      requests.filter((request) =>
+        request.transcript.join("\n").includes("and the price"),
+      ),
+    ).toHaveLength(2);
+    // Cy was not answering, and was not woken.
+    expect(
+      w.rows(group.id).filter((row) => row.agentId === cy.id),
+    ).toHaveLength(0);
+  });
+
+  it("put into a message nobody is answering any more, it is a message of its own", async () => {
+    const { models } = scriptedModels(() => say("hello"));
+    const w = await world({ models });
+    const { agent, group } = await ada(w);
+    const asked = await w.send(group.id, "hi");
+    await w.settled(group.id, asked.replies[0]!.id);
+
+    const late = await w.send(group.id, "one more thing", {
+      into: asked.message.id,
+      mentions: [agent.id],
+      mode: "steer",
+    });
+    expect(late.joined).toEqual([]);
+    expect(late.replies).toHaveLength(1);
+    expect(late.message.data).not.toHaveProperty("into");
+    await w.settled(group.id, late.replies[0]!.id);
+  });
+
   it("steer with nothing running is just a message", async () => {
     const { models } = scriptedModels(() => say("hello"));
     const w = await world({ models });

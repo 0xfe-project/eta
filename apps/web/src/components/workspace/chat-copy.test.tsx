@@ -113,7 +113,7 @@ const footerButton = (message: Element | null | undefined) =>
   message?.querySelector(":scope > .message-footer .message-copy-btn");
 
 describe("the copy button beside a message's time", () => {
-  it("is under your own message, inside the time, and copies what you wrote as written", async () => {
+  it("is under your own message, after the time, and copies what you wrote as written", async () => {
     const text = "@Ada 把 **OG 图**换成新的\n\nSafari 下也测一下";
     const { container } = await start(
       [
@@ -133,9 +133,9 @@ describe("the copy button beside a message's time", () => {
     const footer = user?.querySelector(":scope > .message-footer");
     const button = footerButton(user)!;
     expect(button).not.toBeNull();
-    // The line is right-aligned, so the button comes before the time: on its inner side.
-    expect(footer?.firstElementChild).toBe(button);
-    expect(footer?.lastElementChild?.tagName).toBe("TIME");
+    // The time, then the message's actions (Insert, while it is answered), copy last.
+    expect(footer?.firstElementChild?.tagName).toBe("TIME");
+    expect(footer?.lastElementChild).toBe(button);
     expect(button.textContent).toBe("复制");
 
     await click(button);
