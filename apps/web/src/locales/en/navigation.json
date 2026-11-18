@@ -6,6 +6,7 @@
     "tasks": "Tasks",
     "email": "Email",
     "routines": "Routines",
+    "plugins": "Plugins",
     "more": "More",
     "overview": "Overview",
     "workspace": "Workspace",
@@ -15,6 +16,7 @@
   },
   "accessibility": {
     "sections": "Sections",
+    "pluginsNeedAttention": "An enabled plugin needs attention",
     "workspaceTabs": "Workspace tabs",
     "skipToContent": "Skip to content",
     "resizePanel": "Resize the panel",

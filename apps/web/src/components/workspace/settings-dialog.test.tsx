@@ -65,6 +65,7 @@ describe("设置左侧那一列", () => {
       .setSettings({ open: true, section: "appearance" });
     await mount(<Dialog />);
     await flush();
+    expect(rail()).not.toContain("插件");
     expect(rail()).toEqual(
       labelsOf(
         "agents",
@@ -72,7 +73,6 @@ describe("设置左侧那一列", () => {
         "machines",
         "mcp",
         "acp",
-        "plugins",
         "email",
         "archived",
         "appearance",

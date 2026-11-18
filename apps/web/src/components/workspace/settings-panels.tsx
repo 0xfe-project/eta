@@ -1,8 +1,7 @@
 import type { SettingsSection } from "./workspace-store";
-import { lazy, Suspense, useId, useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageSettings } from "@/components/language-settings";
-import { Loading } from "@/components/states";
 import { Switch } from "@/components/ui/switch";
 import { useTheme } from "@/components/use-theme";
 import { customFontMaxLength, normalizeCustomFont } from "@/lib/custom-font";
@@ -10,6 +9,7 @@ import { elementPickerDefault, setElementPicker } from "@/lib/element-picker";
 import { translate } from "@/lib/i18n";
 import { host } from "@/lib/native";
 import { cn } from "@/lib/utils";
+import { useNeedsAttention } from "@/queries/providers";
 import { AcpSettings } from "./acp-settings";
 import { AgentSettings } from "./agent-settings";
 import { ApprovalSettings } from "./approval-settings";
@@ -20,7 +20,7 @@ import { MachineSettings } from "./machine-settings";
 import { McpSettings } from "./mcp-settings";
 import { ProviderSettings } from "./provider-settings";
 import { SettingsNav } from "./settings-nav";
-import { settingsSections, useSettingsAttention } from "./settings-sections";
+import { settingsSections } from "./settings-sections";
 import { TaskArchiveSetting } from "./task-archive";
 import { UpdateSettings } from "./update-settings";
 import { useWorkspaceStore } from "./workspace-store";
@@ -28,11 +28,6 @@ import { useWorkspaceStore } from "./workspace-store";
 // Settings' body: the rail of sections beside the one being edited. The same body is a dialog
 // over whatever is on screen on a wide window and a page of its own on a phone, so the list, its
 // hiding rules and the panels themselves are written once, here.
-
-// Apart from the main chunk: its form carries the regular-expression engine fields are checked with.
-const PluginSettings = lazy(async () => ({
-  default: (await import("./plugin-settings")).PluginSettings,
-}));
 
 /**
  * The sections the rail does not offer, by choice: Approvals is the editor's only. The settings stay
@@ -299,10 +294,6 @@ function SectionContent({ section }: { section: SettingsSection }) {
     <McpSettings />
   ) : section === "acp" ? (
     <AcpSettings />
-  ) : section === "plugins" ? (
-    <Suspense fallback={<Loading rows={3} />}>
-      <PluginSettings />
-    </Suspense>
   ) : section === "email" ? (
     <EmailSettings />
   ) : section === "archived" ? (
@@ -329,7 +320,7 @@ export function SettingsPanels({
   className?: string;
 }) {
   const { t: translateText } = useTranslation(["settings", "common"] as const);
-  const attention = useSettingsAttention();
+  const providersNeedAttention = useNeedsAttention();
   return (
     <div className={cn("settings-layout", className)}>
       <SettingsNav
@@ -343,7 +334,7 @@ export function SettingsPanels({
           )
           .map((section) => ({
             ...section,
-            attention: attention[section.value],
+            attention: section.value === "providers" && providersNeedAttention,
             hint: translateText("accessibility.accountsNeedAttention"),
           }))}
         value={value}

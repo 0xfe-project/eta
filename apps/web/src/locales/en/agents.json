@@ -115,7 +115,7 @@
   },
   "plugins": {
     "empty": "No plugins yet.",
-    "openSettings": "Add one in settings",
+    "openLibrary": "Open Plugins to add one",
     "skipped": "Its configuration no longer fits: this agent's sessions skip it."
   }
 }

@@ -1,5 +1,6 @@
 import type { UseFormReturn } from "react-hook-form";
 import type { AgentForm } from "./agent-form";
+import { Link } from "@tanstack/react-router";
 import { useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
@@ -13,12 +14,12 @@ import { PluginServers } from "./plugin-servers";
 export function AgentPluginsField({
   form,
   skipped,
-  onOpenSettings,
+  onOpenPlugins,
 }: {
   form: UseFormReturn<AgentForm>;
   /** The plugins this agent has that its sessions skip for now. */
   skipped: readonly string[];
-  onOpenSettings: () => void;
+  onOpenPlugins: () => void;
 }) {
   const { t: translateText } = useTranslation(["agents", "plugins"] as const);
   const { plugins, loaded } = usePlugins();
@@ -33,13 +34,23 @@ export function AgentPluginsField({
     return (
       <p className="text-sm text-muted-foreground">
         {translateText("plugins.empty")}{" "}
-        <button
-          type="button"
+        <Link
+          to="/plugins"
           className="underline underline-offset-2"
-          onClick={onOpenSettings}
+          onClick={(event) => {
+            if (
+              !event.defaultPrevented &&
+              !event.metaKey &&
+              !event.ctrlKey &&
+              !event.shiftKey &&
+              !event.altKey &&
+              event.button === 0
+            )
+              onOpenPlugins();
+          }}
         >
-          {translateText("plugins.openSettings")}
-        </button>
+          {translateText("plugins.openLibrary")}
+        </Link>
       </p>
     );
   return (

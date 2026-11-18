@@ -201,6 +201,68 @@ describe("the plugin list", () => {
   });
 });
 
+describe("plugin page actions", () => {
+  it("rechecks on the host without leaving the page", async () => {
+    const built = host([]);
+    built.handle("plugins.recheck", () => {
+      built.set("plugins", { list: [plugin()], audit: [] });
+      return {};
+    });
+    const { container } = await mount(<PluginSettings />);
+    await click(container.querySelector('button[aria-label="重新检查"]'));
+    await flush();
+    expect(built.calls.at(-1)).toMatchObject({
+      target: "plugins",
+      action: "recheck",
+      args: {},
+    });
+    expect(container.querySelector("main")?.textContent).toContain("hello");
+  });
+
+  it("adds from git and closes only its own dialog", async () => {
+    const built = host([]);
+    const repo = "file:///tmp/fixture.git";
+    built.handle("plugins.add", () => {
+      built.set("plugins", {
+        list: [
+          plugin({
+            source: {
+              kind: "git",
+              repo,
+              rev: "main",
+              path: "",
+              sha: "abcdef1234567890abcdef1234567890abcdef12",
+            },
+          }),
+        ],
+        audit: [],
+      });
+      return { name: "hello" };
+    });
+    const { container } = await mount(<PluginSettings />);
+    const header = container.querySelector("h1")!.parentElement!;
+    await click(
+      [...header.querySelectorAll("button")].find(
+        (item) => item.textContent === "从 git 添加",
+      ),
+    );
+    const add = document.querySelector('[role="dialog"]')!;
+    expect(add.textContent).toContain("从 git 添加插件");
+    await type(add.querySelector('input[aria-label="仓库地址"]')!, repo);
+    await click(add.querySelector('button[type="submit"]'));
+    await flush();
+    expect(built.calls.at(-1)).toMatchObject({
+      target: "plugins",
+      action: "add",
+      args: { repo, rev: "", path: "" },
+    });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.querySelector("main")?.textContent).toContain(
+      `${repo} @ abcdef123456`,
+    );
+  });
+});
+
 describe("the form", () => {
   it("draws a password box for a secret, and shows what will run", async () => {
     host([plugin()]);
