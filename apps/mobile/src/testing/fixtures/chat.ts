@@ -601,6 +601,13 @@ function cardRows(): MessageView[] {
       text: "<captain-review>\n1. [task_stalled] Task #128 has not moved.\n{}\n2. [inbox_pending] A question waits.\n{}\n</captain-review>",
       data: { captainReview: { reviewIds: ["review-1", "review-2"] } },
     }),
+    // The steward left the group: the host clears it and says why.
+    row(id, 10, {
+      kind: "system",
+      author: "system",
+      text: "agent-mori left the group; it has no steward now",
+      data: { event: "steward", from: "agent-mori", to: null, reason: "left" },
+    }),
   ];
 }
 
@@ -700,8 +707,6 @@ class Conversation {
         decided: "",
         archived: summary?.archived ?? false,
         stewardId: summary?.stewardId ?? null,
-        stewardOverrideId: null,
-        noSteward: false,
         readSeq: summary?.readSeq ?? 0,
         lastSeq: summary?.lastSeq ?? 0,
         createdAt: minutesAgo(9000),

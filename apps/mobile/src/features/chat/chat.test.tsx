@@ -274,7 +274,7 @@ test("03f: what happened to a message, and the ways out", async () => {
   const app = await chat("wire", "chat-errors");
   await app.waitFor("text:已并入 阿澈 正在进行的回复");
   expect(app.texts()).toContain(
-    "这条消息没有叫醒任何人：对话没有主理人，成员不止一位。@ 一位成员，或设一位主理人。",
+    "没有 @ 人，这个群也没有主理人。@ 一位成员，或设一位主理人。",
   );
   expect(app.texts()).toContain("已停止");
   expect(app.texts()).toContain("宿主重启了，这条回复没有写完。");
@@ -315,6 +315,19 @@ test("03d: the draft stays in its turn, opens in place and confirms into a card"
   await app.press("role:button[确认并开始]");
   await app.waitFor("text:/#\\d+ 写回滚/");
   expect(app.shows("text:待确认")).toBe(false);
+});
+
+test("a steward who left says so", async () => {
+  const app = await open("../../../DevApp.tsx", {
+    storage: { "eta.host": HOST, "eta.language": "zh" },
+  });
+  await app.waitFor("id:tab-conversations");
+  await app.press("id:tab-conversations");
+  // The fixture names it in English now; either spelling opens it.
+  await app.waitFor("text:/^(产物版本|Artifact version)$/");
+  await app.press("text:/^(产物版本|Artifact version)$/");
+  await app.waitFor("text:Mori 退出了群，现在没有主理人。");
+  expect(app.texts()).not.toContain("Mori 不再是主理人。");
 });
 
 test("03c2: # lists tasks, not after a word, and inserts the number", async () => {

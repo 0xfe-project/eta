@@ -337,11 +337,12 @@ function TaskRow(props: { message: MessageView; chat: Chat }) {
 
 /** A system row: the host writes English for its agents, the page says the event in the reader's language. */
 function systemText(message: MessageView): string {
-  const { event, from, to, budget } = message.data as {
+  const { event, from, to, budget, reason } = message.data as {
     event?: string;
     from?: string | null;
     to?: string | null;
     budget?: number;
+    reason?: string;
   };
   if (event === "steward") {
     if (typeof to === "string" && typeof from === "string")
@@ -351,6 +352,8 @@ function systemText(message: MessageView): string {
       });
     if (typeof to === "string")
       return t("chat.system.stewardSet", { to: agentName(to) });
+    if (typeof from === "string" && reason === "left")
+      return t("chat.system.stewardLeft", { from: agentName(from) });
     if (typeof from === "string")
       return t("chat.system.stewardCleared", { from: agentName(from) });
   }

@@ -9,7 +9,6 @@ import type {
   ConversationInfo,
   ConversationSummary,
   MessageView,
-  ProjectView,
   RoutineSummary,
   TimelineSection,
 } from "@eta/client-contracts";
@@ -188,10 +187,39 @@ function info(host: FakeHost, id: string): ConversationInfo | undefined {
   );
 }
 
-function findProject(host: FakeHost, id: string): ProjectView | undefined {
-  return host
-    .section<ProjectView[]>("projects", "list")
-    .find((project) => project.id === id);
+/** The host's system row when the steward leaves: `{ event: "steward", from, to: null, reason: "left" }`. */
+function stewardLeft(host: FakeHost, id: string, from: string): void {
+  const target = `conversations.${id}`;
+  const timeline = host.section<TimelineSection | undefined>(
+    target,
+    "timeline",
+  );
+  if (timeline === undefined) return;
+  const seq =
+    timeline.messages.reduce((top, row) => Math.max(top, row.seq), 0) + 1;
+  const at = Date.now();
+  const row: MessageView = {
+    id: `${id}-steward-left-${seq}`,
+    conversationId: id,
+    seq,
+    kind: "system",
+    author: "system",
+    agentId: null,
+    text: `${from} left the group; it has no steward now`,
+    thinking: "",
+    status: "done",
+    revision: seq,
+    mentions: [],
+    rootMessageId: null,
+    replyToId: null,
+    data: { event: "steward", from, to: null, reason: "left" },
+    createdAt: at,
+    updatedAt: at,
+  };
+  host.patch(target, "timeline", {
+    ...timeline,
+    messages: [...timeline.messages, row],
+  });
 }
 
 /** What the list and the conversation's target both say, kept the same, as `summary` does on the host. */
@@ -262,34 +290,29 @@ function installConversationOps(host: FakeHost): void {
     const participants = row.participants.filter(
       (member) => member.agentId !== agentId,
     );
-    const own = info(host, conversationId);
-    if (own?.stewardOverrideId === agentId) {
-      const stewardId = findProject(host, row.projectId)?.stewardId ?? null;
-      return {
-        conversation: change(
-          host,
-          conversationId,
-          { participants, stewardId },
-          { stewardOverrideId: null },
-        ),
-      };
+    // The steward leaving leaves the group with none: nobody takes over.
+    if (row.stewardId === agentId) {
+      const conversation = change(host, conversationId, {
+        participants,
+        stewardId: null,
+      });
+      stewardLeft(host, conversationId, agentId);
+      return { conversation };
     }
     return { conversation: change(host, conversationId, { participants }) };
   });
 
-  host.on("conversations.setSteward", ({ conversationId, agentId, none }) => {
+  host.on("conversations.setSteward", ({ conversationId, agentId }) => {
     const row = existing(host, conversationId);
-    const noSteward = agentId === null && none === true;
-    const stewardId = noSteward
-      ? null
-      : (agentId ?? findProject(host, row.projectId)?.stewardId ?? null);
+    if (row.kind === "direct")
+      throw new Error("a private chat's steward is its agent");
+    if (
+      agentId !== null &&
+      !row.participants.some((member) => member.agentId === agentId)
+    )
+      throw new Error("the steward has to be a member of the group");
     return {
-      conversation: change(
-        host,
-        conversationId,
-        { stewardId },
-        { stewardOverrideId: agentId, noSteward },
-      ),
+      conversation: change(host, conversationId, { stewardId: agentId }),
     };
   });
 
@@ -321,23 +344,6 @@ function installConversationOps(host: FakeHost): void {
       hasMore: false,
     }));
   }
-
-  host.on("projects.setSteward", ({ projectId, agentId }) => {
-    const projects = host.section<ProjectView[]>("projects", "list");
-    host.patch(
-      "projects",
-      "list",
-      projects.map((project) =>
-        project.id === projectId ? { ...project, stewardId: agentId } : project,
-      ),
-    );
-    for (const row of list(host)) {
-      const follows = (info(host, row.id)?.stewardOverrideId ?? null) === null;
-      if (row.projectId === projectId && row.kind === "group" && follows)
-        change(host, row.id, { stewardId: agentId });
-    }
-    return { project: findProject(host, projectId) };
-  });
 
   if (!host.ops.has("agents.direct")) {
     host.on("agents.direct", ({ agentId }) => {
@@ -515,8 +521,6 @@ export function installGroup(host: FakeHost): void {
       decided: GOALS[row.id]?.decided ?? "",
       archived: row.archived,
       stewardId: row.stewardId,
-      stewardOverrideId: held?.stewardOverrideId ?? null,
-      noSteward: held?.noSteward ?? false,
       readSeq: row.readSeq,
       lastSeq: row.lastSeq,
       createdAt: row.createdAt,

@@ -508,8 +508,8 @@ export function GroupInfoScreen(props: { id: string }) {
       <StewardSheet
         open={choosingSteward()}
         id={props.id}
-        info={info()}
-        project={project()}
+        stewardId={group()?.stewardId ?? null}
+        members={members()}
         onClose={() => choosingSteward.set(false)}
       />
       <MemberSheet

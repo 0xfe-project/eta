@@ -98,7 +98,7 @@ export function useProjectChoice() {
   /** Nothing to start in yet: Add directory has not been through. */
   const missing = () => adding() && choice().path.trim() === "";
   /** The project the choice stands for, adding the path first when that is what it is. */
-  const resolve = async (stewardId: string | null): Promise<ProjectView> => {
+  const resolve = async (): Promise<ProjectView> => {
     const found = project();
     if (found !== undefined) return found;
     const { path, machineId } = choice();
@@ -108,7 +108,6 @@ export function useProjectChoice() {
       {
         path: path.trim(),
         ...(machineId === undefined ? {} : { machineId }),
-        ...(stewardId === null ? {} : { stewardId }),
       },
     );
     return made;

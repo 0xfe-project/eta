@@ -145,6 +145,62 @@ test("07b: a name left empty is the project's", async () => {
   );
 });
 
+/** New group, without waiting on the list's group names (the fixture spells them in English now). */
+const newGroup = async () => {
+  const app = await open("../../../DevApp.tsx", {
+    storage: {
+      "eta.host": JSON.stringify({ address: "fake", token: "" }),
+      "eta.language": "zh",
+    },
+  });
+  await app.waitFor("id:tab-conversations");
+  await app.press("id:tab-conversations");
+  await app.waitFor("id:create");
+  await app.press("id:create");
+  await app.waitFor("label:新建群");
+  await app.press("label:新建群");
+  await app.waitFor("id:group-name");
+  return app;
+};
+
+test("07b: the steward is the first member chosen, another one, or none", async () => {
+  const app = await newGroup();
+  const seen = (text: string) =>
+    app.texts().filter((each) => each === text).length;
+  // Nobody chosen: nobody to lead.
+  expect(app.shows("id:group-steward")).toBe(false);
+  await app.press("label:Ache");
+  await app.press("label:Mori");
+  await app.waitFor("id:group-steward");
+  expect(seen("Ache")).toBe(2);
+  // The first one chosen going hands it to the next.
+  await app.press("label:Ache");
+  await app.waitUntil(() => seen("Mori") === 2);
+  await app.press("label:Ache");
+  expect(seen("Mori")).toBe(2);
+  await app.press("id:group-steward");
+  await app.waitFor("text:没有主理人");
+  // Only who is chosen, and none.
+  expect(seen("Xiaoman")).toBe(1);
+  await app.press("role:button[Ache]");
+  await app.waitUntil(() => seen("Ache") === 2 && seen("Mori") === 1);
+  await app.press("id:create-group");
+  await app.waitFor("text:/主理人：Ache$/");
+});
+
+test("07b: a group can start with no steward", async () => {
+  const app = await newGroup();
+  await app.press("label:Ache");
+  await app.press("label:Mori");
+  await app.press("id:group-steward");
+  await app.press("label:没有主理人");
+  await app.waitFor("text:没有主理人");
+  await app.press("id:create-group");
+  await app.waitFor("id:composer-input");
+  await app.waitFor("text:eta");
+  expect(app.shows("text:/主理人：/")).toBe(false);
+});
+
 test("07c, 07d: an agent, then its private chat", async () => {
   const app = await start();
   await app.press("label:新建智能体");
