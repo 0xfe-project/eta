@@ -15,7 +15,7 @@ export const i18n = {
     "chat.history.failed": "无法加载对话：{message}",
     "chat.history.gone": "这段对话已不存在。",
     "chat.message.nobody":
-      "这条消息没有叫醒任何人：对话没有主理人，成员不止一位。@ 一位成员，或设一位主理人。",
+      "没有 @ 人，这个群也没有主理人。@ 一位成员，或设一位主理人。",
     "chat.message.joined": "已并入 {names} 正在进行的回复",
     "chat.message.sending": "发送中…",
     "chat.message.stopped": "已停止",
@@ -34,6 +34,7 @@ export const i18n = {
     "chat.system.stewardChanged": "{to} 成为主理人，接替 {from}。",
     "chat.system.stewardSet": "{to} 成为主理人。",
     "chat.system.stewardCleared": "{from} 不再是主理人。",
+    "chat.system.stewardLeft": "{from} 退出了群，现在没有主理人。",
     "chat.system.wakeBudget":
       "这条消息已经用完 {budget} 次唤醒；之后的 @ 只记入对话，等你再发言才会唤醒。",
     "chat.system.captainReview": "Captain 巡检 · {count} 项观察",
@@ -183,7 +184,7 @@ export const i18n = {
     "chat.history.failed": "Could not load the conversation: {message}",
     "chat.history.gone": "This conversation no longer exists.",
     "chat.message.nobody":
-      "This message woke nobody: the conversation has no steward and more than one member. @mention a member, or set a steward.",
+      "Nobody was @mentioned, and this group has no steward. @mention a member, or set a steward.",
     "chat.message.joined": "Joined {names}'s reply in progress",
     "chat.message.sending": "Sending…",
     "chat.message.stopped": "Stopped",
@@ -205,6 +206,7 @@ export const i18n = {
     "chat.system.stewardChanged": "{to} is now steward, replacing {from}.",
     "chat.system.stewardSet": "{to} is now steward.",
     "chat.system.stewardCleared": "{from} is no longer steward.",
+    "chat.system.stewardLeft": "{from} left the group; it has no steward now.",
     "chat.system.wakeBudget":
       "This message has used its {budget} wake-ups. Later @mentions are only recorded until you speak again.",
     "chat.system.captainReview": "Captain review · {count} observation(s)",

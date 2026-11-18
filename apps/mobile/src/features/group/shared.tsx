@@ -134,7 +134,7 @@ export function SheetRow(props: {
   );
 }
 
-/** A sheet's title: This conversation's steward, Public link. */
+/** A sheet's title: Steward, Public link. */
 export function SheetTitle(props: { title: string; body?: string }) {
   return (
     <View class="gap-[2px] px-4 pt-4 pb-3">

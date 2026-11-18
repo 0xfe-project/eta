@@ -74,26 +74,42 @@ test("related tasks link and unlink", async () => {
   await app.waitUntil(() => app.count("text:#129 备份归档到 nas") === 1);
 });
 
-test("03l sets the conversation's steward and follows the project again", async () => {
+test("03l the steward is one of the members, or none", async () => {
   const app = await start("group:wire");
   await app.waitFor("主理人");
   await app.press("label:主理人");
-  await app.waitFor("text:本对话的主理人");
-  expect(app.texts()).toContain("项目「eta」的主理人：阿澈");
+  await app.waitFor("id:steward-agent-mori");
+  expect(app.shows("id:steward-agent-ache")).toBe(true);
+  expect(app.shows("id:steward-none")).toBe(true);
+  // Not a member, and nothing of the project's.
+  expect(app.shows("id:steward-agent-xiaoman")).toBe(false);
+  expect(app.shows("id:steward-follow")).toBe(false);
+  expect(app.shows("id:steward-project")).toBe(false);
+  expect(app.shows("text:/项目「/")).toBe(false);
   await app.press("id:steward-agent-mori");
   await app.waitFor("text:Mori 主理人 · 排队中");
-  await app.press("label:主理人");
-  await app.press("id:steward-follow");
-  await app.waitFor("text:阿澈 主理人 · 等待确认");
 });
 
-test("no steward is the conversation's own", async () => {
+test("no steward is a choice of its own", async () => {
   const app = await start("group:wire");
   await app.waitFor("主理人");
   await app.press("label:主理人");
   await app.press("id:steward-none");
   await app.waitFor("text:没有主理人");
-  expect(app.shows("text:阿澈 主理人 · 等待确认")).toBe(false);
+  expect(app.shows("text:/^(阿澈|Ache) 主理人 · 等待确认$/")).toBe(false);
+});
+
+test("the steward leaving leaves the group with none", async () => {
+  const app = await start("group:wire");
+  // The fixture names its agents in English now.
+  await app.waitFor("text:/^(阿澈|Ache) 主理人 · 等待确认$/");
+  await app.press("id:member-agent-ache");
+  await app.press("移出群");
+  await app.waitFor("text:/^把「(阿澈|Ache)」移出群？$/");
+  await app.press("移出群 >> nth=0");
+  await app.waitFor("text:1 位成员");
+  await app.waitFor("text:没有主理人");
+  expect(app.shows("text:/^Mori 主理人/")).toBe(false);
 });
 
 test("03k member sheet: stats, invite, remove with a confirmation", async () => {

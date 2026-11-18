@@ -49,12 +49,7 @@ export const i18n = {
     "group.related.unlink": "解除关联",
     "group.related.link": "关联",
 
-    "group.steward.title": "本对话的主理人",
     "group.steward.hint": "没 @ 的消息由主理人接",
-    "group.steward.follow": "跟随项目",
-    "group.steward.followHint": "项目「{name}」的主理人：{steward}",
-    "group.steward.projectRow": "项目「{name}」的主理人",
-    "group.steward.projectHint": "所有跟随项目的对话都会换人",
 
     "group.edit.title": "编辑群信息",
     "group.edit.hint": "记录当前目标和已经达成的决定。",
@@ -148,13 +143,7 @@ export const i18n = {
     "group.related.unlink": "Unlink",
     "group.related.link": "Link",
 
-    "group.steward.title": "Steward of this conversation",
     "group.steward.hint": "Takes the messages that @ nobody",
-    "group.steward.follow": "Follow the project",
-    "group.steward.followHint": "Project {name}'s steward: {steward}",
-    "group.steward.projectRow": "Steward of project {name}",
-    "group.steward.projectHint":
-      "Changes every conversation that follows the project",
 
     "group.edit.title": "Edit group info",
     "group.edit.hint": "Keep the current goal and what has been decided.",

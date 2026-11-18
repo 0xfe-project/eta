@@ -74,26 +74,21 @@ export const MACHINES: MachineView[] = [
   machine("nas", "nas", "ssh", "online"),
 ];
 
-const project = (
-  id: string,
-  name: string,
-  machineId: string,
-  stewardId: string,
-): ProjectView => ({
+const project = (id: string, name: string, machineId: string): ProjectView => ({
   id,
   machineId,
   path: `/Users/eric/Developer/${id}`,
   name,
   kind: "project",
-  stewardId,
+  ownerAgentId: null,
   archived: false,
   createdAt: minutesAgo(90_000),
   updatedAt: minutesAgo(60),
 });
 
 export const PROJECTS: ProjectView[] = [
-  project("eta", "eta", "mac-studio", "agent-ache"),
-  project("site", "Website", "mb-air", "agent-mori"),
+  project("eta", "eta", "mac-studio"),
+  project("site", "Website", "mb-air"),
 ];
 
 const member = (agentId: string, status: MemberView["status"]): MemberView => ({

@@ -57,7 +57,7 @@ export function NewConversationScreen() {
     if (agent === undefined || sending()) return;
     sending.set(true);
     try {
-      const target = await projects.resolve(agent);
+      const target = await projects.resolve();
       const { conversation } = await call<ConversationResults["create"]>(
         "conversations",
         "create",

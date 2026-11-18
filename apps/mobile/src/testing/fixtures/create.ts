@@ -158,8 +158,6 @@ export function installCreate(host: FakeHost): void {
       decided: "",
       archived: false,
       stewardId: conversation.stewardId,
-      stewardOverrideId: null,
-      noSteward: false,
       readSeq: 0,
       lastSeq: 0,
       createdAt: conversation.createdAt,
@@ -178,13 +176,14 @@ export function installCreate(host: FakeHost): void {
     kind: ConversationSummary["kind"],
     name: string,
     agentIds: string[],
+    stewardId: string | null = agentIds[0] ?? null,
   ): ConversationSummary => ({
     id: id("conversation"),
     projectId,
     kind,
     name,
     archived: false,
-    stewardId: agentIds[0] ?? null,
+    stewardId,
     participants: agentIds.map((agentId) => ({
       agentId,
       sessionId: null,
@@ -204,10 +203,18 @@ export function installCreate(host: FakeHost): void {
     const project = projects().find((each) => each.id === args.projectId);
     if (project === undefined) throw new Error("no such project");
     const members = args.agentIds ?? [];
+    // As the host: a group needs a member, and its steward is one of them, null for none, or
+    // (left out) the first.
+    if (members.length === 0)
+      throw new Error("a group needs at least one member");
+    const stewardId =
+      args.stewardId === undefined ? (members[0] ?? null) : args.stewardId;
+    if (stewardId !== null && !members.includes(stewardId))
+      throw new Error("the steward has to be a member");
     const given = args.name?.trim();
     // A group nobody named takes the project's name, not the names of who is in it.
     const name = given === undefined || given === "" ? project.name : given;
-    const made = conversation(project.id, "group", name, members);
+    const made = conversation(project.id, "group", name, members, stewardId);
     open(made);
     return { conversation: made };
   });
@@ -323,7 +330,7 @@ export function installCreate(host: FakeHost): void {
       name:
         args.name?.trim() || args.path.slice(args.path.lastIndexOf("/") + 1),
       kind: "project",
-      stewardId: args.stewardId ?? null,
+      ownerAgentId: null,
       archived: false,
       createdAt: minutesAgo(0),
       updatedAt: minutesAgo(0),
