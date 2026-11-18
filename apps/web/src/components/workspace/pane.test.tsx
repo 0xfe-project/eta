@@ -68,3 +68,26 @@ it("follows a moving fallback until a width is chosen, and keeps the width after
   await show(<Fallback fallback={400} />);
   expect(divider()?.getAttribute("aria-valuenow")).toBe("496");
 });
+
+it("a press on the line that never moves keeps the saved width", async () => {
+  localStorage.setItem("test.pane.width", "500");
+  const { container: host } = await mount(<Divider />);
+  const divider = host.querySelector<HTMLElement>('[role="separator"]')!;
+  divider.setPointerCapture = () => undefined;
+  divider.releasePointerCapture = () => undefined;
+  const fire = (type: string) =>
+    act(async () => {
+      divider.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          button: 0,
+          clientX: 100,
+          pointerId: 1,
+        }),
+      );
+    });
+  await fire("pointerdown");
+  await fire("pointerup");
+  expect(localStorage.getItem("test.pane.width")).toBe("500");
+  expect(divider.getAttribute("aria-valuenow")).toBe("500");
+});
