@@ -1,5 +1,6 @@
 import type { AcpAgentView, AcpTestResult } from "./acp";
 import type { PromptImage } from "./operations";
+import type { MachinePlaceOp, MachinePlaceReply } from "./places/types";
 import type { AgentRuntimeInfo, ProcessStep, ToolActivity } from "./product";
 
 /**
@@ -210,6 +211,11 @@ export interface DaemonServiceParams {
   acpDelete: { id: string };
   /** Start a configuration here, saved or not, and shake hands. */
   acpTest: { agent: unknown };
+  /**
+   * Answer a question about this machine's directories with `@eta/places`, the code the primary
+   * runs for its own. A clone streams its progress as events and stops when the call is cancelled.
+   */
+  places: MachinePlaceOp;
 }
 
 /** Evidence that a remote run is alive, streamed while it is in flight. */
@@ -225,6 +231,7 @@ export interface DaemonServiceResults {
   acpSave: AcpAgentView;
   acpDelete: Record<string, never>;
   acpTest: AcpTestResult;
+  places: MachinePlaceReply;
   exec: {
     code: number;
     stdout: string;
