@@ -36,7 +36,7 @@ export function ChatHeader({
   workspaceButtonRef,
 }: {
   group?: ConversationSummary;
-  /** The conversation's own facts (its steward override); not there until its target arrives. */
+  /** The conversation's own facts (its steward); not there until its target arrives. */
   info?: ConversationInfo | undefined;
   project?: ProjectView | undefined;
   /**
@@ -63,7 +63,10 @@ export function ChatHeader({
       {/* A direct conversation has one agent and one fixed folder: the chip would only
           restate the project the sidebar already has open. Groups show where they work. */}
       {group?.kind === "direct" ? null : <ProjectChip project={project} />}
-      <StewardChip info={info} project={project} />
+      <StewardChip
+        info={info}
+        members={members.map((member) => member.agentId)}
+      />
       {group === undefined ? null : (
         <MemoryPauseToggle
           scopeType="conversation"

@@ -17,11 +17,22 @@ import { useSectionLink } from "./workspace-search";
 export function GroupNotice({ message }: { message: MessageView }) {
   const { t: translateText } = useTranslation(["chat", "common"] as const);
   const { agents } = useAgentList();
-  const { event, from, to, budget, routineId, routineName, runId, title } =
-    message.data as {
+  const {
+    event,
+    from,
+    to,
+    reason,
+    budget,
+    routineId,
+    routineName,
+    runId,
+    title,
+  } = message.data as {
       event?: string;
       from?: string | null;
       to?: string | null;
+      /** `left`: the steward left the group, which has none now. */
+      reason?: string;
       budget?: number;
       routineId?: string;
       routineName?: string;
@@ -45,9 +56,12 @@ export function GroupNotice({ message }: { message: MessageView }) {
         to: agentName(agents, to),
       });
     else if (typeof from === "string")
-      text = translateText("chat:system.stewardCleared", {
-        from: agentName(agents, from),
-      });
+      text = translateText(
+        reason === "left"
+          ? "chat:system.stewardLeft"
+          : "chat:system.stewardCleared",
+        { from: agentName(agents, from) },
+      );
   } else if (event === "wake_budget" && typeof budget === "number") {
     text = translateText("chat:system.wakeBudget", { budget });
   }

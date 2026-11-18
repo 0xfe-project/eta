@@ -32,10 +32,13 @@ interface Target {
   project?: ProjectView | undefined;
 }
 
-/** Who is in it. The steward is always one of the members; nobody chosen has no steward. */
+/**
+ * Who is in it, and which of them is the steward: one of the members, or null when the user said
+ * the group has none. Undefined only while nobody is chosen.
+ */
 interface Selection {
   members: string[];
-  stewardId: string | undefined;
+  stewardId: string | null | undefined;
 }
 
 /**
@@ -45,8 +48,9 @@ interface Selection {
  * sidebar and the panel away, which left a mostly empty screen behind a form that fits in a corner
  * of it. The window keeps its size across the steps, so nothing moves under the pointer.
  *
- * Nothing is written until Start: a directory becomes a project then, with the steward on it, so a
- * dialog closed halfway leaves nothing behind. Opened from a project the first step is already
+ * Nothing is written until Start: a directory becomes a project then, so a dialog closed halfway
+ * leaves nothing behind. The steward is the group's own, chosen here among the members (the first
+ * one ticked unless another is made steward), or none. Opened from a project the first step is already
  * answered, and is still one step back.
  */
 export function NewConversationDialog() {
@@ -111,9 +115,7 @@ function NewConversationForm({
   const sendingRef = useRef(false);
   const pending = create.isPending || createProject.isPending;
 
-  const fallback = (
-    agents.find((agent) => agent.id === target?.project?.stewardId) ?? agents[0]
-  )?.id;
+  const fallback = agents[0]?.id;
   const selection: Selection = picked ?? {
     members: fallback === undefined ? [] : [fallback],
     stewardId: fallback,
@@ -125,15 +127,29 @@ function NewConversationForm({
       const rest = members.filter((id) => id !== agentId);
       setPicked({
         members: rest,
-        stewardId: stewardId === agentId ? rest[0] : stewardId,
+        // The steward going takes the next member; "none" stays none while anyone is left.
+        stewardId:
+          rest.length === 0
+            ? undefined
+            : stewardId === agentId
+              ? rest[0]
+              : stewardId,
       });
     } else {
       setPicked({
         members: [...members, agentId],
-        stewardId: stewardId ?? agentId,
+        // The first one ticked leads, unless the user already chose (someone, or nobody).
+        stewardId: stewardId === undefined ? agentId : stewardId,
       });
     }
   };
+
+  /** Pressing the steward's own button again leaves the group with none. */
+  const lead = (agentId: string) =>
+    setPicked({
+      ...selection,
+      stewardId: selection.stewardId === agentId ? null : agentId,
+    });
 
   const choose = (next: Target) => {
     browser.closeTyping();
@@ -145,7 +161,7 @@ function NewConversationForm({
   };
 
   const start = async (where: Target, who: Selection) => {
-    if (sendingRef.current || who.stewardId === undefined) return;
+    if (sendingRef.current || who.members.length === 0) return;
     sendingRef.current = true;
     setFailed("");
     try {
@@ -155,7 +171,6 @@ function NewConversationForm({
           await createProject.mutateAsync({
             path: where.path,
             machineId: where.machineId,
-            stewardId: who.stewardId,
           })
         ).project;
       const { conversation } = await create.mutateAsync({
@@ -245,7 +260,7 @@ function NewConversationForm({
           selection={selection}
           failed={failed}
           onToggle={toggle}
-          onLead={(stewardId) => setPicked({ ...selection, stewardId })}
+          onLead={lead}
         />
       )}
       <DialogFooter className="shrink-0 flex-row justify-between border-t p-3">
@@ -275,7 +290,7 @@ function NewConversationForm({
               {translateText("common:actions.previous")}
             </Button>
             <Button
-              disabled={selection.stewardId === undefined || pending}
+              disabled={selection.members.length === 0 || pending}
               onClick={() => {
                 if (target !== undefined) void start(target, selection);
               }}
@@ -289,7 +304,10 @@ function NewConversationForm({
   );
 }
 
-/** One list: a tick makes a member, and a member can be made the steward from its own row. */
+/**
+ * One list: a tick makes a member, and a member can be made the steward from its own row. The
+ * steward's button pressed again makes the group one without a steward.
+ */
 function MembersStep({
   target,
   agents,

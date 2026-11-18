@@ -15,7 +15,7 @@ export function GroupProposalDetails({
 }: {
   proposal: CaptainGroupProposal;
 }) {
-  const { t: translateText } = useTranslation(["captain"] as const);
+  const { t: translateText } = useTranslation(["captain", "chat"] as const);
   const { agents } = useAgentList();
   const { machines } = useMachines();
   const machine = machines.find((item) => item.id === proposal.machineId);
@@ -44,7 +44,9 @@ export function GroupProposalDetails({
         {proposal.memberIds.map((id) => agentName(agents, id)).join(", ")}
       </ProposalField>
       <ProposalField label={translateText("proposal.steward")}>
-        {agentName(agents, proposal.stewardId)}
+        {proposal.stewardId === null
+          ? translateText("chat:steward.none")
+          : agentName(agents, proposal.stewardId)}
       </ProposalField>
       {proposal.goal === null ? null : (
         <ProposalField label={translateText("proposal.goal")}>

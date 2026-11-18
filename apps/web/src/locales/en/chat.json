@@ -185,7 +185,7 @@
   },
   "messages": {
     "mentionTarget": " → {{name}}",
-    "nobody": "This message woke nobody: the conversation has no steward and more than one member. @mention a member, or set a steward.",
+    "nobody": "Nobody was @mentioned and this group has no steward, so this message woke nobody. @mention a member, or set a steward.",
     "joined": "Joined the reply {{names}} is already writing"
   },
   "reply": {
@@ -339,15 +339,13 @@
   "steward": {
     "label": "Steward: {{name}}",
     "hint": "Messages that name nobody go to the steward",
-    "none": "No steward",
-    "thisConversation": "Steward of this conversation",
-    "followProject": "Follow the project",
-    "project": "Steward of project \"{{name}}\""
+    "none": "No steward"
   },
   "system": {
     "stewardChanged": "{{to}} is now the steward, taking over from {{from}}.",
     "stewardSet": "{{to}} is now the steward.",
     "stewardCleared": "{{from}} is no longer the steward.",
+    "stewardLeft": "{{from}} left the group; it has no steward now.",
     "wakeBudget": "This message has used its {{budget}} wake-ups; later @mentions stay in the conversation and wake nobody until you write again.",
     "routineReport": "Routine “{{name}}” sent a report: {{title}}",
     "routineReportUntitled": "Routine “{{name}}” sent a report",

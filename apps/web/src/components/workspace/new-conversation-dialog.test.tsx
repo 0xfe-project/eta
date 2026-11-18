@@ -33,7 +33,6 @@ const eta = projectView({
   id: "p1",
   name: "eta",
   path: `${HOME}/eta`,
-  stewardId: "a2",
 });
 const house = projectView({ id: "p2", name: "house", path: `${HOME}/house` });
 const primary = machineView({
@@ -218,7 +217,7 @@ describe("第一步：目录", () => {
     expect(calls()).toEqual([
       [
         "conversations.create",
-        { projectId: "p1", agentIds: ["a2"], stewardId: "a2" },
+        { projectId: "p1", agentIds: ["a1"], stewardId: "a1" },
       ],
     ]);
   });
@@ -254,7 +253,7 @@ describe("第一步：目录", () => {
     await begin();
     expect(calls()[0]).toEqual([
       "projects.create",
-      { path: `${HOME}/fresh`, machineId: "m1", stewardId: "a1" },
+      { path: `${HOME}/fresh`, machineId: "m1" },
     ]);
   });
 
@@ -287,7 +286,7 @@ describe("第一步：目录", () => {
     expect(calls()).toEqual([
       [
         "projects.create",
-        { path: `${HOME}/fresh`, machineId: "m1", stewardId: "a1" },
+        { path: `${HOME}/fresh`, machineId: "m1" },
       ],
       [
         "conversations.create",
@@ -310,24 +309,18 @@ describe("第一步：目录", () => {
 });
 
 describe("第二步：成员", () => {
-  it("默认是项目的主理人", async () => {
+  it("默认第一位智能体，它就是主理人：项目没有主理人可跟", async () => {
     await start();
     await pickProject("eta");
-    expect(ticked("装配检查")).toBe(true);
-    expect(ticked("乐子人")).toBe(false);
+    expect(ticked("乐子人")).toBe(true);
+    expect(ticked("装配检查")).toBe(false);
     expect(steward()).toHaveLength(1);
-    expect(steward()[0]).toContain("装配检查");
-  });
-
-  it("项目没有主理人时默认第一位智能体", async () => {
-    await start();
-    await pickProject("house");
     expect(steward()[0]).toContain("乐子人");
     await begin();
     expect(calls()).toEqual([
       [
         "conversations.create",
-        { projectId: "p2", agentIds: ["a1"], stewardId: "a1" },
+        { projectId: "p1", agentIds: ["a1"], stewardId: "a1" },
       ],
     ]);
   });
@@ -336,13 +329,13 @@ describe("第二步：成员", () => {
     await start();
     await pickProject("eta");
     await tick("文档员");
-    await tick("乐子人");
+    await tick("装配检查");
     await click(stewardButton("文档员"));
     await begin();
     expect(calls()).toEqual([
       [
         "conversations.create",
-        { projectId: "p1", agentIds: ["a2", "a3", "a1"], stewardId: "a3" },
+        { projectId: "p1", agentIds: ["a1", "a3", "a2"], stewardId: "a3" },
       ],
     ]);
     expect(state.navigate).toHaveBeenCalledWith({
@@ -352,28 +345,49 @@ describe("第二步：成员", () => {
     expect(isOpen()).toBe(false);
   });
 
+  it("再按一次主理人就是没有主理人，照样能开始", async () => {
+    await start();
+    await pickProject("eta");
+    await tick("文档员");
+    await click(stewardButton("乐子人"));
+    expect(steward()).toEqual([]);
+    expect(stewardButton("乐子人")!.textContent).toBe("设为主理人");
+    expect(stewardButton("文档员")!.textContent).toBe("设为主理人");
+    expect(labelled("开始")!.disabled).toBe(false);
+    // Somebody new joining does not undo the choice.
+    await tick("装配检查");
+    expect(steward()).toEqual([]);
+    await begin();
+    expect(calls()).toEqual([
+      [
+        "conversations.create",
+        { projectId: "p1", agentIds: ["a1", "a3", "a2"], stewardId: null },
+      ],
+    ]);
+  });
+
   it("没勾的行没有主理人按钮", async () => {
     await start();
     await pickProject("eta");
-    expect(stewardButton("乐子人")).toBeNull();
-    await tick("乐子人");
-    expect(stewardButton("乐子人")!.textContent).toBe("设为主理人");
-    expect(stewardButton("装配检查")!.textContent).toBe("主理人");
+    expect(stewardButton("装配检查")).toBeNull();
+    await tick("装配检查");
+    expect(stewardButton("装配检查")!.textContent).toBe("设为主理人");
+    expect(stewardButton("乐子人")!.textContent).toBe("主理人");
   });
 
   it("取消主理人后下一位已选成员接任，没人选时不能开始，再勾的第一位是主理人", async () => {
     await start();
     await pickProject("eta");
     await tick("文档员");
-    await tick("乐子人");
     await tick("装配检查");
-    expect(steward()[0]).toContain("文档员");
     await tick("乐子人");
+    expect(steward()[0]).toContain("文档员");
+    await tick("装配检查");
     await tick("文档员");
     expect(steward()).toEqual([]);
     expect(labelled("开始")!.disabled).toBe(true);
-    await tick("乐子人");
-    expect(steward()[0]).toContain("乐子人");
+    await tick("装配检查");
+    expect(steward()[0]).toContain("装配检查");
     expect(labelled("开始")!.disabled).toBe(false);
   });
 
@@ -384,7 +398,7 @@ describe("第二步：成员", () => {
     await click(stewardButton("文档员"));
     await back();
     await pickProject("house");
-    expect(ticked("装配检查")).toBe(true);
+    expect(ticked("乐子人")).toBe(true);
     expect(ticked("文档员")).toBe(true);
     expect(steward()[0]).toContain("文档员");
   });
@@ -395,16 +409,8 @@ describe("第二步：成员", () => {
     await tick("乐子人");
     await back();
     await pickProject("eta");
-    expect(steward()[0]).toContain("装配检查");
-  });
-
-  it("没动过时跟着目录换默认", async () => {
-    await start();
-    await pickProject("eta");
-    await back();
-    await pickProject("house");
+    expect(ticked("乐子人")).toBe(true);
     expect(steward()[0]).toContain("乐子人");
-    expect(ticked("装配检查")).toBe(false);
   });
 
   it("绑在别的机器上的智能体带机器名，在那台机器上就不带", async () => {
