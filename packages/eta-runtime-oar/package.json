@@ -18,6 +18,7 @@
   "dependencies": {
     "@botiverse/oar": "0.86.0",
     "@eta/core": "*",
+    "@eta/runtime-kit": "*",
     "@eta/server": "*"
   },
   "devDependencies": {

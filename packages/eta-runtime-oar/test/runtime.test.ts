@@ -20,12 +20,14 @@ import type {
 } from "@botiverse/oar";
 import type { ScriptedTurn } from "@botiverse/oar/testing";
 import type { AgentMessage, KernelTool } from "@eta/core";
+import type { Served } from "@eta/runtime-kit/testing";
 import type { ManagedSession, SessionManagerOptions } from "@eta/server";
 import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";
 import { createRuntimeRegistry } from "@botiverse/oar";
 import { scriptedRuntime } from "@botiverse/oar/testing";
 import { kernelOn } from "@eta/core";
+import { listenServed, listServed } from "@eta/runtime-kit/testing";
 import { MemorySessionStore, SessionManager } from "@eta/server";
 import { describe, expect, it } from "vitest";
 import { createOarRuntimes } from "../src/index";
@@ -1146,68 +1148,6 @@ async function callServed(
     text: reply.result.content.map((part) => part.text ?? "").join(""),
     isError: reply.result.isError === true,
   };
-}
-
-interface Served {
-  url: string;
-  headers?: Readonly<Record<string, string>>;
-}
-
-/** The tools a served MCP server lists now. */
-async function listServed(
-  server: Served,
-): Promise<{ name: string; description?: string; inputSchema: unknown }[]> {
-  const response = await fetch(server.url, {
-    method: "POST",
-    headers: {
-      ...server.headers,
-      "content-type": "application/json",
-      accept: "application/json, text/event-stream",
-    },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
-  });
-  const reply = (await response.json()) as {
-    result: {
-      tools: { name: string; description?: string; inputSchema: unknown }[];
-    };
-  };
-  return reply.result.tools;
-}
-
-/** Listen on the server's event stream, as a runtime does for notifications; what it hears. */
-async function listenServed(
-  server: Served,
-): Promise<{ heard: string[]; close: () => void }> {
-  const controller = new AbortController();
-  const response = await fetch(server.url, {
-    headers: { ...server.headers, accept: "text/event-stream" },
-    signal: controller.signal,
-  });
-  const heard: string[] = [];
-  const reader = response.body!.getReader();
-  const decoder = new TextDecoder();
-  void (async () => {
-    let buffer = "";
-    for (;;) {
-      const { value, done } = await reader.read().catch(() => ({
-        value: undefined,
-        done: true,
-      }));
-      if (done) return;
-      buffer += decoder.decode(value, { stream: true });
-      for (
-        let end = buffer.indexOf("\n\n");
-        end >= 0;
-        end = buffer.indexOf("\n\n")
-      ) {
-        const data = /^data: (.*)$/m.exec(buffer.slice(0, end))?.[1];
-        buffer = buffer.slice(end + 2);
-        if (data !== undefined)
-          heard.push((JSON.parse(data) as { method: string }).method);
-      }
-    }
-  })();
-  return { heard, close: () => controller.abort() };
 }
 
 describe("the host's tools, served to the runtime", () => {

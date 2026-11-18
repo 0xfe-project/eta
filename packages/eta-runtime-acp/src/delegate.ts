@@ -14,7 +14,9 @@
  * - Cancelling is `session/cancel`; the agent answers the prompt as `cancelled`. One that does
  *   not, in time, loses its process.
  * - The host's tools reach the agent as an MCP server on this machine (`eta`), where the agent
- *   takes HTTP MCP servers; a call runs through the session's own middleware chain. The
+ *   takes HTTP MCP servers; a call runs through the session's own middleware chain. The set is
+ *   read again at every run, and one that changed is served anew with `list_changed`, so the
+ *   agent sees it at its next turn without a new process (`HostTools`, `@eta/runtime-kit`). The
  *   session's plugin MCP servers go along in the same list.
  * - `session/request_permission` is answered here, always with yes (the agent's own allow option,
  *   this once): nobody is asked and nothing reaches the Inbox. A request outside a turn, or after
@@ -34,7 +36,6 @@ import type {
   SessionNotification,
   SystemPrompt,
 } from "@agentclientprotocol/sdk";
-import type { HostTool, ServedMcpTools } from "@botiverse/oar";
 import type { AcpAgentConfig, SessionMcpServer } from "@eta/client-contracts";
 import type {
   AgentMessage,
@@ -43,8 +44,7 @@ import type {
   RunDelegateContext,
 } from "@eta/core";
 import type { AcpChoices } from "./models";
-import { serveMcpTools } from "@botiverse/oar";
-import { toToolResultMessage } from "@eta/core";
+import { hostResultOf, HostTools, NO_RUN } from "@eta/runtime-kit";
 import { choicesOf, effortFor } from "./models";
 import { AcpProcess, messageOf, methods } from "./process";
 import { Translator } from "./translate";
@@ -119,9 +119,6 @@ type TurnOutcome =
   | { kind: "completed" }
   | { kind: "aborted" }
   | { kind: "failed"; error: string };
-
-/** The MCP server the host's tools are served under. */
-const HOST_SERVER = "eta";
 
 const CANCELLED: RequestPermissionResponse = {
   outcome: { outcome: "cancelled" },
@@ -202,12 +199,23 @@ export class AcpDelegate implements RunDelegate {
   readonly #undelivered: Input[] = [];
   /** The run in flight: where a call to one of the host's tools runs. */
   #run: RunDelegateContext | undefined;
-  /** The host's tools, served once for the life of this delegate. */
-  #served: ServedMcpTools | undefined;
+  /** The host's tools, served to the agent and listed anew at every run. */
+  readonly #host: HostTools;
 
   constructor(options: AcpDelegateOptions) {
     this.#options = options;
     this.#native = options.resume;
+    this.#host = new HostTools({
+      offered: options.hostTools,
+      call: async (name, input) => {
+        const run = this.#run;
+        if (run === undefined) return NO_RUN;
+        const raw = await run.executeTool(name, input, {
+          toolCallId: `mcp-${crypto.randomUUID()}`,
+        });
+        return hostResultOf(name, raw).result;
+      },
+    });
   }
 
   async run(context: RunDelegateContext): Promise<DelegatedRunResult> {
@@ -225,6 +233,9 @@ export class AcpDelegate implements RunDelegate {
         if (context.signal.aborted) return { status: "aborted" };
         return { status: "failed", error: messageOf(error) };
       }
+      // The host's tools as they are now: a set that changed since the agent last listed them is
+      // served anew, and the agent told so (`list_changed`).
+      await this.#host.refresh(context);
       let input = joined([
         ...this.#undelivered.splice(0),
         inputOf(context.opening),
@@ -257,9 +268,7 @@ export class AcpDelegate implements RunDelegate {
     this.#permissions?.abort();
     const opened = this.#opened;
     this.#opened = undefined;
-    const served = this.#served;
-    this.#served = undefined;
-    await served?.close().catch(() => undefined);
+    await this.#host.close();
     if (opened === undefined) return;
     const native = this.#native;
     if (
@@ -306,54 +315,8 @@ export class AcpDelegate implements RunDelegate {
       );
       return undefined;
     }
-    if (this.#served === undefined) {
-      const tools: HostTool[] = context
-        .tools()
-        .filter((tool) => names.has(tool.name))
-        .map((tool) => ({
-          name: tool.name,
-          ...(tool.description === undefined
-            ? {}
-            : { description: tool.description }),
-          inputSchema: ((tool as { parameters?: Record<string, unknown> })
-            .parameters ?? {
-            type: "object",
-            properties: {},
-          }) as Record<string, unknown>,
-          handler: async (input) => {
-            const run = this.#run;
-            if (run === undefined)
-              return {
-                content: [{ type: "text", text: "No run is in flight." }],
-                isError: true,
-              };
-            const raw = await run.executeTool(tool.name, input, {
-              toolCallId: `mcp-${crypto.randomUUID()}`,
-            });
-            const message = toToolResultMessage(
-              { id: tool.name, name: tool.name },
-              raw,
-            );
-            if (message.role !== "toolResult")
-              return { content: [{ type: "text", text: String(raw) }] };
-            return {
-              content: message.content.map((block) =>
-                block.type === "text"
-                  ? { type: "text" as const, text: block.text }
-                  : {
-                      type: "image" as const,
-                      data: block.data,
-                      mimeType: block.mimeType,
-                    },
-              ),
-              isError: message.isError,
-            };
-          },
-        }));
-      if (tools.length === 0) return undefined;
-      this.#served = await serveMcpTools({ name: HOST_SERVER, tools });
-    }
-    const { server } = this.#served;
+    const server = await this.#host.serve(context);
+    if (server === undefined) return undefined;
     return {
       name: server.name,
       type: "http",

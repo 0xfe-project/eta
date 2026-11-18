@@ -15,8 +15,8 @@
  *   drops, is kept and opens the next prompt too (`#undelivered`), the next run's if this one ended.
  * - **The abort** interrupts the runtime's turn; the run ends with the turn's own end.
  * - **The host's tools** (a task board, a way to reach other agents) are served to the runtime
- *   over MCP (`serveMcpTools`) and run through the session's own middleware, so a tool's policy
- *   is the same whoever calls it. What the runtime reports of them is told back as the host's own
+ *   over MCP (`HostTools` in `@eta/runtime-kit`), listed anew at every run, and run through the
+ *   session's own middleware, so a tool's policy is the same whoever calls it. What the runtime reports of them is told back as the host's own
  *   (`HostCalls`): the tool's name, and the `details` an MCP answer has no room for.
  * - **Resume:** the runtime's session id is remembered on the eta session, so a restart picks up
  *   the same conversation instead of starting the runtime from nothing.
@@ -32,12 +32,8 @@
 import type {
   CompactionOutcome,
   Event,
-  HostTool,
-  HostToolContent,
-  HostToolResult,
   InputImage,
   McpServer,
-  ServedMcpTools,
   Session,
   SessionOptions,
   TokenTotals,
@@ -47,7 +43,6 @@ import type {
   AgentMessage,
   DelegatedRunResult,
   KernelConfig,
-  KernelTool,
   RunDelegate,
   RunDelegateContext,
 } from "@eta/core";
@@ -57,9 +52,8 @@ import { Buffer } from "node:buffer";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { serveMcpTools } from "@botiverse/oar";
-import { toToolResultMessage } from "@eta/core";
-import { HOST_SERVER, HostCalls } from "./host-calls";
+import { hostResultOf, HostTools, NO_RUN } from "@eta/runtime-kit";
+import { HostCalls } from "./host-calls";
 import { effortFor } from "./models";
 import { Translator } from "./translate";
 
@@ -191,60 +185,6 @@ function compactionOf(
   }
 }
 
-/**
- * A session tool as an MCP tool definition: the name, description and parameters the eta runtime
- * gives its model, unchanged. The definition exists once, on the host; this only carries it.
- */
-function hostToolDefinition(tool: KernelTool): Omit<HostTool, "handler"> {
-  return {
-    name: tool.name,
-    ...(tool.description === undefined
-      ? {}
-      : { description: tool.description }),
-    inputSchema: ((tool as { parameters?: Record<string, unknown> })
-      .parameters ?? {
-      type: "object",
-      properties: {},
-    }) as Record<string, unknown>,
-  };
-}
-
-/** What tells one served tool set from another: everything the runtime is shown of it. */
-function signatureOf(tools: readonly HostTool[]): string {
-  return JSON.stringify(
-    tools.map(({ name, description, inputSchema }) => [
-      name,
-      description,
-      inputSchema,
-    ]),
-  );
-}
-
-/** A session tool's result as an MCP tool answer, and the details that answer cannot carry. */
-function hostResultOf(
-  name: string,
-  raw: unknown,
-): {
-  result: Exclude<HostToolResult, string>;
-  details: unknown;
-} {
-  const message = toToolResultMessage({ id: name, name }, raw);
-  if (message.role !== "toolResult")
-    return {
-      result: { content: [{ type: "text", text: String(raw) }] },
-      details: undefined,
-    };
-  const content: HostToolContent[] = message.content.map((block) =>
-    block.type === "text"
-      ? { type: "text", text: block.text }
-      : { type: "image", data: block.data, mimeType: block.mimeType },
-  );
-  return {
-    result: { content, isError: message.isError },
-    details: message.details,
-  };
-}
-
 /** How long a compaction is waited for, inside what a client waits for the answer. */
 const COMPACT_WAIT_MS = 9 * 60 * 1000;
 
@@ -267,11 +207,8 @@ export class OarDelegate implements RunDelegate {
   #opened: Opened | undefined;
   #opening: Promise<Opened> | undefined;
   #resume: string | undefined;
-  #served: ServedMcpTools | undefined;
-  /** What `#served` lists, to tell a changed tool set from the same one. */
-  #servedSignature: string | undefined;
-  /** The names of the tools served: the only ones told back as the host's. */
-  #hostTools: ReadonlySet<string> = new Set();
+  /** The host's tools, served to the runtime; the ones served are the only ones told back as the host's. */
+  readonly #host: HostTools;
   /** The runtime session's running total charged to messages so far. */
   #charged: TokenTotals | undefined;
   /** The run in flight, for the tools the runtime calls back into. */
@@ -295,6 +232,20 @@ export class OarDelegate implements RunDelegate {
   constructor(options: OarDelegateOptions) {
     this.#options = options;
     this.#resume = options.resume;
+    this.#host = new HostTools({
+      offered: options.hostTools,
+      call: async (name, input) => {
+        const run = this.#run;
+        const calls = this.#calls;
+        if (run === undefined || calls === undefined) return NO_RUN;
+        const raw = await run.executeTool(name, input, {
+          toolCallId: `mcp-${crypto.randomUUID()}`,
+        });
+        const { result, details } = hostResultOf(name, raw);
+        calls.answered(name, input, result.content, details);
+        return result;
+      },
+    });
   }
 
   async run(context: RunDelegateContext): Promise<DelegatedRunResult> {
@@ -310,8 +261,8 @@ export class OarDelegate implements RunDelegate {
       // The effort the runtime session was opened with is what this run hands it.
       context.recordThinking(opened.effort);
       // The host's tools as they are now: a set that changed since the last run is served anew.
-      if (this.#served !== undefined) await this.#serve(context);
-      this.#calls = new HostCalls(this.#options.runtime, this.#hostTools);
+      await this.#host.refresh(context);
+      this.#calls = new HostCalls(this.#options.runtime, this.#host.names);
       const translator = new Translator(
         context,
         {
@@ -491,8 +442,7 @@ export class OarDelegate implements RunDelegate {
     this.#unwatch = undefined;
     this.#adopted = undefined;
     await opened?.session.dispose().catch(() => undefined);
-    await this.#served?.close().catch(() => undefined);
-    this.#served = undefined;
+    await this.#host.close();
     await rm(this.#imageDir(), { recursive: true, force: true }).catch(
       () => undefined,
     );
@@ -581,7 +531,7 @@ export class OarDelegate implements RunDelegate {
     const runtime = catalog.runtime(id);
     const installation = await catalog.installation(id);
     const refused = runtime.refusedSessionOptions?.mcpServers !== undefined;
-    const served = refused ? undefined : await this.#serve(context);
+    const served = refused ? undefined : await this.#host.serve(context);
     const plugins = this.#options.mcpServers ?? [];
     if (refused && plugins.length > 0)
       this.#options.warn(
@@ -589,7 +539,7 @@ export class OarDelegate implements RunDelegate {
       );
     const mcpServers = refused
       ? []
-      : [...(served === undefined ? [] : [served.server]), ...plugins];
+      : [...(served === undefined ? [] : [served]), ...plugins];
     const options = (resume: string | undefined): SessionOptions =>
       this.#sessionOptions(settings, resume, mcpServers);
     let session: Session;
@@ -618,66 +568,6 @@ export class OarDelegate implements RunDelegate {
       // A resumed conversation already heard who it is.
       prompted: this.#systemPrompt() !== undefined || resumed,
     };
-  }
-
-  /**
-   * The host's tools, as the runtime is offered them: one server for the life of this delegate,
-   * its list assembled again on every call. When the list differs from what is served (a tool
-   * came or went, a description or a schema changed) the server takes the new one and sends
-   * `notifications/tools/list_changed`, so the runtime lists again.
-   *
-   * What a runtime does with that is its own business. Claude Code (2.1.325, measured in #177)
-   * lists again at once, so a tool it has not loaded yet, or a tool that is new, comes in the new
-   * version; a tool it already loaded with ToolSearch keeps the definition of that first load for
-   * the rest of the conversation, resumes included, because it is recorded in its transcript.
-   *
-   * A runtime opened when the session had no host tools was given no server, so it hears of
-   * tools that come later only when it is opened again.
-   */
-  async #serve(
-    context: RunDelegateContext,
-  ): Promise<ServedMcpTools | undefined> {
-    const tools = this.#listed(context);
-    const signature = signatureOf(tools);
-    if (this.#served !== undefined) {
-      if (signature !== this.#servedSignature) {
-        this.#served.setTools(tools);
-        this.#servedSignature = signature;
-        this.#hostTools = new Set(tools.map((tool) => tool.name));
-      }
-      return this.#served;
-    }
-    if (tools.length === 0) return undefined;
-    this.#hostTools = new Set(tools.map((tool) => tool.name));
-    this.#served = await serveMcpTools({ name: HOST_SERVER, tools });
-    this.#servedSignature = signature;
-    return this.#served;
-  }
-
-  /** The host's tools for the runtime, read from the session now. */
-  #listed(context: RunDelegateContext): HostTool[] {
-    const names = new Set(this.#options.hostTools());
-    return context
-      .tools()
-      .filter((tool) => names.has(tool.name))
-      .map((tool) => ({
-        ...hostToolDefinition(tool),
-        handler: async (input) => {
-          const run = this.#run;
-          const calls = this.#calls;
-          if (run === undefined || calls === undefined)
-            return {
-              content: [{ type: "text", text: "No run is in flight." }],
-              isError: true,
-            };
-          const raw = await run.executeTool(tool.name, input, {
-            toolCallId: `mcp-${crypto.randomUUID()}`,
-          });
-          const { result, details } = hostResultOf(tool.name, raw);
-          calls.answered(tool.name, input, result.content, details);
-          return result;
-        },
-      }));
   }
 
   #imageDir(): string {
