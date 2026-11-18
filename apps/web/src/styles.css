@@ -151,7 +151,10 @@
   /*
    * The same control lying down, on the top edge of the sidebar's agent section: the line it lays
    * over is that section's `border-t`, so like the sidebar's edge it paints nothing at rest, and
-   * there is no header band to carry across. The 6px target is centred on the line the same way.
+   * there is no header band to carry across. The 6px target hangs below the line rather than
+   * centred on it: centred, its top 3px lay over the bottom of the groups list's last row, and a
+   * click there started a drag instead of opening that conversation. Below the line it falls in
+   * the section's own top padding, which nothing else uses.
    */
   .pane-divider[aria-orientation="horizontal"] {
     position: absolute;
@@ -165,7 +168,7 @@
   .pane-divider[aria-orientation="horizontal"]::after {
     inset-block: auto;
     inset-inline: 0;
-    top: -3px;
+    top: 0;
     left: 0;
     width: auto;
     height: 6px;

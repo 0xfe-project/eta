@@ -674,9 +674,13 @@ describe("卡片的右键菜单", () => {
 });
 
 describe("拖动智能体区域的上边缘", () => {
-  // happy-dom lays nothing out, so the column is given one: the groups list 500px tall, the shelf
-  // 200px, every card 40px, and each section's head 30px down to its first card. That makes the
-  // floor 30 + 40 = 70 and the ceiling 500 + 200 - (30 + 2.5 × 40) = 570.
+  // happy-dom lays nothing out, so the column is given one: 700px shared by the two sections, the
+  // groups list 500 of them and the shelf 200 until a height is dragged, every card 40px, and each
+  // section's head 30px down to its first card. That makes the floor 30 + 40 = 70 and the ceiling
+  // 700 - (30 + 2.5 × 40) = 570.
+  // As in a browser, a shelf with a height is that tall and the list has what is left, down to
+  // nothing: right after the window gets shorter the shelf still has its old height, and the two
+  // add up to more than the column has.
   // The shelf's content runs to 30 + 1000px, so it is the groups' room that sets the ceiling,
   // until a test shortens the content.
   const layout = { groups: 500, shelf: 200, content: 1000 };
@@ -699,12 +703,30 @@ describe("拖动智能体区域的上边缘", () => {
     });
   };
   const laidOut = () => {
+    const room = () => layout.groups + layout.shelf;
+    const shelfHeight = (section: HTMLElement) =>
+      section.style.maxHeight === ""
+        ? layout.shelf
+        : Number.parseFloat(section.style.maxHeight);
     stub("offsetHeight", {
       get(this: HTMLElement) {
         const labelled = this.getAttribute("aria-labelledby");
-        if (labelled === "sidebar-groups") return layout.groups;
-        if (labelled === "sidebar-agents") return layout.shelf;
+        if (labelled === "sidebar-agents") return shelfHeight(this);
+        if (labelled === "sidebar-groups") {
+          const section = this.parentElement?.querySelector<HTMLElement>(
+            ':scope > [aria-labelledby="sidebar-agents"]',
+          );
+          return Math.max(0, room() - (section ? shelfHeight(section) : 0));
+        }
         return this.dataset.sidebar === "menu-item" ? 40 : 0;
+      },
+    });
+    // The column: the element both sections sit in.
+    stub("clientHeight", {
+      get(this: HTMLElement) {
+        return this.querySelector(':scope > [aria-labelledby="sidebar-agents"]')
+          ? room()
+          : 0;
       },
     });
     stub("scrollHeight", {
