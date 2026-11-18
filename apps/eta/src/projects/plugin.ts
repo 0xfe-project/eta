@@ -6,7 +6,6 @@
  * the one that exists. A project has no steward: that is each group's own (`conversations`).
  */
 import type { ProjectView } from "@eta/client-contracts";
-import type { SshTransport } from "@eta/ssh";
 import type { MachineHub } from "../machines/hub";
 import type { MachineRecord, MachineStore } from "../machines/store";
 import type { MachinePlaces } from "../places/on-machine";
@@ -16,7 +15,6 @@ import { PlaceError } from "@eta/places";
 import { transportOn } from "../machines/shell";
 import { wireFailure } from "../places/on-machine";
 import { Args, productPlugin, publish } from "../wire";
-import { DirectoryError, listDirectories } from "./directories";
 import { DEFAULT_FILE_LIMIT, listProjectFiles } from "./files";
 
 export interface ProjectsDeps {
@@ -141,27 +139,6 @@ export function projectsPlugin(deps: ProjectsDeps, applied: () => void) {
               transportOn(machine, deps.hub),
               project.path,
               args.optionalInteger("limit") ?? DEFAULT_FILE_LIMIT,
-            ),
-          };
-        }),
-
-        wire.handle("projects", "directories", async (call) => {
-          const args = new Args(call);
-          const machine = machineOf(args);
-          let transport: SshTransport;
-          try {
-            transport = transportOn(machine, deps.hub);
-          } catch {
-            throw new DirectoryError("offline");
-          }
-          const onMachine = projects
-            .list()
-            .filter((project) => project.machineId === machine.id);
-          return {
-            result: await listDirectories(
-              transport,
-              args.optionalString("path"),
-              new Map(onMachine.map((project) => [project.path, project.id])),
             ),
           };
         }),
