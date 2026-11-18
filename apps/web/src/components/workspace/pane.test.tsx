@@ -91,3 +91,40 @@ it("a press on the line that never moves keeps the saved width", async () => {
   expect(localStorage.getItem("test.pane.width")).toBe("500");
   expect(divider.getAttribute("aria-valuenow")).toBe("500");
 });
+
+// The same for a pane on the left of the window, whose divider is on its right edge: the test
+// above is the default, a right-hand pane. Without `land`'s check either one saves `undefined`,
+// which a column takes as "forget the width" and removes from storage.
+function LeftPane() {
+  const pane = usePaneWidth({
+    storageKey: "test.pane.left",
+    min: 320,
+    max: 720,
+    fallback: 400,
+    edge: "left",
+  });
+  return <div aria-label="resize" {...pane.dividerProps} />;
+}
+
+it("a press on a left-hand pane's line that never moves keeps its saved width", async () => {
+  localStorage.setItem("test.pane.left", "500");
+  const { container: host } = await mount(<LeftPane />);
+  const divider = host.querySelector<HTMLElement>('[role="separator"]')!;
+  divider.setPointerCapture = () => undefined;
+  divider.releasePointerCapture = () => undefined;
+  const fire = (type: string) =>
+    act(async () => {
+      divider.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          button: 0,
+          clientX: 600,
+          pointerId: 1,
+        }),
+      );
+    });
+  await fire("pointerdown");
+  await fire("pointerup");
+  expect(localStorage.getItem("test.pane.left")).toBe("500");
+  expect(divider.getAttribute("aria-valuenow")).toBe("500");
+});
