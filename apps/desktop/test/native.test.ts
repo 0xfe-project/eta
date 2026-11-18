@@ -1,7 +1,7 @@
 import type { NativeBridge } from "../src/bun/native";
 import { BASELINE_CAPABILITIES } from "@eta/client-contracts/desktop";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { startNativeBridge } from "../src/bun/native";
+import { capabilities, startNativeBridge } from "../src/bun/native";
 
 const REMOTE = "https://mac.ts.net";
 let bridge: NativeBridge;
@@ -11,6 +11,9 @@ afterEach(() => {
 
 const handlers = {
   saveFile: vi.fn(async () => "/saved"),
+  pickDirectory: vi.fn(
+    async (): Promise<string | null> => "/home/me/Developer",
+  ),
   openExternal: vi.fn(),
   contextMenu: vi.fn(),
   windowAction: vi.fn(),
@@ -144,5 +147,43 @@ describe("the app's own update on the bridge", () => {
       body: JSON.stringify({ action: "rm -rf" }),
     });
     expect(odd.status).toBe(400);
+  });
+});
+
+describe("the folder dialog on the bridge", () => {
+  it("is a capability of every build, with or without updates", () => {
+    expect(capabilities(false)).toContain("pick-directory");
+    expect(capabilities(true)).toEqual(
+      expect.arrayContaining([
+        "pick-directory",
+        "shell-update",
+        ...BASELINE_CAPABILITIES,
+      ]),
+    );
+  });
+
+  it("answers the folder chosen, and null when none was", async () => {
+    start([REMOTE]);
+    const chosen = await ask(REMOTE, "/api/native/pick-directory", {
+      method: "POST",
+      body: "{}",
+    });
+    expect(await chosen.json()).toEqual({ path: "/home/me/Developer" });
+    handlers.pickDirectory.mockResolvedValueOnce(null);
+    const none = await ask(REMOTE, "/api/native/pick-directory", {
+      method: "POST",
+      body: "{}",
+    });
+    expect(await none.json()).toEqual({ path: null });
+  });
+
+  it("needs the token like everything else", async () => {
+    start([REMOTE]);
+    const answer = await fetch(`${bridge.apiBase}/api/native/pick-directory`, {
+      method: "POST",
+      body: "{}",
+      headers: { origin: REMOTE },
+    });
+    expect(answer.status).toBe(401);
   });
 });

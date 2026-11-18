@@ -36,9 +36,11 @@ import { BASELINE_CAPABILITIES } from "@eta/client-contracts/desktop";
  * from.
  */
 export function capabilities(updates: boolean): readonly DesktopCapability[] {
-  return updates
-    ? [...BASELINE_CAPABILITIES, "shell-update"]
-    : BASELINE_CAPABILITIES;
+  return [
+    ...BASELINE_CAPABILITIES,
+    "pick-directory",
+    ...(updates ? (["shell-update"] as const) : []),
+  ];
 }
 
 /** What the page may ask the app's own update to do; each is a press of a button. */
@@ -61,6 +63,8 @@ interface NativeHandlers {
     filename: string;
     content: string;
   }) => Promise<string | null>;
+  /** One folder, from the system's folder dialog; `null` when the user chose none. */
+  pickDirectory: () => Promise<string | null>;
   /** Hand a URL to the system browser; the window itself never navigates away. */
   openExternal: (input: { url: string }) => void;
   contextMenu: (input: { items: readonly NativeMenuItem[] }) => void;
@@ -231,6 +235,8 @@ export function startNativeBridge(options: NativeBridgeOptions): NativeBridge {
             path: await handlers.saveFile({ content, filename }),
           });
         }
+        if (path === "/api/native/pick-directory")
+          return json({ path: await handlers.pickDirectory() });
         if (path === "/api/native/open-external") {
           if (url === undefined)
             return new Response("native_request_invalid", {

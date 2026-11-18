@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { folderDialog } from "@/lib/native";
 import { folderName, projectPlace } from "@/lib/projects";
 import { useConversationActions } from "@/queries/conversations";
 import { placesCall } from "@/queries/places";
@@ -203,6 +204,8 @@ function NewConversationForm({
   // Where the flow ends: the directory, and the project it already is when it is one.
   const flow = usePlaceFlow({
     machineId: within?.machineId,
+    // On the desktop, browsing the host's own machine is the system's folder dialog.
+    nativeBrowse: folderDialog(),
     onChoose: (choice) => {
       const where: Target = {
         ...choice,

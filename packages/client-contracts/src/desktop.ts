@@ -31,10 +31,14 @@ export const BASELINE_CAPABILITIES = [
  * A capability a page may ask the app for. New ones are added here and never renamed:
  * - `shell-update`: the app updates itself, by hand (`ShellUpdateView`). Only an app built with an
  *   update address has it.
+ * - `pick-directory`: the system's folder dialog, one folder, on this computer
+ *   (`POST /api/native/pick-directory` answers `{ path }`, null when nothing was chosen). Only
+ *   worth asking for the host's own machine: a remote one's folders are not on this computer.
  */
 export type DesktopCapability =
   | (typeof BASELINE_CAPABILITIES)[number]
-  | "shell-update";
+  | "shell-update"
+  | "pick-directory";
 
 /** Where the app's own update has got to. Nothing here happens unless the user asks. */
 export type ShellUpdateState =

@@ -148,6 +148,7 @@ describe("relaying a call", () => {
       platform: "linux",
       handlers: {
         saveFile: async () => null,
+        pickDirectory: async () => null,
         openExternal: () => {},
         contextMenu: () => {},
         windowAction: () => {},
