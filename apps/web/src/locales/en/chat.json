@@ -203,7 +203,13 @@
       "unavailable": "It could not run.",
       "gone": "This member is no longer in the conversation."
     },
-    "queued": "Waiting"
+    "queued": "Waiting",
+    "stopCodes": {
+      "unanswered": "It did not stop when asked, so it was stopped here.",
+      "unreachable": "Could not tell it to stop ({{error}}), so it was stopped here.",
+      "linkLost": "The link to its machine was lost, so it was stopped here.",
+      "restart": "The host restarted while it was stopping, so it was stopped here."
+    }
   },
   "actions": {
     "withdraw": "Withdraw",

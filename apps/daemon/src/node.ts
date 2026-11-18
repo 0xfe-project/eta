@@ -22,6 +22,7 @@ import type {
   MachineActionResults,
   OpenSessionArgs,
   Redaction,
+  RunOutcome,
   ToolSpec,
 } from "@eta/client-contracts";
 import type { CallFrame, ServerFrame } from "@eta/client-wire-proto";
@@ -31,6 +32,7 @@ import type { McpManagerOptions } from "@eta/mcp";
 import type { AcpRuntimes } from "@eta/runtime-acp";
 import type {
   ListedRuntimes,
+  ManagedSession,
   SessionMeta,
   SessionsService,
   Socket,
@@ -363,7 +365,7 @@ export class DaemonNode {
     this.#current = { socket, connection };
     // The things that can take a while are not pipe calls, which a connection applies one at a
     // time: they are calls of their own, and a stop on the pipe can overtake them.
-    peer.handle("run", async (raw, { emit }) => {
+    peer.handle("run", async (raw, { emit, signal }) => {
       const {
         session,
         text,
@@ -371,27 +373,14 @@ export class DaemonNode {
         activity: wantsActivity,
       } = raw as DaemonServiceParams["run"];
       const { managed } = await this.#service().open(session);
-      if (wantsActivity !== true)
-        return await runAndWait(managed, text, undefined, images);
-      const on = kernelOn(managed.session.kernel.ctx);
-      const activity = (kind: DaemonRunEvent["kind"]): void => {
-        try {
-          emit({ kind });
-        } catch {
-          // The run keeps going if a dying link can no longer carry its liveness signal.
-        }
-      };
-      const offs = [
-        on("tool:start", () => activity("tool-start")),
-        on("tool:update", () => activity("tool-update")),
-        on("tool:end", () => activity("tool-end")),
-        on("message:start", () => activity("message")),
-        on("message:end", () => activity("message")),
-      ];
+      // Nobody waits for the run any more (the primary cancelled the call, or the link is gone and
+      // the primary has ended its reply): it stops, rather than going on for no one.
+      const stop = (): void => managed.session.runner.abort();
+      signal.addEventListener("abort", stop, { once: true });
       try {
-        return await runAndWait(managed, text, undefined, images);
+        return await this.#run(managed, text, images, wantsActivity, emit);
       } finally {
-        for (const off of offs) off();
+        signal.removeEventListener("abort", stop);
       }
     });
     peer.handle("exec", async (raw, { signal }) => {
@@ -468,6 +457,38 @@ export class DaemonNode {
     await this.#manager.closeAll();
     await this.#mcp.close();
     await this.#store.close();
+  }
+
+  /** One run the primary asked for, with its liveness told back when it wants that. */
+  async #run(
+    managed: ManagedSession,
+    text: string,
+    images: DaemonServiceParams["run"]["images"],
+    wantsActivity: boolean | undefined,
+    emit: (event: unknown) => void,
+  ): Promise<RunOutcome> {
+    if (wantsActivity !== true)
+      return await runAndWait(managed, text, undefined, images);
+    const on = kernelOn(managed.session.kernel.ctx);
+    const activity = (kind: DaemonRunEvent["kind"]): void => {
+      try {
+        emit({ kind });
+      } catch {
+        // The run keeps going if a dying link can no longer carry its liveness signal.
+      }
+    };
+    const offs = [
+      on("tool:start", () => activity("tool-start")),
+      on("tool:update", () => activity("tool-update")),
+      on("tool:end", () => activity("tool-end")),
+      on("message:start", () => activity("message")),
+      on("message:end", () => activity("message")),
+    ];
+    try {
+      return await runAndWait(managed, text, undefined, images);
+    } finally {
+      for (const off of offs) off();
+    }
   }
 
   #openingOf(meta: SessionMeta): Opening | undefined {

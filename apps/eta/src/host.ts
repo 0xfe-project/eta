@@ -21,6 +21,7 @@ import type { SshRunner } from "./machines/install";
 import type {
   McpTuning,
   Product,
+  RepliesOptions,
   RoutinesOptions,
   TasksOptions,
 } from "./product";
@@ -106,6 +107,8 @@ export interface HostOptions {
   routines?: RoutinesOptions;
   /** Whether tasks run; a test that is about the board and not the runs turns them off. */
   tasks?: TasksOptions;
+  /** How long a stopped reply waits for its run; a test shortens it. */
+  replies?: RepliesOptions;
   /** Whether this host starts El Capitan. Tests that are not about Captain leave it off. */
   captain?: boolean;
   /**
@@ -210,6 +213,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       warn,
       ...(options.routines === undefined ? {} : { routines: options.routines }),
       ...(options.tasks === undefined ? {} : { tasks: options.tasks }),
+      ...(options.replies === undefined ? {} : { replies: options.replies }),
       ...(options.captain === undefined ? {} : { captain: options.captain }),
       artifactLimits: options.artifactLimits,
       memoryUrl: options.memoryUrl,

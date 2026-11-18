@@ -47,6 +47,11 @@ export interface SessionHandle {
   ) => Promise<RunOutcome>;
   /** Ask the run in flight to stop. */
   abort: () => void;
+  /**
+   * Ask the run in flight to stop, and say whether the asking got there: rejects, with why, when
+   * the session's machine could not be told. It does not wait for the run to end.
+   */
+  stop: () => Promise<void>;
   /** Observe run activity while a caller needs liveness evidence. */
   onActivity?: (listener: (kind: DaemonRunEvent["kind"]) => void) => () => void;
 }
@@ -88,6 +93,10 @@ export interface SessionPlace {
     machine: MachineRecord,
     settings: SessionSettings,
   ) => Promise<void>;
+  /** A machine of this place went out of reach, and why: whatever ran there is lost to us. */
+  onLost?: (
+    listener: (machineId: string, reason: string) => void,
+  ) => () => void;
 }
 
 /** The settings of an agent that its sessions carry as their own. */
@@ -150,6 +159,11 @@ class LocalHandle implements SessionHandle {
 
   abort(): void {
     this.#managed.session.runner.abort();
+  }
+
+  stop(): Promise<void> {
+    this.abort();
+    return Promise.resolve();
   }
 
   onActivity(listener: (kind: DaemonRunEvent["kind"]) => void): () => void {

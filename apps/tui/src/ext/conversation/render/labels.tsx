@@ -40,6 +40,14 @@ const FAILURE_REASONS: Readonly<Record<string, RenderMessageKey>> = {
   gone: "failedGone",
 };
 
+/** Why a reply was stopped without its run, as the host marks it. */
+const STOP_REASONS: Readonly<Record<string, RenderMessageKey>> = {
+  stop_unanswered: "stoppedUnanswered",
+  stop_unreachable: "stoppedUnreachable",
+  link_lost: "stoppedLinkLost",
+  restart: "stoppedRestart",
+};
+
 /** How a reply ended when its text does not say: stopped, failed, or an error inside the run. */
 export function drawOutcome(
   item: OutcomeItem,
@@ -57,7 +65,15 @@ export function drawOutcome(
 }
 
 function outcomeWords(item: OutcomeItem, t: DrawContext["t"]): string {
-  if (item.outcome === "stopped") return t("stopped");
+  if (item.outcome === "stopped") {
+    const code = item.code ?? "";
+    const reason = Object.hasOwn(STOP_REASONS, code)
+      ? STOP_REASONS[code]
+      : undefined;
+    return reason === undefined
+      ? t("stopped")
+      : `${t("stopped")} · ${t(reason, { error: item.text })}`;
+  }
   if (item.outcome === "run-error")
     return `✗ ${item.text === "" ? t("runError") : item.text}`;
   const code = item.code ?? "";

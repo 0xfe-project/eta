@@ -85,6 +85,8 @@ export type TranscriptItem =
   /**
    * How a reply ended when the text does not say it: stopped, or failed with the host's `code`
    * (`restart`, `run_failed`, `unavailable`, `gone`, or one this TUI does not know) and its words.
+   * A reply stopped without its run has the host's reason as `code` (`stop_unanswered`, …) and,
+   * when its machine could not be told, why not as `text`.
    * `run-error` is a turn inside a running reply that ended on an error.
    */
   | {

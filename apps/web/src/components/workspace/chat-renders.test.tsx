@@ -419,6 +419,36 @@ describe("what the timeline says besides words", () => {
     });
   });
 
+  it("says why a stopped reply was stopped without its run", async () => {
+    const user = row({ text: "停下" });
+    const stopped = (data: Record<string, unknown>) =>
+      row({
+        author: "agent",
+        agentId: AGENT,
+        replyToId: user.id,
+        status: "stopped",
+        text: "",
+        data,
+      });
+    history = [
+      user,
+      stopped({ code: "stop_unanswered" }),
+      stopped({ code: "stop_unreachable", stopError: "no such session" }),
+      stopped({ code: "link_lost" }),
+      stopped({}),
+    ];
+    const { container } = await start();
+    await flush();
+    const text = container.textContent ?? "";
+    expect(text).toContain("已停止 · 它没有响应停止，已在这边停止。");
+    expect(text).toContain(
+      "已停止 · 没能通知它停下（no such session），已在这边停止。",
+    );
+    expect(text).toContain("已停止 · 和它所在机器的连接断了，已在这边停止。");
+    // A reply its run stopped says no more than that.
+    expect(text.split("已停止").length - 1).toBe(4);
+  });
+
   it("says a restart once for replies that all failed that way", async () => {
     const user = row({ text: "一起问" });
     const restart = (text: string) =>

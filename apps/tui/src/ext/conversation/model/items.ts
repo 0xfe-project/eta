@@ -255,8 +255,9 @@ function finishedItems(row: MessageView): TranscriptItem[] {
       kind: "outcome",
       key: `${row.id}:outcome`,
       outcome: "stopped",
-      code: undefined,
-      text: "",
+      // Why it was stopped without its run, when it was (`stop_unanswered`, `link_lost`, …).
+      code: typeof row.data.code === "string" ? row.data.code : undefined,
+      text: typeof row.data.stopError === "string" ? row.data.stopError : "",
     });
   else if (row.status === "failed")
     items.push({
