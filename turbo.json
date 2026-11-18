@@ -6,7 +6,7 @@
   // authenticates itself (`turbo login`; CI exchanges its OIDC token).
   "remoteCache": { "teamId": "team_m0cGPvm66wsuOjDpnCrXUDPz" },
   "cacheMaxAge": "7d",
-  "cacheMaxSize": "2GB",
+  "cacheMaxSize": "10GB",
   // --affected stays package-level (affectedUsingTaskInputs off): the libraries
   // are read from source, so a change must reach every dependent package.
   "futureFlags": {
@@ -47,6 +47,14 @@
       "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
       "dependsOn": ["build", "^build"],
       "outputs": []
+    },
+    // The pre-commit's tests: only those that import an uncommitted change (`vitest --changed
+    // HEAD`), the whole suite when a config or package.json changed. Which tests that is depends
+    // on the working tree, not on the package's files, so nothing is cached. `bun run check` and
+    // CI run `test`.
+    "test:changed": {
+      "cache": false,
+      "dependsOn": ["build", "^build"]
     },
     // The root package's files are the whole repository; ESLint lints those outside
     // the workspaces (each workspace lints itself), knip all of it.

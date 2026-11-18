@@ -5,6 +5,7 @@
   "scripts": {
     "build": "rm -rf out/models && FASTEMBED_CACHE_PATH=out/models uv run python -m axp_memory.embedding",
     "lint": "uv run ruff check .",
-    "test": "uv run pytest"
+    "test": "uv run pytest",
+    "test:changed": "uv run pytest"
   }
 }
