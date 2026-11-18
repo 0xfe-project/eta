@@ -9,7 +9,8 @@
     "preview": "vite preview --port 3000",
     "typecheck": "bun check",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
-    "test": "vitest --run --passWithNoTests"
+    "test": "vitest --run --passWithNoTests",
+    "test:changed": "vitest --run --passWithNoTests --changed HEAD"
   },
   "dependencies": {
     "@blobatar/react": "^2.7.0",

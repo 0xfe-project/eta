@@ -9,6 +9,7 @@
     "start": "hutch run start",
     "typecheck": "electrobun prepare && tsc --noEmit",
     "test": "bun --bun vitest --run",
+    "test:changed": "bun --bun vitest --run --passWithNoTests --changed HEAD",
     "//": "Not `build`: turbo would run it, and a distributable app is not part of a source build.",
     "package": "hutch run build"
   },

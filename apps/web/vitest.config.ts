@@ -1,6 +1,7 @@
 import type { Plugin } from "vite";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import { forceRerunTriggers } from "../../vitest.shared.ts";
 
 // Not vite.config.ts: the tests need none of its plugins (the router plugin writes
 // routeTree.gen.ts, Tailwind, the React Compiler), and its config reads the environment.
@@ -29,6 +30,7 @@ export default defineConfig({
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
   test: {
+    forceRerunTriggers,
     include: ["src/**/*.test.{ts,tsx}"],
     environment: "happy-dom",
     setupFiles: ["./src/test-setup.ts"],

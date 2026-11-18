@@ -13,7 +13,8 @@
     "build:all": "bun scripts/build.ts --all",
     "typecheck": "bun check",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
-    "test": "bun --bun vitest --run --passWithNoTests"
+    "test": "bun --bun vitest --run --passWithNoTests",
+    "test:changed": "bun --bun vitest --run --passWithNoTests --changed HEAD"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.85.1",

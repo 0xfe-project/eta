@@ -8,7 +8,12 @@
 # 2. dprint formats the staged files and re-stages them.
 # 3. Turbo builds, typechecks, lints, tests and checks the repository for
 #    dead code (knip), only for what changed since HEAD (--affected);
-#    unchanged tasks come from the cache.
+#    unchanged tasks come from the cache. Of a changed package's tests it runs
+#    only those that import a changed file (test:changed, `vitest --changed`),
+#    all of them when a config or package.json changed.
+#
+# Committing runs only the related tests; the full test suite runs in
+# `bun run check`, `check:affected` and CI.
 assert_lefthook_installed: true
 rc: ./scripts/lefthook-rc.sh
 
@@ -36,4 +41,4 @@ pre-commit:
     - name: verify
       env:
         TURBO_SCM_BASE: HEAD
-      run: bunx turbo run build typecheck lint lint:repo test knip --affected --output-logs=errors-only
+      run: bunx turbo run build typecheck lint lint:repo test:changed knip --affected --output-logs=errors-only

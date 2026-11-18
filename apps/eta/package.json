@@ -13,7 +13,8 @@
     "start": "bun src/main.ts",
     "typecheck": "bun check",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
-    "test": "bun --bun vitest --run --passWithNoTests"
+    "test": "bun --bun vitest --run --passWithNoTests",
+    "test:changed": "bun --bun vitest --run --passWithNoTests --changed HEAD"
   },
   "dependencies": {
     "@cpajs/codex-auth": "0.1.0-rc.9",

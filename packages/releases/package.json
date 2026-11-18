@@ -12,6 +12,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "test": "bun --bun vitest --run --passWithNoTests",
+    "test:changed": "bun --bun vitest --run --passWithNoTests --changed HEAD",
     "typecheck": "bun check",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
   },

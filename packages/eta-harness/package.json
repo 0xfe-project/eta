@@ -13,6 +13,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "test": "NODE_OPTIONS=--experimental-vm-modules vitest --run --passWithNoTests",
+    "test:changed": "NODE_OPTIONS=--experimental-vm-modules vitest --run --passWithNoTests --changed HEAD",
     "typecheck": "bun check",
     "smoke": "ETA_SMOKE_CONFIG=\"${ETA_SMOKE_CONFIG:-$HOME/.eta/config.json}\" vitest --run test/smoke.e2e.test.ts test/session.e2e.test.ts",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
