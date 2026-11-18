@@ -42,7 +42,7 @@ interface Base {
 
 export type FlowPage =
   | ({ kind: "machine"; query: string } & Base)
-  | ({ kind: "method"; machineId: string } & Base)
+  | ({ kind: "method"; machineId: string; query: string } & Base)
   | ({ kind: "search"; machineId: string; query: string } & Base)
   | ({
       kind: "browse";
@@ -104,9 +104,7 @@ export function pageKey(page: FlowPage): string {
 function withDraft(state: FlowState, page: FlowPage): FlowPage {
   const draft = state.drafts[pageKey(page)];
   if (draft === undefined) return page;
-  return "query" in page
-    ? { ...page, query: draft.query, activeIndex: draft.activeIndex }
-    : { ...page, activeIndex: draft.activeIndex };
+  return { ...page, query: draft.query, activeIndex: draft.activeIndex };
 }
 
 function push(state: FlowState, page: FlowPage): FlowState {
@@ -127,7 +125,7 @@ export function machineClosed(
 }
 
 function methodPage(machineId: string): FlowPage {
-  return { kind: "method", machineId, ...base };
+  return { kind: "method", machineId, query: "", ...base };
 }
 
 /**
@@ -208,7 +206,7 @@ function updateCurrent(
     drafts: {
       ...state.drafts,
       [pageKey(page)]: {
-        query: "query" in page ? page.query : "",
+        query: page.query,
         activeIndex: page.activeIndex,
       },
     },
@@ -217,9 +215,12 @@ function updateCurrent(
 
 /** What is in the box changed: the list starts over at its top, and the last error is gone. */
 export function setQuery(state: FlowState, query: string): FlowState {
-  return updateCurrent(state, (page) =>
-    "query" in page ? { ...page, query, activeIndex: 0, error: null } : page,
-  );
+  return updateCurrent(state, (page) => ({
+    ...page,
+    query,
+    activeIndex: 0,
+    error: null,
+  }));
 }
 
 export function setActive(state: FlowState, activeIndex: number): FlowState {

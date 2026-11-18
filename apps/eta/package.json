@@ -26,6 +26,7 @@
     "@eta/daemon": "*",
     "@eta/harness": "*",
     "@eta/mcp": "*",
+    "@eta/places": "*",
     "@eta/releases": "*",
     "@eta/runtime-acp": "*",
     "@eta/runtime-oar": "*",

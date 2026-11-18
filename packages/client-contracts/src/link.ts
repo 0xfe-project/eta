@@ -143,8 +143,6 @@ export interface MachineFacts {
  */
 export interface MachineActionArgs {
   info: Record<string, never>;
-  /** Is this an existing directory on the machine? */
-  stat: { path: string };
   /**
    * Bring the session of one agent in a conversation in line with the agent, creating it when
    * `session` is not given. The agent's words, the tools it has and the model it uses are the
@@ -166,7 +164,6 @@ export interface MachineActionArgs {
 }
 export interface MachineActionResults {
   info: MachineFacts;
-  stat: { ok: true } | { ok: false; reason: string };
   open: { session: string };
   catalog: Record<string, never>;
   config: { model: string | undefined; thinkingLevel: string };

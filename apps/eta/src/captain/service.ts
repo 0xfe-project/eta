@@ -93,8 +93,11 @@ export interface CaptainServiceDeps {
   runner: TaskRunner;
   changed: (conversationIds?: readonly string[]) => void;
   warn: (message: string) => void;
-  /** Whether a path is a directory on the machine; throws saying why not (`projects/check.ts`). */
-  checkDirectory: (machine: MachineRecord, path: string) => Promise<void>;
+  /** A typed path by the machine's own rules, and what is there (`places/on-machine.ts`). */
+  resolvePath: (
+    machine: MachineRecord,
+    raw: string,
+  ) => Promise<{ path: string; exists: boolean; directory: boolean }>;
   /** The routines Captain runs, proposes and changes. */
   routines?: RoutineService | undefined;
 }

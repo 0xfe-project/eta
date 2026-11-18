@@ -76,3 +76,20 @@ export function buildSuggestions<T extends PlaceRef>(input: {
   );
   return listed ? out : [{ kind: "typed", path: query }, ...out];
 }
+
+/**
+ * The directories the recent places are in, each once, most recent first: where a clone or a new
+ * directory is likely to go, as Paseo offers the parents of its projects.
+ */
+export function parentsOf(
+  places: readonly { parent: PlaceRef | null }[],
+): PlaceRef[] {
+  const seen = new Set<string>();
+  const out: PlaceRef[] = [];
+  for (const { parent } of places) {
+    if (parent === null || seen.has(parent.path)) continue;
+    seen.add(parent.path);
+    out.push(parent);
+  }
+  return out;
+}

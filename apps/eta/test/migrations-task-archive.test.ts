@@ -20,7 +20,8 @@ import { tempDir } from "./support/host";
 
 const NEWEST = "0054-task-archive";
 
-const ALL = loadMigrations();
+// The migrations as far as 0054: what came after it is not this test's business.
+const ALL = loadMigrations().filter((migration) => migration.id <= NEWEST);
 /** What a v0.3.0 host ran, in order. */
 const BEFORE_0054 = ALL.filter((migration) => migration.id < NEWEST);
 /** What a host that ran 0054 had: later migrations are their own tests' business. */

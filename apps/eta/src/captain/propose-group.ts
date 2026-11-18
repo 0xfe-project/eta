@@ -13,7 +13,6 @@ import type { Timeline } from "../conversations/timeline";
 import type { MachineRecord, MachineStore } from "../machines/store";
 import type { ProjectRecord, ProjectStore } from "../projects/store";
 import type { ProposalKind, ProposalOrigin } from "./proposals";
-import { basename, isAbsolute, resolve } from "node:path";
 import { isAgentHome } from "../agents/home";
 import { createGroup, groupNamed } from "../conversations/groups";
 
@@ -55,7 +54,11 @@ export interface GroupProposalDeps {
   created?: ((conversationId: string) => void) | undefined;
   changed: (conversationIds?: readonly string[]) => void;
   /** Whether a path is a directory on the machine; throws saying why not (`projects/check.ts`). */
-  checkDirectory: (machine: MachineRecord, path: string) => Promise<void>;
+  /** A typed path by the machine's own rules, and what is there (`places/on-machine.ts`). */
+  resolvePath: (
+    machine: MachineRecord,
+    raw: string,
+  ) => Promise<{ path: string; exists: boolean; directory: boolean }>;
   captainId: () => string | undefined;
 }
 
@@ -86,15 +89,15 @@ export function groupProposals(
     const machine =
       machineId === undefined ? undefined : deps.machines.get(machineId);
     if (machine === undefined) throw new Error("no such machine");
-    if (!isAbsolute(input.path!))
-      throw new Error(`the path must be absolute: ${input.path}`);
-    const path = resolve(input.path!);
+    const found = await deps.resolvePath(machine, input.path!);
+    const path = found.path;
     // A directory that is a project already is that project, the way adding it again is.
     const project = deps.projects.byPath(machine.id, path);
     if (project === undefined) {
       if (machine.kind === "primary" && isAgentHome(deps, path))
         throw new Error(`${path} is an agent's own workspace`);
-      await deps.checkDirectory(machine, path);
+      if (!found.exists) throw new Error(`no such directory: ${path}`);
+      if (!found.directory) throw new Error(`not a directory: ${path}`);
     }
     return { project, machine, path };
   };
@@ -199,5 +202,5 @@ export function groupProposals(
 
 /** What a directory that becomes a project is called: its last segment. */
 function projectNameOf(path: string): string {
-  return basename(path) || path;
+  return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
 }

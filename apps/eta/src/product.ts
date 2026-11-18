@@ -9,6 +9,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
  */
 import type { AgentRuntimeInfo, RoutinesStatus } from "@eta/client-contracts";
 import type { McpHostOptions } from "@eta/daemon";
+import type { Places } from "@eta/places";
 import type { AcpRuntimes } from "@eta/runtime-acp";
 import type {
   AssembledServer,
@@ -81,10 +82,12 @@ import { McpService } from "./mcp/service";
 import { MemoryClient } from "./memory/client";
 import { memoryRunHooks, memoryTools } from "./memory/hooks";
 import { memoryPlugin } from "./memory/plugin";
+import { MachinePlaces, wireFailure } from "./places/on-machine";
+import { placesPlugin } from "./places/plugin";
+import { PlaceStore } from "./places/store";
 import { pluginsPlugin } from "./plugins/plugin";
 import { Plugins } from "./plugins/service";
 import { pluginSessionTools } from "./plugins/tools";
-import { checkDirectory } from "./projects/check";
 import { projectsPlugin } from "./projects/plugin";
 import { ProjectStore } from "./projects/store";
 import { routinesPlugin } from "./routines/plugin";
@@ -200,6 +203,8 @@ export function createProduct(options: {
   hostname?: string | undefined;
   /** The agent's home, where the user's own persona cards are. Defaults to the real one. */
   home?: string | undefined;
+  /** The primary's directories (`@eta/places`); a test hands in one with a home of its own. */
+  places?: Places | undefined;
   routines?: RoutinesOptions;
   tasks?: TasksOptions;
   /** Whether this product starts Captain; tests that are not about Captain leave it off. */
@@ -280,6 +285,7 @@ export function createProduct(options: {
       "conversations",
       "plugins",
       "mcp",
+      "places",
     ])
       wire.pushNow(target);
     // Captain's identity, pauses, operations, settings and assignment summaries are product
@@ -412,6 +418,7 @@ export function createProduct(options: {
     plugins?: Plugins;
     mcp?: McpService;
   } = {};
+  const placeStore = new PlaceStore(db);
   const hub = new MachineHub({
     machines,
     changed: () => {
@@ -469,6 +476,10 @@ export function createProduct(options: {
         generated,
         warn,
       }),
+  });
+  const onMachine = new MachinePlaces({
+    hub,
+    ...(options.places === undefined ? {} : { local: options.places }),
   });
   const mirrors = new SessionMirrors(hub, (id) => machines.get(id)?.name);
   const secretKey = loadSecretKey(dataDir);
@@ -662,7 +673,13 @@ export function createProduct(options: {
     runner: taskRunner,
     changed,
     warn,
-    checkDirectory: (machine, path) => checkDirectory(machine, hub, path),
+    resolvePath: async (machine, raw) => {
+      try {
+        return await onMachine.ask(machine, { op: "resolve", path: raw });
+      } catch (error) {
+        throw wireFailure(error, raw);
+      }
+    },
     routines: routineService,
   });
   made.captain = captain;
@@ -927,6 +944,7 @@ export function createProduct(options: {
         "agents",
         "machines",
         "projects",
+        "places",
         "conversations",
         ...(captainOn ? ["captain"] : []),
         "routines",
@@ -1024,7 +1042,23 @@ export function createProduct(options: {
       );
       server.mount(
         "projects",
-        projectsPlugin({ ...shared, hub, changed }, applied("projects")),
+        projectsPlugin(
+          { ...shared, hub, places: placeStore, onMachine, changed },
+          applied("projects"),
+        ),
+      );
+      server.mount(
+        "places",
+        placesPlugin(
+          {
+            machines,
+            projects,
+            places: placeStore,
+            onMachine,
+            changed: () => wire?.pushNow("places"),
+          },
+          applied("places"),
+        ),
       );
       server.mount(
         "conversations",

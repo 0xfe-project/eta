@@ -111,6 +111,11 @@ export interface ProjectView {
   machineId: string;
   /** Absolute, and unique per machine. */
   path: string;
+  /**
+   * The path as its machine writes it for a person: `~/Developer/eta` under the machine's home,
+   * `~\code\eta` on Windows, the path itself elsewhere. Clients show it as it is.
+   */
+  display: string;
   name: string;
   kind: ProjectKind;
   /** The agent whose own workspace this is: set on an `agent_home`, null on any other project. */
