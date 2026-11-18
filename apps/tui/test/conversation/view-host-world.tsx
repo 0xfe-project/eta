@@ -1,3 +1,4 @@
+import type { HostOptions } from "@eta/app/src/host";
 /**
  * A real host in this process, the TUI's own wire to it, and the whole interface drawn in memory
  * on that wire: what the conversation view and its commands are tested on. The host makes the
@@ -73,9 +74,14 @@ export const KEY = {
  */
 export const WITHOUT_SETUP = ["setup"];
 
-export async function hostWorld(respond: Respond) {
+export async function hostWorld(
+  respond: Respond,
+  overrides: Partial<HostOptions> = {},
+) {
   const { models, requests } = scriptedModels(respond);
-  const host = await testHost({ overrides: { models: models as never } });
+  const host = await testHost({
+    overrides: { models: models as never, ...overrides },
+  });
   const raw = new Wire({ url: wireUrl(baseUrl(host)) });
   cleanups.push(() => raw.close());
   raw.connect();

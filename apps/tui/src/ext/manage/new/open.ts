@@ -8,7 +8,10 @@ import { NewConversationLayer } from "./layer";
 
 /** The ops `/new` calls. */
 export const NEW_CONVERSATION_OPS = [
-  "projects.directories",
+  "places.capabilities",
+  "places.search",
+  "places.list",
+  "places.resolve",
   "projects.create",
   "conversations.create",
 ] as const;

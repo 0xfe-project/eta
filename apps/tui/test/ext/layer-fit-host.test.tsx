@@ -184,14 +184,19 @@ describe("/new on a 60×9 terminal", () => {
     await r.runCommand("/new");
     await r.waitFor("New conversation");
     await r.settle();
-    expect(r.screen()).toMatch(/› /);
+    // Into searching, where the projects are the rows; the box's own `›` is not the cursor.
+    await r.press(KEYS.enter);
+    await r.waitFor("eta-tui-gate-");
+    await r.settle();
+    const cursorOnRow = /› \S*eta-tui-gate-/;
+    expect(r.screen()).toMatch(cursorOnRow);
     await r.press("\u001B[5~");
     await r.settle();
-    expect(r.screen()).not.toMatch(/› /);
+    expect(r.screen()).not.toMatch(cursorOnRow);
     await r.press(KEYS.enter);
     await r.settle();
     expect(r.screen()).not.toContain("Started");
-    expect(r.screen()).toMatch(/› /);
+    expect(r.screen()).toMatch(cursorOnRow);
     await r.press(KEYS.enter);
     await r.waitFor("Started");
   });
