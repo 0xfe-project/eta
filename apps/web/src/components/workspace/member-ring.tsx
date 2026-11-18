@@ -293,19 +293,22 @@ export function MemberContext({
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-64 gap-2 p-2.5">
-        <p className="text-muted-foreground tabular-nums">
-          {translateText("compactPanel.usage", {
-            used: tokens(used),
-            window: tokens(window),
-            percent,
-          })}
-          {" · "}
-          {compacted === undefined
-            ? translateText("compactPanel.never")
-            : translateText("compactPanel.lastCompacted", {
-                time: when(compacted),
-              })}
-        </p>
+        <div className="text-muted-foreground tabular-nums">
+          <p>
+            {translateText("compactPanel.usage", {
+              used: tokens(used),
+              window: tokens(window),
+              percent,
+            })}
+          </p>
+          <p>
+            {compacted === undefined
+              ? translateText("compactPanel.never")
+              : translateText("compactPanel.lastCompacted", {
+                  time: when(compacted),
+                })}
+          </p>
+        </div>
         <div>
           <Button
             type="button"
