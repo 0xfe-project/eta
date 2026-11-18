@@ -260,7 +260,11 @@ export class SessionsService extends Service implements SessionsApi {
   /** Queue an input, then let the harness pump decide that it starts a run. */
   async prompt(id: string, input: PromptInput): Promise<void> {
     const attached = await this.open(id);
-    const kernel = attached.managed.session.kernel;
+    const { kernel, runner } = attached.managed.session;
+    // Checked and enqueued in the same tick, on the machine that runs the session: no turn can
+    // end between the two.
+    if (input.ifRunning === true && !runner.running)
+      throw new Error(`session ${id} has no run to take the words`);
     const images = (input.images ?? []).map(toImageContent);
     const attachedImages = images.length === 0 ? undefined : images;
     // The mode is the inbox's kind: steering changes course at the next boundary, a queue
@@ -865,6 +869,9 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
               text: args.text,
               ...(args.mode === undefined ? {} : { mode: args.mode }),
               ...(args.images === undefined ? {} : { images: args.images }),
+              ...(args.ifRunning === undefined
+                ? {}
+                : { ifRunning: args.ifRunning }),
             });
             return { result: { session: args.session, queued: true } };
           }),

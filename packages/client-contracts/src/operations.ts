@@ -42,6 +42,13 @@ export interface PromptInput {
   text: string;
   mode?: "queue" | "steer" | undefined;
   images?: PromptImage[] | undefined;
+  /**
+   * Take the words only into a run in flight: on a session with no run the call fails and nothing
+   * is queued. Without it a steer into an idle session starts a run with the words. The session's
+   * own machine answers this, so a caller elsewhere (the primary, for a daemon's session) does not
+   * race the end of the turn with a check of its own.
+   */
+  ifRunning?: boolean | undefined;
 }
 
 /** The actions this target has. One list, so the wire and the plugin cannot disagree. */

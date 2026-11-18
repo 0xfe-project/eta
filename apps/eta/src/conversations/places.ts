@@ -27,7 +27,10 @@ export interface SessionHandle {
   readonly id: string;
   /** Whether a turn is in flight, which a steer can join. */
   readonly running: boolean;
-  /** Put words (and images) into the turn in flight; they arrive at its next boundary. */
+  /**
+   * Put words (and images) into the turn in flight; they arrive at its next boundary. Fails, with
+   * nothing queued, when the session itself has no run in flight: it never starts one.
+   */
   steer: (text: string, images?: PromptImage[]) => Promise<void>;
   /** The model the session runs on now, as `provider:modelId`; undefined when it cannot say. */
   model: () => Promise<string | undefined>;
@@ -122,6 +125,7 @@ class LocalHandle implements SessionHandle {
     return this.#sessions.prompt(this.id, {
       text,
       mode: "steer",
+      ifRunning: true,
       ...(images === undefined || images.length === 0 ? {} : { images }),
     });
   }
