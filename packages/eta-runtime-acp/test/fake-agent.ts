@@ -246,6 +246,45 @@ const app = acp
       await sleep(30);
       process.exit(7);
     }
+    if (asked.includes("listing")) {
+      // What the host's MCP server lists now, as an agent lists it again on `list_changed`.
+      let names = "no eta server";
+      if (stored.eta !== undefined) {
+        const response = await fetch(stored.eta.url, {
+          method: "POST",
+          headers: {
+            ...Object.fromEntries(
+              stored.eta.headers.map((h) => [h.name, h.value]),
+            ),
+            "content-type": "application/json",
+            accept: "application/json, text/event-stream",
+          },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+        });
+        const reply = (await response.json()) as {
+          result: {
+            tools: {
+              name: string;
+              description?: string;
+              inputSchema: { properties?: object };
+            }[];
+          };
+        };
+        names = reply.result.tools
+          .map((tool) =>
+            [
+              tool.name,
+              tool.description,
+              JSON.stringify(tool.inputSchema.properties ?? {}),
+            ]
+              .filter((part) => part !== undefined)
+              .join(" "),
+          )
+          .join(" | ");
+      }
+      await say(`tools: ${names}`);
+      return { stopReason: "end_turn" };
+    }
     if (asked.includes("state")) {
       await say(
         JSON.stringify({

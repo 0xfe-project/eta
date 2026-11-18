@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { kernelOn } from "@eta/core";
+import { listenServed } from "@eta/runtime-kit/testing";
 import { MemorySessionStore, SessionManager } from "@eta/server";
 import { afterEach, describe, expect, it } from "vitest";
 import { createAcpRuntimes } from "../src/index";
@@ -309,6 +310,69 @@ describe("the host's tools", () => {
       .find((message) => message.role === "toolResult");
     expect(result).toMatchObject({ isError: true });
     expect(JSON.stringify(result)).toContain("notes are closed");
+  });
+
+  it("are listed anew, with list_changed, when they change mid-session", async () => {
+    // A host tool whose definition changes under a running session (#177: a parameter added).
+    const state = { description: "pin a note", properties: {} as object };
+    const pin = {
+      name: "pin",
+      get description() {
+        return state.description;
+      },
+      get parameters() {
+        return { type: "object", properties: state.properties };
+      },
+      execute: () => ({ content: [{ type: "text", text: "pinned" }] }),
+    } as unknown as KernelTool;
+    const { manager, agent } = setup({}, { sessionTools: () => [note, pin] });
+    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    await run(managed, "listing");
+    expect(transcript(managed).at(-1)).toBe(
+      'assistant:tools: note write a note on the board {"text":{"type":"string"}} | pin pin a note {}',
+    );
+    const opened = agent
+      .log()
+      .find((entry) => entry.method === "session/new") as unknown as {
+      mcpServers: {
+        name: string;
+        url: string;
+        headers: { name: string; value: string }[];
+      }[];
+    };
+    const eta = opened.mcpServers.find((server) => server.name === "eta")!;
+    const stream = await listenServed({
+      url: eta.url,
+      headers: Object.fromEntries(eta.headers.map((h) => [h.name, h.value])),
+    });
+
+    // Nothing changed: nothing is said.
+    await run(managed, "listing");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(stream.heard).toEqual([]);
+
+    // A parameter is added on the host: the next run serves it and tells the agent.
+    state.properties = { at: { type: "string" } };
+    await run(managed, "listing");
+    expect(transcript(managed).at(-1)).toBe(
+      'assistant:tools: note write a note on the board {"text":{"type":"string"}} | pin pin a note {"at":{"type":"string"}}',
+    );
+    await until(() => stream.heard.length > 0);
+    expect(stream.heard).toEqual(["notifications/tools/list_changed"]);
+
+    // A description counts as much as a schema.
+    state.description = "pin a note, at a place";
+    await run(managed, "listing");
+    expect(transcript(managed).at(-1)).toContain("pin pin a note, at a place");
+    await until(() => stream.heard.length > 1);
+
+    // One process and one agent session throughout: the list changed, nothing was reopened.
+    const seen = agent.log().map((entry) => entry.method);
+    expect(seen.filter((method) => method === "started")).toHaveLength(1);
+    expect(
+      seen.filter((method) => /^session\/(?:new|resume|load)$/.test(method)),
+    ).toEqual(["session/new"]);
+    stream.close();
   });
 });
 

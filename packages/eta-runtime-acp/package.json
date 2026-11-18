@@ -18,9 +18,9 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "2.7.0",
-    "@botiverse/oar": "0.86.0",
     "@eta/client-contracts": "*",
     "@eta/core": "*",
+    "@eta/runtime-kit": "*",
     "@eta/server": "*",
     "zod": "4.6.7"
   },

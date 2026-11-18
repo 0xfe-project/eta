@@ -72,14 +72,12 @@ describe("an ACP agent's configuration", () => {
 describe("acp.json", () => {
   it("is read each time, written whole, and the user's alone to read", () => {
     const path = join(mkdtempSync(join(tmpdir(), "eta-acp-file-")), "acp.json");
-    const warnings: string[] = [];
-    const file = new AcpConfigFile(path, (message) => warnings.push(message));
+    const file = new AcpConfigFile(path);
     expect(file.read()).toEqual([]);
     file.write([agent]);
     expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ agents: [agent] });
     expect(statSync(path).mode & 0o777).toBe(0o600);
     expect(file.get("gemini")).toEqual(agent);
-    expect(warnings).toEqual([]);
   });
 
   it("that cannot be read whole is an error naming the file, never a shorter list", () => {

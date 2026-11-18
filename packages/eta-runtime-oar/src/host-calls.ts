@@ -21,9 +21,7 @@
  */
 import type { RawEvent, ToolOutputPart } from "@botiverse/oar";
 import type { RuntimeId } from "./catalog";
-
-/** The name the host's MCP server goes by: what runtimes build their spellings from. */
-export const HOST_SERVER = "eta";
+import { HOST_SERVER } from "@eta/runtime-kit";
 
 /** How a runtime spells a host tool in its events. Codex's events do not: see `see`. */
 const PREFIXES: Partial<Record<RuntimeId, string>> = {

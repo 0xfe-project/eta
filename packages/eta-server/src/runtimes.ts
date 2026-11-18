@@ -15,8 +15,6 @@ import type {
   SessionMcpServer,
 } from "@eta/client-contracts";
 import type { KernelConfig, KernelModels, RunDelegate } from "@eta/core";
-import type { AskPayload } from "@eta/core/session";
-import type { AskResponse } from "@eta/harness";
 
 export type { RuntimeCompaction };
 
@@ -54,22 +52,7 @@ export interface SessionRuntimeInput {
    * the turn already.
    */
   wake?: ((wanted: () => boolean) => void) | undefined;
-  /**
-   * Ask the user something through the session's own ask channel (a permission a runtime wants
-   * before it acts). The question is an ordinary one of the session's: it shows where the
-   * session's questions show, and it is answered the same way. Bound late, like `wake`: the
-   * runtime exists before the session does, and a question asked before the session is assembled,
-   * or on a host with no ask channel, settles as `none` (nobody answered).
-   */
-  ask?: SessionRuntimeAsk | undefined;
-  /** What the host says about this session beyond the above, in the runtime's own terms. */
-  settings?: Readonly<Record<string, unknown>> | undefined;
 }
-
-export type SessionRuntimeAsk = (
-  payload: AskPayload,
-  options?: { timeoutMs?: number; signal?: AbortSignal },
-) => Promise<AskResponse>;
 
 /** What a session on an external runtime gets from the host beyond its tools. */
 export interface RuntimeExtras {
@@ -77,8 +60,6 @@ export interface RuntimeExtras {
   skills?: string | undefined;
   mcpServers?: readonly SessionMcpServer[] | undefined;
   launchArgs?: readonly string[] | undefined;
-  /** Opaque values for the runtime (`SessionRuntimeInput.settings`). */
-  settings?: Readonly<Record<string, unknown>> | undefined;
 }
 
 export interface SessionRuntime {

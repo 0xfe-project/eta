@@ -47,7 +47,6 @@ export function createAcpRuntimes(
   const warn = options.warn ?? (() => undefined);
   const config = new AcpConfigFile(
     options.configPath ?? defaultAcpConfigPath(),
-    warn,
   );
   const catalog = new AcpCatalog({
     config,

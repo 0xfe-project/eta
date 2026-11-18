@@ -1,0 +1,29 @@
+{
+  "name": "@eta/runtime-kit",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "What eta's external-runtime adapters share: the host's tools, served to a runtime over MCP and kept current run by run.",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./test/support.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "bun --bun vitest --run --passWithNoTests",
+    "typecheck": "bun check",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
+  },
+  "dependencies": {
+    "@botiverse/oar": "0.86.0",
+    "@eta/core": "*"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.19",
+    "bun-types": "1.4.2",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}

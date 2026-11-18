@@ -292,14 +292,28 @@
       "version": "0.1.0",
       "dependencies": {
         "@agentclientprotocol/sdk": "2.7.0",
-        "@botiverse/oar": "0.86.0",
         "@eta/client-contracts": "*",
         "@eta/core": "*",
+        "@eta/runtime-kit": "*",
         "@eta/server": "*",
         "zod": "4.6.7",
       },
       "devDependencies": {
         "@eta/harness": "*",
+        "@types/node": "22.19.19",
+        "bun-types": "1.4.2",
+        "typescript": "5.9.3",
+        "vitest": "4.1.9",
+      },
+    },
+    "packages/eta-runtime-kit": {
+      "name": "@eta/runtime-kit",
+      "version": "0.1.0",
+      "dependencies": {
+        "@botiverse/oar": "0.86.0",
+        "@eta/core": "*",
+      },
+      "devDependencies": {
         "@types/node": "22.19.19",
         "bun-types": "1.4.2",
         "typescript": "5.9.3",
@@ -312,6 +326,7 @@
       "dependencies": {
         "@botiverse/oar": "0.86.0",
         "@eta/core": "*",
+        "@eta/runtime-kit": "*",
         "@eta/server": "*",
       },
       "devDependencies": {
@@ -681,6 +696,8 @@
     "@eta/releases": ["@eta/releases@workspace:packages/releases"],
 
     "@eta/runtime-acp": ["@eta/runtime-acp@workspace:packages/eta-runtime-acp"],
+
+    "@eta/runtime-kit": ["@eta/runtime-kit@workspace:packages/eta-runtime-kit"],
 
     "@eta/runtime-oar": ["@eta/runtime-oar@workspace:packages/eta-runtime-oar"],
 
