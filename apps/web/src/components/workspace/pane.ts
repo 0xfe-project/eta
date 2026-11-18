@@ -1,30 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * A column you can drag to size, and the line you drag.
+ * A pane you can drag to size, and the line you drag.
  *
  * BR1's rules for the line live in `styles.css` (`.pane-divider`): 1px at rest, 2px of
- * foreground under the pointer, a 6px hit target, `col-resize`, and — because the window's header
- * is one band across all three columns — the gutter paints that band and the rule under it too.
+ * foreground under the pointer, a 6px hit target, `col-resize` — or `row-resize` for a line across
+ * a column — and, for the columns, the window's header band painted through the gutter.
  *
- * What lives here is the state: the width, the drag, and remembering it. The width is kept in
- * `localStorage` rather than on the server because it is a property of this screen, not of the
- * person's work: the same conversation on a laptop and on a wide monitor should not fight over
- * one number.
+ * What lives here is the state: the size, the drag, and remembering it. Where it is remembered is
+ * the caller's: a column's width in its own `localStorage` key (`usePaneWidth`), the sidebar's
+ * agent shelf in the workspace state (`usePaneSize` with `saved`/`save`).
  */
-export interface PaneWidth {
-  width: number;
+export interface PaneSize {
+  /** The size in pixels, inside the bounds: a saved size is pulled in when the bounds shrink. */
+  size: number;
   /**
-   * Whether a width has been chosen here, by a drag now or a saved one. Until then `width` is the
+   * Whether a size has been chosen here, by a drag now or a saved one. Until then `size` is the
    * caller's `fallback`, and a caller whose default is the stylesheet's has nothing to write.
    */
   sized: boolean;
   dragging: boolean;
-  /** Spread on the divider: pointer capture, moves, release, and arrow keys. */
+  /** Spread on the divider: pointer capture, moves, release, arrow keys, and double-click. */
   dividerProps: React.HTMLAttributes<HTMLDivElement> & {
     role: "separator";
     tabIndex: 0;
-    "aria-orientation": "vertical";
+    "aria-orientation": "vertical" | "horizontal";
     "aria-valuenow": number;
     "aria-valuemin": number;
     "aria-valuemax": number;
@@ -32,42 +32,60 @@ export interface PaneWidth {
   };
 }
 
-export function usePaneWidth(options: {
-  storageKey: string;
+/** Which edge of the pane the divider is on. Dragging the edge away from the pane grows it. */
+export type PaneEdge = "left" | "right" | "top" | "bottom";
+
+export function usePaneSize(options: {
+  /** The remembered size; undefined until one has been chosen. */
+  saved: number | undefined;
+  /** Called once a size has landed (a drag ends, a key is pressed), or with undefined to forget it. */
+  save: (size: number | undefined) => void;
   min: number;
   max: number;
+  /** The size to show, and to start a drag from, while nothing is saved. */
   fallback: number;
-  /** Which edge the divider is on. Dragging left grows a right-hand pane. */
-  edge?: "left" | "right";
-}): PaneWidth {
-  const { storageKey, min, max, fallback } = options;
-  const grow = options.edge === "right" ? -1 : 1;
+  edge: PaneEdge;
+  /** Whether a double-click forgets the size and gives the pane back its default. */
+  resettable?: boolean;
+}): PaneSize {
+  const { saved, save, fallback, edge } = options;
+  // A column narrower than its floor still has the floor; the ceiling never goes under it.
+  const min = Math.round(options.min);
+  const max = Math.max(min, Math.round(options.max));
+  const vertical = edge === "top" || edge === "bottom";
+  // Moving the pointer right (or down) grows a pane whose divider is on its right (or bottom).
+  const grow = edge === "left" || edge === "top" ? -1 : 1;
   const clamp = useCallback(
     (value: number) => Math.min(max, Math.max(min, Math.round(value))),
     [min, max],
   );
-  const read = useCallback(() => {
-    try {
-      const stored = Number(localStorage.getItem(storageKey));
-      return Number.isFinite(stored) && stored > 0 ? clamp(stored) : undefined;
-    } catch {
-      return undefined;
-    }
-  }, [storageKey, clamp]);
 
-  const [chosen, setChosen] = useState(read);
-  // Read through on every render, not copied in once: `fallback` can move with the window.
-  const width = chosen ?? fallback;
-  const [dragging, setDragging] = useState(false);
-  const dragRef = useRef<{ startX: number; startWidth: number } | undefined>(
-    undefined,
-  );
+  // The drag's own copy, so the pane follows every pixel and only where it lands is saved.
+  const [draft, setDraft] = useState<number | undefined>(undefined);
+  const chosen = draft ?? saved;
+  // Read through on every render, not copied in once: `fallback` and the bounds move with the
+  // window.
+  const size = clamp(chosen ?? fallback);
+  const dragRef = useRef<
+    { start: number; startSize: number; landed: number | undefined } | undefined
+  >(undefined);
+  const saveRef = useRef(save);
+  saveRef.current = save;
+
+  // Saved when the drag ends, not on every pixel: the value that matters is where it landed.
+  // A press that never moved chose nothing, so it does not pin the default.
+  const land = useCallback(() => {
+    const current = dragRef.current;
+    if (current === undefined) return false;
+    dragRef.current = undefined;
+    if (current.landed !== undefined) saveRef.current(current.landed);
+    setDraft(undefined);
+    return true;
+  }, []);
 
   useEffect(() => {
     const stop = () => {
-      if (dragRef.current === undefined) return;
-      dragRef.current = undefined;
-      setDragging(false);
+      land();
     };
     window.addEventListener("pointerup", stop);
     window.addEventListener("pointercancel", stop);
@@ -75,41 +93,35 @@ export function usePaneWidth(options: {
       window.removeEventListener("pointerup", stop);
       window.removeEventListener("pointercancel", stop);
     };
-  }, []);
+  }, [land]);
 
-  // Saved when the drag ends, not on every pixel: the value that matters is where it landed.
-  const remember = useCallback(
-    (next: number) => {
-      try {
-        localStorage.setItem(storageKey, String(next));
-      } catch {
-        /* private mode */
-      }
-    },
-    [storageKey],
-  );
+  const back = vertical ? "ArrowUp" : "ArrowLeft";
+  const forward = vertical ? "ArrowDown" : "ArrowRight";
+  const at = (event: React.PointerEvent) =>
+    vertical ? event.clientY : event.clientX;
 
   return {
-    width,
+    size,
     sized: chosen !== undefined,
-    dragging,
+    dragging: draft !== undefined,
     dividerProps: {
       role: "separator",
-      "aria-orientation": "vertical",
-      "aria-valuenow": width,
+      // A separator's orientation is the line's: a line between two columns stands up.
+      "aria-orientation": vertical ? "horizontal" : "vertical",
+      "aria-valuenow": size,
       "aria-valuemin": min,
       "aria-valuemax": max,
-      "data-dragging": dragging,
+      "data-dragging": draft !== undefined,
       tabIndex: 0,
       // The keyboard's way to drag: arrows step 16px the way the pointer would move, Home and
       // End go to the ends. Each press lands, so each press is remembered.
       onKeyDown: (event) => {
         const step = 16;
         const next =
-          event.key === "ArrowLeft"
-            ? clamp(width - grow * step)
-            : event.key === "ArrowRight"
-              ? clamp(width + grow * step)
+          event.key === back
+            ? clamp(size - grow * step)
+            : event.key === forward
+              ? clamp(size + grow * step)
               : event.key === "Home"
                 ? min
                 : event.key === "End"
@@ -117,30 +129,85 @@ export function usePaneWidth(options: {
                   : undefined;
         if (next === undefined) return;
         event.preventDefault();
-        setChosen(next);
-        remember(next);
+        save(next);
       },
       onPointerDown: (event) => {
         if (event.button !== 0) return;
         event.currentTarget.setPointerCapture(event.pointerId);
-        dragRef.current = { startX: event.clientX, startWidth: width };
-        setDragging(true);
+        dragRef.current = {
+          start: at(event),
+          startSize: size,
+          landed: undefined,
+        };
       },
       onPointerMove: (event) => {
         const current = dragRef.current;
         if (current === undefined) return;
-        setChosen(
-          clamp(current.startWidth + grow * (event.clientX - current.startX)),
+        const next = clamp(
+          current.startSize + grow * (at(event) - current.start),
         );
+        current.landed = next;
+        setDraft(next);
       },
       onPointerUp: (event) => {
         if (dragRef.current === undefined) return;
         event.currentTarget.releasePointerCapture(event.pointerId);
-        dragRef.current = undefined;
-        setDragging(false);
-        // A press that never moved chose nothing, so it does not pin the default.
-        if (chosen !== undefined) remember(chosen);
+        land();
       },
+      ...(options.resettable === true
+        ? { onDoubleClick: () => save(undefined) }
+        : {}),
     },
   };
+}
+
+/** A column's width, remembered under its own `localStorage` key. */
+export interface PaneWidth extends PaneSize {
+  width: number;
+}
+
+/**
+ * The width is kept in `localStorage` rather than on the server because it is a property of this
+ * screen, not of the person's work: the same conversation on a laptop and on a wide monitor should
+ * not fight over one number.
+ */
+export function usePaneWidth(options: {
+  storageKey: string;
+  min: number;
+  max: number;
+  fallback: number;
+  /** Which side of the window the pane is on. Dragging left grows a right-hand pane. */
+  edge?: "left" | "right";
+}): PaneWidth {
+  const { storageKey } = options;
+  const [saved, setSaved] = useState(() => {
+    try {
+      const stored = Number(localStorage.getItem(storageKey));
+      return Number.isFinite(stored) && stored > 0 ? stored : undefined;
+    } catch {
+      return undefined;
+    }
+  });
+  const save = useCallback(
+    (next: number | undefined) => {
+      setSaved(next);
+      try {
+        if (next === undefined) localStorage.removeItem(storageKey);
+        else localStorage.setItem(storageKey, String(next));
+      } catch {
+        /* private mode */
+      }
+    },
+    [storageKey],
+  );
+  const pane = usePaneSize({
+    saved,
+    save,
+    min: options.min,
+    max: options.max,
+    fallback: options.fallback,
+    // `edge` here names the pane's side of the window; its divider is on the opposite edge.
+    edge: options.edge === "right" ? "left" : "right",
+  });
+  return { ...pane, width: pane.size };
 }

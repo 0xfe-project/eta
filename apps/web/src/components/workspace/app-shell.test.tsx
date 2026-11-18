@@ -725,8 +725,11 @@ describe("拖左栏右缘调宽", () => {
         '[data-slot="sidebar-wrapper"]',
       ),
     ].at(-1)!;
+  // The column's edge, not the agent shelf's top edge, which lies across the column.
   const divider = (container: HTMLElement) =>
-    container.querySelector<HTMLElement>('[role="separator"]');
+    container.querySelector<HTMLElement>(
+      '[role="separator"][aria-orientation="vertical"]',
+    );
   const shell = () =>
     render(
       <SidebarShell>

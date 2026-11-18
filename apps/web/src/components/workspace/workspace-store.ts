@@ -26,6 +26,9 @@ const workspaceSchema = z.object({
   customMonoFont: z.string().max(64).optional(),
   // The sidebar's agent section, folded down to its heading.
   agentsCollapsed: z.boolean().optional(),
+  // The most height that section takes, dragged on its top edge (sidebar-tree.tsx); unset is
+  // its content's height, up to two fifths of the screen.
+  agentsHeight: z.number().int().positive().max(10_000).optional(),
   // Directories chosen on each machine, newest first (directory-picker.tsx).
   recentDirectories: z
     .record(z.string().max(64), z.array(z.string().max(4096)).max(5))
