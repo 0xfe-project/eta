@@ -209,9 +209,7 @@ describe("主理人芯片", () => {
     expect(document.body.textContent).not.toContain("跟随项目");
     expect(document.body.textContent).not.toContain("项目「");
     // The current one is marked.
-    expect(
-      items()[1]!.querySelector('[aria-label="当前"]'),
-    ).not.toBeNull();
+    expect(items()[1]!.querySelector('[aria-label="当前"]')).not.toBeNull();
     await click(items().find((item) => item.textContent?.includes("小明")));
     await flush();
     expect(
@@ -244,9 +242,7 @@ describe("主理人芯片", () => {
         new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
       );
     });
-    expect(
-      items().at(-1)!.querySelector('[aria-label="当前"]'),
-    ).not.toBeNull();
+    expect(items().at(-1)!.querySelector('[aria-label="当前"]')).not.toBeNull();
   });
 
   it("is not there in a private chat, which has only its agent", async () => {

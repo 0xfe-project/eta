@@ -249,7 +249,9 @@ describe("what the timeline says besides words", () => {
     ];
     const { container } = await start();
     await flush();
-    expect(container.textContent).toContain("装配检查 退出了群，现在没有主理人。");
+    expect(container.textContent).toContain(
+      "装配检查 退出了群，现在没有主理人。",
+    );
     expect(container.textContent).toContain("研究员 不再是主理人。");
   });
 
