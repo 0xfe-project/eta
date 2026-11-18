@@ -36,6 +36,14 @@ function entry(overrides: Partial<AuthFileEntry> = {}): AuthFileEntry {
     recent_requests: [],
     quota: { signals: {} },
     cooldowns: null,
+    // A signed-in account that has renewed its token and answered a request.
+    requires_sign_in: false,
+    renewal_state: "renewal_verified",
+    recovery_stage: "inference_verified",
+    quota_blocked: false,
+    adopted: true,
+    inference_verified: true,
+    renewal_verified: true,
     email: "ada@example.com",
     created_at: "2026-10-01T00:00:00Z",
     id_token: { plan_type: "plus", chatgpt_account_id: "acct" },
@@ -90,6 +98,14 @@ describe("an account's state", () => {
       state: "degraded",
       error: { code: "upstream_unstable", params: { status: 503 } },
     });
+    // A short burst of 429s is rate limiting that clears by itself: degraded, not the login.
+    expect(
+      state([cooldown({ reason: "transient_rate_limit", http_status: 429 })]),
+    ).toMatchObject({
+      state: "degraded",
+      retryAt: later,
+      error: { code: "rate_limited" },
+    });
     expect(state([cooldown({ reason: "unknown" })])).toMatchObject({
       state: "degraded",
       error: { code: "upstream_unreachable" },
@@ -134,6 +150,24 @@ describe("an account's state", () => {
         NOW,
       ).state,
     ).toBe("active");
+  });
+
+  it("does not ask for a login when the provider is only pacing the account", () => {
+    const paced = cooldown({
+      scope: "model",
+      model_key: "gpt-x",
+      reason: "transient_rate_limit",
+      http_status: 429,
+    });
+    const connection = fileConnection(
+      entry({ cooldowns: [paced] }),
+      "codex",
+      NOW,
+    );
+    expect(connection.state).toBe("active");
+    expect(modelState(connection, "gpt-x", "Codex", false).status).toBe(
+      "degraded",
+    );
   });
 
   it("is disabled before anything else", () => {
@@ -195,6 +229,11 @@ describe("a model's state", () => {
     expect(of("transient_error", 502)).toMatchObject({
       status: "degraded",
       reason: { code: "upstream_unstable" },
+    });
+    expect(of("transient_rate_limit", 429)).toMatchObject({
+      status: "degraded",
+      retryAt: later,
+      reason: { code: "rate_limited" },
     });
     expect(modelState(active([]), "gpt-x", "Codex", false).status).toBe(
       "available",
