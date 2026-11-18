@@ -23,6 +23,7 @@ import { join } from "node:path";
 import { captainProposalOf, isCaptainOutcome } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
 import { agentHome } from "../src/agents/store";
+import { availableModels } from "../src/captain/tools";
 import { until } from "./support/client";
 import { say, scriptedModels } from "./support/models";
 import { world } from "./support/world";
@@ -138,8 +139,10 @@ describe("propose_agent is Captain's", () => {
     const tools = (agent: string) =>
       requests.find((request) => request.agent === agent)!.tools;
     expect(tools("Captain")).toContain("propose_agent");
+    expect(tools("Captain")).toContain("list_models");
     expect(tools("Captain")).toContain("list_persona_cards");
     expect(tools("Ada")).not.toContain("propose_agent");
+    expect(tools("Ada")).not.toContain("list_models");
     expect(tools("Ada")).not.toContain("list_persona_cards");
   });
 
@@ -455,5 +458,92 @@ describe("the persona of an agent Captain proposed", () => {
     expect(asked.system).toContain(
       "Reads a change and says what it breaks, in one line.",
     );
+  });
+});
+
+describe("list_models", () => {
+  it("combines configured provider models with gateway subscription models", () => {
+    const snapshots = new Map<string, { sections: Record<string, unknown> }>([
+      [
+        "providers",
+        {
+          sections: {
+            config: {
+              revision: 1,
+              providers: [
+                {
+                  id: "openai",
+                  name: "OpenAI",
+                  kind: "openai-responses",
+                  hasKey: true,
+                  models: [{ id: "gpt-5", name: "GPT-5" }],
+                },
+              ],
+            },
+          },
+        },
+      ],
+      [
+        "llm",
+        {
+          sections: {
+            accounts: {
+              ready: true,
+              connectors: [{ id: "codex", name: "Codex", kind: "oauth" }],
+              connections: [],
+            },
+            models: [
+              {
+                id: "gpt-5.4",
+                name: "GPT-5.4",
+                connector: "codex",
+                available: true,
+              },
+              {
+                id: "grok-4",
+                name: "Grok 4",
+                connector: "xai",
+                available: false,
+                reason: {
+                  code: "no_connection",
+                  message: "Account not signed in",
+                },
+              },
+            ],
+          },
+        },
+      ],
+    ]);
+    const fakeServer = {
+      wire: {
+        snapshot: (target: string) => snapshots.get(target),
+      },
+    } as never;
+
+    expect(availableModels(undefined)).toEqual([]);
+    expect(availableModels(fakeServer)).toEqual([
+      {
+        id: "openai:gpt-5",
+        provider: "openai",
+        providerName: "OpenAI",
+        name: "GPT-5",
+        available: true,
+      },
+      {
+        id: "llm:gpt-5.4",
+        provider: "llm",
+        providerName: "Codex",
+        name: "GPT-5.4",
+        available: true,
+      },
+      {
+        id: "llm:grok-4",
+        provider: "llm",
+        providerName: "xai",
+        name: "Grok 4",
+        available: false,
+        unavailableReason: "no_connection",
+      },
+    ]);
   });
 });
