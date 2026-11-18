@@ -79,6 +79,7 @@ class RemoteHandle implements SessionHandle {
       session: this.id,
       text,
       mode: "steer",
+      ifRunning: true,
       ...(images === undefined || images.length === 0 ? {} : { images }),
     });
   }

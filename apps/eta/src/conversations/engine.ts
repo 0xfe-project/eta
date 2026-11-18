@@ -794,13 +794,10 @@ export class Engine {
       machine,
     );
     // The briefing waits (on files, on the model), and the turn may end meanwhile. A steer into a
-    // session with no turn starts a run nobody waits for, so its answer would reach no reply:
-    // fail here instead, before anything is sent, and the caller gives it a reply of its own.
-    if (
-      this.#running.get(keyOf(conversation.id, agentId)) !== running ||
-      !running.handle.running
-    )
-      throw new Error("the turn ended before the message could join it");
+    // session with no turn would start a run nobody waits for, so its answer would reach no
+    // reply. Whether there is a turn is the session's machine's to say (a daemon's turn can end
+    // while the word of it is still on the link), so the steer is sent as one that only a run in
+    // flight takes; a refusal throws, and the caller gives the message a reply of its own.
     await running.handle.steer(told.text, told.images);
     this.#conversations.setSeen(conversation.id, agentId, told.seen);
   }

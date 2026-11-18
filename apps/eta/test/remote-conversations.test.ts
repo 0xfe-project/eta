@@ -833,6 +833,59 @@ describe("stopping, steering and a link that fails", () => {
     expect(requests[1]!.transcript.join("\n")).toContain("make it shorter");
   });
 
+  it("steer that reaches the daemon after its turn ended gets a reply of its own, not a run nobody waits for", async () => {
+    const { models, requests } = scriptedModels((request) =>
+      say(request.index === 0 ? "on it" : "the shorter one"),
+    );
+    const r = await remoteWorld({ models });
+    const { agents, group } = await r.agents("Ada");
+    // The run's end is held on its way back: the daemon's session is idle, while the primary
+    // still has the turn as running — the window between a turn ending and the word of it.
+    const ended = gate();
+    const delivered = gate();
+    const link = r.host.product.hub.link(r.daemon.machineId)!;
+    const daemon = link.daemon.bind(link);
+    link.daemon = ((...args: Parameters<typeof daemon>) => {
+      const answer = daemon(...args);
+      if (args[0] !== "run") return answer;
+      return answer.then(async (outcome) => {
+        ended.open();
+        await delivered.opened;
+        return outcome;
+      });
+    }) as typeof link.daemon;
+
+    const sent = await r.send(group.id, "write the report");
+    const reply = sent.replies[0]!;
+    await ended.opened;
+    expect(r.row(group.id, reply.id)?.status).toBe("working");
+
+    const steered = await r.send(group.id, "make it shorter", {
+      mode: "steer",
+    });
+    // The daemon refused it (no run to take it), so it is answered as a reply of its own.
+    expect(steered.joined).toEqual([]);
+    expect(steered.replies).toHaveLength(1);
+    expect(steered.message.data).toMatchObject({
+      joined: [],
+      woke: [agents[0]!.id],
+    });
+    // Nothing started on the daemon behind the primary's back.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(requests).toHaveLength(1);
+
+    delivered.open();
+    expect((await r.settled(group.id, reply.id)).text).toBe("on it");
+    const own = await r.settled(group.id, steered.replies[0]!.id);
+    expect(own).toMatchObject({ status: "done", text: "the shorter one" });
+    expect(requests).toHaveLength(2);
+    expect(
+      requests.filter((request) =>
+        request.transcript.join("\n").includes("make it shorter"),
+      ),
+    ).toHaveLength(1);
+  });
+
   it("a queued message waits behind the reply that is running, as it does at home", async () => {
     const first = gate();
     const order: string[] = [];

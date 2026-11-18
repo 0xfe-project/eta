@@ -223,6 +223,44 @@ describe("a turn, seen from the pipe", () => {
     await h.unload();
   });
 
+  it("a steer that only a run may take is refused by an idle session, and joins one in flight", async () => {
+    const h = await harness();
+    await h.load();
+    const { session } = (await h.call("sessions", "create", {
+      cwd: "/work/eta",
+    })) as { session: string };
+    const open = () => h.manager.openSessions()[0]!.session;
+
+    // Idle: refused, with nothing queued and no run started.
+    await expect(
+      h.call("sessions", "prompt", {
+        session,
+        text: "late",
+        mode: "steer",
+        ifRunning: true,
+      }),
+    ).rejects.toThrow(/no run/);
+    expect(open().kernel.inboxDepth).toBe(0);
+    expect(open().runner.running).toBe(false);
+
+    // In flight: taken like any steer.
+    await h.call("sessions", "prompt", { session, text: "go" });
+    expect(open().runner.running).toBe(true);
+    await h.call("sessions", "prompt", {
+      session,
+      text: "and this",
+      mode: "steer",
+      ifRunning: true,
+    });
+    await until(() => open().runner.running === false);
+
+    // Without the option, a steer into an idle session still starts a run with it.
+    await h.call("sessions", "prompt", { session, text: "hi", mode: "steer" });
+    expect(open().runner.running).toBe(true);
+    await until(() => open().runner.running === false);
+    await h.unload();
+  });
+
   it("answers a failure with a name, not with silence", async () => {
     const h = await harness();
     await h.load();
