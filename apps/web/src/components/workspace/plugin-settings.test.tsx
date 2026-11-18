@@ -4,9 +4,17 @@ import type {
   PluginFieldView,
   PluginView,
 } from "@eta/client-contracts";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import {
+  afterAll,
+  afterEach,
+  describe,
+  expect,
+  it,
+  rstest,
+} from "@rstest/core";
 import { act } from "react";
 import { setWire } from "@/lib/wire";
+import { closeBrowser, hasBrowser, onPage, PHONE } from "@/test-browser";
 import { buildProductHost } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
 import { PluginSettings } from "./plugin-settings";
@@ -29,6 +37,8 @@ afterEach(async () => {
   toasts.success.mockClear();
   toasts.error.mockClear();
 });
+
+afterAll(closeBrowser);
 
 const text = () => document.body.textContent ?? "";
 
@@ -123,7 +133,7 @@ const save = () =>
 const passwordInput = () =>
   document.querySelector<HTMLInputElement>('input[type="password"]')!;
 
-describe("the plugin list", () => {
+describe("the plugin cards", () => {
   it("shows where a plugin came from, how it stands and what it lacks", async () => {
     host([
       plugin({
@@ -153,6 +163,85 @@ describe("the plugin list", () => {
     expect(text()).toContain("https://example.com/x.git @ abcdef123456");
     expect(text()).toContain("gpu-box 上缺少 node");
     expect(text()).toContain("unknown field hooks");
+  });
+
+  it("fits long sources in two columns or one, with a fixed decorative icon per card", async ({
+    skip,
+  }) => {
+    if (!(await hasBrowser())) return skip();
+    const repo = `https://example.com/${"x".repeat(240)}.git`;
+    host([
+      plugin(),
+      plugin({
+        name: "from-git",
+        state: "ready",
+        source: { kind: "git", repo, rev: "main", path: "", sha: "abc123" },
+      }),
+    ]);
+    const { container } = await mount(<PluginSettings />);
+    await flush();
+
+    for (const mobile of [false, true]) {
+      await onPage(
+        container.innerHTML,
+        async (page) => {
+          const cards = page
+            .getByRole("list", { name: "插件" })
+            .getByRole("listitem");
+          const layout = await cards.evaluateAll((items) =>
+            items.map((item) => {
+              const card = item as HTMLElement;
+              const { x, y } = card.getBoundingClientRect();
+              const icon = card.querySelector(
+                'span[aria-hidden="true"]:has(svg)',
+              );
+              const slot = icon?.getBoundingClientRect();
+              const heading = card.querySelector("h2")?.getBoundingClientRect();
+              const rem = Number.parseFloat(
+                getComputedStyle(document.documentElement).fontSize,
+              );
+              return {
+                x,
+                y,
+                fits: card.scrollWidth === card.clientWidth,
+                slotWidth: (slot?.width ?? 0) / rem,
+                slotHeight: (slot?.height ?? 0) / rem,
+                alongsideTitle:
+                  !!slot && !!heading && slot.right < heading.left,
+              };
+            }),
+          );
+          expect(layout).toHaveLength(2);
+          const [first, second] = layout;
+          expect(first!.x === second!.x).toBe(mobile);
+          expect(first!.y === second!.y).toBe(!mobile);
+          for (const card of layout) {
+            expect(card).toMatchObject({
+              fits: true,
+              alongsideTitle: true,
+            });
+            expect(card.slotWidth).toBeCloseTo(2.025);
+            expect(card.slotHeight).toBeCloseTo(2.025);
+          }
+          const git = cards.filter({
+            has: page.getByRole("heading", { name: "from-git" }),
+          });
+          expect(
+            await git
+              .getByText(`${repo} @ abc123`, { exact: true })
+              .isVisible(),
+          ).toBe(true);
+          expect(
+            await git.getByText("1 个 skill · 1 个 MCP 服务器").isVisible(),
+          ).toBe(true);
+          expect(await cards.locator("img").count()).toBe(0);
+          expect(
+            await page.evaluate(() => document.documentElement.scrollWidth),
+          ).toBe(page.viewportSize()?.width);
+        },
+        mobile ? PHONE : undefined,
+      );
+    }
   });
 
   it("says which agents skip a plugin that fell back", async () => {
@@ -202,6 +291,75 @@ describe("the plugin list", () => {
 });
 
 describe("plugin page actions", () => {
+  it("keeps configuration, Git update and confirmed removal on their own card", async () => {
+    const local = plugin({ name: "local", fields: [team] });
+    const git = plugin({
+      name: "from-git",
+      source: {
+        kind: "git",
+        repo: "file:///tmp/fixture.git",
+        rev: "main",
+        path: "",
+        sha: "abc123",
+      },
+      fields: [team],
+    });
+    const built = host([local, git]);
+    built.handle("plugins.configure", () => ({
+      name: "local",
+      state: "ready",
+      issues: [],
+    }));
+    built.handle("plugins.update", () => ({ name: "from-git" }));
+    built.handle("plugins.remove", () => {
+      built.set("plugins", { list: [local], audit: [] });
+      return {};
+    });
+    const { container } = await mount(<PluginSettings />);
+    await flush();
+    const card = (name: string) =>
+      [...container.querySelectorAll("main li")].find(
+        (item) => item.querySelector("h2")?.textContent === name,
+      )!;
+    const dialog = () =>
+      document.querySelector('[role="dialog"], [role="alertdialog"]');
+    expect(card("local").querySelectorAll("button")).toHaveLength(1);
+    await click(card("local").querySelector('[aria-label="配置 local"]'));
+    expect(dialog()?.textContent).toContain("配置 local");
+    await type(dialog()!.querySelector("input")!, "local-only");
+    await click(save());
+    await flush();
+    expect(dialog()).toBeNull();
+
+    await click(card("from-git").querySelector('[aria-label="更新 from-git"]'));
+    await flush();
+    const remove = card("from-git").querySelector(
+      '[aria-label="移除 from-git"]',
+    );
+    await click(remove);
+    expect(dialog()?.textContent).toContain("移除 from-git？");
+    await click(dialog()?.querySelector('[data-slot="alert-dialog-cancel"]'));
+    expect(dialog()).toBeNull();
+    expect(built.calls.map(({ action }) => action)).toEqual([
+      "configure",
+      "update",
+    ]);
+    await click(remove);
+    await click(dialog()?.querySelector('[data-slot="alert-dialog-action"]'));
+    await flush();
+
+    expect(built.calls.map(({ action, args }) => ({ action, args }))).toEqual([
+      {
+        action: "configure",
+        args: { name: "local", values: { team: "local-only" } },
+      },
+      { action: "update", args: { name: "from-git" } },
+      { action: "remove", args: { name: "from-git" } },
+    ]);
+    expect(card("from-git")).toBeUndefined();
+    expect(card("local")).toBeDefined();
+  });
+
   it("rechecks on the host without leaving the page", async () => {
     const built = host([]);
     built.handle("plugins.recheck", () => {

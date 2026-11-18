@@ -409,7 +409,7 @@ function sourceText(
     : `${plugin.source.repo} @ ${plugin.source.sha.slice(0, 12)}`;
 }
 
-function PluginRow({ plugin }: { plugin: PluginView }) {
+function PluginCard({ plugin }: { plugin: PluginView }) {
   const { t: translateText } = useTranslation(["plugins", "common"] as const);
   const update = useUpdatePlugin();
   const remove = useRemovePlugin();
@@ -424,37 +424,77 @@ function PluginRow({ plugin }: { plugin: PluginView }) {
       ? undefined
       : plugin.agents.map((agent) => agent.name).join(", ");
   const hasForm = plugin.fields.length > 0 && plugin.problem === null;
+  const isGit = plugin.source.kind === "git";
   return (
-    <li className="space-y-1 px-3 py-2 text-sm">
-      <div className="flex flex-col items-start gap-2 sm:flex-row sm:gap-3">
-        <div className="w-full min-w-0 flex-1 space-y-0.5">
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
-            {plugin.name}
+    <li className="flex min-w-0 flex-col gap-3 border p-3 text-sm wrap-anywhere">
+      <div className="flex min-w-0 items-start gap-3">
+        {/* PluginView has no trusted logo asset. Keep the slot decorative and local. */}
+        <span
+          aria-hidden="true"
+          className="grid size-9 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground"
+        >
+          <PuzzlePieceIcon className="size-5" />
+        </span>
+        <div className="min-w-0 space-y-1">
+          <h2 className="font-medium">{plugin.name}</h2>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             {plugin.version === null ? null : (
-              <span className="text-xs font-normal text-muted-foreground">
+              <span className="min-w-0 text-xs text-muted-foreground">
                 {plugin.version}
               </span>
             )}
             <Badge variant={ready ? "default" : "outline"}>
               {translateText(`state.${stateKeys[plugin.state]}`)}
             </Badge>
-          </p>
-          {plugin.description === "" ? null : (
-            <p className="text-xs text-muted-foreground">
-              {plugin.description}
+          </div>
+        </div>
+      </div>
+      {plugin.description === "" ? null : (
+        <p className="text-sm text-muted-foreground">{plugin.description}</p>
+      )}
+      <div className="space-y-1 text-xs text-muted-foreground">
+        <p>{sourceText(plugin, translateText)}</p>
+        <p>
+          {translateText("summary.parts", {
+            skills: plugin.skills.length,
+            servers: plugin.servers.length,
+          })}
+        </p>
+      </div>
+      {plugin.problem !== null ||
+      skippedBy !== undefined ||
+      lacking.length > 0 ||
+      plugin.reports.length > 0 ? (
+        <div className="space-y-1">
+          {plugin.problem === null ? null : (
+            <p className="text-xs text-destructive">{plugin.problem}</p>
+          )}
+          {skippedBy === undefined ? null : (
+            <p className="text-xs text-destructive">
+              {translateText("skipped", { agents: skippedBy })}
             </p>
           )}
-          <p className="text-xs break-all text-muted-foreground">
-            {sourceText(plugin, translateText)}
-            {" · "}
-            {translateText("summary.parts", {
-              skills: plugin.skills.length,
-              servers: plugin.servers.length,
-            })}
-          </p>
+          {lacking.map((machine) => (
+            <p
+              key={machine.machineId}
+              className="text-xs text-muted-foreground"
+            >
+              {translateText("requires.missing", {
+                machine: machine.name,
+                commands: machine.missing.join(", "),
+              })}
+            </p>
+          ))}
+          {plugin.reports.map((report) => (
+            <p key={report} className="text-xs text-muted-foreground">
+              {report}
+            </p>
+          ))}
         </div>
-        <div className="flex shrink-0 flex-wrap justify-end gap-1">
-          {plugin.source.kind === "git" ? (
+      ) : null}
+      {isGit || hasForm ? (
+        <div className="mt-auto flex flex-wrap justify-end gap-1 border-t pt-2">
+          {isGit ? (
             <>
               <Button
                 size="sm"
@@ -495,28 +535,7 @@ function PluginRow({ plugin }: { plugin: PluginView }) {
             </Button>
           ) : null}
         </div>
-      </div>
-      {plugin.problem === null ? null : (
-        <p className="text-xs break-words text-destructive">{plugin.problem}</p>
-      )}
-      {skippedBy === undefined ? null : (
-        <p className="text-xs text-destructive">
-          {translateText("skipped", { agents: skippedBy })}
-        </p>
-      )}
-      {lacking.map((machine) => (
-        <p key={machine.machineId} className="text-xs text-muted-foreground">
-          {translateText("requires.missing", {
-            machine: machine.name,
-            commands: machine.missing.join(", "),
-          })}
-        </p>
-      ))}
-      {plugin.reports.map((report) => (
-        <p key={report} className="text-xs break-words text-muted-foreground">
-          {report}
-        </p>
-      ))}
+      ) : null}
       {configuring ? (
         <ConfigureDialog
           plugin={plugin}
@@ -613,7 +632,7 @@ export function PluginSettings() {
         </div>
       </PageHeader>
       <main id="main" className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-content space-y-4 px-4 py-4 sm:px-6">
+        <div className="@container mx-auto max-w-content space-y-4 px-4 py-4 sm:px-6">
           <p className="text-sm text-muted-foreground">
             {translateText("description")}
           </p>
@@ -626,9 +645,12 @@ export function PluginSettings() {
               {translateText("empty.description")}
             </Empty>
           ) : (
-            <ul aria-label={translateText("title")} className="divide-y border">
+            <ul
+              aria-label={translateText("title")}
+              className="grid grid-cols-1 gap-3 @lg:grid-cols-2"
+            >
               {plugins.map((plugin) => (
-                <PluginRow key={plugin.name} plugin={plugin} />
+                <PluginCard key={plugin.name} plugin={plugin} />
               ))}
             </ul>
           )}
