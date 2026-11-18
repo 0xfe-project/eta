@@ -15,7 +15,6 @@
   },
   "composer": {
     "messageLabel": "Message",
-    "slashCommands": "Slash commands",
     "errors": {
       "failedAttachments": "Some attachments failed to upload. Retry or remove them before sending.",
       "attachmentLimit": "Each message can include up to {{maxAttachments}} attachments.",
@@ -27,10 +26,9 @@
     "noAgentSelected": "No agent selected",
     "waitForUploads": "Wait for attachments to finish uploading before sending.",
     "fileHint": "file",
-    "sendHint": "Enter to send · Shift+Enter for a new line · ⌘Enter to steer",
-    "workingHint": "a reply is running · ⌘Enter to say something now",
-    "stopLabel": "STOP",
-    "commandsLabel": "commands",
+    "sendHint": "Enter to send · Shift+Enter for a new line",
+    "workingHint": "a reply is being written · new messages wait · Esc stops all",
+    "mentionsLabel": "Mentions",
     "tasksLabel": "tasks",
     "taskOption": "{{ref}} {{title}} · {{status}}",
     "noMatches": "nothing matches"
@@ -41,7 +39,10 @@
     "fold": "Thinking process",
     "steps": "{{count}} steps",
     "title": "Process",
-    "note": "Note"
+    "note": "Note",
+    "stop": "Stop",
+    "stopping": "Stopping…",
+    "stopLabel": "Stop {{name}}'s reply"
   },
   "tools": {
     "arguments": "arguments",
@@ -170,23 +171,27 @@
     "failed": "{{runtime}} couldn't compact its context: {{reason}}",
     "unconfirmed": "{{runtime}} didn't confirm the compaction. It may still be running."
   },
-  "commands": {
-    "stopAllDescription": "Stop all replies in the group",
-    "compactDescription": "Compact context",
-    "compactRequiresMention": "@mention the agent whose context you want to compact first.",
-    "goalDescription": "Set what this conversation is trying to achieve",
-    "themeDescription": "Switch light and dark",
-    "settingsDescription": "Open settings",
-    "newDescription": "Start a new conversation"
-  },
-  "sendModes": {
-    "afterReply": "Send after the current reply",
-    "interruptReply": "Insert into the current reply"
+  "compactPanel": {
+    "usage": "Context {{used}} / {{window}} ({{percent}}%)",
+    "lastCompacted": "Last compacted: {{time}}",
+    "never": "Last compacted: never",
+    "compact": "Compact context",
+    "open": "{{name}}'s context"
   },
   "messages": {
     "mentionTarget": " → {{name}}",
     "nobody": "Nobody was @mentioned and this group has no steward, so this message woke nobody. @mention a member, or set a steward.",
     "joined": "Joined the reply {{names}} is already writing"
+  },
+  "insert": {
+    "action": "Insert",
+    "title": "Insert into this turn",
+    "placeholder": "Add to this turn…",
+    "to": "To {{names}} · ⏎ send · Esc close",
+    "send": "Insert",
+    "label": "Inserted · {{time}}",
+    "ended": "That turn had ended, so it was sent as a new message",
+    "received": "— Received your insert —"
   },
   "reply": {
     "stopping": "Stopping",

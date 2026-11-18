@@ -15,7 +15,6 @@
   },
   "composer": {
     "messageLabel": "消息",
-    "slashCommands": "斜杠命令",
     "errors": {
       "failedAttachments": "有附件上传失败：重试或移除后再发送。",
       "attachmentLimit": "一条消息最多带 {{maxAttachments}} 个附件。",
@@ -27,10 +26,9 @@
     "noAgentSelected": "未选择智能体",
     "waitForUploads": "附件上传中，完成后才能发送。",
     "fileHint": "文件",
-    "sendHint": "Enter 发送 · Shift+Enter 换行 · ⌘Enter 插话",
-    "workingHint": "有人在说话 · ⌘Enter 现在就插一句",
-    "stopLabel": "停止",
-    "commandsLabel": "命令",
+    "sendHint": "Enter 发送 · Shift+Enter 换行",
+    "workingHint": "有人在写 · 新消息会排队 · Esc 全部停止",
+    "mentionsLabel": "提及",
     "tasksLabel": "任务",
     "taskOption": "{{ref}} {{title}} · {{status}}",
     "noMatches": "没有匹配的"
@@ -41,7 +39,10 @@
     "fold": "思考过程",
     "steps": "{{count}} 步",
     "title": "过程",
-    "note": "说明"
+    "note": "说明",
+    "stop": "停止",
+    "stopping": "停止中…",
+    "stopLabel": "停止 {{name}} 的回复"
   },
   "tools": {
     "arguments": "参数",
@@ -170,23 +171,27 @@
     "failed": "{{runtime}} 没能压缩上下文：{{reason}}",
     "unconfirmed": "{{runtime}} 没有确认压缩结果，可能还在进行。"
   },
-  "commands": {
-    "stopAllDescription": "停止群内全部回复",
-    "compactDescription": "压缩上下文",
-    "compactRequiresMention": "先 @ 要压缩上下文的智能体。",
-    "goalDescription": "设定这段对话要达成什么",
-    "themeDescription": "切换明暗",
-    "settingsDescription": "打开设置",
-    "newDescription": "开一个新对话"
-  },
-  "sendModes": {
-    "afterReply": "当前回复结束后发送",
-    "interruptReply": "插入当前回复"
+  "compactPanel": {
+    "usage": "上下文 {{used}} / {{window}}（{{percent}}%）",
+    "lastCompacted": "上次压缩：{{time}}",
+    "never": "上次压缩：没有",
+    "compact": "压缩上下文",
+    "open": "{{name}} 的上下文"
   },
   "messages": {
     "mentionTarget": " → {{name}}",
     "nobody": "没有 @ 人，这个群也没有主理人，所以没有叫醒任何人。@ 一位成员，或设一位主理人。",
     "joined": "已并入 {{names}} 正在进行的回复"
+  },
+  "insert": {
+    "action": "插入",
+    "title": "插入这一轮",
+    "placeholder": "补充给这一轮…",
+    "to": "插给 {{names}} · ⏎ 发出 · Esc 关闭",
+    "send": "插入",
+    "label": "插入 · {{time}}",
+    "ended": "这一轮已经结束，已作为新消息发出",
+    "received": "— 收到你插入的消息 —"
   },
   "reply": {
     "stopping": "正在停止",

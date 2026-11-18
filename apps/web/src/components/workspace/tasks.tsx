@@ -1619,7 +1619,6 @@ export function CommentBox({
     text,
     members,
     files: [],
-    commands: [],
     tasks: [],
     dismissed: menuDismissed,
   });

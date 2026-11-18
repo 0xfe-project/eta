@@ -135,6 +135,29 @@ describe("成员和群的管理", () => {
     expect(container.textContent).toContain("还没和它说过话");
   });
 
+  it("compacts a member's context from its ring, with how full it is", async () => {
+    host.handle("sessions.compact", () => ({}));
+    const { container } = await mount(<GroupMembers />);
+    await flush();
+    // Only a member with a session has a ring to open.
+    expect(
+      container.querySelector('button[aria-label="装配检查 的上下文"]'),
+    ).toBeNull();
+    await click(container.querySelector('button[aria-label="乐子人 的上下文"]'));
+    await flush();
+    const panel = document.querySelector('[data-slot="popover-content"]')!;
+    expect(panel.textContent).toMatch(/上下文 \S+ \/ \S+（\d+%）/);
+    expect(panel.textContent).toContain("上次压缩：没有");
+    const compact = [...panel.querySelectorAll("button")].find(
+      (b) => b.textContent === "压缩上下文",
+    );
+    await click(compact);
+    await flush();
+    expect(host.calls.find((call) => call.action === "compact")?.args).toEqual(
+      { session: "s1" },
+    );
+  });
+
   it("pauses a member's goal through its session", async () => {
     const { container } = await mount(<GroupMembers />);
     await flush();

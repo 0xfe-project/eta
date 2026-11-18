@@ -226,8 +226,11 @@ function sessionOf(
 }
 
 function finishedItems(row: MessageView): TranscriptItem[] {
-  // What it thought, said and did on the way, in the order the run showed it.
-  const items = savedSteps(row).map(
+  // What it thought, said and did on the way, in the order the run showed it. Where it took a steer
+  // is not drawn: the words are the user's row, with the notice of whose turn they joined.
+  const items = savedSteps(row)
+    .filter((block) => block.type !== "steer")
+    .map(
     (block): TranscriptItem =>
       block.type === "tool"
         ? {

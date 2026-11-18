@@ -133,12 +133,10 @@ describe("chat 页里成排出现的东西", () => {
           draft={[]}
           onDraftChange={() => {}}
           onSend={() => {}}
-          onCompact={() => {}}
           onStop={() => {}}
           onStopAll={() => {}}
           onChoose={() => {}}
           onAbort={() => {}}
-          onGoal={async () => undefined}
           outgoing={[]}
           onRetry={() => {}}
           onEdit={() => {}}

@@ -51,7 +51,7 @@ import { AgentAvatar, AgentStatus, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels, memberStatusLabel } from "./agent-status";
 import { InspectButton } from "./inspect-button";
 import { InviteDialog } from "./invite-dialog";
-import { MemberRing } from "./member-ring";
+import { MemberContext, MemberRing } from "./member-ring";
 import { MemberStats } from "./member-stats";
 import { MemberTasksButton, MemberTasksPanel } from "./member-tasks";
 import { when } from "./routine-format";
@@ -420,9 +420,16 @@ export function GroupMembers() {
                 {p.sessionId === null ? (
                   <AgentAvatar agent={{ id: p.agentId }} />
                 ) : (
-                  <MemberRing sessionId={p.sessionId}>
-                    <AgentAvatar agent={{ id: p.agentId }} />
-                  </MemberRing>
+                  // The ring opens what it measures: the context, and the way to compact it.
+                  <MemberContext
+                    sessionId={p.sessionId}
+                    name={name}
+                    runtime={agent?.runtime}
+                  >
+                    <MemberRing sessionId={p.sessionId}>
+                      <AgentAvatar agent={{ id: p.agentId }} />
+                    </MemberRing>
+                  </MemberContext>
                 )}
                 <div className="min-w-0 flex-1 text-sm">
                   <span className="block truncate" title={name}>

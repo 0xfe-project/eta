@@ -218,6 +218,7 @@ export function conversationsPlugin(
             blocks: args.integerPairs("blocks"),
             mentions: args.strings("mentions"),
             mode,
+            into: args.optionalString("into"),
             clientId: args.optionalString("clientId"),
             attachments: args.strings("attachments"),
           });

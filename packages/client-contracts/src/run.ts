@@ -37,7 +37,9 @@ export type RunBlock =
       /** What the tool left for the page beyond its text (`publish_artifact` names its artifact). */
       details?: unknown;
       status: "running" | "completed" | "failed";
-    };
+    }
+  /** Where the run took words the user put into it while it worked (a steer); not what they said. */
+  | { type: "steer"; id: string };
 
 export type ToolBlock = Extract<RunBlock, { type: "tool" }>;
 
@@ -115,6 +117,7 @@ export function savedSteps(message: {
         const tool = byId.get(String(step.id));
         return tool === undefined ? [] : [tool];
       }
+      if (step?.type === "steer") return [{ type: "steer", id: `step${at}` }];
       return (step?.type === "thinking" || step?.type === "text") &&
         typeof step.text === "string"
         ? [{ type: step.type, id: `step${at}`, text: step.text }]
@@ -179,12 +182,13 @@ function stampOf(message: AgentMessage | undefined): number {
 /**
  * The blocks of the run in flight, in the order they happened.
  *
- * The run starts after `runFrom`, the place in the session the reply's row names, and after the
- * last user message in the transcript (a steer or the next briefing is a user message, so after
- * one the blocks start over, which is the same moment the agent turns to it). The first is what
- * keeps the last run out: the reply goes to work before the view has the message that started it,
- * and until then the newest user message is the last run's. A row that names no place (a daemon
- * too old to say) has only the second. A tool call is `running` until its result lands in the transcript. The streamed message is
+ * The run starts after `runFrom`, the place in the session the reply's row names: the reply goes
+ * to work before the view has the message that started it, and until then the newest messages are
+ * the last run's. Its first user message is the briefing it began with and is not drawn; one after
+ * that is words the user put into the run (a steer), drawn as a `steer` block where they arrived,
+ * with the steps before it kept. A row that names no place (a daemon too old to say) starts after
+ * the last user message instead, so there the blocks start over at a steer. A tool call is
+ * `running` until its result lands in the transcript. The streamed message is
  * drawn only while it is newer than the newest assistant message committed, because the commit
  * and the stream's end do not arrive in the same frame and the text must not show twice.
  */
@@ -196,7 +200,10 @@ export function runBlocks(
   return blocksFrom(rows, streaming, runStart(rows, runFrom)) as RunBlock[];
 }
 
-/** Where the run in flight starts among its session's rows: after `runFrom` and the last user message. */
+/**
+ * Where the run in flight starts among its session's rows: after `runFrom`, or, when the row names
+ * no place, after the last user message.
+ */
 export function runStart(
   rows: readonly ViewMessageRow[],
   runFrom: number | undefined,
@@ -204,8 +211,7 @@ export function runStart(
   let start = 0;
   rows.forEach((row, index) => {
     if (
-      row.message.role === "user" ||
-      (runFrom !== undefined && row.seq <= runFrom)
+      runFrom === undefined ? row.message.role === "user" : row.seq <= runFrom
     )
       start = index + 1;
   });
@@ -254,7 +260,14 @@ interface SummaryBlock {
   text: string;
 }
 
-export type LogBlock = RunBlock | UserBlock | ErrorBlock | SummaryBlock;
+/** A log draws what the user said itself, so it has no `steer` marks. */
+type SteerBlock = Extract<RunBlock, { type: "steer" }>;
+
+export type LogBlock =
+  | Exclude<RunBlock, SteerBlock>
+  | UserBlock
+  | ErrorBlock
+  | SummaryBlock;
 
 /**
  * A whole session as blocks: every run it has had, with the user messages that steered it (a task
@@ -266,7 +279,7 @@ export function logBlocks(
   rows: readonly ViewMessageRow[],
   streaming: AgentMessage | undefined,
 ): LogBlock[] {
-  return blocksFrom(rows, streaming, 0, true);
+  return blocksFrom(rows, streaming, 0, true) as LogBlock[];
 }
 
 function blocksFrom(
@@ -274,8 +287,8 @@ function blocksFrom(
   streaming: AgentMessage | undefined,
   start: number,
   log = false,
-): LogBlock[] {
-  const blocks: LogBlock[] = [];
+): (LogBlock | SteerBlock)[] {
+  const blocks: (LogBlock | SteerBlock)[] = [];
   const tools = new Map<string, ToolBlock>();
   // A message's blocks are keyed by when it started, which it keeps from its first streamed frame
   // to its row: the page draws them as the same elements throughout, so the words already shown
@@ -316,7 +329,13 @@ function blocksFrom(
   const run = rows.slice(start);
   for (const row of run) {
     const message = row.message;
-    if (message.role === "user") {
+    if (message.role === "user" && !log) {
+      // The briefing is the run's first message; a user message after it, or after anything the
+      // run said (the briefing may be out of the view's window), is a steer.
+      if (briefed || blocks.length > 0)
+        blocks.push({ type: "steer", id: row.entryId });
+      briefed = true;
+    } else if (message.role === "user") {
       const content = (message as { content?: unknown }).content;
       const text = typeof content === "string" ? content : resultText(message);
       const images = imagesOf(row.entryId, message);

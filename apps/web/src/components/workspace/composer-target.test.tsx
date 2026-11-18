@@ -294,17 +294,6 @@ describe("keeping the choice", () => {
     expect(sent[1]!.mentions).toEqual([]);
   });
 
-  it("uses the choice for a steer, like any message", async () => {
-    await start();
-    await pick("Bolt");
-    await say("/steer 改一下");
-    expect(sent[0]).toMatchObject({
-      text: "改一下",
-      mode: "steer",
-      mentions: [BOLT],
-    });
-  });
-
   it("keeps one choice per group", async () => {
     const other = `${CONV}-other`;
     const summary = (id: string) =>

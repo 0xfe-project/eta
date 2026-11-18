@@ -71,14 +71,23 @@ const partsOf = (message: AgentMessage): Part[] => {
 export class ActivityRecorder {
   readonly #calls = new Map<string, ToolActivity>();
   readonly #steps: ProcessStep[] = [];
+  /** The run's first user message (its briefing) has been seen; another one is a steer. */
+  #briefed = false;
 
   #step(step: ProcessStep): void {
     if (this.#steps.length < MAX_STEPS) this.#steps.push(step);
   }
 
-  /** A message ended: an assistant one may have made calls, a tool result settles one. */
+  /**
+   * A message ended: an assistant one may have made calls, a tool result settles one, and a user
+   * message after the briefing is words put into the run while it worked (a steer).
+   */
   see(message: AgentMessage): void {
-    if (message.role === "assistant") {
+    if (message.role === "user") {
+      if (this.#briefed || this.#steps.length > 0)
+        this.#step({ type: "steer" });
+      this.#briefed = true;
+    } else if (message.role === "assistant") {
       for (const part of partsOf(message)) {
         if (part.type === "thinking" && part.thinking?.trim())
           this.#step({

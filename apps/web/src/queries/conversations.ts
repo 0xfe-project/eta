@@ -184,6 +184,21 @@ export function useConversation(
 }
 
 /** The actions on a conversation, each as a mutation. (`send` has its own path: see outbox.ts.) */
+/**
+ * Put words into the turns answering one of the user's messages (`conversations.send` with `into`).
+ * The rows it wrote are kept at once, so the words join that message without waiting for a push;
+ * when nobody was answering any more the row has no `into`, and it is a message of its own.
+ */
+export function useInsert() {
+  return useWireMutation<
+    ConversationArgs["send"] & { into: string },
+    ConversationResults["send"]
+  >("conversations", "send", {
+    onSuccess: (result, args) =>
+      rememberRows(args.conversationId, [result.message, ...result.replies]),
+  });
+}
+
 export function useConversationActions() {
   return {
     create: useWireMutation<

@@ -1,8 +1,17 @@
 import type { AgentMessage, ViewMessageRow } from "@eta/client-contracts";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { compactionNotice } from "@/lib/compaction-notice";
 import { useModels } from "@/queries/providers";
-import { useSession } from "@/queries/sessions";
+import { useSession, useSessionActions } from "@/queries/sessions";
+import { when } from "./routine-format";
 
 /**
  * How full a member's context window is, as a ring around the member's own avatar.
@@ -72,16 +81,11 @@ function shareOf(
   return { user, assistant, tool, toolDefs };
 }
 
-export function MemberRing({
-  sessionId,
-  children,
-  size = 48,
-}: {
-  sessionId: string;
-  children: ReactNode;
-  /** The ring's box in px. The viewBox stays 48, so the geometry below scales with it. */
-  size?: number;
-}) {
+/**
+ * How full a member's context window is: its share by source, the tokens used, the window, and
+ * when the session was last compacted (undefined for never).
+ */
+function useContextUsage(sessionId: string) {
   const { t: translateText } = useTranslation(["chat"] as const);
   const view = useSession(sessionId);
   const { data: models } = useModels();
@@ -149,6 +153,24 @@ export function MemberRing({
   const cap = Math.max(window, used, 1);
   // The percentage is against the real window, so over 100% stays visible as over 100%.
   const percent = Math.min(999, Math.round((used / Math.max(window, 1)) * 100));
+  const compacted = [...messages]
+    .reverse()
+    .find((row) => row.message.role === "compactionSummary")?.at;
+  return { slices, used, window, cap, percent, compacted };
+}
+
+export function MemberRing({
+  sessionId,
+  children,
+  size = 48,
+}: {
+  sessionId: string;
+  children: ReactNode;
+  /** The ring's box in px. The viewBox stays 48, so the geometry below scales with it. */
+  size?: number;
+}) {
+  const { t: translateText } = useTranslation(["chat"] as const);
+  const { slices, used, window, cap, percent } = useContextUsage(sessionId);
   // The circle's circumference at r=20 in this 48-unit box: the avatar (32px) sits inside it
   // with a gap, so the ring reads as around the avatar rather than as its border.
   const circumference = 2 * Math.PI * 20;
@@ -210,5 +232,94 @@ export function MemberRing({
       </svg>
       {children}
     </span>
+  );
+}
+
+/**
+ * A member's ring as a button: it opens a small panel with how full the context is, when it was
+ * last compacted, and the way to compact it — this member's session in this conversation. What
+ * `/compact` used to do from the composer, where the ring that measures it already is.
+ */
+export function MemberContext({
+  sessionId,
+  name,
+  runtime,
+  children,
+}: {
+  sessionId: string;
+  name: string;
+  /** The member's runtime: one other than eta compacts out of sight, so a toast says how it went. */
+  runtime: string | undefined;
+  children: ReactNode;
+}) {
+  const { t: translateText } = useTranslation(["chat"] as const);
+  const { used, window, percent, compacted } = useContextUsage(sessionId);
+  const { compact } = useSessionActions();
+  const tokens = (count: number) =>
+    count >= 1000 ? `${Math.round(count / 1000)}k` : String(count);
+
+  function run() {
+    // A runtime's compaction leaves nothing in the transcript, so a toast tells how it went.
+    const waiting =
+      runtime !== undefined && runtime !== "eta"
+        ? toast.loading(translateText("compaction.running"))
+        : undefined;
+    compact.mutateAsync({ session: sessionId }).then(
+      ({ runtime: outcome }) => {
+        if (outcome === undefined) {
+          if (waiting !== undefined) toast.dismiss(waiting);
+          return;
+        }
+        const { level, text } = compactionNotice(outcome);
+        toast[level](text, { id: waiting });
+      },
+      (error: Error) => {
+        // With no id this would dismiss every toast on the screen.
+        if (waiting !== undefined) toast.dismiss(waiting);
+        toast.error(error.message);
+      },
+    );
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="shrink-0 cursor-pointer focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
+          aria-label={translateText("compactPanel.open", { name })}
+        >
+          {children}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 gap-2 p-2.5">
+        <p className="text-muted-foreground tabular-nums">
+          {translateText("compactPanel.usage", {
+            used: tokens(used),
+            window: tokens(window),
+            percent,
+          })}
+          {" · "}
+          {compacted === undefined
+            ? translateText("compactPanel.never")
+            : translateText("compactPanel.lastCompacted", {
+                time: when(compacted),
+              })}
+        </p>
+        <div>
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            disabled={compact.isPending}
+            onClick={run}
+          >
+            {compact.isPending
+              ? translateText("compaction.running")
+              : translateText("compactPanel.compact")}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
