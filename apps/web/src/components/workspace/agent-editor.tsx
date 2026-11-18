@@ -207,7 +207,10 @@ function AgentEditorForm({
   const { errors, isDirty } = useFormState({ control: form.control });
   const runtime = useWatch({ control: form.control, name: "runtime" });
   const machineId = useWatch({ control: form.control, name: "machineId" });
-  const { runtimes, models } = useAgentRuntimeChoices(runtime, machineId);
+  const { runtimes, models, refresh } = useAgentRuntimeChoices(
+    runtime,
+    machineId,
+  );
 
   const save = form.handleSubmit(
     (values) => {
@@ -280,7 +283,7 @@ function AgentEditorForm({
             <>
               <NameField form={form} />
               <MachinePicker form={form} />
-              <RuntimeField form={form} runtimes={runtimes} />
+              <RuntimeField form={form} runtimes={runtimes} refresh={refresh} />
               <ModelField
                 form={form}
                 models={models}

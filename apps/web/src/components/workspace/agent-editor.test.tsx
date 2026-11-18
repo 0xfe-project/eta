@@ -466,6 +466,68 @@ describe("an agent's machine and its runtimes", () => {
   const trigger = (id: string) =>
     document.getElementById(id) as HTMLButtonElement;
 
+  it("says in a few words why a runtime cannot be picked, the probe's own words under details", async () => {
+    const timeout =
+      "Failed to list opencode models: opencode models --verbose timeout after 30000 ms";
+    let opencode: Record<string, unknown> = {
+      id: "opencode",
+      label: "OpenCode",
+      status: "error",
+      detail: timeout,
+      models: [],
+    };
+    await withMachines(null, (args) =>
+      args.machineId === "gpu"
+        ? { runtimes: [] }
+        : {
+            runtimes: [
+              {
+                id: "claude",
+                label: "Claude Code",
+                status: "unauthenticated",
+                detail: "is not signed in",
+                models: [],
+              },
+              opencode,
+              {
+                id: "pi",
+                label: "Pi",
+                status: "error",
+                detail: "spawn pi ENOENT",
+                models: [],
+              },
+            ],
+          },
+    );
+    await click(trigger("agent-runtime"));
+    const option = (label: string) =>
+      [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+        (candidate) => candidate.textContent?.startsWith(label),
+      )!.textContent;
+    expect(option("OpenCode")).toBe("OpenCode（探测超时 30s）");
+    expect(option("Pi")).toBe("Pi（探测失败）");
+    expect(dialogText().includes(timeout)).toBe(true);
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    await settle();
+    // The agent is on Claude Code, which is not signed in: what to run, where it is chosen.
+    expect(document.getElementById("agent-runtime-sign-in")?.textContent).toBe(
+      "Claude Code 还没登录：在终端运行 claude 登录，再点重试。",
+    );
+    const details = document.querySelector("#agent-runtime ~ div details")!;
+    expect(details.textContent).toContain(timeout);
+    expect(details.textContent).toContain("spawn pi ENOENT");
+
+    // A retry asks past the host's cache, and its answer is the list from then on.
+    opencode = { ...opencode, status: "available", detail: undefined };
+    await click(buttons().find((b) => b.textContent === "重试")!);
+    expect(asked()).toContainEqual({ fresh: true });
+    expect(
+      document.querySelector("#agent-runtime ~ div details")!.textContent,
+    ).not.toContain(timeout);
+  });
+
   it("keeps the runtime in view and the model choosable when the machine cannot be asked", async () => {
     await withMachines("mac");
     expect(asked()).toContainEqual({ machineId: "mac" });
