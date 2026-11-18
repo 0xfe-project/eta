@@ -79,7 +79,9 @@ test("insert: after the turn ended it goes out as a new message, and says so", a
   expect(app.texts()).toContain("插给 Ache、Mori");
   await app.press("id:insert-send");
   await app.waitFor("text:这一轮已经结束，已作为新消息发出");
-  await app.waitFor("text:One more thing.");
+  // A new message, at the live end (go back there if the list was left above it).
+  if (app.shows("text:/^新活动/")) await app.press("text:/^新活动/");
+  await app.waitFor("text:One more thing.", { timeout: 10_000 });
   expect(app.shows("text:/^插入 · /")).toBe(false);
 });
 
