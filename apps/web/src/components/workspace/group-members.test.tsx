@@ -143,7 +143,9 @@ describe("成员和群的管理", () => {
     expect(
       container.querySelector('button[aria-label="装配检查 的上下文"]'),
     ).toBeNull();
-    await click(container.querySelector('button[aria-label="乐子人 的上下文"]'));
+    await click(
+      container.querySelector('button[aria-label="乐子人 的上下文"]'),
+    );
     await flush();
     const panel = document.querySelector('[data-slot="popover-content"]')!;
     expect(panel.textContent).toMatch(/上下文 \S+ \/ \S+（\d+%）/);
@@ -153,9 +155,9 @@ describe("成员和群的管理", () => {
     );
     await click(compact);
     await flush();
-    expect(host.calls.find((call) => call.action === "compact")?.args).toEqual(
-      { session: "s1" },
-    );
+    expect(host.calls.find((call) => call.action === "compact")?.args).toEqual({
+      session: "s1",
+    });
   });
 
   it("pauses a member's goal through its session", async () => {
