@@ -14,7 +14,7 @@ import {
 } from "@rstest/core";
 import { act } from "react";
 import { setWire } from "@/lib/wire";
-import { closeBrowser, hasBrowser, onPage, PHONE } from "@/test-browser";
+import { closeBrowser, hasBrowser, onPage } from "@/test-browser";
 import { buildProductHost } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
 import { PluginSettings } from "./plugin-settings";
@@ -34,6 +34,7 @@ rstest.mock("sonner", () => ({
 afterEach(async () => {
   await cleanup();
   setWire(undefined);
+  toasts.message.mockClear();
   toasts.success.mockClear();
   toasts.error.mockClear();
 });
@@ -165,82 +166,148 @@ describe("the plugin cards", () => {
     expect(text()).toContain("unknown field hooks");
   });
 
-  it("fits long sources in two columns or one, with a fixed decorative icon per card", async ({
+  const repo = `https://example.com/${"x".repeat(240)}.git`;
+  const sha = "abcdef1234567890abcdef1234567890abcdef12";
+  const git = plugin({
+    name: "from-git",
+    state: "ready",
+    source: { kind: "git", repo, rev: "main", path: "", sha },
+  });
+
+  it("uses four fixed tracks even with two cards, then shrinks by content width", async ({
     skip,
   }) => {
     if (!(await hasBrowser())) return skip();
-    const repo = `https://example.com/${"x".repeat(240)}.git`;
     host([
       plugin(),
-      plugin({
-        name: "from-git",
-        state: "ready",
-        source: { kind: "git", repo, rev: "main", path: "", sha: "abc123" },
-      }),
+      git,
+      plugin({ name: "third" }),
+      plugin({ name: "fourth" }),
     ]);
     const { container } = await mount(<PluginSettings />);
     await flush();
 
-    for (const mobile of [false, true]) {
-      await onPage(
-        container.innerHTML,
-        async (page) => {
-          const cards = page
-            .getByRole("list", { name: "插件" })
-            .getByRole("listitem");
-          const layout = await cards.evaluateAll((items) =>
+    await onPage(
+      `<div style="max-width:var(--available, 100%)">${container.innerHTML}</div>`,
+      async (page) => {
+        const grid = page.getByRole("list", { name: "插件" });
+        const cards = grid.getByRole("listitem");
+        const read = () =>
+          cards.evaluateAll((items) =>
             items.map((item) => {
               const card = item as HTMLElement;
-              const { x, y } = card.getBoundingClientRect();
-              const icon = card.querySelector(
-                'span[aria-hidden="true"]:has(svg)',
-              );
-              const slot = icon?.getBoundingClientRect();
-              const heading = card.querySelector("h2")?.getBoundingClientRect();
-              const rem = Number.parseFloat(
-                getComputedStyle(document.documentElement).fontSize,
+              const { x, y, width, right } = card.getBoundingClientRect();
+              const slot = card
+                .querySelector('span[aria-hidden="true"]:has(svg)')!
+                .getBoundingClientRect();
+              const heading = card.querySelector("h2")!.getBoundingClientRect();
+              const buttons = [...card.querySelectorAll("button")].map(
+                (button) => button.getBoundingClientRect(),
               );
               return {
                 x,
                 y,
+                width,
                 fits: card.scrollWidth === card.clientWidth,
-                slotWidth: (slot?.width ?? 0) / rem,
-                slotHeight: (slot?.height ?? 0) / rem,
-                alongsideTitle:
-                  !!slot && !!heading && slot.right < heading.left,
+                slot: [slot.width, slot.height],
+                alongside: slot.right < heading.left,
+                buttonsFit: buttons.every(
+                  (b) => b.left >= x && b.right <= right,
+                ),
               };
             }),
           );
-          expect(layout).toHaveLength(2);
-          const [first, second] = layout;
-          expect(first!.x === second!.x).toBe(mobile);
-          expect(first!.y === second!.y).toBe(!mobile);
+        let wideWidths: number[] = [];
+        for (const [width, cols] of [
+          [940, 4],
+          [750, 3],
+          [540, 2],
+          [320, 1],
+        ] as const) {
+          await page.evaluate(
+            (width) =>
+              document.body.style.setProperty("--available", `${width}px`),
+            width,
+          );
+          const layout = await read();
+          expect(new Set(layout.map((card) => card.x)).size).toBe(cols);
+          expect(layout.filter((card) => card.y === layout[0]!.y)).toHaveLength(
+            cols,
+          );
           for (const card of layout) {
             expect(card).toMatchObject({
               fits: true,
-              alongsideTitle: true,
+              alongside: true,
+              buttonsFit: true,
             });
-            expect(card.slotWidth).toBeCloseTo(2.025);
-            expect(card.slotHeight).toBeCloseTo(2.025);
+            expect(card.slot[0]).toBeCloseTo(32.4, 1);
+            expect(card.slot[1]).toBe(card.slot[0]);
           }
-          const git = cards.filter({
-            has: page.getByRole("heading", { name: "from-git" }),
+          const source = grid.getByText(`${repo} @ ${sha.slice(0, 12)}`, {
+            exact: true,
           });
           expect(
-            await git
-              .getByText(`${repo} @ abc123`, { exact: true })
-              .isVisible(),
+            await source.evaluate((el) => {
+              const style = getComputedStyle(el);
+              return (
+                style.textOverflow === "ellipsis" &&
+                style.whiteSpace === "nowrap" &&
+                el.scrollWidth > el.clientWidth
+              );
+            }),
           ).toBe(true);
-          expect(
-            await git.getByText("1 个 skill · 1 个 MCP 服务器").isVisible(),
-          ).toBe(true);
-          expect(await cards.locator("img").count()).toBe(0);
-          expect(
-            await page.evaluate(() => document.documentElement.scrollWidth),
-          ).toBe(page.viewportSize()?.width);
-        },
-        mobile ? PHONE : undefined,
+          if (cols === 4) wideWidths = layout.map((card) => card.width);
+        }
+        await page.evaluate(() =>
+          document.body.style.setProperty("--available", "940px"),
+        );
+        await cards.evaluateAll((items) =>
+          items.slice(2).forEach((item) => item.remove()),
+        );
+        expect((await read()).map((card) => card.width)).toEqual(
+          wideWidths.slice(0, 2),
+        );
+        await page.setViewportSize({ width: 500, height: 820 });
+        const narrow = await read();
+        expect(new Set(narrow.map((card) => card.x)).size).toBe(1);
+        expect(narrow.every((card) => card.fits && card.buttonsFit)).toBe(true);
+        expect(await cards.locator("img").count()).toBe(0);
+      },
+    );
+  });
+
+  it("opens the full Git source without a host call and copies it unshortened", async () => {
+    const built = host([plugin(), git]);
+    const { container } = await mount(<PluginSettings />);
+    const writeText = rstest.fn().mockResolvedValue(undefined);
+    const previous = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    try {
+      await click(container.querySelector('[aria-label="from-git 的来源"]'));
+      const dialog = document.querySelector('[role="dialog"]');
+      expect(dialog?.textContent).toContain(`${repo} @ ${sha}`);
+      await click(
+        [...dialog!.querySelectorAll("button")].find(
+          (button) => button.textContent === "复制",
+        ),
       );
+      expect(writeText).toHaveBeenCalledWith(`${repo} @ ${sha}`);
+      expect(toasts.message).toHaveBeenCalledWith("已复制");
+      writeText.mockRejectedValueOnce(new Error("blocked"));
+      await click(
+        [...dialog!.querySelectorAll("button")].find(
+          (button) => button.textContent === "复制",
+        ),
+      );
+      expect(toasts.error).toHaveBeenCalled();
+      expect(dialog?.textContent).toContain(`${repo} @ ${sha}`);
+      expect(built.calls).toEqual([]);
+    } finally {
+      if (previous) Object.defineProperty(navigator, "clipboard", previous);
+      else Reflect.deleteProperty(navigator, "clipboard");
     }
   });
 

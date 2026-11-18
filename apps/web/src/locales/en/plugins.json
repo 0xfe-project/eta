@@ -10,7 +10,8 @@
     "ready": "Can be enabled"
   },
   "source": {
-    "local": "Local directory"
+    "local": "Local directory",
+    "details": "Source for {{name}}"
   },
   "summary": {
     "parts": "{{skills}} skills · {{servers}} MCP servers"

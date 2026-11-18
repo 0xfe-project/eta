@@ -10,7 +10,8 @@
     "ready": "可启用"
   },
   "source": {
-    "local": "本地目录"
+    "local": "本地目录",
+    "details": "{{name}} 的来源"
   },
   "summary": {
     "parts": "{{skills}} 个 skill · {{servers}} 个 MCP 服务器"

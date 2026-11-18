@@ -6,6 +6,7 @@ import type {
 } from "@eta/client-contracts";
 import type { FieldDraft, PluginDraft } from "./plugin-form";
 import { ArrowsClockwiseIcon } from "@phosphor-icons/react/ArrowsClockwise";
+import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { PuzzlePieceIcon } from "@phosphor-icons/react/PuzzlePiece";
 import { useId, useState } from "react";
@@ -33,6 +34,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -400,13 +402,60 @@ function AddDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function sourceText(
-  plugin: PluginView,
-  translateText: (key: "source.local") => string,
-): string {
-  return plugin.source.kind === "local"
-    ? translateText("source.local")
-    : `${plugin.source.repo} @ ${plugin.source.sha.slice(0, 12)}`;
+function GitSource({
+  name,
+  source,
+}: {
+  name: string;
+  source: Extract<PluginView["source"], { kind: "git" }>;
+}) {
+  const { t: translateText } = useTranslation(["plugins", "common"] as const);
+  const full = `${source.repo} @ ${source.sha}`;
+  const label = translateText("source.details", { name });
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <p className="min-w-0 flex-1 truncate">
+        {source.repo} @ {source.sha.slice(0, 12)}
+      </p>
+      <Dialog>
+        <DialogTrigger asChild>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            aria-label={label}
+            title={label}
+          >
+            <DotsThreeIcon aria-hidden="true" />
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="pr-8 wrap-anywhere">{label}</DialogTitle>
+            <DialogDescription className="mt-2 select-all wrap-anywhere">
+              {full}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(full);
+                  toast(translateText("common:feedback.copied"));
+                } catch {
+                  toast.error(translateText("common:errors.clipboardBlocked"));
+                }
+              }}
+            >
+              {translateText("common:actions.copy")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
 }
 
 function PluginCard({ plugin }: { plugin: PluginView }) {
@@ -453,7 +502,13 @@ function PluginCard({ plugin }: { plugin: PluginView }) {
         <p className="text-sm text-muted-foreground">{plugin.description}</p>
       )}
       <div className="space-y-1 text-xs text-muted-foreground">
-        <p>{sourceText(plugin, translateText)}</p>
+        {plugin.source.kind === "git" ? (
+          <GitSource name={plugin.name} source={plugin.source} />
+        ) : (
+          <p className="flex min-h-7 items-center">
+            {translateText("source.local")}
+          </p>
+        )}
         <p>
           {translateText("summary.parts", {
             skills: plugin.skills.length,
@@ -493,7 +548,7 @@ function PluginCard({ plugin }: { plugin: PluginView }) {
         </div>
       ) : null}
       {isGit || hasForm ? (
-        <div className="mt-auto flex flex-wrap justify-end gap-1 border-t pt-2">
+        <div className="mt-auto flex flex-wrap justify-end gap-1 border-t pt-2 [&>button]:px-1.5">
           {isGit ? (
             <>
               <Button
@@ -632,7 +687,7 @@ export function PluginSettings() {
         </div>
       </PageHeader>
       <main id="main" className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-        <div className="@container mx-auto max-w-content space-y-4 px-4 py-4 sm:px-6">
+        <div className="@container mx-auto max-w-[96rem] space-y-4 px-4 py-4 sm:px-6">
           <p className="text-sm text-muted-foreground">
             {translateText("description")}
           </p>
@@ -647,7 +702,7 @@ export function PluginSettings() {
           ) : (
             <ul
               aria-label={translateText("title")}
-              className="grid grid-cols-1 gap-3 @lg:grid-cols-2"
+              className="grid grid-cols-1 gap-3 @min-[30rem]:grid-cols-2 @min-[41rem]:grid-cols-3 @min-[54rem]:grid-cols-4"
             >
               {plugins.map((plugin) => (
                 <PluginCard key={plugin.name} plugin={plugin} />
