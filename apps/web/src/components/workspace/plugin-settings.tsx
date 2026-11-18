@@ -9,6 +9,7 @@ import { ArrowsClockwiseIcon } from "@phosphor-icons/react/ArrowsClockwise";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { PuzzlePieceIcon } from "@phosphor-icons/react/PuzzlePiece";
+import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -413,7 +414,10 @@ function GitSource({
   const full = `${source.repo} @ ${source.sha}`;
   const label = translateText("source.details", { name });
   return (
-    <div className="flex min-w-0 items-center gap-1">
+    <div
+      data-slot="plugin-source"
+      className="flex h-7 min-w-0 items-center gap-1"
+    >
       <p className="min-w-0 flex-1 truncate">
         {source.repo} @ {source.sha.slice(0, 12)}
       </p>
@@ -474,8 +478,18 @@ function PluginCard({ plugin }: { plugin: PluginView }) {
       : plugin.agents.map((agent) => agent.name).join(", ");
   const hasForm = plugin.fields.length > 0 && plugin.problem === null;
   const isGit = plugin.source.kind === "git";
+  const hasDiagnostics =
+    plugin.problem !== null ||
+    skippedBy !== undefined ||
+    lacking.length > 0 ||
+    plugin.reports.length > 0;
+  const diagnosticsLabel = translateText("diagnostics", { name: plugin.name });
+  const counts = translateText("summary.parts", {
+    skills: plugin.skills.length,
+    servers: plugin.servers.length,
+  });
   return (
-    <li className="flex min-w-0 flex-col gap-3 border p-3 text-sm wrap-anywhere">
+    <li className="grid min-w-0 grid-cols-1 content-start gap-2 self-start border p-3 text-sm wrap-anywhere">
       <div className="flex min-w-0 items-start gap-3">
         {/* PluginView has no trusted logo asset. Keep the slot decorative and local. */}
         <span
@@ -484,11 +498,16 @@ function PluginCard({ plugin }: { plugin: PluginView }) {
         >
           <PuzzlePieceIcon className="size-5" />
         </span>
-        <div className="min-w-0 space-y-1">
-          <h2 className="font-medium">{plugin.name}</h2>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <div className="min-w-0 flex-1 space-y-1">
+          <h2 className="truncate font-medium" title={plugin.name}>
+            {plugin.name}
+          </h2>
+          <div className="flex h-5 items-center gap-2">
             {plugin.version === null ? null : (
-              <span className="min-w-0 text-xs text-muted-foreground">
+              <span
+                className="truncate text-xs text-muted-foreground"
+                title={plugin.version}
+              >
                 {plugin.version}
               </span>
             )}
@@ -498,99 +517,138 @@ function PluginCard({ plugin }: { plugin: PluginView }) {
           </div>
         </div>
       </div>
-      {plugin.description === "" ? null : (
-        <p className="text-sm text-muted-foreground">{plugin.description}</p>
-      )}
+      <p
+        data-slot="plugin-description"
+        className="line-clamp-2 h-[2lh] text-sm text-muted-foreground"
+        aria-hidden={plugin.description === "" || undefined}
+      >
+        {plugin.description}
+      </p>
       <div className="space-y-1 text-xs text-muted-foreground">
         {plugin.source.kind === "git" ? (
           <GitSource name={plugin.name} source={plugin.source} />
         ) : (
-          <p className="flex min-h-7 items-center">
+          <p data-slot="plugin-source" className="flex h-7 items-center">
             {translateText("source.local")}
           </p>
         )}
-        <p>
-          {translateText("summary.parts", {
-            skills: plugin.skills.length,
-            servers: plugin.servers.length,
-          })}
-        </p>
-      </div>
-      {plugin.problem !== null ||
-      skippedBy !== undefined ||
-      lacking.length > 0 ||
-      plugin.reports.length > 0 ? (
-        <div className="space-y-1">
-          {plugin.problem === null ? null : (
-            <p className="text-xs text-destructive">{plugin.problem}</p>
-          )}
-          {skippedBy === undefined ? null : (
-            <p className="text-xs text-destructive">
-              {translateText("skipped", { agents: skippedBy })}
-            </p>
-          )}
-          {lacking.map((machine) => (
-            <p
-              key={machine.machineId}
-              className="text-xs text-muted-foreground"
-            >
-              {translateText("requires.missing", {
-                machine: machine.name,
-                commands: machine.missing.join(", "),
-              })}
-            </p>
-          ))}
-          {plugin.reports.map((report) => (
-            <p key={report} className="text-xs text-muted-foreground">
-              {report}
-            </p>
-          ))}
-        </div>
-      ) : null}
-      {isGit || hasForm ? (
-        <div className="mt-auto flex flex-wrap justify-end gap-1 border-t pt-2 [&>button]:px-1.5">
-          {isGit ? (
-            <>
-              <Button
-                size="sm"
-                variant="ghost"
-                aria-label={`${translateText("actions.update")} ${plugin.name}`}
-                disabled={update.isPending}
-                onClick={() =>
-                  update.mutate(
-                    { name: plugin.name },
-                    {
-                      onSuccess: () =>
-                        toast.success(translateText("actions.updated")),
-                      onError: showError,
-                    },
-                  )
-                }
-              >
-                {translateText("actions.update")}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                aria-label={`${translateText("actions.remove")} ${plugin.name}`}
-                onClick={() => setRemoving(true)}
-              >
-                {translateText("actions.remove")}
-              </Button>
-            </>
+        <div className="flex h-6 min-w-0 items-center gap-1">
+          <p
+            data-slot="plugin-counts"
+            className="min-w-0 flex-1 truncate"
+            title={counts}
+          >
+            {counts}
+          </p>
+          {hasDiagnostics ? (
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon-xs"
+                  variant="ghost"
+                  aria-label={diagnosticsLabel}
+                  title={diagnosticsLabel}
+                >
+                  <WarningIcon
+                    aria-hidden="true"
+                    className={
+                      plugin.problem !== null || skippedBy !== undefined
+                        ? "text-destructive"
+                        : undefined
+                    }
+                  />
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle className="pr-8 wrap-anywhere">
+                    {diagnosticsLabel}
+                  </DialogTitle>
+                  <DialogDescription asChild>
+                    <div className="space-y-1 wrap-anywhere">
+                      {plugin.problem === null ? null : (
+                        <p className="text-xs text-destructive">
+                          {plugin.problem}
+                        </p>
+                      )}
+                      {skippedBy === undefined ? null : (
+                        <p className="text-xs text-destructive">
+                          {translateText("skipped", { agents: skippedBy })}
+                        </p>
+                      )}
+                      {lacking.map((machine) => (
+                        <p
+                          key={machine.machineId}
+                          className="text-xs text-muted-foreground"
+                        >
+                          {translateText("requires.missing", {
+                            machine: machine.name,
+                            commands: machine.missing.join(", "),
+                          })}
+                        </p>
+                      ))}
+                      {plugin.reports.map((report) => (
+                        <p
+                          key={report}
+                          className="text-xs text-muted-foreground"
+                        >
+                          {report}
+                        </p>
+                      ))}
+                    </div>
+                  </DialogDescription>
+                </DialogHeader>
+              </DialogContent>
+            </Dialog>
           ) : null}
-          {hasForm ? (
+        </div>
+      </div>
+      <div
+        data-slot="plugin-actions"
+        className="flex h-7 box-content items-center justify-end gap-1 border-t pt-2 [&>button]:px-1.5"
+      >
+        {isGit ? (
+          <>
             <Button
               size="sm"
-              variant="outline"
-              aria-label={`${translateText("actions.configure")} ${plugin.name}`}
-              onClick={() => setConfiguring(true)}
+              variant="ghost"
+              aria-label={`${translateText("actions.update")} ${plugin.name}`}
+              disabled={update.isPending}
+              onClick={() =>
+                update.mutate(
+                  { name: plugin.name },
+                  {
+                    onSuccess: () =>
+                      toast.success(translateText("actions.updated")),
+                    onError: showError,
+                  },
+                )
+              }
             >
-              {translateText("actions.configure")}
+              {translateText("actions.update")}
             </Button>
-          ) : null}
-        </div>
-      ) : null}
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={`${translateText("actions.remove")} ${plugin.name}`}
+              onClick={() => setRemoving(true)}
+            >
+              {translateText("actions.remove")}
+            </Button>
+          </>
+        ) : null}
+        {hasForm ? (
+          <Button
+            size="sm"
+            variant="outline"
+            aria-label={`${translateText("actions.configure")} ${plugin.name}`}
+            onClick={() => setConfiguring(true)}
+          >
+            {translateText("actions.configure")}
+          </Button>
+        ) : null}
+      </div>
       {configuring ? (
         <ConfigureDialog
           plugin={plugin}

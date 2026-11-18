@@ -21,6 +21,7 @@
     "http": "HTTP",
     "sse": "SSE"
   },
+  "diagnostics": "Warnings for {{name}}",
   "skipped": "{{agents}} enabled this, but its configuration no longer fits. It is skipped until that is fixed.",
   "requires": {
     "missing": "{{machine}} is missing {{commands}}"

@@ -21,6 +21,7 @@
     "http": "HTTP",
     "sse": "SSE"
   },
+  "diagnostics": "{{name}} 的警告",
   "skipped": "{{agents}} 启用了它，但配置不再合法，正在跳过，改好后恢复。",
   "requires": {
     "missing": "{{machine}} 上缺少 {{commands}}"

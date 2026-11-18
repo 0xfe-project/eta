@@ -162,7 +162,10 @@ describe("the plugin cards", () => {
     expect(text()).toContain("可启用");
     expect(text()).toContain("本地目录");
     expect(text()).toContain("https://example.com/x.git @ abcdef123456");
-    expect(text()).toContain("gpu-box 上缺少 node");
+    await click(document.querySelector('[aria-label="hello 的警告"]'));
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+      "gpu-box 上缺少 node",
+    );
     expect(text()).toContain("unknown field hooks");
   });
 
@@ -276,6 +279,122 @@ describe("the plugin cards", () => {
     );
   });
 
+  it("keeps two lines of description and a fixed footer, even with warnings or no actions", async ({
+    skip,
+  }) => {
+    if (!(await hasBrowser())) return skip();
+    host([
+      plugin({ description: "", fields: [] }),
+      plugin({ name: "short", description: "One line." }),
+      plugin({
+        name: "two",
+        description: "This local plugin has a description that wraps.",
+      }),
+      {
+        ...git,
+        description: "A deliberately long description. ".repeat(12),
+        reports: ["A warning that should not change card height.".repeat(12)],
+      },
+    ]);
+    const { container } = await mount(<PluginSettings />);
+    await flush();
+    await onPage(
+      `<div style="max-width:1100px">${container.innerHTML}</div>`,
+      async (page) => {
+        const cards = page
+          .getByRole("list", { name: "插件" })
+          .getByRole("listitem");
+        const read = () =>
+          cards.evaluateAll((items) =>
+            items.map((card) => {
+              const slot = (name: string) =>
+                card.querySelector<HTMLElement>(
+                  `[data-slot="plugin-${name}"]`,
+                )!;
+              const box = card.getBoundingClientRect();
+              const desc = slot("description");
+              const range = document.createRange();
+              range.selectNodeContents(desc);
+              const counts = slot("counts").getBoundingClientRect();
+              const actions = slot("actions");
+              return {
+                y: box.y,
+                height: box.height,
+                description: desc.getBoundingClientRect().top - box.top,
+                descriptionHeight: desc.getBoundingClientRect().height,
+                lineHeight: Number.parseFloat(
+                  getComputedStyle(desc).lineHeight,
+                ),
+                clamp: getComputedStyle(desc).webkitLineClamp,
+                overflow: getComputedStyle(desc).overflowY,
+                lines: new Set(
+                  [...range.getClientRects()]
+                    .filter(
+                      (rect) =>
+                        rect.top < desc.getBoundingClientRect().bottom &&
+                        rect.bottom > desc.getBoundingClientRect().top,
+                    )
+                    .map((rect) => rect.y),
+                ).size,
+                source: slot("source").getBoundingClientRect().top - box.top,
+                counts: counts.top - box.top,
+                divider: actions.getBoundingClientRect().top - box.top,
+                gap: actions.getBoundingClientRect().top - counts.bottom,
+                buttons: [...actions.querySelectorAll("button")].map(
+                  (button) => {
+                    const rect = button.getBoundingClientRect();
+                    return {
+                      bottom: rect.bottom - box.top,
+                      fits:
+                        rect.left >= box.left &&
+                        rect.right <= box.right &&
+                        rect.bottom <= box.bottom,
+                    };
+                  },
+                ),
+              };
+            }),
+          );
+        const assertSlots = (layout: Awaited<ReturnType<typeof read>>) => {
+          const first = layout[0]!;
+          for (const card of layout) {
+            expect(card).toMatchObject({
+              height: first.height,
+              description: first.description,
+              source: first.source,
+              counts: first.counts,
+              divider: first.divider,
+              clamp: "2",
+              overflow: "hidden",
+            });
+            expect(card.descriptionHeight).toBeCloseTo(card.lineHeight * 2, 1);
+            expect(card.gap).toBeGreaterThan(0);
+            expect(card.gap).toBeLessThan(16);
+            expect(card.lines).toBeLessThanOrEqual(2);
+          }
+          expect(first.buttons).toHaveLength(0);
+          expect(layout[3]!.buttons).toHaveLength(3);
+          const buttons = layout.flatMap((card) => card.buttons);
+          expect(new Set(buttons.map((button) => button.bottom)).size).toBe(1);
+          expect(buttons.every((button) => button.fits)).toBe(true);
+        };
+        const wide = await read();
+        expect(new Set(wide.map((card) => card.y)).size).toBe(1);
+        expect(wide.slice(0, 3).map((card) => card.lines)).toEqual([0, 1, 2]);
+        expect(wide[3]!.lines).toBe(2);
+        const long = cards.last().locator('[data-slot="plugin-description"]');
+        expect(
+          await long.evaluate((desc) => desc.scrollHeight > desc.clientHeight),
+        ).toBe(true);
+        assertSlots(wide);
+        await page.setViewportSize({ width: 320, height: 820 });
+        const narrow = await read();
+        expect(new Set(narrow.map((card) => card.y)).size).toBe(4);
+        assertSlots(narrow);
+      },
+    );
+  });
+
   it("opens the full Git source without a host call and copies it unshortened", async () => {
     const built = host([plugin(), git]);
     const { container } = await mount(<PluginSettings />);
@@ -315,6 +434,7 @@ describe("the plugin cards", () => {
     host([plugin({ agents: [{ id: "a", name: "Ada" }] })]);
     await mount(<PluginSettings />);
     await flush();
+    await click(document.querySelector('[aria-label="hello 的警告"]'));
     expect(text()).toContain("Ada 启用了它，但配置不再合法");
   });
 
@@ -322,6 +442,7 @@ describe("the plugin cards", () => {
     host([plugin({ problem: "plugin.json: unsupported $schema", fields: [] })]);
     const { container } = await mount(<PluginSettings />);
     await flush();
+    await click(container.querySelector('[aria-label="hello 的警告"]'));
     expect(text()).toContain("unsupported $schema");
     expect(container.querySelector('[aria-label="配置 hello"]')).toBeNull();
   });
