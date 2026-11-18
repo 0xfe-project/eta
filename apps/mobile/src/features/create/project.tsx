@@ -11,20 +11,19 @@ import { signal } from "nsh";
 import { machineById, machines, projects } from "../../app/lists";
 import { nav, open } from "../../nav/stack";
 import { call } from "../../wire/target";
-import { DirectoryPicker } from "./DirectoryPicker";
-import { rememberDirectory } from "./remember";
+import { PlacePicker } from "./PlacePicker";
+import { importRecentDirectories } from "./remember";
 
 export interface ProjectChoice {
   projectId: string | undefined;
   path: string;
+  /** The path as its machine writes it (`~/Developer/eta`), from the machine. */
+  display: string;
   machineId?: string;
 }
 
 export const primaryMachine = (): MachineView | undefined =>
   machines().find((machine) => machine.kind === "primary");
-
-export const usableMachines = (): MachineView[] =>
-  machines().filter((machine) => machine.status === "online");
 
 /** The projects a conversation can start in: not an agent's own workspace, not put away. */
 export const choosableProjects = (): ProjectView[] =>
@@ -32,34 +31,26 @@ export const choosableProjects = (): ProjectView[] =>
     (project) => project.kind === "project" && !project.archived,
   );
 
-export function folderName(path: string): string {
-  const trimmed = path.replace(/\/+$/, "");
-  if (trimmed.length === 0) return path;
-  const name = trimmed.slice(trimmed.lastIndexOf("/") + 1);
-  return name.length === 0 ? trimmed : name;
-}
-
-export function shortenPath(
-  path: string,
-  home: string | null | undefined,
-): string {
-  if (home === null || home === undefined) return path;
-  if (path === home) return "~";
-  return path.startsWith(`${home}/`)
-    ? `~/${path.slice(home.length + 1)}`
-    : path;
-}
-
-/** `mac-studio · ~/Developer/eta`. */
-export function placeLine(place: { machineId: string; path: string }): string {
+/** `mac-studio · ~/Developer/eta`: the path as its machine writes it, which the host says. */
+export function placeLine(place: {
+  machineId: string;
+  display: string;
+}): string {
   const machine = machineById(place.machineId);
-  const path = shortenPath(place.path, machine?.home);
-  return machine === undefined ? path : `${machine.name} · ${path}`;
+  return machine === undefined
+    ? place.display
+    : `${machine.name} · ${place.display}`;
 }
 
 /** The choice's state, and the way to the directory picker and back. */
 export function useProjectChoice() {
-  const choice = signal<ProjectChoice>({ projectId: undefined, path: "" });
+  const choice = signal<ProjectChoice>({
+    projectId: undefined,
+    path: "",
+    display: "",
+  });
+  // What this phone kept of recent directories before the host did goes to the host.
+  void importRecentDirectories();
   const adding = () =>
     choice().projectId === "" || choosableProjects().length === 0;
   const project = (): ProjectView | undefined => {
@@ -68,27 +59,26 @@ export function useProjectChoice() {
     return list.find((each) => each.id === choice().projectId) ?? list[0];
   };
   const chosenPlace = () => {
-    const { machineId, path } = choice();
+    const { machineId, path, display } = choice();
     return {
       machineId: machineId ?? primaryMachine()?.id ?? "",
       path: path.trim(),
+      display,
     };
   };
   const browse = () => {
-    const { machineId, path } = chosenPlace();
     open("new:directory", () => (
-      <DirectoryPicker
-        machineId={machineId}
-        start={path === "" ? undefined : path}
-        onPick={(picked, on) => {
-          rememberDirectory(on, picked);
+      <PlacePicker
+        onPick={(picked) => {
           const existing = choosableProjects().find(
-            (each) => each.machineId === on && each.path === picked,
+            (each) =>
+              each.machineId === picked.machineId && each.path === picked.path,
           );
           choice.set({
             projectId: existing?.id ?? "",
-            path: existing === undefined ? picked : "",
-            machineId: on,
+            path: existing === undefined ? picked.path : "",
+            display: existing === undefined ? picked.display : "",
+            machineId: picked.machineId,
           });
           nav.pop();
         }}
@@ -100,7 +90,14 @@ export function useProjectChoice() {
   /** The project the choice stands for, adding the path first when that is what it is. */
   const resolve = async (): Promise<ProjectView> => {
     const found = project();
-    if (found !== undefined) return found;
+    if (found !== undefined) {
+      // Used now: first among the recent places, for every client (making one already is).
+      void call("places", "remember", {
+        machineId: found.machineId,
+        path: found.path,
+      }).catch(() => undefined);
+      return found;
+    }
     const { path, machineId } = choice();
     const { project: made } = await call<ProjectResults["create"]>(
       "projects",

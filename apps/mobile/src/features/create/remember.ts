@@ -1,14 +1,14 @@
-// What the phone remembers between creations, as the web's workspace store does per browser.
+// What the phone remembers between creations. The directories used lately are the host's now
+// (`places.recent`, shared with the web and the terminal); what the phone kept before is handed
+// over once (`importRecentDirectories`).
 
 import { signal, Storage } from "nsh";
+import { call } from "../../wire/target";
 
+/** Where the phone kept its recent directories before the host did: machine id → paths. */
 const RECENT_KEY = "eta.recentDirectories";
 const MODEL_KEY = "eta.lastModel";
-/** How many chosen directories each machine remembers. */
-const RECENT_DIRECTORIES = 5;
 
-/** Machine id → the directories chosen on it, newest first. */
-export const recentDirectories = signal<Record<string, string[]>>({});
 /** Undefined until storage answered; null when nothing was stored. */
 export const lastModel = signal<string | null | undefined>(undefined);
 
@@ -16,36 +16,41 @@ let loading: Promise<void> | undefined;
 
 export function loadRemembered(): Promise<void> {
   loading ??= (async () => {
-    const [recent, model] = await Promise.all([
-      Storage.getItem(RECENT_KEY),
-      Storage.getItem(MODEL_KEY),
-    ]);
-    if (recent) {
-      try {
-        recentDirectories.set(JSON.parse(recent) as Record<string, string[]>);
-      } catch {
-        // Not ours to fix: it is overwritten by the next directory chosen.
-      }
-    }
-    lastModel.set(model ?? null);
+    lastModel.set((await Storage.getItem(MODEL_KEY)) ?? null);
   })();
   return loading;
-}
-
-export function rememberDirectory(machineId: string, path: string): void {
-  const earlier = recentDirectories()[machineId] ?? [];
-  const next = {
-    ...recentDirectories(),
-    [machineId]: [path, ...earlier.filter((seen) => seen !== path)].slice(
-      0,
-      RECENT_DIRECTORIES,
-    ),
-  };
-  recentDirectories.set(next);
-  void Storage.setItem(RECENT_KEY, JSON.stringify(next));
 }
 
 export function rememberModel(model: string): void {
   lastModel.set(model);
   void Storage.setItem(MODEL_KEY, model);
+}
+
+let importing: Promise<void> | undefined;
+
+/**
+ * The recent directories this phone kept, handed to the host once and then let go of. The host
+ * adds what it does not know behind what it does, so asking twice changes nothing; only its answer
+ * removes them here, so a failed try is tried again the next time.
+ */
+export function importRecentDirectories(): Promise<void> {
+  importing ??= (async () => {
+    const stored = await Storage.getItem(RECENT_KEY);
+    if (stored === null || stored === undefined) return;
+    let recent: unknown;
+    try {
+      recent = JSON.parse(stored);
+    } catch {
+      // Nothing the host could take: let it go.
+      await Storage.removeItem(RECENT_KEY);
+      return;
+    }
+    try {
+      await call("places", "importRecent", { recent });
+      await Storage.removeItem(RECENT_KEY);
+    } catch {
+      importing = undefined;
+    }
+  })();
+  return importing;
 }

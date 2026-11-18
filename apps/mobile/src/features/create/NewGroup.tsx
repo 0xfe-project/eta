@@ -22,7 +22,7 @@ import {
   Title,
   TopBar,
 } from "./fields";
-import { choosableProjects, folderName, useProjectChoice } from "./project";
+import { choosableProjects, useProjectChoice } from "./project";
 
 const ADD = "__add__";
 const NO_STEWARD = "__none__";
@@ -76,7 +76,7 @@ export function NewGroupScreen() {
       return `${project.name} · ${machineById(project.machineId)?.name ?? ""}`;
     const place = projects.chosenPlace();
     if (place.path === "") return t("create.addPath");
-    return `${folderName(place.path)} · ${machineById(place.machineId)?.name ?? ""}`;
+    return `${place.display} · ${machineById(place.machineId)?.name ?? ""}`;
   };
 
   const options = (): SelectOption<string>[] => [

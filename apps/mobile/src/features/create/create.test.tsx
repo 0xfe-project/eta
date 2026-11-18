@@ -10,7 +10,8 @@ const start = async (storage: Record<string, string> = {}) => {
   });
   await app.waitFor("id:tab-conversations");
   await app.press("id:tab-conversations");
-  await app.waitFor("wire 重连");
+  // The conversation list is there (its fixture titles are English).
+  await app.waitFor("wire reconnect");
   await app.press("id:create");
   await app.waitFor("新建智能体");
   return app;
@@ -48,24 +49,33 @@ test("07: starts with the first project and agent, and back from the chat is the
   );
 });
 
-test("07a: walks to a directory, adds it as a project on start", async () => {
-  const app = await start();
+/** 07a: from 新对话 into the places flow, on mac-studio. */
+const toWays = async (app: Awaited<ReturnType<typeof start>>) => {
   await app.press("label:新对话");
   await app.press("label:添加目录…");
-  await app.waitFor("label:Developer");
-  expect(app.texts()).toContain("最近用过");
-  expect(app.texts()).toContain("~/Developer/hutch");
-  expect(app.texts()).toContain("已添加");
-  expect(app.texts()).not.toContain(".config");
-  await app.press("label:隐藏目录");
-  await app.waitFor(".config");
-  await app.press("label:Developer");
-  await app.waitFor("label:notes");
-  expect(app.texts()).not.toContain("最近用过");
-  await app.press("label:notes");
-  await app.waitFor("这里没有子目录，可以直接选择当前目录");
-  await app.press("id:picker-choose");
-  await app.waitFor("notes");
+  await app.waitFor("label:mac-studio");
+  // nas is offline: greyed out, with why.
+  expect(app.texts()).toContain("离线");
+  await expect(app.press("label:nas")).rejects.toMatchObject({
+    code: "ERR_NSH_TEST_DISABLED",
+  });
+  await app.press("label:mac-studio");
+  await app.waitFor("label:搜索目录");
+  for (const text of ["浏览…", "从 GitHub 克隆", "新建目录"])
+    expect(app.texts()).toContain(text);
+};
+
+test("07a: searching lists what was used lately first, the phone's old ones included", async () => {
+  const app = await start();
+  await toWays(app);
+  await app.waitFor("没有登录 gh，只能贴地址或 owner/repo");
+  await app.press("label:搜索目录");
+  // The phone's old `eta.recentDirectories` went to the host and come back as the host's.
+  await app.waitFor("label:~/Developer/hutch");
+  expect(app.texts()).toContain("~/Developer/eta");
+  await app.type("id:place-query", "note");
+  await app.waitFor("label:~/Developer/notes");
+  await app.press("label:~/Developer/notes");
   await app.waitFor("mac-studio · ~/Developer/notes");
   await app.press("id:start");
   await app.waitUntil(() => app.count("id:start") === 0);
@@ -73,44 +83,90 @@ test("07a: walks to a directory, adds it as a project on start", async () => {
   await app.waitFor("notes");
 });
 
-test("07a: a directory that is already a project is that project", async () => {
+test("07a: a typed path is checked on the machine; one that is not there says so", async () => {
   const app = await start();
-  await app.press("label:新对话");
-  await app.press("label:添加目录…");
-  await app.press("label:Developer");
-  await app.press("label:eta");
-  await app.waitFor("label:packages");
-  await app.press("id:picker-choose");
+  await toWays(app);
+  await app.press("label:搜索目录");
+  await app.type("id:place-query", "~/nowhere");
+  await app.waitFor("label:打开 ~/nowhere");
+  await app.press("label:打开 ~/nowhere");
+  await app.waitFor("这个目录不存在");
+  await app.clear("id:place-query");
+  await app.type("id:place-query", "~/Developer/eta");
+  await app.waitFor("label:~/Developer/eta");
+  await app.press("label:~/Developer/eta");
   await app.waitFor("id:start");
+  // Already a project: that project, not a second one.
   expect(app.texts().filter((text) => text === "eta").length).toBe(1);
 });
 
-test("07a′: the list's states", async () => {
+test("07a: browsing walks the machine's crumbs, shows hidden ones on asking, and picks where it is", async () => {
   const app = await start();
-  await app.press("label:新对话");
-  await app.press("label:添加目录…");
+  await toWays(app);
+  await app.press("label:浏览…");
   await app.waitFor("label:Developer");
-  await app.type("id:picker-filter", "zzz");
-  await app.waitFor("没有匹配的目录");
-  await app.clear("id:picker-filter");
-  await app.press("label:big");
-  await app.waitFor("目录太多，只列出前 1000 个。用筛选或输入路径。");
+  expect(app.texts()).not.toContain(".config");
+  await app.press("label:隐藏目录");
+  await app.waitFor(".config");
+  await app.press("label:Developer");
+  await app.waitFor("label:notes");
   await app.press("~");
   await app.waitFor("label:locked");
   await app.press("label:locked");
   await app.waitFor("没有权限读取这个目录");
-  await app.press("label:回到上一级");
-  await app.waitFor("label:locked");
-  await app.press("输入路径");
-  await app.clear("id:picker-path");
-  await app.type("id:picker-path", "/nowhere");
-  await app.submit("id:picker-path");
-  await app.waitFor("这个目录不存在");
-  await app.press("取消");
-  await app.press("id:picker-machine");
-  await app.press("label:gpu-box");
-  await app.waitFor("连不上这台机器");
-  await app.waitFor("label:重试");
+  await app.press("~");
+  await app.waitFor("label:Developer");
+  await app.press("label:Developer");
+  await app.press("label:notes");
+  await app.waitFor("这里没有子目录，可以直接选择当前目录");
+  await app.press("id:picker-choose");
+  await app.waitFor("mac-studio · ~/Developer/notes");
+});
+
+test("07a: a new directory, made where it was put", async () => {
+  const app = await start();
+  await toWays(app);
+  await app.press("label:新建目录");
+  await app.waitFor("label:~");
+  await app.type("id:place-query", "~/Dev");
+  await app.waitFor("label:~/Developer");
+  await app.press("label:~/Developer");
+  await app.waitFor("在 ~/Developer 里新建");
+  await app.type("id:place-query", "fresh");
+  await app.waitFor("label:新建 ~/Developer/fresh");
+  await app.press("label:新建 ~/Developer/fresh");
+  await app.waitFor("mac-studio · ~/Developer/fresh");
+});
+
+test("07a: cloning owner/repo by HTTPS into the default place", async () => {
+  const app = await start();
+  await toWays(app);
+  await app.press("label:从 GitHub 克隆");
+  await app.type("id:place-query", "octocat/Hello-World");
+  await app.waitFor("通过 HTTPS 克隆");
+  expect(app.texts()).toContain("通过 SSH 克隆");
+  // The first is HTTPS.
+  await app.press("label:octocat/Hello-World >> nth=0");
+  await app.waitFor("label:~/Developer/Hello-World");
+  await app.press("label:~/Developer/Hello-World");
+  await app.waitFor("mac-studio · ~/Developer/Hello-World");
+});
+
+test("07a′: the back arrow is a page back, and the first page's back leaves", async () => {
+  const app = await start();
+  await toWays(app);
+  await app.press("label:搜索目录");
+  await app.type("id:place-query", "eta");
+  await app.press("id:back");
+  await app.waitFor("label:新建目录");
+  await app.press("label:搜索目录");
+  // What was typed is still there.
+  await app.waitFor("label:~/Developer/eta");
+  await app.press("id:back");
+  await app.press("id:back");
+  await app.waitFor("label:mac-studio");
+  await app.press("id:back");
+  await app.waitFor("id:start");
 });
 
 test("07b: a typed name and a goal; empty members can't go", async () => {

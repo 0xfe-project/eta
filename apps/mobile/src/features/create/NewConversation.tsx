@@ -10,12 +10,7 @@ import { toast } from "../../ui/toast";
 import { call } from "../../wire/target";
 import { enterChat } from "./enter";
 import { Caption, Cta, Title, TopBar } from "./fields";
-import {
-  choosableProjects,
-  folderName,
-  placeLine,
-  useProjectChoice,
-} from "./project";
+import { choosableProjects, placeLine, useProjectChoice } from "./project";
 
 function ProjectRow(props: {
   name: string;
@@ -83,7 +78,7 @@ export function NewConversationScreen() {
         <If when={projects.adding() && projects.choice().path.trim() !== ""}>
           <ProjectRow
             selected
-            name={folderName(projects.choice().path.trim())}
+            name={projects.choice().display}
             place={placeLine(projects.chosenPlace())}
             onPress={projects.browse}
           />

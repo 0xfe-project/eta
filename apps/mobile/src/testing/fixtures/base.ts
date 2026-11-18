@@ -78,6 +78,7 @@ const project = (id: string, name: string, machineId: string): ProjectView => ({
   id,
   machineId,
   path: `/Users/eric/Developer/${id}`,
+  display: `~/Developer/${id}`,
   name,
   kind: "project",
   ownerAgentId: null,
