@@ -55,6 +55,15 @@ import { conversationTools } from "./tools";
 
 /** What a reply says when the process died under it. */
 export const RESTART_TEXT = "The server restarted before this reply finished.";
+/** What a reply that was being stopped when the server went says about it. */
+export const RESTART_STOP_NOTE =
+  "The server restarted while this reply was being stopped, so it was stopped here.";
+
+/**
+ * How long a run is given to end once it was told to stop. After that the reply is the user's:
+ * it ends as stopped, and whatever the run says later is not written.
+ */
+const STOP_GRACE_MS = 5_000;
 
 /** One wake, as a feature that wants to act around its run sees it. */
 export interface RunInfo {
@@ -140,12 +149,23 @@ export interface EngineOptions {
   /** Say that product state moved: these conversations, or all of them. */
   changed: (conversations?: readonly string[] | "all") => void;
   warn: (message: string) => void;
+  /** How long a run told to stop has before its reply is stopped without it; 5 seconds. */
+  stopGraceMs?: number | undefined;
 }
 
 /** A reply that is running: which session runs it, to stop it or to join it. */
 interface Running {
   replyId: string;
   handle: SessionHandle;
+  /** Who runs it and where, for the words a reply that is stopped without its run says. */
+  agent: string;
+  machine: { id: string; name: string; remote: boolean };
+  /** Settles when the run itself has ended, however it ended. */
+  ended: Promise<void>;
+  /** Stop waiting for the run: its reply is over, whatever the run does. */
+  release: () => void;
+  /** The end of the wait for a run that was told to stop. */
+  deadline?: ReturnType<typeof setTimeout> | undefined;
 }
 
 export class Engine {
@@ -166,12 +186,18 @@ export class Engine {
   readonly #pluginStamp: EngineOptions["pluginStamp"];
   readonly #pluginsRead: EngineOptions["pluginsRead"];
   readonly #sessionStamp: EngineOptions["sessionStamp"];
+  readonly #stopGraceMs: number;
 
   #closing = false;
   /** Replies waiting their turn on a participant's session, by `conversation:agent`. */
   readonly #chains = new Map<string, Promise<unknown>>();
   /** The reply each participant's session is running right now. */
   readonly #running = new Map<string, Running>();
+  /**
+   * Runs whose reply was stopped without them, by `conversation:agent`: they may still be going on
+   * the session, and the next run there waits for them a moment first.
+   */
+  readonly #leftover = new Map<string, Promise<void>>();
   /** What each open session was opened with, to know when it has to be opened again. */
   readonly #opened = new Map<string, string>();
   /** What each session made away from its project's machine is told about that, by `conversation:agent`. */
@@ -194,6 +220,10 @@ export class Engine {
     this.#pluginStamp = options.pluginStamp;
     this.#pluginsRead = options.pluginsRead;
     this.#sessionStamp = options.sessionStamp;
+    this.#stopGraceMs = options.stopGraceMs ?? STOP_GRACE_MS;
+    options.remote?.onLost?.((machineId, reason) =>
+      this.#machineLost(machineId, reason),
+    );
     this.#local = new LocalPlace({
       opened: this.#opened,
       warn: options.warn,
@@ -212,7 +242,10 @@ export class Engine {
    */
   async detach(): Promise<void> {
     this.#closing = true;
-    for (const running of this.#running.values()) running.handle.abort();
+    for (const running of this.#running.values()) {
+      clearTimeout(running.deadline);
+      running.handle.abort();
+    }
     await Promise.allSettled([...this.#chains.values()]);
     this.#local.detach();
   }
@@ -350,19 +383,35 @@ export class Engine {
         return undefined;
       }
     };
+    let runEnded!: () => void;
+    const over = new Promise<void>((resolve) => (runEnded = resolve));
     const offStart = on("turn:start", () => {
       offStart();
       // A reply of the engine's took the session meanwhile: what the run says is that reply's.
       if (this.#running.has(key)) return;
       row = write("working");
       if (row === undefined) return;
-      this.#running.set(key, { replyId: row.id, handle });
+      const machine = this.#machines.primary();
+      this.#running.set(key, {
+        replyId: row.id,
+        handle,
+        agent: this.#agents.get(agentId)?.name ?? "The agent",
+        machine: {
+          id: machine?.id ?? "",
+          name: machine?.name ?? "",
+          remote: false,
+        },
+        ended: over,
+        // Nothing waits for this run: the end below finds its row already over.
+        release: () => undefined,
+      });
       this.#changed([conversationId]);
     });
     const offEnd = on("turn:run-end", ({ status, error }) => {
       offStart();
       offEnd();
       heard.stop();
+      runEnded();
       if (row === undefined) {
         if (status === "failed" && !this.#running.has(key)) {
           write("failed", error ?? "The run failed.");
@@ -370,7 +419,11 @@ export class Engine {
         }
         return;
       }
-      if (this.#running.get(key)?.replyId === row.id) this.#running.delete(key);
+      const mine = this.#running.get(key);
+      if (mine?.replyId === row.id) {
+        clearTimeout(mine.deadline);
+        this.#running.delete(key);
+      }
       const said = heard.said();
       const ended = {
         ...row.data,
@@ -1024,23 +1077,125 @@ export class Engine {
 
   /**
    * A reply that has not started simply never will; one that is running is told to stop and ends
-   * as `stopped` when the run gives up. Stopping twice is not a second change.
+   * as `stopped` when the run gives up. The stop is the user's, not the run's: a run that has not
+   * ended within the grace, or whose machine could not be told, is let go of and its reply ends
+   * as stopped anyway, saying why. Stopping a reply that is already stopping does that at once.
    */
   #stopRow(row: MessageView): MessageView | undefined {
     if (row.status === "queued") {
       return this.#timeline.finish(row.id, { status: "stopped", text: "" });
     }
+    const running =
+      row.agentId === null
+        ? undefined
+        : this.#running.get(keyOf(row.conversationId, row.agentId));
+    const mine = running?.replyId === row.id ? running : undefined;
+    if (row.status === "stopping") {
+      return this.#letGo(
+        row.id,
+        "stop_unanswered",
+        mine === undefined ? undefined : unanswered(mine),
+      );
+    }
     if (row.status !== "working" && row.status !== "waiting_for_input")
       return undefined;
+    // Nothing runs it (its run is gone): there is nothing to wait for.
+    if (mine === undefined) return this.#letGo(row.id, "stop_unanswered");
     const stopping = this.#timeline.transition(
       row.id,
       ["working", "waiting_for_input"],
       "stopping",
     );
-    if (stopping !== undefined && row.agentId !== null) {
-      this.#running.get(keyOf(row.conversationId, row.agentId))?.handle.abort();
-    }
+    if (stopping === undefined) return undefined;
+    clearTimeout(mine.deadline);
+    mine.deadline = setTimeout(() => {
+      if (
+        this.#letGo(row.id, "stop_unanswered", unanswered(mine)) !== undefined
+      )
+        this.#changed([row.conversationId]);
+    }, this.#stopGraceMs);
+    mine.handle.stop().catch((error: unknown) => {
+      this.#warn(`[eta] could not stop ${mine.handle.id}: ${messageOf(error)}`);
+      const why = messageOf(error);
+      const note = `Could not tell ${mine.machine.name} to stop ${mine.agent} (${why}), so it was stopped here.`;
+      if (
+        this.#letGo(row.id, "stop_unreachable", note, { stopError: why }) !==
+        undefined
+      )
+        this.#changed([row.conversationId]);
+    });
     return stopping;
+  }
+
+  /**
+   * End a reply as stopped without waiting for its run any longer, and say why. The run, if there
+   * is one, is let go of: what it says later is not written, and the session's next run waits for
+   * it a moment before it starts. Undefined when the reply had already ended.
+   */
+  #letGo(
+    replyId: string,
+    code: string,
+    note?: string,
+    extra?: Record<string, unknown>,
+  ): MessageView | undefined {
+    const row = this.#timeline.get(replyId);
+    if (row === undefined) return undefined;
+    const ended = this.#timeline.finish(replyId, {
+      status: "stopped",
+      text: row.text,
+      thinking: row.thinking,
+      data: {
+        ...row.data,
+        ...extra,
+        code,
+        ...(note === undefined ? {} : { stopNote: note }),
+      },
+    });
+    if (ended !== undefined) this.#release(row);
+    return ended;
+  }
+
+  /** Stop waiting for the run of a reply that is over: the session's next run waits for it instead. */
+  #release(row: MessageView): void {
+    if (row.agentId === null) return;
+    const key = keyOf(row.conversationId, row.agentId);
+    const running = this.#running.get(key);
+    if (running?.replyId !== row.id) return;
+    clearTimeout(running.deadline);
+    this.#running.delete(key);
+    this.#leftover.set(key, running.ended);
+    void running.ended.then(() => {
+      if (this.#leftover.get(key) === running.ended) this.#leftover.delete(key);
+    });
+    running.release();
+  }
+
+  /**
+   * A machine's link went down: every reply running there ends now, saying so. One being stopped
+   * is stopped; one still working failed, since what it did there is unknown. What the machine may
+   * still be running is stopped when it is back (`RemotePlace`).
+   */
+  #machineLost(machineId: string, reason: string): void {
+    const touched = new Set<string>();
+    for (const running of [...this.#running.values()]) {
+      if (running.machine.id !== machineId) continue;
+      const row = this.#timeline.get(running.replyId);
+      if (row === undefined) continue;
+      const lost = `The link to ${running.machine.name} was lost (${reason})`;
+      if (row.status === "stopping") {
+        this.#letGo(row.id, "link_lost", `${lost}, so it was stopped here.`);
+      } else {
+        const failed = this.#timeline.finish(row.id, {
+          status: "failed",
+          text: `${lost} while this reply was running, so what it did there is unknown. Nothing was run again.`,
+          data: { ...row.data, code: "link_lost" },
+        });
+        if (failed === undefined) continue;
+        this.#release(row);
+      }
+      touched.add(row.conversationId);
+    }
+    if (touched.size > 0) this.#changed([...touched]);
   }
 
   /* ---------------------------------------------------------------- running */
@@ -1145,6 +1300,20 @@ export class Engine {
     }
     // A stop that arrived while the session was being made.
     if (this.#timeline.get(replyId)?.status !== "queued") return;
+    // A run whose reply was stopped without it may still be going on this session. It was told to
+    // stop; it gets one more telling and a moment. A session still busy with it cannot take the
+    // words: they would wait behind a run nobody waits for.
+    const key = keyOf(conversationId, agent.id);
+    const leftover = this.#leftover.get(key);
+    if (leftover !== undefined) {
+      handle.abort();
+      if (!(await settlesWithin(leftover, this.#stopGraceMs)))
+        return fail(
+          "still_running",
+          `${agent.name} is still busy with the reply you stopped, so this message was not given to it. Send it again in a moment.`,
+        );
+      if (this.#timeline.get(replyId)?.status !== "queued") return;
+    }
 
     // What it is told is settled before the row says it is working, so one push carries both.
     const told = await this.#briefingFor(
@@ -1169,8 +1338,23 @@ export class Engine {
     if (this.#timeline.get(replyId)?.status !== "queued") return;
     const prompt = extra === undefined ? told.text : `${extra}\n\n${told.text}`;
     this.#conversations.setSeen(conversationId, agent.id, told.seen);
-    const key = keyOf(conversationId, agent.id);
-    this.#running.set(key, { replyId, handle });
+    let release!: () => void;
+    const released = new Promise<undefined>(
+      (resolve) => (release = () => resolve(undefined)),
+    );
+    const running: Running = {
+      replyId,
+      handle,
+      agent: agent.name,
+      machine: {
+        id: machine.id,
+        name: machine.name,
+        remote: machine.kind !== "primary",
+      },
+      ended: Promise.resolve(),
+      release,
+    };
+    this.#running.set(key, running);
     // The row says where the run starts in the session. The page cannot tell from the session: its
     // view is sent on a pace of its own, so for a moment after this push the newest things the
     // view holds are still the last run's.
@@ -1180,11 +1364,15 @@ export class Engine {
     this.#changed([conversationId]);
 
     try {
-      const result = await handle.run(
-        prompt,
-        () => !this.#closing,
-        told.images,
+      const run = handle.run(prompt, () => !this.#closing, told.images);
+      running.ended = run.then(
+        () => undefined,
+        () => undefined,
       );
+      // The reply is let go of when the run would not stop (`#letGo`): it is over, and what the run
+      // says when it does end is nobody's.
+      const result = await Promise.race([run, released]);
+      if (result === undefined) return;
       // What the run did with tools, and the order of its steps, stay on the row, so the page draws
       // it after the run as it did during it.
       const activity = {
@@ -1229,10 +1417,11 @@ export class Engine {
         data: { ...reply.data, code: lost ? "link_lost" : "run_failed" },
       });
     } finally {
-      this.#running.delete(key);
+      clearTimeout(running.deadline);
+      if (this.#running.get(key) === running) this.#running.delete(key);
       this.#changed([conversationId]);
+      this.#afterRun(info);
     }
-    this.#afterRun(info);
   }
 
   /** Where the session stands before a run; a machine that cannot say does not stop the run. */
@@ -1405,6 +1594,12 @@ function stampOf(agent: AgentRecord): string {
   return JSON.stringify([agent.name, agent.instructions, agent.persona]);
 }
 
+/** What a reply stopped without its run says: the run was told and did not end. */
+function unanswered(running: Running): string {
+  const where = running.machine.remote ? ` on ${running.machine.name}` : "";
+  return `${running.agent}${where} did not stop when asked, so it was stopped here.`;
+}
+
 function nameIn(
   members: readonly { id: string; name: string }[],
   id: string,
@@ -1450,4 +1645,20 @@ function agentPromptOf(
   ];
   if (agent.instructions.trim() !== "") parts.push(agent.instructions);
   return parts.join("\n\n");
+}
+
+/** Whether the promise settles within `ms`. */
+async function settlesWithin(
+  promise: Promise<void>,
+  ms: number,
+): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<false>((resolve) => {
+    timer = setTimeout(resolve, ms, false);
+  });
+  try {
+    return await Promise.race([promise.then(() => true as const), late]);
+  } finally {
+    clearTimeout(timer);
+  }
 }

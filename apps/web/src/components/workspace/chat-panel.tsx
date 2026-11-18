@@ -116,6 +116,13 @@ const FAILURE_CODES = {
   unavailable: "unavailable",
   gone: "gone",
 } as const;
+// Why a reply the user stopped ended without its run, as the host marks it (chat:reply.stopCodes.*).
+const STOP_CODES = {
+  stop_unanswered: "unanswered",
+  stop_unreachable: "unreachable",
+  link_lost: "linkLost",
+  restart: "restart",
+} as const;
 // Settings → Appearance's chat content width, as the section's `--chat-width`: the transcript, the strip over the
 // composer and `.input-outer` all read that, so they cannot come apart.
 const chatWidths: Record<NonNullable<WorkspaceState["chatWidth"]>, string> = {
@@ -1044,8 +1051,22 @@ function ReplyOutcome({
     "tasks",
   ] as const);
   switch (message.status) {
-    case "stopped":
-      return <Warning>{translateText("common:status.stopped")}</Warning>;
+    case "stopped": {
+      const code = String(message.data.code ?? "");
+      const known = Object.hasOwn(STOP_CODES, code)
+        ? STOP_CODES[code as keyof typeof STOP_CODES]
+        : undefined;
+      return (
+        <Warning>
+          {translateText("common:status.stopped")}
+          {known === undefined
+            ? ""
+            : ` · ${translateText(`reply.stopCodes.${known}`, {
+                error: String(message.data.stopError ?? ""),
+              })}`}
+        </Warning>
+      );
+    }
     case "failed": {
       const code = String(message.data.code ?? "");
       const known = Object.hasOwn(FAILURE_CODES, code)

@@ -440,7 +440,7 @@ describe("a run that fails", () => {
 });
 
 describe("a restart", () => {
-  it("fails what a crashed process left in flight, with the reason", async () => {
+  it("ends what a crashed process left in flight, with the reason", async () => {
     const dataDir = await tempDir();
     const { models } = scriptedModels(() => HANG);
     const first = await world({ dataDir, models });
@@ -473,12 +473,14 @@ describe("a restart", () => {
     await restarted.watch(group.id);
 
     const replies = ids.map((id) => restarted.row(group.id, id)!);
+    // The one being stopped was stopped, as the user asked; the others failed.
     expect(replies.map((row) => row.status)).toEqual([
       "failed",
-      "failed",
+      "stopped",
       "failed",
     ]);
     expect(replies[0]!.text).toMatch(/restarted/);
+    expect(replies[1]!.data.stopNote).toMatch(/restarted/);
     expect(replies.every((row) => row.data.code === "restart")).toBe(true);
     // Nobody is shown as working.
     expect(

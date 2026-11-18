@@ -419,6 +419,29 @@ describe("outcome", () => {
     expect(draw(outcome("run-error", undefined, "x")).lines[0]).toContain(RED);
   });
 
+  it("says why a reply was stopped without its run", () => {
+    expect(
+      draw(outcome("stopped", "stop_unanswered", ""), { width: 200 }).plain,
+    ).toEqual([
+      "■ Stopped · It did not stop when asked, so it was stopped here",
+    ]);
+    expect(
+      draw(outcome("stopped", "stop_unreachable", "no such session"), {
+        locale: "zh",
+        width: 200,
+      }).plain,
+    ).toEqual(["■ 已停止 · 没能通知它停下（no such session），已在这边停止"]);
+    expect(
+      draw(outcome("stopped", "link_lost", ""), { width: 200 }).plain,
+    ).toEqual([
+      "■ Stopped · The link to its machine was lost, so it was stopped here",
+    ]);
+    // Stopped by its run, it says no more.
+    expect(draw(outcome("stopped", undefined, "")).plain).toEqual([
+      "■ Stopped",
+    ]);
+  });
+
   it("speaks Chinese under zh", () => {
     expect(
       draw(outcome("failed", "run_failed", "boom"), { locale: "zh" }).plain,

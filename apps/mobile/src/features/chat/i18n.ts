@@ -19,6 +19,10 @@ export const i18n = {
     "chat.message.joined": "已并入 {names} 正在进行的回复",
     "chat.message.sending": "发送中…",
     "chat.message.stopped": "已停止",
+    "chat.stop.unanswered": "它没有响应停止，已在这边停止。",
+    "chat.stop.unreachable": "没能通知它停下（{error}），已在这边停止。",
+    "chat.stop.linkLost": "和它所在机器的连接断了，已在这边停止。",
+    "chat.stop.restart": "停止时宿主重启了，已在这边停止。",
     "chat.message.edit": "编辑",
     "chat.message.discard": "丢弃",
     "chat.message.resend": "重新发送",
@@ -183,6 +187,14 @@ export const i18n = {
     "chat.message.joined": "Joined {names}'s reply in progress",
     "chat.message.sending": "Sending…",
     "chat.message.stopped": "Stopped",
+    "chat.stop.unanswered":
+      "It did not stop when asked, so it was stopped here.",
+    "chat.stop.unreachable":
+      "Could not tell it to stop ({error}), so it was stopped here.",
+    "chat.stop.linkLost":
+      "The link to its machine was lost, so it was stopped here.",
+    "chat.stop.restart":
+      "The host restarted while it was stopping, so it was stopped here.",
     "chat.message.edit": "Edit",
     "chat.message.discard": "Discard",
     "chat.message.resend": "Send again",
