@@ -142,6 +142,21 @@ describe("an account's state", () => {
         NOW,
       ).state,
     ).toBe("needs_login");
+    // CPA's own word after renewing the login failed: its status stays active, its models go.
+    expect(
+      fileConnection(
+        entry({
+          requires_sign_in: true,
+          renewal_state: "sign_in_required",
+          recovery_stage: "sign_in_required",
+          inference_verified: false,
+          renewal_verified: false,
+          next_action: "sign_in",
+        }),
+        "codex",
+        NOW,
+      ),
+    ).toMatchObject({ state: "needs_login", error: { code: "login_expired" } });
     // A stale error with nothing about the login is not.
     expect(
       fileConnection(

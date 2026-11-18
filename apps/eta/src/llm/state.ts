@@ -178,11 +178,16 @@ export function keyConnection(input: {
   };
 }
 
-/** A credential the provider no longer accepts. A 401 is about the credential, whichever model it came from. */
+/**
+ * A credential the provider no longer accepts. A 401 is about the credential, whichever model it
+ * came from. CPA (v8.0.77 on) also says so itself once renewing the login failed for good: it
+ * keeps the status `active` while the access token lasts, but serves none of its models.
+ */
 function loginRejected(
   entry: AuthFileEntry,
   cooldowns: readonly CooldownView[],
 ): boolean {
+  if (entry.requires_sign_in) return true;
   if (cooldowns.some((cooldown) => LOGIN_REJECTED.has(cooldown.reason)))
     return true;
   return (
