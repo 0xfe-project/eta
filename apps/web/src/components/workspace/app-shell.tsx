@@ -9,6 +9,7 @@ import { EnvelopeSimpleIcon } from "@phosphor-icons/react/EnvelopeSimple";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
+import { PuzzlePieceIcon } from "@phosphor-icons/react/PuzzlePiece";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
@@ -32,11 +33,13 @@ import { ROUTINES_VISIBLE } from "@/lib/features";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useEmail, useVerifyEmailAccount } from "@/queries/email";
+import { usePlugins } from "@/queries/plugins";
 import { useTasks } from "@/queries/tasks";
 import { AgentEditor } from "./agent-editor";
 import { NewConversationDialog } from "./new-conversation-dialog";
 import { usePaneWidth } from "./pane";
 import { SettingsDialog, SettingsMenuItem } from "./settings-dialog";
+import { AttentionDot } from "./settings-nav";
 import { CaptainSection, ConversationList } from "./sidebar-tree";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -72,6 +75,13 @@ const sections = [
     },
     icon: ClockIcon,
   },
+  {
+    to: "/plugins",
+    get label() {
+      return translate("navigation:sections.plugins");
+    },
+    icon: PuzzlePieceIcon,
+  },
 ] as const;
 
 /** The sections this build offers: Routine keeps its entry only where the feature is on. */
@@ -87,6 +97,14 @@ function useBadges(): Partial<Record<(typeof sections)[number]["to"], number>> {
     "/tasks": tasks.filter((t) => t.status === "in_review").length,
     "/email": stats.unread,
   };
+}
+
+/** An enabled plugin that is no longer usable is skipped by the agents that count on it. */
+function usePluginsNeedAttention() {
+  const { plugins } = usePlugins();
+  return plugins.some(
+    (plugin) => plugin.state !== "ready" && plugin.agents.length > 0,
+  );
 }
 
 const MAILBOX_STATUS = {
@@ -148,6 +166,7 @@ export function Sidebar({
   const { state, isMobile, toggleSidebar } = useSidebar();
   const badges = useBadges();
   const mailbox = useMailboxRow();
+  const pluginsNeedAttention = usePluginsNeedAttention();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   // The rail: the width 4rem of icons, and the same tree in it. Not the agent shelf's fold — that
   // one is the workspace store's, and the two never meet.
@@ -237,6 +256,10 @@ export function Sidebar({
                 mail?.status === undefined
                   ? undefined
                   : translateText(MAILBOX_STATUS[mail.status]);
+              const needsAttention = to === "/plugins" && pluginsNeedAttention;
+              const detail = needsAttention
+                ? translateText("accessibility.pluginsNeedAttention")
+                : health;
               const name = count ? `${label} · ${count}` : label;
               // Conversation is the home row: `startsWith("/")` is true from every section, so it is lit by
               // the home path alone. The other rows keep the prefix match.
@@ -256,11 +279,18 @@ export function Sidebar({
                     <Link
                       to={to}
                       aria-label={
-                        health === undefined ? name : `${name} · ${health}`
+                        detail === undefined ? name : `${name} · ${detail}`
                       }
                     >
                       <Icon aria-hidden="true" />
                       {rail ? null : <span>{label}</span>}
+                      {needsAttention ? (
+                        <AttentionDot
+                          className={
+                            rail ? "absolute -top-0.5 -right-1" : "ml-auto"
+                          }
+                        />
+                      ) : null}
                       {/* The state rides in the row, in the flow: it is what the label leads to
                           a question about, and `pr-8` is already reserved for the button beside
                           it by the row's own action. */}
@@ -422,6 +452,7 @@ export function SidebarShell({ children }: { children: ReactNode }) {
 export function BottomNav() {
   const { t: translateText } = useTranslation(["navigation"] as const);
   const badges = useBadges();
+  const pluginsNeedAttention = usePluginsNeedAttention();
   return (
     <>
       <nav
@@ -434,14 +465,14 @@ export function BottomNav() {
         {/* Destinations of one width, the plus in a cell of its own: the solid square is the axis
           the tabs are read against, and it breaks the plate's edge above and below, which is what
           makes it a bigger thing than the tabs beside it rather than one of them. Routine keeps a
-          cell only where the feature is on; with three destinations the four cells are equal. */}
+          cell only where the feature is on. */}
         <div className="relative h-[52px] border bg-background">
           <div
             className={cn(
               "grid h-full grid-rows-1",
               ROUTINES_VISIBLE
-                ? "grid-cols-[1fr_1fr_1fr_68px_1fr_1fr]"
-                : "grid-cols-[1fr_1fr_1fr_68px_1fr]",
+                ? "grid-cols-[1fr_1fr_1fr_68px_1fr_1fr_1fr]"
+                : "grid-cols-[1fr_1fr_1fr_68px_1fr_1fr]",
             )}
           >
             <Tab
@@ -473,6 +504,16 @@ export function BottomNav() {
               />
             ) : null}
             <Tab
+              to="/plugins"
+              label={translateText("sections.plugins")}
+              icon={PuzzlePieceIcon}
+              attention={
+                pluginsNeedAttention
+                  ? translateText("accessibility.pluginsNeedAttention")
+                  : undefined
+              }
+            />
+            <Tab
               to="/settings"
               label={translateText("sections.settings")}
               icon={GearSixIcon}
@@ -490,22 +531,30 @@ function Tab({
   label,
   icon: Icon,
   badge,
+  attention,
 }: {
-  to: "/" | "/tasks" | "/email" | "/routines" | "/settings";
+  to: (typeof sections)[number]["to"] | "/settings";
   label: string;
   icon: Icon;
   badge?: number | undefined;
+  attention?: string | undefined;
 }) {
   return (
     <Link
       to={to}
       search={{}}
-      className="flex min-w-0 flex-col items-center justify-center gap-1 text-xs"
+      aria-label={
+        attention === undefined ? undefined : `${label} · ${attention}`
+      }
+      className="relative flex min-w-0 flex-col items-center justify-center gap-1 text-xs"
       activeOptions={{ exact: true, includeSearch: false }}
       activeProps={{ className: "text-foreground bg-muted/50" }}
       inactiveProps={{ className: "text-muted-foreground" }}
     >
       <Icon className="size-5" aria-hidden="true" />
+      {attention === undefined ? null : (
+        <AttentionDot className="absolute top-1 right-1" />
+      )}
       <span className="max-w-full truncate px-1">
         {badge ? `${label} · ${badge}` : label}
       </span>

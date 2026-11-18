@@ -38,8 +38,7 @@ function host() {
 }
 
 /**
- * The pages the bar links to, plus the one under test: Link resolves `to` against the tree, so
- * all four destinations have to exist even when three of them are empty.
+ * Mount the routes needed to exercise settings and going back to another page.
  */
 async function open(...history: string[]) {
   const root = createRootRoute({
@@ -125,6 +124,7 @@ describe("设置整页", () => {
   it("offers the same rail as the wide window's dialog", async () => {
     host();
     await open("/settings?section=appearance");
+    expect(rail()).not.toContain("插件");
     expect(rail()).toEqual(
       labelsOf(
         "agents",
@@ -132,7 +132,6 @@ describe("设置整页", () => {
         "machines",
         "mcp",
         "acp",
-        "plugins",
         "email",
         "archived",
         "appearance",

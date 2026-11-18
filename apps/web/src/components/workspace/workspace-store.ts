@@ -51,7 +51,6 @@ export type SettingsSection =
   | "machines"
   | "mcp"
   | "acp"
-  | "plugins"
   | "email"
   | "archived"
   | "appearance"

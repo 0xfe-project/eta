@@ -50,16 +50,17 @@ afterEach(async () => {
 });
 
 describe("手机底部栏", () => {
-  it("has five destinations with the plus between them", async () => {
+  it("includes Plugins after Routines, with the plus between the two groups", async () => {
     const container = await render();
     expect(links(container)).toEqual([
       "/",
       "/tasks",
       "/email",
       "/routines",
+      "/plugins",
       "/settings",
     ]);
-    // Five destinations and the solid square between tasks/email and routines/settings.
+    // The solid square stays between Mail and Routines.
     const anchors = [...container.querySelectorAll("a")];
     const follows = (a: Node, b: Node) =>
       (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;

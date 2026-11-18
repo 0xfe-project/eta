@@ -6,6 +6,7 @@
     "tasks": "任务",
     "email": "邮箱",
     "routines": "定时",
+    "plugins": "插件",
     "more": "更多",
     "overview": "概览",
     "workspace": "工作区",
@@ -15,6 +16,7 @@
   },
   "accessibility": {
     "sections": "分区",
+    "pluginsNeedAttention": "有已启用的插件需要处理",
     "workspaceTabs": "工作区标签",
     "skipToContent": "跳转到内容",
     "resizePanel": "调整右栏宽度",

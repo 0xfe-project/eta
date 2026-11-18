@@ -187,9 +187,10 @@ function AgentEditorForm({
     onDone();
     setSettings({ open: true, section: "providers" });
   };
-  const openPlugins = () => {
+  const leaveForPlugins = () => {
     onDone();
-    setSettings({ open: true, section: "plugins" });
+    // The editor may have been opened on top of the settings dialog.
+    setSettings((state) => ({ ...state, open: false }));
   };
 
   // Fields on other tabs are not mounted: open the error's tab first.
@@ -285,7 +286,7 @@ function AgentEditorForm({
             <AgentPluginsField
               form={form}
               skipped={agent.skippedPlugins}
-              onOpenSettings={openPlugins}
+              onOpenPlugins={leaveForPlugins}
             />
           )}
         </section>

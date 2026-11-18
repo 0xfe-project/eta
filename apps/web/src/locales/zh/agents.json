@@ -115,7 +115,7 @@
   },
   "plugins": {
     "empty": "还没有插件。",
-    "openSettings": "去设置里添加",
+    "openLibrary": "去插件页面添加",
     "skipped": "配置不再合法，这个智能体的会话正在跳过它。"
   }
 }

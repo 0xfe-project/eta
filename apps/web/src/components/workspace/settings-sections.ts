@@ -8,13 +8,10 @@ import { GlobeSimpleIcon } from "@phosphor-icons/react/GlobeSimple";
 import { PaletteIcon } from "@phosphor-icons/react/Palette";
 import { PlugIcon } from "@phosphor-icons/react/Plug";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
-import { PuzzlePieceIcon } from "@phosphor-icons/react/PuzzlePiece";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { ShieldCheckIcon } from "@phosphor-icons/react/ShieldCheck";
 import { TerminalWindowIcon } from "@phosphor-icons/react/TerminalWindow";
 import { translate } from "@/lib/i18n";
-import { usePlugins } from "@/queries/plugins";
-import { useNeedsAttention } from "@/queries/providers";
 
 // Settings' sections, listed by the wide window's dialog and by the phone's settings page.
 
@@ -66,13 +63,6 @@ export const settingsSections: {
     icon: TerminalWindowIcon,
   },
   {
-    value: "plugins",
-    get label() {
-      return translate("plugins:title");
-    },
-    icon: PuzzlePieceIcon,
-  },
-  {
     value: "email",
     get label() {
       return translate("email:title");
@@ -108,17 +98,3 @@ export const settingsSections: {
     icon: ArrowCircleUpIcon,
   },
 ];
-
-/** The sections with something the user has to act on. */
-export function useSettingsAttention(): Partial<
-  Record<SettingsSection, boolean>
-> {
-  // A plugin an agent has enabled but is skipping: something it counted on is off.
-  const { plugins } = usePlugins();
-  return {
-    providers: useNeedsAttention(),
-    plugins: plugins.some(
-      (plugin) => plugin.state !== "ready" && plugin.agents.length > 0,
-    ),
-  };
-}

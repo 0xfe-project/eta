@@ -48,11 +48,12 @@ import {
   useUpdatePlugin,
 } from "@/queries/plugins";
 import { wireErrorMessage } from "@/queries/wire";
+import { PageHeader } from "./app-shell";
 import { changes, draftOf, formState } from "./plugin-form";
 import { PluginServers } from "./plugin-servers";
 import { Select, SelectOption } from "./select-field";
 
-// Settings → Plugins: what plugins there are and where each came from, whether it can be enabled, what
+// Plugins: what plugins there are and where each came from, whether it can be enabled, what
 // it needs from each machine, and a form generated from what it declares. A secret is typed here
 // once and is never shown again.
 
@@ -425,8 +426,8 @@ function PluginRow({ plugin }: { plugin: PluginView }) {
   const hasForm = plugin.fields.length > 0 && plugin.problem === null;
   return (
     <li className="space-y-1 px-3 py-2 text-sm">
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1 space-y-0.5">
+      <div className="flex flex-col items-start gap-2 sm:flex-row sm:gap-3">
+        <div className="w-full min-w-0 flex-1 space-y-0.5">
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
             {plugin.name}
             {plugin.version === null ? null : (
@@ -585,21 +586,15 @@ function PluginAudit() {
   );
 }
 
-/** Settings → Plugins. */
+/** The main Plugins page. */
 export function PluginSettings() {
   const { t: translateText } = useTranslation(["plugins", "common"] as const);
   const { plugins, loaded, error } = usePlugins();
   const recheck = useRecheckPlugins();
   const [adding, setAdding] = useState(false);
   return (
-    <div className="space-y-4">
-      <header className="flex items-start gap-3">
-        <div className="min-w-0 flex-1 space-y-1">
-          <h2 className="text-sm font-semibold">{translateText("title")}</h2>
-          <p className="text-xs text-muted-foreground">
-            {translateText("description")}
-          </p>
-        </div>
+    <>
+      <PageHeader title={translateText("title")}>
         <div className="flex shrink-0 gap-1">
           <Button
             size="icon-sm"
@@ -616,24 +611,31 @@ export function PluginSettings() {
             {translateText("actions.add")}
           </Button>
         </div>
-      </header>
-      {error !== undefined ? (
-        <LoadError what={translateText("title")} error={error} />
-      ) : !loaded ? (
-        <Loading rows={3} />
-      ) : plugins.length === 0 ? (
-        <Empty icon={PuzzlePieceIcon} title={translateText("empty.title")}>
-          {translateText("empty.description")}
-        </Empty>
-      ) : (
-        <ul aria-label={translateText("title")} className="divide-y border">
-          {plugins.map((plugin) => (
-            <PluginRow key={plugin.name} plugin={plugin} />
-          ))}
-        </ul>
-      )}
-      <PluginAudit />
+      </PageHeader>
+      <main id="main" className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-content space-y-4 px-4 py-4 sm:px-6">
+          <p className="text-sm text-muted-foreground">
+            {translateText("description")}
+          </p>
+          {error !== undefined ? (
+            <LoadError what={translateText("title")} error={error} />
+          ) : !loaded ? (
+            <Loading rows={3} />
+          ) : plugins.length === 0 ? (
+            <Empty icon={PuzzlePieceIcon} title={translateText("empty.title")}>
+              {translateText("empty.description")}
+            </Empty>
+          ) : (
+            <ul aria-label={translateText("title")} className="divide-y border">
+              {plugins.map((plugin) => (
+                <PluginRow key={plugin.name} plugin={plugin} />
+              ))}
+            </ul>
+          )}
+          <PluginAudit />
+        </div>
+      </main>
       {adding ? <AddDialog onClose={() => setAdding(false)} /> : null}
-    </div>
+    </>
   );
 }
