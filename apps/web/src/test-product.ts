@@ -13,6 +13,7 @@ import type {
   MemberView,
   MessageView,
   ProjectView,
+  RecentPlace,
   RoutineInfo,
   RoutineSections,
   RoutinesStatus,
@@ -271,6 +272,8 @@ export interface ProductSeed {
   routines?: RoutineSections[];
   /** Whether Captain is on to run routines; on unless a test says otherwise. */
   routinesStatus?: RoutinesStatus;
+  /** The recent places (`places.recent`), shared by every client. */
+  recent?: RecentPlace[];
   /** Plugins the host does not have: no target and no mount, so reading them fails. */
   absent?: ("tasks" | "artifacts" | "routines")[];
 }
@@ -301,6 +304,7 @@ export function buildProductHost(
     .target("agents", { list: seed.agents ?? [] }, { eager: true })
     .target("machines", { list: seed.machines ?? [] }, { eager: true })
     .target("projects", { list: seed.projects ?? [] }, { eager: true })
+    .target("places", { recent: seed.recent ?? [], clones: [] })
     .target(
       "conversations",
       { list: seed.conversations ?? [] },
@@ -311,6 +315,7 @@ export function buildProductHost(
         "agents",
         "machines",
         "projects",
+        "places",
         "conversations",
         "tasks",
         "artifacts",

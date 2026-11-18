@@ -13,22 +13,27 @@ import {
 import { Input } from "@/components/ui/input";
 import { folderName, projectPlace } from "@/lib/projects";
 import { useConversationActions } from "@/queries/conversations";
+import { placesCall } from "@/queries/places";
 import { useCreateProject, useMachines } from "@/queries/projects";
 import { wireErrorMessage } from "@/queries/wire";
 import { AGENT_SEARCH_FROM } from "./agent-pick";
 import { AgentPickRow } from "./agent-pick-row";
-import { DirectoryPicker, Tag } from "./directory-picker";
+import { useImportRecentDirectories } from "./import-recent";
+import { moveRow } from "./move-row";
+import { PlacePicker, Tag } from "./place-picker";
 import { useReturnFocus } from "./return-focus";
 import { Stepper } from "./stepper";
 import { useAgents } from "./use-agents";
-import { moveRow, useDirectoryBrowser } from "./use-directory-browser";
-import { rememberDirectory, useChoosable } from "./use-project-choice";
+import { usePlaceFlow } from "./use-place-flow";
+import { useChoosable } from "./use-project-choice";
 import { useWorkspaceStore } from "./workspace-store";
 
 /** Where the conversation will work; without `project`, a directory that starting will add. */
 interface Target {
   machineId: string;
   path: string;
+  /** The path as its machine writes it (`~/Developer/eta`). */
+  display: string;
   project?: ProjectView | undefined;
 }
 
@@ -63,6 +68,8 @@ export function NewConversationDialog() {
   );
   const close = () => setNewConversation({ open: false });
   const returnFocus = useReturnFocus(open);
+  // Mounted wherever the dialog can open, so the browser's old recent directories reach the host.
+  useImportRecentDirectories();
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? undefined : close())}>
       {/* Mounted per open: a form left half filled in is not what the next open should show. */}
@@ -96,14 +103,11 @@ function NewConversationForm({
   const [within] = useState(() =>
     projects.find((project) => project.id === projectId),
   );
-  const browser = useDirectoryBrowser({
-    machineId: within?.machineId,
-    path: within?.path,
-  });
   const [target, setTarget] = useState<Target | undefined>(
     within && {
       machineId: within.machineId,
       path: within.path,
+      display: within.display,
       project: within,
     },
   );
@@ -152,7 +156,6 @@ function NewConversationForm({
     });
 
   const choose = (next: Target) => {
-    browser.closeTyping();
     setTarget(next);
     // An empty list has nothing to keep: the new target's defaults are better than none.
     setPicked((now) => (now?.members.length ? now : undefined));
@@ -178,7 +181,11 @@ function NewConversationForm({
         agentIds: who.members,
         stewardId: who.stewardId,
       });
-      rememberDirectory(where.machineId, where.path);
+      // Used now: first among the recent places, for every client.
+      void placesCall("remember", {
+        machineId: where.machineId,
+        path: project.path,
+      }).catch(() => undefined);
       onDone();
       useWorkspaceStore.getState().setMobilePanel("chat");
       // The conversation you just made, on itself — same rule as opening a row: no `view`, so the
@@ -193,21 +200,23 @@ function NewConversationForm({
 
   const only = agents.length === 1 ? agents[0] : undefined;
 
-  const next = () => {
-    const { listed, machineId } = browser;
-    if (listed === undefined) return;
-    const where = {
-      machineId,
-      path: listed.path,
-      project: projects.find(
-        (project) =>
-          project.machineId === machineId && project.path === listed.path,
-      ),
-    };
-    choose(where);
-    if (only !== undefined)
-      void start(where, { members: [only.id], stewardId: only.id });
-  };
+  // Where the flow ends: the directory, and the project it already is when it is one.
+  const flow = usePlaceFlow({
+    machineId: within?.machineId,
+    onChoose: (choice) => {
+      const where: Target = {
+        ...choice,
+        project: projects.find(
+          (project) =>
+            project.machineId === choice.machineId &&
+            project.path === choice.path,
+        ),
+      };
+      choose(where);
+      if (only !== undefined)
+        void start(where, { members: [only.id], stewardId: only.id });
+    },
+  });
 
   return (
     <DialogContent
@@ -216,9 +225,9 @@ function NewConversationForm({
       className="flex h-[min(560px,calc(100dvh-2rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-[560px]"
       onEscapeKeyDown={(event) => {
         if (event.isComposing) event.preventDefault();
-        else if (browser.typing !== undefined) {
+        else if (step === 0 && flow.key("Escape")) {
+          // One page of the flow back; on its first page Escape closes.
           event.preventDefault();
-          browser.closeTyping();
         } else if (step === 1) {
           event.preventDefault();
           if (!pending) setStep(0);
@@ -242,16 +251,7 @@ function NewConversationForm({
         />
       </div>
       {step === 0 || target === undefined ? (
-        <DirectoryPicker
-          browser={browser}
-          onProject={(project) =>
-            choose({
-              machineId: project.machineId,
-              path: project.path,
-              project,
-            })
-          }
-        />
+        <PlacePicker flow={flow} />
       ) : (
         <MembersStep
           target={target}
@@ -267,20 +267,7 @@ function NewConversationForm({
         <Button variant="ghost" disabled={pending} onClick={onDone}>
           {translateText("common:actions.cancel")}
         </Button>
-        {step === 0 ? (
-          <Button
-            disabled={
-              browser.listed === undefined ||
-              browser.typing !== undefined ||
-              pending
-            }
-            onClick={next}
-          >
-            {translateText(
-              only === undefined ? "common:actions.next" : "chat:new.start",
-            )}
-          </Button>
-        ) : (
+        {step === 0 ? null : (
           <div className="flex gap-2">
             <Button
               variant="outline"

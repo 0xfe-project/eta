@@ -18,7 +18,7 @@ import { useConversationActions } from "@/queries/conversations";
 import { wireErrorMessage } from "@/queries/wire";
 import { AGENT_SEARCH_FROM } from "./agent-pick";
 import { AgentPickRow } from "./agent-pick-row";
-import { moveRow } from "./use-directory-browser";
+import { moveRow } from "./move-row";
 
 type Candidate = Pick<AgentView, "id" | "name" | "runtime">;
 

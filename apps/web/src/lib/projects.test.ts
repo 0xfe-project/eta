@@ -1,15 +1,9 @@
 import { describe, expect, it } from "@rstest/core";
 import { machineView } from "@/test-product";
-import {
-  folderName,
-  joinPath,
-  parentPath,
-  pathCrumbs,
-  projectPlace,
-  shortenPath,
-} from "./projects";
+import { folderName, projectPlace } from "./projects";
 
-// Where a project is, as the sidebar and the header write it.
+// Where a project is, as the sidebar and the header write it: the path as its machine writes it
+// comes from the host (`display`); nothing here takes a path apart beyond its last name.
 
 const machines = [
   machineView({ id: "m1", name: "这台", home: "/Users/me" }),
@@ -19,106 +13,63 @@ const machines = [
     name: "gpu-box",
     home: "/home/eric",
   }),
-  machineView({ id: "m3", kind: "daemon", name: "nas", home: null }),
+  machineView({
+    id: "m3",
+    kind: "daemon",
+    name: "win",
+    home: "C:\\Users\\Ada",
+  }),
 ];
 
 describe("projectPlace", () => {
-  it("is the bare path on the primary, ~ only when asked for short", () => {
-    const project = { machineId: "m1", path: "/Users/me/Desktop/eta" };
+  it("is the bare path on the primary, the machine's display only when asked for short", () => {
+    const project = {
+      machineId: "m1",
+      path: "/Users/me/Desktop/eta",
+      display: "~/Desktop/eta",
+    };
     expect(projectPlace(project, machines)).toBe("/Users/me/Desktop/eta");
     expect(projectPlace(project, machines, { short: true })).toBe(
       "~/Desktop/eta",
     );
-    expect(
-      projectPlace({ machineId: "m1", path: "/Users/me" }, machines, {
-        short: true,
-      }),
-    ).toBe("~");
   });
 
-  it("names the machine when it is not the primary, and shortens with that machine's home", () => {
-    const project = { machineId: "m2", path: "/home/eric/training" };
+  it("names the machine when it is not the primary", () => {
+    const project = {
+      machineId: "m2",
+      path: "/home/eric/training",
+      display: "~/training",
+    };
     expect(projectPlace(project, machines)).toBe("gpu-box:/home/eric/training");
     expect(projectPlace(project, machines, { short: true })).toBe(
       "gpu-box:~/training",
     );
-    // The primary's home means nothing on another machine.
-    expect(
-      projectPlace({ machineId: "m2", path: "/Users/me/eta" }, machines, {
-        short: true,
-      }),
-    ).toBe("gpu-box:/Users/me/eta");
-  });
-
-  it("keeps the path whole on a machine that has not said its home", () => {
-    expect(
-      projectPlace({ machineId: "m3", path: "/srv/backup" }, machines, {
-        short: true,
-      }),
-    ).toBe("nas:/srv/backup");
-  });
-
-  it("is the bare path while the project's machine is not in the list yet", () => {
-    const project = { machineId: "m9", path: "/home/eric/training" };
-    expect(projectPlace(project, machines, { short: true })).toBe(
-      "/home/eric/training",
+    const windows = {
+      machineId: "m3",
+      path: "C:\\Users\\Ada\\code",
+      display: "~\\code",
+    };
+    expect(projectPlace(windows, machines, { short: true })).toBe(
+      "win:~\\code",
     );
-    expect(projectPlace(project, [])).toBe("/home/eric/training");
+  });
+
+  it("keeps the bare path while the machine list has not arrived", () => {
+    expect(
+      projectPlace(
+        { machineId: "m9", path: "/srv/x", display: "/srv/x" },
+        machines,
+        { short: true },
+      ),
+    ).toBe("/srv/x");
   });
 });
 
-describe("Windows paths", () => {
-  const home = "C:\\Users\\me";
-
-  it("finds parents and joins children with backslashes", () => {
-    expect(parentPath("C:\\")).toBeUndefined();
-    expect(parentPath("C:\\Users\\me")).toBe("C:\\Users");
-    expect(parentPath("C:\\Users")).toBe("C:\\");
-    expect(joinPath("C:\\", "Users")).toBe("C:\\Users");
-    expect(joinPath("C:\\Users\\me", "Desktop")).toBe("C:\\Users\\me\\Desktop");
-  });
-
-  it("keeps the drive reachable above the home", () => {
-    expect(pathCrumbs(home, home)).toEqual([
-      { name: "C:", path: "C:\\" },
-      { name: "~", path: home },
-    ]);
-    expect(pathCrumbs("C:\\Users\\me\\Desktop", home)).toEqual([
-      { name: "C:", path: "C:\\" },
-      { name: "~", path: home },
-      { name: "Desktop", path: "C:\\Users\\me\\Desktop" },
-    ]);
-  });
-
-  it("shortens project paths inside the home", () => {
-    expect(folderName("C:\\Users\\me\\Desktop\\")).toBe("Desktop");
-    expect(shortenPath("C:\\Users\\me\\Desktop\\eta", home)).toBe(
-      "~/Desktop/eta",
-    );
-    expect(shortenPath("C:\\Users\\Public", home)).toBe("C:\\Users\\Public");
-  });
-});
-
-describe("POSIX paths", () => {
-  it("keeps a backslash in a POSIX directory name", () => {
-    expect(folderName("/Users/me/foo\\bar")).toBe("foo\\bar");
+describe("folderName", () => {
+  it("is the last name, whichever separator the machine uses", () => {
+    expect(folderName("/Users/me/eta/")).toBe("eta");
+    expect(folderName("C:\\Users\\Ada\\code")).toBe("code");
     expect(folderName("/")).toBe("/");
-  });
-
-  it("keeps the filesystem root reachable above the home", () => {
-    expect(pathCrumbs("/Users/me", "/Users/me")).toEqual([
-      { name: "/", path: "/" },
-      { name: "~", path: "/Users/me" },
-    ]);
-    expect(pathCrumbs("/Users/me/Desktop", "/Users/me")).toEqual([
-      { name: "/", path: "/" },
-      { name: "~", path: "/Users/me" },
-      { name: "Desktop", path: "/Users/me/Desktop" },
-    ]);
-    expect(pathCrumbs("/Volumes/Data", "/Users/me")).toEqual([
-      { name: "/", path: "/" },
-      { name: "Volumes", path: "/Volumes" },
-      { name: "Data", path: "/Volumes/Data" },
-    ]);
+    expect(folderName("D:\\")).toBe("D:");
   });
 });

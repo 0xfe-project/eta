@@ -333,6 +333,89 @@
         "denied": "没有权限读取这个目录",
         "offline": "连不上这台机器"
       }
+    },
+    "places": {
+      "keys": "↑↓ 选择 · ⏎ 确定 · Esc 返回",
+      "open": "打开 {{path}}",
+      "useHere": "就用 {{path}}",
+      "create": "新建 {{path}}",
+      "cloneTo": "克隆到",
+      "cloning": "正在克隆到 {{path}}… 按 Esc 停止",
+      "parentIs": "放在 {{path}}",
+      "via": "通过 {{protocol}} 克隆",
+      "steps": {
+        "machine": "机器"
+      },
+      "machineKinds": {
+        "primary": "本机",
+        "daemon": "远程",
+        "ssh": "SSH"
+      },
+      "closed": {
+        "offline": "离线",
+        "ssh": "暂不支持 SSH 机器"
+      },
+      "methods": {
+        "search": "搜索目录",
+        "browse": "浏览…",
+        "github": "从 GitHub 克隆",
+        "new": "新建目录"
+      },
+      "methodDetails": {
+        "search": "在 {{name}} 上找一个目录",
+        "browse": "一层一层点进去",
+        "github": "搜你的仓库",
+        "new": "建一个空目录"
+      },
+      "notes": {
+        "checking": "正在询问这台机器…",
+        "noGit": "这台机器没装 git",
+        "pasteOnly": "没有登录 gh，只能贴地址或 owner/repo",
+        "update": "更新这台机器的 daemon 后才能用",
+        "native": "打开系统的文件夹对话框"
+      },
+      "placeholders": {
+        "machine": "选择机器…",
+        "method": "怎么添加？",
+        "search": "按名字搜，或输入路径…",
+        "browse": "过滤…",
+        "github": "搜仓库，或贴 URL、owner/repo…",
+        "cloneLocation": "放在哪？搜索或输入路径…",
+        "newParent": "新目录放在哪？",
+        "newName": "新目录的名字"
+      },
+      "sections": {
+        "typed": "输入的路径",
+        "recent": "最近",
+        "suggested": "建议",
+        "found": "这台机器上",
+        "inside": "子目录",
+        "repos": "你的仓库",
+        "typedRepo": "输入的"
+      },
+      "empty": {
+        "search": "输入名字在这台机器上搜索",
+        "github": "输入 URL 或 owner/repo",
+        "newName": "输入名字"
+      },
+      "problems": {
+        "offline": "这台机器离线了",
+        "timeout": "这台机器太久没有回应",
+        "unsupported": "这台机器还做不了这个：请更新它的 daemon；SSH 机器暂不支持。",
+        "notFound": "这个目录不存在",
+        "denied": "没有权限读取这个目录",
+        "notDirectory": "这不是一个目录",
+        "exists": "那里已经有同名的东西了",
+        "invalid": "在这台机器上这不是有效的路径或名字",
+        "notAbsolute": "请输入完整路径：以 / 或 ~ 开头（Windows 上可以是 C:\\ 这样的盘符）",
+        "auth": "认证失败：请在那台机器上用 gh 登录，或检查它的 SSH 密钥。",
+        "network": "网络问题：连不上这个仓库",
+        "repoNotFound": "找不到这个仓库，或者你没有权限",
+        "cancelled": "克隆已停止",
+        "noGit": "这台机器没装 git",
+        "ghSignedOut": "这台机器上 gh 没有登录",
+        "other": "出错了"
+      }
     }
   },
   "chat": {},

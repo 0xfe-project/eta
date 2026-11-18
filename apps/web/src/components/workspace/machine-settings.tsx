@@ -57,7 +57,7 @@ const osLabels: Record<string, string> = {
   windows: "Windows",
 };
 
-export function StatusDot({
+function StatusDot({
   status,
   label,
 }: {
