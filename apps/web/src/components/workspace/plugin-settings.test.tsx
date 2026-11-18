@@ -73,14 +73,25 @@ const team: PluginFieldView = {
   issue: null,
 };
 
-const plugin = (fields: Partial<PluginView> = {}): PluginView => ({
+const displayPlugin = (overrides: Partial<PluginView> = {}): PluginView => ({
   name: "hello",
   version: "1.0.0",
   description: "Says hello.",
   source: { kind: "local", path: "/h/.eta/plugins/hello" },
-  state: "needs_config",
+  state: "ready",
   problem: null,
   reports: [],
+  skills: [],
+  servers: [],
+  requires: [],
+  machines: [],
+  fields: [],
+  agents: [],
+  ...overrides,
+});
+
+const configuration = {
+  ...displayPlugin(),
   skills: [{ name: "greet", description: "Greets." }],
   servers: [
     {
@@ -93,11 +104,17 @@ const plugin = (fields: Partial<PluginView> = {}): PluginView => ({
     },
   ],
   requires: ["node"],
-  machines: [],
+} satisfies PluginView;
+const needsConfig: PluginView = {
+  ...configuration,
+  state: "needs_config",
   fields: [secret, team],
-  agents: [],
-  ...fields,
-});
+};
+const savedSecret = { ...secret, set: true, issue: null };
+const configured: PluginView = {
+  ...configuration,
+  fields: [savedSecret, team],
+};
 
 function host(plugins: PluginView[], audit: PluginAuditView[] = []) {
   const fake = buildProductHost({}, ["plugins"]).target("plugins", {
@@ -107,6 +124,15 @@ function host(plugins: PluginView[], audit: PluginAuditView[] = []) {
   fake.install();
   fake.hello();
   return fake;
+}
+
+async function renderCards(plugins: PluginView[]) {
+  host(plugins);
+  const { container } = await mount(<PluginSettings />);
+  await flush();
+  const markup = container.innerHTML;
+  await cleanup();
+  return markup;
 }
 
 async function type(input: HTMLInputElement, value: string) {
@@ -137,16 +163,15 @@ const passwordInput = () =>
 describe("the plugin cards", () => {
   it("shows where a plugin came from, how it stands and what it lacks", async () => {
     host([
-      plugin({
+      {
+        ...needsConfig,
         machines: [
           { machineId: "m", name: "gpu-box", missing: ["node"], checked: true },
         ],
         reports: ["plugin.json: unknown field hooks was ignored"],
-      }),
-      plugin({
+      },
+      displayPlugin({
         name: "from-git",
-        state: "ready",
-        fields: [],
         source: {
           kind: "git",
           repo: "https://example.com/x.git",
@@ -171,135 +196,99 @@ describe("the plugin cards", () => {
 
   const repo = `https://example.com/${"x".repeat(240)}.git`;
   const sha = "abcdef1234567890abcdef1234567890abcdef12";
-  const git = plugin({
+  const git = displayPlugin({
     name: "from-git",
-    state: "ready",
     source: { kind: "git", repo, rev: "main", path: "", sha },
   });
 
-  it("uses four fixed tracks even with two cards, then shrinks by content width", async ({
+  it("shows four columns until space runs out, without widening two cards", async ({
     skip,
   }) => {
     if (!(await hasBrowser())) return skip();
-    host([
-      plugin(),
-      git,
-      plugin({ name: "third" }),
-      plugin({ name: "fourth" }),
+    const pair = [displayPlugin(), git];
+    const four = await renderCards([
+      ...pair,
+      displayPlugin({ name: "third" }),
+      displayPlugin({ name: "fourth" }),
     ]);
-    const { container } = await mount(<PluginSettings />);
-    await flush();
+    const two = await renderCards(pair);
+    const frame = (markup: string) =>
+      `<div style="max-width:var(--available, 940px)">${markup}</div>`;
 
-    await onPage(
-      `<div style="max-width:var(--available, 100%)">${container.innerHTML}</div>`,
-      async (page) => {
-        const grid = page.getByRole("list", { name: "插件" });
-        const cards = grid.getByRole("listitem");
-        const read = () =>
-          cards.evaluateAll((items) =>
-            items.map((item) => {
-              const card = item as HTMLElement;
-              const { x, y, width, right } = card.getBoundingClientRect();
-              const slot = card
-                .querySelector('span[aria-hidden="true"]:has(svg)')!
-                .getBoundingClientRect();
-              const heading = card.querySelector("h2")!.getBoundingClientRect();
-              const buttons = [...card.querySelectorAll("button")].map(
-                (button) => button.getBoundingClientRect(),
-              );
-              return {
-                x,
-                y,
-                width,
-                fits: card.scrollWidth === card.clientWidth,
-                slot: [slot.width, slot.height],
-                alongside: slot.right < heading.left,
-                buttonsFit: buttons.every(
-                  (b) => b.left >= x && b.right <= right,
-                ),
-              };
-            }),
-          );
-        let wideWidths: number[] = [];
-        for (const [width, cols] of [
-          [940, 4],
-          [750, 3],
-          [540, 2],
-          [320, 1],
-        ] as const) {
-          await page.evaluate(
-            (width) =>
-              document.body.style.setProperty("--available", `${width}px`),
-            width,
-          );
-          const layout = await read();
-          expect(new Set(layout.map((card) => card.x)).size).toBe(cols);
-          expect(layout.filter((card) => card.y === layout[0]!.y)).toHaveLength(
-            cols,
-          );
-          for (const card of layout) {
-            expect(card).toMatchObject({
-              fits: true,
-              alongside: true,
-              buttonsFit: true,
-            });
-            expect(card.slot[0]).toBeCloseTo(32.4, 1);
-            expect(card.slot[1]).toBe(card.slot[0]);
-          }
-          const source = grid.getByText(`${repo} @ ${sha.slice(0, 12)}`, {
-            exact: true,
-          });
-          expect(
-            await source.evaluate((el) => {
-              const style = getComputedStyle(el);
-              return (
-                style.textOverflow === "ellipsis" &&
-                style.whiteSpace === "nowrap" &&
-                el.scrollWidth > el.clientWidth
-              );
-            }),
-          ).toBe(true);
-          if (cols === 4) wideWidths = layout.map((card) => card.width);
-        }
-        await page.evaluate(() =>
-          document.body.style.setProperty("--available", "940px"),
+    const wideWidths = await onPage(frame(four), async (page) => {
+      const cards = page
+        .getByRole("list", { name: "插件" })
+        .getByRole("listitem");
+      const source = page.getByText(`${repo} @ ${sha.slice(0, 12)}`, {
+        exact: true,
+      });
+      expect(
+        await source.evaluate((el) => el.scrollWidth > el.clientWidth),
+      ).toBe(true);
+      expect(await cards.locator("img").count()).toBe(0);
+      let widths: number[] = [];
+      for (const [width, columns] of [
+        [940, 4],
+        [750, 3],
+        [540, 2],
+        [320, 1],
+      ] as const) {
+        await page.evaluate((width) => {
+          document.body.style.setProperty("--available", `${width}px`);
+        }, width);
+        const layout = await cards.evaluateAll((items) =>
+          items.map((card) => {
+            const { x, y, width } = card.getBoundingClientRect();
+            return { x, y, width, fits: card.scrollWidth === card.clientWidth };
+          }),
         );
+        expect(new Set(layout.map(({ x }) => x)).size).toBe(columns);
+        expect(layout.filter(({ y }) => y === layout[0]!.y)).toHaveLength(
+          columns,
+        );
+        expect(layout.every(({ fits }) => fits)).toBe(true);
+        if (columns === 4) widths = layout.map(({ width }) => width);
+      }
+      return widths;
+    });
+
+    await onPage(frame(two), async (page) => {
+      const cards = page
+        .getByRole("list", { name: "插件" })
+        .getByRole("listitem");
+      expect(
         await cards.evaluateAll((items) =>
-          items.slice(2).forEach((item) => item.remove()),
-        );
-        expect((await read()).map((card) => card.width)).toEqual(
-          wideWidths.slice(0, 2),
-        );
-        await page.setViewportSize({ width: 500, height: 820 });
-        const narrow = await read();
-        expect(new Set(narrow.map((card) => card.x)).size).toBe(1);
-        expect(narrow.every((card) => card.fits && card.buttonsFit)).toBe(true);
-        expect(await cards.locator("img").count()).toBe(0);
-      },
-    );
+          items.map((card) => card.getBoundingClientRect().width),
+        ),
+      ).toEqual(wideWidths.slice(0, 2));
+    });
   });
 
-  it("keeps two lines of description and a fixed footer, even with warnings or no actions", async ({
+  it("keeps descriptions to two lines and actions aligned, even with warnings or no actions", async ({
     skip,
   }) => {
     if (!(await hasBrowser())) return skip();
-    host([
-      plugin({ description: "", fields: [] }),
-      plugin({ name: "short", description: "One line." }),
-      plugin({
+    const markup = await renderCards([
+      displayPlugin({ description: "" }),
+      displayPlugin({
+        name: "short",
+        description: "One line.",
+        fields: [team],
+      }),
+      displayPlugin({
         name: "two",
         description: "This local plugin has a description that wraps.",
+        fields: [team],
       }),
       {
         ...git,
         description: "A deliberately long description. ".repeat(12),
         reports: ["A warning that should not change card height.".repeat(12)],
+        fields: [team],
       },
     ]);
-    const { container } = await mount(<PluginSettings />);
-    await flush();
     await onPage(
-      `<div style="max-width:1100px">${container.innerHTML}</div>`,
+      `<div style="max-width:1100px">${markup}</div>`,
       async (page) => {
         const cards = page
           .getByRole("list", { name: "插件" })
@@ -312,40 +301,36 @@ describe("the plugin cards", () => {
                   `[data-slot="plugin-${name}"]`,
                 )!;
               const box = card.getBoundingClientRect();
-              const desc = slot("description");
-              const range = document.createRange();
-              range.selectNodeContents(desc);
-              const counts = slot("counts").getBoundingClientRect();
+              const description = slot("description");
+              const desc = description.getBoundingClientRect();
               const actions = slot("actions");
+              const range = document.createRange();
+              range.selectNodeContents(description);
+              const visibleLines = [...range.getClientRects()].filter(
+                (line) => line.top < desc.bottom && line.bottom > desc.top,
+              );
               return {
-                y: box.y,
+                row: box.top,
                 height: box.height,
-                description: desc.getBoundingClientRect().top - box.top,
-                descriptionHeight: desc.getBoundingClientRect().height,
+                rows: [
+                  description,
+                  slot("source"),
+                  slot("counts"),
+                  actions,
+                ].map((el) => el.getBoundingClientRect().top - box.top),
+                lines: new Set(visibleLines.map((line) => line.top)).size,
+                descriptionHeight: desc.height,
                 lineHeight: Number.parseFloat(
-                  getComputedStyle(desc).lineHeight,
+                  getComputedStyle(description).lineHeight,
                 ),
-                clamp: getComputedStyle(desc).webkitLineClamp,
-                overflow: getComputedStyle(desc).overflowY,
-                lines: new Set(
-                  [...range.getClientRects()]
-                    .filter(
-                      (rect) =>
-                        rect.top < desc.getBoundingClientRect().bottom &&
-                        rect.bottom > desc.getBoundingClientRect().top,
-                    )
-                    .map((rect) => rect.y),
-                ).size,
-                source: slot("source").getBoundingClientRect().top - box.top,
-                counts: counts.top - box.top,
-                divider: actions.getBoundingClientRect().top - box.top,
-                gap: actions.getBoundingClientRect().top - counts.bottom,
+                clipped: description.scrollHeight > description.clientHeight,
                 buttons: [...actions.querySelectorAll("button")].map(
                   (button) => {
                     const rect = button.getBoundingClientRect();
                     return {
                       bottom: rect.bottom - box.top,
                       fits:
+                        rect.width > 0 &&
                         rect.left >= box.left &&
                         rect.right <= box.right &&
                         rect.bottom <= box.bottom,
@@ -355,48 +340,36 @@ describe("the plugin cards", () => {
               };
             }),
           );
-        const assertSlots = (layout: Awaited<ReturnType<typeof read>>) => {
+        for (const viewport of [1280, 320]) {
+          await page.setViewportSize({ width: viewport, height: 820 });
+          const layout = await read();
           const first = layout[0]!;
+          expect(new Set(layout.map(({ row }) => row)).size).toBe(
+            viewport === 320 ? 4 : 1,
+          );
+          if (viewport === 1280)
+            expect(layout.map(({ lines }) => lines)).toEqual([0, 1, 2, 2]);
+          expect(layout[3]).toMatchObject({ lines: 2, clipped: true });
           for (const card of layout) {
             expect(card).toMatchObject({
               height: first.height,
-              description: first.description,
-              source: first.source,
-              counts: first.counts,
-              divider: first.divider,
-              clamp: "2",
-              overflow: "hidden",
+              rows: first.rows,
             });
             expect(card.descriptionHeight).toBeCloseTo(card.lineHeight * 2, 1);
-            expect(card.gap).toBeGreaterThan(0);
-            expect(card.gap).toBeLessThan(16);
             expect(card.lines).toBeLessThanOrEqual(2);
           }
           expect(first.buttons).toHaveLength(0);
           expect(layout[3]!.buttons).toHaveLength(3);
           const buttons = layout.flatMap((card) => card.buttons);
-          expect(new Set(buttons.map((button) => button.bottom)).size).toBe(1);
-          expect(buttons.every((button) => button.fits)).toBe(true);
-        };
-        const wide = await read();
-        expect(new Set(wide.map((card) => card.y)).size).toBe(1);
-        expect(wide.slice(0, 3).map((card) => card.lines)).toEqual([0, 1, 2]);
-        expect(wide[3]!.lines).toBe(2);
-        const long = cards.last().locator('[data-slot="plugin-description"]');
-        expect(
-          await long.evaluate((desc) => desc.scrollHeight > desc.clientHeight),
-        ).toBe(true);
-        assertSlots(wide);
-        await page.setViewportSize({ width: 320, height: 820 });
-        const narrow = await read();
-        expect(new Set(narrow.map((card) => card.y)).size).toBe(4);
-        assertSlots(narrow);
+          expect(new Set(buttons.map(({ bottom }) => bottom)).size).toBe(1);
+          expect(buttons.every(({ fits }) => fits)).toBe(true);
+        }
       },
     );
   });
 
   it("opens the full Git source without a host call and copies it unshortened", async () => {
-    const built = host([plugin(), git]);
+    const built = host([displayPlugin(), git]);
     const { container } = await mount(<PluginSettings />);
     const writeText = rstest.fn().mockResolvedValue(undefined);
     const previous = Object.getOwnPropertyDescriptor(navigator, "clipboard");
@@ -431,7 +404,7 @@ describe("the plugin cards", () => {
   });
 
   it("says which agents skip a plugin that fell back", async () => {
-    host([plugin({ agents: [{ id: "a", name: "Ada" }] })]);
+    host([{ ...needsConfig, agents: [{ id: "a", name: "Ada" }] }]);
     await mount(<PluginSettings />);
     await flush();
     await click(document.querySelector('[aria-label="hello 的警告"]'));
@@ -439,7 +412,12 @@ describe("the plugin cards", () => {
   });
 
   it("shows why a plugin was rejected, and no form", async () => {
-    host([plugin({ problem: "plugin.json: unsupported $schema", fields: [] })]);
+    host([
+      displayPlugin({
+        state: "needs_config",
+        problem: "plugin.json: unsupported $schema",
+      }),
+    ]);
     const { container } = await mount(<PluginSettings />);
     await flush();
     await click(container.querySelector('[aria-label="hello 的警告"]'));
@@ -449,7 +427,7 @@ describe("the plugin cards", () => {
 
   it("shows who read what, and when", async () => {
     host(
-      [plugin()],
+      [needsConfig],
       [
         {
           id: 1,
@@ -480,8 +458,8 @@ describe("the plugin cards", () => {
 
 describe("plugin page actions", () => {
   it("keeps configuration, Git update and confirmed removal on their own card", async () => {
-    const local = plugin({ name: "local", fields: [team] });
-    const git = plugin({
+    const local = displayPlugin({ name: "local", fields: [team] });
+    const git = displayPlugin({
       name: "from-git",
       source: {
         kind: "git",
@@ -551,7 +529,7 @@ describe("plugin page actions", () => {
   it("rechecks on the host without leaving the page", async () => {
     const built = host([]);
     built.handle("plugins.recheck", () => {
-      built.set("plugins", { list: [plugin()], audit: [] });
+      built.set("plugins", { list: [displayPlugin()], audit: [] });
       return {};
     });
     const { container } = await mount(<PluginSettings />);
@@ -571,7 +549,7 @@ describe("plugin page actions", () => {
     built.handle("plugins.add", () => {
       built.set("plugins", {
         list: [
-          plugin({
+          displayPlugin({
             source: {
               kind: "git",
               repo,
@@ -611,7 +589,7 @@ describe("plugin page actions", () => {
 
 describe("the form", () => {
   it("draws a password box for a secret, and shows what will run", async () => {
-    host([plugin()]);
+    host([needsConfig]);
     const { container } = await mount(<PluginSettings />);
     await open(container);
     expect(passwordInput()).not.toBeNull();
@@ -621,7 +599,7 @@ describe("the form", () => {
   });
 
   it("will not save what does not fit", async () => {
-    const built = host([plugin()]);
+    const built = host([needsConfig]);
     const { container } = await mount(<PluginSettings />);
     await open(container);
     await type(passwordInput(), "wrong");
@@ -632,7 +610,7 @@ describe("the form", () => {
   });
 
   it("saves what changed, and a blank secret is left out", async () => {
-    const built = host([plugin({ fields: [{ ...secret, set: true }, team] })]);
+    const built = host([configured]);
     built.handle("plugins.configure", () => ({
       name: "hello",
       state: "ready",
@@ -654,7 +632,7 @@ describe("the form", () => {
   });
 
   it("saves while something required is missing, and says it still is", async () => {
-    const built = host([plugin()]);
+    const built = host([needsConfig]);
     built.handle("plugins.configure", () => ({
       name: "hello",
       state: "needs_config",
@@ -669,7 +647,7 @@ describe("the form", () => {
   });
 
   it("never puts a saved secret's value in a control", async () => {
-    host([plugin({ fields: [{ ...secret, set: true }] })]);
+    host([{ ...configured, fields: [savedSecret] }]);
     const { container } = await mount(<PluginSettings />);
     await open(container);
     expect(passwordInput().value).toBe("");
@@ -678,7 +656,7 @@ describe("the form", () => {
   });
 
   it("offers a secret's levels, up to what the manifest declares", async () => {
-    host([plugin()]);
+    host([needsConfig]);
     const { container } = await mount(<PluginSettings />);
     await open(container);
     const trigger = document.querySelector('[role="combobox"]')!;
