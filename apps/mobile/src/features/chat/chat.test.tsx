@@ -110,10 +110,11 @@ test("04: what a reply said is a 说明 step, open until its head folds it", asy
   );
 });
 
-test("03: stop goes to the running reply", async () => {
+test("03: stop is in the running reply's box, and goes to that reply", async () => {
   const app = await chat("wire");
   await app.waitFor("text:14 步");
-  await app.press("id:composer-submit");
+  await app.press("id:process-stop");
+  await app.waitFor("text:停止中…");
   await app.waitFor("text:已停止");
 });
 
@@ -196,17 +197,6 @@ test("03a: a queued message reads in two lines and can be inserted into the turn
   expect(app.shows("text:插入这一轮")).toBe(false);
 });
 
-test("03a: a long press on send offers both modes, and sending works from the box", async () => {
-  const app = await chat("wire", "chat-queue");
-  await app.waitFor("text:The rollback needs tests too");
-  await app.type("id:composer-input", "先别跑生产，等我回复");
-  await app.longPress("id:composer-submit");
-  await app.waitFor("text:当前回复结束后发送");
-  await app.press("text:插入当前回复");
-  await app.waitFor("text:先别跑生产，等我回复");
-  expect(app.value("id:composer-input")).toBe("");
-});
-
 test("03b: @ lists members, everyone and files, and a pick replaces only the token", async () => {
   const app = await chat("wire");
   await app.type("id:composer-input", "看下 @");
@@ -219,19 +209,6 @@ test("03b: @ lists members, everyone and files, and a pick replaces only the tok
   expect(app.shows("text:唤醒所有群成员")).toBe(false);
   // The chip says who the message now reaches.
   expect(app.texts()).toContain("Mori");
-});
-
-test("03c: / offers commands, and only at the start of a draft", async () => {
-  const app = await chat("wire");
-  await app.type("id:composer-input", "/");
-  await app.waitFor("text:/compact");
-  expect(app.texts()).toContain("停止群内全部回复");
-  expect(app.texts()).toContain("开一个新对话");
-  await app.press("text:/goal");
-  await app.waitUntil(() => app.value("id:composer-input") === "/goal ");
-  await app.clear("id:composer-input");
-  await app.type("id:composer-input", "a/");
-  expect(app.shows("text:/compact")).toBe(false);
 });
 
 test("03g: empty, then a first message", async () => {
@@ -347,7 +324,7 @@ test("03c2: # lists tasks, not after a word, and inserts the number", async () =
   expect(app.shows("id:composer-submit")).toBe(true);
 });
 
-test("03c2: a # query reads as a title too, and @ and / still work beside it", async () => {
+test("03c2: a # query reads as a title too, and @ still works beside it", async () => {
   const app = await chat("wire");
   await app.type("id:composer-input", "，#重连");
   await app.waitFor("text:重连后补发丢失的帧");

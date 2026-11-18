@@ -22,10 +22,12 @@ import { Body, Header, Page } from "../../ui/Page";
 import { Sheet } from "../../ui/Sheet";
 import { Empty, Loading } from "../../ui/States";
 import { call, useTarget } from "../../wire/target";
+import { ContextPanel, contextUse, useWindow } from "./context";
 import {
   act,
   agentName,
   modelName,
+  RowCaret,
   SheetRow,
   statusLabel,
   tokens,
@@ -125,6 +127,19 @@ function MemberBody(props: {
     const current = session()?.model?.id;
     return current === undefined ? "—" : modelName(current);
   };
+  const windowOf = useWindow();
+  const context = () => {
+    const view = session();
+    return contextUse({
+      messages: view?.transcript?.messages ?? [],
+      before: view?.transcript?.messagesBefore ?? 0,
+      tools: view?.tools ?? [],
+      prompt: view?.prompt,
+      window: windowOf(view?.model?.id),
+    });
+  };
+  /** The context panel is open: how full the window is, and Compact. */
+  const contextOpen = signal(false);
   const leave = (then: () => void) => {
     props.onClose();
     then();
@@ -188,6 +203,23 @@ function MemberBody(props: {
           <Steps
             session={props.member.sessionId as string}
             tasks={session()?.tasks ?? []}
+          />
+        </If>
+        <SheetRow
+          title={t("group.context.row")}
+          subtitle={t("group.context.summary", {
+            percent: context().percent,
+            used: tokens(context().used),
+            window: tokens(context().window),
+          })}
+          testID="member-context"
+          trailing={<RowCaret />}
+          onPress={() => contextOpen.set(!contextOpen())}
+        />
+        <If when={contextOpen()}>
+          <ContextPanel
+            session={props.member.sessionId as string}
+            use={context()}
           />
         </If>
       </If>

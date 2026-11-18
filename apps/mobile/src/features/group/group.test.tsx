@@ -228,3 +228,17 @@ test("a task that runs stays over a queued one of its status, even one that move
     texts.indexOf("#131 Board column width remembers last drag"),
   ).toBeLessThan(texts.indexOf("#133 Run history supports pagination"));
 });
+
+test("03k a member's context: how full, when last compacted, and compacting it", async () => {
+  const app = await start("group:wire");
+  await app.waitFor("id:member-agent-ache");
+  await app.press("id:member-agent-ache");
+  await app.waitFor("id:member-context");
+  await app.press("id:member-context");
+  await app.waitFor("id:context-panel");
+  await app.waitFor("text:/^已用 [\\d.]+k? \\/ 128k tokens · \\d+%$/");
+  expect(app.texts()).toContain("上次压缩：没有");
+  await app.press("id:context-compact");
+  await app.waitFor("text:已压缩上下文。");
+  await app.waitFor("text:/^上次压缩：\\d+:\\d\\d$/");
+});

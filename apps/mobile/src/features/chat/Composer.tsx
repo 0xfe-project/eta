@@ -1,6 +1,5 @@
 import type {
   BoardTaskStatus,
-  CompactResult,
   MessageView,
   SteerHeldResult,
 } from "@eta/client-contracts";
@@ -8,21 +7,11 @@ import type { InputRef, Signal } from "nsh";
 import type { Chat } from "./conversation";
 import type { ComposerTarget } from "./mentions";
 import type { MenuItem, MenuState } from "./menu";
-import type { SendMode, Upload } from "./outbox";
+import type { Upload } from "./outbox";
 import { MAX_ATTACHMENTS } from "@eta/client-contracts";
-import {
-  colorScheme,
-  computed,
-  effect,
-  Picker,
-  Scroll,
-  signal,
-  Text,
-  View,
-} from "nsh";
+import { computed, effect, Picker, Scroll, signal, Text, View } from "nsh";
 import { Input } from "nsh/base";
 import { agentById, boardTasks, projectById } from "../../app/lists";
-import { setScheme } from "../../app/prefs";
 import { t } from "../../i18n";
 import { go } from "../../nav/links";
 import { AgentAvatar } from "../../ui/AgentAvatar";
@@ -55,31 +44,6 @@ import { forgetRows, rememberRows } from "./rows";
 const MAX_MESSAGE_CHARS = 100_000;
 /** What the box grows to before it scrolls inside itself. */
 const MAX_TEXT_HEIGHT = 120;
-
-type CommandName =
-  | "/stop"
-  | "/queue"
-  | "/steer"
-  | "/compact"
-  | "/goal"
-  | "/theme"
-  | "/settings"
-  | "/new";
-
-const commands = (): {
-  name: CommandName;
-  description: string;
-  takesText?: boolean;
-}[] => [
-  { name: "/stop", description: t("chat.command.stop") },
-  { name: "/queue", description: t("chat.send.queue"), takesText: true },
-  { name: "/steer", description: t("chat.send.steer"), takesText: true },
-  { name: "/compact", description: t("chat.command.compact") },
-  { name: "/goal", description: t("chat.command.goal"), takesText: true },
-  { name: "/theme", description: t("chat.command.theme") },
-  { name: "/settings", description: t("chat.command.settings") },
-  { name: "/new", description: t("chat.command.new") },
-];
 
 function fileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -126,25 +90,15 @@ function MenuRow(props: {
       <If when={item().kind === "file"}>
         <Icon name="fileText" size={18} color="muted-foreground" />
       </If>
-      <If when={item().kind === "command"}>
-        <Text class="w-[80px] shrink-0 text-base leading-[18px] text-foreground">
-          {item().label}
-        </Text>
-        <Text class="truncate grow basis-0 text-md leading-4 text-muted-foreground">
-          {(item() as { description?: string }).description}
-        </Text>
-      </If>
       <If when={item().kind === "task"}>
         <TaskStatusIcon status={taskStatus(item())} size={16} />
         <Text class="w-[40px] shrink-0 text-md leading-4 text-muted-foreground">
           #{(item() as { number?: number }).number}
         </Text>
       </If>
-      <If when={item().kind !== "command"}>
-        <Text class="truncate grow basis-0 text-base leading-[18px] text-foreground">
-          {item().label}
-        </Text>
-      </If>
+      <Text class="truncate grow basis-0 text-base leading-[18px] text-foreground">
+        {item().label}
+      </Text>
       <If when={hint() !== undefined}>
         <Text class="text-sm leading-4 text-muted-foreground">{hint()}</Text>
       </If>
@@ -377,8 +331,6 @@ function HeldBand(props: { chat: Chat; onPullBack: (text: string) => void }) {
 
 export function Composer(props: {
   chat: Chat;
-  /** The menu of send modes is open; the screen dismisses it on a press outside. */
-  modes: Signal<boolean>;
   /** The @ / # menu is open: over the keyboard it takes the room the screen has. */
   menuOpen: Signal<boolean>;
   /** Sending jumps back to the live end, as in a terminal. */
@@ -523,7 +475,6 @@ export function Composer(props: {
         busy: member.status !== "idle",
       })),
       files: projectFiles(),
-      commands: commands(),
       tasks: boardTasks(),
       groupId: id,
       dismissed: dismissed() || blocked(),
@@ -538,10 +489,7 @@ export function Composer(props: {
     }),
   );
   effect(() => props.menuOpen.set(menu() !== null));
-  const showToolbar = () => {
-    const kind = menu()?.kind;
-    return !blocked() && kind !== "slash" && kind !== "hash";
-  };
+  const showToolbar = () => !blocked() && menu()?.kind !== "hash";
 
   const replaceDraft = (next: string) => {
     setDraft(id, next);
@@ -553,93 +501,16 @@ export function Composer(props: {
       : (chat.members().find((member) => member.agentId === agentId)
           ?.sessionId ?? undefined);
   }
-  const stopAll = () =>
-    call<{ stopped: never[] }>("conversations", "stop", {
-      conversationId: id,
-    }).then(
-      (result) => rememberRows(id, result.stopped),
-      (error: unknown) => toast(t("common.failed", { message: reason(error) })),
-    );
-  const stopActive = () => {
-    const active = chat.active();
-    if (active === undefined) return;
-    call<{ stopped: never[] }>("conversations", "stop", {
-      conversationId: id,
-      messageId: active.id,
-    }).then(
-      (result) => rememberRows(id, result.stopped),
-      (error: unknown) => toast(t("common.failed", { message: reason(error) })),
-    );
-  };
-  const compact = () => {
-    // Who the composer says it is talking to, the steward included.
-    const named = target()
-      .ids.map(sessionOf)
-      .filter((session) => session !== undefined);
-    const sessions =
-      named.length > 0
-        ? named
-        : members().length === 1
-          ? [sessionOf(members()[0]?.id)]
-          : [];
-    const session = sessions.find(
-      (value): value is string => typeof value === "string",
-    );
-    if (session === undefined) {
-      toast(t("chat.command.compactNeedsTarget"));
-      return;
-    }
-    replaceDraft("");
-    call<CompactResult>("sessions", "compact", { session }).then(
-      ({ runtime }) => {
-        if (runtime === undefined) return;
-        const key = `chat.compaction.${runtime.outcome}` as const;
-        toast(
-          t(key, { runtime: runtime.runtime, reason: runtime.reason ?? "" }),
-        );
-      },
-      (error: unknown) => toast(t("common.failed", { message: reason(error) })),
-    );
-  };
-  const goal = (objective: string) => {
-    const session =
-      target().ids.map(sessionOf).find(Boolean) ??
-      chat.members().find((member) => member.sessionId !== null)?.sessionId ??
-      undefined;
-    if (session === undefined) return;
-    call("sessions", "goal", { session, action: "set", objective }).catch(
-      (error: unknown) => toast(t("common.failed", { message: reason(error) })),
-    );
-  };
-  const deliver = (body: string, mode: SendMode) => {
+  /** A new message, always: one for a turn in flight is put into it from the message it answers. */
+  const deliver = (body: string) => {
     const chosen = target();
     const attachments = files().flatMap((file) =>
       file.attachment === undefined ? [] : [file.attachment],
     );
-    sendMessage(id, body, mode, chosen.mentions, attachments);
+    sendMessage(id, body, chosen.mentions, attachments);
     setSticky(id, chosen.sticky);
     clearUploads(id);
     replaceDraft("");
-  };
-  const run = (name: CommandName, rest: string) => {
-    if (name === "/stop") {
-      void stopAll();
-      replaceDraft("");
-    } else if (name === "/compact") compact();
-    else if (name === "/goal") {
-      if (rest.length > 0) goal(rest);
-      replaceDraft("");
-    } else if (name === "/theme") {
-      setScheme(colorScheme() === "dark" ? "light" : "dark");
-      replaceDraft("");
-    } else if (name === "/settings") {
-      replaceDraft("");
-      go.settings();
-    } else if (name === "/new") {
-      replaceDraft("");
-      go.newConversation();
-    } else if (rest.length > 0)
-      deliver(rest, name === "/steer" ? "steer" : "queue");
   };
   const choose = (item: MenuItem) => {
     if (
@@ -658,31 +529,13 @@ export function Composer(props: {
       if (at !== null)
         setDraft(id, `${text().slice(0, at.start)}${item.value}`);
       dismissed.set(true);
-    } else {
-      const command = commands().find((entry) => entry.name === item.value);
-      if (command === undefined) return;
-      if (command.name === "/compact" && members().length > 1)
-        setDraft(id, "/compact ");
-      else if (command.takesText === true) setDraft(id, `${command.name} `);
-      else run(command.name, "");
     }
     input?.focus();
   };
-  const send = (mode: SendMode) => {
-    props.modes.set(false);
-    if (blocked() || hold() !== undefined) return;
-    // The button says Stop while a reply runs and the box is empty, and that promise is kept.
-    if (blank()) {
-      stopActive();
-      return;
-    }
-    const first = text().trimStart();
-    const space = first.search(/\s/);
-    const name = space === -1 ? first : first.slice(0, space);
-    const command = commands().find((entry) => entry.name === name);
-    if (command !== undefined)
-      run(command.name, first.slice(name.length).trim());
-    else deliver(text().trim(), mode);
+  // Send is only ever Send: a reply is stopped from its own process box, and `/` is a character.
+  const send = () => {
+    if (blocked() || hold() !== undefined || blank()) return;
+    deliver(text().trim());
     props.onSent();
   };
   const pick = () => {
@@ -699,12 +552,7 @@ export function Composer(props: {
     );
   };
   props.bindResend((body, agentId) => {
-    sendMessage(
-      id,
-      body,
-      "queue",
-      agentId === null ? target().mentions : [agentId],
-    );
+    sendMessage(id, body, agentId === null ? target().mentions : [agentId]);
     props.onSent();
   });
 
@@ -745,31 +593,6 @@ export function Composer(props: {
           replaceDraft(text() === "" ? body : `${body}\n\n${text()}`)
         }
       />
-      <If when={props.modes()}>
-        <View class="w-[236px] shrink-0 self-end border border-border-strong bg-background">
-          <View
-            role="button"
-            accessibilityLabel={t("chat.send.queue")}
-            onPress={() => send("queue")}
-            class="h-11 shrink-0 flex-row items-center gap-2 px-3 active:bg-muted"
-          >
-            <Text class="grow basis-0 text-base leading-[18px] text-foreground">
-              {t("chat.send.queue")}
-            </Text>
-            <Icon name="check" size={14} />
-          </View>
-          <View
-            role="button"
-            accessibilityLabel={t("chat.send.steer")}
-            onPress={() => send("steer")}
-            class="h-11 shrink-0 flex-row items-center border-t border-border px-3 active:bg-muted"
-          >
-            <Text class="text-base leading-[18px] text-foreground">
-              {t("chat.send.steer")}
-            </Text>
-          </View>
-        </View>
-      </If>
       <If when={archived()}>
         <Blocked
           message={t("chat.blocked.archived")}
@@ -871,23 +694,13 @@ export function Composer(props: {
             <View class="grow basis-0" />
             <View
               role="button"
-              accessibilityLabel={
-                blank() && chat.active() !== undefined
-                  ? t("chat.composer.stop")
-                  : t("common.send")
-              }
+              accessibilityLabel={t("common.send")}
               testID="composer-submit"
-              onPress={() => send("queue")}
-              onLongPress={() => {
-                if (!blank() && chat.active() !== undefined)
-                  props.modes.set(true);
-              }}
+              onPress={send}
               class="h-8 items-center justify-center bg-primary px-[14px] active:opacity-80"
             >
               <Text class="text-md leading-4 text-primary-foreground">
-                {blank() && chat.active() !== undefined
-                  ? t("chat.composer.stop")
-                  : t("common.send")}
+                {t("common.send")}
               </Text>
             </View>
           </View>

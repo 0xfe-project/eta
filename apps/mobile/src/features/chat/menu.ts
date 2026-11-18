@@ -5,10 +5,10 @@
  * What the composer's one menu offers, and why.
  *
  * There is a single menu because there is a single thing to be completed — "who or what am I
- * referring to". Three keys open it: `/` for commands (the whole draft has to be `/name`, which is
- * what makes a slash at the start of a sentence not a command) and `#` for tasks (`#10` reads as a
- * task number, so `#` offers nothing but the board's tasks), and `@` for references, which can mix
- * two kinds:
+ * referring to". Two keys open it: `#` for tasks (`#10` reads as a task number, so `#` offers
+ * nothing but the board's tasks), and `@` for references, which can mix two kinds. `/` is a plain
+ * character: the phone has no commands (a reply stops from its process box, a member's context is
+ * compacted from the group's members).
  *
  * - members of this group, first, because in a group "who" is the question the message answers.
  *   eta-old had only files here; a group needs people, and putting them below a file list would
@@ -38,7 +38,6 @@ export type MenuItem =
     }
   | { kind: "everyone"; value: string; label: string }
   | { kind: "file"; value: string; label: string }
-  | { kind: "command"; value: string; label: string; description: string }
   | {
       kind: "task";
       value: string;
@@ -60,7 +59,7 @@ export interface MenuTask {
 }
 
 export interface MenuState {
-  kind: "slash" | "at" | "hash";
+  kind: "at" | "hash";
   query: string;
   /** Where the query starts in the draft, so a pick can replace exactly that. */
   start: number;
@@ -70,7 +69,6 @@ export interface MenuState {
 /** How many rows each source may contribute: enough to choose from, short enough to read. */
 const MAX_MEMBERS = 8;
 const MAX_FILES = 8;
-const MAX_COMMANDS = 8;
 const MAX_TASKS = 8;
 
 /**
@@ -125,13 +123,6 @@ export function hashAt(text: string): { query: string; start: number } | null {
   return { query, start: text.length - query.length - 1 };
 }
 
-/** `/name` — the whole draft, no spaces: a slash inside a sentence is a slash. */
-function slashAt(text: string): { query: string; start: number } | null {
-  if (!text.startsWith("/") || text.startsWith("//")) return null;
-  if (/\s/.test(text)) return null;
-  return { query: text.slice(1).toLowerCase(), start: 0 };
-}
-
 /**
  * Whether two tasks differ by "is this the group being written in": 0 when they agree, negative or
  * positive when one of them is. A task with no group is `null` on the wire, so it cannot rank first
@@ -151,7 +142,6 @@ export function buildMenu(input: {
   text: string;
   members: readonly MenuMember[];
   files: readonly string[];
-  commands: readonly { name: string; description: string }[];
   /** A group's `@everyone` row, after the members: its name, and the words it answers to. */
   everyone?: { label: string; aliases: readonly string[] };
   /** The board, for `#`. */
@@ -237,18 +227,5 @@ export function buildMenu(input: {
       : { kind: "hash", query: hash.query, start: hash.start, items };
   }
 
-  const slash = slashAt(input.text);
-  if (slash === null) return null;
-  const items: MenuItem[] = input.commands
-    .filter((command) => command.name.slice(1).startsWith(slash.query))
-    .slice(0, MAX_COMMANDS)
-    .map((command) => ({
-      kind: "command" as const,
-      value: command.name,
-      label: command.name,
-      description: command.description,
-    }));
-  return items.length === 0
-    ? null
-    : { kind: "slash", query: slash.query, start: slash.start, items };
+  return null;
 }
