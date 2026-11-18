@@ -18,7 +18,6 @@ import type {
 import type {
   RuntimeExtras,
   SessionRuntime,
-  SessionRuntimeAsk,
   SessionRuntimes,
 } from "./runtimes";
 import type { Settings } from "./settings";
@@ -602,8 +601,6 @@ export class SessionManager {
     const tools: { names: readonly string[] } = { names: [] };
     /** Starts a run for a turn the runtime began itself, once the session exists. */
     let wake: ((wanted: () => boolean) => void) | undefined;
-    /** The session's ask channel, once the session exists. */
-    let asking: SessionRuntimeAsk | undefined;
     const agentPrompt = this.agentPromptFor?.(meta);
     const platform = this.platformFor?.(meta);
     const extras = await this.runtimeExtrasFor?.(meta);
@@ -638,10 +635,6 @@ export class SessionManager {
       },
       hostTools: () => tools.names,
       wake: (wanted) => wake?.(wanted),
-      // Nobody is there to answer before the session is assembled: that is `none`.
-      ask: async (payload, options) =>
-        (await asking?.(payload, options)) ?? { kind: "none" },
-      settings: extras?.settings,
     });
     if (runtime === undefined)
       throw new Error(`runtime_unavailable: ${runtimeId} does not run here`);
@@ -678,10 +671,6 @@ export class SessionManager {
       for (const middleware of this.toolMiddleware?.({ meta, session }) ?? []) {
         session.kernel.tools.use(middleware);
       }
-      const channel = session.ask;
-      if (channel !== undefined)
-        asking = async (payload, options) =>
-          await channel.ask(payload, options ?? {});
       // The host attaches its tools and starts the pump, here as in an eta session.
       const hostTools = this.sessionTools?.({ meta, session }) ?? [];
       registerSessionTools(session, hostTools);

@@ -14,17 +14,26 @@ mine". `composeRuntimes([...])` makes several sets one: each is asked in turn, a
 What a runtime is handed (`SessionRuntimeInput`), beyond the session's id and directory:
 
 - `resume`, `remember`: the runtime's own session id, kept in `SessionMeta.runtimeSession`.
-- `agentPrompt()`, `hostTools()`: read when the runtime opens, after the session's tools exist.
+- `agentPrompt()`: read when the runtime opens, after the session's tools exist.
+- `hostTools()`: the names of the host's tools the session is offered, read at every run.
 - `mcpServers`, `launchArgs`: what the agent's plugins bring.
 - `wake`: for a runtime that begins a turn nobody asked for.
-- `ask`: the session's ask channel, bound once the session exists. A question asked through it is
-  an ordinary question of the session's: it shows in the Inbox and is answered the same way, on
-  the primary and on a daemon alike.
-- `settings`: opaque values from `RuntimeExtras.settings`.
+
+There is no ask channel on the seam: neither adapter asks the user anything. An ACP agent's
+permission requests are answered yes (below), and the oar runtimes run without asking.
 
 A session on an external runtime gets the host's tool middleware (`toolMiddleware`), like any
 other: the approval list on the primary and redaction on a daemon hold when the runtime calls one
 of the host's tools.
+
+Both adapters serve the host's tools the same way, through `HostTools` in `@eta/runtime-kit`: an
+HTTP MCP server on 127.0.0.1 named `eta`, one for the life of the session's delegate. A tool's
+name, description and parameters go to the runtime unchanged, and a call runs through the
+session's middleware under the run in flight. At the start of every run the list is read again
+from the session; one that differs (a tool came or went, a description or a schema changed) is
+served on the same server, which sends `notifications/tools/list_changed`, so the runtime lists
+again without a restart. A runtime opened when the session had no host tools was given no server,
+and hears of later ones only when it is opened again.
 
 Two adapters implement the seam, and `apps/eta/src/host.ts` and `apps/daemon/src/node.ts` compose
 them:
@@ -33,6 +42,8 @@ them:
 | ------------------ | ----------------------------------- | ------------------------------------------ |
 | `@eta/runtime-oar` | `claude`, `codex`, `opencode`, `pi` | `@botiverse/oar`                           |
 | `@eta/runtime-acp` | `acp.<id>`                          | `@agentclientprotocol/sdk` (ACP v1), stdio |
+
+What both share lives in `@eta/runtime-kit`; neither adapter depends on the other.
 
 ## ACP agents
 

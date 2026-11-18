@@ -110,11 +110,7 @@ function describe(raw: unknown): string {
 export class AcpConfigFile {
   readonly path: string;
 
-  constructor(
-    path: string = defaultAcpConfigPath(),
-    /** Unused since a bad file is an error; kept so callers need not change. */
-    _warn: (message: string) => void = () => undefined,
-  ) {
+  constructor(path: string = defaultAcpConfigPath()) {
     this.path = path;
   }
 
