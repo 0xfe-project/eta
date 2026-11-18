@@ -1,13 +1,6 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  rstest,
-} from "@rstest/core";
 import { NuqsTestingAdapter } from "nuqs/adapters/testing";
 import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { customFontStack, watchCustomFont } from "@/lib/custom-font";
 import { translate } from "@/lib/i18n";
 import { setWire } from "@/lib/wire";
@@ -19,7 +12,7 @@ import { useWorkspaceStore } from "./workspace-store";
 // Settings → Appearance → Interface font: typed in, saved on leaving the field or Enter, refused
 // with a reason when it is not one font name.
 
-rstest.mock("@tanstack/react-router", () => ({
+vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children?: React.ReactNode }) => <a>{children}</a>,
   useRouterState: (options?: { select?: (state: unknown) => unknown }) =>
     options?.select
@@ -31,7 +24,7 @@ rstest.mock("@tanstack/react-router", () => ({
     options?.select ? options.select({ pathname: "/" }) : { pathname: "/" },
 }));
 
-rstest.mock("./use-groups", () => ({
+vi.mock("./use-groups", () => ({
   useGroups: () => ({ groups: [], current: undefined }),
   useOpenGroup: () => () => undefined,
 }));

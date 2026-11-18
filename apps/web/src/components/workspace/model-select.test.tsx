@@ -1,6 +1,6 @@
 import type { Model } from "@/queries/providers";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, click, flush, mount } from "@/test-render";
 import { ModelSelect } from "./model-select";
 
@@ -46,7 +46,7 @@ const selected = () =>
 async function render(
   props: Partial<React.ComponentProps<typeof ModelSelect>> = {},
 ) {
-  const change = rstest.fn();
+  const change = vi.fn();
   await mount(
     <ModelSelect
       id="model"

@@ -1,5 +1,5 @@
 import type { EmailProposalView } from "@eta/client-contracts";
-import { afterEach, describe, expect, it } from "@rstest/core";
+import { afterEach, describe, expect, it } from "vitest";
 import { setWire } from "@/lib/wire";
 import { buildProductHost } from "@/test-product";
 import { cleanup, click, mount } from "@/test-render";

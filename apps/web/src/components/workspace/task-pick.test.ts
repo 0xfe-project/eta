@@ -1,5 +1,5 @@
 import type { Task } from "@/queries/tasks";
-import { describe, expect, it } from "@rstest/core";
+import { describe, expect, it } from "vitest";
 import { pickOptions, stepIfMade } from "./task-pick";
 import { parseSplit, splitBatch, stepSizes } from "./task-split";
 import { board, release } from "./task-tree-fixture";

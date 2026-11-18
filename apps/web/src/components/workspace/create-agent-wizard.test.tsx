@@ -1,12 +1,5 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  rstest,
-} from "@rstest/core";
 import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { agentView, machineView } from "@/test-product";
 import { cleanup, mount } from "@/test-render";
@@ -31,15 +24,15 @@ const providers = {
   ],
 };
 
-const api = rstest.hoisted(() => ({
-  select: rstest.fn(),
+const api = vi.hoisted(() => ({
+  select: vi.fn(),
   agents: [] as { id: string; name: string }[],
 }));
-rstest.mock("./use-agents", () => ({
+vi.mock("./use-agents", () => ({
   useAgents: () => ({ agents: api.agents, select: api.select }),
 }));
-rstest.mock("./agent-identity", () => ({ AgentAvatar: () => <span /> }));
-rstest.mock("sonner", () => ({
+vi.mock("./agent-identity", () => ({ AgentAvatar: () => <span /> }));
+vi.mock("sonner", () => ({
   toast: { success: () => {}, error: () => {} },
 }));
 

@@ -1,6 +1,6 @@
 import type { FakeHost } from "@/test-wire";
 import { ATTACH_CHUNK_BYTES } from "@eta/client-contracts";
-import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setWire } from "@/lib/wire";
 import { productHost } from "@/test-product";
 import { flush } from "@/test-render";

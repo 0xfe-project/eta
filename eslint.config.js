@@ -96,6 +96,13 @@ export default antfu(
       ],
     },
   },
+  {
+    // The web tests name their cases in sentences that start with product names (Captain,
+    // Markdown, Windows); lowercasing them reads wrong. They came from rstest, which this rule did
+    // not see.
+    files: ["apps/web/src/**/*.test.ts", "apps/web/src/**/*.test.tsx"],
+    rules: { "test/prefer-lowercase-title": "off" },
+  },
 )
   // nsh components run once and react through signals, so hooks order, the
   // `use` prefix, Fast Refresh and render purity do not apply to the phone app.

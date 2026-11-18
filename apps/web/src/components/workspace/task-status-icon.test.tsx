@@ -1,5 +1,5 @@
 import type { TaskStatus } from "@/queries/tasks";
-import { afterEach, describe, expect, it } from "@rstest/core";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, mount } from "@/test-render";
 import { StatusIcon, StatusPill } from "./task-status-icon";
 

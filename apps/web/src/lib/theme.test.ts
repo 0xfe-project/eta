@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setTheme, TITLE_BAR_COLORS } from "./theme";
 
 // The title bar of the installed app: index.html's two theme-color metas, and what the app does

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "@rstest/core";
+import { afterEach, describe, expect, it } from "vitest";
 import { translate } from "@/lib/i18n";
 import { cleanup, mount } from "@/test-render";
 import { AppSkeleton, PageSkeleton } from "./app-skeleton";

@@ -1,6 +1,6 @@
 import type { PluginFieldView } from "@eta/client-contracts";
 import { parseConfigFields } from "@eta/client-contracts/plugin-fields";
-import { describe, expect, it } from "@rstest/core";
+import { describe, expect, it } from "vitest";
 import { changes, draftOf, formState } from "./plugin-form";
 
 /** A field as the host sends it, from what a manifest declares. */

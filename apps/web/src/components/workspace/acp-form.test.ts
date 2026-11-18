@@ -1,4 +1,4 @@
-import { describe, expect, it } from "@rstest/core";
+import { describe, expect, it } from "vitest";
 import { acpDraftOf, acpSlug, checkAcpDraft, parseAcpEnv } from "./acp-form";
 
 describe("parseAcpEnv", () => {

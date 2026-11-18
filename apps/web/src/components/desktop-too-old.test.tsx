@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "@rstest/core";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, click, mount } from "@/test-render";
 import { DesktopTooOld } from "./desktop-too-old";
 

@@ -1,5 +1,5 @@
 import type { EmailMetaView } from "@eta/client-contracts";
-import { afterEach, describe, expect, it } from "@rstest/core";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, click, mount } from "@/test-render";
 import { EmailMetaPanel } from "./email-meta";
 

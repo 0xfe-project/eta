@@ -1,5 +1,4 @@
 import type { ArtifactView } from "@eta/client-contracts";
-import { afterEach, beforeEach, expect, it } from "@rstest/core";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -8,6 +7,7 @@ import {
 } from "@tanstack/react-router";
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act, useState } from "react";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { setWire } from "@/lib/wire";
 import { surfaceHost } from "@/test-inbox";
 import {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "@rstest/core";
+import { describe, expect, it } from "vitest";
 import { newTaskMode, newTaskStartsAtHead, splitJoinSteps } from "./task-join";
 import { parseSplit } from "./task-split";
 import { board } from "./task-tree-fixture";

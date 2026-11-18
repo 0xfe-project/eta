@@ -1,5 +1,5 @@
 import type { AgentMessage, ViewMessageRow } from "@eta/client-contracts";
-import { describe, expect, it } from "@rstest/core";
+import { describe, expect, it } from "vitest";
 import {
   kindTotals,
   replyRows,

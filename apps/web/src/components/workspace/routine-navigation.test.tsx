@@ -1,18 +1,18 @@
 import type { ProductSeed } from "@/test-product";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { productHost, routineInfo, routineSections } from "@/test-product";
 import { cleanup, flush, mount } from "@/test-render";
 import { RoutineBoard } from "./routine-board";
 
-const navigation = rstest.hoisted(() => ({
+const navigation = vi.hoisted(() => ({
   routine: null as string | null,
   edit: "missing" as string | null,
   run: null,
-  set: rstest.fn(),
+  set: vi.fn(),
 }));
-rstest.mock("./routine-nav", () => ({
+vi.mock("./routine-nav", () => ({
   useRoutineNav: () => [navigation, navigation.set],
 }));
 

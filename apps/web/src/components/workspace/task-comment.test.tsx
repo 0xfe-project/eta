@@ -1,7 +1,7 @@
 import type { BoardTaskDetail } from "@eta/client-contracts";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
 import { toast } from "sonner";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { useTask } from "@/queries/tasks";
 import {
@@ -13,7 +13,7 @@ import {
 import { cleanup, flush, mount } from "@/test-render";
 import { CommentBox, Timeline } from "./tasks";
 
-rstest.mock("./use-groups", () => ({
+vi.mock("./use-groups", () => ({
   useGroups: () => ({ groups: [], current: undefined, groupId: null }),
   useOpenGroup: () => () => {},
 }));
@@ -205,7 +205,7 @@ describe("comments on a task", () => {
   });
 
   it("says a pasted image stays out of the comment, and keeps the pasted text", async () => {
-    const warn = rstest.spyOn(toast, "warning");
+    const warn = vi.spyOn(toast, "warning");
     const { container } = await render();
     const paste = new Event("paste", { bubbles: true, cancelable: true });
     const image = new File(["x"], "shot.png", { type: "image/png" });

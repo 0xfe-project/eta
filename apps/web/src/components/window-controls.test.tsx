@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, mount } from "@/test-render";
 import { WindowControls } from "./window-controls";
 
@@ -12,7 +12,7 @@ function shell(facts: Record<string, unknown> | undefined) {
 afterEach(async () => {
   await cleanup();
   shell(undefined);
-  rstest.restoreAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe("the window's three buttons", () => {
@@ -28,7 +28,7 @@ describe("the window's three buttons", () => {
   });
 
   it("Windows 里三个点各调各的动作，且不许拖窗口", async () => {
-    const fetch = rstest
+    const fetch = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response(null, { status: 202 }));
     shell({

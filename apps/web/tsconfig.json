@@ -15,5 +15,5 @@
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "include": ["src", "vite.config.ts", "rstest.config.ts"]
+  "include": ["src", "vite.config.ts", "vitest.config.ts"]
 }

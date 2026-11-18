@@ -1,18 +1,18 @@
 import type { ConversationSummary } from "@eta/client-contracts";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { conversationView, productHost } from "@/test-product";
 import { button, cleanup, mount } from "@/test-render";
 import { ArchivedGroups, GroupList } from "./groups";
 import { useWorkspaceStore } from "./workspace-store";
 
-const groups = rstest.hoisted(() => ({
+const groups = vi.hoisted(() => ({
   list: [] as ConversationSummary[],
 }));
-const navigation = rstest.hoisted(() => ({ open: rstest.fn() }));
+const navigation = vi.hoisted(() => ({ open: vi.fn() }));
 
-rstest.mock("./use-groups", () => ({
+vi.mock("./use-groups", () => ({
   useGroups: () => ({ groups: groups.list }),
   useOpenGroup: () => navigation.open,
 }));

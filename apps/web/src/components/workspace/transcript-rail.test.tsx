@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, mount } from "@/test-render";
 import { TranscriptRail } from "./transcript-rail";
 
@@ -34,7 +34,7 @@ describe("右边缘的轨", () => {
   });
 
   it("回复和提问是两条轨，各数各的", async () => {
-    const jump = rstest.fn();
+    const jump = vi.fn();
     const container = await render(
       <TranscriptRail
         replies={entries(12)}
@@ -60,7 +60,7 @@ describe("右边缘的轨", () => {
   });
 
   it("点一个编号就跳到那条消息", async () => {
-    const jump = rstest.fn();
+    const jump = vi.fn();
     const container = await render(
       <TranscriptRail
         replies={entries(12)}

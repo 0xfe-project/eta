@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "@rstest/core";
 import { act } from "react";
+import { afterEach, describe, expect, it } from "vitest";
 import { setWire } from "@/lib/wire";
 import { artifactView, productHost } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";

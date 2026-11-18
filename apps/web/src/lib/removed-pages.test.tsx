@@ -1,10 +1,10 @@
-import { describe, expect, it } from "@rstest/core";
 import {
   createMemoryHistory,
   createRootRoute,
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
+import { describe, expect, it } from "vitest";
 import { Route as unknownPath } from "@/routes/$";
 import { Route as routinesPath } from "@/routes/_app/routines";
 

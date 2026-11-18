@@ -1,17 +1,17 @@
 import type { McpServerView } from "@eta/client-contracts";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { buildProductHost } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
 import { McpSettings } from "./mcp-settings";
 
-const toasts = rstest.hoisted(() => ({
-  message: rstest.fn(),
-  success: rstest.fn(),
-  error: rstest.fn(),
+const toasts = vi.hoisted(() => ({
+  message: vi.fn(),
+  success: vi.fn(),
+  error: vi.fn(),
 }));
-rstest.mock("sonner", () => ({
+vi.mock("sonner", () => ({
   toast: Object.assign(toasts.message, {
     success: toasts.success,
     error: toasts.error,
@@ -21,7 +21,7 @@ rstest.mock("sonner", () => ({
 afterEach(async () => {
   await cleanup();
   setWire(undefined);
-  rstest.restoreAllMocks();
+  vi.restoreAllMocks();
   toasts.message.mockClear();
   toasts.success.mockClear();
   toasts.error.mockClear();
@@ -78,9 +78,9 @@ function stubTab() {
   const tab = {
     opener: "set" as unknown,
     location: { href: "" },
-    close: rstest.fn(),
+    close: vi.fn(),
   };
-  const open = rstest.spyOn(window, "open").mockReturnValue(tab as never);
+  const open = vi.spyOn(window, "open").mockReturnValue(tab as never);
   return { tab, open };
 }
 

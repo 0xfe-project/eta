@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "./random-uuid";
 
 const UUID_V4 =
@@ -12,7 +12,7 @@ describe("randomUUID", () => {
   );
 
   afterEach(() => {
-    rstest.restoreAllMocks();
+    vi.restoreAllMocks();
     if (originalDescriptor) {
       Object.defineProperty(globalThis, "crypto", originalDescriptor);
     } else {
@@ -24,7 +24,7 @@ describe("randomUUID", () => {
   });
 
   it("uses native crypto.randomUUID when available", () => {
-    const spy = rstest
+    const spy = vi
       .spyOn(globalThis.crypto, "randomUUID")
       .mockReturnValue("11111111-1111-4111-8111-111111111111");
     expect(randomUUID()).toBe("11111111-1111-4111-8111-111111111111");

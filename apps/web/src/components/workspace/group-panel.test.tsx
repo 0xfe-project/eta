@@ -1,4 +1,3 @@
-import { afterEach, expect, it, rstest } from "@rstest/core";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -7,6 +6,7 @@ import {
 } from "@tanstack/react-router";
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
+import { afterEach, expect, it, vi } from "vitest";
 import { translate } from "@/lib/i18n";
 import { setWire } from "@/lib/wire";
 import { interactionView, surfaceHost } from "@/test-inbox";
@@ -24,7 +24,7 @@ import { useAttention } from "./use-attention";
 
 // The members block is the group manager's own component, and its own tests
 // cover it; here only the place its section holds matters.
-rstest.mock("./groups", () => ({
+vi.mock("./groups", () => ({
   GroupMembers: () => (
     <section aria-label={translate("chat:groups.members.title")} />
   ),

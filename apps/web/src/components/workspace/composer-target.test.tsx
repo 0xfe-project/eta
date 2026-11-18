@@ -3,8 +3,8 @@ import type {
   MemberView,
   SendResult,
 } from "@eta/client-contracts";
-import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { plainDraft } from "@/lib/composer";
 import { setWire } from "@/lib/wire";
 import { useOutbox } from "@/queries/outbox";

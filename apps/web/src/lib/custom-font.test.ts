@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { useWorkspaceStore } from "@/components/workspace/workspace-store";
 import {
   applyCustomFont,

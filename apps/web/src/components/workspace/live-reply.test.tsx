@@ -1,6 +1,6 @@
 import type { MessageView, ViewMessageRow } from "@eta/client-contracts";
-import { afterEach, describe, expect, it } from "@rstest/core";
 import { act } from "react";
+import { afterEach, describe, expect, it } from "vitest";
 import { setWire } from "@/lib/wire";
 import { Chat } from "@/test-chat";
 import { surfaceHost } from "@/test-inbox";

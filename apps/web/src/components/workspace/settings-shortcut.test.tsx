@@ -1,6 +1,5 @@
 import type { RouterContext } from "@/lib/query-client";
 import type { FakeHost } from "@/test-wire";
-import { afterEach, beforeAll, describe, expect, it } from "@rstest/core";
 import { QueryClient } from "@tanstack/react-query";
 import {
   createMemoryHistory,
@@ -12,6 +11,7 @@ import {
 } from "@tanstack/react-router";
 import { NuqsTestingAdapter } from "nuqs/adapters/testing";
 import { act } from "react";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { setWire } from "@/lib/wire";
 import { RootDocument } from "@/pages/root-document";
 import { agentView, buildProductHost } from "@/test-product";

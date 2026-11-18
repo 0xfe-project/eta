@@ -1,13 +1,6 @@
 import type { MessageView } from "@eta/client-contracts";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  rstest,
-} from "@rstest/core";
 import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { translate } from "@/lib/i18n";
 import { setWire } from "@/lib/wire";
 import { agentView, messageView, productHost } from "@/test-product";
@@ -15,7 +8,7 @@ import { cleanup, mount } from "@/test-render";
 import { ChatPanel } from "./chat-panel";
 import { useWorkspaceStore } from "./workspace-store";
 
-rstest.mock("@tanstack/react-router", () => ({
+vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children?: React.ReactNode }) => <a>{children}</a>,
   useRouterState: (options?: { select?: (state: unknown) => unknown }) =>
     options?.select
@@ -27,7 +20,7 @@ rstest.mock("@tanstack/react-router", () => ({
     options?.select ? options.select({ pathname: "/" }) : { pathname: "/" },
 }));
 
-rstest.mock("./use-groups", () => ({
+vi.mock("./use-groups", () => ({
   useGroups: () => ({ groups: [], current: undefined }),
   useOpenGroup: () => () => undefined,
 }));
@@ -108,7 +101,7 @@ interface Open {
 
 async function chat(first: Open) {
   productHost({ agents: [agentView({ id: "a1", name: "乐子人" })] });
-  const loadOlder = rstest.fn();
+  const loadOlder = vi.fn();
   const panel = ({ groupId, messages = [], loading, hasOlder }: Open) => (
     <ChatPanel
       groupId={groupId}
@@ -326,7 +319,7 @@ describe("读者的动作照常算数", () => {
       `[data-mid="${messages[0]!.id}"]`,
     )!;
     row.getBoundingClientRect = () => ({ top: -9000 }) as DOMRect;
-    row.scrollIntoView = rstest.fn();
+    row.scrollIntoView = vi.fn();
     await act(async () => {
       page.container.querySelector<HTMLElement>('[title^="1 ·"]')!.click();
     });
@@ -372,7 +365,7 @@ describe("读者的动作照常算数", () => {
       `[data-mid="${messages[0]!.id}"]`,
     )!;
     row.getBoundingClientRect = () => ({ top: -10 }) as DOMRect;
-    row.scrollIntoView = rstest.fn();
+    row.scrollIntoView = vi.fn();
     await act(async () => {
       page.container.querySelector<HTMLElement>('[title^="1 ·"]')!.click();
     });

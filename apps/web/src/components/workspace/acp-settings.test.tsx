@@ -3,19 +3,19 @@ import type {
   AcpMachineList,
   MachineView,
 } from "@eta/client-contracts";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { buildProductHost, machineView } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
 import { AcpSettings } from "./acp-settings";
 
-const toasts = rstest.hoisted(() => ({
-  message: rstest.fn(),
-  success: rstest.fn(),
-  error: rstest.fn(),
+const toasts = vi.hoisted(() => ({
+  message: vi.fn(),
+  success: vi.fn(),
+  error: vi.fn(),
 }));
-rstest.mock("sonner", () => ({
+vi.mock("sonner", () => ({
   toast: Object.assign(toasts.message, {
     success: toasts.success,
     error: toasts.error,

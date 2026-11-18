@@ -3,15 +3,8 @@ import type {
   MessageView,
   SendResult,
 } from "@eta/client-contracts";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  rstest,
-} from "@rstest/core";
 import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { plainDraft } from "@/lib/composer";
 import { setWire } from "@/lib/wire";
 import { useOutbox } from "@/queries/outbox";
@@ -159,7 +152,7 @@ beforeEach(() => {
   useOutbox.setState({ drafts: {}, uploads: {}, outgoing: [] });
 });
 afterEach(async () => {
-  rstest.useRealTimers();
+  vi.useRealTimers();
   // Ends the deliveries still waiting, so none outlives its test.
   useOutbox.setState({ outgoing: [] });
   for (const send of sends) send.reject(new Error("done"));
@@ -252,10 +245,10 @@ describe("sending a message", () => {
     await type("你好");
     await enter(c);
     // The waits between tries pass at once.
-    rstest.useFakeTimers({ toFake: ["setTimeout"] });
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
     await act(async () => {
       host.socket.drop();
-      await rstest.advanceTimersByTimeAsync(20_000);
+      await vi.advanceTimersByTimeAsync(20_000);
     });
     expect(log(c)).toContain("网络连接失败，消息未送达。");
     expect(sends).toHaveLength(1);
@@ -263,7 +256,7 @@ describe("sending a message", () => {
     sends = [];
 
     // Back on a connection, the retry is the same message.
-    rstest.useRealTimers();
+    vi.useRealTimers();
     await act(async () => host.hello());
     await click(button(c, "重试"));
     await flush();

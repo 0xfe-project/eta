@@ -1,6 +1,6 @@
 import type { ToolBlock } from "@eta/client-contracts";
-import { afterEach, describe, expect, it } from "@rstest/core";
 import { act } from "react";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, mount } from "@/test-render";
 import { ToolDetailCard } from "./transcript/tool-detail";
 

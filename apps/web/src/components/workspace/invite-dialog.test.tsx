@@ -1,19 +1,12 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  rstest,
-} from "@rstest/core";
 import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { productHost } from "@/test-product";
 import { button, cleanup, click, flush, mount } from "@/test-render";
 import { InviteDialog } from "./invite-dialog";
 
-const toasts = rstest.hoisted(() => ({ error: rstest.fn() }));
-rstest.mock("sonner", () => ({ toast: { error: toasts.error } }));
+const toasts = vi.hoisted(() => ({ error: vi.fn() }));
+vi.mock("sonner", () => ({ toast: { error: toasts.error } }));
 
 const agents = (count: number) =>
   Array.from({ length: count }, (_, i) => ({
@@ -52,7 +45,7 @@ const submitButton = () =>
   );
 
 async function open(count: number) {
-  const onOpenChange = rstest.fn();
+  const onOpenChange = vi.fn();
   await mount(
     <InviteDialog
       open

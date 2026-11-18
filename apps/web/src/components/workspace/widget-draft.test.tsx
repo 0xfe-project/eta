@@ -2,8 +2,8 @@
 // the user sends it. Its scripts run with no click behind them, and again every time the
 // conversation is opened, so a widget that could send would speak for the user.
 import type { MessageView, SendResult } from "@eta/client-contracts";
-import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { draftText, plainDraft } from "@/lib/composer";
 import { setWire } from "@/lib/wire";
 import { useOutbox } from "@/queries/outbox";

@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import {
   agentView,
@@ -15,14 +15,14 @@ import { TaskBoard } from "./task-board";
 import { useNewTask } from "./task-new-store";
 import { storageKey, useWorkspaceStore } from "./workspace-store";
 
-const navigation = rstest.hoisted(() => ({
+const navigation = vi.hoisted(() => ({
   task: null as string | null,
-  set: rstest.fn(),
+  set: vi.fn(),
 }));
-rstest.mock("./task-nav", () => ({
+vi.mock("./task-nav", () => ({
   useTaskNav: () => [navigation, navigation.set],
 }));
-rstest.mock("./use-groups", () => ({
+vi.mock("./use-groups", () => ({
   useGroups: () => ({ groups: [], current: undefined, groupId: null }),
   useOpenGroup: () => () => {},
 }));

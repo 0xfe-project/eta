@@ -1,4 +1,4 @@
-import { describe, expect, it } from "@rstest/core";
+import { describe, expect, it } from "vitest";
 import { idParam } from "./id-param";
 
 // `?group=null` is a state a URL can reach, and once it is there every link the panel draws

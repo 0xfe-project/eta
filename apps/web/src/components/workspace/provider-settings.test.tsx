@@ -13,6 +13,9 @@ import type {
   ProvidersView,
 } from "@eta/client-contracts";
 import { MODEL_SOURCES } from "@eta/client-contracts";
+import { QueryClient } from "@tanstack/react-query";
+import { act } from "react";
+import { toast } from "sonner";
 import {
   afterAll,
   afterEach,
@@ -20,18 +23,15 @@ import {
   describe,
   expect,
   it,
-  rstest,
-} from "@rstest/core";
-import { QueryClient } from "@tanstack/react-query";
-import { act } from "react";
-import { toast } from "sonner";
+  vi,
+} from "vitest";
 import { setWire } from "@/lib/wire";
 import { modelsOf } from "@/queries/providers";
 import { cleanup, mount } from "@/test-render";
 import { FakeHost } from "@/test-wire";
 import { ProviderSettings } from "./provider-settings";
 
-rstest.mock("./use-agents", () => ({
+vi.mock("./use-agents", () => ({
   useAgents: () => ({
     agents: [
       { id: "a1", name: "小助手", model: "ds:deepseek-chat" },
@@ -39,8 +39,8 @@ rstest.mock("./use-agents", () => ({
     ],
   }),
 }));
-rstest.mock("sonner", () => ({
-  toast: { success: rstest.fn(), error: rstest.fn(), warning: rstest.fn() },
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }));
 
 const provider = (
@@ -289,8 +289,8 @@ afterEach(async () => {
   await cleanup();
   setWire(undefined);
   document.body.innerHTML = "";
-  rstest.clearAllMocks();
-  rstest.restoreAllMocks();
+  vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe("the model sources list", () => {

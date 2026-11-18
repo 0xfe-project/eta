@@ -1,5 +1,5 @@
 import type { Question } from "@/queries/questions";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, click, mount } from "@/test-render";
 import { PendingStrip } from "./pending-strip";
 
@@ -26,7 +26,7 @@ const question = (
 
 describe("等你处理的那一条", () => {
   it("说清是谁在问、问什么，并能就地回答", async () => {
-    const choose = rstest.fn();
+    const choose = vi.fn();
     const { container } = await mount(
       <PendingStrip
         questions={[question("q1", "a1")]}

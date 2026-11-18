@@ -1,6 +1,6 @@
 import type { TaskRunView } from "@eta/client-contracts";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import {
   agentView,
@@ -14,14 +14,14 @@ import { TaskBoard } from "./task-board";
 // The run log dialog's header: one line (face, name, state and time, which run), the workspace
 // behind a button, and the run's timing strip that sends the log to a step.
 
-const navigation = rstest.hoisted(() => ({
+const navigation = vi.hoisted(() => ({
   task: "t1" as string | null,
-  set: rstest.fn(),
+  set: vi.fn(),
 }));
-rstest.mock("./task-nav", () => ({
+vi.mock("./task-nav", () => ({
   useTaskNav: () => [navigation, navigation.set],
 }));
-rstest.mock("./use-groups", () => ({
+vi.mock("./use-groups", () => ({
   useGroups: () => ({ groups: [], current: undefined, groupId: null }),
   useOpenGroup: () => () => {},
 }));

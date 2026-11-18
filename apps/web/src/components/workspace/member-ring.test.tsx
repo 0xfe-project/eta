@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setWire } from "@/lib/wire";
 import { agentView, productHost } from "@/test-product";
 import { cleanup, flush, mount } from "@/test-render";

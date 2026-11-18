@@ -1,4 +1,4 @@
-import { beforeEach, expect, it } from "@rstest/core";
+import { beforeEach, expect, it } from "vitest";
 import { storageKey } from "@/components/workspace/workspace-store";
 import { elementPickerDefault, savedElementPicker } from "./element-picker";
 

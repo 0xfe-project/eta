@@ -1,13 +1,6 @@
 import type { Wire } from "./wire";
 import type { FakeSocket } from "@/test-wire";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  rstest,
-} from "@rstest/core";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeWire } from "@/test-wire";
 import { applyState, WireError, wireUrl } from "./wire";
 
@@ -15,14 +8,14 @@ let wire: Wire;
 let sockets: FakeSocket[];
 
 beforeEach(() => {
-  rstest.useFakeTimers();
+  vi.useFakeTimers();
   ({ wire, sockets } = fakeWire());
   wire.connect();
 });
 
 afterEach(() => {
   wire.close();
-  rstest.useRealTimers();
+  vi.useRealTimers();
 });
 
 const hello = (state: Record<string, object> = {}, ops = ["providers.save"]) =>
@@ -273,7 +266,7 @@ describe("calls", () => {
       { timeoutMs: 1000 },
     );
     const caught = result.catch((error: unknown) => error);
-    await rstest.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(1000);
     await expect(caught).resolves.toMatchObject({ code: "timeout" });
     // Nothing is left waiting for it.
     sockets[0].receive({
@@ -286,12 +279,12 @@ describe("calls", () => {
   it("time out by default after thirty seconds", async () => {
     connected();
     const caught = wire.call("a", "b").catch((error: unknown) => error);
-    await rstest.advanceTimersByTimeAsync(29_999);
+    await vi.advanceTimersByTimeAsync(29_999);
     let settled = false;
     void caught.then(() => (settled = true));
-    await rstest.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
     expect(settled).toBe(false);
-    await rstest.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(1);
     await expect(caught).resolves.toMatchObject({ code: "timeout" });
   });
 
@@ -388,9 +381,9 @@ describe("a dropped connection", () => {
     expect(wire.store.getState().status).toBe("reconnecting");
     await expect(waiting).resolves.toMatchObject({ code: "disconnected" });
     // No new socket yet: the first retry waits half a second.
-    await rstest.advanceTimersByTimeAsync(499);
+    await vi.advanceTimersByTimeAsync(499);
     expect(sockets).toHaveLength(1);
-    await rstest.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(1);
     expect(sockets).toHaveLength(2);
 
     sockets[1].open();
@@ -423,24 +416,24 @@ describe("a dropped connection", () => {
     });
     sockets[0].drop();
     expect(targets()["sessions.a"]?.sections.core).toEqual({ running: true });
-    rstest.advanceTimersByTime(500);
+    vi.advanceTimersByTime(500);
     connected(sockets[1]);
     expect(targets()["sessions.a"]?.sections.core).toEqual({ running: true });
   });
 
   it("waits longer each time it fails, and starts over once the host answers", async () => {
     sockets[0].drop();
-    await rstest.advanceTimersByTimeAsync(500);
+    await vi.advanceTimersByTimeAsync(500);
     expect(sockets).toHaveLength(2);
     sockets[1].drop();
-    await rstest.advanceTimersByTimeAsync(999);
+    await vi.advanceTimersByTimeAsync(999);
     expect(sockets).toHaveLength(2);
-    await rstest.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(1);
     expect(sockets).toHaveLength(3);
 
     connected(sockets[2]);
     sockets[2].drop();
-    await rstest.advanceTimersByTimeAsync(500);
+    await vi.advanceTimersByTimeAsync(500);
     expect(sockets).toHaveLength(4);
   });
 
@@ -448,12 +441,12 @@ describe("a dropped connection", () => {
     ({ wire, sockets } = fakeWire({ initialRetryMs: 4000, maxRetryMs: 5000 }));
     wire.connect();
     sockets[0].drop();
-    await rstest.advanceTimersByTimeAsync(4000);
+    await vi.advanceTimersByTimeAsync(4000);
     sockets[1].drop();
-    await rstest.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(5000);
     expect(sockets).toHaveLength(3);
     sockets[2].drop();
-    await rstest.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(5000);
     expect(sockets).toHaveLength(4);
   });
 
@@ -470,7 +463,7 @@ describe("a dropped connection", () => {
     const waiting = wire.call("a", "b").catch((error: unknown) => error);
     wire.close();
     await expect(waiting).resolves.toMatchObject({ code: "disconnected" });
-    await rstest.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(sockets).toHaveLength(1);
   });
 });

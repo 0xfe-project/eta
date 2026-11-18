@@ -1,6 +1,6 @@
 import type { FakeHost } from "@/test-wire";
-import { afterEach, describe, expect, it } from "@rstest/core";
 import { NuqsTestingAdapter } from "nuqs/adapters/testing";
+import { afterEach, describe, expect, it } from "vitest";
 import { setWire } from "@/lib/wire";
 import { buildProductHost } from "@/test-product";
 import { cleanup, flush, mount } from "@/test-render";

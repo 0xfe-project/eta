@@ -1,5 +1,5 @@
 import type { EmailThreadView } from "@eta/client-contracts";
-import { describe, expect, it } from "@rstest/core";
+import { describe, expect, it } from "vitest";
 import { emailThreadsForFolder } from "./email-folders";
 
 const thread = (

@@ -1,5 +1,5 @@
-import { afterEach, expect, it } from "@rstest/core";
 import { act } from "react";
+import { afterEach, expect, it } from "vitest";
 import { cleanup, mount } from "@/test-render";
 import { usePaneWidth } from "./pane";
 

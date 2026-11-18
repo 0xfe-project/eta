@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "@rstest/core";
+import { describe, expect, it } from "vitest";
 
 // index.html's boot outline: what shows before any script runs. It is static HTML, so the only way
 // to keep it honest is to read the file.

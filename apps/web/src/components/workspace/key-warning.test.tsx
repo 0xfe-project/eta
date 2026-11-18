@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { QueryClient } from "@tanstack/react-query";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Markdown } from "@/components/markdown";
 import { setWire } from "@/lib/wire";
 import {
@@ -13,7 +13,7 @@ import { cleanup, flush, mount } from "@/test-render";
 import { GroupNotice } from "./group-notice";
 import { PendingStrip } from "./pending-strip";
 
-rstest.mock("@tanstack/react-router", () => ({
+vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children?: React.ReactNode }) => <a>{children}</a>,
   useRouterState: (options?: { select?: (state: unknown) => unknown }) =>
     options?.select
@@ -26,7 +26,7 @@ rstest.mock("@tanstack/react-router", () => ({
 }));
 
 // The notice reads the open group through nuqs; this file is about React's key warnings.
-rstest.mock("./use-groups", () => ({
+vi.mock("./use-groups", () => ({
   useGroups: () => ({ groups: [], current: undefined }),
   useOpenGroup: () => () => undefined,
 }));

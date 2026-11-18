@@ -1,15 +1,15 @@
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { machineView, productHost } from "@/test-product";
 import { button, cleanup, click, flush, mount } from "@/test-render";
 import { MachineSettings } from "./machine-settings";
 
-const toasts = rstest.hoisted(() => ({
-  message: rstest.fn(),
-  error: rstest.fn(),
+const toasts = vi.hoisted(() => ({
+  message: vi.fn(),
+  error: vi.fn(),
 }));
-rstest.mock("sonner", () => ({
+vi.mock("sonner", () => ({
   toast: Object.assign(toasts.message, { error: toasts.error }),
 }));
 

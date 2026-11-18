@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   folderDialog,
   hasCapability,
@@ -23,7 +23,7 @@ function shell(extra: Record<string, unknown> = {}) {
 }
 
 function serve(answer: unknown, init?: ResponseInit) {
-  const fetch = rstest.fn(
+  const fetch = vi.fn(
     async (_url: string, _init?: RequestInit): Promise<Response> =>
       answer instanceof Response
         ? answer
@@ -41,7 +41,7 @@ afterEach(() => {
   delete window.__ETA_HOST__;
   delete document.documentElement.dataset.host;
   document.body.innerHTML = "";
-  globalThis.fetch = rstest.fn() as unknown as typeof globalThis.fetch;
+  globalThis.fetch = vi.fn() as unknown as typeof globalThis.fetch;
 });
 
 describe("capabilities", () => {

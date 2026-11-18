@@ -1,5 +1,5 @@
-import { beforeEach } from "@rstest/core";
 import { setI18n } from "react-i18next";
+import { beforeEach } from "vitest";
 import { i18n } from "@/lib/i18n";
 
 // Existing UI regressions exercise Chinese. Language-specific tests switch

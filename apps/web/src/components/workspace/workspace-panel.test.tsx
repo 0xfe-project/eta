@@ -1,4 +1,3 @@
-import { afterEach, expect, it } from "@rstest/core";
 import { QueryClient } from "@tanstack/react-query";
 import {
   createMemoryHistory,
@@ -10,6 +9,7 @@ import {
 } from "@tanstack/react-router";
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
+import { afterEach, expect, it } from "vitest";
 import { cleanup, mount as render } from "@/test-render";
 import { WorkspacePanel } from "./workspace-panel";
 import { useWorkspaceView, validateWorkspaceSearch } from "./workspace-search";

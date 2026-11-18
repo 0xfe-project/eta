@@ -1,19 +1,19 @@
 import type { RunView } from "@eta/client-contracts";
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
 import { buildProductHost, routineInfo, routineSections } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
 import { RoutineBoard } from "./routine-board";
 import { viewerTimeZone } from "./routine-format";
 
-const navigation = rstest.hoisted(() => ({
+const navigation = vi.hoisted(() => ({
   routine: null as string | null,
   edit: null as string | null,
   run: null as string | null,
-  set: rstest.fn(),
+  set: vi.fn(),
 }));
-rstest.mock("./routine-nav", () => ({
+vi.mock("./routine-nav", () => ({
   useRoutineNav: () => [navigation, navigation.set],
 }));
 

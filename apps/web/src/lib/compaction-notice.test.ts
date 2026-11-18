@@ -1,4 +1,4 @@
-import { describe, expect, it } from "@rstest/core";
+import { describe, expect, it } from "vitest";
 import { compactionNotice } from "./compaction-notice";
 
 describe("what a /compact on an external runtime tells the user", () => {
