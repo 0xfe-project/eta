@@ -8,7 +8,9 @@ import { sentence, stepOf } from "./steps";
 /** How many blocks the frame draws: its newest, which is all its 92 of height can show. */
 const SHOWN = 4;
 
-const stepLine = (block: Exclude<RunBlock, { type: "text" }>) =>
+type StepBlock = Extract<RunBlock, { type: "thinking" | "tool" }>;
+
+const stepLine = (block: StepBlock) =>
   block.type === "thinking"
     ? t("chat.thinking.fold", {
         count: block.text.length.toLocaleString("en-US"),
@@ -21,7 +23,9 @@ const stepLine = (block: Exclude<RunBlock, { type: "text" }>) =>
  * thoughts and calls as a line each, its words whole, written as they stream — with the newest at
  * the bottom. The frame never grows, so a long run does not push the conversation away and replies
  * written at once do not push each other. Once the run is over it folds to its head, and the answer
- * is drawn under it.
+ * is drawn under it. Words the user put into the run (a steer) are one faint line where they
+ * arrived, never their text: the message itself is in the bubble it was put into. While the reply
+ * is writing its head has the reply's own Stop.
  */
 export function ProcessBox(props: {
   blocks: RunBlock[];
@@ -29,6 +33,8 @@ export function ProcessBox(props: {
   waiting: boolean;
   folded: boolean;
   onViewAll: () => void;
+  /** The reply is writing: its head stops it, and says so while it stops. */
+  stop?: { stopping: boolean; onPress: () => void } | undefined;
 }) {
   const shown = computed(() => props.blocks.slice(-SHOWN));
   // What it said is open from the start, as a step a reader folds by its head; a thought is a line.
@@ -36,7 +42,10 @@ export function ProcessBox(props: {
   const toggle = (id: string) =>
     closed.update((all) => ({ ...all, [id]: all[id] !== true }));
   const steps = computed(
-    () => props.blocks.filter((block) => block.type !== "text").length,
+    () =>
+      props.blocks.filter(
+        (block) => block.type === "thinking" || block.type === "tool",
+      ).length,
   );
   const head = (
     <View
@@ -57,6 +66,28 @@ export function ProcessBox(props: {
           {t("chat.process.viewAll")}
         </Text>
       </View>
+      <If when={props.stop}>
+        {(stop) => (
+          <View
+            role="button"
+            accessibilityLabel={
+              stop().stopping
+                ? t("chat.process.stopping")
+                : t("chat.process.stop")
+            }
+            testID="process-stop"
+            // Pressing again while it stops asks again: the host answers the same.
+            onPress={() => stop().onPress()}
+            class="h-8 justify-center pl-3 active:opacity-60"
+          >
+            <Text class="text-sm leading-4 text-foreground">
+              {stop().stopping
+                ? t("chat.process.stopping")
+                : t("chat.process.stop")}
+            </Text>
+          </View>
+        )}
+      </If>
     </View>
   );
   return (
@@ -77,11 +108,20 @@ export function ProcessBox(props: {
               <If
                 when={block().type === "text"}
                 else={
-                  <Text
-                    class={`shrink-0 truncate text-sm leading-[18px] ${index() === shown().length - 1 ? "text-foreground" : "text-muted-foreground"}`}
+                  <If
+                    when={block().type === "steer"}
+                    else={
+                      <Text
+                        class={`shrink-0 truncate text-sm leading-[18px] ${index() === shown().length - 1 ? "text-foreground" : "text-muted-foreground"}`}
+                      >
+                        {stepLine(block() as StepBlock)}
+                      </Text>
+                    }
                   >
-                    {stepLine(block() as Exclude<RunBlock, { type: "text" }>)}
-                  </Text>
+                    <Text class="shrink-0 truncate text-center text-sm leading-[18px] text-faint">
+                      {t("chat.process.steer")}
+                    </Text>
+                  </If>
                 }
               >
                 <View class="shrink-0">

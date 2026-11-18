@@ -43,7 +43,14 @@ type Row =
       who: "agent" | "user";
     }
   | { key: string; type: "note"; verb: string; text: string; failed: boolean }
+  /** Where words the user put into the run arrived; the words are in their bubble. */
+  | { key: string; type: "steer" }
   | { key: string; type: "stop"; prompt: string };
+
+type Shown =
+  | ToolBlock
+  | Extract<RunBlock, { type: "text" }>
+  | Extract<RunBlock, { type: "steer" }>;
 
 function formatDuration(ms: number): string {
   const minutes = Math.round(ms / 60_000);
@@ -306,6 +313,13 @@ function ProcessList(props: {
                 </RowLine>
               )}
             </If>
+            <If when={of("steer")}>
+              <View class="h-11 shrink-0 items-center justify-center border-t border-border px-4">
+                <Text class="truncate text-sm leading-4 text-faint">
+                  {t("chat.process.steer")}
+                </Text>
+              </View>
+            </If>
             <If when={of("stop")}>
               {(item) => (
                 <View class="h-[52px] shrink-0 flex-row items-center gap-3 border-t-2 border-foreground px-4">
@@ -365,37 +379,38 @@ function replyRows(
     ...(hidden === 0
       ? []
       : [{ key: "earlier", type: "earlier" as const, count: hidden }]),
-    ...shownSteps(blocks, hidden).map(
-      (block, index): Row =>
-        block.type === "tool"
-          ? {
-              key: block.id,
-              type: "step",
-              step: stepOf(block),
-              first: index === 0 && thinking.length === 0 && hidden === 0,
-            }
-          : {
-              key: block.id,
-              type: "words",
-              id: block.id,
-              text: block.text,
-              who: "agent",
-            },
-    ),
+    ...shownSteps(blocks, hidden).map((block, index): Row => {
+      if (block.type === "tool")
+        return {
+          key: block.id,
+          type: "step",
+          step: stepOf(block),
+          first: index === 0 && thinking.length === 0 && hidden === 0,
+        };
+      if (block.type === "steer") return { key: block.id, type: "steer" };
+      return {
+        key: block.id,
+        type: "words",
+        id: block.id,
+        text: block.text,
+        who: "agent",
+      };
+    }),
     ...(question === undefined
       ? []
       : [{ key: "stop", type: "stop" as const, prompt: question }]),
   ];
 }
 
-/** Its calls and its words in order, from the first call not hidden behind 「Earlier N steps」. */
-function shownSteps(
-  blocks: readonly RunBlock[],
-  hidden: number,
-): (ToolBlock | Extract<RunBlock, { type: "text" }>)[] {
+/**
+ * Its calls, its words and where the user's inserts arrived, in order, from the first call not
+ * hidden behind 「Earlier N steps」.
+ */
+function shownSteps(blocks: readonly RunBlock[], hidden: number): Shown[] {
   const ordered = blocks.filter(
-    (block): block is ToolBlock | Extract<RunBlock, { type: "text" }> =>
+    (block): block is Shown =>
       block.type === "tool" ||
+      block.type === "steer" ||
       (block.type === "text" && block.text.trim() !== ""),
   );
   if (hidden === 0) return ordered;
@@ -428,7 +443,10 @@ export function ProcessScreen(props: { chat: Chat; messageId: string }) {
   const all = signal(false);
   const folds = useFolds();
   const rows = computed(() => replyRows(blocks(), all(), question()));
-  const steps = () => blocks().filter((block) => block.type !== "text").length;
+  const steps = () =>
+    blocks().filter(
+      (block) => block.type === "thinking" || block.type === "tool",
+    ).length;
   const duration = () => {
     const row = message();
     if (row === undefined) return "";

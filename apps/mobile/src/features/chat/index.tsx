@@ -27,7 +27,6 @@ const MAX_FACES = 4;
 export function ChatScreen(props: { id: string }) {
   void loadOutbox();
   const chat = useChat(props.id);
-  const modes = signal(false);
   const menuOpen = signal(false);
   let toBottom = () => undefined as void;
   let resend: (text: string, agentId: string | null) => void = () => undefined;
@@ -112,9 +111,6 @@ export function ChatScreen(props: { id: string }) {
               toBottom = handle.toBottom;
             }}
           />
-          <If when={modes()}>
-            <View class="absolute inset-0" onPress={() => modes.set(false)} />
-          </If>
         </View>
         <If when={lines().length > 0}>
           <View class="shrink-0 gap-2 px-4 pb-3">
@@ -143,7 +139,6 @@ export function ChatScreen(props: { id: string }) {
         </View>
         <Composer
           chat={chat}
-          modes={modes}
           menuOpen={menuOpen}
           onSent={() => toBottom()}
           bindResend={(fn) => {

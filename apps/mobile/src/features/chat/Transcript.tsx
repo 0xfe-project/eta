@@ -7,13 +7,18 @@ import { computed, effect, List, signal, Text, untracked, View } from "nsh";
 import { t } from "../../i18n";
 import { open } from "../../nav/stack";
 import { AgentAvatar } from "../../ui/AgentAvatar";
+import { clock, reason } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
 import { Markdown } from "../../ui/Markdown";
+import { toast } from "../../ui/toast";
+import { call } from "../../wire/target";
 import { ArtifactCard, DraftCard, TaskCard } from "./cards";
 import { agentName, replyBlocks } from "./conversation";
+import { answering, InsertSheet, insertsInto } from "./InsertSheet";
 import { discard, edit, outgoing, retry } from "./outbox";
 import { ProcessScreen } from "./process";
 import { ProcessBox } from "./ProcessBox";
+import { rememberRows } from "./rows";
 
 type Item =
   | { key: string; type: "message"; message: MessageView }
@@ -44,17 +49,40 @@ const asFiles = (data: Record<string, unknown>): AttachmentView[] =>
       )
     : [];
 
+/** A user row put into another's turn (`data.into`): drawn inside that message's bubble. */
+const intoOf = (row: MessageView): string | undefined =>
+  row.author === "user" && typeof row.data.into === "string"
+    ? row.data.into
+    : undefined;
+
 function Bubble(props: {
   text: string;
   files?: readonly AttachmentView[] | undefined;
+  /** Words put into this message's turn, in the order they were sent, under a rule each. */
+  inserts?: readonly MessageView[] | undefined;
 }) {
+  // One selectable block: copying the message copies what was put into it, in order.
   return (
     <View class="max-w-[300px] gap-1 self-end bg-muted px-3 py-2">
-      <If when={props.text !== ""}>
-        <View selectable>
-          <Text class="text-base leading-[23px] text-foreground">
-            {props.text}
-          </Text>
+      <If when={props.text !== "" || (props.inserts ?? []).length > 0}>
+        <View selectable class="gap-1">
+          <If when={props.text !== ""}>
+            <Text class="text-base leading-[23px] text-foreground">
+              {props.text}
+            </Text>
+          </If>
+          <Each of={props.inserts ?? []} key={(row) => row.id}>
+            {(row) => (
+              <View class="gap-[2px] border-t border-border-strong pt-1.5">
+                <Text class="text-xs leading-4 text-faint">
+                  {t("chat.insert.mark", { time: clock(row().createdAt) })}
+                </Text>
+                <Text class="text-base leading-[23px] text-foreground">
+                  {row().text}
+                </Text>
+              </View>
+            )}
+          </Each>
         </View>
       </If>
       <Each of={props.files ?? []} key={(file) => file.id}>
@@ -71,8 +99,15 @@ function Bubble(props: {
   );
 }
 
-function UserRow(props: { message: MessageView }) {
+function UserRow(props: {
+  message: MessageView;
+  chat: Chat;
+  onInsert: (message: MessageView) => void;
+}) {
   const data = () => props.message.data;
+  // Only while a turn this message started is still writing (not once it is being stopped).
+  const writing = () => answering(props.chat, props.message).length > 0;
+  const inserts = () => insertsInto(props.chat, props.message);
   const nobody = () =>
     Array.isArray(data().woke) &&
     (data().woke as unknown[]).length === 0 &&
@@ -84,7 +119,26 @@ function UserRow(props: { message: MessageView }) {
       : "";
   return (
     <View class="gap-[6px]">
-      <Bubble text={props.message.text} files={asFiles(data())} />
+      <Bubble
+        text={props.message.text}
+        files={asFiles(data())}
+        inserts={inserts()}
+      />
+      <If when={writing()}>
+        <View
+          role="button"
+          accessibilityLabel={t("chat.insert.label", {
+            text: props.message.text,
+          })}
+          testID={`insert-${props.message.id}`}
+          onPress={() => props.onInsert(props.message)}
+          class="h-8 justify-center self-end px-1 active:opacity-60"
+        >
+          <Text class="text-sm leading-4 text-foreground">
+            {t("chat.insert.action")}
+          </Text>
+        </View>
+      </If>
       <If when={nobody()}>
         <Text class="text-sm leading-[18px] text-foreground">
           {t("chat.message.nobody")}
@@ -261,10 +315,23 @@ function Reply(props: {
   // is a finished reply, whose process is what it kept (`savedSteps`) and whose answer is its text.
   const reply = computed(() => replyBlocks(chat, m()));
   const waiting = () => m().status === "waiting_for_input";
+  /** Still writing: its box has its own Stop, which reaches this reply and no other. */
+  const writing = () =>
+    m().status === "working" ||
+    m().status === "waiting_for_input" ||
+    m().status === "stopping";
+  const stop = () =>
+    void call<{ stopped: MessageView[] }>("conversations", "stop", {
+      conversationId: chat.id,
+      messageId: m().id,
+    }).then(
+      (result) => rememberRows(chat.id, result.stopped),
+      (error: unknown) => toast(t("common.failed", { message: reason(error) })),
+    );
   /** Nothing from the run yet: the frame holds the place. */
   const pending = () =>
     reply().live && reply().blocks.length === 0 && !waiting();
-  const inBox = () => reply().blocks.length > 0 || pending();
+  const inBox = () => reply().blocks.length > 0 || pending() || writing();
   const answer = () =>
     !reply().live && m().text !== "" && m().status !== "failed"
       ? m().text
@@ -297,6 +364,11 @@ function Reply(props: {
           waiting={pending()}
           folded={!reply().live}
           onViewAll={viewAll}
+          stop={
+            writing()
+              ? { stopping: m().status === "stopping", onPress: stop }
+              : undefined
+          }
         />
       </If>
       <If when={answer() !== undefined}>
@@ -387,6 +459,7 @@ function MessageRow(props: {
   chat: Chat;
   lines: Lines;
   onResend: (text: string, agentId: string | null) => void;
+  onInsert: (message: MessageView) => void;
 }) {
   const kind = () => props.message.kind;
   return (
@@ -414,7 +487,11 @@ function MessageRow(props: {
                 />
               }
             >
-              <UserRow message={props.message} />
+              <UserRow
+                message={props.message}
+                chat={props.chat}
+                onInsert={props.onInsert}
+              />
             </If>
           }
         >
@@ -464,6 +541,11 @@ export function Transcript(props: {
   props.handle({ toBottom });
 
   const lines = computed(() => replyLines(chat.messages()));
+  /** The message an insert is being written for: the sheet is open while there is one. */
+  const inserting = signal<string | undefined>(undefined);
+  const insertInto = computed(() =>
+    chat.messages().find((row) => row.id === inserting()),
+  );
   const mine = computed(() =>
     outgoing().filter((item) => item.conversationId === chat.id),
   );
@@ -475,6 +557,11 @@ export function Transcript(props: {
   });
   const items = computed((): Item[] => {
     const arrived = new Set(chat.messages().map((row) => row.id));
+    // An insert is drawn in the bubble of the message it went into, when that message is here.
+    const folded = (row: MessageView) => {
+      const into = intoOf(row);
+      return into !== undefined && arrived.has(into);
+    };
     return [
       ...mine()
         .filter((item) => !arrived.has(item.id))
@@ -485,7 +572,9 @@ export function Transcript(props: {
       ...chat
         .grouped()
         .rows.filter(
-          (row) => !(row.author === "agent" && row.status === "queued"),
+          (row) =>
+            !(row.author === "agent" && row.status === "queued") &&
+            !folded(row),
         )
         .toReversed()
         .map((row): Item => ({ key: row.id, type: "message", message: row })),
@@ -584,6 +673,7 @@ export function Transcript(props: {
                       chat={chat}
                       lines={lines()}
                       onResend={props.onResend}
+                      onInsert={(target) => inserting.set(target.id)}
                     />
                   )}
                 </If>
@@ -612,6 +702,12 @@ export function Transcript(props: {
           </View>
         </View>
       </If>
+      <InsertSheet
+        chat={chat}
+        message={insertInto()}
+        onClose={() => inserting.set(undefined)}
+        onSent={() => toBottom()}
+      />
     </View>
   );
 }

@@ -21,6 +21,8 @@ export interface Model {
   provider: string;
   providerName: string;
   name: string;
+  /** Tokens it reads at once, when its provider says. */
+  contextWindow?: number | undefined;
   /** Not while its provider lacks a key it cannot run without. */
   available: boolean;
 }
@@ -33,6 +35,7 @@ function modelsOf(view: ProvidersView): Model[] {
         provider: provider.id,
         providerName: providerLabel(provider),
         name: model.name ?? model.id,
+        contextWindow: model.contextWindow,
         available: !keyMissing(provider),
       }),
     ),
@@ -50,6 +53,7 @@ const gatewayModels = (
       accounts?.connectors.find((connector) => connector.id === model.connector)
         ?.name ?? model.connector,
     name: model.name,
+    contextWindow: model.contextWindow,
     available: model.available,
   }));
 

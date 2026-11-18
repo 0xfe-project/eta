@@ -3,7 +3,9 @@
 // 03h, `board` a run with a failed test (03i). The rest are variants of `wire`, by scenario:
 // chat-queue (03a), chat-errors (03f), chat-empty, chat-loading, chat-archived, chat-no-members,
 // chat-no-model, chat-elsewhere (03g), chat-process (a finished reply that spoke between its calls),
-// chat-said (a reply at work that says a sentence, calls, says another, calls, answers, then ends).
+// chat-said (a reply at work that says a sentence, calls, says another, calls, answers, then ends),
+// chat-insert (two members answering one message at once, to insert into and stop one by one),
+// chat-insert-ends (the same, but both turns end on their own a few seconds after it is opened).
 
 import type {
   AgentMessage,
@@ -651,6 +653,35 @@ function queueRows(): MessageView[] {
   ];
 }
 
+/** Ache and Mori both answering the message at seq 9, with two earlier messages nobody answers. */
+function insertRows(): MessageView[] {
+  const id = "wire";
+  const asked = `${id}-9`;
+  return [
+    ...older(id),
+    user(
+      id,
+      9,
+      "@Ache @Mori Check the reconnect path and the migration together.",
+      {
+        woke: ["agent-ache", "agent-mori"],
+      },
+    ),
+    reply(id, 10, "agent-ache", {
+      status: "working",
+      replyToId: asked,
+      rootMessageId: asked,
+      data: { runFrom: 0 },
+    }),
+    reply(id, 11, "agent-mori", {
+      status: "working",
+      replyToId: asked,
+      rootMessageId: asked,
+      data: { runFrom: 0 },
+    }),
+  ];
+}
+
 function queueRun(): ViewMessageRow[] {
   const list: Call[] = Array.from({ length: 8 }, (_, index) => ({
     id: `q${index}`,
@@ -673,6 +704,10 @@ function queueRun(): ViewMessageRow[] {
 // ---------------------------------------------------------------- the ops
 
 const PAGE = 50;
+/** How long a running reply takes to wind down once stopped. */
+const STOP_MS = 1500;
+/** chat-insert-ends: how long both turns run once the conversation is opened. */
+const INSERT_ENDS_MS = 5000;
 
 class Conversation {
   rows: MessageView[];
@@ -758,6 +793,18 @@ class Conversation {
     return (this.rows.at(-1)?.seq ?? 0) + 1;
   }
 
+  /** The members answering `messageId` now with a turn that can be steered: `Engine.answering`. */
+  answering(messageId: string): string[] {
+    return this.rows.flatMap((item) =>
+      item.author === "agent" &&
+      item.replyToId === messageId &&
+      item.agentId !== null &&
+      (item.status === "working" || item.status === "waiting_for_input")
+        ? [item.agentId]
+        : [],
+    );
+  }
+
   active(agentId: string): MessageView | undefined {
     return this.rows.find(
       (item) =>
@@ -796,6 +843,8 @@ export function installChat(host: FakeHost): void {
     if (scenario === "chat-errors") return errorRows();
     if (scenario === "chat-empty") return [];
     if (scenario === "chat-process") return wireRows(true);
+    if (scenario === "chat-insert" || scenario === "chat-insert-ends")
+      return insertRows();
     if (scenario === "chat-said")
       return wireRows().map((row) =>
         row.id === "wire-11" ? { ...row, status: "working" as const } : row,
@@ -868,6 +917,13 @@ export function installChat(host: FakeHost): void {
         ],
       },
     });
+  const insertScenario =
+    scenario === "chat-insert" || scenario === "chat-insert-ends";
+  if (insertScenario) {
+    // Enough of the timeline to show messages nobody is answering above the one being answered.
+    const wire = conversations.get("wire");
+    if (wire !== undefined) wire.window = 8;
+  }
   if (scenario === "chat-elsewhere")
     summaries({
       redesign: {
@@ -903,7 +959,9 @@ export function installChat(host: FakeHost): void {
 
   const runs: Record<string, ViewMessageRow[]> = {
     "session-agent-ache":
-      scenario === "chat-queue"
+      scenario === "chat-queue" ||
+      scenario === "chat-insert" ||
+      scenario === "chat-insert-ends"
         ? queueRun()
         : scenario === "chat-said"
           ? saidRun(40)
@@ -921,6 +979,19 @@ export function installChat(host: FakeHost): void {
         ...session(id, rows),
       });
     if (scenario === "chat-loading") host.set("conversations.wire", {});
+    // Both at work in this group, each in its own session (the group's fixture draws Mori there
+    // before its first wake).
+    if (insertScenario) {
+      summaries({
+        wire: {
+          participants: [
+            member("agent-ache", "working"),
+            member("agent-mori", "working"),
+          ],
+        },
+      });
+      conversations.get("wire")?.publish();
+    }
     // The board's fixture turns a draft into its card; the host also moves the row's revision.
     const confirm = host.ops.get("tasks.confirmDraft");
     if (confirm === undefined) return;
@@ -994,10 +1065,31 @@ export function installChat(host: FakeHost): void {
     mimeType: "image/png",
     data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
   }));
-  host.on("sessions.compact", ({ session: id }: { session: string }) => ({
-    session: id,
-    compacted: true,
-  }));
+  /** A row at the end of a session's transcript, as the session writes one. */
+  const appendToSession = (sessionId: string, message: AgentMessage) => {
+    const target = `sessions.${sessionId}`;
+    const transcript = host.section<{ messages: ViewMessageRow[] }>(
+      target,
+      "transcript",
+    ) ?? { messages: [] };
+    const seq = (transcript.messages.at(-1)?.seq ?? 0) + 1;
+    host.patch(target, "transcript", {
+      ...transcript,
+      messages: [
+        ...transcript.messages,
+        { entryId: `entry-${sessionId}-${seq}`, seq, message },
+      ],
+    });
+  };
+  host.on("sessions.compact", ({ session: id }: { session: string }) => {
+    appendToSession(id, {
+      role: "compactionSummary",
+      summary: "The reconnect work so far, in short.",
+      tokensBefore: 48_200,
+      timestamp: Date.now(),
+    } as AgentMessage);
+    return { session: id, compacted: true };
+  });
   host.on("sessions.history", ({ session: id }: { session: string }) => ({
     session: id,
     rows: [],
@@ -1025,6 +1117,7 @@ export function installChat(host: FakeHost): void {
       text: string;
       mentions?: string[];
       mode?: "queue" | "steer";
+      into?: string;
       clientId?: string;
       attachments?: string[];
     }): SendResult | Promise<SendResult> => {
@@ -1042,11 +1135,28 @@ export function installChat(host: FakeHost): void {
       const known = conversation.rows.find((item) => item.id === args.clientId);
       if (known !== undefined)
         return { message: known, replies: [], joined: [], nobody: false };
-      const targets = conversation.targets(args.mentions ?? []);
+      // `into`, as the engine reads it: every member answering that message now, steered; with
+      // nobody answering any more, a message of its own, queued, and no mark.
+      let mentions = args.mentions ?? [];
+      let mode = args.mode;
+      let into: string | undefined;
+      if (args.into !== undefined) {
+        const target = conversation.rows.find((item) => item.id === args.into);
+        if (target === undefined || target.author !== "user")
+          throw new Error(
+            `no message ${args.into} of yours in this conversation`,
+          );
+        const answering = conversation.answering(target.id);
+        if (answering.length > 0) {
+          into = target.id;
+          mentions = answering;
+          mode = "steer";
+        } else mode = "queue";
+      }
+      const targets = conversation.targets(mentions);
       const planned = targets.map((agentId) => ({
         agentId,
-        join:
-          args.mode === "steer" && conversation.active(agentId) !== undefined,
+        join: mode === "steer" && conversation.active(agentId) !== undefined,
       }));
       const held =
         planned.length > 0 &&
@@ -1062,7 +1172,7 @@ export function installChat(host: FakeHost): void {
       const message = row(args.conversationId, seq, {
         id: args.clientId ?? `sent-${seq}`,
         text: args.text,
-        mentions: args.mentions ?? [],
+        mentions,
         rootMessageId: args.clientId ?? `sent-${seq}`,
         data: {
           ...(held ? { held: true } : {}),
@@ -1072,9 +1182,23 @@ export function installChat(host: FakeHost): void {
           joined: planned
             .filter((target) => target.join)
             .map((target) => target.agentId),
+          ...(into === undefined ? {} : { into }),
           ...(files.length === 0 ? {} : { attachments: files }),
         },
       });
+      // A steered turn reads the words as its next user message: the process box marks it there.
+      for (const target of planned.filter((item) => item.join)) {
+        const sessionId =
+          conversation
+            .summary()
+            ?.participants.find((item) => item.agentId === target.agentId)
+            ?.sessionId ?? `session-${target.agentId}`;
+        appendToSession(sessionId, {
+          role: "user",
+          content: args.text,
+          timestamp: Date.now(),
+        } as AgentMessage);
+      }
       const replies = planned
         .filter((target) => !target.join)
         .map((target, index) =>
@@ -1125,18 +1249,31 @@ export function installChat(host: FakeHost): void {
       messageId?: string;
     }) => {
       const conversation = conversationOf(conversationId);
+      // As the engine: a queued reply ends at once, a running one is `stopping` until its run
+      // has wound down. Asking again while it stops answers the same.
       const stopped = conversation.rows
         .filter(
           (item) =>
             item.author === "agent" &&
             (item.status === "queued" ||
               item.status === "working" ||
-              item.status === "waiting_for_input") &&
+              item.status === "waiting_for_input" ||
+              item.status === "stopping") &&
             (messageId === undefined || item.id === messageId),
         )
-        .flatMap(
-          (item) => conversation.replace(item.id, { status: "stopped" }) ?? [],
-        );
+        .flatMap((item) => {
+          if (item.status === "queued")
+            return conversation.replace(item.id, { status: "stopped" }) ?? [];
+          if (item.status === "stopping") return [item];
+          const stopping = conversation.replace(item.id, {
+            status: "stopping",
+          });
+          setTimeout(() => {
+            conversation.replace(item.id, { status: "stopped" });
+            conversation.publish();
+          }, STOP_MS);
+          return stopping ?? [];
+        });
       conversation.publish();
       return { stopped };
     },
@@ -1161,6 +1298,19 @@ export function installChat(host: FakeHost): void {
             setTimeout(end, 1500),
           );
         setTimeout(answer, 1000);
+      }
+      // chat-insert-ends: both turns end on their own a while after someone opens the group.
+      if (
+        conversationId === "wire" &&
+        scenario === "chat-insert-ends" &&
+        !streamed
+      ) {
+        streamed = true;
+        setTimeout(() => {
+          for (const id of ["wire-10", "wire-11"])
+            conversation.replace(id, { status: "done", text: "Done." });
+          conversation.publish();
+        }, INSERT_ENDS_MS);
       }
       // 03h's reply goes on writing once someone is there to see it.
       if (conversationId === "dm-xiaoman" && !streamed) {

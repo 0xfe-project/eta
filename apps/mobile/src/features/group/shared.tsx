@@ -39,7 +39,7 @@ const opened = new Set<string>();
 type Session = Partial<
   Pick<
     SessionViewSections,
-    "usage" | "model" | "tools" | "metrics" | "tasks" | "transcript"
+    "usage" | "model" | "tools" | "metrics" | "tasks" | "transcript" | "prompt"
   >
 >;
 

@@ -15,14 +15,16 @@ import { t } from "../../i18n";
 import { WireError } from "../../wire/wire";
 import { rememberRows } from "./rows";
 
-export type SendMode = "queue" | "steer";
-
 export interface Outgoing {
   id: string;
   conversationId: string;
   text: string;
   mentions: string[];
-  mode: SendMode;
+  /**
+   * Only on a message an older version saved: the composer sends new messages, each queued behind a
+   * reply in flight (a turn is put into from the message it answers, `InsertSheet`).
+   */
+  mode?: "queue" | "steer" | undefined;
   attachments: AttachmentView[];
   failure?: string | undefined;
 }
@@ -136,7 +138,7 @@ async function attempt(item: Outgoing): Promise<void> {
           conversationId: item.conversationId,
           text: item.text,
           mentions: item.mentions,
-          mode: item.mode,
+          mode: item.mode ?? "queue",
           clientId: item.id,
           ...(item.attachments.length === 0
             ? {}
@@ -182,7 +184,6 @@ function deliver(item: Outgoing): void {
 export function send(
   conversationId: string,
   text: string,
-  mode: SendMode,
   mentions: string[],
   attachments: AttachmentView[] = [],
 ): void {
@@ -190,7 +191,6 @@ export function send(
     id: crypto.randomUUID(),
     conversationId,
     text,
-    mode,
     mentions,
     attachments,
   };

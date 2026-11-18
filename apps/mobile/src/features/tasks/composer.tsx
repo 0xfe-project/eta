@@ -131,7 +131,6 @@ export function Composer(props: {
       text: text(),
       members: members(),
       files: [],
-      commands: [],
       tasks: [],
       dismissed: dismissed(),
     }),
