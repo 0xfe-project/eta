@@ -855,35 +855,40 @@ describe("stopping, steering and a link that fails", () => {
       });
     }) as typeof link.daemon;
 
-    const sent = await r.send(group.id, "write the report");
-    const reply = sent.replies[0]!;
-    await ended.opened;
-    expect(r.row(group.id, reply.id)?.status).toBe("working");
+    // A failed assertion must not leave the held run (and the test's teardown) waiting.
+    try {
+      const sent = await r.send(group.id, "write the report");
+      const reply = sent.replies[0]!;
+      await ended.opened;
+      expect(r.row(group.id, reply.id)?.status).toBe("working");
 
-    const steered = await r.send(group.id, "make it shorter", {
-      mode: "steer",
-    });
-    // The daemon refused it (no run to take it), so it is answered as a reply of its own.
-    expect(steered.joined).toEqual([]);
-    expect(steered.replies).toHaveLength(1);
-    expect(steered.message.data).toMatchObject({
-      joined: [],
-      woke: [agents[0]!.id],
-    });
-    // Nothing started on the daemon behind the primary's back.
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(requests).toHaveLength(1);
+      const steered = await r.send(group.id, "make it shorter", {
+        mode: "steer",
+      });
+      // The daemon refused it (no run to take it), so it is answered as a reply of its own.
+      expect(steered.joined).toEqual([]);
+      expect(steered.replies).toHaveLength(1);
+      expect(steered.message.data).toMatchObject({
+        joined: [],
+        woke: [agents[0]!.id],
+      });
+      // Nothing started on the daemon behind the primary's back.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(requests).toHaveLength(1);
 
-    delivered.open();
-    expect((await r.settled(group.id, reply.id)).text).toBe("on it");
-    const own = await r.settled(group.id, steered.replies[0]!.id);
-    expect(own).toMatchObject({ status: "done", text: "the shorter one" });
-    expect(requests).toHaveLength(2);
-    expect(
-      requests.filter((request) =>
-        request.transcript.join("\n").includes("make it shorter"),
-      ),
-    ).toHaveLength(1);
+      delivered.open();
+      expect((await r.settled(group.id, reply.id)).text).toBe("on it");
+      const own = await r.settled(group.id, steered.replies[0]!.id);
+      expect(own).toMatchObject({ status: "done", text: "the shorter one" });
+      expect(requests).toHaveLength(2);
+      expect(
+        requests.filter((request) =>
+          request.transcript.join("\n").includes("make it shorter"),
+        ),
+      ).toHaveLength(1);
+    } finally {
+      delivered.open();
+    }
   });
 
   it("a queued message waits behind the reply that is running, as it does at home", async () => {
