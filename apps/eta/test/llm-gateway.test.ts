@@ -44,6 +44,13 @@ function fakeGoogle() {
   };
 }
 
+/**
+ * A Codex login's state here. CPA (v8.0.77 on) renews a new login at once, against the real
+ * OpenAI, which the fake tokens fail: the account needs a sign-in from then on, and when that
+ * happens is up to CPA and the network.
+ */
+const RENEWED_OR_NOT = /^(active|needs_login)$/;
+
 const jwt = (claims: unknown) =>
   `x.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.y`;
 
@@ -289,7 +296,7 @@ describe("the gateway's accounts", () => {
         connector: "codex",
         label: "ada@example.com",
         plan: "plus",
-        state: "active",
+        state: expect.stringMatching(RENEWED_OR_NOT),
       });
       // The credential file, as CPA's own device login writes it.
       const auths = join(dataDir, "llm", "auths");
@@ -310,20 +317,27 @@ describe("the gateway's accounts", () => {
       expect(
         Date.parse(credential.expired) - Date.parse(credential.last_refresh),
       ).toBe(3_600_000);
-      // CPA serves its models; a disabled account serves none of them.
-      await until(async () =>
-        (await gateway.models()).some(
+      // CPA serves its models until renewing the fake tokens fails, then asks for a sign-in;
+      // either way the account follows, and a disabled account serves none of them.
+      let served = false;
+      await until(async () => {
+        served = (await gateway.models()).some(
           (model) => model.connector === "codex" && model.available,
-        ),
-      );
+        );
+        return (
+          served || (await gateway.connections())[0]?.state === "needs_login"
+        );
+      });
       expect((await gateway.setEnabled(account!.id, false)).state).toBe(
         "disabled",
       );
       await gateway.remove(account!.id);
       expect(await gateway.connections()).toEqual([]);
-      expect(
-        await readFile(join(dataDir, "llm", "models.json"), "utf8"),
-      ).toContain('"connector": "codex"');
+      // The models it served stay in the catalog.
+      if (served)
+        expect(
+          await readFile(join(dataDir, "llm", "models.json"), "utf8"),
+        ).toContain('"connector": "codex"');
 
       await expect(gateway.loginPoll("no-such-login")).rejects.toMatchObject({
         code: "not_found",
@@ -358,7 +372,7 @@ describe("the gateway's accounts", () => {
     expect((await gateway.connections())[0]).toMatchObject({
       connector: "codex",
       label: email,
-      state: "active",
+      state: expect.stringMatching(RENEWED_OR_NOT),
     });
   }, 60_000);
 
