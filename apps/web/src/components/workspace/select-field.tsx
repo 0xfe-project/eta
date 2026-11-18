@@ -26,6 +26,7 @@ type SelectProps = Pick<
     | "onBlur"
     | "size"
     | "className"
+    | "title"
   > & {
     value?: string;
     defaultValue?: string;

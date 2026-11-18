@@ -383,7 +383,27 @@ async function loadSkillFromFile(
     return { skill: null, diagnostics };
   }
 
-  const parsed = parseFrontmatter<SkillFrontmatter>(rawContent.value);
+  return parseSkillText(
+    rawContent.value,
+    filePath,
+    parentDirName,
+    isDeclaredSkill,
+  );
+}
+
+/** Parse the original document without rewriting it; shared by loading and file management. */
+export function parseSkillText(
+  text: string,
+  filePath: string,
+  parentDirName: string,
+  isDeclaredSkill = true,
+): {
+  skill: Skill | null;
+  diagnostics: SkillDiagnostic[];
+  preview?: { body: string; metadata: string };
+} {
+  const diagnostics: SkillDiagnostic[] = [];
+  const parsed = parseFrontmatter<SkillFrontmatter>(text);
   if (!parsed.ok) {
     if (isDeclaredSkill) {
       diagnostics.push({
@@ -397,6 +417,10 @@ async function loadSkillFromFile(
   }
 
   const { frontmatter, body } = parsed.value;
+  const preview =
+    parsed.value.frontmatterText === undefined
+      ? undefined
+      : { body, metadata: parsed.value.frontmatterText };
   const description =
     typeof frontmatter.description === "string"
       ? frontmatter.description
@@ -427,10 +451,11 @@ async function loadSkillFromFile(
   }
 
   if (!description || description.trim() === "") {
-    return { skill: null, diagnostics };
+    return { skill: null, diagnostics, preview };
   }
 
   return {
+    preview,
     skill: {
       name,
       description,
@@ -476,7 +501,7 @@ function validateDescription(description: string | undefined): string[] {
 
 function parseFrontmatter<T extends Record<string, unknown>>(
   content: string,
-): Result<{ frontmatter: T; body: string }, Error> {
+): Result<{ frontmatter: T; body: string; frontmatterText?: string }, Error> {
   try {
     const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
     if (!normalized.startsWith("---"))
@@ -488,7 +513,11 @@ function parseFrontmatter<T extends Record<string, unknown>>(
     const body = normalized.slice(endIndex + 4).trim();
     return {
       ok: true,
-      value: { frontmatter: (parse(yamlString) ?? {}) as T, body },
+      value: {
+        frontmatter: (parse(yamlString) ?? {}) as T,
+        body,
+        frontmatterText: yamlString,
+      },
     };
   } catch (error) {
     return { ok: false, error: toError(error) };

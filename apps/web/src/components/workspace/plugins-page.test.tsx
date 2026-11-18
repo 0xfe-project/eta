@@ -122,6 +122,26 @@ describe("Plugins as a main section", () => {
     expect(router.state.location.href).toBe("/tasks");
   });
 
+  it.each([
+    "/?settings=skills",
+    "/email?settings=skills",
+    "/settings?section=skills",
+    "/settings/?section=skills",
+  ])(
+    "replaces the old Skill entry %s without opening settings",
+    async (legacy) => {
+      const { router } = await open("/tasks", legacy);
+      expect(router.state.location.href).toBe("/plugins/skills");
+      expect(heading()).toBe("插件");
+      expect(sidebarLink("/plugins").getAttribute("data-active")).toBe("true");
+      expect(bottomLink("/plugins").getAttribute("aria-current")).toBe("page");
+      expect(dialog()).toBeNull();
+      await act(async () => router.history.back());
+      await flush();
+      expect(router.state.location.href).toBe("/tasks");
+    },
+  );
+
   it("leaves the agent editor and underlying settings when following its empty-state link", async () => {
     const { router } = await open("/email");
     const { setSettings, setAgentEditor } = useWorkspaceStore.getState();
@@ -169,7 +189,7 @@ describe("Plugins as a main section", () => {
             .locator('ul[aria-label="分区"] a[href="/plugins"]')
             .isVisible(),
         ).toBe(false);
-        const tab = page.getByRole("link", { name: "插件", exact: true });
+        const tab = page.locator('nav[aria-label="分区"] a[href="/plugins"]');
         expect(await tab.isVisible()).toBe(true);
         expect(await tab.getAttribute("aria-current")).toBe("page");
         expect(

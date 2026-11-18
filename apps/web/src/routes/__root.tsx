@@ -11,12 +11,19 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   // Redirect before either renders, and replace the stale URL instead of adding a history stop.
   beforeLoad: ({ location: { pathname, searchStr } }) => {
     const search = new URLSearchParams(searchStr);
-    if (
-      search.get("settings") === "plugins" ||
-      ((pathname === "/settings" || pathname === "/settings/") &&
-        search.get("section") === "plugins")
-    ) {
-      throw redirect({ to: "/plugins", search: {}, replace: true });
+    const dialog = search.get("settings");
+    const section =
+      pathname === "/settings" || pathname === "/settings/"
+        ? search.get("section")
+        : null;
+    const legacy =
+      dialog === "plugins" || dialog === "skills" ? dialog : section;
+    if (legacy === "plugins" || legacy === "skills") {
+      throw redirect({
+        to: legacy === "skills" ? "/plugins/skills" : "/plugins",
+        search: {},
+        replace: true,
+      });
     }
   },
   // The page goes in as children: the shared chrome — the providers, the window's buttons, the

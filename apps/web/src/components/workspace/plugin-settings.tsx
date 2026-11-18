@@ -4,6 +4,7 @@ import type {
   PluginFieldView,
   PluginView,
 } from "@eta/client-contracts";
+import type { ReactNode } from "react";
 import type { FieldDraft, PluginDraft } from "./plugin-form";
 import { ArrowsClockwiseIcon } from "@phosphor-icons/react/ArrowsClockwise";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
@@ -719,7 +720,7 @@ function PluginAudit() {
 }
 
 /** The main Plugins page. */
-export function PluginSettings() {
+export function PluginSettings({ category }: { category?: ReactNode }) {
   const { t: translateText } = useTranslation(["plugins", "common"] as const);
   const { plugins, loaded, error } = usePlugins();
   const recheck = useRecheckPlugins();
@@ -746,6 +747,7 @@ export function PluginSettings() {
       </PageHeader>
       <main id="main" className="min-h-0 min-w-0 flex-1 overflow-y-auto">
         <div className="@container mx-auto max-w-[96rem] space-y-4 px-4 py-4 sm:px-6">
+          {category}
           <p className="text-sm text-muted-foreground">
             {translateText("description")}
           </p>

@@ -85,5 +85,6 @@
     "option": "Not one of the options",
     "minItems": "Choose at least {{limit}}",
     "maxItems": "Choose at most {{limit}}"
-  }
+  },
+  "categories": "Plugin page categories"
 }

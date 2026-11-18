@@ -103,6 +103,8 @@ import {
   sessionKeyOf,
   taskKey,
 } from "./session-owner";
+import { skillFilesPlugin } from "./skills/plugin";
+import { SkillFileService } from "./skills/service";
 import { TaskArchiver } from "./tasks/archiver";
 import { TaskBoard } from "./tasks/board";
 import { TaskCards } from "./tasks/cards";
@@ -955,6 +957,7 @@ export function createProduct(options: {
         "email",
         "plugins",
         "mcp",
+        "skills",
         ...(options.acp === undefined ? [] : ["acp"]),
         ...(memory === undefined ? [] : ["memory"]),
       ]);
@@ -1140,6 +1143,13 @@ export function createProduct(options: {
             ...options.upgrade,
           },
           applied("upgrade"),
+        ),
+      );
+      server.mount(
+        "skills",
+        skillFilesPlugin(
+          new SkillFileService({ machines, projects, hub }),
+          applied("skills"),
         ),
       );
       server.mount("mcp", mcpPlugin({ service: mcp }, applied("mcp")));

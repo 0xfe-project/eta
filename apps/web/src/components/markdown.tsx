@@ -141,10 +141,12 @@ export const Markdown = memo(
     children,
     className,
     streaming = false,
+    resourceComponents,
   }: {
     children: string;
     className?: string;
     streaming?: boolean;
+    resourceComponents?: Pick<Components, "a" | "img">;
   }) => {
     return (
       <Streamdown
@@ -153,7 +155,11 @@ export const Markdown = memo(
         mode={streaming ? "streaming" : "static"}
         isAnimating={streaming}
         plugins={plugins}
-        components={components}
+        components={
+          resourceComponents
+            ? { ...components, ...resourceComponents }
+            : components
+        }
         controls={false}
         linkSafety={linkSafety}
         rehypePlugins={rehypePlugins}

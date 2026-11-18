@@ -547,7 +547,7 @@ function Tab({
         attention === undefined ? undefined : `${label} · ${attention}`
       }
       className="relative flex min-w-0 flex-col items-center justify-center gap-1 text-xs"
-      activeOptions={{ exact: true, includeSearch: false }}
+      activeOptions={{ exact: to !== "/plugins", includeSearch: false }}
       activeProps={{ className: "text-foreground bg-muted/50" }}
       inactiveProps={{ className: "text-muted-foreground" }}
     >
