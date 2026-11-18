@@ -410,6 +410,66 @@ describe("浏览", () => {
   });
 });
 
+describe("桌面端浏览", () => {
+  afterEach(() => {
+    delete window.__ETA_HOST__;
+  });
+
+  it("主机器上用系统的文件夹对话框，选中的目录在机器上检查后进第二步", async () => {
+    window.__ETA_HOST__ = {
+      native: true,
+      nativeApiBase: "http://127.0.0.1:5001",
+      nativeToken: "t",
+      capabilities: ["pick-directory"],
+      connection: "local",
+    };
+    const asked: string[] = [];
+    const before = globalThis.fetch;
+    globalThis.fetch = (async (url: string) => {
+      asked.push(url);
+      return new Response(JSON.stringify({ path: `${HOME}/fresh` }), {
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    try {
+      await start();
+      expect(option("浏览…")!.textContent).toContain("打开系统的文件夹对话框");
+      await take("浏览…");
+      await flush(20);
+      expect(asked).toEqual([
+        "http://127.0.0.1:5001/api/native/pick-directory",
+      ]);
+      expect(placeCalls("resolve")).toEqual([
+        { machineId: "m1", path: `${HOME}/fresh` },
+      ]);
+      expect(onMembers()).toBe(true);
+      expect(body().textContent).toContain("~/fresh");
+    } finally {
+      globalThis.fetch = before;
+    }
+  });
+
+  it("远程机器上还是一层层浏览", async () => {
+    window.__ETA_HOST__ = {
+      native: true,
+      nativeApiBase: "http://127.0.0.1:5001",
+      nativeToken: "t",
+      capabilities: ["pick-directory"],
+      connection: "local",
+    };
+    await start({
+      machines: [
+        primary,
+        machineView({ id: "m2", name: "gpu", kind: "daemon", home: "/g" }),
+      ],
+    });
+    await take("gpu");
+    expect(option("浏览…")!.textContent).not.toContain("系统");
+    await take("浏览…");
+    expect(document.querySelector("nav")).not.toBeNull();
+  });
+});
+
 describe("从 GitHub 克隆", () => {
   it("没登录 gh 时贴 owner/repo，选 HTTPS，放到默认位置，克隆完直接进第二步", async () => {
     await start();

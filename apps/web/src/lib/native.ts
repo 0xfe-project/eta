@@ -161,6 +161,18 @@ export async function openExternal(url: string): Promise<void> {
 }
 
 /**
+ * The system's folder dialog, for choosing a directory on the host's own machine; `undefined` when
+ * there is none to open: a browser, a shell from before `pick-directory`, or a shell whose host
+ * is another computer, whose folders the dialog would not show.
+ */
+export function folderDialog(): (() => Promise<string | null>) | undefined {
+  if (!hasCapability("pick-directory") || host().connection === "remote")
+    return undefined;
+  return async () =>
+    (await call<{ path: string | null }>("pick-directory", {}))?.path ?? null;
+}
+
+/**
  * The window buttons a page has to draw, and the way it asks the window to act.
  *
  * A macOS window keeps its own three lights, inset into our band; a Windows window whose title bar

@@ -502,6 +502,17 @@ const bridge = startNativeBridge({
       await Bun.write(target, content);
       return target;
     },
+    async pickDirectory() {
+      // The system's own folder dialog: one folder, no files. Making a folder from it is the
+      // system's (GTK's and Windows' dialogs have the button; Electrobun sets macOS's panel).
+      const picked = await Utils.openFileDialog({
+        startingFolder: homedir(),
+        canChooseFiles: false,
+        canChooseDirectory: true,
+        allowsMultipleSelection: false,
+      });
+      return picked[0] ?? null;
+    },
     /** A webview has no browser behind it: a link only opens if the shell opens it. */
     openExternal({ url }) {
       Utils.openExternal(url);

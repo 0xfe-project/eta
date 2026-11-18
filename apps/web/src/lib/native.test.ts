@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import {
+  folderDialog,
   hasCapability,
   host,
   markHost,
@@ -197,5 +198,28 @@ describe("in the shell", () => {
     expect(event.defaultPrevented).toBe(false);
     expect(fetch).not.toHaveBeenCalled();
     stop();
+  });
+});
+
+describe("the folder dialog", () => {
+  it("is none in a browser, in a shell without it, and in a shell on a remote host", () => {
+    expect(folderDialog()).toBeUndefined();
+    shell();
+    expect(folderDialog()).toBeUndefined();
+    shell({ capabilities: ["pick-directory"], connection: "remote" });
+    expect(folderDialog()).toBeUndefined();
+  });
+
+  it("asks the window for one folder and gives back what was chosen", async () => {
+    shell({ capabilities: ["pick-directory"], connection: "local" });
+    const fetch = serve({ path: "/Users/me/Developer/eta" });
+    const pick = folderDialog();
+    expect(await pick?.()).toBe("/Users/me/Developer/eta");
+    expect(fetch.mock.calls[0]?.[0]).toBe(
+      "http://127.0.0.1:5001/api/native/pick-directory",
+    );
+    expect(fetch.mock.calls[0]?.[1]?.method).toBe("POST");
+    serve({ path: null });
+    expect(await pick?.()).toBeNull();
   });
 });
