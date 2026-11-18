@@ -1,0 +1,32 @@
+{
+  "name": "@eta/places",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A machine's directories, answered on that machine: list, search, resolve, make, clone.",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest --run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
+  },
+  "dependencies": {
+    "@eta/client-contracts": "*",
+    "@simple-git/argv-parser": "3.0.0",
+    "execa": "10.2.1",
+    "fdir": "6.5.0",
+    "lru-cache": "11.5.3",
+    "simple-git": "4.1.0",
+    "valid-filename": "5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.19",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}

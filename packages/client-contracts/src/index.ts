@@ -22,6 +22,7 @@ export * from "./llm";
 export * from "./mcp";
 export * from "./memory";
 export * from "./operations";
+export * from "./places";
 export type * from "./plugin-fields";
 export * from "./plugins";
 export * from "./product";
