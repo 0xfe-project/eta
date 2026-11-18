@@ -131,6 +131,7 @@ export function InsertMessage({
             type="button"
             size="xs"
             variant="outline"
+            className="text-foreground"
             disabled={draft.trim() === ""}
             onClick={send}
           >
