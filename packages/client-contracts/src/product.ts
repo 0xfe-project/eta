@@ -54,6 +54,10 @@ export interface AgentView {
   skippedPlugins: string[];
   /** `captain` for the one El Capitan agent; null for every ordinary agent. */
   systemRole: "captain" | null;
+  /** The seed its avatar is drawn from; null draws it from `id`, the face every agent starts with. */
+  avatarSeed: string | null;
+  /** The last few seeds it wore, newest first: the current one, then the ones it can go back to. */
+  avatarSeeds: string[];
   /** The agent's workspace directory (on the primary machine). */
   home: string;
   homeProjectId: string;
@@ -407,7 +411,8 @@ export interface AgentFields {
 export interface AgentArgs {
   /** Makes the agent, its workspace directory and its home project. */
   create: AgentFields;
-  update: { agentId: string } & Partial<AgentFields>;
+  /** `avatarSeed` draws its avatar from that seed and puts it at the front of `avatarSeeds`. */
+  update: { agentId: string; avatarSeed?: string } & Partial<AgentFields>;
   /** Clears it as steward, archives the chats it was alone in, and leaves its directory on disk. */
   delete: { agentId: string };
   /** The private chat with the agent, made the first time and found every time after. */

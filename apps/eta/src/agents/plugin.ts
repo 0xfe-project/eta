@@ -65,6 +65,9 @@ export interface AgentsDeps {
   capturePrompt?: AgentCreateDeps["capturePrompt"];
 }
 
+/** What a client may draw an avatar from: an agent's id is one, and so is a short random string. */
+const AVATAR_SEED = /^[\w-]{1,64}$/;
+
 export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
   const { agents, projects, machines, conversations, timeline, plugins } = deps;
 
@@ -86,6 +89,8 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
       plugins: plugins.rows.enabled(agent.id),
       skippedPlugins: plugins.skipped(agent.id),
       systemRole: agent.systemRole,
+      avatarSeed: agent.avatarSeed,
+      avatarSeeds: agent.avatarSeeds,
       home,
       homeProjectId: project?.id ?? "",
       status: statuses.get(agent.id) ?? "idle",
@@ -137,6 +142,11 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
               "the Captain is managed through the captain target",
             );
           const fields = fieldsOf(call, false);
+          const avatarSeed = args.optionalString("avatarSeed");
+          if (avatarSeed !== undefined && !AVATAR_SEED.test(avatarSeed))
+            throw new Error(
+              "avatarSeed must be 1 to 64 letters, digits, - or _",
+            );
           const moved =
             fields.runtime !== undefined && fields.runtime !== before.runtime;
           // Another runtime's names mean nothing on this one: a move that names no model clears it.
@@ -151,7 +161,10 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             checkAgentName(agents, fields.name, id);
           checkMachine(machines, fields.machineId);
           checkPlugins(plugins, id, fields.plugins);
-          const agent = agents.update(id, fields)!;
+          const agent = agents.update(id, {
+            ...fields,
+            ...(avatarSeed === undefined ? {} : { avatarSeed }),
+          })!;
           if (fields.plugins !== undefined)
             plugins.rows.setEnabled(id, fields.plugins);
           if (agent.instructions !== before.instructions)
