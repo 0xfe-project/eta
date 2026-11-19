@@ -4,7 +4,7 @@
  * after. How long "a while" is, or never, is the user's setting, kept with the host's others.
  */
 import type { TaskArchiveDays, TaskBoardSettings } from "@eta/client-contracts";
-import type { SettingStore } from "../inbox/setting";
+import type { SettingStore } from "../settings/store";
 import type { TaskBoard } from "./board";
 import {
   DEFAULT_TASK_ARCHIVE_DAYS,

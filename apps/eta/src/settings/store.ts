@@ -1,6 +1,6 @@
 /**
- * The product's small settings: a key and a JSON value. Which tools ask before they run is the
- * first; what a setting means is the feature's business, this only keeps it.
+ * The product's settings table: a key and a JSON value. This is the only place that reads or
+ * writes it; what a setting means is the feature's business, this only keeps it.
  */
 import type { Database } from "bun:sqlite";
 
