@@ -1,79 +1,53 @@
 /**
- * The `credential` table as the MCP library's `CredentialStore`.
+ * The MCP library's `CredentialStore`, over the `credential` table.
  *
- * Every value is JSON sealed under the host's key (`../secret`); a row that does not open (another
- * host's key, or tampering) reads as nothing, so the server needs a new login and nothing worse.
- * The reads are synchronous underneath: the async interface is the library's, and `has` is for the
- * status page, which cannot await.
+ * The table seals and opens the values (`../credentials/table`); a row that does not open reads
+ * as nothing, so the server needs a new login and nothing worse. The reads are synchronous
+ * underneath: the async methods are the library's, and `has` is for the status page, which cannot
+ * await.
  */
-import type { CredentialKind, CredentialStore } from "@eta/mcp";
+import type {
+  CredentialKind,
+  CredentialRecord,
+  CredentialStore,
+} from "@eta/mcp";
 import type { Database } from "bun:sqlite";
 import type { Buffer } from "node:buffer";
-import { randomUUID } from "node:crypto";
-import { seal, unseal } from "../secret";
+import { EncryptedCredentialTable } from "../credentials/table";
 
 const INTEGRATION = "mcp";
 
 export class CredentialRows implements CredentialStore {
-  readonly #db: Database;
-  readonly #key: Buffer;
-  readonly #integration: string;
+  readonly #table: EncryptedCredentialTable;
 
-  constructor(db: Database, key: Buffer, integration = INTEGRATION) {
-    this.#db = db;
-    this.#key = key;
-    this.#integration = integration;
-  }
-
-  #read(serverKey: string, kind: string): unknown {
-    const row = this.#db
-      .query<{ value: Uint8Array }, [string, string, string]>(
-        "SELECT value FROM credential WHERE integration = ? AND key = ? AND kind = ?",
-      )
-      .get(this.#integration, serverKey, kind);
-    if (row === null) return undefined;
-    const text = unseal(this.#key, row.value);
-    if (text === undefined) return undefined;
-    try {
-      return JSON.parse(text);
-    } catch {
-      return undefined;
-    }
+  constructor(db: Database, key: Buffer) {
+    this.#table = new EncryptedCredentialTable(db, key);
   }
 
   /** Whether a credential of this kind is stored and opens. */
   has(serverKey: string, kind: CredentialKind): boolean {
-    return this.#read(serverKey, kind) !== undefined;
+    return this.#table.read(INTEGRATION, serverKey, kind) !== undefined;
   }
 
-  get: CredentialStore["get"] = async (serverKey, kind) =>
-    this.#read(serverKey, kind) as never;
+  async get<K extends CredentialKind>(
+    serverKey: string,
+    kind: K,
+  ): Promise<CredentialRecord[K] | undefined> {
+    // The value is a CredentialRecord at set; a row that does not open is undefined.
+    return this.#table.read(INTEGRATION, serverKey, kind) as
+      | CredentialRecord[K]
+      | undefined;
+  }
 
-  set: CredentialStore["set"] = async (serverKey, kind, value) => {
-    const now = Date.now();
-    this.#db
-      .query(
-        `INSERT INTO credential (id, integration, key, kind, value, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (integration, key, kind)
-         DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-      )
-      .run(
-        randomUUID(),
-        this.#integration,
-        serverKey,
-        kind,
-        seal(this.#key, JSON.stringify(value)),
-        now,
-        now,
-      );
-  };
+  async set<K extends CredentialKind>(
+    serverKey: string,
+    kind: K,
+    value: CredentialRecord[K],
+  ): Promise<void> {
+    this.#table.write(INTEGRATION, serverKey, kind, value);
+  }
 
-  delete: CredentialStore["delete"] = async (serverKey, kind) => {
-    this.#db
-      .query(
-        "DELETE FROM credential WHERE integration = ? AND key = ? AND kind = ?",
-      )
-      .run(this.#integration, serverKey, kind);
-  };
+  async delete(serverKey: string, kind: CredentialKind): Promise<void> {
+    this.#table.erase(INTEGRATION, serverKey, kind);
+  }
 }
