@@ -4,11 +4,12 @@ import type { AgentStore } from "../agents/store";
 import type { ConversationStore } from "../conversations/store";
 import type { MemoryClient } from "../memory/client";
 import type { ProjectStore } from "../projects/store";
-import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import process from "node:process";
 import { agentHome } from "../agents/store";
+import type { MemorySection } from "./memory-file";
+import { parseMemoryFile, renderMemoryFile } from "./memory-file";
 
 export interface CaptainMemoryItem {
   id: string;
@@ -21,56 +22,8 @@ export interface CaptainMemoryItem {
   deletedAt: number | null;
 }
 
-interface FileEntry {
-  id: string;
-  text: string;
-  section: string;
-  path: string;
-}
-
-const SECTIONS = ["decision", "preference", "lesson"] as const;
-const hash = (text: string): string =>
-  createHash("sha256").update(text).digest("hex").slice(0, 12);
 const archiveId = (agentId: string, memoryId: string): string =>
   `${agentId}:${memoryId}`;
-
-function parseFile(path: string, text: string): FileEntry[] {
-  const out: FileEntry[] = [];
-  let section = "";
-  for (const line of text.split("\n")) {
-    if (line.startsWith("## ")) {
-      section = line.slice(3).trim();
-      continue;
-    }
-    if (!SECTIONS.includes(section as (typeof SECTIONS)[number])) continue;
-    const bullet = line.trimStart();
-    if (!bullet.startsWith("- ")) continue;
-    let body = bullet.slice(2).trim();
-    const tag = /^\[[^\]]+\]\s+/.exec(body);
-    if (tag !== null) body = body.slice(tag[0].length).trim();
-    if (body === "") continue;
-    out.push({
-      id: `file:${hash(`${path}\0${section}\0${body}`)}`,
-      text: body,
-      section,
-      path,
-    });
-  }
-  return out;
-}
-
-function renderFile(entries: readonly FileEntry[]): string {
-  return [
-    "# eta memory (untrusted)",
-    ...SECTIONS.flatMap((section) => [
-      `## ${section}`,
-      ...entries
-        .filter((entry) => entry.section === section)
-        .map((entry) => `- ${entry.text}`),
-    ]),
-    "",
-  ].join("\n");
-}
 
 export class CaptainMemory {
   readonly #db: Database;
@@ -146,7 +99,7 @@ export class CaptainMemory {
       await this.#client.softDelete(agentId, id, actorAgentId);
       return;
     }
-    const entries = parseFile(
+    const entries = parseMemoryFile(
       item.path,
       await readFile(item.path, "utf8").catch(() => ""),
     );
@@ -178,7 +131,7 @@ export class CaptainMemory {
           now,
         );
     })();
-    await atomicWrite(item.path, renderFile(kept));
+    await atomicWrite(item.path, renderMemoryFile(kept));
   }
 
   async restore(agentId: string, id: string) {
@@ -187,7 +140,8 @@ export class CaptainMemory {
         {
           id: string;
           path: string;
-          section: string;
+          /** The archive only holds sections written from parsed entries. */
+          section: MemorySection;
           text: string;
           restored_at: number | null;
         },
@@ -200,7 +154,7 @@ export class CaptainMemory {
       .get(archiveId(agentId, id), id, agentId);
     if (row !== null) {
       if (row.restored_at !== null) return;
-      const entries = parseFile(
+      const entries = parseMemoryFile(
         row.path,
         await readFile(row.path, "utf8").catch(() => ""),
       );
@@ -212,7 +166,7 @@ export class CaptainMemory {
         section: row.section,
         path: row.path,
       });
-      await atomicWrite(row.path, renderFile(entries));
+      await atomicWrite(row.path, renderMemoryFile(entries));
       this.#db
         .query(
           "UPDATE captain_memory_archive SET restored_at = ? WHERE id = ? AND agent_id = ?",
@@ -251,7 +205,7 @@ export class CaptainMemory {
     for (const [path, source] of paths) {
       const text = await readFile(path, "utf8").catch(() => undefined);
       if (text === undefined) continue;
-      for (const entry of parseFile(path, text))
+      for (const entry of parseMemoryFile(path, text))
         items.push({
           id: entry.id,
           agentId,
@@ -272,7 +226,8 @@ export class CaptainMemory {
         {
           id: string;
           path: string;
-          section: string;
+          /** The archive only holds sections written from parsed entries. */
+          section: MemorySection;
           text: string;
           deleted_at: number;
         },
