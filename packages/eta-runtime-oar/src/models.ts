@@ -10,11 +10,34 @@
  * runtime that takes names beyond its list (claude takes full model ids as well as its aliases).
  */
 import type { Api, KernelModels, Model, ThinkingLevel } from "@eta/core";
-import type { RuntimeCatalog, RuntimeId, RuntimeModel } from "./catalog";
+import type {
+  RuntimeCatalog,
+  RuntimeId,
+  RuntimeInfo,
+  RuntimeModel,
+} from "./catalog";
 import { THINKING_LEVELS } from "@eta/core";
 
 /** The runtimes whose `--model` takes names their list does not show. */
-const OPEN_NAMES: ReadonlySet<RuntimeId> = new Set(["claude", "codex"]);
+export const OPEN_NAMES: ReadonlySet<RuntimeId> = new Set(["claude", "codex"]);
+
+/**
+ * Whether a runtime that lists its models does not list this one. For such a runtime a name its
+ * list does not carry resolves to nothing; a runtime whose list is unknown, empty, in error, or
+ * whose `--model` takes names beyond its list (`OPEN_NAMES`) carries any name.
+ */
+export function modelUnlisted(
+  runtime: RuntimeId,
+  info: RuntimeInfo | undefined,
+  id: string,
+): boolean {
+  return (
+    info?.status === "available" &&
+    info.models.length > 0 &&
+    !OPEN_NAMES.has(runtime) &&
+    !info.models.some((model) => model.id === id)
+  );
+}
 
 /**
  * The effort a runtime is asked for at a thinking level: the level itself where the model takes
@@ -78,13 +101,7 @@ export function runtimeModels(
       if (provider !== runtime) return undefined;
       const info = catalog.peek(runtime);
       const listed = info?.models.find((model) => model.id === id);
-      if (
-        listed === undefined &&
-        info?.status === "available" &&
-        info.models.length > 0 &&
-        !OPEN_NAMES.has(runtime)
-      )
-        return undefined;
+      if (modelUnlisted(runtime, info, id)) return undefined;
       return modelOf(runtime, id, listed);
     },
     streamSimple: refuse,

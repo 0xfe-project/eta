@@ -54,7 +54,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hostResultOf, HostTools, NO_RUN } from "@eta/runtime-kit";
 import { HostCalls } from "./host-calls";
-import { effortFor } from "./models";
+import { effortFor, modelUnlisted } from "./models";
 import { Translator } from "./translate";
 
 export interface OarDelegateOptions {
@@ -530,6 +530,15 @@ export class OarDelegate implements RunDelegate {
     const { runtime: id, catalog } = this.#options;
     const runtime = catalog.runtime(id);
     const installation = await catalog.installation(id);
+    // A model the runtime's list does not carry fails here, before the session opens, rather than
+    // deep in the first prompt: the agent is configured for a model the provider no longer serves.
+    if (
+      settings.model !== undefined &&
+      modelUnlisted(id, catalog.peek(id), settings.model)
+    )
+      throw new Error(
+        `Model "${settings.model}" is not available in ${id}. Run '${id} models' to see the list.`,
+      );
     const refused = runtime.refusedSessionOptions?.mcpServers !== undefined;
     const served = refused ? undefined : await this.#host.serve(context);
     const plugins = this.#options.mcpServers ?? [];

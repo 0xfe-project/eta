@@ -661,6 +661,125 @@ describe("a session on an external runtime", () => {
     await manager.closeAll();
   });
 
+  it("rejects a model not in the runtime's list before opening the session", async () => {
+    // Use "opencode" as test runtime (not in OPEN_NAMES, unlike "claude"/"codex")
+    const setupOpencode = (
+      turn: (turn: ScriptedTurn) => void | Promise<void>,
+      listModels?: Runtime["listModels"],
+    ) => {
+      const turns: ScriptedTurn[] = [];
+      const opened: {
+        options: Parameters<Runtime["session"]>[1];
+        session: Session;
+      }[] = [];
+      const scripted = scriptedRuntime({
+        id: "opencode",
+        turn: async (scriptedTurn) => {
+          turns.push(scriptedTurn);
+          await turn(scriptedTurn);
+        },
+      });
+      const runtime: Runtime = {
+        ...scripted,
+        session: async (installation, sessionOptions, context) => {
+          const { effort: _effort, ...withoutEffort } = sessionOptions;
+          const session = await scripted.session(
+            installation,
+            listModels === undefined ? sessionOptions : withoutEffort,
+            context,
+          );
+          opened.push({ options: sessionOptions, session });
+          return session;
+        },
+        ...(listModels === undefined ? {} : { listModels }),
+      };
+      const runtimes = createOarRuntimes({
+        registry: createRuntimeRegistry([runtime]),
+        warn: () => {},
+      });
+      const manager = new SessionManager({
+        store: new MemorySessionStore(),
+        modelsFor: () => {
+          throw new Error("an eta model was asked for");
+        },
+        runtimes,
+        agentPromptFor: () => "In this conversation you are Probe.",
+      });
+      return { manager, turns, opened };
+    };
+
+    // Positive case: a model the list does not carry rejects before session() is called.
+    const { manager, opened } = setupOpencode(
+      (turn) => turn.say("ok"),
+      async () => ({
+        kind: "ok",
+        models: [
+          { id: "available-model", effortLevels: [] },
+          { id: "another-model", effortLevels: [] },
+        ],
+      }),
+    );
+    const managed = await manager.create({
+      cwd: "/work",
+      runtime: "opencode",
+      model: "opencode:no-such-model",
+    });
+    const result = await run(managed, "test");
+    expect(result.status).toBe("failed");
+    expect(result.error).toContain(
+      '"no-such-model" is not available in opencode',
+    );
+    expect(opened).toHaveLength(0);
+
+    // A model the list carries opens as before.
+    const managed1 = await manager.create({
+      cwd: "/work",
+      runtime: "opencode",
+      model: "opencode:available-model",
+    });
+    const result1 = await run(managed1, "test");
+    expect(result1.status).toBe("completed");
+    expect(opened).toHaveLength(1);
+    await manager.close(managed1.meta.id);
+
+    // claude/codex take names beyond their list: an unlisted name opens.
+    const { manager: claudeManager, opened: claudeOpened } = setup(
+      (turn) => turn.say("ok"),
+      {
+        listModels: async () => ({
+          kind: "ok",
+          models: [{ id: "listed-model", effortLevels: [] }],
+        }),
+      },
+    );
+    const managed2 = await claudeManager.create({
+      cwd: "/work",
+      runtime: "claude",
+      model: "claude:some-unlisted-model",
+    });
+    const result2 = await run(managed2, "test");
+    expect(result2.status).toBe("completed");
+    expect(claudeOpened).toHaveLength(1);
+    await claudeManager.closeAll();
+
+    // An empty list is not a list to check against: any name opens.
+    const { manager: emptyManager, opened: emptyOpened } = setupOpencode(
+      (turn) => turn.say("ok"),
+      async () => ({ kind: "ok", models: [] }),
+    );
+    const managed3 = await emptyManager.create({
+      cwd: "/work",
+      runtime: "opencode",
+      model: "opencode:any-model",
+    });
+    const result3 = await run(managed3, "test");
+    expect(result3.status).toBe("completed");
+    expect(emptyOpened).toHaveLength(1);
+    await emptyManager.closeAll();
+
+    await manager.closeAll();
+  });
+
   it("steers the turn in flight", async () => {
     let steered: readonly string[] = [];
     const { manager } = setup(async (turn) => {
