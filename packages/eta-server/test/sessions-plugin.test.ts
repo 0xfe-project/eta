@@ -13,6 +13,7 @@
 import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
 import type { CompactionSummarizer } from "@eta/core";
 import type { SessionRuntime, SessionRuntimes } from "../src/runtimes";
+import { DEFAULT_COMPACTION_SETTINGS } from "@eta/core";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
@@ -892,6 +893,57 @@ describe("choosing how the next turn is generated", () => {
         (error: Error) => expect(error.message).toContain("busy"),
       );
     await until(() => open()?.runner.running === false);
+    await h.unload();
+  });
+
+  it("answers a model switch without waiting for the compaction it starts", async () => {
+    // A summarizer that never answers is what a slow provider looks like from here: the
+    // switch is written before the re-measure, so the answer must not wait on it.
+    const asked: string[] = [];
+    const summarizer: CompactionSummarizer = {
+      summarize: (request) => {
+        asked.push(request.reason);
+        return new Promise(() => undefined);
+      },
+    };
+    const h = await harness(
+      fakeModels([
+        assistantMessage({
+          content: [{ type: "text", text: "x".repeat(400) }],
+        }),
+      ]),
+      { compaction: summarizer },
+    );
+    await h.load();
+    const { session } = (await h.call("sessions", "create", {
+      cwd: "/work/eta",
+    })) as { session: string };
+    const open = () =>
+      h.manager.openSessions().find((entry) => entry.meta.id === session)
+        ?.session;
+    await h.call("sessions", "prompt", { session, text: "y".repeat(400) });
+    await until(() => open()?.runner.running === false);
+    // The history no longer fits: the switch's re-measure has to compact.
+    open()?.kernel.config.update({
+      compaction: { ...DEFAULT_COMPACTION_SETTINGS, maxContextTokens: 10 },
+    });
+
+    const timedOut = Symbol("timed out");
+    const answered = await Promise.race([
+      h.call("sessions", "modelSet", { session, model: "fake:fake-model" }),
+      new Promise((resolve) => setTimeout(resolve, 1_000, timedOut)),
+    ]);
+    expect(answered).toEqual({
+      model: "fake:fake-model",
+      thinkingLevel: "off",
+    });
+    // The compaction did start, and is still waiting on the summarizer.
+    await until(() => asked.length === 1);
+    expect(asked).toEqual(["threshold"]);
+    expect(open()?.config.model).toEqual({
+      provider: "fake",
+      modelId: "fake-model",
+    });
     await h.unload();
   });
 
