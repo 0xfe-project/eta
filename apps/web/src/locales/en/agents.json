@@ -43,7 +43,8 @@
   },
   "feedback": {
     "restarted": "Restarted {{name}}",
-    "created": "Created “{{name}}”"
+    "created": "Created “{{name}}”",
+    "savedApplyLater": "Saved. Session settings will apply shortly."
   },
   "empty": {
     "title": "No agents yet",

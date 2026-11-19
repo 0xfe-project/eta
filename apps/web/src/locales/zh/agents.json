@@ -43,7 +43,8 @@
   },
   "feedback": {
     "restarted": "已重启 {{name}}",
-    "created": "已创建「{{name}}」"
+    "created": "已创建「{{name}}」",
+    "savedApplyLater": "已保存，会话设置稍后生效。"
   },
   "empty": {
     "title": "还没有智能体",
