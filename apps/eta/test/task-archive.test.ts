@@ -18,7 +18,7 @@ import {
   loadMigrations,
   openDatabase,
 } from "../src/db";
-import { SettingStore } from "../src/inbox/setting";
+import { SettingStore } from "../src/settings/store";
 import { TaskArchiver } from "../src/tasks/archiver";
 import { until } from "./support/client";
 import { call, HANG, say, scriptedModels } from "./support/models";

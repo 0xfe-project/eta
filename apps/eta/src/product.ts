@@ -66,7 +66,6 @@ import { EmailStore } from "./email/store";
 import { emailSessionTools } from "./email/tools";
 import { Inbox } from "./inbox/inbox";
 import { inboxPlugin } from "./inbox/plugin";
-import { SettingStore } from "./inbox/setting";
 import { InteractionStore } from "./inbox/store";
 import { MachineHub } from "./machines/hub";
 import { sshRunner } from "./machines/install";
@@ -103,6 +102,7 @@ import {
   sessionKeyOf,
   taskKey,
 } from "./session-owner";
+import { SettingStore } from "./settings/store";
 import { skillFilesPlugin } from "./skills/plugin";
 import { SkillFileService } from "./skills/service";
 import { TaskArchiver } from "./tasks/archiver";

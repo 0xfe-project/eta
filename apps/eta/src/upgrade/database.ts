@@ -24,8 +24,8 @@ import { join } from "node:path";
 import { UPSTREAM_SETTING } from "@eta/releases";
 import { Database } from "bun:sqlite";
 import { databasePath } from "../db";
-import { SettingStore } from "../inbox/setting";
 import { loadSecretKey } from "../secret";
+import { SettingStore } from "../settings/store";
 import { openToken, TOKEN_SETTING } from "./token";
 
 /** Backups kept in `<dataDir>/backups`, newest first; each is as big as the database. */
