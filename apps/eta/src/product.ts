@@ -66,7 +66,6 @@ import { EmailStore } from "./email/store";
 import { emailSessionTools } from "./email/tools";
 import { Inbox } from "./inbox/inbox";
 import { inboxPlugin } from "./inbox/plugin";
-import { SettingStore } from "./inbox/setting";
 import { InteractionStore } from "./inbox/store";
 import { MachineHub } from "./machines/hub";
 import { sshRunner } from "./machines/install";
@@ -103,8 +102,15 @@ import {
   sessionKeyOf,
   taskKey,
 } from "./session-owner";
+import { SettingStore } from "./settings/store";
 import { skillFilesPlugin } from "./skills/plugin";
 import { SkillFileService } from "./skills/service";
+import {
+  announce,
+  conversationTarget,
+  PRODUCT_TARGETS,
+  routineTarget,
+} from "./targets";
 import { TaskArchiver } from "./tasks/archiver";
 import { TaskBoard } from "./tasks/board";
 import { TaskCards } from "./tasks/cards";
@@ -279,27 +285,12 @@ export function createProduct(options: {
   const changed = (touched?: readonly string[] | "all"): void => {
     captainChangeObserver?.();
     if (wire === undefined) return;
-    // `mcp` lists each agent's servers, so it moves with the agents.
-    for (const target of [
-      "agents",
-      "machines",
-      "projects",
-      "conversations",
-      "plugins",
-      "mcp",
-      "places",
-    ])
-      wire.pushNow(target);
-    // Captain's identity, pauses, operations, settings and assignment summaries are product
-    // state too. A mutation from the sidebar must not wait for the next board event to redraw.
-    wire.pushNow("captain");
-    // Whether routines run follows Captain's switch and model (`routines.status`).
-    wire.pushNow("routines");
+    for (const target of PRODUCT_TARGETS) announce(wire, target);
     const ids =
       touched === "all"
         ? conversations.list().map((c) => c.id)
         : (touched ?? []);
-    for (const id of ids) wire.pushNow(`conversations.${id}`);
+    for (const id of ids) announce(wire, conversationTarget(id));
   };
 
   // The routines: their rows, the runs that carry them out and the clock that starts the runs.
@@ -308,8 +299,10 @@ export function createProduct(options: {
   // A run the last process left going is not going now.
   routines.recover(INTERRUPTED);
   const routinesChanged = (routineId: string): void => {
-    wire?.pushNow("routines");
-    wire?.pushNow(`routines.${routineId}`);
+    if (wire !== undefined) {
+      announce(wire, "routines");
+      announce(wire, routineTarget(routineId));
+    }
   };
   // Routines are Captain's: a run is a new Captain session, and with Captain off nothing runs.
   // Captain and the engine are made further down; they are read from here when a run needs them.
@@ -424,7 +417,7 @@ export function createProduct(options: {
   const hub = new MachineHub({
     machines,
     changed: () => {
-      wire?.pushNow("machines");
+      if (wire !== undefined) announce(wire, "machines");
       // A machine that came up may be the one a run was waiting for.
       later.taskRunner?.pump();
     },
@@ -495,7 +488,9 @@ export function createProduct(options: {
     // Read when a session opens or the settings page asks; the plugins are made just below.
     pluginSources: ({ agentId }) => later.plugins?.mcpSourcesFor(agentId) ?? [],
     publicUrl: options.publicUrl,
-    changed: () => wire?.pushNow("mcp"),
+    changed: () => {
+      if (wire !== undefined) announce(wire, "mcp");
+    },
     warn,
     ...options.mcp,
   });
@@ -509,9 +504,11 @@ export function createProduct(options: {
     machines,
     hub,
     changed: () => {
-      wire?.pushNow("plugins");
-      wire?.pushNow("agents");
-      wire?.pushNow("mcp");
+      if (wire !== undefined) {
+        announce(wire, "plugins");
+        announce(wire, "agents");
+        announce(wire, "mcp");
+      }
     },
     warn,
   });
@@ -564,7 +561,7 @@ export function createProduct(options: {
     settings: new SettingStore(db),
     timeline,
     changed: () => {
-      wire?.pushNow("inbox");
+      if (wire !== undefined) announce(wire, "inbox");
       captainChangeObserver?.();
     },
     warn,
@@ -701,14 +698,16 @@ export function createProduct(options: {
     inbox,
     timer: options.routines?.timer ?? true,
     warn,
-    changed: () => wire?.pushNow("captain"),
+    changed: () => {
+      if (wire !== undefined) announce(wire, "captain");
+    },
   });
   later.captainSupervisor = captainSupervisor;
   captainChangeObserver = () => captainSupervisor.requestTick();
   board.onChange(() => {
     captain.refreshAssignments();
     captainSupervisor.requestTick();
-    wire?.pushNow("captain");
+    if (wire !== undefined) announce(wire, "captain");
   });
   // Nothing is running yet, so the runs the last process left going cannot be.
   taskRunner.recover();
@@ -737,7 +736,9 @@ export function createProduct(options: {
     limits,
     kinds: KINDS,
     key: loadKey(join(artifactsRoot, ".preview-key")),
-    changed: () => wire?.pushNow("artifacts"),
+    changed: () => {
+      if (wire !== undefined) announce(wire, "artifacts");
+    },
   });
   const artifactRoutes = createArtifactRoutes(artifacts);
 
@@ -1058,7 +1059,9 @@ export function createProduct(options: {
             projects,
             places: placeStore,
             onMachine,
-            changed: () => wire?.pushNow("places"),
+            changed: () => {
+              if (wire !== undefined) announce(wire, "places");
+            },
           },
           applied("places"),
         ),
@@ -1165,7 +1168,9 @@ export function createProduct(options: {
                 agents: () => agents.list(),
                 projectMachines: (agentId) =>
                   projectMachinesOf({ projects, conversations }, agentId),
-                changed: () => wire?.pushNow("acp"),
+                changed: () => {
+                  if (wire !== undefined) announce(wire, "acp");
+                },
               }),
             },
             applied("acp"),

@@ -19,6 +19,7 @@ import type {
 } from "@eta/client-contracts";
 import type { CatalogModel, Gateway } from "./gateway";
 import type { GatewayModels } from "./models";
+import { announce } from "../targets";
 import { Args, productPlugin, publish } from "../wire";
 import { LlmError } from "./problems";
 
@@ -92,7 +93,7 @@ export function llmPlugin(deps: LlmPluginDeps, applied: () => void) {
             connections = nextConnections;
             catalog = nextCatalog;
             if (modelsMoved) await models.update(catalog);
-            if (!closed) wire.pushNow("llm");
+            if (!closed) announce(wire, "llm");
           } catch (error) {
             warn(`[eta] llm: could not read the gateway: ${String(error)}`);
           } finally {
@@ -104,7 +105,7 @@ export function llmPlugin(deps: LlmPluginDeps, applied: () => void) {
       const readQuota = async (): Promise<void> => {
         try {
           quota = await gateway.usage();
-          if (!closed) wire.pushNow("llm");
+          if (!closed) announce(wire, "llm");
         } catch (error) {
           warn(`[eta] llm: could not read quota: ${String(error)}`);
         }
@@ -128,7 +129,7 @@ export function llmPlugin(deps: LlmPluginDeps, applied: () => void) {
           catalog = checked.models;
           quota = checked.quota;
           await models.update(catalog);
-          wire.pushNow("llm");
+          announce(wire, "llm");
           return { result: {} };
         }),
         wire.handle("llm", "loginStart", async (call) => {

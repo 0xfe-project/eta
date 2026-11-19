@@ -15,7 +15,7 @@ import type {
   UpgradeUpstreamSource,
   UpgradeUpstreamView,
 } from "@eta/client-contracts";
-import type { SettingStore } from "../inbox/setting";
+import type { SettingStore } from "../settings/store";
 import type { HostService } from "./service";
 import process from "node:process";
 import {

@@ -4,6 +4,7 @@
  */
 import type { CallFrame } from "@eta/client-wire-proto";
 import type { SessionsService, WireService } from "@eta/server";
+import type { TargetName } from "./targets";
 
 /** What a cordis plugin is applied on, with the two services every product plugin injects. */
 export interface PluginContext {
@@ -47,7 +48,7 @@ export function productPlugin(
  */
 export function publish(
   wire: WireService,
-  target: string,
+  target: TargetName,
   sections: Record<string, () => unknown>,
   options: { eager?: boolean } = {},
 ): () => void {

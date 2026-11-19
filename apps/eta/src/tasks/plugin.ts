@@ -14,7 +14,7 @@ import type {
  * `create`, whose call is the user pressing "Create" (`TaskBoard.make`).
  */
 import type { CallFrame } from "@eta/client-wire-proto";
-import type { SettingStore } from "../inbox/setting";
+import type { SettingStore } from "../settings/store";
 import type {
   DependencyInput,
   FieldsInput,
@@ -24,6 +24,7 @@ import type {
 import type { TaskRunner } from "./runner";
 import type { WorkspaceChoice } from "./tools";
 import { TASK_ARCHIVED_FILTERS } from "@eta/client-contracts";
+import { announce, taskTarget } from "../targets";
 import { Args, productPlugin, publish } from "../wire";
 import { boardSettings, saveBoardSettings } from "./archiver";
 
@@ -189,7 +190,7 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
           const saved = saveBoardSettings(settings, {
             archiveAfterDays: raw.archiveAfterDays,
           });
-          wire.pushNow("tasks");
+          announce(wire, "tasks");
           deps.settingsChanged?.();
           return { result: { settings: saved } };
         }),
@@ -200,8 +201,8 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
             targets.get(taskId)?.();
             targets.delete(taskId);
           }
-          wire.pushNow("tasks");
-          if (kind !== "removed") wire.pushNow(`tasks.${taskId}`);
+          announce(wire, "tasks");
+          if (kind !== "removed") announce(wire, taskTarget(taskId));
         }),
 
         wire.handle("tasks", "update", (call) => {

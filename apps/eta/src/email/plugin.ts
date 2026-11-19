@@ -5,6 +5,7 @@ import type { ConversationStore } from "../conversations/store";
 import type { ProjectStore } from "../projects/store";
 import type { EmailService } from "./service";
 import { openDirect } from "../conversations/direct";
+import { announce, emailTarget } from "../targets";
 import { Args, productPlugin, publish } from "../wire";
 import { renderAgentPayload } from "./payload";
 
@@ -103,9 +104,9 @@ export function emailPlugin(deps: EmailPluginDeps, applied: () => void) {
 
         service.onChange(() => {
           for (const thread of service.store.threads()) add(thread.id);
-          wire.pushNow("email");
+          announce(wire, "email");
           for (const threadId of targets.keys())
-            wire.pushNow(`email.${threadId}`);
+            announce(wire, emailTarget(threadId));
         }),
 
         wire.handle("email", "saveAccount", async (call) => {

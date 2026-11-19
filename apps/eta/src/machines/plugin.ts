@@ -19,6 +19,7 @@ import type { MachineHub } from "./hub";
 import type { SshRunner } from "./install";
 import type { MachineRecord, MachineStore } from "./store";
 import type { Tailscale } from "./tailscale";
+import { announce } from "../targets";
 import { Args, productPlugin, publish } from "../wire";
 import { installDaemon } from "./install";
 import { installCommand } from "./install-script";
@@ -235,7 +236,7 @@ export function machinesPlugin(deps: MachinesDeps, applied: () => void) {
           };
           installs.unshift(install);
           installs.splice(KEEP_INSTALLS);
-          const moved = (): void => wire.pushNow("machines");
+          const moved = (): void => announce(wire, "machines");
           moved();
           // The call is answered now; the install goes on, and its steps are the section.
           void installDaemon(
