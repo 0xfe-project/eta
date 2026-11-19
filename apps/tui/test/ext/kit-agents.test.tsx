@@ -17,6 +17,8 @@ function agent(id: string, name: string): AgentView {
     thinkingLevel: null,
     machineId: null,
     systemRole: null,
+    avatarSeed: null,
+    avatarSeeds: [],
     plugins: [],
     skippedPlugins: [],
     home: "",

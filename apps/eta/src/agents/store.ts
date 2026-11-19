@@ -26,9 +26,16 @@ export interface AgentRecord {
   machineId: string | null;
   /** The one system role an agent can carry. Ordinary agents have none. */
   systemRole: "captain" | null;
+  /** The seed its avatar is drawn from; null draws it from the id. */
+  avatarSeed: string | null;
+  /** The last seeds it wore, newest first, the current one included. */
+  avatarSeeds: string[];
   createdAt: number;
   updatedAt: number;
 }
+
+/** How many of the seeds an agent wore are kept. */
+const AVATAR_HISTORY = 8;
 
 export interface AgentInput {
   name: string;
@@ -39,6 +46,7 @@ export interface AgentInput {
   thinkingLevel?: ThinkingLevel | null | undefined;
   machineId?: string | null | undefined;
   systemRole?: "captain" | null | undefined;
+  avatarSeed?: string | undefined;
 }
 
 interface Row {
@@ -51,6 +59,8 @@ interface Row {
   thinking_level: string | null;
   machine_id: string | null;
   system_role: string | null;
+  avatar_seed: string | null;
+  avatar_seeds: string;
   created_at: number;
   updated_at: number;
 }
@@ -65,6 +75,8 @@ const recordOf = (row: Row): AgentRecord => ({
   thinkingLevel: row.thinking_level as ThinkingLevel | null,
   machineId: row.machine_id,
   systemRole: row.system_role as "captain" | null,
+  avatarSeed: row.avatar_seed,
+  avatarSeeds: JSON.parse(row.avatar_seeds) as string[],
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -118,13 +130,28 @@ export class AgentStore {
     return this.get(id)!;
   }
 
-  /** Change what was sent; `null` clears a model or a thinking level, `undefined` leaves it. */
+  /**
+   * Change what was sent; `null` clears a model or a thinking level, `undefined` leaves it. A new
+   * avatar seed goes to the front of the seeds worn, once, and the oldest past the last few go.
+   */
   update(id: string, patch: Partial<AgentInput>): AgentRecord | undefined {
     const current = this.get(id);
     if (current === undefined) return undefined;
+    const avatarSeeds =
+      patch.avatarSeed === undefined
+        ? current.avatarSeeds
+        : [
+            patch.avatarSeed,
+            // An agent that never drew one wears its id: that face is the first one to go back to.
+            ...(current.avatarSeeds.length === 0
+              ? [current.id]
+              : current.avatarSeeds),
+          ]
+            .filter((seed, at, seeds) => seeds.indexOf(seed) === at)
+            .slice(0, AVATAR_HISTORY);
     this.#db
       .query(
-        `UPDATE agent SET name = ?, instructions = ?, persona = ?, runtime = ?, model = ?, thinking_level = ?, machine_id = ?, system_role = ?, updated_at = ?
+        `UPDATE agent SET name = ?, instructions = ?, persona = ?, runtime = ?, model = ?, thinking_level = ?, machine_id = ?, system_role = ?, avatar_seed = ?, avatar_seeds = ?, updated_at = ?
           WHERE id = ?`,
       )
       .run(
@@ -138,6 +165,8 @@ export class AgentStore {
           : patch.thinkingLevel,
         patch.machineId === undefined ? current.machineId : patch.machineId,
         patch.systemRole === undefined ? current.systemRole : patch.systemRole,
+        patch.avatarSeed ?? current.avatarSeed,
+        JSON.stringify(avatarSeeds),
         Date.now(),
         id,
       );

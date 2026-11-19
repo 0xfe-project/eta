@@ -274,12 +274,14 @@ export class CaptainStore {
           thinking_level: string | null;
           machine_id: string | null;
           system_role: string | null;
+          avatar_seed: string | null;
+          avatar_seeds: string;
           created_at: number;
           updated_at: number;
         },
         []
       >(
-        "SELECT id, name, instructions, persona, runtime, model, thinking_level, machine_id, system_role, created_at, updated_at FROM agent WHERE system_role = 'captain'",
+        "SELECT id, name, instructions, persona, runtime, model, thinking_level, machine_id, system_role, avatar_seed, avatar_seeds, created_at, updated_at FROM agent WHERE system_role = 'captain'",
       )
       .get();
     if (row === null) return undefined;
@@ -293,6 +295,8 @@ export class CaptainStore {
       thinkingLevel: row.thinking_level as AgentRecord["thinkingLevel"],
       machineId: row.machine_id,
       systemRole: "captain",
+      avatarSeed: row.avatar_seed,
+      avatarSeeds: JSON.parse(row.avatar_seeds) as string[],
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
