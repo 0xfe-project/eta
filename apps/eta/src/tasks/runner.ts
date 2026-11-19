@@ -66,7 +66,7 @@ import { LinkError } from "@eta/daemon";
 import { shellQuote } from "@eta/ssh";
 import { explainRunError } from "../agents/model";
 import { mentionKey, sessionKeyOf, taskKey } from "../session-owner";
-import { workable } from "./board";
+import { workable } from "./status";
 import { executorOf } from "./store";
 import { prepareWorktree } from "./workspace";
 
