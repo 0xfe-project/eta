@@ -19,7 +19,13 @@
       "instructions": "Instructions",
       "plugins": "Plugins"
     },
-    "sectionsLabel": "Agent settings sections"
+    "sectionsLabel": "Agent settings sections",
+    "avatar": {
+      "draw": "Draw another face",
+      "recent": "Recent faces",
+      "current": "Current face",
+      "wear": "Wear this face again"
+    }
   },
   "models": {
     "loading": "Loading models…",
