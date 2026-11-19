@@ -552,33 +552,40 @@ export const UPGRADE_ACTIONS = [
 export type UpgradeAction = (typeof UPGRADE_ACTIONS)[number];
 
 /** Where a running upgrade is, in order. Until `stopping` the host goes on serving. */
-export type UpgradePhase =
-  | "starting"
-  | "downloading"
-  | "waiting"
-  | "stopping"
-  | "backing-up"
-  | "restarting"
-  | "verifying"
-  | "rolling-back";
+export const UPGRADE_PHASES = [
+  "starting",
+  "downloading",
+  "waiting",
+  "stopping",
+  "backing-up",
+  "restarting",
+  "verifying",
+  "rolling-back",
+] as const;
+export type UpgradePhase = (typeof UPGRADE_PHASES)[number];
 
 /**
  * How it ended: `failed` before the service was touched, `rolled-back` on the old build with its
  * database, `broken` when going back failed too and the service needs a person, `lost` when the
  * process doing it died.
  */
-export type UpgradeState =
-  | "running"
-  | "done"
-  | "failed"
-  | "rolled-back"
-  | "broken"
-  | "cancelled"
-  | "lost";
+export const UPGRADE_STATES = [
+  "running",
+  "done",
+  "failed",
+  "rolled-back",
+  "broken",
+  "cancelled",
+  "lost",
+] as const;
+export type UpgradeState = (typeof UPGRADE_STATES)[number];
+
+export const UPGRADE_BUSY_KINDS = ["task", "routine", "reply"] as const;
+export type UpgradeBusyKind = (typeof UPGRADE_BUSY_KINDS)[number];
 
 /** One thing a restart would stop. A task has its number; `name` is its title, or the routine's or conversation's name. */
 export interface UpgradeBusy {
-  kind: "task" | "routine" | "reply";
+  kind: UpgradeBusyKind;
   name: string;
   number?: number;
 }
