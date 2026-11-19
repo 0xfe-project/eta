@@ -462,6 +462,72 @@ describe("when the summarizer refuses", () => {
     expect(outcome).toBeUndefined();
   });
 
+  it("retries without tool output when the model refuses, and marks the retry", async () => {
+    // The refusal is triggered by one flagged tool output; the retry strips it.
+    const flagged = "flagged tool output ".repeat(20);
+    const history = [
+      user("run the command"),
+      call("c1"),
+      result("c1", flagged),
+      ...longHistory(),
+    ];
+    const prompts: string[] = [];
+    const ask: CompactionRequest["ask"] = async (prompt) => {
+      const text = JSON.stringify(prompt.messages);
+      prompts.push(text);
+      const refused = text.includes("flagged tool output");
+      return {
+        role: "assistant",
+        content: [{ type: "text", text: refused ? "" : "notes after retry" }],
+        stopReason: refused ? "error" : "stop",
+        ...(refused
+          ? { errorMessage: "Provider finish_reason: content_filter" }
+          : {}),
+        usage: usageOf(5),
+        timestamp: 0,
+      } as unknown as AssistantMessage;
+    };
+    const outcome = await etaCompaction().summarize(request(history, ask));
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0]).toContain("flagged tool output");
+    expect(prompts[1]).not.toContain("flagged tool output");
+    expect(outcome?.summary).toBe("notes after retry");
+    expect(
+      (outcome?.details as { summarization?: unknown }).summarization,
+    ).toEqual({
+      path: "retried",
+      reason: "Provider finish_reason: content_filter",
+    });
+  });
+
+  it("digests a refused turn prefix instead of throwing, and marks the path", async () => {
+    // One long turn split by the cut: the prefix summary is refused.
+    const messages = [
+      user("start"),
+      answer("ok"),
+      user("a long turn"),
+      ...Array.from({ length: 6 }, (_, i) => [
+        call(`t${i}`),
+        result(`t${i}`, "z".repeat(800)),
+      ]).flat(),
+    ];
+    const { ask } = asker([], "error");
+    const outcome = await etaCompaction().summarize(
+      request(messages, ask, {
+        settings: {
+          enabled: true,
+          reserveTokens: 1_000,
+          keepRecentTokens: 300,
+        },
+      }),
+    );
+    expect(outcome).toBeDefined();
+    expect(
+      (outcome?.details as { summarization?: { path: string } }).summarization
+        ?.path,
+    ).toBe("digested");
+  });
+
   it("digests the history when the request fails, rather than losing it", async () => {
     const { ask, calls } = asker(["never used"], "error");
     const outcome = await etaCompaction().summarize(

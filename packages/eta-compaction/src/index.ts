@@ -30,6 +30,7 @@ import type {
   CompactionOutcome,
   CompactionRequest,
   CompactionSummarizer,
+  JsonValue,
 } from "@eta/core";
 import type { Entry, MessageEntry } from "@eta/core/session";
 import type { Usage } from "@eta/core/storage";
@@ -240,12 +241,37 @@ class SummarizationError extends Error {
   }
 }
 
+/** Folded summary, with the fallback path taken when the model refused. */
+interface SummaryFallback {
+  path: "retried" | "digested";
+  reason: string;
+}
+interface FoldedSummary {
+  text: string;
+  usage: Usage;
+  fallback?: SummaryFallback;
+}
+
+/** Drop the raw text of tool results: a refusal is often one flagged tool output. */
+function stripToolResults(
+  messages: readonly AgentMessage[],
+): readonly AgentMessage[] {
+  return messages.map((message) =>
+    message.role === "toolResult"
+      ? ({
+          ...(message as object),
+          content: [{ type: "text", text: "[tool output removed for retry]" }],
+        } as AgentMessage)
+      : message,
+  );
+}
+
 /** One folded summary: the notes, and what writing them cost. */
 async function foldSummary(
   request: CompactionRequest,
   conversation: readonly AgentMessage[],
   previousSummary: string | undefined,
-): Promise<{ text: string; usage: Usage } | undefined> {
+): Promise<FoldedSummary | undefined> {
   const settings = request.settings;
   const maxTokens = Math.min(
     Math.floor(0.8 * settings.reserveTokens),
@@ -257,6 +283,7 @@ async function foldSummary(
   let usage = emptyUsage();
   let cursor = 0;
   let folds = 0;
+  let fallback: SummaryFallback | undefined;
 
   // The pieces are sized against the window of the model that will summarize,
   // not the one the history was written under.
@@ -290,52 +317,87 @@ async function foldSummary(
         throw new SummarizationError(
           "summarization left history without a summary",
         );
-      return { text: fold(summary, digest), usage };
+      return {
+        text: fold(summary, digest),
+        usage,
+        fallback: { path: "digested", reason: "fold limit reached" },
+      };
     }
 
-    const response = await request.ask(
-      {
-        systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: promptText(
-                  piece,
-                  summary,
-                  summaryInstruction(summary, request.customInstructions),
-                ),
-              },
-            ],
-            timestamp: Date.now(),
-          },
-        ],
-      },
-      {
-        maxTokens,
-        ...(request.thinkingLevel === "off"
-          ? {}
-          : { reasoning: request.thinkingLevel }),
-      },
-    );
+    const askPiece = async (content: readonly AgentMessage[]) =>
+      request.ask(
+        {
+          systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: promptText(
+                    content,
+                    summary,
+                    summaryInstruction(summary, request.customInstructions),
+                  ),
+                },
+              ],
+              timestamp: Date.now(),
+            },
+          ],
+        },
+        {
+          maxTokens,
+          ...(request.thinkingLevel === "off"
+            ? {}
+            : { reasoning: request.thinkingLevel }),
+        },
+      );
 
+    let response = await askPiece(piece);
     if (aborted(response)) return undefined;
     if (failed(response)) {
-      // A refused piece is digested rather than lost: worse notes than a model
-      // would write, better than losing the history.
-      const digest = digestRest();
-      if (digest !== undefined) return { text: fold(summary, digest), usage };
-      throw new SummarizationError(
-        `summarization failed: ${response.errorMessage ?? "unknown error"}`,
-      );
+      // A refusal is often one flagged tool output: retry once with the tool
+      // results stripped before giving up on a model summary.
+      const leaner = stripToolResults(piece);
+      const retryable =
+        JSON.stringify(leaner) !== JSON.stringify(piece) ? leaner : undefined;
+      const retried =
+        retryable === undefined ? undefined : await askPiece(retryable);
+      if (retried !== undefined && aborted(retried)) return undefined;
+      if (retried !== undefined && !failed(retried)) {
+        fallback = {
+          path: "retried",
+          reason: response.errorMessage ?? "unknown error",
+        };
+        response = retried;
+      } else {
+        // Still refused: digest the rest rather than lose it.
+        const digest = digestRest();
+        if (digest === undefined)
+          throw new SummarizationError(
+            `summarization failed: ${response.errorMessage ?? "unknown error"}`,
+          );
+        usage = addUsage(usage, response.usage);
+        if (retried !== undefined) usage = addUsage(usage, retried.usage);
+        return {
+          text: fold(summary, digest),
+          usage,
+          fallback: {
+            path: "digested",
+            reason: response.errorMessage ?? "unknown error",
+          },
+        };
+      }
     }
     summary = textOf(response);
     usage = addUsage(usage, response.usage);
   } while (cursor < conversation.length);
 
-  return { text: summary ?? "", usage };
+  return {
+    text: summary ?? "",
+    usage,
+    ...(fallback === undefined ? {} : { fallback }),
+  };
 }
 
 function fold(summary: string | undefined, text: string | undefined): string {
@@ -357,7 +419,7 @@ function textOf(response: AssistantMessage): string {
 async function foldTurnPrefix(
   request: CompactionRequest,
   messages: readonly AgentMessage[],
-): Promise<{ text: string; usage: Usage } | undefined> {
+): Promise<FoldedSummary | undefined> {
   const maxTokens = Math.min(
     Math.floor(0.5 * request.settings.reserveTokens),
     request.model.maxTokens > 0
@@ -385,9 +447,21 @@ async function foldTurnPrefix(
   );
   if (aborted(response)) return undefined;
   if (failed(response)) {
-    throw new SummarizationError(
-      `turn prefix summarization failed: ${response.errorMessage ?? "unknown error"}`,
-    );
+    // Digest the prefix rather than losing it: worse than model notes, better than throwing.
+    const digest = digestContext(messages, maxTokens * 4);
+    if (digest === undefined) {
+      throw new SummarizationError(
+        `turn prefix summarization failed: ${response.errorMessage ?? "unknown error"}`,
+      );
+    }
+    return {
+      text: digest,
+      usage: emptyUsage(),
+      fallback: {
+        path: "digested",
+        reason: response.errorMessage ?? "unknown error",
+      },
+    };
   }
   return { text: textOf(response), usage: response.usage };
 }
@@ -424,6 +498,7 @@ export function etaCompaction(): CompactionSummarizer {
 
       let summary: string;
       let usage: Usage;
+      let fallback: SummaryFallback | undefined;
       if (
         plan.messagesToSummarize.length === 0 &&
         plan.turnPrefixMessages.length === 0 &&
@@ -444,6 +519,7 @@ export function etaCompaction(): CompactionSummarizer {
       } else if (plan.isSplitTurn && plan.turnPrefixMessages.length > 0) {
         let historyText = "No prior history.";
         let historyUsage: Usage | undefined;
+        let historyFallback: SummaryFallback | undefined;
         if (plan.messagesToSummarize.length > 0) {
           const folded = await foldSummary(
             request,
@@ -453,6 +529,7 @@ export function etaCompaction(): CompactionSummarizer {
           if (folded === undefined) return undefined;
           historyText = folded.text;
           historyUsage = folded.usage;
+          historyFallback = folded.fallback;
         }
         const prefix = await foldTurnPrefix(request, plan.turnPrefixMessages);
         if (prefix === undefined) return undefined;
@@ -461,6 +538,8 @@ export function etaCompaction(): CompactionSummarizer {
           historyUsage === undefined
             ? prefix.usage
             : addUsage(historyUsage, prefix.usage);
+        // Combine fallback markers: prefix > history (prefix is later and more immediate).
+        fallback = prefix.fallback ?? historyFallback;
       } else {
         const folded = await foldSummary(
           request,
@@ -470,19 +549,24 @@ export function etaCompaction(): CompactionSummarizer {
         if (folded === undefined) return undefined;
         summary = folded.text;
         usage = folded.usage;
+        fallback = folded.fallback;
       }
 
       // What the history touched, appended where the next reader sees it.
       const { readFiles, modifiedFiles } = computeFileLists(plan.fileOps);
       const text = summary + formatFileOperations(readFiles, modifiedFiles);
+      const detailFields: { [key: string]: JsonValue } = {};
+      if (readFiles.length > 0) detailFields.readFiles = readFiles;
+      if (modifiedFiles.length > 0) detailFields.modifiedFiles = modifiedFiles;
+      if (fallback !== undefined) detailFields.summarization = { ...fallback };
       return {
         summary: text.length === 0 ? UNTRUSTED_SUMMARY_NOTE : text,
         retainedTail: plan.retainedTail,
         tokensBefore: plan.tokensBefore,
         usage,
-        ...(readFiles.length === 0 && modifiedFiles.length === 0
+        ...(Object.keys(detailFields).length === 0
           ? {}
-          : { details: { readFiles, modifiedFiles } }),
+          : { details: detailFields }),
       };
     },
   };
