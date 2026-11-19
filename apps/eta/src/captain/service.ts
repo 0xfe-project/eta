@@ -31,6 +31,7 @@ import type { CaptainAudit } from "./audit";
 import type { CaptainMemory } from "./memory";
 import type { AgentProposalDeps } from "./propose-agent";
 import type { CaptainReviewRecord, CaptainStore } from "./store";
+import { isActive } from "../tasks/status";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/harness";
 import { createCaptainIdentity } from "../agents/create";
 import { ensureHome, homeOf } from "../agents/home";
@@ -48,7 +49,6 @@ import { MAX_CAPTAIN_REVIEW_ATTEMPTS } from "./store";
 
 const GLOBAL_PROMPT_ID = "global";
 const ACTIVE_MEMBER = new Set(["queued", "working", "stopping"]);
-const ACTIVE_TASK = new Set(["todo", "in_progress"]);
 const REVIEW_BATCH_MAX = 20;
 const REVIEW_PROMPT_CHARS = 12_000;
 const REVIEW_BODY_CHARS = 600;
@@ -1008,8 +1008,7 @@ export class CaptainService {
       );
       const taskBusy = relatedTasks.some(
         (task) =>
-          ACTIVE_TASK.has(task.status) ||
-          this.#deps.runs.openOf(task.id).length > 0,
+          isActive(task.status) || this.#deps.runs.openOf(task.id).length > 0,
       );
       if (taskBusy) continue;
 
