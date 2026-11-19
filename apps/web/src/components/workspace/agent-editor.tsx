@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { useForm, useFormState, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { WireError } from "@/lib/wire";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -242,7 +243,16 @@ function AgentEditorForm({
             toast.success(translateText("common:feedback.saved"));
             onDone();
           },
-          onError: (error) => toast.error(error.message),
+          onError: (error) => {
+            // The host writes the agent before it re-applies its sessions, so a call that ran
+            // out of time has still saved: say so, and close like a success. A refusal is real.
+            if (error instanceof WireError && error.code === "timeout") {
+              toast.success(translateText("feedback.savedApplyLater"));
+              onDone();
+            } else {
+              toast.error(error.message);
+            }
+          },
         },
       );
     },
