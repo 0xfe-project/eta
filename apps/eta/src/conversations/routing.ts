@@ -9,6 +9,7 @@
  * able to wake itself for ever: the budget below caps what one user message can start.
  */
 import type { ConversationKind } from "@eta/client-contracts";
+import { sameName } from "../agents/names";
 
 /** How many agent-to-agent mentions one user message may start, across every branch of replies. */
 export const WAKE_BUDGET = 5;
@@ -74,9 +75,7 @@ export function resolveNamed(
   const unknown: string[] = [];
   for (const raw of wanted) {
     const name = raw.trim().replace(/^@/, "");
-    const named = members.filter(
-      (member) => member.name.toLowerCase() === name.toLowerCase(),
-    );
+    const named = members.filter((member) => sameName(member.name, name));
     const found =
       members.find((member) => member.id === name) ??
       named.find((member) => member.systemRole === "captain") ??

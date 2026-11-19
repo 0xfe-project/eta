@@ -15,6 +15,7 @@ import type { ProjectRecord, ProjectStore } from "../projects/store";
 import type { AgentRecord, AgentStore } from "./store";
 import { mkdir, rm } from "node:fs/promises";
 import { requireModel } from "./model";
+import { foldName, sameName } from "./names";
 import { agentHome } from "./store";
 
 /** Captain's name: no other agent may take it, in any case (`checkAgentName`). */
@@ -180,18 +181,15 @@ function agentNamed(
   name: string,
   except?: string,
 ): AgentRecord | undefined {
-  const wanted = name.trim().toLowerCase();
+  const wanted = foldName(name);
   return agents
     .list()
-    .find(
-      (agent) =>
-        agent.id !== except && agent.name.trim().toLowerCase() === wanted,
-    );
+    .find((agent) => agent.id !== except && foldName(agent.name) === wanted);
 }
 
 /** Whether `name` is Captain's, compared without case. */
 function isCaptainName(name: string): boolean {
-  return name.trim().toLowerCase() === CAPTAIN_NAME.toLowerCase();
+  return sameName(name, CAPTAIN_NAME);
 }
 
 /**
@@ -208,11 +206,7 @@ export function checkAgentName(
   except?: string,
 ): void {
   const current = except === undefined ? undefined : agents.get(except);
-  if (
-    current !== undefined &&
-    current.name.trim().toLowerCase() === name.trim().toLowerCase()
-  )
-    return;
+  if (current !== undefined && sameName(current.name, name)) return;
   if (isCaptainName(name))
     throw new Error(
       `"${name.trim()}" is reserved for Captain; choose another name`,

@@ -8,6 +8,7 @@
  * agents there are: guessing would hand the work to someone the user did not mean.
  */
 import type { AgentRecord, AgentStore } from "../agents/store";
+import { sameName } from "../agents/names";
 
 const listed = (agents: readonly AgentRecord[]): string =>
   agents.length === 0
@@ -32,16 +33,10 @@ export function resolveAssignee(
   if (byId !== undefined) return byId.id;
   const all = agents.list();
   const captain = all.find((a) => a.systemRole === "captain");
-  if (
-    captain !== undefined &&
-    captain.name.trim().toLowerCase() === wanted.toLowerCase()
-  )
+  if (captain !== undefined && sameName(captain.name, wanted))
     return captain.id;
   let named = all.filter((a) => a.name.trim() === wanted);
-  if (named.length === 0) {
-    const folded = wanted.toLowerCase();
-    named = all.filter((a) => a.name.trim().toLowerCase() === folded);
-  }
+  if (named.length === 0) named = all.filter((a) => sameName(a.name, wanted));
   if (named.length === 1) return named[0]!.id;
   if (named.length === 0)
     throw new Error(
