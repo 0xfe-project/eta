@@ -12,6 +12,7 @@ import {
 } from "@eta/client-contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
+import { z } from "zod";
 import { translate } from "@/lib/i18n";
 import { getWire } from "@/lib/wire";
 import { useConnectionLost, useWireMutation } from "@/queries/wire";
@@ -52,56 +53,38 @@ const DOWNLOAD_POLL_MS = 500;
 const STATUS_KEY = ["upgrade", "status"];
 const CHECK_KEY = ["wire", "upgrade", "check"];
 
-function isOptionalString(value: unknown): boolean {
-  return value === undefined || typeof value === "string";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isDownload(value: unknown): boolean {
-  if (value === undefined) return true;
-  if (!isRecord(value)) return false;
-  return (
-    typeof value.received === "number" &&
-    (value.total === undefined || typeof value.total === "number")
-  );
-}
-
-function isBusy(value: unknown): boolean {
-  if (value === undefined) return true;
-  return (
-    Array.isArray(value) &&
-    value.every(
-      (item) =>
-        isRecord(item) &&
-        typeof item.kind === "string" &&
-        (UPGRADE_BUSY_KINDS as readonly string[]).includes(item.kind) &&
-        typeof item.name === "string",
+/** What `/upgrade/status` may answer; anything else is no status. */
+const upgradeStatusSchema = z.object({
+  id: z.string(),
+  state: z.enum(UPGRADE_STATES),
+  phase: z.enum(UPGRADE_PHASES),
+  from: z.string(),
+  to: z.string().optional(),
+  startedAt: z.number(),
+  finishedAt: z.number().optional(),
+  download: z
+    .object({ received: z.number(), total: z.number().optional() })
+    .optional(),
+  busy: z
+    .array(
+      z.object({
+        kind: z.enum(UPGRADE_BUSY_KINDS),
+        name: z.string(),
+        number: z.number().optional(),
+      }),
     )
-  );
-}
+    .optional(),
+  error: z.string().optional(),
+  log: z.array(z.string()),
+});
 
-function isUpgradeStatusView(value: unknown): value is UpgradeStatusView {
-  if (!isRecord(value)) return false;
-  return (
-    typeof value.id === "string" &&
-    typeof value.from === "string" &&
-    typeof value.state === "string" &&
-    (UPGRADE_STATES as readonly string[]).includes(value.state) &&
-    typeof value.phase === "string" &&
-    (UPGRADE_PHASES as readonly string[]).includes(value.phase) &&
-    typeof value.startedAt === "number" &&
-    Array.isArray(value.log) &&
-    value.log.every((line) => typeof line === "string") &&
-    isOptionalString(value.to) &&
-    (value.finishedAt === undefined || typeof value.finishedAt === "number") &&
-    isOptionalString(value.error) &&
-    isDownload(value.download) &&
-    isBusy(value.busy)
-  );
-}
+// The schema and the contract's type stay one shape: a field added, dropped or changed on either
+// side fails here.
+type Same<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : false;
+true satisfies Same<z.infer<typeof upgradeStatusSchema>, UpgradeStatusView>;
 
 export interface UpgradeWatch {
   /** Whether the host answered. */
@@ -115,8 +98,8 @@ async function readUpgradeStatus(): Promise<UpgradeWatch> {
     // A proxy in front of a host that is down answers for it.
     if (!response.ok) return { reachable: false, status: null };
     const body: unknown = await response.json().catch(() => null);
-    const status = isUpgradeStatusView(body) ? body : null;
-    return { reachable: true, status };
+    const parsed = upgradeStatusSchema.safeParse(body);
+    return { reachable: true, status: parsed.success ? parsed.data : null };
   } catch {
     return { reachable: false, status: null };
   }
