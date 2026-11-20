@@ -1,26 +1,18 @@
 import type { McpServerView } from "@eta/client-contracts";
 import type { Layout } from "../../../components";
-import { Scroll, signal, View } from "nsh";
-import {
-  colors,
-  Empty,
-  grow,
-  Header,
-  Icon,
-  Label,
-  row,
-} from "../../../components";
-import { StatusDot } from "../../../components/status-dot";
+import { Scroll, signal } from "nsh";
+import { ActionItem, colors, Empty, grow, Icon } from "../../../components";
 import { uiText, useText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 
+import { emptyStyle, EntityRow, SectionHeader } from "../section";
 import { McpDetail } from "./server-detail";
 import {
   McpPhoneHeader,
   serverStatus,
   statusTone,
   toolsDescription,
-  transportDescription,
+  transportName,
 } from "./server-presentation";
 function key(item: McpServerView) {
   return JSON.stringify([item.agentId, item.source, item.server]);
@@ -34,116 +26,90 @@ export function McpSettings(props: { layout: Layout; onBack: () => void }) {
   const list = () => host.list<McpServerView>("mcp");
   const server = () => list().find((item) => key(item) === selected());
   const groups = () => {
-    const sources = new Map<string, McpServerView[]>();
+    const agents = new Map<string, McpServerView[]>();
     for (const item of list()) {
-      const key = JSON.stringify([item.agentId, item.source]);
-      const items = sources.get(key) ?? [];
+      const items = agents.get(item.agentId) ?? [];
       items.push(item);
-      sources.set(key, items);
+      agents.set(item.agentId, items);
     }
-    return [...sources.entries()];
+    return [...agents.entries()];
   };
+  const meta = (item: McpServerView) =>
+    item.overriddenBy
+      ? uiText("mcpOverriddenRow", { source: item.overriddenBy.source })
+      : [
+          item.source === ".mcp.json"
+            ? uiText("mcpProjectSource")
+            : item.source,
+          transportName(item),
+          toolsDescription(item.toolCount),
+          item.auth === "needs_login" ? uiText("mcpNotSignedIn") : "",
+        ]
+          .filter(Boolean)
+          .join(" · ");
   const phone = () => props.layout === "phone";
   return (
     <If
       when={server()}
       else={
         <>
-          <If
-            when={phone()}
-            else={<Header title={text("mcpServers")} layout={props.layout} />}
-          >
+          <If when={phone()}>
             <McpPhoneHeader title={text("settings")} onBack={props.onBack} />
           </If>
+          <SectionHeader
+            title={text("mcpServers")}
+            count={list().length || undefined}
+            description={uiText("mcpServersHint")}
+          />
           <If
             when={list().length}
-            else={<Empty title={uiText("noMcpServersConfigured")} />}
+            else={
+              <Empty
+                title={uiText("noMcpServersConfigured")}
+                style={emptyStyle}
+              />
+            }
           >
             <Scroll style={grow} scrollbar={false}>
-              <View
-                style={{
-                  padding: 16,
-                  gap: 4,
-                  borderBottomWidth: 1,
-                  borderColor: c().border,
-                }}
-              >
-                <If when={phone()}>
-                  <Label weight={600}>{text("mcpServers")}</Label>
-                </If>
-                <Label size={12} line={16} tone="muted">
-                  {uiText("mcpServersHint")}
-                </Label>
-              </View>
-              <Each of={groups()} key={([key]) => key}>
+              <Each of={groups()} key={([agentId]) => agentId}>
                 {(group) => (
-                  <View>
-                    <View
-                      style={{
-                        ...row,
-                        gap: 8,
-                        paddingHorizontal: 16,
-                        height: 39,
-                        borderBottomWidth: 1,
-                        borderColor: c().border,
-                      }}
-                    >
-                      <Label weight={600}>
-                        {group()[1][0]?.source === "~/.eta/mcp.json"
-                          ? uiText("mcpYourServers")
-                          : group()[1][0]?.agentName}
-                      </Label>
-                      <Label size={12} tone="muted">
-                        {group()[1][0]?.source}
-                      </Label>
-                    </View>
+                  <>
+                    <SectionHeader
+                      title={group()[1][0]?.agentName ?? ""}
+                      count={group()[1].length}
+                    />
                     <Each of={group()[1]} key={key}>
                       {(item) => (
-                        <View
-                          role="button"
-                          accessibilityLabel={item().server}
-                          hoverStyle={{ backgroundColor: c().selected }}
-                          style={{
-                            ...row,
-                            minHeight: 72,
-                            gap: 10,
-                            paddingHorizontal: 16,
-                            paddingVertical: 8,
-                            borderBottomWidth: 1,
-                            borderColor: c().border,
-                            cursor: "pointer",
-                          }}
+                        <EntityRow
+                          title={item().server}
+                          titleTone={item().overriddenBy ? "muted" : "ink"}
+                          strike={!!item().overriddenBy}
+                          leading={
+                            <Icon name="plugins" size={16} tone="muted" />
+                          }
+                          meta={meta(item())}
+                          status={
+                            item().overriddenBy
+                              ? undefined
+                              : {
+                                  label: serverStatus(item()),
+                                  color: c()[statusTone(item())],
+                                }
+                          }
+                          menuLabel={item().server}
+                          menu={
+                            item().overriddenBy ? undefined : (
+                              <ActionItem
+                                label={uiText("settingsDetails")}
+                                onSelect={() => selected.set(key(item()))}
+                              />
+                            )
+                          }
                           onPress={() => selected.set(key(item()))}
-                        >
-                          <View style={{ flex: 1, gap: 2 }}>
-                            <Label line={20} weight={500}>
-                              {item().server}
-                            </Label>
-                            <View style={{ ...row, gap: 6 }}>
-                              <StatusDot color={c()[statusTone(item())]} />
-                              <Label size={12} line={16} tone="muted">
-                                {serverStatus(item())}
-                              </Label>
-                            </View>
-                            <Label size={12} line={16} tone="muted">
-                              {[
-                                transportDescription(item()),
-                                item().auth !== "needs_login"
-                                  ? toolsDescription(item().toolCount)
-                                  : "",
-                                item().auth === "signed_in"
-                                  ? uiText("mcpSignedIn")
-                                  : "",
-                              ]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </Label>
-                          </View>
-                          <Icon name="right" tone="muted" size={10} />
-                        </View>
+                        />
                       )}
                     </Each>
-                  </View>
+                  </>
                 )}
               </Each>
             </Scroll>

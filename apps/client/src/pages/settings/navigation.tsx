@@ -27,7 +27,7 @@ export function SettingsNavigation(props: {
       }
       scrollbar={false}
     >
-      <View style={{ padding: props.phone ? 0 : 6 }}>
+      <View style={{ padding: props.phone ? 0 : 6, gap: props.phone ? 0 : 2 }}>
         <Each of={sections}>
           {(item) => (
             <View
@@ -37,7 +37,7 @@ export function SettingsNavigation(props: {
               hoverStyle={{ backgroundColor: c().selected }}
               style={{
                 ...row,
-                height: props.phone ? 48 : 32,
+                height: props.phone ? 48 : 30,
                 paddingHorizontal: props.phone ? 16 : 10,
                 gap: 10,
                 borderBottomWidth: props.phone ? 1 : 0,
@@ -47,8 +47,23 @@ export function SettingsNavigation(props: {
                 cursor: "pointer",
               }}
             >
-              <Icon name={item()[1]} />
-              <Label>{text(item()[2])}</Label>
+              <Icon
+                name={item()[1]}
+                size={props.phone ? 14 : 16}
+                tone={
+                  props.phone || props.current === item()[0] ? "ink" : "muted"
+                }
+              />
+              <Label
+                line={20}
+                tone={
+                  props.phone || props.current === item()[0]
+                    ? "ink"
+                    : "mutedInk"
+                }
+              >
+                {text(item()[2])}
+              </Label>
               <If when={props.phone}>
                 <View style={{ flex: 1 }} />
                 <If when={props.summary(item()[0]).tone}>

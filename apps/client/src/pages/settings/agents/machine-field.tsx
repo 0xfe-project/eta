@@ -15,7 +15,7 @@ import { localizedText, uiText } from "../../../i18n";
 import { EditorRow } from "./editor-row";
 
 export function MachineField(props: { form: AgentForm }) {
-  const { phoneEditor, machineId, machines, creating, stacked, controlHeight } =
+  const { phoneEditor, machineId, machines, creating, stacked, selectStyle } =
     props.form;
   const c = colors();
   if (phoneEditor()) {
@@ -120,7 +120,7 @@ export function MachineField(props: { form: AgentForm }) {
             ? localizedText("Unavailable machine", "机器不可用")
             : uiText("followProject"))
         }
-        triggerStyle={{ height: controlHeight() }}
+        triggerStyle={selectStyle()}
       >
         <ActionItem
           label={uiText("followProject")}

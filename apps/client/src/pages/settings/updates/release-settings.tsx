@@ -136,7 +136,7 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
                 <Label size={12} lines={1} style={{ flex: 1 }}>
                   {channelName()}
                 </Label>
-                <Icon name="down" size={9} tone="muted" />
+                <Icon name="down" size={12} tone="muted" />
               </View>
             }
             onChange={({ value }) => {
@@ -176,7 +176,7 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
               transform: advancedOpen() ? [{ rotate: "180deg" }] : undefined,
             }}
           >
-            <Icon name="down" size={9} tone="muted" />
+            <Icon name="down" size={12} tone="muted" />
           </View>
         </View>
       </GroupHeading>

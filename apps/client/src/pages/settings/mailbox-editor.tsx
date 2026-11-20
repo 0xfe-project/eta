@@ -21,6 +21,7 @@ import { BackButton } from "../../components/navigation-buttons";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { SectionHeader } from "./section";
 
 const providers = {
   Gmail: ["imap.gmail.com", "smtp.gmail.com", 465],
@@ -170,16 +171,20 @@ export function MailboxEditor(props: {
         style={{
           flexDirection: stack() ? "column" : "row",
           alignItems: stack() ? "stretch" : "center",
-          minHeight: phone() ? 44 : 41,
+          minHeight: phone() ? 44 : 40,
           paddingHorizontal: 16,
-          paddingVertical: phone() ? 8 : 6,
-          gap: 6,
+          paddingVertical: 8,
+          gap: phone() ? 6 : 16,
           justifyContent: "space-between",
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
       >
-        <Label size={12} line={16}>
+        <Label
+          size={phone() ? 12 : 14}
+          line={phone() ? 16 : 20}
+          style={phone() ? undefined : { flex: 1, minWidth: 0 }}
+        >
           {p.title}
         </Label>
         {p.children}
@@ -197,7 +202,19 @@ export function MailboxEditor(props: {
             p.name === "password" && account() ? "••••••••" : undefined
           }
           onChange={(v) => values.update((old) => ({ ...old, [p.name]: v }))}
-          style={{ width: inputWidth(), height: phone() ? 32 : 24 }}
+          style={
+            phone()
+              ? { width: inputWidth(), height: 32 }
+              : {
+                  width: inputWidth(),
+                  height: 24,
+                  fontSize: 12,
+                  lineHeight: 16,
+                  paddingHorizontal: 10,
+                  paddingVertical: 3,
+                  borderColor: c().strong,
+                }
+          }
         />
       </FormRow>
     );
@@ -207,25 +224,17 @@ export function MailboxEditor(props: {
       <If
         when={phone()}
         else={
-          <View
-            style={{
-              paddingHorizontal: 20,
-              paddingVertical: 8,
-              gap: 2,
-              borderBottomWidth: 1,
-              borderColor: c().border,
-            }}
-          >
-            <View style={{ ...row, gap: 6, height: 24 }}>
-              <BackButton disabled={busy()} onPress={props.onClose} />
-              <Label size={14} line={20} weight={600}>
-                {account()?.name ?? uiText("connectMailbox")}
-              </Label>
-            </View>
-            <Label size={12} line={16} tone="muted">
-              {uiText("mailCheckExplanation")}
-            </Label>
-          </View>
+          <SectionHeader
+            title={account()?.name ?? uiText("connectMailbox")}
+            description={uiText("mailCheckExplanation")}
+            leading={
+              <BackButton
+                disabled={busy()}
+                style={{ marginLeft: -6 }}
+                onPress={props.onClose}
+              />
+            }
+          />
         }
       >
         <Header
@@ -280,7 +289,16 @@ export function MailboxEditor(props: {
           <ActionMenu
             label={uiText("mailProvider")}
             value={provider() === "Custom" ? uiText("mailCustom") : provider()}
-            triggerStyle={{ width: inputWidth() }}
+            triggerStyle={
+              phone()
+                ? { width: inputWidth() }
+                : {
+                    width: inputWidth(),
+                    height: 24,
+                    paddingLeft: 10,
+                    paddingRight: 8,
+                  }
+            }
           >
             <Each of={[...Object.keys(providers), "Custom"] as Provider[]}>
               {(key) => (
@@ -296,15 +314,30 @@ export function MailboxEditor(props: {
         <InputRow name="address" title={uiText("mailAddress")} />
         <InputRow name="name" title={uiText("mailName")} />
         <InputRow name="password" title={uiText("mailAppPassword")} />
-        <FormRow title={uiText("mailAdvanced")} horizontal>
-          <Button
-            label={uiText("mailAdvanced")}
-            icon={advanced() ? "down" : "right"}
-            iconOnly
-            selected={advanced()}
-            onPress={() => advanced.set(!advanced())}
-          />
-        </FormRow>
+        <If
+          when={phone()}
+          else={
+            <SectionHeader title={uiText("mailAdvanced")}>
+              <Button
+                label={uiText("mailAdvanced")}
+                icon="down"
+                iconOnly
+                selected={advanced()}
+                onPress={() => advanced.set(!advanced())}
+              />
+            </SectionHeader>
+          }
+        >
+          <FormRow title={uiText("mailAdvanced")} horizontal>
+            <Button
+              label={uiText("mailAdvanced")}
+              icon={advanced() ? "down" : "right"}
+              iconOnly
+              selected={advanced()}
+              onPress={() => advanced.set(!advanced())}
+            />
+          </FormRow>
+        </If>
         <If when={advanced()}>
           <InputRow name="username" title={uiText("mailUsername")} />
           <InputRow name="imapHost" title="IMAP host" />
@@ -335,7 +368,6 @@ export function MailboxEditor(props: {
               label={
                 confirmRemove() ? uiText("confirmRemove") : uiText("remove2")
               }
-              tone="danger"
               disabled={busy()}
               onPress={() => void remove()}
             />
@@ -364,6 +396,7 @@ export function MailboxEditor(props: {
           dimDisabled={false}
           disabled={busy() || !valid()}
           size={phone() ? 32 : 24}
+          style={phone() ? undefined : { paddingHorizontal: 12 }}
           onPress={() => void save()}
         />
       </View>

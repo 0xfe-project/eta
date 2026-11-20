@@ -288,7 +288,6 @@ export function MachineDetail(props: {
             </Label>
             <Button
               label={uiText("removeMachine")}
-              tone="danger"
               disabled={busy()}
               onPress={() =>
                 void act(

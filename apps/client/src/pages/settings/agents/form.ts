@@ -8,6 +8,7 @@ import type {
 } from "@eta/client-contracts";
 import { AGENT_RUNTIMES } from "@eta/client-contracts";
 import { cleanup, effect, signal } from "nsh";
+import { colors } from "../../../components";
 import { useModels } from "../../../components/model-select";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
@@ -38,7 +39,26 @@ export function createAgentForm(props: AgentEditorProps) {
   const creating = !props.id;
   const phoneEditor = () => props.phone && !creating;
   const stacked = () => creating || props.phone;
-  const controlHeight = () => (phoneEditor() ? 32 : 28);
+  const controlHeight = () => (phoneEditor() ? 32 : creating ? 28 : 24);
+  const c = colors();
+  /** The editor's selects and fields: 24px with a strong border in the dialog. */
+  const compact = () => !phoneEditor() && !creating;
+  const selectStyle = () => ({
+    height: controlHeight(),
+    ...(compact() ? { paddingLeft: 10, paddingRight: 8 } : {}),
+  });
+  const fieldStyle = () => ({
+    height: controlHeight(),
+    fontSize: 12,
+    ...(compact()
+      ? {
+          lineHeight: 16,
+          paddingHorizontal: 10,
+          paddingVertical: 3,
+          borderColor: c().strong,
+        }
+      : {}),
+  });
   const canDelete = () =>
     !!saved && saved.systemRole !== "captain" && host.can("agents.delete");
   const canSave = () => {
@@ -211,6 +231,8 @@ export function createAgentForm(props: AgentEditorProps) {
     phoneEditor,
     stacked,
     controlHeight,
+    selectStyle,
+    fieldStyle,
     machines,
     showRunsOn,
     runtimeList,

@@ -1,6 +1,6 @@
 import type {
+  AcpMachineList,
   EmailAccountView,
-  LlmAccounts,
   ProviderSummary,
 } from "@eta/client-contracts";
 import type { Layout } from "../../components";
@@ -9,11 +9,13 @@ import type { SourceChoice } from "./models/sources";
 import type { SettingsSection } from "./overview";
 import { Scroll, signal, View } from "nsh";
 import {
+  ActionItem,
   Button,
   colors,
   Empty,
   grow,
   Header,
+  Icon,
   Modal,
   row,
 } from "../../components";
@@ -22,17 +24,19 @@ import { useHost } from "../../services/host";
 import { AgentEditor } from "./agents/editor";
 import { Appearance } from "./appearance";
 import { ArchiveSettings } from "./archive";
-import { acpStatus, ExternalAgentDetail } from "./external-agent";
+import { ExternalAgentDetail } from "./external-agent";
+import { ExternalAgentList } from "./external-agent-list";
 import { Machines } from "./machines/machines";
 import { MailboxEditor } from "./mailbox-editor";
 import { McpSettings } from "./mcp/server-list";
-import { GatewayAccounts } from "./models/gateway-accounts";
 import { ProviderDetail } from "./models/provider-detail";
 import { ProviderEditor } from "./models/provider-editor";
+import { ModelSourceList, useModelSources } from "./models/source-list";
 import { ModelSources } from "./models/sources";
 import { SettingsNavigation } from "./navigation";
 import { sections, useSettingsOverview } from "./overview";
-import { AgentSetting, SettingRow } from "./setting-row";
+import { emptyStyle, EntityRow, SectionHeader } from "./section";
+import { AgentSetting } from "./setting-row";
 import { UpdateSettings } from "./updates/update";
 
 export function Settings(
@@ -74,7 +78,53 @@ export function Settings(
         item.machineId === selected?.machineId && item.agent.id === selected.id,
     );
   };
-  const info = (text: string) => <Empty title={text} />;
+  const info = (text: string) => <Empty title={text} style={emptyStyle} />;
+  const { count: sourceCount } = useModelSources();
+  const acpLists = () =>
+    host.section<Record<string, AcpMachineList>>("acp", "machines") ?? {};
+  const offlineMachines = () =>
+    machines().filter((item) => item.status === "offline");
+  const sectionCount = (name: SettingsSection) =>
+    (name === "Agents"
+      ? host.people().length
+      : name === "Model services"
+        ? sourceCount()
+        : name === "External agents"
+          ? externalAgents().length
+          : name === "Email"
+            ? email().length
+            : undefined) || undefined;
+  const sectionHint = (name: SettingsSection) =>
+    name === "External agents"
+      ? uiText("externalAgentsHint")
+      : name === "Email"
+        ? uiText("settingsEmailHint")
+        : undefined;
+  const actions = (name: SettingsSection) => (
+    <>
+      <If when={name === "Agents"}>
+        <Button
+          label={uiText("new")}
+          icon="plus"
+          onPress={() => agent.set("new")}
+        />
+      </If>
+      <If when={name === "Model services"}>
+        <Button
+          label={uiText("addSource")}
+          icon="plus"
+          onPress={() => sources.set(true)}
+        />
+      </If>
+      <If when={name === "Email"}>
+        <Button
+          label={uiText("connectMailbox")}
+          icon="plus"
+          onPress={() => mailbox.set("new")}
+        />
+      </If>
+    </>
+  );
   const content = () => (
     <>
       <View style={{ ...row, ...grow, alignItems: "stretch" }}>
@@ -107,49 +157,45 @@ export function Settings(
               </If>
               <If
                 when={
+                  phone() &&
                   current() !== "Update" &&
                   current() !== "Machines" &&
                   current() !== "MCP servers" &&
                   !(current() === "Email" && mailbox()) &&
-                  (!phone() || !showingProvider())
+                  !showingProvider()
                 }
               >
                 <Header
                   title={sectionTitle(current())}
-                  layout={
-                    phone() && current() === "Appearance"
-                      ? "desktop"
-                      : props.layout
-                  }
+                  layout={current() === "Appearance" ? "desktop" : props.layout}
                   inset={current() === "Appearance" ? 16 : undefined}
                   onBack={
-                    phone() && current() !== "Appearance"
+                    current() !== "Appearance"
                       ? () => section.set(undefined)
                       : undefined
                   }
                 >
-                  <If when={current() === "Agents"}>
-                    <Button
-                      label={uiText("new")}
-                      icon="plus"
-                      onPress={() => agent.set("new")}
-                    />
-                  </If>
-                  <If when={current() === "Model services"}>
-                    <Button
-                      label={uiText("addSource")}
-                      icon="plus"
-                      onPress={() => sources.set(true)}
-                    />
-                  </If>
-                  <If when={current() === "Email"}>
-                    <Button
-                      label={uiText("connectMailbox")}
-                      icon="plus"
-                      onPress={() => mailbox.set("new")}
-                    />
-                  </If>
+                  {actions(current())}
                 </Header>
+              </If>
+              <If
+                when={
+                  !phone() &&
+                  current() !== "Update" &&
+                  current() !== "Machines" &&
+                  current() !== "MCP servers" &&
+                  current() !== "Archived" &&
+                  !(current() === "Email" && mailbox()) &&
+                  !showingProvider()
+                }
+              >
+                <SectionHeader
+                  title={sectionTitle(current())}
+                  count={sectionCount(current())}
+                  description={sectionHint(current())}
+                >
+                  {actions(current())}
+                </SectionHeader>
               </If>
               <If when={current() === "Agents"}>
                 <If
@@ -173,31 +219,28 @@ export function Settings(
                   when={provider() && provider() !== "new"}
                   else={
                     <If
-                      when={
-                        providers()?.providers.length ||
-                        host.section<LlmAccounts>("llm", "accounts")
-                          ?.connections.length
+                      when={sourceCount()}
+                      else={
+                        <Empty
+                          title={uiText("noModelSources")}
+                          description={uiText("noModelSourcesHint")}
+                          style={emptyStyle}
+                        >
+                          <Button
+                            label={uiText("addEtaTokenPlan")}
+                            style={{ marginTop: 8, paddingHorizontal: 10 }}
+                            onPress={() => {
+                              sourceChoice.set({ kind: "eta" });
+                              provider.set("new");
+                            }}
+                          />
+                        </Empty>
                       }
-                      else={info(uiText("settingsNoModelServices"))}
                     >
                       <Scroll style={grow} scrollbar={false}>
-                        <GatewayAccounts />
-                        <Each
-                          of={providers()?.providers ?? []}
-                          key={(item) => item.id}
-                        >
-                          {(item) => (
-                            <SettingRow
-                              icon="plugins"
-                              title={item().name ?? item().id}
-                              detail={uiText("models", {
-                                length: item().models.length,
-                                baseUrl: item().baseUrl,
-                              })}
-                              onPress={() => provider.set(item())}
-                            />
-                          )}
-                        </Each>
+                        <ModelSourceList
+                          onProvider={(item) => provider.set(item)}
+                        />
                       </Scroll>
                     </If>
                   }
@@ -225,28 +268,17 @@ export function Settings(
               </If>
               <If when={current() === "External agents"}>
                 <If
-                  when={externalAgents().length}
+                  when={externalAgents().length || offlineMachines().length}
                   else={info(uiText("settingsNoExternalAgents"))}
                 >
                   <Scroll style={grow} scrollbar={false}>
-                    <Each
-                      of={externalAgents()}
-                      key={(item) => `${item.machineId}:${item.agent.id}`}
-                    >
-                      {(item) => (
-                        <SettingRow
-                          icon="context"
-                          title={item().agent.label}
-                          detail={`${item().agent.command} · ${uiText(acpStatus[item().agent.status])}`}
-                          onPress={() =>
-                            acpAgent.set({
-                              machineId: item().machineId,
-                              id: item().agent.id,
-                            })
-                          }
-                        />
-                      )}
-                    </Each>
+                    <ExternalAgentList
+                      lists={acpLists()}
+                      machines={machines()}
+                      onAgent={(machineId, item) =>
+                        acpAgent.set({ machineId, id: item.id })
+                      }
+                    />
                   </Scroll>
                 </If>
               </If>
@@ -256,15 +288,41 @@ export function Settings(
                   else={
                     <If
                       when={email().length}
-                      else={info("No mailbox connected")}
+                      else={info(uiText("noMailboxConnected"))}
                     >
                       <Scroll style={grow} scrollbar={false}>
                         <Each of={email()} key={(item) => item.id}>
                           {(item) => (
-                            <SettingRow
-                              icon="email"
+                            <EntityRow
                               title={item().name}
-                              detail={`${item().address} · ${item().status}`}
+                              leading={
+                                <Icon name="email" size={16} tone="muted" />
+                              }
+                              meta={`${item().address} · ${item().imapHost}`}
+                              laneWidth={112}
+                              status={
+                                item().status === "ready"
+                                  ? {
+                                      label: uiText("mailConnected"),
+                                      color: c().green,
+                                    }
+                                  : item().status === "error"
+                                    ? {
+                                        label: uiText("mailConnectionError"),
+                                        color: c().red,
+                                      }
+                                    : {
+                                        label: uiText("mailNotChecked"),
+                                        color: c().faint,
+                                      }
+                              }
+                              menuLabel={item().name}
+                              menu={
+                                <ActionItem
+                                  label={uiText("settingsEdit")}
+                                  onSelect={() => mailbox.set(item())}
+                                />
+                              }
                               onPress={() => mailbox.set(item())}
                             />
                           )}
@@ -380,6 +438,7 @@ export function Settings(
         hideHeader={phone() && section() !== undefined}
         width={770}
         height={phone() ? "100%" : 578}
+        modalFocus
         onClose={props.onClose}
       >
         {content()}

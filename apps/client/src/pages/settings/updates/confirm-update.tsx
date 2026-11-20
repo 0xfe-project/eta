@@ -64,7 +64,6 @@ export function ConfirmHostUpdate(props: {
             <If when={check()?.busy.length}>
               <Button
                 label={uiText("updateNow")}
-                tone="danger"
                 disabled={!canUpdate()}
                 onPress={() => void request("start", { force: true })}
               />

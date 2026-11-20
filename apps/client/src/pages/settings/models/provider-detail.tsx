@@ -5,21 +5,23 @@ import type {
   ProviderRefreshResult,
   ProvidersView,
 } from "@eta/client-contracts";
+import { providerLabel } from "@eta/client-contracts";
 import { Scroll, signal, View } from "nsh";
 import {
   Button,
-  Caption,
   colors,
   Field,
   grow,
-  Header,
   Label,
   Modal,
   row,
 } from "../../../components";
+import { BackButton } from "../../../components/navigation-buttons";
+import { StatusDot } from "../../../components/status-dot";
 import { ToggleSwitch } from "../../../components/toggle-switch";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { SectionHeader, WarningLine } from "../section";
 import { ProviderEditor } from "./provider-editor";
 
 export function ProviderDetail(props: {
@@ -33,19 +35,15 @@ export function ProviderDetail(props: {
   const provider = () =>
     config()?.providers.find((item) => item.id === props.id);
   const catalog = signal<EtaModelConfig[]>(provider()?.models ?? []);
-  const query = signal("");
+  const name = signal(provider()?.name ?? "");
   const busy = signal("");
   const check = signal<ProviderCheck | undefined>(undefined);
-  const section = signal<"Models" | "Connection">("Models");
   const connection = signal(false);
   const removing = signal(false);
   const candidates = () => {
     const found = new Map(catalog().map((model) => [model.id, model]));
     for (const model of provider()?.models ?? []) found.set(model.id, model);
-    const term = query().trim().toLowerCase();
-    return [...found.values()].filter((model) =>
-      `${model.name ?? ""} ${model.id}`.toLowerCase().includes(term),
-    );
+    return [...found.values()];
   };
   const configured = (id: string) =>
     provider()?.models.some((model) => model.id === id) ?? false;
@@ -105,80 +103,132 @@ export function ProviderDetail(props: {
     busy.set("");
     if (result) props.onClose();
   }
+  async function rename() {
+    const current = provider();
+    const state = config();
+    const next = name().trim();
+    if (busy() || !current || !state || !next || next === current.name) return;
+    busy.set("rename");
+    await host.action(() =>
+      host.call("providers", "save", {
+        revision: state.revision,
+        provider: {
+          id: current.id,
+          name: next,
+          baseUrl: current.baseUrl,
+          kind: current.kind,
+          headers: current.headers,
+          models: current.models,
+        },
+      }),
+    );
+    busy.set("");
+  }
+  const modelMeta = (model: EtaModelConfig) =>
+    [
+      model.contextWindow
+        ? `${Math.round(model.contextWindow / 1000)}K context`
+        : "",
+      model.reasoning ? "Reasoning" : "",
+      model.input?.includes("image") ? "Images" : "",
+      model.reasoning
+        ? uiText("modelThinking", {
+            level: model.defaultThinking ?? uiText("modelThinkingDefault"),
+          })
+        : "",
+      model.deprecated ? "Deprecated" : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  const preference = {
+    ...row,
+    minHeight: 40,
+    gap: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderColor: c().border,
+  } as const;
   return (
     <View style={grow}>
-      <Header
-        title={provider()?.name ?? props.id}
-        layout={props.phone ? "phone" : "desktop"}
-        onBack={props.onClose}
-        subtitle={
-          check()
-            ? check()?.state === "ok"
-              ? uiText("working2")
-              : uiText("needsAttention")
-            : undefined
+      <SectionHeader
+        title={provider() ? providerLabel(provider()!) : props.id}
+        leading={
+          <BackButton style={{ marginLeft: -6 }} onPress={props.onClose} />
         }
-        subtitleTone={check()?.state === "ok" ? "green" : "amber"}
-      />
-      <View style={{ ...row, borderBottomWidth: 1, borderColor: c().border }}>
-        <Each of={["Models", "Connection"] as const}>
-          {(tab) => (
-            <Button
-              label={uiText(tab() === "Models" ? "modelsTab" : "connectionTab")}
-              size={40}
-              tone="ghost"
-              selected={section() === tab()}
-              style={{
-                flex: 1,
-                borderBottomWidth: section() === tab() ? 2 : 0,
-              }}
-              onPress={() => section.set(tab())}
+      >
+        <If when={check()}>
+          <View style={{ ...row, gap: 6 }}>
+            <StatusDot
+              color={check()?.state === "ok" ? c().green : c().amber}
             />
-          )}
-        </Each>
-      </View>
-      <If
-        when={section() === "Models"}
-        else={
-          <View style={{ padding: 16, gap: 8 }}>
-            <Caption text={uiText("sourceConnection")} />
-            <Label size={13}>{provider()?.baseUrl}</Label>
-            <Label size={12} tone="muted">
+            <Label size={12} line={16} tone="mutedInk">
+              {check()?.state === "ok"
+                ? uiText("sourceWorking")
+                : check()?.state === "invalid_key"
+                  ? uiText("sourceKeyRefused")
+                  : uiText("sourceUnreachable")}
+            </Label>
+          </View>
+        </If>
+        <Button
+          label={busy() === "check" ? uiText("checking") : uiText("check")}
+          disabled={!!busy()}
+          style={{ paddingHorizontal: 10 }}
+          onPress={() => void test()}
+        />
+      </SectionHeader>
+      <Scroll style={grow} scrollbar={false}>
+        <If when={check()?.error}>
+          <Label
+            tone="red"
+            size={12}
+            line={16}
+            style={{ paddingHorizontal: 16, paddingVertical: 8 }}
+          >
+            {check()?.error}
+          </Label>
+        </If>
+        <View style={preference}>
+          <Label line={20} style={{ flex: 1, minWidth: 0 }}>
+            {uiText("name")}
+          </Label>
+          <Field
+            label={uiText("name")}
+            value={name()}
+            onChange={name.set}
+            onSubmit={() => void rename()}
+            onBlur={() => void rename()}
+            style={{
+              width: 200,
+              height: 24,
+              fontSize: 12,
+              lineHeight: 16,
+              paddingHorizontal: 10,
+              paddingVertical: 3,
+              borderColor: c().strong,
+            }}
+          />
+        </View>
+        <View style={preference}>
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <Label line={20}>{uiText("sourceApiKey")}</Label>
+            <Label size={12} line={16} tone="muted">
               {provider()?.hasApiKey
                 ? uiText("apiKeySavedOnTheHost")
                 : uiText("noApiKeySaved")}
             </Label>
-            <Button
-              label={uiText("editConnection")}
-              onPress={() => connection.set(true)}
-            />
-            <Button
-              label={uiText("removeThisSource")}
-              tone="danger"
-              onPress={() => removing.set(true)}
-            />
           </View>
-        }
-      >
-        <View
-          style={{
-            ...row,
-            gap: 8,
-            paddingHorizontal: 16,
-            minHeight: 44,
-            borderBottomWidth: 1,
-            borderColor: c().border,
-          }}
-        >
-          <Label weight={600}>{uiText("models2")}</Label>
-          <Label size={12} tone="muted" style={{ flex: 1 }}>
-            {provider()?.models.length ?? 0}
-          </Label>
           <Button
-            label={busy() === "check" ? uiText("checking") : uiText("check")}
-            disabled={!!busy()}
-            onPress={() => void test()}
+            label={uiText("settingsChange")}
+            style={{ paddingHorizontal: 10 }}
+            onPress={() => connection.set(true)}
           />
+        </View>
+        <SectionHeader
+          title={uiText("models2")}
+          count={provider()?.models.length ?? 0}
+        >
           <Button
             label={
               busy() === "refresh"
@@ -187,82 +237,66 @@ export function ProviderDetail(props: {
             }
             icon="refresh"
             disabled={!!busy()}
+            style={{ gap: 6, paddingHorizontal: 10 }}
             onPress={() => void refresh()}
           />
-        </View>
-        <View
-          style={{
-            paddingHorizontal: 16,
-            paddingVertical: 8,
-            borderBottomWidth: 1,
-            borderColor: c().border,
-          }}
-        >
-          <Field
-            label={uiText("searchModels")}
-            placeholder={uiText("searchModels")}
-            value={query()}
-            onChange={query.set}
-          />
-          <If when={check()?.error}>
-            <Label tone="red" size={12}>
-              {check()?.error}
-            </Label>
-          </If>
-        </View>
-        <Scroll style={grow} scrollbar={false}>
-          <Each of={candidates()} key={(model) => model.id}>
-            {(model) => (
-              <View
-                style={{
-                  ...row,
-                  minHeight: 54,
-                  gap: 12,
-                  paddingHorizontal: 16,
-                  paddingVertical: 7,
-                  borderBottomWidth: 1,
-                  borderColor: c().border,
-                }}
-              >
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Label tone={configured(model().id) ? "ink" : "muted"}>
-                    {model().name ?? model().id}
-                  </Label>
-                  <Label size={11} tone={model().delisted ? "amber" : "muted"}>
-                    {[
-                      model().contextWindow
-                        ? `${Math.round(model().contextWindow! / 1000)}K context`
-                        : "",
-                      model().reasoning ? "Reasoning" : "",
-                      model().input?.includes("image") ? "Images" : "",
-                      model().delisted
-                        ? "Delisted"
-                        : model().deprecated
-                          ? "Deprecated"
-                          : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </Label>
-                </View>
-                <ToggleSwitch
-                  label={model().name ?? model().id}
-                  checked={configured(model().id)}
-                  disabled={!!busy()}
-                  onChange={(checked) => void toggle(model(), checked)}
-                />
+        </SectionHeader>
+        <Each of={candidates()} key={(model) => model.id}>
+          {(model) => (
+            <View
+              style={{
+                ...row,
+                gap: 10,
+                paddingHorizontal: 16,
+                paddingVertical: 8,
+                borderBottomWidth: 1,
+                borderColor: c().border,
+              }}
+            >
+              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <Label
+                  line={20}
+                  weight={500}
+                  tone={configured(model().id) ? "ink" : "muted"}
+                >
+                  {model().name ?? model().id}
+                </Label>
+                <If
+                  when={model().delisted}
+                  else={
+                    <Label size={12} line={16} tone="muted">
+                      {modelMeta(model())}
+                    </Label>
+                  }
+                >
+                  <WarningLine text={uiText("modelDelisted")} />
+                </If>
               </View>
-            )}
-          </Each>
-          <If when={!candidates().length}>
-            <Label size={12} tone="muted" style={{ padding: 16 }}>
-              {query()
-                ? uiText("noMatchingModels")
-                : uiText("refreshTheListToFindModels")}
-            </Label>
-          </If>
-        </Scroll>
-      </If>
+              <ToggleSwitch
+                label={model().name ?? model().id}
+                checked={configured(model().id)}
+                disabled={!!busy()}
+                onChange={(checked) => void toggle(model(), checked)}
+              />
+            </View>
+          )}
+        </Each>
+        <If when={!candidates().length}>
+          <Label size={12} line={16} tone="muted" style={{ padding: 16 }}>
+            {uiText("refreshTheListToFindModels")}
+          </Label>
+        </If>
+        <View style={preference}>
+          <Label line={20} style={{ flex: 1, minWidth: 0 }}>
+            {uiText("removeThisSource")}
+          </Label>
+          <Button
+            label={uiText("remove2")}
+            style={{ gap: 6, paddingHorizontal: 10 }}
+            onPress={() => removing.set(true)}
+          />
+        </View>
+      </Scroll>
       <If when={connection() && provider()}>
         <ProviderEditor
           item={provider()}
@@ -288,7 +322,6 @@ export function ProviderDetail(props: {
               />
               <Button
                 label={uiText("removeSource")}
-                tone="danger"
                 disabled={!!busy()}
                 onPress={() => void remove()}
               />

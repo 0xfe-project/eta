@@ -11,27 +11,32 @@ import { Scroll, signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
-  Button,
-  Caption,
   colors,
   Empty,
   grow,
+  Icon,
   Label,
   row,
 } from "../../components";
-import { uiText } from "../../i18n";
+import { uiText, useText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { emptyStyle, EntityRow, SectionHeader } from "./section";
 
 export function ArchiveSettings() {
   const host = useHost();
   const c = colors();
+  const text = useText();
   const saving = signal(false);
   const days = () => {
     const stored = host.section<TaskBoardSettings>("tasks", "settings");
     return stored ? stored.archiveAfterDays : DEFAULT_TASK_ARCHIVE_DAYS;
   };
-  const dayLabel = (value: number | null) =>
-    value === null ? "Never" : `${value} days`;
+  const dayLabel = (value: number | null) => {
+    const label = value === null ? "Never" : `${value} days`;
+    return value === DEFAULT_TASK_ARCHIVE_DAYS
+      ? uiText("autoArchiveDefault", { label })
+      : label;
+  };
   async function setDays(value: TaskBoardSettings["archiveAfterDays"]) {
     if (saving() || value === days()) return;
     saving.set(true);
@@ -43,104 +48,110 @@ export function ArchiveSettings() {
   const conversations = () =>
     host.conversations().filter((item) => item.archived);
   const tasks = () => host.list<BoardTaskView>("tasks", "archived");
+  const restoreConversation = (id: string) =>
+    void host.action(() =>
+      host.call("conversations", "update", {
+        conversationId: id,
+        archived: false,
+      }),
+    );
+  const restoreTask = (id: string) =>
+    void host.action(() => host.call("tasks", "unarchive", { taskId: id }));
   return (
     <View style={grow}>
       <If when={host.can("tasks.setSettings")}>
+        <SectionHeader title={uiText("autoArchive")} />
         <View
           style={{
-            padding: 16,
-            gap: 7,
+            ...row,
+            minHeight: 40,
+            gap: 16,
+            paddingHorizontal: 16,
+            paddingVertical: 8,
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
-          <Label weight={600}>{uiText("autoArchive")}</Label>
-          <View style={{ ...row, gap: 8 }}>
-            <Label size={12} tone="muted" style={{ flex: 1 }}>
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <Label line={20}>
               {uiText("archiveFinishedTasksAfterTheyAre")}
             </Label>
-            <ActionMenu
-              label={uiText("autoArchiveQuietPeriod")}
-              value={saving() ? "Saving…" : dayLabel(days())}
-            >
-              <Each of={[...TASK_ARCHIVE_DAYS, null]}>
-                {(choice) => (
-                  <ActionItem
-                    label={dayLabel(choice())}
-                    checked={choice() === days()}
-                    onSelect={() => void setDays(choice())}
-                  />
-                )}
-              </Each>
-            </ActionMenu>
+            <Label size={12} line={16} tone="muted">
+              {uiText("autoArchiveHint")}
+            </Label>
           </View>
+          <ActionMenu
+            label={uiText("autoArchiveQuietPeriod")}
+            value={saving() ? "Saving…" : dayLabel(days())}
+            triggerStyle={{
+              width: 160,
+              height: 24,
+              paddingLeft: 10,
+              paddingRight: 8,
+            }}
+          >
+            <Each of={[...TASK_ARCHIVE_DAYS, null]}>
+              {(choice) => (
+                <ActionItem
+                  label={dayLabel(choice())}
+                  checked={choice() === days()}
+                  onSelect={() => void setDays(choice())}
+                />
+              )}
+            </Each>
+          </ActionMenu>
         </View>
       </If>
+      <SectionHeader
+        title={text("archived")}
+        count={conversations().length + tasks().length || undefined}
+      />
       <If
         when={conversations().length + tasks().length}
-        else={<Empty title={uiText("nothingArchived")} />}
+        else={<Empty title={uiText("nothingArchived")} style={emptyStyle} />}
       >
-        <Scroll style={grow}>
-          <View style={{ padding: 12, gap: 8 }}>
-            <If when={conversations().length}>
-              <Caption
-                text={uiText("archivedGroups", {
-                  length: conversations().length,
-                })}
-              />
-            </If>
-            <Each
-              of={conversations()}
-              key={(item: ConversationSummary) => item.id}
-            >
-              {(item) => (
-                <View style={{ ...row, gap: 8 }}>
-                  <View style={{ flex: 1 }}>
-                    <Label>{item().name}</Label>
-                    <Label size={11} tone="muted">
-                      {host
-                        .projects()
-                        .find((project) => project.id === item().projectId)
-                        ?.display ?? ""}
-                    </Label>
-                  </View>
-                  <Button
+        <Scroll style={grow} scrollbar={false}>
+          <Each
+            of={conversations()}
+            key={(item: ConversationSummary) => item.id}
+          >
+            {(item) => (
+              <EntityRow
+                title={item().name}
+                leading={<Icon name="archive" size={16} tone="muted" />}
+                meta={
+                  host
+                    .projects()
+                    .find((project) => project.id === item().projectId)
+                    ?.display ?? ""
+                }
+                lane={false}
+                menuLabel={item().name}
+                menu={
+                  <ActionItem
                     label={uiText("restore")}
-                    onPress={() =>
-                      void host.action(() =>
-                        host.call("conversations", "update", {
-                          conversationId: item().id,
-                          archived: false,
-                        }),
-                      )
-                    }
+                    onSelect={() => restoreConversation(item().id)}
                   />
-                </View>
-              )}
-            </Each>
-            <If when={tasks().length}>
-              <Caption
-                text={uiText("archivedTasks", { length: tasks().length })}
+                }
               />
-            </If>
-            <Each of={tasks()} key={(item) => item.id}>
-              {(item) => (
-                <View style={{ ...row, gap: 8 }}>
-                  <Label style={{ flex: 1 }}>
-                    {`#${item().number} ${item().title}`}
-                  </Label>
-                  <Button
+            )}
+          </Each>
+          <Each of={tasks()} key={(item) => item.id}>
+            {(item) => (
+              <EntityRow
+                title={`#${item().number} ${item().title}`}
+                leading={<Icon name="tasks" size={16} tone="muted" />}
+                lane={false}
+                menuLabel={item().title}
+                menu={
+                  <ActionItem
                     label={uiText("restore")}
-                    onPress={() =>
-                      void host.action(() =>
-                        host.call("tasks", "unarchive", { taskId: item().id }),
-                      )
-                    }
+                    onSelect={() => restoreTask(item().id)}
                   />
-                </View>
-              )}
-            </Each>
-          </View>
+                }
+              />
+            )}
+          </Each>
         </Scroll>
       </If>
     </View>

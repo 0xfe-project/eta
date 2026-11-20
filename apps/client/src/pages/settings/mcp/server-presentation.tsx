@@ -25,6 +25,10 @@ export function serverStatus(item: McpServerView) {
   );
 }
 
+export function transportName(item: McpServerView) {
+  return transports[item.transport];
+}
+
 export function transportDescription(item: McpServerView) {
   return `${transports[item.transport]} · ${uiText(lifecycleLabels[item.lifecycle])}`;
 }

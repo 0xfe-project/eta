@@ -1,13 +1,7 @@
 import type { ThinkingLevel } from "@eta/client-contracts";
 import type { AgentForm } from "./form";
 import { View } from "nsh";
-import {
-  ActionItem,
-  ActionMenu,
-  Button,
-  Field,
-  Label,
-} from "../../../components";
+import { ActionItem, ActionMenu, Field, Label } from "../../../components";
 import { ModelSelect } from "../../../components/model-select";
 import { localizedText, uiText } from "../../../i18n";
 
@@ -35,7 +29,8 @@ export function AgentGeneral(props: {
     stacked,
     phoneEditor,
     name,
-    controlHeight,
+    selectStyle,
+    fieldStyle,
     showRunsOn,
     runtimeLabel,
     runtimeList,
@@ -52,7 +47,7 @@ export function AgentGeneral(props: {
     return (
       <If when={missingModel() || noModels()}>
         <View style={{ alignItems: "flex-start", gap: 2 }}>
-          <Label size={10} line={13} tone={missingModel() ? "amber" : "muted"}>
+          <Label size={12} line={16} tone={missingModel() ? "amber" : "muted"}>
             {missingModel()
               ? localizedText(
                   "This model is no longer available. Choose another one.",
@@ -60,21 +55,36 @@ export function AgentGeneral(props: {
                 )
               : localizedText("No models available.", "暂无可用模型。")}
           </Label>
-          <Button
-            label={localizedText("Go to model services", "前往模型服务")}
-            tone="ghost"
-            size={16}
-            labelSize={10}
-            style={{ paddingHorizontal: 0 }}
+          <View
+            role="link"
+            accessibilityLabel={localizedText(
+              "Go to model services",
+              "前往模型服务",
+            )}
             onPress={props.onModelServices}
-          />
+            style={{ cursor: "pointer" }}
+          >
+            <Label
+              size={12}
+              line={16}
+              tone="mutedInk"
+              style={{ textDecorationLine: "underline" }}
+            >
+              {localizedText("Go to model services", "前往模型服务")}
+            </Label>
+          </View>
         </View>
       </If>
     );
   }
   return (
     <View style={creating ? { padding: 14, gap: 12 } : undefined}>
-      <EditorRow label={uiText("name")} stack={stacked()} phone={phoneEditor()}>
+      <EditorRow
+        label={uiText("name")}
+        stack={stacked()}
+        phone={phoneEditor()}
+        width={200}
+      >
         <Field
           label={uiText("name")}
           value={name()}
@@ -85,7 +95,7 @@ export function AgentGeneral(props: {
               : undefined
           }
           maxLength={agentNameLimit}
-          style={{ height: controlHeight(), fontSize: 12 }}
+          style={fieldStyle()}
         />
       </EditorRow>
       <If when={showRunsOn()}>
@@ -99,7 +109,7 @@ export function AgentGeneral(props: {
         <ActionMenu
           label={uiText("runtime")}
           value={runtimeLabel(runtime())}
-          triggerStyle={{ height: controlHeight() }}
+          triggerStyle={selectStyle()}
         >
           <Each of={runtimeList()}>
             {(item) => (
@@ -129,7 +139,7 @@ export function AgentGeneral(props: {
                   placeholder={uiText("runtimeDefault")}
                   value={model()}
                   onChange={chooseModel}
-                  style={{ height: controlHeight(), fontSize: 12 }}
+                  style={fieldStyle()}
                 />
               }
             >
@@ -142,7 +152,7 @@ export function AgentGeneral(props: {
                   model() ||
                   uiText("runtimeDefault")
                 }
-                triggerStyle={{ height: controlHeight() }}
+                triggerStyle={selectStyle()}
               >
                 <ActionItem
                   label={uiText("runtimeDefault")}
@@ -173,7 +183,7 @@ export function AgentGeneral(props: {
         <ActionMenu
           label={uiText("thinkingLevel")}
           value={thinking() ?? uiText("modelDefault")}
-          triggerStyle={{ height: controlHeight() }}
+          triggerStyle={selectStyle()}
         >
           <ActionItem
             label={uiText("modelDefault")}

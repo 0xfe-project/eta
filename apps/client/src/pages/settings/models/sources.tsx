@@ -17,6 +17,7 @@ import {
 } from "../../../components";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { EntityRow, LetterBox, SectionHeader } from "../section";
 
 export interface SourceChoice {
   kind: ProviderKind;
@@ -106,6 +107,10 @@ export function ModelSources(props: {
       clearTimeout(timer);
     });
   });
+  function choose(source: SourceChoice) {
+    props.onClose();
+    props.onCustom(source);
+  }
   function close() {
     const pending = login();
     if (pending?.status === "pending")
@@ -120,86 +125,83 @@ export function ModelSources(props: {
       phone={props.phone}
       sheet={props.phone}
       overPhoneNavigation
+      blurBackdrop={false}
       dismissible={!busy()}
       onClose={close}
     >
       <Scroll style={grow}>
-        <View style={{ padding: 16, gap: 8 }}>
+        <View style={login() ? { padding: 16, gap: 8 } : undefined}>
           <If
             when={login()}
             else={
               <>
-                <View style={{ gap: 3, paddingBottom: 8 }}>
-                  <Label weight={600}>{uiText("source")}</Label>
-                  <Label size={12} tone="muted">
-                    {uiText("pickWhereTheModelsComeFrom")}
-                  </Label>
-                </View>
-                <Button
-                  label="Eta Token Plan"
-                  end="right"
-                  size={40}
-                  style={{ justifyContent: "space-between" }}
-                  onPress={() => {
-                    props.onClose();
-                    props.onCustom({ kind: "eta" });
-                  }}
+                <SectionHeader
+                  title={uiText("source")}
+                  count={uiText("sourceStep", { step: 1 })}
+                  description={uiText("pickWhereTheModelsComeFrom")}
                 />
-                <Label size={12} tone="muted">
-                  {uiText("etasOwnGatewayOneKeyFor")}
-                </Label>
-                <Caption text={uiText("providerApiKeys")} />
+                <EntityRow
+                  title="Eta Token Plan"
+                  leading={<LetterBox name="Eta" />}
+                  meta={uiText("etasOwnGatewayOneKeyFor")}
+                  status={{
+                    label: uiText("sourceRecommended"),
+                    color: c().blue,
+                  }}
+                  caret
+                  onPress={() => choose({ kind: "eta" })}
+                />
+                <SectionHeader title={uiText("providerApiKeys")} />
                 <Each of={keySources}>
                   {(kind) => (
-                    <Button
-                      label={modelSource(kind())?.name ?? kind()}
-                      size={32}
-                      end="right"
-                      style={{ justifyContent: "space-between" }}
-                      onPress={() => {
-                        props.onClose();
-                        props.onCustom({ kind: kind() });
-                      }}
+                    <EntityRow
+                      title={modelSource(kind())?.name ?? kind()}
+                      leading={
+                        <LetterBox name={modelSource(kind())?.name ?? kind()} />
+                      }
+                      lane={false}
+                      caret
+                      onPress={() => choose({ kind: kind() })}
                     />
                   )}
                 </Each>
                 <If when={accounts()?.connectors.length}>
-                  <Caption text={uiText("subscriptions")} />
+                  <SectionHeader title={uiText("subscriptions")} />
                   <Each
                     of={accounts()?.connectors ?? []}
                     key={(connector) => connector.id}
                   >
                     {(connector) => (
-                      <Button
-                        label={connector().name}
-                        end="right"
-                        disabled={busy()}
-                        style={{ justifyContent: "space-between" }}
-                        onPress={() => void start(connector().id)}
+                      <EntityRow
+                        title={connector().name}
+                        leading={<LetterBox name={connector().name} />}
+                        lane={false}
+                        caret
+                        onPress={() => {
+                          if (!busy()) void start(connector().id);
+                        }}
                       />
                     )}
                   </Each>
                 </If>
-                <Caption text={uiText("custom")} />
-                <Button
-                  label={uiText("openaiCompatibleEndpoint")}
-                  end="right"
-                  size={32}
-                  style={{ justifyContent: "space-between" }}
-                  onPress={() => {
-                    props.onClose();
-                    props.onCustom({ kind: "openai-compatible" });
-                  }}
+                <SectionHeader title={uiText("custom")} />
+                <EntityRow
+                  title={uiText("openaiCompatibleEndpoint")}
+                  leading={<LetterBox name="OpenAI" />}
+                  meta={uiText("openaiCompatibleHint")}
+                  lane={false}
+                  caret
+                  onPress={() => choose({ kind: "openai-compatible" })}
                 />
-                <Button
-                  label={uiText("localModels")}
-                  end="right"
-                  size={32}
-                  style={{ justifyContent: "space-between" }}
-                  onPress={() => {
-                    props.onClose();
-                    props.onCustom({ kind: "openai-compatible", local: true });
-                  }}
+                <EntityRow
+                  title={uiText("localModels")}
+                  leading={<LetterBox name={uiText("localModels")} />}
+                  meta={uiText("localModelsHint")}
+                  lane={false}
+                  caret
+                  onPress={() =>
+                    choose({ kind: "openai-compatible", local: true })
+                  }
                 />
               </>
             }
@@ -289,12 +291,16 @@ export function ModelSources(props: {
         style={{
           ...row,
           justifyContent: "flex-end",
-          padding: 12,
-          borderTopWidth: 1,
-          borderColor: c().border,
+          paddingHorizontal: 16,
+          paddingVertical: 12,
         }}
       >
-        <Button label={uiText("cancel")} onPress={close} disabled={busy()} />
+        <Button
+          label={uiText("cancel")}
+          style={{ paddingHorizontal: 12 }}
+          onPress={close}
+          disabled={busy()}
+        />
       </View>
     </Modal>
   );

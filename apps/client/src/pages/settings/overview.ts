@@ -15,7 +15,7 @@ import { follow, useHost } from "../../services/host";
 export const sections = [
   ["Agents", "context", "agents"],
   ["Model services", "plugins", "modelServices"],
-  ["Machines", "panel", "machines"],
+  ["Machines", "monitor", "machines"],
   ["MCP servers", "plugins", "mcpServers"],
   ["External agents", "context", "externalAgents"],
   ["Email", "email", "email"],

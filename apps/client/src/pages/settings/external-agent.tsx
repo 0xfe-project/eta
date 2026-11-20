@@ -192,7 +192,6 @@ export function ExternalAgentDetail(props: {
             </Label>
             <Button
               label={removing() ? uiText("removing") : uiText("remove2")}
-              tone="danger"
               disabled={removing()}
               onPress={() => void remove()}
             />

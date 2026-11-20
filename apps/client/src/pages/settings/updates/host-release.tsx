@@ -176,7 +176,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
               <Label size={12} line={17} tone="mutedInk">
                 {uiText("whatsNew")}
               </Label>
-              <Icon name={notes() ? "down" : "right"} size={8} tone="muted" />
+              <Icon name={notes() ? "down" : "right"} size={12} tone="muted" />
             </View>
           </If>
         </View>

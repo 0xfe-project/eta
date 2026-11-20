@@ -231,7 +231,6 @@ export function McpDetail(props: {
           <If when={signedIn() && host.can("mcp.logout")}>
             <Button
               label={uiText("signOut")}
-              tone="danger"
               size={phone() ? 32 : 24}
               disabled={busy()}
               onPress={() => confirm.set(true)}
@@ -277,7 +276,6 @@ export function McpDetail(props: {
               />
               <Button
                 label={uiText("signOut")}
-                tone="danger"
                 disabled={busy()}
                 onPress={() =>
                   void run(async () => {

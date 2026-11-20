@@ -17,6 +17,7 @@ import {
 import { StatusDot } from "../../../components/status-dot";
 import { uiText, useText } from "../../../i18n";
 import { relativeTime, useHost } from "../../../services/host";
+import { SectionHeader } from "../section";
 import { AddMachine } from "./add-machine";
 import { MachineDetail, machineSystem } from "./machine-detail";
 import { PhonePairing } from "./phone-pairing";
@@ -211,13 +212,7 @@ export function Machines(props: {
             onBack={props.onBack}
           />
         </If>
-        <Header
-          title={text("machines")}
-          count={visible().length}
-          layout={props.layout}
-          dialog
-          inset={16}
-        >
+        <SectionHeader title={text("machines")} count={visible().length}>
           <If when={host.can("machines.phoneLink")}>
             <Button
               label={uiText("connectPhone")}
@@ -231,7 +226,7 @@ export function Machines(props: {
               onPress={() => adding.set(true)}
             />
           </If>
-        </Header>
+        </SectionHeader>
         <Scroll style={grow} scrollbar={false}>
           <Each of={visible()} key={(item) => item.id}>
             {(item) => (
