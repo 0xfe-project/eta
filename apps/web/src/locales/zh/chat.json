@@ -244,6 +244,7 @@
   },
   "attachments": {
     "fullContentLabel": "{{name}}的完整内容",
+    "openPicture": "查看图片 {{name}} · {{size}}",
     "pastedTextSummary": "粘贴文本 · {{characterCount}} 字符",
     "removePastedText": "移除粘贴文本",
     "expandText": "展开为文本",
