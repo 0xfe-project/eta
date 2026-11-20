@@ -332,6 +332,7 @@ export const AGENT_ACTIONS = [
   "delete",
   "direct",
   "runtimes",
+  "runtimeAccount",
 ] as const;
 export type AgentAction = (typeof AGENT_ACTIONS)[number];
 
@@ -388,6 +389,46 @@ export interface AgentRuntimeInfo {
   models: AgentRuntimeModel[];
 }
 
+/**
+ * Who a runtime is signed in as and how much of its plan is used, as the runtime itself reports
+ * it. Read only: asking never signs it in or out. A part is absent when the runtime has no way to
+ * say it (OpenCode and Pi have neither).
+ */
+export interface AgentRuntimeAccount {
+  /** From the runtime's own status query, which may refresh its stored sign-in. */
+  auth?:
+    | {
+        kind: "logged_in";
+        email?: string;
+        /** `max`, `pro`, ... */
+        plan?: string;
+        /** How it is signed in, in the runtime's words (`claude.ai`, `chatgpt`, `apiKey`, ...). */
+        method?: string;
+      }
+    | { kind: "logged_out"; detail?: string }
+    /** The query failed or could not tell. */
+    | { kind: "unknown"; detail?: string };
+  usage?:
+    | {
+        kind: "available";
+        plan?: string;
+        email?: string;
+        rateLimited: boolean;
+        windows: {
+          label: string;
+          /** From 0 to 1. */
+          usedRatio: number;
+          /** ISO 8601, when the runtime says. */
+          resetsAt?: string;
+        }[];
+      }
+    /** Signed out, or its sign-in cannot read usage: `reason` is the runtime's code. */
+    | { kind: "reauth_required"; reason?: string }
+    | { kind: "unsupported"; reason?: string }
+    /** Asking failed. */
+    | { kind: "error"; detail: string };
+}
+
 export interface AgentFields {
   name: string;
   instructions?: string;
@@ -417,6 +458,8 @@ export interface AgentArgs {
    * has to be online to be asked). `fresh` asks the runtimes again.
    */
   runtimes: { fresh?: boolean; machineId?: string };
+  /** A built-in runtime's sign-in and plan usage on the primary or `machineId` (online). */
+  runtimeAccount: { runtime: string; machineId?: string };
 }
 export interface AgentResults {
   create: { agent: AgentView };
@@ -424,6 +467,7 @@ export interface AgentResults {
   delete: { agentId: string };
   direct: { conversation: ConversationSummary };
   runtimes: { runtimes: AgentRuntimeInfo[] };
+  runtimeAccount: { account: AgentRuntimeAccount };
 }
 export type AgentCall = {
   [A in AgentAction]: Omit<CallFrame, "target" | "action" | "args"> & {

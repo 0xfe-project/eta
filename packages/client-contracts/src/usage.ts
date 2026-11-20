@@ -64,6 +64,13 @@ export interface DayUsage extends UsageTotals {
   day: string;
 }
 
+/** One provider's rolling windows, all agents and routines together. */
+export interface ProviderUsage {
+  /** A provider's id, or an external runtime's (`claude`, `codex`, ...) for the runs it made. */
+  provider: string;
+  windows: Record<UsageWindow, UsageTotals>;
+}
+
 export interface UsageSections {
   /** Every agent with usage in the retention window, the most tokens in 30 days first. */
   agents: AgentUsage[];
@@ -77,4 +84,6 @@ export interface UsageSections {
   models: ModelUsage[];
   /** All agents together, oldest first; a day without usage has no row. */
   days: DayUsage[];
+  /** Every provider with usage in the retention window, the most tokens in 30 days first. */
+  providers: ProviderUsage[];
 }

@@ -190,7 +190,7 @@ function AgentEditorForm({
     onDone();
     setSettings({ open: true, section: "providers" });
   };
-  const leaveForPlugins = () => {
+  const leave = () => {
     onDone();
     // The editor may have been opened on top of the settings dialog.
     setSettings((state) => ({ ...state, open: false }));
@@ -283,7 +283,12 @@ function AgentEditorForm({
             <>
               <NameField form={form} />
               <MachinePicker form={form} />
-              <RuntimeField form={form} runtimes={runtimes} refresh={refresh} />
+              <RuntimeField
+                form={form}
+                runtimes={runtimes}
+                refresh={refresh}
+                onOpenRuntimes={leave}
+              />
               <ModelField
                 form={form}
                 models={models}
@@ -301,7 +306,7 @@ function AgentEditorForm({
             <AgentPluginsField
               form={form}
               skipped={agent.skippedPlugins}
-              onOpenPlugins={leaveForPlugins}
+              onOpenPlugins={leave}
             />
           )}
         </section>

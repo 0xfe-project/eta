@@ -10,6 +10,7 @@ import type {
   AgentUsage,
   DayUsage,
   ModelUsage,
+  ProviderUsage,
   RoutineUsage,
   UsageTotals,
   UsageWindow,
@@ -241,6 +242,40 @@ export class UsageStore {
         model: row.model,
         ...totalsOf(row),
       }));
+  }
+
+  /**
+   * Every provider with usage in the retention window, over the rolling windows, all agents and
+   * routines together; an external runtime's runs count under the runtime's id.
+   */
+  providers(): ProviderUsage[] {
+    const now = this.#now();
+    const byProvider = new Map<string, ProviderUsage>();
+    for (const window of USAGE_WINDOWS) {
+      const rows = this.#db
+        .query<TotalsRow & { provider: string }, [number]>(
+          `SELECT provider, ${TOTALS} FROM usage WHERE at >= ? GROUP BY provider`,
+        )
+        .all(now - WINDOW_MS[window]);
+      for (const row of rows) {
+        let entry = byProvider.get(row.provider);
+        if (entry === undefined) {
+          entry = {
+            provider: row.provider,
+            windows: Object.fromEntries(
+              USAGE_WINDOWS.map((each) => [each, NONE]),
+            ) as Record<UsageWindow, UsageTotals>,
+          };
+          byProvider.set(row.provider, entry);
+        }
+        entry.windows[window] = totalsOf(row);
+      }
+    }
+    return [...byProvider.values()].sort(
+      (a, b) =>
+        b.windows["30d"].total - a.windows["30d"].total ||
+        a.provider.localeCompare(b.provider),
+    );
   }
 
   /** Each UTC day with usage in the retention window, all agents together, oldest first. */

@@ -242,6 +242,10 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
               note={runtimeNote}
               onChange={clearRuntimeNote}
               refresh={refresh}
+              onOpenRuntimes={() => {
+                onDone();
+                setSettings((state) => ({ ...state, open: false }));
+              }}
             />
             <ModelField
               form={form}

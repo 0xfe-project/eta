@@ -1,6 +1,7 @@
 import type {
   AgentArgs,
   AgentResults,
+  AgentRuntimeAccount,
   AgentRuntimeInfo,
   AgentView,
   MachineView,
@@ -123,7 +124,7 @@ export function useRuntimesByMachine(
  * host keeps a failed answer as long as a good one, so only `fresh` gets a new look. The answer
  * replaces the machine's list for every reader of it.
  */
-function useRefreshRuntimes() {
+export function useRefreshRuntimes() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (machineId: string | undefined) =>
@@ -140,6 +141,33 @@ function useRefreshRuntimes() {
       ).runtimes,
     onSuccess: (runtimes, machineId) =>
       queryClient.setQueryData(runtimesQuery(machineId).queryKey, runtimes),
+  });
+}
+
+/**
+ * A built-in runtime's sign-in and plan usage on a machine (`machineId` undefined is the primary),
+ * as the runtime reports them; asked only while `enabled` (a detail that is open).
+ */
+export function useRuntimeAccount(
+  runtime: string,
+  machineId: string | undefined,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ["wire", "agents", "runtimeAccount", machineId ?? "", runtime],
+    queryFn: async (): Promise<AgentRuntimeAccount> =>
+      (
+        await getWire().call<AgentResults["runtimeAccount"]>(
+          "agents",
+          "runtimeAccount",
+          machineId === undefined ? { runtime } : { runtime, machineId },
+          // The sign-in and the usage each have the runtime's 30s, and a daemon is asked over its link.
+          { timeoutMs: 70_000 },
+        )
+      ).account,
+    enabled,
+    staleTime: 60_000,
+    retry: false,
   });
 }
 
