@@ -9,9 +9,9 @@ import type {
 import type { Layout } from "../../components";
 import { runBlocks } from "@eta/client-contracts";
 import { Scroll, signal, View } from "nsh";
+import { Select } from "nsh/base";
 import {
   Button,
-  Caption,
   colors,
   grow,
   Icon,
@@ -475,64 +475,124 @@ export function AssignEmail(props: {
   const busy = signal(false);
   return (
     <Modal
-      title={uiText("assignEmail")}
+      title={
+        props.ids.length > 1
+          ? uiText("handCountToAnAgent", { count: props.ids.length })
+          : uiText("handToAnAgent")
+      }
       phone={props.phone}
+      compact={!props.phone}
+      titleWeight={500}
       onClose={props.onClose}
     >
-      <View style={{ padding: 16, gap: 8 }}>
-        <Caption text={uiText("agent")} />
-        <View style={{ ...row, flexWrap: "wrap", gap: 5 }}>
-          <Each of={host.people()} key={(item) => item.id}>
-            {(item) => (
-              <Button
-                label={item().name}
-                selected={agent() === item().id}
-                onPress={() => agent.set(item().id)}
-              />
-            )}
-          </Each>
-        </View>
-        <Caption text={uiText("project2")} />
-        <View style={{ ...row, flexWrap: "wrap", gap: 5 }}>
-          <Each
-            of={host
+      <View style={props.phone ? { padding: 16 } : { paddingTop: 14 }}>
+        <View style={{ gap: 12 }}>
+          <AssignField
+            label={uiText("agent")}
+            value={agent()}
+            items={host
+              .people()
+              .map((item) => ({ value: item.id, title: item.name }))}
+            onChange={(value) => agent.set(value)}
+          />
+          <AssignField
+            label={uiText("project2")}
+            value={project()}
+            items={host
               .projects()
-              .filter((item) => item.kind === "project" && !item.archived)}
-            key={(item) => item.id}
-          >
-            {(item) => (
-              <Button
-                label={item().name}
-                selected={project() === item().id}
-                onPress={() => project.set(item().id)}
-              />
-            )}
-          </Each>
+              .filter((item) => item.kind === "project" && !item.archived)
+              .map((item) => ({
+                value: item.id,
+                title: `${item.name} · ${item.path}`,
+              }))}
+            onChange={(value) => project.set(value)}
+          />
         </View>
-        <Button
-          label={uiText("assign2")}
-          tone="primary"
-          disabled={!agent() || !project() || busy()}
-          onPress={() =>
-            void (async () => {
-              if (busy()) return;
-              busy.set(true);
-              const result = await host.action(() =>
-                host.call<EmailResults["assign"]>("email", "assign", {
-                  threadIds: props.ids,
-                  agentId: agent(),
-                  projectId: project(),
-                }),
-              );
-              busy.set(false);
-              if (result) {
-                props.onClose();
-                props.onAssigned(result.conversationId);
-              }
-            })()
-          }
-        />
+        <View style={{ ...row, justifyContent: "flex-end", paddingTop: 20 }}>
+          <Button
+            label={uiText("startProcessing")}
+            tone="primary"
+            size={28}
+            disabled={!agent() || !project() || busy()}
+            onPress={() =>
+              void (async () => {
+                if (busy()) return;
+                busy.set(true);
+                const result = await host.action(() =>
+                  host.call<EmailResults["assign"]>("email", "assign", {
+                    threadIds: props.ids,
+                    agentId: agent(),
+                    projectId: project(),
+                  }),
+                );
+                busy.set(false);
+                if (result) {
+                  props.onClose();
+                  props.onAssigned(result.conversationId);
+                }
+              })()
+            }
+          />
+        </View>
       </View>
     </Modal>
+  );
+}
+
+/** A labelled 28pt select, the design's Agent and Project fields. */
+function AssignField(props: {
+  label: string;
+  value: string;
+  items: { value: string; title: string }[];
+  onChange: (value: string) => void;
+}) {
+  const c = colors();
+  return (
+    <View style={{ gap: 4 }}>
+      <Label size={12} line={16} tone="muted">
+        {props.label}
+      </Label>
+      <Select
+        accessibilityLabel={props.label}
+        items={props.items}
+        value={props.value || null}
+        cover={false}
+        offset={2}
+        popupStyle={{
+          borderWidth: 1,
+          borderColor: c().strong,
+          backgroundColor: c().canvas,
+        }}
+        itemStyle={{
+          minHeight: 28,
+          paddingHorizontal: 8,
+          color: c().ink,
+          fontSize: 12,
+        }}
+        trigger={
+          <View
+            style={{
+              ...row,
+              gap: 8,
+              height: 28,
+              paddingHorizontal: 8,
+              borderWidth: 1,
+              borderColor: c().border,
+              backgroundColor: c().canvas,
+              cursor: "pointer",
+            }}
+          >
+            <Label size={12} line={16} lines={1} style={{ flex: 1 }}>
+              {props.items.find((item) => item.value === props.value)?.title ??
+                ""}
+            </Label>
+            <Icon name="down" size={10} tone="muted" />
+          </View>
+        }
+        onChange={({ value }) => {
+          if (value !== null) props.onChange(value);
+        }}
+      />
+    </View>
   );
 }

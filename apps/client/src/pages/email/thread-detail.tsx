@@ -4,7 +4,7 @@ import type {
   EmailProposalView,
   EmailThreadView,
 } from "@eta/client-contracts";
-import { Scroll, View } from "nsh";
+import { Scroll, signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -18,6 +18,7 @@ import {
 import { AgentFace } from "../../components/agent-face";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { AssignmentInline } from "./assignment-detail";
 import { EmailBadge, isAgentMail, MailMessage, mailSubject } from "./message";
 import { EmailProposal } from "./proposal";
 
@@ -32,10 +33,13 @@ export function ThreadDetail(props: {
   onDelete: () => void;
   onMarkUnread: () => void;
   onAssignment: (assignment: EmailAssignmentView) => void;
+  onOpenSession: (assignment: EmailAssignmentView) => void;
   onContext: (message: EmailMessageView) => void;
 }) {
   const c = colors();
   const host = useHost();
+  // Desktop opens a processing row in place; the id of the open one.
+  const open = signal("");
   const agentName = (id: string) => host.agent(id)?.name ?? uiText("agent");
   const projectName = (id: string) =>
     host.projects().find((item) => item.id === id)?.name ?? "Project";
@@ -190,13 +194,25 @@ export function ThreadDetail(props: {
                   accessibilityLabel={uiText("processingAgent", {
                     value1: agentName(assignment().agentId),
                   })}
-                  onPress={() => props.onAssignment(assignment())}
+                  accessibilityState={
+                    props.desktop
+                      ? { expanded: open() === assignment().id }
+                      : undefined
+                  }
+                  onPress={() =>
+                    props.desktop
+                      ? open.set(
+                          open() === assignment().id ? "" : assignment().id,
+                        )
+                      : props.onAssignment(assignment())
+                  }
                   hoverStyle={{ backgroundColor: c().selected }}
                   style={{
                     ...row,
                     gap: 12,
                     paddingVertical: 10,
-                    borderBottomWidth: 1,
+                    borderBottomWidth:
+                      props.desktop && open() === assignment().id ? 0 : 1,
                     borderColor: c().border,
                     cursor: "pointer",
                   }}
@@ -216,8 +232,23 @@ export function ThreadDetail(props: {
                   <Label size={12} line={16} tone="muted">
                     {uiText("view")}
                   </Label>
-                  <Icon name="down" size={14} tone="muted" />
+                  <View
+                    style={{
+                      transform:
+                        props.desktop && open() === assignment().id
+                          ? [{ rotate: "180deg" }]
+                          : undefined,
+                    }}
+                  >
+                    <Icon name="down" size={14} tone="muted" />
+                  </View>
                 </View>
+                <If when={props.desktop && open() === assignment().id}>
+                  <AssignmentInline
+                    assignment={assignment()}
+                    onOpenSession={() => props.onOpenSession(assignment())}
+                  />
+                </If>
               </If>
             )}
           </Each>

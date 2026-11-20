@@ -80,6 +80,7 @@ export function Email(props: {
       .filter((item) => item.status === "pending" || item.status === "failed");
   const assignments = () =>
     host.list<EmailAssignmentView>(target() ?? "", "assignments");
+  const deleteIds = () => (checked().length ? checked() : [selected()]);
   const phone = () => props.layout === "phone";
   const tablet = () => props.layout === "tablet";
   const contextMessage = () =>
@@ -102,6 +103,18 @@ export function Email(props: {
     folder.set(tab);
     selected.set("");
     checked.set([]);
+  }
+  /** The conversation the processing session belongs to, else its transcript. */
+  function openSession(assignment: EmailAssignmentView) {
+    const conversation = host
+      .conversations()
+      .find((item) =>
+        item.participants.some(
+          (member) => member.sessionId === assignment.sessionId,
+        ),
+      );
+    if (conversation) props.onConversation(conversation.id);
+    else processing.set(assignment);
   }
   async function markUnread(id: string) {
     const result = await host.action(() =>
@@ -186,16 +199,10 @@ export function Email(props: {
             <View
               style={{
                 ...row,
-                minHeight: 44,
+                flexShrink: 0,
                 ...(phone()
-                  ? { gap: 8, paddingHorizontal: 16 }
-                  : {
-                      paddingHorizontal: 12,
-                      flexWrap: "wrap",
-                      paddingVertical: 8,
-                      columnGap: 10,
-                      rowGap: 8,
-                    }),
+                  ? { minHeight: 44, gap: 8, paddingHorizontal: 16 }
+                  : { height: 44, gap: 10, paddingHorizontal: 12 }),
                 borderBottomWidth: 1,
                 borderColor: c().border,
               }}
@@ -246,39 +253,17 @@ export function Email(props: {
               <If
                 when={phone()}
                 else={
-                  <If
-                    when={checked().length}
-                    else={
-                      <Label size={12} tone="muted">
-                        {threads().length}
-                      </Label>
-                    }
-                  >
-                    <Label size={12} tone="muted">
-                      {uiText("countSelected", { count: checked().length })}
-                    </Label>
-                    <Button
-                      label={uiText("deleteMail")}
-                      style={{
-                        borderColor: c().border,
-                        paddingHorizontal: 10,
-                        gap: 6,
-                      }}
-                      onPress={() => deleting.set(true)}
-                    />
-                    <Button
-                      label={uiText("handCountToAnAgent", {
-                        count: checked().length,
-                      })}
-                      tone="primary"
-                      style={{ paddingHorizontal: 10 }}
-                      onPress={() => assigning.set(true)}
-                    />
-                  </If>
+                  <Label size={12} line={16} tone="muted">
+                    {checked().length
+                      ? uiText("countSelected", { count: checked().length })
+                      : threads().length}
+                  </Label>
                 }
               >
                 <Label size={11} line={14} tone="muted">
-                  {threads().length}
+                  {checked().length
+                    ? uiText("countSelected", { count: checked().length })
+                    : threads().length}
                 </Label>
                 <If when={threads().length}>
                   <Button
@@ -293,15 +278,32 @@ export function Email(props: {
                 </If>
               </If>
             </View>
-            <If when={phone() && checked().length}>
-              <View style={{ ...row, padding: 6, gap: 6 }}>
+            <If when={checked().length}>
+              <View
+                style={{
+                  ...row,
+                  flexShrink: 0,
+                  height: 40,
+                  gap: 8,
+                  justifyContent: "flex-end",
+                  paddingHorizontal: phone() ? 16 : 12,
+                  borderBottomWidth: 1,
+                  borderColor: c().border,
+                }}
+              >
                 <Button
-                  label={uiText("assign", { length: checked().length })}
-                  onPress={() => assigning.set(true)}
+                  label={uiText("deleteMail")}
+                  icon="trash"
+                  iconSize={12}
+                  style={{ gap: 6 }}
+                  onPress={() => deleting.set(true)}
                 />
                 <Button
-                  label={uiText("delete")}
-                  onPress={() => deleting.set(true)}
+                  label={uiText("handCountToAnAgent", {
+                    count: checked().length,
+                  })}
+                  tone="primary"
+                  onPress={() => assigning.set(true)}
                 />
               </View>
             </If>
@@ -314,7 +316,8 @@ export function Email(props: {
                     <NoMailbox phone={phone()} onSettings={props.onSettings} />
                   }
                 >
-                  <Empty
+                  <ListNotice
+                    phone={phone()}
                     title={
                       folder() === "Inbox"
                         ? uiText("inboxIsEmpty")
@@ -381,6 +384,7 @@ export function Email(props: {
                   onDelete={() => deleting.set(true)}
                   onMarkUnread={() => void markUnread(entry().id)}
                   onAssignment={(assignment) => handledBy.set(assignment)}
+                  onOpenSession={openSession}
                   onContext={(message) => threadContext.set(message)}
                 />
               )}
@@ -406,16 +410,8 @@ export function Email(props: {
             rootMessageId={thread()?.rootMessageId}
             onClose={() => handledBy.set(undefined)}
             onOpenSession={() => {
-              const conversation = host
-                .conversations()
-                .find((item) =>
-                  item.participants.some(
-                    (member) => member.sessionId === assignment().sessionId,
-                  ),
-                );
               handledBy.set(undefined);
-              if (conversation) props.onConversation(conversation.id);
-              else processing.set(assignment());
+              openSession(assignment());
             }}
           />
         )}
@@ -443,25 +439,49 @@ export function Email(props: {
       </If>
       <If when={deleting()}>
         <Modal
-          title={uiText("deleteEmailThreads")}
+          title={
+            deleteIds().length === 1
+              ? uiText("deleteOneEmail")
+              : uiText("deleteCountEmails", { count: deleteIds().length })
+          }
           phone={phone()}
+          compact={!phone()}
+          titleWeight={500}
           onClose={() => deleting.set(false)}
         >
-          <View style={{ padding: 16, gap: 8 }}>
-            <Label>{uiText("deleteTheSelectedThreadsFromEta")}</Label>
-            <Button
-              label={uiText("delete")}
-              onPress={() =>
-                void host.action(async () => {
-                  await host.call("email", "deleteThreads", {
-                    threadIds: checked().length ? checked() : [selected()],
-                  });
-                  checked.set([]);
-                  selected.set("");
-                  deleting.set(false);
-                })
-              }
-            />
+          <View style={phone() ? { padding: 16 } : { paddingTop: 6 }}>
+            <Label size={12} line={18} tone="muted">
+              {uiText("deleteEmailsDescription")}
+            </Label>
+            <View
+              style={{
+                ...row,
+                gap: 8,
+                justifyContent: "flex-end",
+                paddingTop: 20,
+              }}
+            >
+              <Button
+                label={uiText("cancel")}
+                size={28}
+                onPress={() => deleting.set(false)}
+              />
+              <Button
+                label={uiText("deleteMail")}
+                tone="primary"
+                size={28}
+                onPress={() =>
+                  void host.action(async () => {
+                    await host.call("email", "deleteThreads", {
+                      threadIds: deleteIds(),
+                    });
+                    checked.set([]);
+                    selected.set("");
+                    deleting.set(false);
+                  })
+                }
+              />
+            </View>
           </View>
         </Modal>
       </If>
@@ -471,6 +491,30 @@ export function Email(props: {
 
 /** The list column with no mailbox: a short block at its top, not centred. */
 function NoMailbox(props: { phone: boolean; onSettings: () => void }) {
+  return (
+    <ListNotice phone={props.phone} title={uiText("noMailboxConnected")}>
+      <Button
+        label={uiText("connectMailbox")}
+        size={props.phone ? 34 : undefined}
+        labelSize={props.phone ? 13 : undefined}
+        style={
+          props.phone
+            ? { marginTop: 8, paddingHorizontal: 16 }
+            : { marginTop: 4 }
+        }
+        onPress={props.onSettings}
+      />
+    </ListNotice>
+  );
+}
+
+/** A note at the top of the list column: the envelope, a line, and maybe an
+ * action. No mailbox, or a folder with nothing in it. */
+function ListNotice(props: {
+  phone: boolean;
+  title: string;
+  children?: JSX.Element;
+}) {
   return (
     <View
       style={{
@@ -487,19 +531,9 @@ function NoMailbox(props: { phone: boolean; onSettings: () => void }) {
         line={20}
         style={{ textAlign: "center" }}
       >
-        {uiText("noMailboxConnected")}
+        {props.title}
       </Label>
-      <Button
-        label={uiText("connectMailbox")}
-        size={props.phone ? 34 : undefined}
-        labelSize={props.phone ? 13 : undefined}
-        style={
-          props.phone
-            ? { marginTop: 8, paddingHorizontal: 16 }
-            : { marginTop: 4 }
-        }
-        onPress={props.onSettings}
-      />
+      {props.children}
     </View>
   );
 }

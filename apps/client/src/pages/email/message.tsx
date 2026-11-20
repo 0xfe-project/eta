@@ -92,6 +92,35 @@ function RfcHeaders(props: { message: EmailMessageView }) {
   );
 }
 
+/** One header off phones: a 112pt muted name, the value in the mono face,
+ * and a dash for a header the message does not carry. */
+function RfcLine(props: { label: string; value?: string | null }) {
+  const fonts = Fonts();
+  return (
+    <View style={{ ...row, alignItems: "flex-start", gap: 12 }}>
+      <Label
+        size={12}
+        line={18}
+        tone="muted"
+        style={{ width: 112, flexShrink: 0 }}
+      >
+        {props.label}
+      </Label>
+      <Label
+        size={12}
+        line={18}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          fontFamily: fontFamily(fonts().mono),
+        }}
+      >
+        {props.value || "—"}
+      </Label>
+    </View>
+  );
+}
+
 function MailBody(props: {
   message: EmailMessageView;
   agentMail: boolean;
@@ -406,15 +435,38 @@ export function MailMessage(props: {
         </View>
       </If>
       <If when={headers()}>
-        <View
-          style={{
-            borderTopWidth: 1,
-            borderColor: c().border,
-            ...(props.phone ? { marginHorizontal: 16 } : undefined),
-          }}
+        <If
+          when={props.phone}
+          else={
+            <View
+              style={{
+                gap: 4,
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+                borderWidth: 1,
+                borderTopWidth: 0,
+                borderColor: c().border,
+              }}
+            >
+              <RfcLine label="Message-ID" value={props.message.rfcMessageId} />
+              <RfcLine label="In-Reply-To" value={props.message.inReplyTo} />
+              <RfcLine
+                label="References"
+                value={props.message.references.join(", ")}
+              />
+            </View>
+          }
         >
-          <RfcHeaders message={props.message} />
-        </View>
+          <View
+            style={{
+              borderTopWidth: 1,
+              borderColor: c().border,
+              marginHorizontal: 16,
+            }}
+          >
+            <RfcHeaders message={props.message} />
+          </View>
+        </If>
       </If>
       <If when={meta()}>
         {(value) => (

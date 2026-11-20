@@ -15,9 +15,13 @@ export function ThreadRow(props: {
   onOpen: () => void;
 }) {
   const c = colors();
+  // A checked row reads like the open one: tinted, with the ink edge.
+  const marked = () => props.selected || (!props.phone && props.checked);
   return (
     <View
-      hoverStyle={props.phone ? undefined : { backgroundColor: c().selected }}
+      hoverStyle={
+        props.phone || marked() ? undefined : { backgroundColor: c().selected }
+      }
       style={{
         ...row,
         ...(props.phone
@@ -27,12 +31,12 @@ export function ThreadRow(props: {
               gap: 8,
               paddingVertical: 10,
               paddingHorizontal: 8,
-              borderLeftWidth: props.selected ? 2 : 0,
+              borderLeftWidth: marked() ? 2 : 0,
               borderLeftColor: c().ink,
             }),
         borderBottomWidth: 1,
         borderBottomColor: c().border,
-        backgroundColor: props.selected ? c().selected : c().canvas,
+        backgroundColor: marked() ? c().selected : c().canvas,
       }}
     >
       <If when={!props.phone || props.selecting}>
@@ -44,6 +48,11 @@ export function ThreadRow(props: {
           onChange={props.onCheck}
           size={props.phone ? 15 : 14}
           outlineOnly={props.phone}
+          indicatorStyle={
+            props.checked && !props.phone
+              ? { borderColor: c().button }
+              : undefined
+          }
           style={
             props.phone ? { flexShrink: 0 } : { marginTop: 4, flexShrink: 0 }
           }
