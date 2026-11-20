@@ -1,9 +1,10 @@
 import type { BoardTaskStatus, TaskActivityView } from "@eta/client-contracts";
 import { dependencyEntry } from "@eta/client-contracts";
-import { View } from "nsh";
-import { Caption, Label, Markdown } from "../../components";
+import { signal, View } from "nsh";
+import { Caption, Icon, Label, Markdown, row } from "../../components";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
+import { taskMoment } from "./facts";
 import { statusKeys, statusName } from "./status";
 
 export function taskActivityLabel(entry: TaskActivityView): string {
@@ -26,39 +27,141 @@ export function taskActivityLabel(entry: TaskActivityView): string {
   return entry.kind.replaceAll("_", " ");
 }
 
+/** What an entry says on a desktop task page: a sentence, the task at the other end quoted. */
+function taskActivitySentence(entry: TaskActivityView): string {
+  if (entry.kind === "status") {
+    const from = entry.data.from as BoardTaskStatus;
+    const to = entry.data.to as BoardTaskStatus;
+    if (Object.hasOwn(statusKeys, from) && Object.hasOwn(statusKeys, to))
+      return uiText("activityStatus", {
+        from: statusName(from),
+        to: statusName(to),
+      });
+  }
+  if (entry.kind === "dependency") {
+    const edge = dependencyEntry(entry.data);
+    if (edge) {
+      const title = edge.title || `#${edge.number}`;
+      if (edge.action === "added")
+        return uiText("activityPrerequisiteAdded", { title });
+      if (edge.action === "removed" || edge.action === "deleted")
+        return uiText("activityPrerequisiteRemoved", { title });
+      if (edge.action === "blocked")
+        return uiText("activityBlocked", { title });
+      if (edge.action === "unblocked") return uiText("activityUnblocked");
+    }
+  }
+  if (entry.kind === "parent") {
+    const to = entry.data.to as { title?: string } | null;
+    const from = entry.data.from as { title?: string } | null;
+    if (to?.title) return uiText("activityParent", { title: to.title });
+    if (from?.title)
+      return uiText("activityParentRemoved", { title: from.title });
+  }
+  if (entry.kind === "created") return uiText("activityCreated");
+  if (entry.kind === "comment") return uiText("activityCommented");
+  return taskActivityLabel(entry);
+}
+
+/** The run's own bookkeeping and what the host wrote itself, folded away under "N updates" on desktop. */
+function isQuiet(entry: TaskActivityView) {
+  return entry.kind.startsWith("run_") || entry.actor.kind === "system";
+}
+
 export function TaskActivity(props: {
   entries: TaskActivityView[];
   phone: boolean;
+  desktop?: boolean;
 }) {
   const host = useHost();
+  const unfolded = signal(false);
+  const actor = (entry: TaskActivityView) =>
+    host.agent(entry.actor.agentId)?.name ??
+    (entry.actor.kind === "user" ? uiText("taskMe") : "Eta");
+  const quiet = () => props.entries.filter(isQuiet);
   return (
-    <View style={{ gap: 5, marginTop: 3 }}>
-      <Caption text={uiText("activity")} />
-      <Each
-        of={
-          props.phone
-            ? props.entries
-                .slice()
-                .reverse()
-                .filter((entry) => entry.kind !== "run_queued")
-            : props.entries
-        }
-        key={(entry) => entry.id}
-      >
-        {(entry) => (
-          <View style={{ gap: 2 }}>
-            <Label size={11} tone="muted">
-              {`${
-                host.agent(entry().actor.agentId)?.name ??
-                (entry().actor.kind === "user" ? "You" : "Eta")
-              } · ${taskActivityLabel(entry())} · ${relativeTime(entry().createdAt)}`}
+    <If
+      when={props.desktop}
+      else={
+        <View style={{ gap: 5, marginTop: 3 }}>
+          <Caption text={uiText("activity")} />
+          <Each
+            of={
+              props.phone
+                ? props.entries
+                    .slice()
+                    .reverse()
+                    .filter((entry) => entry.kind !== "run_queued")
+                : props.entries
+            }
+            key={(entry) => entry.id}
+          >
+            {(entry) => (
+              <View style={{ gap: 2 }}>
+                <Label size={11} tone="muted">
+                  {`${
+                    host.agent(entry().actor.agentId)?.name ??
+                    (entry().actor.kind === "user" ? "You" : "Eta")
+                  } · ${taskActivityLabel(entry())} · ${relativeTime(entry().createdAt)}`}
+                </Label>
+                <If when={entry().body}>
+                  <Markdown value={entry().body ?? ""} line={22} />
+                </If>
+              </View>
+            )}
+          </Each>
+        </View>
+      }
+    >
+      <View style={{ gap: 10, paddingBottom: 16 }}>
+        <Label size={14} line={18} weight={700}>
+          {uiText("activity")}
+        </Label>
+        <Each
+          of={props.entries.filter((entry) => unfolded() || !isQuiet(entry))}
+          key={(entry) => entry.id}
+        >
+          {(entry) => (
+            <View style={{ gap: 4, paddingLeft: 35 }}>
+              <View style={{ ...row, gap: 6, flexWrap: "wrap" }}>
+                <Label size={10} line={12} tone="muted">
+                  {actor(entry())}
+                </Label>
+                <Label size={10} line={12} tone="muted">
+                  {taskActivitySentence(entry())}
+                </Label>
+                <Label size={10} line={12} tone="muted">
+                  {taskMoment(entry().createdAt)}
+                </Label>
+              </View>
+              <If when={entry().body}>
+                <Markdown value={entry().body ?? ""} line={18} />
+              </If>
+            </View>
+          )}
+        </Each>
+        <If when={!unfolded() && quiet().length}>
+          <View
+            role="button"
+            accessibilityLabel={uiText(
+              quiet().length === 1 ? "taskUpdates" : "taskUpdatesMany",
+              { count: quiet().length },
+            )}
+            onPress={() => unfolded.set(true)}
+            style={{ ...row, gap: 6, paddingLeft: 35, cursor: "pointer" }}
+          >
+            <Icon name="right" size={10} />
+            <Label size={10} line={12} tone="muted">
+              {uiText(
+                quiet().length === 1 ? "taskUpdates" : "taskUpdatesMany",
+                {
+                  count: quiet().length,
+                },
+              )}
             </Label>
-            <If when={entry().body}>
-              <Markdown value={entry().body ?? ""} line={22} />
-            </If>
           </View>
-        )}
-      </Each>
-    </View>
+        </If>
+      </View>
+    </If>
   );
 }

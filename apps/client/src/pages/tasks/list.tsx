@@ -4,7 +4,8 @@ import { Scroll, signal, View } from "nsh";
 import { colors, grow, Icon, Label, row } from "../../components";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
-import { statusName, TaskGlyph, tones } from "./status";
+import { isWaiting, stepOf, taskHint, taskTime } from "./facts";
+import { statusName, TaskGlyph } from "./status";
 
 const phoneGroups = [
   { name: "Needs you", label: "taskNeedsYou", fold: false },
@@ -192,15 +193,20 @@ export function TaskTableRow(props: {
   const phone = () => props.layout === "phone";
   const hint = () => {
     const task = props.item;
-    const wait = task.waitingOn?.[0];
-    if (wait)
-      return uiText(
-        wait.state === "cancelled" ? "prerequisiteCancelled" : "waitsForTask",
-        { title: wait.title },
-      );
-    if (task.status === "in_review") return uiText("forYouToCheck2");
-    if (task.runStatus) return task.runStatus.replaceAll("_", " ");
-    return statusName(task.status);
+    if (task.status === "done") {
+      const step = stepOf(task, host.tasks());
+      return step ? uiText("step", { value1: step }) : statusName(task.status);
+    }
+    return taskHint(task, host.tasks()) ?? statusName(task.status);
+  };
+  const hintTone = () => {
+    const status = props.item.status;
+    if (status === "in_review") return "amber";
+    if (status === "in_progress" && !props.item.subtasks?.total) return "blue";
+    if (status === "todo" && !props.item.waitingOn?.length) return "ink";
+    return status === "blocked" && !props.item.waitingOn?.length
+      ? "red"
+      : "mutedInk";
   };
   return (
     <View
@@ -231,21 +237,39 @@ export function TaskTableRow(props: {
       <Label size={12} line={16} lines={1} style={{ flex: 1 }}>
         {props.item.title}
       </Label>
-      <Label
-        size={desktop() ? 10 : 11}
-        line={14}
-        lines={1}
-        tone={
-          props.item.waitingOn?.length ? "mutedInk" : tones[props.item.status]
-        }
-        style={{ width: phone() ? 72 : desktop() ? 183 : 160 }}
+      <View
+        style={{
+          ...row,
+          gap: 4,
+          width: phone() ? 72 : desktop() ? 183 : 160,
+          flexShrink: 0,
+          overflow: "hidden",
+        }}
       >
-        {hint()}
-      </Label>
+        <If
+          when={
+            props.item.status === "in_progress" && !props.item.subtasks?.total
+          }
+        >
+          <View style={{ width: 6, height: 6, backgroundColor: c().blue }} />
+        </If>
+        <If when={isWaiting(props.item)}>
+          <Icon name="lock" size={10} tone="mutedInk" />
+        </If>
+        <Label
+          size={desktop() ? 10 : 11}
+          line={desktop() ? 12 : 14}
+          lines={1}
+          tone={hintTone()}
+          style={{ flexShrink: 1, minWidth: 0 }}
+        >
+          {hint()}
+        </Label>
+      </View>
       <If when={!phone()}>
         <Label
           size={desktop() ? 10 : 11}
-          line={14}
+          line={desktop() ? 12 : 14}
           tone="mutedInk"
           lines={1}
           style={{ width: desktop() ? 100 : 50 }}
@@ -256,12 +280,14 @@ export function TaskTableRow(props: {
         </Label>
         <Label
           size={desktop() ? 10 : 11}
-          line={14}
+          line={desktop() ? 12 : 14}
           tone="muted"
           lines={1}
           style={{ width: desktop() ? 116 : 80, textAlign: "right" }}
         >
-          {relativeTime(props.item.updatedAt)}
+          {desktop()
+            ? taskTime(props.item)
+            : relativeTime(props.item.updatedAt)}
         </Label>
       </If>
     </View>

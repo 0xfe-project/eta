@@ -1,5 +1,10 @@
-import type { BoardTaskDetail, TaskResults } from "@eta/client-contracts";
-import { Scroll, signal, View } from "nsh";
+import type {
+  BoardTaskDetail,
+  BoardTaskView,
+  TaskResults,
+} from "@eta/client-contracts";
+import type { JSX } from "nsh";
+import { Image, Scroll, signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -7,6 +12,7 @@ import {
   colors,
   Field,
   grow,
+  Icon,
   Label,
   Modal,
   row,
@@ -14,8 +20,555 @@ import {
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { taskDropZones } from "./drag";
+import {
+  dependentsOf,
+  isWaiting,
+  planLevels,
+  runningFor,
+  taskDay,
+  taskHint,
+} from "./facts";
 import { statusName, TaskGlyph } from "./status";
 
+/** The two sizes the plan is drawn at: on the Tasks page, and on a parent's own Plan tab. */
+const sizes = {
+  page: {
+    cardWidth: 256,
+    cardHeight: 52,
+    columnGap: 36,
+    rowGap: 9,
+    left: 13,
+    labelTop: 16,
+    cardsTop: 37,
+    tileHeight: 30,
+    legendGap: 12,
+    bottom: 16,
+    padding: 9,
+    titleSize: 12,
+    criticalBorder: 1,
+    indent: 0,
+  },
+  detail: {
+    cardWidth: 254,
+    cardHeight: 49,
+    columnGap: 38,
+    rowGap: 11,
+    left: 12,
+    labelTop: 15,
+    cardsTop: 36,
+    tileHeight: 33,
+    legendGap: 16,
+    bottom: 15,
+    padding: 10,
+    titleSize: 10,
+    criticalBorder: 2,
+    indent: 18,
+  },
+};
+
+function planGraph(all: BoardTaskView[]) {
+  const tasks = all
+    .filter((task) => task.status !== "cancelled")
+    .sort((a, b) => a.number - b.number);
+  const { levels, parents } = planLevels(tasks);
+  const columns: BoardTaskView[][] = [];
+  for (const task of tasks)
+    (columns[levels.get(task.id) ?? 0] ??= []).push(task);
+  const critical = new Set<string>();
+  let last = columns.at(-1)?.[0]?.id;
+  while (last && !critical.has(last)) {
+    critical.add(last);
+    last = parents.get(last);
+  }
+  return { columns, critical, parents };
+}
+
+/** How many of a plan's steps still have something not done. */
+function stepsToGo(tasks: BoardTaskView[]) {
+  return planGraph(tasks).columns.filter((column) =>
+    column.some(
+      (task) => task.status !== "done" && task.status !== "cancelled",
+    ),
+  ).length;
+}
+
+/** Tasks laid out by step, one column per step, with the waits between them drawn as curves. */
+function PlanGraph(props: {
+  tasks: BoardTaskView[];
+  variant: keyof typeof sizes;
+  desktop: boolean;
+  onOpen: (id: string) => void;
+  onConnect: (from: string, to: string) => void;
+  onConnectFrom: (id: string) => void;
+  onAddStep?: () => void;
+}) {
+  const c = colors();
+  const host = useHost();
+  const size = () => sizes[props.variant];
+  const graph = () => planGraph(props.tasks);
+  const drag = taskDropZones<string>((from, to) => {
+    if (from !== to && props.tasks.some((task) => task.id === to))
+      props.onConnect(from, to);
+  });
+  const pitch = () => size().cardHeight + size().rowGap;
+  const x = (column: number) =>
+    size().left + column * (size().cardWidth + size().columnGap);
+  const y = (index: number) => size().cardsTop + index * pitch();
+  const height = () => {
+    const columns = graph().columns;
+    const rows = Math.max(
+      1,
+      ...columns.map((column) => column.length * pitch() - size().rowGap),
+    );
+    const tile = props.onAddStep
+      ? (columns.at(-1)?.length ?? 0) * pitch() + size().tileHeight
+      : 0;
+    return size().cardsTop + Math.max(rows, tile);
+  };
+  const width = () =>
+    x(Math.max(1, graph().columns.length)) - size().columnGap + size().left;
+  const edges = () => {
+    const place = new Map<string, { x: number; y: number }>();
+    graph().columns.forEach((column, index) =>
+      column.forEach((task, rowIndex) =>
+        place.set(task.id, {
+          x: x(index),
+          y: y(rowIndex) + size().cardHeight / 2,
+        }),
+      ),
+    );
+    return graph()
+      .columns.flat()
+      .flatMap((task) =>
+        (task.dependsOn ?? []).flatMap((edge) => {
+          const from = place.get(edge.taskId);
+          const to = place.get(task.id);
+          if (!from || !to || to.x <= from.x) return [];
+          const start = from.x + size().cardWidth;
+          const middle = (start + to.x) / 2;
+          const critical =
+            graph().critical.has(task.id) && graph().critical.has(edge.taskId);
+          return [
+            `<path d="M${start} ${from.y}C${middle} ${from.y} ${middle} ${to.y} ${to.x} ${to.y}" fill="none" stroke="${critical ? c().ink : c().strong}" stroke-width="1.5"/>`,
+          ];
+        }),
+      );
+  };
+  const stepLabel = (column: BoardTaskView[], index: number) => {
+    const done = column.filter((task) => task.status === "done").length;
+    if (done === column.length)
+      return uiText("doneWithCount", { length: done, value2: column.length });
+    if (column.length > 1) return uiText("sideBySide");
+    if (index > 1) return uiText("afterStep", { step: index });
+    return "";
+  };
+  return (
+    <View>
+      <View style={{ position: "relative", height: height(), width: width() }}>
+        <Image
+          src={`data:image/svg+xml,${encodeURIComponent(
+            `<svg xmlns="http://www.w3.org/2000/svg" width="${width()}" height="${height()}" viewBox="0 0 ${width()} ${height()}">${edges().join("")}</svg>`,
+          )}`}
+          fadeDuration={0}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: width(),
+            height: height(),
+          }}
+        />
+        <Each of={graph().columns} key="index">
+          {(column, index) => (
+            <View
+              style={{
+                ...row,
+                position: "absolute",
+                top: size().labelTop,
+                left: x(index()),
+                width: size().cardWidth,
+                justifyContent: "space-between",
+              }}
+            >
+              <Label size={10} line={12} weight={600}>
+                {uiText("step", { value1: index() + 1 })}
+              </Label>
+              <Label size={10} line={12} tone="muted">
+                {stepLabel(column(), index())}
+              </Label>
+            </View>
+          )}
+        </Each>
+        <Each of={graph().columns} key="index">
+          {(column, index) => (
+            <Each of={column()} key={(task) => task.id}>
+              {(task, rowIndex) => (
+                <PlanCard
+                  task={task()}
+                  variant={props.variant}
+                  critical={graph().critical.has(task().id)}
+                  dependents={dependentsOf(task(), host.tasks()).length}
+                  desktop={props.desktop}
+                  drag={drag}
+                  left={x(index())}
+                  top={y(rowIndex())}
+                  onOpen={() => props.onOpen(task().id)}
+                  onConnectFrom={() => props.onConnectFrom(task().id)}
+                />
+              )}
+            </Each>
+          )}
+        </Each>
+        <If when={props.onAddStep}>
+          {(add) => (
+            <View
+              role="button"
+              accessibilityLabel={uiText("addAStepAtTheEnd")}
+              onPress={() => add()()}
+              hoverStyle={{ backgroundColor: c().selected }}
+              style={{
+                ...row,
+                position: "absolute",
+                left: x(Math.max(0, graph().columns.length - 1)),
+                top: y(graph().columns.at(-1)?.length ?? 0),
+                width: size().cardWidth,
+                height: size().tileHeight,
+                paddingHorizontal: 10,
+                gap: 6,
+                borderWidth: 1,
+                borderStyle: "dashed",
+                borderColor: c().strong,
+                cursor: "pointer",
+              }}
+            >
+              <Icon name="plus" size={10} tone="mutedInk" />
+              <Label size={10} line={12} tone="mutedInk">
+                {uiText("addAStepAtTheEnd")}
+              </Label>
+            </View>
+          )}
+        </If>
+      </View>
+      <View
+        style={{
+          ...row,
+          gap: 18,
+          paddingLeft: size().left - 1,
+          marginTop: size().legendGap,
+          marginBottom: size().bottom,
+        }}
+      >
+        <View style={{ ...row, gap: 5 }}>
+          <TaskGlyph status="done" size={11} />
+          <Label size={10} line={12} tone="muted">
+            {uiText("taskDone")}
+          </Label>
+        </View>
+        <View style={{ ...row, gap: 5 }}>
+          <TaskGlyph status="in_review" size={12} />
+          <Label size={10} line={12} tone="muted">
+            {uiText("inReviewLetsNextGo")}
+          </Label>
+        </View>
+        <View style={{ ...row, gap: 5 }}>
+          <TaskGlyph status="in_progress" size={11} />
+          <Label size={10} line={12} tone="muted">
+            {statusName("in_progress")}
+          </Label>
+        </View>
+        <View style={{ ...row, gap: 5 }}>
+          <Icon name="lock" size={11} tone="muted" />
+          <Label size={10} line={12} tone="muted">
+            {uiText("taskWaitingForOthers")}
+          </Label>
+        </View>
+        <View style={{ ...row, gap: 5 }}>
+          <View
+            style={{
+              width: 14,
+              height: 2,
+              backgroundColor: c().ink,
+            }}
+          />
+          <Label size={10} line={12} tone="muted">
+            {uiText("criticalPath")}
+          </Label>
+        </View>
+        <If when={props.desktop}>
+          <Label size={10} line={12} tone="muted">
+            {uiText("dragToMakeWait")}
+          </Label>
+        </If>
+      </View>
+    </View>
+  );
+}
+
+function PlanCard(props: {
+  task: BoardTaskView;
+  variant: keyof typeof sizes;
+  critical: boolean;
+  dependents: number;
+  desktop: boolean;
+  drag: ReturnType<typeof taskDropZones<string>>;
+  left: number;
+  top: number;
+  onOpen: () => void;
+  onConnectFrom: () => void;
+}) {
+  const c = colors();
+  const host = useHost();
+  const size = () => sizes[props.variant];
+  const gesture = props.drag.gesture(props.task.id);
+  const hint = () => {
+    const task = props.task;
+    if (task.status === "done")
+      return `${uiText("taskDone")} · ${taskDay(task.updatedAt)}`;
+    if (task.status === "in_progress") return `■ ${runningFor(task)}`;
+    return taskHint(task, host.tasks()) ?? statusName(task.status);
+  };
+  const tone = () =>
+    props.task.status === "in_review"
+      ? "amber"
+      : props.task.status === "in_progress"
+        ? "blue"
+        : "muted";
+  return (
+    <View
+      role="button"
+      accessibilityLabel={props.task.title}
+      ref={(view) => props.drag.register(props.task.id, view)}
+      onPress={props.onOpen}
+      hoverStyle={{ backgroundColor: c().selected }}
+      style={{
+        position: "absolute",
+        left: props.left,
+        top: props.top,
+        width: size().cardWidth,
+        height: size().cardHeight,
+        paddingVertical: 6,
+        paddingHorizontal: size().padding,
+        gap: 6,
+        borderWidth: props.critical ? size().criticalBorder : 1,
+        borderColor: props.critical ? c().ink : c().strong,
+        backgroundColor: c().canvas,
+        opacity: props.drag.active() === props.task.id ? 0.65 : 1,
+        cursor: "pointer",
+      }}
+    >
+      <View style={{ ...row, gap: 6 }}>
+        <TaskGlyph status={props.task.status} size={11} />
+        <Label
+          size={size().titleSize}
+          line={size().titleSize === 10 ? 12 : 16}
+          weight={size().titleSize === 10 ? 600 : 400}
+          lines={1}
+          style={{ flex: 1, minWidth: 0 }}
+        >
+          {props.task.title}
+        </Label>
+      </View>
+      <View style={{ ...row, gap: 4, paddingLeft: size().indent }}>
+        <Label size={10} line={12} tone="muted">
+          {`#${props.task.number} ·`}
+        </Label>
+        <If when={isWaiting(props.task)}>
+          <Icon name="lock" size={10} tone="muted" />
+        </If>
+        <Label
+          size={10}
+          line={12}
+          tone={tone()}
+          lines={1}
+          style={{ flex: 1, minWidth: 0 }}
+        >
+          {hint()}
+        </Label>
+      </View>
+      <If when={props.desktop}>
+        <View
+          role="button"
+          accessibilityLabel={uiText("taskConnectFrom", {
+            number: props.task.number,
+          })}
+          onPressDown={gesture.onPressDown}
+          onPanStart={gesture.onPanStart}
+          onPanEnd={gesture.onPanEnd}
+          onPress={props.onConnectFrom}
+          style={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: 10,
+            cursor: "crosshair",
+          }}
+        />
+      </If>
+    </View>
+  );
+}
+
+/** Adding to a plan: a step at its end, a subtask, or a wait between two of its tasks. */
+function createPlanEditing(owner: () => string | undefined) {
+  const host = useHost();
+  const saving = signal(false);
+  const adding = signal<
+    { parent: string; dependsOn: string[]; title: string } | undefined
+  >(undefined);
+  const stepTitle = signal("");
+  const connecting = signal<{ tasks: BoardTaskView[] } | undefined>(undefined);
+  const prerequisite = signal("");
+  const dependent = signal("");
+  async function create() {
+    const target = adding();
+    const assignee = owner();
+    if (!target || !assignee || !stepTitle().trim() || saving()) return;
+    saving.set(true);
+    const result = await host.action(() =>
+      host.call<TaskResults["create"]>("tasks", "create", {
+        parent: target.parent,
+        tasks: [
+          {
+            title: stepTitle().trim(),
+            assignee,
+            dependsOn: target.dependsOn.map((task) => ({ task })),
+          },
+        ],
+      }),
+    );
+    saving.set(false);
+    if (result) adding.set(undefined);
+  }
+  async function connect(from: string, to: string) {
+    if (saving() || !from || !to || from === to) return;
+    saving.set(true);
+    const result = await host.action(() =>
+      host.call("tasks", "addDependency", { taskId: to, dependsOn: from }),
+    );
+    saving.set(false);
+    if (result) connecting.set(undefined);
+  }
+  function startAdding(parent: string, dependsOn: string[], title: string) {
+    stepTitle.set("");
+    adding.set({ parent, dependsOn, title });
+  }
+  function startConnecting(tasks: BoardTaskView[], from: string) {
+    prerequisite.set(from);
+    dependent.set("");
+    connecting.set({ tasks });
+  }
+  function Dialogs() {
+    return (
+      <>
+        <If when={adding()}>
+          {(target) => (
+            <Modal
+              title={target().title}
+              width={440}
+              overPhoneNavigation
+              onClose={() => adding.set(undefined)}
+            >
+              <View style={{ padding: 16, gap: 8 }}>
+                <If when={target().dependsOn.length}>
+                  <Label size={12} tone="muted">
+                    {uiText("thisTaskWaitsForTheTasks")}
+                  </Label>
+                </If>
+                <Field
+                  label={uiText("taskTitle")}
+                  value={stepTitle()}
+                  onChange={stepTitle.set}
+                  onSubmit={() => void create()}
+                />
+                <Button
+                  label={uiText("addTask")}
+                  tone="primary"
+                  disabled={!stepTitle().trim() || saving()}
+                  onPress={() => void create()}
+                />
+              </View>
+            </Modal>
+          )}
+        </If>
+        <If when={connecting()}>
+          {(target) => (
+            <Modal
+              title={uiText("addDependency")}
+              width={440}
+              onClose={() => connecting.set(undefined)}
+            >
+              <View style={{ padding: 16, gap: 8 }}>
+                <Label>{uiText("chooseTheTaskThatWaitsAnd")}</Label>
+                <ActionMenu
+                  label={uiText("taskThatWaits")}
+                  value={
+                    target().tasks.find((task) => task.id === dependent())
+                      ?.title ?? "Select task"
+                  }
+                >
+                  <Each of={target().tasks} key={(task) => task.id}>
+                    {(task) => (
+                      <ActionItem
+                        label={task().title}
+                        checked={dependent() === task().id}
+                        onSelect={() => {
+                          if (prerequisite() === task().id)
+                            prerequisite.set("");
+                          dependent.set(task().id);
+                        }}
+                      />
+                    )}
+                  </Each>
+                </ActionMenu>
+                <ActionMenu
+                  label={uiText("prerequisite")}
+                  value={
+                    target().tasks.find((task) => task.id === prerequisite())
+                      ?.title ?? "Select prerequisite"
+                  }
+                >
+                  <Each
+                    of={target().tasks.filter(
+                      (task) =>
+                        task.id !== dependent() && task.status !== "cancelled",
+                    )}
+                    key={(task) => task.id}
+                  >
+                    {(task) => (
+                      <ActionItem
+                        label={task().title}
+                        checked={prerequisite() === task().id}
+                        onSelect={() => prerequisite.set(task().id)}
+                      />
+                    )}
+                  </Each>
+                </ActionMenu>
+                <Button
+                  label={uiText("addDependency")}
+                  tone="primary"
+                  disabled={saving() || !prerequisite() || !dependent()}
+                  onPress={() => void connect(prerequisite(), dependent())}
+                />
+              </View>
+            </Modal>
+          )}
+        </If>
+      </>
+    );
+  }
+  return { startAdding, startConnecting, connect, Dialogs };
+}
+
+/** The steps still to go, for a parent's plan. */
+function stepsCaption(number: number, tasks: BoardTaskView[]) {
+  const left = stepsToGo(tasks);
+  return left
+    ? uiText("stepsToGo", { number, count: left })
+    : uiText("stepsAllDone", { number });
+}
+
+/** A parent's own Plan tab. */
 export function TaskPlan(props: {
   task: () => BoardTaskDetail;
   onOpen: (id: string) => void;
@@ -23,435 +576,209 @@ export function TaskPlan(props: {
 }) {
   const c = colors();
   const host = useHost();
-  const adding = signal(false);
-  const prerequisite = signal("");
-  const dependent = signal("");
-  const addingStep = signal(false);
-  const stepTitle = signal("");
   const owner = () =>
     props.task().assigneeAgentId ??
     props.task().createdBy.agentId ??
     host.people()[0]?.id;
-  const columnWidth = 164;
-  const columnGap = 36;
-  const cardHeight = 64;
-  const cardGap = 10;
-  const saving = signal(false);
+  const editing = createPlanEditing(owner);
   const children = () => {
-    const parent = props.task();
-    const visible = host.tasks().filter((task) => task.parentId === parent.id);
-    const current = new Map(
-      (parent.children ?? []).map((task) => [task.taskId, task]),
-    );
-    for (const { id, number, status, title } of visible)
-      current.set(id, { taskId: id, number, status, title });
-    return [...current.values()];
-  };
-  const planDrag = taskDropZones<string>((from, to) => {
-    if (
-      from === to ||
-      saving() ||
-      !children().some((child) => child.taskId === to)
-    )
-      return;
-    prerequisite.set(from);
-    dependent.set(to);
-    void add();
-  });
-  const graph = () => {
-    const references = children();
-    const known = new Map(host.tasks().map((task) => [task.id, task]));
-    const ids = new Set(references.map((task) => task.taskId));
-    const levels = new Map<string, number>();
-    const inStack = new Set<string>();
-    const parents = new Map<string, string>();
-    function level(id: string): number {
-      const existing = levels.get(id);
-      if (existing !== undefined) return existing;
-      if (inStack.has(id)) return 0;
-      inStack.add(id);
-      const dependencies = (known.get(id)?.dependsOn ?? []).filter((edge) =>
-        ids.has(edge.taskId),
-      );
-      let next = 0;
-      for (const edge of dependencies) {
-        const depth = level(edge.taskId) + 1;
-        if (depth > next) {
-          next = depth;
-          parents.set(id, edge.taskId);
-        }
-      }
-      inStack.delete(id);
-      levels.set(id, next);
-      return next;
-    }
-    const columns: (typeof references)[] = [];
-    for (const task of references)
-      (columns[level(task.taskId)] ??= []).push(task);
-    const points = new Map(
-      columns.flatMap((tasks, col) =>
-        tasks.map(
-          (task, row) =>
-            [
-              task.taskId,
-              {
-                x: col * (columnWidth + columnGap),
-                y: 18 + cardHeight / 2 + row * (cardHeight + cardGap),
-              },
-            ] as const,
-        ),
+    const known = new Map(
+      [...host.list<BoardTaskView>("tasks", "archived"), ...host.tasks()].map(
+        (task) => [task.id, task],
       ),
     );
-    const critical = new Set<string>();
-    let last = columns.at(-1)?.[0]?.taskId;
-    while (last && !critical.has(last)) {
-      critical.add(last);
-      last = parents.get(last);
-    }
-    const edges = references.flatMap((task) =>
-      (known.get(task.taskId)?.dependsOn ?? []).flatMap((edge) => {
-        const start = points.get(edge.taskId);
-        const end = points.get(task.taskId);
-        if (!start || !end || end.x <= start.x) return [];
-        return [
-          {
-            from: start,
-            to: end,
-            id: `${edge.taskId}/${task.taskId}`,
-            primary:
-              critical.has(task.taskId) &&
-              parents.get(task.taskId) === edge.taskId,
-          },
-        ];
-      }),
-    );
-    return { columns, edges, critical };
+    const ids = new Set([
+      ...(props.task().children ?? []).map((child) => child.taskId),
+      ...host
+        .tasks()
+        .filter((task) => task.parentId === props.task().id)
+        .map((task) => task.id),
+    ]);
+    return [...ids].flatMap((id) => {
+      const task = known.get(id);
+      return task ? [task] : [];
+    });
   };
-  const steps = () => graph().columns;
-  async function appendStep() {
-    const assignee = owner();
-    if (!assignee || !stepTitle().trim() || saving()) return;
-    saving.set(true);
-    const result = await host.action(() =>
-      host.call<TaskResults["create"]>("tasks", "create", {
-        parent: props.task().id,
-        tasks: [
-          {
-            title: stepTitle().trim(),
-            assignee,
-            dependsOn: (steps().at(-1) ?? [])
-              .filter((item) => item.status !== "cancelled")
-              .map((item) => ({ task: item.taskId })),
-          },
-        ],
-      }),
-    );
-    saving.set(false);
-    if (result) addingStep.set(false);
-  }
-  async function add() {
-    if (
-      saving() ||
-      !prerequisite() ||
-      !dependent() ||
-      prerequisite() === dependent()
-    )
-      return;
-    saving.set(true);
-    const result = await host.action(() =>
-      host.call("tasks", "addDependency", {
-        taskId: dependent(),
-        dependsOn: prerequisite(),
-      }),
-    );
-    saving.set(false);
-    if (result) adding.set(false);
-  }
+  const lastStep = () =>
+    planGraph(children())
+      .columns.at(-1)
+      ?.filter((task) => task.status !== "cancelled")
+      .map((task) => task.id) ?? [];
   return (
-    <View style={grow}>
-      <View style={{ ...row, gap: 8, padding: 14 }}>
-        <Label size={12} tone="muted" style={{ flex: 1 }}>
-          {uiText("steps", {
-            number: props.task().number,
-            length: steps().length,
-          })}
+    <Scroll style={grow}>
+      <View style={{ paddingHorizontal: 22, paddingTop: 16, gap: 14 }}>
+        <Label size={10} line={12} tone="muted">
+          {stepsCaption(props.task().number, children())}
         </Label>
-        <Button
-          label={uiText("addDependency")}
-          icon="plus"
-          onPress={() => {
-            prerequisite.set("");
-            dependent.set("");
-            adding.set(true);
-          }}
-        />
-      </View>
-      <Scroll style={grow} horizontal>
-        <View style={{ padding: 16, gap: 10 }}>
+        <Scroll horizontal>
           <View
             style={{
-              position: "relative",
-              flexDirection: "row",
-              alignItems: "flex-start",
-              gap: columnGap,
+              borderWidth: 1,
+              borderColor: c().border,
+              backgroundColor: c().canvas,
+              minWidth: "100%",
             }}
           >
-            <Each of={graph().edges} key={(edge) => edge.id}>
-              {(edge) => {
-                const left = () => edge().from.x + columnWidth;
-                const width = () => edge().to.x - left();
-                const bend = () => left() + width() / 2;
-                const tone = () => (edge().primary ? c().ink : c().strong);
-                return (
-                  <>
-                    <View
-                      style={{
-                        position: "absolute",
-                        left: left(),
-                        top: edge().from.y,
-                        width: width() / 2,
-                        height: 1,
-                        backgroundColor: tone(),
-                      }}
-                    />
-                    <View
-                      style={{
-                        position: "absolute",
-                        left: bend(),
-                        top: Math.min(edge().from.y, edge().to.y),
-                        width: 1,
-                        height: Math.abs(edge().from.y - edge().to.y) + 1,
-                        backgroundColor: tone(),
-                      }}
-                    />
-                    <View
-                      style={{
-                        position: "absolute",
-                        left: bend(),
-                        top: edge().to.y,
-                        width: width() / 2,
-                        height: 1,
-                        backgroundColor: tone(),
-                      }}
-                    />
-                  </>
-                );
+            <PlanGraph
+              tasks={children()}
+              variant="detail"
+              desktop={props.desktop}
+              onOpen={props.onOpen}
+              onConnect={(from, to) => void editing.connect(from, to)}
+              onConnectFrom={(id) => editing.startConnecting(children(), id)}
+              onAddStep={
+                owner()
+                  ? () =>
+                      editing.startAdding(
+                        props.task().id,
+                        lastStep(),
+                        uiText("addAStepAtTheEnd"),
+                      )
+                  : undefined
+              }
+            />
+          </View>
+        </Scroll>
+      </View>
+      <editing.Dialogs />
+    </Scroll>
+  );
+}
+
+/** The Tasks page's Plan view: one frame per parent, and one for the tasks that are part of nothing. */
+export function TaskPlanBoard(props: {
+  items: BoardTaskView[];
+  onOpen: (id: string) => void;
+}) {
+  const c = colors();
+  const host = useHost();
+  const editing = createPlanEditing(() => host.people()[0]?.id);
+  const ids = () => new Set(props.items.map((task) => task.id));
+  const parents = () =>
+    props.items.filter(
+      (task) =>
+        task.subtasks?.total ||
+        props.items.some((other) => other.parentId === task.id),
+    );
+  const childrenOf = (parent: BoardTaskView) =>
+    props.items.filter((task) => task.parentId === parent.id);
+  const orphans = () =>
+    props.items.filter(
+      (task) =>
+        !(task.parentId && ids().has(task.parentId)) &&
+        !parents().some((parent) => parent.id === task.id),
+    );
+  return (
+    <View style={{ paddingHorizontal: 22, paddingVertical: 14, gap: 15 }}>
+      <Each of={parents()} key={(task) => task.id}>
+        {(parent) => (
+          <PlanFrame>
+            <View
+              style={{
+                ...row,
+                height: 37,
+                paddingHorizontal: 13,
+                gap: 8,
+                borderBottomWidth: 1,
+                borderColor: c().border,
               }}
-            </Each>
-            <Each of={steps()} key="index">
-              {(items, index) => (
-                <View style={{ width: columnWidth, gap: cardGap }}>
-                  <View
-                    style={{
-                      ...row,
-                      height: 8,
-                      justifyContent: "space-between",
-                    }}
-                  >
-                    <Label size={12} weight={600}>
-                      {uiText("step", { value1: index() + 1 })}
-                    </Label>
-                    <Label size={11} tone="muted">
-                      {uiText("doneWithCount", {
-                        length: items().filter((task) => task.status === "done")
-                          .length,
-                        value2: items().length,
-                      })}
-                    </Label>
-                  </View>
-                  <Each of={items()} key={(task) => task.taskId}>
-                    {(task) => {
-                      const gesture = planDrag.gesture(task().taskId);
-                      return (
-                        <View
-                          role="button"
-                          ref={(view) => planDrag.register(task().taskId, view)}
-                          onPress={() => props.onOpen(task().taskId)}
-                          style={{
-                            ...row,
-                            height: cardHeight,
-                            padding: 7,
-                            gap: 6,
-                            borderWidth: 1,
-                            borderColor: graph().critical.has(task().taskId)
-                              ? c().ink
-                              : c().border,
-                            backgroundColor: c().canvas,
-                            cursor: "pointer",
-                          }}
-                        >
-                          <TaskGlyph status={task().status} />
-                          <View style={{ flex: 1, gap: 2 }}>
-                            <Label size={12} lines={2}>
-                              {task().title}
-                            </Label>
-                            <Label
-                              size={11}
-                              tone="muted"
-                            >{`#${task().number} · ${statusName(task().status)}`}</Label>
-                          </View>
-                          <If when={props.desktop}>
-                            <View
-                              role="button"
-                              accessibilityLabel={uiText("taskConnectFrom", {
-                                number: task().number,
-                              })}
-                              onPressDown={gesture.onPressDown}
-                              onPanStart={gesture.onPanStart}
-                              onPanEnd={gesture.onPanEnd}
-                              onPress={() => {
-                                prerequisite.set(task().taskId);
-                                dependent.set("");
-                                adding.set(true);
-                              }}
-                              style={{
-                                width: 14,
-                                height: 20,
-                                alignItems: "center",
-                                justifyContent: "center",
-                                cursor: "crosshair",
-                              }}
-                            >
-                              <View
-                                style={{
-                                  width: 8,
-                                  height: 8,
-                                  borderWidth: 1,
-                                  borderRadius: 4,
-                                  borderColor: c().muted,
-                                  backgroundColor: c().canvas,
-                                }}
-                              />
-                            </View>
-                          </If>
-                        </View>
-                      );
-                    }}
-                  </Each>
-                  <If when={index() === steps().length - 1 && owner()}>
-                    <Button
-                      label={uiText("addAStepAtTheEnd")}
-                      icon="plus"
-                      size={32}
-                      onPress={() => {
-                        stepTitle.set("");
-                        addingStep.set(true);
-                      }}
-                    />
-                  </If>
-                </View>
-              )}
-            </Each>
-          </View>
-          <View style={{ ...row, flexWrap: "wrap", gap: 10, paddingTop: 8 }}>
-            <Each of={["done", "in_review", "in_progress", "todo"] as const}>
-              {(status) => (
-                <View style={{ ...row, gap: 4 }}>
-                  <TaskGlyph status={status()} size={11} />
-                  <Label size={11} tone="muted">
-                    {statusName(status())}
-                  </Label>
-                </View>
-              )}
-            </Each>
-            <View style={{ ...row, gap: 5 }}>
+            >
+              <TaskGlyph status={parent().status} size={12} />
               <View
-                style={{ width: 14, height: 1, backgroundColor: c().ink }}
-              />
-              <Label size={11} tone="muted">
-                {uiText("criticalPath")}
-              </Label>
-            </View>
-          </View>
-        </View>
-      </Scroll>
-      <If when={addingStep()}>
-        <Modal
-          title={uiText("addAStepAtTheEnd")}
-          width={440}
-          overPhoneNavigation
-          onClose={() => addingStep.set(false)}
-        >
-          <View style={{ padding: 16, gap: 8 }}>
-            <Label size={12} tone="muted">
-              {uiText("thisTaskWaitsForTheTasks")}
-            </Label>
-            <Field
-              label={uiText("taskTitle")}
-              value={stepTitle()}
-              onChange={stepTitle.set}
-              onSubmit={() => void appendStep()}
-            />
-            <Button
-              label={uiText("addTask")}
-              tone="primary"
-              disabled={!stepTitle().trim() || saving()}
-              onPress={() => void appendStep()}
-            />
-          </View>
-        </Modal>
-      </If>
-      <If when={adding()}>
-        <Modal
-          title={uiText("addDependency")}
-          width={440}
-          onClose={() => adding.set(false)}
-        >
-          <View style={{ padding: 16, gap: 8 }}>
-            <Label>{uiText("chooseTheTaskThatWaitsAnd")}</Label>
-            <ActionMenu
-              label={uiText("taskThatWaits")}
-              value={
-                children().find((task) => task.taskId === dependent())?.title ??
-                "Select task"
-              }
-            >
-              <Each of={children()} key={(task) => task.taskId}>
-                {(task) => (
-                  <ActionItem
-                    label={task().title}
-                    checked={dependent() === task().taskId}
-                    onSelect={() => {
-                      if (prerequisite() === task().taskId)
-                        prerequisite.set("");
-                      dependent.set(task().taskId);
-                    }}
-                  />
-                )}
-              </Each>
-            </ActionMenu>
-            <ActionMenu
-              label={uiText("prerequisite")}
-              value={
-                children().find((task) => task.taskId === prerequisite())
-                  ?.title ?? "Select prerequisite"
-              }
-            >
-              <Each
-                of={children().filter(
-                  (task) =>
-                    task.taskId !== dependent() && task.status !== "cancelled",
-                )}
-                key={(task) => task.taskId}
+                role="button"
+                accessibilityLabel={parent().title}
+                onPress={() => props.onOpen(parent().id)}
+                style={{ cursor: "pointer" }}
               >
-                {(task) => (
-                  <ActionItem
-                    label={task().title}
-                    checked={prerequisite() === task().taskId}
-                    onSelect={() => prerequisite.set(task().taskId)}
-                  />
-                )}
-              </Each>
-            </ActionMenu>
-            <Button
-              label={uiText("addDependency")}
-              tone="primary"
-              disabled={saving() || !prerequisite() || !dependent()}
-              onPress={() => void add()}
+                <Label size={14} line={18} weight={600}>
+                  {parent().title}
+                </Label>
+              </View>
+              <Label size={10} line={12} tone="muted" style={{ flex: 1 }}>
+                {stepsCaption(parent().number, childrenOf(parent()))}
+              </Label>
+              <View
+                role="button"
+                accessibilityLabel={uiText("addSubtask")}
+                onPress={() =>
+                  editing.startAdding(parent().id, [], uiText("addSubtask"))
+                }
+                hoverStyle={{ backgroundColor: c().selected }}
+                style={{ ...row, gap: 4, height: 24, cursor: "pointer" }}
+              >
+                <Icon name="plus" size={10} />
+                <Label size={10} line={12}>
+                  {uiText("subtask")}
+                </Label>
+              </View>
+            </View>
+            <PlanGraph
+              tasks={childrenOf(parent())}
+              variant="page"
+              desktop
+              onOpen={props.onOpen}
+              onConnect={(from, to) => void editing.connect(from, to)}
+              onConnectFrom={(id) =>
+                editing.startConnecting(childrenOf(parent()), id)
+              }
+              onAddStep={() =>
+                editing.startAdding(
+                  parent().id,
+                  planGraph(childrenOf(parent()))
+                    .columns.at(-1)
+                    ?.filter((task) => task.status !== "cancelled")
+                    .map((task) => task.id) ?? [],
+                  uiText("addAStepAtTheEnd"),
+                )
+              }
             />
+          </PlanFrame>
+        )}
+      </Each>
+      <If when={orphans().length}>
+        <PlanFrame>
+          <View
+            style={{
+              ...row,
+              height: 37,
+              paddingHorizontal: 13,
+              borderBottomWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <Label size={10} line={12} tone="mutedInk">
+              {uiText("notPartOfAnything")}
+            </Label>
           </View>
-        </Modal>
+          <PlanGraph
+            tasks={orphans()}
+            variant="page"
+            desktop
+            onOpen={props.onOpen}
+            onConnect={(from, to) => void editing.connect(from, to)}
+            onConnectFrom={(id) => editing.startConnecting(orphans(), id)}
+          />
+        </PlanFrame>
       </If>
+      <editing.Dialogs />
     </View>
+  );
+}
+
+function PlanFrame(props: { children: JSX.Element }) {
+  const c = colors();
+  return (
+    <Scroll horizontal>
+      <View
+        style={{
+          minWidth: "100%",
+          borderWidth: 1,
+          borderColor: c().border,
+          backgroundColor: c().canvas,
+        }}
+      >
+        {props.children}
+      </View>
+    </Scroll>
   );
 }

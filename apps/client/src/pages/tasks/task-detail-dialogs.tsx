@@ -221,15 +221,29 @@ export function TaskDetailDialogs(props: {
           overPhoneNavigation
           onClose={() => archive.set(false)}
         >
-          <View style={{ padding: 16, gap: 12 }}>
-            <Label size={12} tone="muted">
-              {activeArchiveTargets().length
-                ? uiText("theRunsStopAndTheTasks")
-                : uiText("thisWillPutTheTaskAnd")}
+          <View
+            style={{ paddingHorizontal: 14, paddingTop: 6, paddingBottom: 14 }}
+          >
+            <Label size={12} line={18} tone="muted">
+              {activeArchiveTargets().length === 1
+                ? uiText("theRunStopsTheTaskStays", {
+                    status: statusName(activeArchiveTargets()[0]!.status),
+                  })
+                : activeArchiveTargets().length
+                  ? uiText("theRunsStopAndTheTasks")
+                  : uiText("thisWillPutTheTaskAnd")}
             </Label>
-            <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>
+            <View
+              style={{
+                ...row,
+                justifyContent: "flex-end",
+                gap: 8,
+                paddingTop: 20,
+              }}
+            >
               <Button
                 label={uiText("keepIt")}
+                size={28}
                 onPress={() => archive.set(false)}
               />
               <Button
@@ -238,6 +252,7 @@ export function TaskDetailDialogs(props: {
                     ? uiText("stopAndArchive")
                     : uiText("archive")
                 }
+                size={28}
                 tone="primary"
                 disabled={submitting()}
                 onPress={() => {

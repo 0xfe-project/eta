@@ -6,7 +6,8 @@ import { Button, colors, grow, Label, row } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskTableRow } from "./list";
-import { statusName, TaskGlyph, TaskSummary, tones } from "./status";
+import { TaskPlanBoard } from "./plan";
+import { progressColor, statusName, TaskGlyph } from "./status";
 import { visibleStatuses } from "./workspace-board";
 
 export function TaskWorkspaceList(props: {
@@ -49,42 +50,13 @@ export function TaskWorkspaceList(props: {
     <Scroll style={grow}>
       <View
         style={{
-          padding: props.groupByParent ? 0 : 22,
+          padding: props.groupByParent || props.view === "Plan" ? 0 : 22,
           gap: props.groupByParent ? 0 : 12,
         }}
       >
-        <Each
-          of={
-            props.view === "Plan" && !phone()
-              ? props.items.filter((task) => !task.parentId)
-              : []
-          }
-          key={(task) => task.id}
-        >
-          {(task) => (
-            <View style={{ gap: 6 }}>
-              <TaskSummary
-                task={task()}
-                onPress={() => props.onOpen(task().id)}
-              />
-              <View style={{ paddingLeft: 20, gap: 6 }}>
-                <Each
-                  of={props.items.filter(
-                    (subtask) => subtask.parentId === task().id,
-                  )}
-                  key={(subtask) => subtask.id}
-                >
-                  {(subtask) => (
-                    <TaskSummary
-                      task={subtask()}
-                      onPress={() => props.onOpen(subtask().id)}
-                    />
-                  )}
-                </Each>
-              </View>
-            </View>
-          )}
-        </Each>
+        <If when={props.view === "Plan" && !phone()}>
+          <TaskPlanBoard items={props.items} onOpen={props.onOpen} />
+        </If>
         <If when={props.groupByParent}>
           <Each of={byParent().groups} key={(group) => group.parent.id}>
             {(group) => {
@@ -165,7 +137,10 @@ export function TaskWorkspaceList(props: {
                               style={{
                                 height: props.layout === "desktop" ? 4 : 3,
                                 flex: 1,
-                                backgroundColor: c()[tones[child().status]],
+                                backgroundColor: progressColor(
+                                  child().status,
+                                  c(),
+                                ),
                               }}
                             />
                           )}
@@ -193,11 +168,24 @@ export function TaskWorkspaceList(props: {
           </Each>
           <If when={byParent().orphans.length}>
             <View>
-              <Label size={12} tone="muted" style={{ padding: 8 }}>
-                {uiText("notPartOfAnything", {
-                  length: byParent().orphans.length,
-                })}
-              </Label>
+              <View
+                style={{
+                  ...row,
+                  height: 29,
+                  paddingHorizontal: 14,
+                  gap: 6,
+                  backgroundColor: c().surface,
+                  borderBottomWidth: 1,
+                  borderColor: c().border,
+                }}
+              >
+                <Label size={10} line={12} tone="mutedInk">
+                  {uiText("notPartOfAnything")}
+                </Label>
+                <Label size={10} line={12} tone="muted">
+                  {byParent().orphans.length}
+                </Label>
+              </View>
               <Each of={byParent().orphans} key={(task) => task.id}>
                 {(task) => (
                   <TaskTableRow

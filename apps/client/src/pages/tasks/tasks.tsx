@@ -10,12 +10,14 @@ import {
   Field,
   grow,
   Header,
+  Icon,
   row,
 } from "../../components";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { taskDropZones } from "./drag";
 import { PhoneTaskList } from "./list";
+import { Segmented } from "./segmented";
 import { TaskWorkspaceBoard } from "./workspace-board";
 import { TaskWorkspaceList } from "./workspace-list";
 
@@ -42,7 +44,7 @@ export function Tasks(props: {
       );
     }
   });
-  const view = signal("Board");
+  const view = signal<keyof typeof taskViews>("Board");
   const listGrouping = signal<"Part of" | "Status">("Part of");
   const foldedParents = signal<string[]>([]);
   const query = signal("");
@@ -84,19 +86,53 @@ export function Tasks(props: {
         layout={props.layout}
       >
         <If when={!phone()}>
-          <Field
-            label={uiText("searchTasks")}
-            placeholder={uiText("search")}
-            value={query()}
-            onChange={query.set}
+          <View
             style={{
-              width: 142,
-              height: 26,
-              borderWidth: 0,
-              backgroundColor: c().surface,
-              fontSize: 12,
+              ...row,
+              width: 150,
+              height: 25,
+              paddingHorizontal: 8,
+              gap: 7,
+              marginRight: 7,
+              flexShrink: 0,
             }}
-          />
+          >
+            <Icon name="search" size={12.6} tone="muted" />
+            <Field
+              label={uiText("searchTasks")}
+              placeholder={uiText("search")}
+              value={query()}
+              onChange={query.set}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                height: 25,
+                paddingHorizontal: 0,
+                paddingVertical: 0,
+                borderWidth: 0,
+                backgroundColor: "transparent",
+                fontSize: 12,
+                lineHeight: 16,
+              }}
+            />
+            <If when={query()}>
+              <View
+                role="button"
+                accessibilityLabel={uiText("clearSearch")}
+                onPress={() => query.set("")}
+                hoverStyle={{ backgroundColor: c().selected }}
+                style={{
+                  width: 20,
+                  height: 20,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                }}
+              >
+                <Icon name="close" size={10} />
+              </View>
+            </If>
+          </View>
           <If when={!props.condensed}>
             <Button
               label={host.agent(executor())?.name ?? uiText("executor")}
@@ -130,6 +166,7 @@ export function Tasks(props: {
             >
               <ActionMenu
                 label={uiText("groupTasksBy")}
+                triggerStyle={{ borderWidth: 0, height: 25 }}
                 value={uiText("taskGrouping", {
                   name: uiText(
                     listGrouping() === "Part of" ? "groupByPartOf" : "status",
@@ -149,17 +186,14 @@ export function Tasks(props: {
                 </Each>
               </ActionMenu>
             </If>
-            <View style={row}>
-              <Each of={["Board", "List", "Plan"] as const}>
-                {(mode) => (
-                  <Button
-                    label={uiText(taskViews[mode()])}
-                    tone={view() === mode() ? "primary" : "plain"}
-                    onPress={() => view.set(mode())}
-                  />
-                )}
-              </Each>
-            </View>
+            <Segmented
+              options={(["Board", "List", "Plan"] as const).map((mode) => ({
+                value: mode,
+                label: uiText(taskViews[mode]),
+              }))}
+              value={view()}
+              onChange={view.set}
+            />
           </If>
         </If>
         <If when={!phone() && !props.condensed}>
@@ -223,20 +257,32 @@ export function Tasks(props: {
         when={filtered().length}
         else={
           <Empty
+            style={
+              host.state().missing.tasks || !host.state().targets.tasks
+                ? undefined
+                : {
+                    flex: 1,
+                    justifyContent: "flex-start",
+                    paddingTop: 64,
+                    gap: 10,
+                  }
+            }
             title={
               host.state().missing.tasks
                 ? uiText("unableToLoadTasks")
                 : !host.state().targets.tasks
                   ? uiText("loadingTasks")
                   : shown().length
-                    ? uiText("noMatchingTasks")
+                    ? uiText("noTasksMatchTheFilters")
                     : uiText("noTasksYet")
             }
             icon={host.state().missing.tasks ? "info" : "tasks"}
             description={
               host.state().missing.tasks
                 ? uiText("theHostDidNotRespondIn")
-                : undefined
+                : host.state().targets.tasks && !shown().length
+                  ? uiText("noTasksYetDescription")
+                  : undefined
             }
           >
             <If when={host.state().missing.tasks}>

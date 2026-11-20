@@ -14,6 +14,7 @@ import {
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskPlan } from "./plan";
+import { Segmented } from "./segmented";
 import { TaskDetailDialogs } from "./task-detail-dialogs";
 import { createTaskDetailState } from "./task-detail-state";
 import { TaskCommentBox, TaskReviewActions } from "./task-fields";
@@ -60,18 +61,17 @@ export function TaskDetail(props: {
         <View style={{ flex: 1 }} />
         <If when={task()}>
           <If when={!phone() && task()?.children?.length}>
-            <View style={row}>
-              <Button
-                label={uiText("overview")}
-                tone={plan() ? "ghost" : "primary"}
-                onPress={() => plan.set(false)}
-              />
-              <Button
-                label={uiText("plan")}
-                tone={plan() ? "primary" : "ghost"}
-                onPress={() => plan.set(true)}
-              />
-            </View>
+            <Segmented
+              options={[
+                { value: "overview", label: uiText("overview") },
+                { value: "plan", label: uiText("plan") },
+              ]}
+              value={plan() ? "plan" : "overview"}
+              height={22}
+              labelSize={10}
+              onChange={(value) => plan.set(value === "plan")}
+            />
+            <View style={{ width: 8 }} />
           </If>
           <If when={props.layout === "tablet" && !props.docked}>
             <Button
