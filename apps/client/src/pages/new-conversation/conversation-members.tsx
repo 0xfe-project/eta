@@ -32,7 +32,15 @@ export function ConversationMembers(props: {
   const c = colors();
   return (
     <>
-      <View style={{ ...row, gap: 8, marginHorizontal: 16, marginTop: 10 }}>
+      <View
+        style={{
+          ...row,
+          gap: 8,
+          marginHorizontal: 16,
+          marginTop: props.phone ? 12 : 10,
+          height: props.phone ? 32 : undefined,
+        }}
+      >
         <Icon name="folder" size={14} />
         <Label
           size={12}
@@ -42,7 +50,7 @@ export function ConversationMembers(props: {
       <Label
         tone="muted"
         size={14}
-        style={{ paddingHorizontal: 16, paddingVertical: 7 }}
+        style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 }}
       >
         {localizedText(
           "Who should work in this conversation?",
@@ -50,7 +58,7 @@ export function ConversationMembers(props: {
         )}
       </Label>
       <Each of={host.agents()} key={(agent) => agent.id}>
-        {(agent) => {
+        {(agent, index) => {
           const checked = () => props.agentIds.includes(agent().id);
           return (
             <CheckControl
@@ -58,7 +66,7 @@ export function ConversationMembers(props: {
               checked={checked()}
               onChange={() => props.onToggleAgent(agent().id)}
               hoverStyle={{ backgroundColor: c().selected }}
-              size={13}
+              size={14}
               indicatorStyle={{ borderColor: checked() ? c().ink : c().strong }}
               style={{
                 ...row,
@@ -66,6 +74,7 @@ export function ConversationMembers(props: {
                 gap: 12,
                 marginHorizontal: 16,
                 paddingHorizontal: 4,
+                borderTopWidth: index() === 0 ? 1 : 0,
                 borderBottomWidth: 1,
                 borderColor: c().border,
                 cursor: "pointer",

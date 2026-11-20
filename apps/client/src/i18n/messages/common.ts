@@ -155,8 +155,8 @@ export const commonMessages = {
     "宿主没有及时回应。",
   ],
   thisHostNeedsTheEtaDesktop: [
-    "This host needs the eta desktop app {{MIN_DESKTOP}} or later. This app is {{applicationVersion}}. Update the desktop app for full compatibility.",
-    "此主机要求 Eta 桌面应用 {{MIN_DESKTOP}} 或更高版本。当前版本为 {{applicationVersion}}。请更新桌面应用以获得完整兼容性。",
+    "This host needs the eta desktop app {{MIN_DESKTOP}} or later; this one is {{applicationVersion}}. Some things may not work until you update the app.",
+    "此主机需要 Eta 桌面应用 {{MIN_DESKTOP}} 或更高版本；当前版本为 {{applicationVersion}}。更新应用前，部分功能可能无法使用。",
   ],
   title: ["Title", "标题"],
   token: ["Token", "令牌"],

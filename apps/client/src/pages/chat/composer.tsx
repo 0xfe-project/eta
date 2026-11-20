@@ -121,6 +121,7 @@ export function Composer(props: {
       (Math.min(activeMention(), count - 1) + step + count) % count,
     );
   }
+  const offline = () => props.phone && host.state().status === "reconnecting";
   const sendable = () =>
     (draft().trim() || attachments().length) &&
     !busy() &&
@@ -311,12 +312,16 @@ export function Composer(props: {
         </View>
       </If>
       <View
+        accessibilityState={{ disabled: offline() }}
         style={{
           position: "relative",
           borderWidth: 1,
           borderColor: c().ink,
           flexDirection: props.phone ? "row" : "column",
           alignItems: props.phone ? "center" : "stretch",
+          // A phone draws the composer disabled while the host is away.
+          opacity: offline() ? 0.45 : 1,
+          pointerEvents: offline() ? "none" : undefined,
         }}
       >
         <If when={choices().length && !busy()}>

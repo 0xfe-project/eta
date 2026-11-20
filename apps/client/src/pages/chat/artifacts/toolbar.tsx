@@ -71,6 +71,8 @@ export function ArtifactToolbar(props: {
     return (
       <Button
         label={props.shared ? uiText("unshare") : uiText("sharePublicly")}
+        icon={phone() ? undefined : "globe"}
+        iconSize={12}
         tone={phone() ? "plain" : "ghost"}
         size={phone() ? 28 : 24}
         labelSize={phone() ? 12 : 10}
@@ -86,6 +88,8 @@ export function ArtifactToolbar(props: {
       <If when={props.hasViewer}>
         <Button
           label={uiText("exportPdf")}
+          icon={phone() ? undefined : "printer"}
+          iconSize={12}
           tone={phone() ? "plain" : "ghost"}
           size={phone() ? 28 : 24}
           labelSize={phone() ? 12 : 10}
@@ -104,43 +108,57 @@ export function ArtifactToolbar(props: {
         <View
           style={{
             ...row,
-            paddingHorizontal: 12,
-            gap: 4,
+            paddingLeft: 12,
+            paddingRight: 14,
+            gap: 8,
             flexShrink: 0,
             height: props.layout === "desktop" ? 40 : 36,
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
-          <Icon name="artifact" size={12} tone="muted" />
+          <Icon name="appWindow" size={14} tone="muted" />
           <Label
             size={12}
             weight={500}
             lines={1}
-            style={{ flex: 1, minWidth: 0, marginLeft: 4 }}
+            style={{ flex: 1, minWidth: 0 }}
           >
             {props.title}
           </Label>
-          {versionPicker()}
-          {shareButton()}
-          {exportButton()}
-          <If when={props.hasViewer}>
+          <View style={{ ...row, gap: 4 }}>
+            {versionPicker()}
+            {shareButton()}
+            {exportButton()}
+            <If when={props.hasViewer}>
+              <Button
+                label={uiText("openInNewWindow")}
+                icon="external"
+                iconSize={12}
+                tone="ghost"
+                size={24}
+                labelSize={10}
+                disabled={!props.previewReady}
+                onPress={props.onPreview}
+              />
+            </If>
             <Button
-              label={uiText("openInNewWindow")}
+              label={uiText(props.downloading ? "downloading" : "download")}
+              icon="download"
+              iconSize={12}
               tone="ghost"
+              size={24}
               labelSize={10}
-              disabled={!props.previewReady}
-              onPress={props.onPreview}
+              disabled={props.downloadDisabled}
+              onPress={props.onDownload}
             />
-          </If>
-          <Button
-            label={uiText(props.downloading ? "downloading" : "download")}
-            tone="ghost"
-            labelSize={10}
-            disabled={props.downloadDisabled}
-            onPress={props.onDownload}
+          </View>
+          {/* The actions end 48pt from the edge, the bare close glyph 14pt. */}
+          <CloseButton
+            iconSize={14}
+            onPress={props.onClose}
+            style={{ marginLeft: 7, marginRight: -5 }}
           />
-          <CloseButton onPress={props.onClose} />
         </View>
       }
     >

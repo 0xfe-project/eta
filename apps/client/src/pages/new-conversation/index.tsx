@@ -6,7 +6,6 @@ import type { Layout } from "../../components";
 import { back } from "@eta/client-contracts";
 import { Scroll, signal, View, windowSize } from "nsh";
 import { Button, colors, grow, Label, Modal, row } from "../../components";
-import { StatusDot } from "../../components/status-dot";
 import { localizedText, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { ConversationMembers } from "./conversation-members";
@@ -149,6 +148,7 @@ export function NewConversation(props: {
       sheet={phone()}
       overPhoneNavigation={phone()}
       modalFocus
+      stepHeader
       blurBackdrop={props.layout === "desktop"}
       onClose={previous}
       width={560}
@@ -171,34 +171,47 @@ export function NewConversation(props: {
         <View
           style={{
             ...row,
-            height: phone() ? 48 : 42,
-            paddingHorizontal: 16,
-            gap: 8,
+            height: 40,
+            flexShrink: 0,
+            paddingHorizontal: phone() ? 0 : 20,
+            marginHorizontal: phone() ? 16 : 0,
+            marginTop: phone() ? 16 : 0,
+            gap: 12,
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
-          <Label size={11} tone="muted">
-            {directory() ? "2/2" : "1/2"}
-          </Label>
-          <Label size={12} weight={600} style={grow}>
-            {directory() ? uiText("members") : uiText("directory")}
-          </Label>
-          <Label size={11} tone="muted">
+          <View style={{ ...row, ...grow, gap: 8 }}>
+            <Label size={10} tone="muted" style={{ letterSpacing: 0.8 }}>
+              {directory() ? "2/2" : "1/2"}
+            </Label>
+            <Label size={12} weight={600}>
+              {directory() ? uiText("members") : uiText("directory")}
+            </Label>
+          </View>
+          <Label size={12} tone="muted">
             {directory()
               ? localizedText("Last step", "最后一步")
               : localizedText("Next: Members", "下一步：成员")}
           </Label>
-          <StatusDot color={directory() ? c().muted : c().ink} size={7} />
-          <View
-            style={{
-              width: 7,
-              height: 7,
-              backgroundColor: directory() ? c().ink : c().surface,
-              borderWidth: directory() ? 0 : 1,
-              borderColor: c().border,
-            }}
-          />
+          <View style={{ ...row, gap: 4 }}>
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                backgroundColor: directory() ? c().faint : c().ink,
+              }}
+            />
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                backgroundColor: directory() ? c().ink : undefined,
+                borderWidth: directory() ? 0 : 1,
+                borderColor: c().strong,
+              }}
+            />
+          </View>
         </View>
       </If>
       <Scroll style={grow} scrollbar={false}>
@@ -246,7 +259,7 @@ export function NewConversation(props: {
           size={10}
           tone="muted"
           style={{
-            paddingHorizontal: 16,
+            paddingHorizontal: 14,
             paddingVertical: 5,
             borderTopWidth: 1,
             borderColor: c().border,
@@ -261,10 +274,10 @@ export function NewConversation(props: {
       <View
         style={{
           ...row,
-          height: 56,
+          height: phone() ? 56 : 50,
           justifyContent: "flex-end",
           gap: 8,
-          paddingHorizontal: 16,
+          paddingHorizontal: phone() ? 16 : 20,
           borderTopWidth: 1,
           borderColor: c().border,
         }}
@@ -284,7 +297,7 @@ export function NewConversation(props: {
         <Button
           label={methodEntry() ? uiText("cancel") : uiText("back")}
           tone="ghost"
-          size={30}
+          size={24}
           disabled={busy() || saving() || cancelling()}
           onPress={previous}
         />
@@ -292,7 +305,7 @@ export function NewConversation(props: {
           <Button
             label={localizedText("Start", "开始")}
             tone="primary"
-            size={26}
+            size={24}
             disabled={
               !agents().length || saving() || !host.can("conversations.create")
             }

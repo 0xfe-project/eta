@@ -5,7 +5,7 @@ import type {
 } from "@eta/client-contracts";
 import type { ListRef } from "nsh";
 import { List, signal, View } from "nsh";
-import { Button, Empty, grow, Label } from "../../components";
+import { Button, Empty, grow, Label, MessagesSkeleton } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { Message } from "./message";
@@ -41,16 +41,21 @@ export function ConversationTimeline(props: {
       else={
         <If
           when={props.noCachedMessages}
-          else={<Empty title={uiText("loadingConversation")} />}
+          else={<MessagesSkeleton label={uiText("loadingConversation")} />}
         >
           <Empty
             title={uiText("lostTheConnectionToTheHost")}
             description={uiText("agentsKeepRunningOnTheHost")}
-            icon="refresh"
+            icon="linkBreak"
+            iconSize={28}
+            iconTone="ink"
+            titleWeight={600}
           >
             <Button
               label={uiText("retry")}
               icon="refresh"
+              size={32}
+              style={{ marginTop: 8, paddingHorizontal: 12, gap: 6 }}
               onPress={host.reconnect}
             />
           </Empty>

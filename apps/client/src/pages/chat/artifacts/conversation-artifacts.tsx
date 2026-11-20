@@ -9,6 +9,7 @@ import {
   Field,
   Icon,
   Label,
+  ListSkeleton,
   row,
 } from "../../../components";
 import { uiText } from "../../../i18n";
@@ -151,33 +152,39 @@ export function ConversationArtifacts(props: {
             </Label>
           }
         >
-          <Empty
-            icon="artifact"
-            iconSize={32}
-            style={{ gap: 8 }}
-            title={
-              host.state().missing.artifacts
-                ? uiText("artifactLoadError")
-                : host.state().targets.artifacts
-                  ? uiText("noArtifactsYet")
-                  : uiText("artifactsLoading")
+          <If
+            when={
+              host.state().targets.artifacts || host.state().missing.artifacts
             }
-            description={
-              host.state().missing.artifacts
-                ? uiText("theHostDidNotRespondIn")
-                : host.state().targets.artifacts
-                  ? uiText("artifactsEmptyHelp")
-                  : undefined
-            }
+            else={<ListSkeleton label={uiText("artifactsLoading")} />}
           >
-            <If when={host.state().missing.artifacts}>
-              <Button
-                label={uiText("retry")}
-                icon="refresh"
-                onPress={props.reload}
-              />
-            </If>
-          </Empty>
+            <Empty
+              icon={host.state().missing.artifacts ? "warning" : "appWindow"}
+              iconSize={32}
+              iconTone={host.state().missing.artifacts ? "red" : "muted"}
+              style={{ paddingVertical: 40 }}
+              title={
+                host.state().missing.artifacts
+                  ? uiText("artifactLoadError")
+                  : uiText("noArtifactsYet")
+              }
+              description={
+                host.state().missing.artifacts
+                  ? uiText("theHostDidNotRespondIn")
+                  : uiText("artifactsEmptyHelp")
+              }
+            >
+              <If when={host.state().missing.artifacts}>
+                <Button
+                  label={uiText("retry")}
+                  icon="refresh"
+                  size={28}
+                  style={{ marginTop: 4 }}
+                  onPress={props.reload}
+                />
+              </If>
+            </Empty>
+          </If>
         </If>
       </If>
       <Each of={artifactsInPanel()} key={(artifact) => artifact.id}>

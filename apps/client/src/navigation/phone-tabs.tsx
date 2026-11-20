@@ -9,7 +9,7 @@ import { taskNeedsAttention } from "../pages/tasks/status";
 import { useHost } from "../services/host";
 import { CaptainFace } from "./captain";
 
-const phoneTabs = [
+export const phoneTabs = [
   ["chat", "chat"],
   ["pending", "pending"],
   ["captain", "captain"],
@@ -19,7 +19,7 @@ const phoneTabs = [
 
 type PhoneTab = (typeof phoneTabs)[number];
 
-function PhoneTabItem(props: {
+export function PhoneTabItem(props: {
   tab: PhoneTab;
   selected: boolean;
   count: number;

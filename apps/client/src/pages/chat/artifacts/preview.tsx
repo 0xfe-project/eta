@@ -267,7 +267,8 @@ export function ArtifactPreview(props: {
     return (
       <ActionMenu
         label={uiText("artifactActions")}
-        triggerStyle={{ height: 26 }}
+        iconSize={20}
+        triggerStyle={{ width: 40, height: 40, paddingHorizontal: 0 }}
       >
         <If when={url()}>
           <ActionItem label={uiText("openInBrowser")} onSelect={openPreview} />

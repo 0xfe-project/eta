@@ -319,15 +319,16 @@ export function Conversation(props: {
             style={{
               ...row,
               paddingVertical: 8,
-              paddingHorizontal: 14,
+              paddingHorizontal: 16,
               gap: 8,
-              backgroundColor: c().amberFill,
+              // The design's state-warning at 12%.
+              backgroundColor: `${c().warning}1f`,
               borderBottomWidth: 1,
-              borderColor: c().border,
+              borderColor: c().warning,
             }}
           >
-            <Icon name="info" tone="amber" size={13} />
-            <Label size={12} line={15} tone="amber" style={{ flex: 1 }}>
+            <Icon name="warning" tone="warningInk" size={14} />
+            <Label size={12} line={16} tone="warningInk" style={{ flex: 1 }}>
               {uiText("connectionLostReconnectingWhatYouSee")}
             </Label>
           </View>

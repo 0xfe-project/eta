@@ -135,7 +135,7 @@ export function placeChoices(context: {
             "Find a repository or paste its URL",
             "查找仓库或粘贴 URL",
           ),
-          "archive",
+          "download",
           "places.clone",
         ],
         new: [

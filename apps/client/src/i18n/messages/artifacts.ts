@@ -48,7 +48,7 @@ export const artifactsMessages = {
     "The artifact couldn't be loaded from the host.",
     "无法从主机加载制品。",
   ],
-  noArtifactsYet: ["No artifacts yet", "暂无产物"],
+  noArtifactsYet: ["No Artifacts yet", "暂无产物"],
   noMatchingArtifacts: ["No matching artifacts", "没有匹配的产物"],
   openInBrowser: ["Open in browser", "在浏览器中打开"],
   openingPreview: ["Opening preview…", "正在打开预览…"],

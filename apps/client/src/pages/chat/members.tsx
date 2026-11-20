@@ -170,14 +170,20 @@ export function InviteAgents(props: {
           <Label size={14} weight={500}>
             {title()}
           </Label>
-          <CloseButton size={18} disabled={saving()} onPress={props.onClose} />
+          <CloseButton
+            size={18}
+            iconSize={14}
+            disabled={saving()}
+            onPress={props.onClose}
+            style={{ marginRight: -2 }}
+          />
         </View>
       </If>
       <View
         style={{
           paddingHorizontal: phone() ? 16 : 14,
           paddingTop: phone() ? 16 : 2,
-          gap: phone() ? 10 : 12,
+          gap: 12,
           ...(phone() ? grow : {}),
         }}
       >
@@ -198,7 +204,7 @@ export function InviteAgents(props: {
           scrollbar={false}
         >
           <Each of={candidates()} key={(agent) => agent.id}>
-            {(agent) => (
+            {(agent, index) => (
               <CheckControl
                 size={14}
                 checked={selected().includes(agent().id)}
@@ -212,9 +218,10 @@ export function InviteAgents(props: {
                 }
                 style={{
                   ...row,
-                  gap: 8,
+                  gap: phone() ? 12 : 8,
                   paddingHorizontal: phone() ? 4 : 0,
                   minHeight: phone() ? 52 : 32,
+                  borderTopWidth: phone() && index() === 0 ? 1 : 0,
                   borderBottomWidth: phone() ? 1 : 0,
                   borderColor: c().border,
                   cursor: "pointer",
@@ -224,7 +231,7 @@ export function InviteAgents(props: {
                 <Label style={{ flex: phone() ? 1 : undefined }}>
                   {agent().name}
                 </Label>
-                <Label size={10} tone="muted">
+                <Label size={phone() ? 11 : 10} tone="muted">
                   {agent().runtime === "eta"
                     ? uiText("etaBuiltIn")
                     : agent().runtime}
@@ -241,7 +248,9 @@ export function InviteAgents(props: {
         style={{
           ...row,
           justifyContent: "flex-end",
-          padding: 14,
+          ...(phone()
+            ? { height: 56, paddingHorizontal: 16 }
+            : { padding: 14 }),
           gap: 8,
           marginTop: phone() ? 0 : 4,
           borderTopWidth: phone() ? 1 : 0,
@@ -257,7 +266,7 @@ export function InviteAgents(props: {
         </If>
         <Button
           label={uiText("cancel")}
-          size={28}
+          size={phone() ? 24 : 28}
           tone={phone() ? "ghost" : "plain"}
           disabled={saving()}
           onPress={props.onClose}
@@ -265,7 +274,7 @@ export function InviteAgents(props: {
         <Button
           label={uiText("invite", { length: inviteIds().length })}
           tone="primary"
-          size={28}
+          size={phone() ? 24 : 28}
           disabled={saving() || !inviteIds().length}
           onPress={() => void invite()}
         />
@@ -278,7 +287,7 @@ export function InviteAgents(props: {
       else={
         <Modal
           title={title()}
-          width={384}
+          width={385}
           height={phone() ? 380 : undefined}
           phone={phone()}
           sheet={phone()}
@@ -295,7 +304,7 @@ export function InviteAgents(props: {
         accessibilityLabel={title()}
         animation="none"
         style={fill}
-        backdropStyle={{ backgroundColor: c().modalShade }}
+        backdropStyle={{ backgroundColor: c().sheetShade }}
         closeOnEscape={!saving()}
         closeOnBackdropPress={!saving()}
         onOpenChange={({ open }) => {
@@ -308,11 +317,12 @@ export function InviteAgents(props: {
           style={{
             position: "absolute",
             ...placement(),
-            width: 384,
+            width: 385,
             maxWidth: "100%",
             borderWidth: 1,
-            borderColor: c().border,
+            borderColor: c().strong,
             backgroundColor: c().canvas,
+            boxShadow: [{ x: 0, y: 8, blur: 24, color: "#0000001f" }],
           }}
         >
           {content()}

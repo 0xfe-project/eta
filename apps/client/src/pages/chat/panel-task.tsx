@@ -6,7 +6,7 @@ import {
   ActionItem,
   ActionMenu,
   colors,
-  Empty,
+  DetailSkeleton,
   Field,
   grow,
   Icon,
@@ -43,7 +43,7 @@ export function PanelTask(props: {
   const fullGoal = signal(false);
   const updates = signal(false);
   return (
-    <If when={task()} else={<Empty title={uiText("loadingTask")} />}>
+    <If when={task()} else={<DetailSkeleton label={uiText("loadingTask")} />}>
       {(item) => {
         const run = () => {
           const last = item().runs.at(-1);

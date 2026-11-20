@@ -38,6 +38,9 @@ export function Modal(props: {
   titleWeight?: number;
   /** A sheet's 44pt header with no divider under it, and a 16pt grabber. */
   plainSheetHeader?: boolean;
+  /** The design's stepped-dialog header off phones: 48pt tall, 20pt insets,
+   * a 14/18 semibold title and a 16pt close glyph. */
+  stepHeader?: boolean;
   headerActions?: JSX.Element;
   blurBackdrop?: boolean;
   modalFocus?: boolean;
@@ -63,6 +66,7 @@ export function Modal(props: {
   const sheetChrome = () => Boolean(props.phone) && !props.phonePage;
   const sideDrawer = () => Boolean(props.side) && !props.phone;
   const centred = () => !props.phone && !props.side;
+  const stepHeader = () => Boolean(props.stepHeader) && centred();
   const popupStyle = (): ViewStyle => ({
     width: props.phone ? "100%" : (props.width ?? 480),
     maxWidth: "100%",
@@ -147,16 +151,36 @@ export function Modal(props: {
             subtitle={props.subtitle}
             subtitleTone={props.subtitleTone}
             layout={props.phone ? "phone" : "desktop"}
-            inset={sheetChrome() ? 16 : sideDrawer() ? 12 : 14}
-            end={sheetChrome() || sideDrawer() ? 8 : 6}
+            inset={
+              sheetChrome() ? 16 : sideDrawer() ? 12 : stepHeader() ? 20 : 14
+            }
+            end={
+              sheetChrome() || sideDrawer() || props.phonePage
+                ? 8
+                : stepHeader()
+                  ? 16
+                  : 6
+            }
             height={
-              sheetChrome() ? (props.plainSheetHeader ? 44 : 40) : undefined
+              sheetChrome()
+                ? props.plainSheetHeader
+                  ? 44
+                  : 40
+                : stepHeader()
+                  ? 48
+                  : undefined
             }
             divider={!(sheetChrome() && props.plainSheetHeader)}
             background={sideDrawer() ? "surface" : undefined}
-            titleSize={sheetChrome() || sideDrawer() ? 14 : undefined}
-            titleWeight={sheetChrome() || sideDrawer() ? 600 : undefined}
-            titleLine={sheetChrome() || sideDrawer() ? 20 : undefined}
+            titleSize={
+              sheetChrome() || sideDrawer() || stepHeader() ? 14 : undefined
+            }
+            titleWeight={
+              sheetChrome() || sideDrawer() || stepHeader() ? 600 : undefined
+            }
+            titleLine={
+              stepHeader() ? 18 : sheetChrome() || sideDrawer() ? 20 : undefined
+            }
             dialog={!props.phonePage}
             onBack={props.phonePage ? close : undefined}
           >
@@ -166,7 +190,7 @@ export function Modal(props: {
               <CloseButton
                 onPress={close}
                 size={sheetChrome() ? 32 : undefined}
-                iconSize={sheetChrome() ? 16 : 14}
+                iconSize={sheetChrome() || stepHeader() ? 16 : 14}
               />
             </If>
           </Header>

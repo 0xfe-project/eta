@@ -57,7 +57,7 @@ const dark: typeof light = {
   redFill: "#3a1d21",
   shade: "#00000080",
   modalShade: "#00000048",
-  sheetShade: "#00000048",
+  sheetShade: "#0a0a0a99",
 };
 
 export const Palette = context<() => typeof light>(() => light);
