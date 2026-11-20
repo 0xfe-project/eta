@@ -282,7 +282,11 @@ export function RoutineReport(props: RoutineReportProps) {
   const failed = () =>
     props.run.status === "failed" || props.run.status === "skipped";
   const sendable = () => !!props.feedback.trim() && !props.routine.revising;
-  const date = () => feedTime(props.run.startedAt);
+  // A finished run also says how long it took.
+  const date = () =>
+    [feedTime(props.run.startedAt), recordedDuration(props.run)]
+      .filter(Boolean)
+      .join(" · ");
   const inset = () => (props.phone ? 16 : 32);
   const column = { width: "100%", maxWidth: 640 } as const;
   const move = (label: string, enabled: boolean, by: number) => (
@@ -405,22 +409,18 @@ export function RoutineReport(props: RoutineReportProps) {
                   </>
                 }
               >
-                <If
-                  when={props.phone}
-                  else={
-                    <Label size={16} line={22} weight={600}>
-                      {uiText("noReport")}
-                    </Label>
-                  }
-                >
-                  <View style={{ ...row, gap: 8 }}>
-                    <StatusDot color={c().red} />
-                    <Label size={14} line={20} weight={600} tone="muted">
-                      {uiText("noReport")}
-                    </Label>
-                  </View>
-                </If>
-                <Label line={22} tone="muted">
+                <View style={{ ...row, gap: 8 }}>
+                  <StatusDot color={c().red} />
+                  <Label
+                    size={props.phone ? 14 : 16}
+                    line={props.phone ? 20 : 22}
+                    weight={600}
+                    tone={props.phone ? "muted" : "mutedInk"}
+                  >
+                    {uiText("noReport")}
+                  </Label>
+                </View>
+                <Label line={22} tone={props.phone ? "muted" : "mutedInk"}>
                   {props.run.error ?? uiText("theRoutineWasSkipped")}
                 </Label>
                 <View style={{ ...row, paddingTop: props.phone ? 4 : 0 }}>
@@ -436,7 +436,11 @@ export function RoutineReport(props: RoutineReportProps) {
             </View>
           </View>
         </View>
-        <If when={!failed() && props.run.report}>
+        <If
+          when={
+            props.run.status !== "running" && (failed() || props.run.report)
+          }
+        >
           <View
             style={{
               alignItems: "center",

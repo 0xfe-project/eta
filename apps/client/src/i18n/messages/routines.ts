@@ -33,8 +33,8 @@ export const routinesMessages = {
   routineDaysAt: ["{{days}} at {{time}}", "{{days}} {{time}}"],
   dailySchedule: ["Daily", "每天"],
   weeklySchedule: ["Weekly", "每周"],
-  hourlySchedule: ["Hourly", "按小时"],
-  cronSchedule: ["Cron", "Cron 表达式"],
+  hourlySchedule: ["Every few hours", "每隔几小时"],
+  cronSchedule: ["Custom cron", "自定义 cron"],
   briefUpdatedToV: [
     "Brief updated to v{{briefVersion}}",
     "要求已更新为 v{{briefVersion}}",
@@ -54,6 +54,8 @@ export const routinesMessages = {
   editRoutine: ["Edit routine", "编辑定时任务"],
   everyHour: ["Every hour", "每小时"],
   everyHours: ["Every {{hours}} hours", "每 {{hours}} 小时"],
+  intervalHour: ["1 hour", "1 小时"],
+  intervalHours: ["{{hours}} hours", "{{hours}} 小时"],
   feedbackEGSkipFundingNews: [
     "Feedback, e.g. Skip funding news",
     "反馈，例如：融资新闻不用放",
@@ -61,14 +63,13 @@ export const routinesMessages = {
   loadingRoutine: ["Loading routine…", "正在加载定时任务…"],
   me: ["Me", "我"],
   minuteHourDayOfMonthMonth: [
-    "Minute, hour, day of month, month and day of week.",
-    "依次填写分钟、小时、日期、月份和星期。",
+    "minute hour day month weekday",
+    "分 时 日 月 星期",
   ],
   newer: ["Newer", "较新的"],
   newRoutine: ["New routine", "新建定时任务"],
   nextWithCount: ["Next · {{clockDistance}}", "下次 · {{clockDistance}}"],
   noReport: ["No report", "暂无报告"],
-  noReportsYet: ["No reports yet", "暂无报告"],
   noRoutinesYet: ["No routines yet", "还没有定时任务"],
   noUpcomingRun: ["No upcoming run", "暂无下次运行"],
   older: ["Older", "较早的"],
@@ -101,6 +102,10 @@ export const routinesMessages = {
   time: ["Time", "时间"],
   timeZone: ["Time zone", "时区"],
   turnCaptainOn: ["Turn Captain on", "启用 Captain"],
+  captainSupervisorOff: [
+    "Its supervisor is switched off. While it is off, each time that comes is recorded as skipped; missed runs are not made up when it is back.",
+    "Captain 的监督开关已关闭。关闭期间每次到点都会记一条「已跳过」；重新打开后不会补跑错过的那些次。",
+  ],
   turnOnCaptainToResumeRoutines: [
     "Turn on Captain to resume routines. Scheduled runs are recorded as skipped while Captain is off.",
     "启用 Captain 以恢复定时任务。Captain 停用期间，计划中的运行会记为跳过。",

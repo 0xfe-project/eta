@@ -20,7 +20,10 @@ export function RoutineRow(props: {
       role="button"
       accessibilityLabel={props.item.name}
       onPress={props.onOpen}
-      hoverStyle={{ backgroundColor: c().selected }}
+      // Hover is the selected fill at 60%, so the open row still stands out.
+      hoverStyle={{
+        backgroundColor: props.selected ? c().selected : `${c().selected}99`,
+      }}
       style={{
         ...row,
         ...(props.tablet

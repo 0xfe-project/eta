@@ -114,10 +114,8 @@ export function Routines(props: {
       title={
         phone() && current()
           ? uiText("runReport")
-          : tablet() && editing()
-            ? editing() === "new"
-              ? uiText("newRoutine")
-              : uiText("editRoutine")
+          : tablet() && editing() === "new"
+            ? uiText("newRoutine")
             : props.layout !== "desktop" && info()
               ? info()!.name
               : uiText("routines2")
@@ -140,17 +138,16 @@ export function Routines(props: {
           onPress={() => editing.set("new")}
         />
       </If>
-      <If when={phone() && !selected()}>
-        <ActionMenu
-          label={uiText("routineActions")}
-          iconSize={18}
-          triggerStyle={{ width: 40, height: 40 }}
-        >
-          <ActionItem
-            label={uiText("newRoutine")}
-            onSelect={() => editing.set("new")}
-          />
-        </ActionMenu>
+      <If when={phone() && !selected() && host.can("routines.create")}>
+        <Button
+          label={uiText("newRoutine")}
+          icon="plus"
+          iconSize={20}
+          iconOnly
+          tone="ghost"
+          style={{ width: 40, height: 40 }}
+          onPress={() => editing.set("new")}
+        />
       </If>
       <If when={phone() && info() && !current()}>
         <ActionMenu
@@ -220,59 +217,78 @@ export function Routines(props: {
       </If>
     </Header>
   );
+  const turnOn = () =>
+    status()?.reason === "supervisor_off" && host.can("captain.setSetting");
   const pauseBanner = () => (
     <If when={paused() && !current()}>
       <View
         style={{
+          // The desktop notice puts its button on the right; the others below the text.
+          ...(props.layout === "desktop"
+            ? { ...row, gap: 12 }
+            : { gap: tablet() ? 10 : 6 }),
           paddingHorizontal: phone() ? 12 : props.layout === "tablet" ? 14 : 11,
           paddingTop: props.layout === "desktop" ? 7 : 12,
-          // The phone notice ends on a 6px spacer under its text.
-          paddingBottom: props.layout === "desktop" ? 7 : phone() ? 18 : 12,
+          // The phone notice without a button ends on a 6px spacer under its text.
+          paddingBottom:
+            props.layout === "desktop" ? 7 : phone() && !turnOn() ? 18 : 12,
           marginHorizontal: phone() ? 16 : props.layout === "tablet" ? 12 : 21,
           marginTop: props.layout === "desktop" ? 11 : 12,
           marginBottom: phone() ? 4 : props.layout === "tablet" ? 12 : 0,
-          gap: props.layout === "desktop" ? 0 : phone() ? 6 : 4,
           borderWidth: 1,
           // state-warning at 40% and 12%.
           borderColor: `${c().warning}66`,
           backgroundColor: `${c().warning}1f`,
         }}
       >
-        <Label
-          size={tablet() ? 13 : 14}
-          line={tablet() ? 18 : phone() ? 20 : undefined}
-          weight={props.layout === "desktop" ? 500 : 600}
+        <View
+          style={{
+            gap: props.layout === "desktop" ? 0 : phone() ? 6 : 4,
+            ...(props.layout === "desktop" ? { flex: 1, minWidth: 0 } : {}),
+          }}
         >
-          {uiText("captainIsOffSoRoutinesAre")}
-        </Label>
-        <Label
-          size={tablet() ? 11 : 12}
-          line={phone() ? 18 : 16}
-          tone={props.layout === "desktop" ? "muted" : "mutedInk"}
-        >
-          {status()?.reason === "no_model"
-            ? uiText("captainHasNoModelChooseOne")
-            : uiText("turnOnCaptainToResumeRoutines")}
-        </Label>
-        <If
-          when={
-            status()?.reason === "supervisor_off" &&
-            host.can("captain.setSetting")
-          }
-        >
-          <Button
-            label={uiText("turnCaptainOn")}
-            size={28}
-            style={{ alignSelf: "flex-start" }}
-            onPress={() =>
-              void host.action(() =>
-                host.call("captain", "setSetting", {
-                  key: "supervisorEnabled",
-                  value: true,
-                }),
-              )
-            }
-          />
+          <Label
+            size={tablet() ? 13 : 14}
+            line={tablet() ? 18 : phone() ? 20 : undefined}
+            weight={props.layout === "desktop" ? 500 : 600}
+          >
+            {uiText("captainIsOffSoRoutinesAre")}
+          </Label>
+          <Label
+            size={tablet() ? 11 : 12}
+            line={phone() ? 18 : 16}
+            tone={props.layout === "desktop" ? "muted" : "mutedInk"}
+          >
+            {status()?.reason === "no_model"
+              ? uiText("captainHasNoModelChooseOne")
+              : status()?.reason === "supervisor_off"
+                ? uiText("captainSupervisorOff")
+                : uiText("turnOnCaptainToResumeRoutines")}
+          </Label>
+        </View>
+        <If when={turnOn()}>
+          <View
+            style={{
+              ...row,
+              flexShrink: 0,
+              paddingTop: phone() ? 6 : 0,
+            }}
+          >
+            <Button
+              label={uiText("turnCaptainOn")}
+              size={phone() ? 36 : 28}
+              labelSize={phone() ? 14 : undefined}
+              style={{ paddingHorizontal: phone() ? 14 : 12 }}
+              onPress={() =>
+                void host.action(() =>
+                  host.call("captain", "setSetting", {
+                    key: "supervisorEnabled",
+                    value: true,
+                  }),
+                )
+              }
+            />
+          </View>
         </If>
       </View>
     </If>
@@ -300,7 +316,7 @@ export function Routines(props: {
             <If when={props.layout === "tablet"}>
               <Header
                 title={uiText("routines2")}
-                count={list().length}
+                count={list().length || undefined}
                 layout="tablet"
                 background="none"
                 inset={14}
@@ -331,13 +347,39 @@ export function Routines(props: {
                       : undefined
                   }
                   icon="routines"
+                  iconSize={24}
+                  iconTone="ink"
+                  titleSize={tablet() ? 13 : 14}
+                  titleLine={tablet() ? 18 : 20}
+                  titleWeight={tablet() ? 400 : 500}
+                  descriptionSize={tablet() ? 11 : 12}
+                  descriptionLine={phone() ? 18 : 16}
+                  descriptionWidth={400}
+                  // The list's empty state sits at the top of the column.
+                  style={{
+                    flex: 0,
+                    justifyContent: "flex-start",
+                    paddingTop: phone() ? 56 : tablet() ? 48 : 59,
+                    paddingBottom: phone() ? 24 : 0,
+                    paddingHorizontal: phone() ? 32 : tablet() ? 20 : 30,
+                  }}
                 >
                   <If when={host.can("routines.create") && !editing()}>
-                    <Button
-                      label={uiText("newRoutine")}
-                      icon="plus"
-                      onPress={() => editing.set("new")}
-                    />
+                    <View style={{ ...row, paddingTop: 8 }}>
+                      <Button
+                        label={uiText("newRoutine")}
+                        icon="plus"
+                        tone="primary"
+                        size={phone() ? 36 : tablet() ? 28 : 24}
+                        iconSize={phone() ? 14 : 12}
+                        labelSize={phone() ? 14 : 12}
+                        style={{
+                          paddingHorizontal: phone() ? 14 : tablet() ? 12 : 8,
+                          gap: phone() ? 6 : 4,
+                        }}
+                        onPress={() => editing.set("new")}
+                      />
+                    </View>
                   </If>
                 </Empty>
               }
@@ -390,35 +432,37 @@ export function Routines(props: {
               <If
                 when={info()}
                 else={
-                  <Empty
-                    title={
-                      selected()
-                        ? uiText("loadingRoutine")
-                        : uiText("selectARoutine")
-                    }
-                    description={
-                      selected() ? undefined : uiText("selectOneOnTheLeftTo")
-                    }
-                    icon="routines"
-                    iconSize={selected() ? undefined : 24}
-                    iconTone={selected() ? undefined : "ink"}
-                    titleSize={tablet() ? 13 : undefined}
-                    titleLine={tablet() ? undefined : 20}
-                    titleWeight={tablet() ? 400 : undefined}
-                    descriptionSize={tablet() ? 11 : undefined}
-                    descriptionLine={16}
-                    // Two lines on the desktop; tablet runs it across the pane.
-                    descriptionWidth={tablet() ? 560 : 230}
-                    style={
-                      selected()
-                        ? undefined
-                        : {
-                            justifyContent: "flex-start",
-                            paddingTop: tablet() ? 110 : 60,
-                            paddingHorizontal: tablet() ? 40 : undefined,
-                          }
-                    }
-                  />
+                  <If when={selected() || list().length}>
+                    <Empty
+                      title={
+                        selected()
+                          ? uiText("loadingRoutine")
+                          : uiText("selectARoutine")
+                      }
+                      description={
+                        selected() ? undefined : uiText("selectOneOnTheLeftTo")
+                      }
+                      icon="routines"
+                      iconSize={selected() ? undefined : 24}
+                      iconTone={selected() ? undefined : "ink"}
+                      titleSize={tablet() ? 13 : undefined}
+                      titleLine={tablet() ? undefined : 20}
+                      titleWeight={tablet() ? 400 : undefined}
+                      descriptionSize={tablet() ? 11 : undefined}
+                      descriptionLine={16}
+                      // Two lines on the desktop; tablet runs it across the pane.
+                      descriptionWidth={tablet() ? 560 : 230}
+                      style={
+                        selected()
+                          ? undefined
+                          : {
+                              justifyContent: "flex-start",
+                              paddingTop: tablet() ? 110 : 60,
+                              paddingHorizontal: tablet() ? 40 : undefined,
+                            }
+                      }
+                    />
+                  </If>
                 }
               >
                 {(item) => (

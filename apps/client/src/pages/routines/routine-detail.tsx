@@ -140,6 +140,34 @@ export function RoutineDetail(props: {
         </View>
       </If>
       <Scroll style={grow} scrollbar={false}>
+        <If when={phone()}>
+          <View
+            style={{
+              paddingVertical: 12,
+              paddingHorizontal: 16,
+              gap: 4,
+              borderBottomWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <View style={{ ...row, alignItems: "baseline", gap: 12 }}>
+              <Label size={12} line={16} tone="muted" style={{ width: 64 }}>
+                {uiText("schedule")}
+              </Label>
+              <Label size={12} line={16} tone="mutedInk" style={{ flex: 1 }}>
+                {scheduleFor(props.routine.schedule, props.routine.timezone)}
+              </Label>
+            </View>
+            <View style={{ ...row, alignItems: "baseline", gap: 12 }}>
+              <Label size={12} line={16} tone="muted" style={{ width: 64 }}>
+                {uiText("briefV", { value1: props.brief?.version ?? 1 })}
+              </Label>
+              <Label size={14} line={20} lines={3} style={{ flex: 1 }}>
+                {props.brief?.text ?? ""}
+              </Label>
+            </View>
+          </View>
+        </If>
         <View
           style={{
             ...row,
@@ -240,36 +268,28 @@ export function RoutineDetail(props: {
             </View>
           </View>
         </If>
-        <If when={!props.runs.length}>
-          <View
-            style={{
-              paddingVertical: 16,
-              paddingHorizontal: inset(),
-              borderTopWidth: 1,
-              borderColor: c().border,
-            }}
-          >
-            <Label tone="muted">{uiText("noReportsYet")}</Label>
-          </View>
-        </If>
         <View
           style={{
             ...row,
-            minHeight: 32,
+            ...(phone()
+              ? { height: 44, borderBottomWidth: 1 }
+              : { minHeight: 32 }),
             paddingHorizontal: inset(),
             gap: 12,
             borderTopWidth: 1,
             borderColor: c().border,
           }}
         >
-          <Label
-            size={12}
-            line={16}
-            tone="muted"
-            style={{ width: 72, flexShrink: 0 }}
-          >
-            {shortDate(props.routine.createdAt)}
-          </Label>
+          <If when={!phone()}>
+            <Label
+              size={12}
+              line={16}
+              tone="muted"
+              style={{ width: 72, flexShrink: 0 }}
+            >
+              {shortDate(props.routine.createdAt)}
+            </Label>
+          </If>
           <Label size={12} line={16} tone="muted" style={{ flex: 1 }}>
             {uiText("routineCreatedMarker", {
               version: props.firstBrief?.version ?? 1,
