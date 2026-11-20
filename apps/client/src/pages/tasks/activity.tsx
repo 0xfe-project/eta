@@ -207,7 +207,7 @@ export function TaskActivity(props: {
           <View
             role="button"
             accessibilityLabel={uiText(
-              quiet().length === 1 ? "taskUpdates" : "taskUpdatesMany",
+              quiet().length === 1 ? "oneTaskUpdate" : "taskUpdates",
               { count: quiet().length },
             )}
             onPress={() => unfolded.set(true)}
@@ -226,12 +226,9 @@ export function TaskActivity(props: {
               line={12}
               tone={props.tablet ? "mutedInk" : "muted"}
             >
-              {uiText(
-                quiet().length === 1 ? "taskUpdates" : "taskUpdatesMany",
-                {
-                  count: quiet().length,
-                },
-              )}
+              {uiText(quiet().length === 1 ? "oneTaskUpdate" : "taskUpdates", {
+                count: quiet().length,
+              })}
             </Label>
           </View>
         </If>
