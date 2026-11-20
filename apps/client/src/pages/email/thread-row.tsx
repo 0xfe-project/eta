@@ -4,7 +4,7 @@ import { colors, Icon, Label, row } from "../../components";
 import { CheckControl } from "../../components/check-control";
 import { uiText } from "../../i18n";
 import { relativeTime } from "../../services/host";
-import { EmailBadge, isAgentMail, mailSubject } from "./message";
+import { EmailBadge, isAgentMail, mailDay, mailSubject } from "./message";
 
 export function ThreadRow(props: {
   thread: EmailThreadView;
@@ -18,11 +18,21 @@ export function ThreadRow(props: {
   const c = colors();
   return (
     <View
+      hoverStyle={props.phone ? undefined : { backgroundColor: c().selected }}
       style={{
         ...row,
-        minHeight: props.phone ? 76 : 81,
+        ...(props.phone
+          ? { minHeight: 76 }
+          : {
+              alignItems: "flex-start",
+              gap: 8,
+              paddingVertical: 10,
+              paddingHorizontal: 8,
+              borderLeftWidth: props.selected ? 2 : 0,
+              borderLeftColor: c().ink,
+            }),
         borderBottomWidth: 1,
-        borderColor: c().border,
+        borderBottomColor: c().border,
         backgroundColor: props.selected ? c().selected : c().canvas,
       }}
     >
@@ -33,9 +43,13 @@ export function ThreadRow(props: {
           })}
           checked={props.checked}
           onChange={props.onCheck}
-          size={15}
-          outlineOnly
-          style={{ marginLeft: 8, flexShrink: 0 }}
+          size={props.phone ? 15 : 14}
+          outlineOnly={props.phone}
+          style={
+            props.phone
+              ? { marginLeft: 8, flexShrink: 0 }
+              : { marginTop: 4, flexShrink: 0 }
+          }
         />
       </If>
       <If when={props.phone && !props.selecting}>
@@ -58,17 +72,23 @@ export function ThreadRow(props: {
             ? props.onCheck(!props.checked)
             : props.onOpen()
         }
-        hoverStyle={{ backgroundColor: c().selected }}
+        hoverStyle={props.phone ? { backgroundColor: c().selected } : undefined}
         style={{
           flex: 1,
           minWidth: 0,
-          gap: 2,
-          paddingHorizontal: props.phone ? 11 : 8,
-          paddingVertical: 8,
           cursor: "pointer",
+          ...(props.phone
+            ? { gap: 2, paddingHorizontal: 11, paddingVertical: 8 }
+            : { gap: 4 }),
         }}
       >
-        <View style={{ ...row, gap: 8 }}>
+        <View
+          style={{
+            ...row,
+            gap: 8,
+            alignItems: props.phone ? "center" : "baseline",
+          }}
+        >
           <If when={isAgentMail(props.thread.subject)}>
             <EmailBadge />
           </If>
@@ -79,19 +99,48 @@ export function ThreadRow(props: {
           >
             {mailSubject(props.thread.subject)}
           </Label>
-          <Label size={10} tone="muted">
-            {relativeTime(props.thread.lastMessageAt)}
-          </Label>
+          <If
+            when={props.phone}
+            else={
+              <Label size={11} line={16} tone="muted">
+                {mailDay(props.thread.lastMessageAt)}
+              </Label>
+            }
+          >
+            <Label size={10} tone="muted">
+              {relativeTime(props.thread.lastMessageAt)}
+            </Label>
+          </If>
           <If when={props.phone}>
             <Icon name="right" size={10} tone="muted" />
           </If>
         </View>
-        <Label size={12} tone="muted" lines={1}>
-          {props.thread.messageCount > 1
-            ? `${props.thread.peer} · ${props.thread.messageCount}`
-            : props.thread.peer}
-        </Label>
-        <Label size={12} tone="muted" lines={1}>
+        <If
+          when={props.phone}
+          else={
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <Label
+                size={12}
+                line={16}
+                tone="muted"
+                lines={1}
+                style={{ flex: 1, minWidth: 0 }}
+              >
+                {props.thread.peer}
+              </Label>
+              <Label size={12} line={16} tone="muted">
+                {props.thread.messageCount}
+              </Label>
+            </View>
+          }
+        >
+          <Label size={12} tone="muted" lines={1}>
+            {props.thread.messageCount > 1
+              ? `${props.thread.peer} · ${props.thread.messageCount}`
+              : props.thread.peer}
+          </Label>
+        </If>
+        <Label size={12} line={16} tone="muted" lines={1}>
           {props.thread.lastMessage}
         </Label>
       </View>

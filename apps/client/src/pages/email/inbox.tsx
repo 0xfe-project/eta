@@ -88,10 +88,15 @@ export function Email(props: {
       );
   }
   async function refresh() {
-    if (refreshing()) return;
+    if (refreshing() || !accounts().length) return;
     refreshing.set(true);
     await host.action(() => host.call("email", "refresh", {}));
     refreshing.set(false);
+  }
+  function openFolder(tab: "Inbox" | "Sent") {
+    folder.set(tab);
+    selected.set("");
+    checked.set([]);
   }
   async function markUnread(id: string) {
     const result = await host.action(() =>
@@ -122,7 +127,7 @@ export function Email(props: {
             icon="refresh"
             iconOnly={phone()}
             tone={phone() ? "ghost" : undefined}
-            disabled={refreshing() || !accounts().length}
+            disabled={refreshing()}
             onPress={() => void refresh()}
           />
         </If>
@@ -141,7 +146,7 @@ export function Email(props: {
         </If>
       </Header>
       <If
-        when={accounts().length}
+        when={accounts().length || !phone()}
         else={
           <Empty
             title={uiText("noMailboxConnected")}
@@ -175,30 +180,69 @@ export function Email(props: {
                   ...row,
                   minHeight: 44,
                   paddingHorizontal: 12,
-                  gap: 6,
+                  gap: phone() ? 6 : 10,
                   borderBottomWidth: 1,
                   borderColor: c().border,
                 }}
               >
-                <If when={!phone()}>
-                  <Icon name="email" />
-                </If>
-                <Each of={["Inbox", "Sent"] as const}>
-                  {(tab) => (
-                    <Button
-                      label={uiText(
-                        tab() === "Inbox" ? "inboxFolder" : "sentFolder",
+                <If
+                  when={!phone()}
+                  else={
+                    <Each of={["Inbox", "Sent"] as const}>
+                      {(tab) => (
+                        <Button
+                          label={uiText(
+                            tab() === "Inbox" ? "inboxFolder" : "sentFolder",
+                          )}
+                          selected={folder() === tab()}
+                          tone="ghost"
+                          onPress={() => openFolder(tab())}
+                        />
                       )}
-                      selected={folder() === tab()}
-                      tone="ghost"
-                      onPress={() => {
-                        folder.set(tab());
-                        selected.set("");
-                        checked.set([]);
-                      }}
-                    />
-                  )}
-                </Each>
+                    </Each>
+                  }
+                >
+                  <Icon name="email" size={16} />
+                  <View
+                    style={{
+                      ...row,
+                      gap: 2,
+                      padding: 2,
+                      backgroundColor: c().selected,
+                    }}
+                  >
+                    <Each of={["Inbox", "Sent"] as const}>
+                      {(tab) => (
+                        <View
+                          role="tab"
+                          accessibilityLabel={uiText(
+                            tab() === "Inbox" ? "inboxFolder" : "sentFolder",
+                          )}
+                          accessibilityState={{ selected: folder() === tab() }}
+                          onPress={() => openFolder(tab())}
+                          style={{
+                            paddingVertical: 3,
+                            paddingHorizontal: 8,
+                            backgroundColor:
+                              folder() === tab() ? c().canvas : "transparent",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <Label
+                            size={12}
+                            line={16}
+                            weight={folder() === tab() ? 600 : 400}
+                            tone={folder() === tab() ? "ink" : "muted"}
+                          >
+                            {uiText(
+                              tab() === "Inbox" ? "inboxFolder" : "sentFolder",
+                            )}
+                          </Label>
+                        </View>
+                      )}
+                    </Each>
+                  </View>
+                </If>
                 <View style={{ flex: 1 }} />
                 <If
                   when={phone()}
@@ -237,13 +281,18 @@ export function Email(props: {
               <If
                 when={threads().length}
                 else={
-                  <Empty
-                    title={
-                      folder() === "Inbox"
-                        ? uiText("inboxIsEmpty")
-                        : uiText("noSentMail")
-                    }
-                  />
+                  <If
+                    when={accounts().length}
+                    else={<NoMailbox onSettings={props.onSettings} />}
+                  >
+                    <Empty
+                      title={
+                        folder() === "Inbox"
+                          ? uiText("inboxIsEmpty")
+                          : uiText("noSentMail")
+                      }
+                    />
+                  </If>
                 }
               >
                 <Scroll style={grow} scrollbar={false}>
@@ -282,6 +331,7 @@ export function Email(props: {
                   assignments={assignments()}
                   proposals={proposals()}
                   phone={phone()}
+                  desktop={props.layout === "desktop"}
                   onAssign={() => assigning.set(true)}
                   onDelete={() => deleting.set(true)}
                   onMarkUnread={() => void markUnread(entry().id)}
@@ -371,6 +421,30 @@ export function Email(props: {
           </View>
         </Modal>
       </If>
+    </View>
+  );
+}
+
+/** The list column with no mailbox: a short block at its top, not centred. */
+function NoMailbox(props: { onSettings: () => void }) {
+  return (
+    <View
+      style={{
+        alignItems: "center",
+        gap: 8,
+        paddingVertical: 40,
+        paddingHorizontal: 24,
+      }}
+    >
+      <Icon name="email" size={24} tone="muted" />
+      <Label weight={500} style={{ textAlign: "center" }}>
+        {uiText("noMailboxConnected")}
+      </Label>
+      <Button
+        label={uiText("connectMailbox")}
+        style={{ marginTop: 4 }}
+        onPress={props.onSettings}
+      />
     </View>
   );
 }

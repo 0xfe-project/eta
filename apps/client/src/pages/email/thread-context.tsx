@@ -1,6 +1,7 @@
 import type {
   EmailAssignmentView,
   EmailMessageView,
+  EmailMetaView,
   EmailResults,
   TranscriptSection,
   ViewCore,
@@ -13,6 +14,7 @@ import {
   Caption,
   colors,
   grow,
+  Icon,
   Label,
   Markdown,
   Modal,
@@ -60,6 +62,249 @@ export function EmailInfo(props: {
   );
 }
 
+function signatureText(meta: EmailMetaView) {
+  return meta.signatureValid === true
+    ? uiText("signatureVerified")
+    : meta.signatureValid === false
+      ? uiText("signatureInvalid")
+      : meta.signaturePresent
+        ? uiText("signatureUnchecked")
+        : uiText("unsigned");
+}
+
+function dataPoints(count: number) {
+  return uiText(count === 1 ? "dataPoint" : "dataPointCount", { count });
+}
+
+function entries(count: number) {
+  return uiText(count === 1 ? "entry" : "entries", { count });
+}
+
+function MetaStat(props: { label: string; value: string; verified?: boolean }) {
+  const c = colors();
+  return (
+    <View
+      style={{
+        flex: 1,
+        minWidth: 0,
+        gap: 2,
+        paddingVertical: 8,
+        paddingHorizontal: 10,
+        borderBottomWidth: 1,
+        borderRightWidth: 1,
+        borderColor: c().border,
+      }}
+    >
+      <Label
+        size={10}
+        line={16}
+        tone="muted"
+        style={{ letterSpacing: 0.5, textTransform: "uppercase" }}
+      >
+        {props.label}
+      </Label>
+      <Label
+        size={12}
+        line={16}
+        tone={props.verified ? "green" : "ink"}
+        lines={1}
+      >
+        {props.value}
+      </Label>
+    </View>
+  );
+}
+
+/** Desktop: the agent part of a message, inline under it and folded by default. */
+export function EmailMetaCard(props: { meta: EmailMetaView }) {
+  const c = colors();
+  const open = signal(false);
+  const route = () =>
+    [
+      [uiText("metaAgentId"), props.meta.agentId],
+      [uiText("metaSessionId"), props.meta.sessionId],
+      [uiText("mailThread"), props.meta.mailThreadId],
+      [uiText("metaTask"), props.meta.taskId],
+    ].filter((entry): entry is [string, string] => !!entry[1]);
+  return (
+    <View
+      style={{
+        backgroundColor: c().selected,
+        borderWidth: 1,
+        borderColor: c().border,
+      }}
+    >
+      <View
+        role="button"
+        accessibilityLabel={uiText("agentCommunicationContext")}
+        accessibilityState={{ expanded: open() }}
+        onPress={() => open.set(!open())}
+        style={{
+          ...row,
+          gap: 12,
+          paddingVertical: 10,
+          paddingHorizontal: 12,
+          cursor: "pointer",
+        }}
+      >
+        <View
+          style={{
+            width: 32,
+            height: 32,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: c().canvas,
+            borderWidth: 1,
+            borderColor: c().border,
+          }}
+        >
+          <Label size={10} line={16} weight={600}>
+            ETA
+          </Label>
+        </View>
+        <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+          <View style={{ ...row, gap: 8 }}>
+            <Label size={12} line={16} weight={600}>
+              {uiText("agentCommunicationContext")}
+            </Label>
+            <Label
+              size={10}
+              line={16}
+              tone="muted"
+              style={{
+                backgroundColor: c().canvas,
+                borderWidth: 1,
+                borderColor: c().border,
+                paddingVertical: 2,
+                paddingHorizontal: 6,
+              }}
+            >
+              {dataPoints(props.meta.packetCount)}
+            </Label>
+          </View>
+          <Label size={11} line={16} tone="muted" lines={1}>
+            {[
+              props.meta.agentName ?? "—",
+              props.meta.protocol ?? "—",
+              entries(route().length),
+            ].join(" · ")}
+          </Label>
+        </View>
+        <View
+          style={{ transform: open() ? [{ rotate: "180deg" }] : undefined }}
+        >
+          <Icon name="down" size={14} tone="muted" />
+        </View>
+      </View>
+      <If when={open()}>
+        <View
+          style={{
+            gap: 10,
+            paddingVertical: 10,
+            paddingHorizontal: 12,
+            borderTopWidth: 1,
+            borderColor: c().border,
+          }}
+        >
+          <Label size={11} line={16} tone="muted">
+            {uiText("contextHint")}
+          </Label>
+          <View
+            style={{
+              flexDirection: "row",
+              borderLeftWidth: 1,
+              borderTopWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <MetaStat
+              label={uiText("agent")}
+              value={props.meta.agentName ?? "—"}
+            />
+            <MetaStat
+              label={uiText("protocol")}
+              value={props.meta.protocol ?? "—"}
+            />
+            <MetaStat
+              label={uiText("dataPoints")}
+              value={dataPoints(props.meta.packetCount)}
+            />
+            <MetaStat
+              label={uiText("signature")}
+              value={signatureText(props.meta)}
+              verified={props.meta.signatureValid === true}
+            />
+          </View>
+          <View
+            style={{
+              backgroundColor: c().canvas,
+              borderWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <View
+              style={{
+                ...row,
+                justifyContent: "space-between",
+                paddingVertical: 6,
+                paddingHorizontal: 12,
+                borderBottomWidth: 1,
+                borderColor: c().border,
+              }}
+            >
+              <Label size={12} line={16} weight={600}>
+                {uiText("context")}
+              </Label>
+              <Label size={10} line={16} tone="muted">
+                {entries(route().length)}
+              </Label>
+            </View>
+            <Label
+              size={10}
+              line={16}
+              tone="muted"
+              style={{
+                backgroundColor: c().selected,
+                paddingVertical: 4,
+                paddingHorizontal: 12,
+              }}
+            >
+              {uiText("communicationRoute")}
+            </Label>
+            <Each of={route()} key={(entry) => entry[0]}>
+              {(entry) => (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    gap: 12,
+                    paddingVertical: 6,
+                    paddingHorizontal: 12,
+                    borderBottomWidth:
+                      entry()[0] === route().at(-1)?.[0] ? 0 : 1,
+                    borderColor: c().border,
+                  }}
+                >
+                  <Label
+                    size={10}
+                    line={16}
+                    tone="muted"
+                    style={{ width: 140, flexShrink: 0 }}
+                  >
+                    {entry()[0]}
+                  </Label>
+                  <Label size={11} line={16} style={{ flex: 1, minWidth: 0 }}>
+                    {entry()[1]}
+                  </Label>
+                </View>
+              )}
+            </Each>
+          </View>
+        </View>
+      </If>
+    </View>
+  );
+}
+
 export function EmailContext(props: {
   message: EmailMessageView;
   layout: Layout;
@@ -100,13 +345,7 @@ export function EmailContext(props: {
               />
               <EmailInfo
                 label={uiText("signature")}
-                value={
-                  meta()?.signatureValid === true
-                    ? "Verified"
-                    : meta()?.signaturePresent
-                      ? "Unverified"
-                      : "Not signed"
-                }
+                value={meta() ? signatureText(meta()!) : undefined}
               />
               <EmailInfo
                 label={uiText("mailThread")}
