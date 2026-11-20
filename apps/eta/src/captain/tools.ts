@@ -26,6 +26,7 @@ import {
   keyMissing,
   LLM_PROVIDER_ID,
   providerLabel,
+  TASK_STATUSES,
 } from "@eta/client-contracts";
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
@@ -587,15 +588,7 @@ export function captainSessionTools(
         title: Type.Optional(Type.String()),
         description: Type.Optional(Type.String()),
         status: Type.Optional(
-          Type.Union([
-            Type.Literal("backlog"),
-            Type.Literal("todo"),
-            Type.Literal("in_progress"),
-            Type.Literal("in_review"),
-            Type.Literal("done"),
-            Type.Literal("blocked"),
-            Type.Literal("cancelled"),
-          ]),
+          Type.Union(TASK_STATUSES.map((status) => Type.Literal(status))),
         ),
       }),
       execute(args) {

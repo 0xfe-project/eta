@@ -11,7 +11,7 @@ import type { InboxResponse, InteractionView } from "@eta/client-contracts";
 import type { AskObserver } from "@eta/harness";
 import type { SessionMeta, SessionsService } from "@eta/server";
 import type { Timeline } from "../conversations/timeline";
-import type { SettingStore } from "./setting";
+import type { SettingStore } from "../settings/store";
 import type { InteractionStore } from "./store";
 import { interactionId } from "./store";
 

@@ -390,7 +390,9 @@ describe("the timeline", () => {
     const queued = timeline.queueReply(conv.id, ada.id, user);
     const done = timeline.queueReply(conv.id, ada.id, user);
     timeline.finish(done.id, { status: "done", text: "fine" });
-    expect(timeline.failInterrupted("restarted")).toEqual([conv.id]);
+    expect(timeline.failInterrupted("restarted", "stopped here")).toEqual([
+      conv.id,
+    ]);
     expect(timeline.get(queued.id)).toMatchObject({
       status: "failed",
       text: "restarted",
@@ -401,7 +403,7 @@ describe("the timeline", () => {
       text: "fine",
     });
     expect(timeline.get(user.id)?.status).toBe("done");
-    expect(timeline.failInterrupted("again")).toEqual([]);
+    expect(timeline.failInterrupted("again", "stopped here")).toEqual([]);
   });
 
   it("a reply outlives its agent, which leaves the conversation", () => {

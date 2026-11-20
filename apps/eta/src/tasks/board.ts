@@ -33,6 +33,7 @@ import type { TaskRecord, TaskStore } from "./store";
 import { TASK_STATUSES } from "@eta/client-contracts";
 import { resolveAssignee } from "./assignee";
 import { nameOf, TaskGraph } from "./graph";
+import { finished, workable } from "./status";
 
 /** A dependency as a caller names it: the task (`#N` or id), and whether only done resolves it. */
 export interface DependencyInput {
@@ -121,15 +122,6 @@ export interface TaskRuns {
     options?: { wake?: boolean },
   ) => void;
 }
-
-/**
- * Whether a task in this status is one an executor works on. It answers two questions at once: does
- * a change to this task set a run going, and does a comment on it wake one. A task in the backlog is
- * not claimed yet, and one that is done or cancelled has nothing more to do with it: those comments
- * are recorded and read by whoever looks.
- */
-export const workable = (status: BoardTaskStatus): boolean =>
-  status !== "backlog" && status !== "done" && status !== "cancelled";
 
 export interface TaskBoardDeps {
   db: Database;
@@ -239,10 +231,6 @@ const viewOf = (task: TaskRecord, graph: TaskGraph): BoardTaskView => ({
 });
 
 const DAY = 24 * 60 * 60 * 1000;
-
-/** Done or cancelled: the statuses a task can be archived in by itself. */
-const finished = (status: BoardTaskStatus): boolean =>
-  status === "done" || status === "cancelled";
 
 export class TaskBoard {
   readonly #deps: TaskBoardDeps;

@@ -143,6 +143,7 @@ export class SessionsService extends Service implements SessionsApi {
   private readonly manager: SessionManager;
   private readonly wire: WireService;
   private readonly remote: RemoteSessions | undefined;
+  private readonly warn: (message: string) => void;
   private readonly held = new Map<string, Attached>();
   /**
    * What the store last told us, and nothing more: the *live* parts of a row (is it running,
@@ -161,12 +162,14 @@ export class SessionsService extends Service implements SessionsApi {
       manager: SessionManager;
       wire: WireService;
       remote?: RemoteSessions | undefined;
+      warn?: ((message: string) => void) | undefined;
     },
   ) {
     super(ctx, "sessions");
     this.manager = deps.manager;
     this.wire = deps.wire;
     this.remote = deps.remote;
+    this.warn = deps.warn ?? ((message) => console.warn(message));
     // The sidebar is eager: a client that has just connected draws it from `hello`. The
     // store is asynchronous and a state projector must not be, so the last answer is kept
     // here and refreshed whenever something changed.
@@ -402,7 +405,14 @@ export class SessionsService extends Service implements SessionsApi {
       ...(level === current ? {} : { thinkingLevel: level }),
     });
     await this.manager.setMeta(id, { model: formatModelId(identity) });
-    await attached.managed.session.compaction?.threshold().catch(() => false);
+    // The re-measure runs behind the answer: a summary can take longer than the caller waits,
+    // and the switch is already written. Nothing is skipped by not waiting — the next run's
+    // first turn checks the threshold again (kernel runner) — and a failure is reported.
+    void attached.managed.session.compaction?.threshold().catch((error) => {
+      this.warn(
+        `[sessions] compaction after the switch to ${formatModelId(identity)} failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
+      );
+    });
     await this.refresh();
     return { model: formatModelId(identity), thinkingLevel: level };
   }
@@ -832,6 +842,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           manager: options.manager,
           wire,
           remote: options.remote,
+          warn: options.warn,
         });
         void service.refresh();
         const registrations: (() => void)[] = [];

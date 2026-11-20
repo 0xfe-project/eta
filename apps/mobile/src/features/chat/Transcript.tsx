@@ -32,6 +32,25 @@ const FAILURE_KEYS = {
   unavailable: "chat.failure.unavailable",
   gone: "chat.failure.gone",
 } as const;
+// Why a reply was stopped without its run, as the host marks it.
+const STOP_KEYS = {
+  stop_unanswered: "chat.stop.unanswered",
+  stop_unreachable: "chat.stop.unreachable",
+  link_lost: "chat.stop.linkLost",
+  restart: "chat.stop.restart",
+} as const;
+
+/** "Stopped", and why when the host stopped it without its run. */
+function stoppedWords(data: Readonly<Record<string, unknown>>): string {
+  const code = String(data.code ?? "");
+  const key = Object.hasOwn(STOP_KEYS, code)
+    ? STOP_KEYS[code as keyof typeof STOP_KEYS]
+    : undefined;
+  const stopped = t("chat.message.stopped");
+  return key === undefined
+    ? stopped
+    : `${stopped} · ${t(key, { error: String(data.stopError ?? "") })}`;
+}
 
 /** How long a reply has to be before it folds. */
 const LONG_MESSAGE = { chars: 1000, lines: 12 };
@@ -382,7 +401,7 @@ function Reply(props: {
       </Each>
       <If when={m().status === "stopped"}>
         <Text class="text-sm leading-[18px] text-muted-foreground">
-          {t("chat.message.stopped")}
+          {stoppedWords(m().data)}
         </Text>
       </If>
       <If when={m().status === "failed"}>

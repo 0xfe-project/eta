@@ -20,7 +20,7 @@ export const BUILT_UPSTREAM: string =
     ? ETA_HOST_UPSTREAM
     : "0xfe-project/eta";
 
-/** Under this key in the `setting` table, as the text given (`inbox/setting.ts`). */
+/** Under this key in the `setting` table, as the text given (`settings/store.ts`). */
 export const UPSTREAM_SETTING = "upgrade.upstream";
 
 const GITHUB_API = "https://api.github.com";

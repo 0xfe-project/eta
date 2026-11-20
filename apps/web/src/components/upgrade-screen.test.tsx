@@ -1,10 +1,18 @@
 import type { UpgradeStatusView } from "@eta/client-contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setWire } from "@/lib/wire";
+import { useUpgradeWatch } from "@/queries/upgrade";
 import { buildProductHost } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
 import { UpgradeScreen } from "./upgrade-screen";
 import { useWorkspaceStore } from "./workspace/workspace-store";
+
+function Watch() {
+  const watch = useUpgradeWatch();
+  return (
+    <output>{watch === undefined ? "loading" : JSON.stringify(watch)}</output>
+  );
+}
 
 const realFetch = globalThis.fetch;
 afterEach(async () => {
@@ -145,4 +153,65 @@ describe("the screen over an upgrade", () => {
     await poll();
     expect(screen()).toBeNull();
   }, 15_000);
+
+  it("treats a response without a phase as no status, while the host is still there", async () => {
+    globalThis.fetch = (async () =>
+      Response.json({
+        id: "u1",
+        state: "running",
+        from: "1.0.0",
+        startedAt: 1,
+        log: [],
+      })) as unknown as typeof globalThis.fetch;
+    const host = buildProductHost();
+    host.install();
+    host.hello();
+    await mount(<Watch />);
+    await flush();
+    expect(JSON.parse(document.body.textContent ?? "")).toEqual({
+      reachable: true,
+      status: null,
+    });
+  });
+
+  it("treats a status with an unknown phase as no status", async () => {
+    status({
+      ...upgrade(),
+      phase: "melting",
+    } as unknown as UpgradeStatusView);
+    const host = buildProductHost();
+    host.install();
+    host.hello();
+    await mount(<Watch />);
+    await flush();
+    expect(JSON.parse(document.body.textContent ?? "")).toEqual({
+      reachable: true,
+      status: null,
+    });
+  });
+
+  it("reads a well-formed status as it was sent", async () => {
+    const sent = upgrade({
+      state: "running",
+      phase: "waiting",
+      finishedAt: 2,
+      download: { received: 10, total: 20 },
+      busy: [
+        { kind: "task", name: "Ship it", number: 7 },
+        { kind: "reply", name: "eta" },
+      ],
+      error: "slow",
+      log: ["one", "two"],
+    });
+    status(sent);
+    const host = buildProductHost();
+    host.install();
+    host.hello();
+    await mount(<Watch />);
+    await flush();
+    expect(JSON.parse(document.body.textContent ?? "")).toEqual({
+      reachable: true,
+      status: sent,
+    });
+  });
 });

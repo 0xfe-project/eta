@@ -67,6 +67,8 @@ export function createOarRuntimes(
         models: runtimeModels(input.runtime, catalog),
         delegate,
         compact: async (config) => await delegate.compact(config),
+        residency: () => delegate.residency(),
+        release: async () => await delegate.release(),
         dispose: async () => await delegate.dispose(),
       };
     },

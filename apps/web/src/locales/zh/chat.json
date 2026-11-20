@@ -208,7 +208,13 @@
       "unavailable": "跑不起来。",
       "gone": "这位成员已不在对话里。"
     },
-    "queued": "排队中"
+    "queued": "排队中",
+    "stopCodes": {
+      "unanswered": "它没有响应停止，已在这边停止。",
+      "unreachable": "没能通知它停下（{{error}}），已在这边停止。",
+      "linkLost": "和它所在机器的连接断了，已在这边停止。",
+      "restart": "停止时宿主重启了，已在这边停止。"
+    }
   },
   "actions": {
     "withdraw": "撤回",

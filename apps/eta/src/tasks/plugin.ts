@@ -14,7 +14,7 @@ import type {
  * `create`, whose call is the user pressing "Create" (`TaskBoard.make`).
  */
 import type { CallFrame } from "@eta/client-wire-proto";
-import type { SettingStore } from "../inbox/setting";
+import type { SettingStore } from "../settings/store";
 import type {
   DependencyInput,
   FieldsInput,

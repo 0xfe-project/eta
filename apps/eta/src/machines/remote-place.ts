@@ -31,9 +31,15 @@ import type { MachineHub, MachineLink } from "./hub";
 import type { SessionMirrors } from "./mirror";
 import type { MachineRecord } from "./store";
 import { LINK_LIMITS } from "@eta/client-contracts";
-import { modelSpecOf } from "@eta/daemon";
+import { LinkError, modelSpecOf } from "@eta/daemon";
 import { builtinPersonas } from "@eta/harness";
 import { discoverPersonas, parseModelId } from "@eta/server";
+
+/**
+ * How long a stop may take to reach a daemon and be answered. Shorter than the engine's wait for
+ * the run to end, so a link that swallows the stop is told apart from a run that ignores it.
+ */
+const STOP_TIMEOUT_MS = 4_000;
 
 export interface RemotePlaceDeps {
   hub: MachineHub;
@@ -59,15 +65,23 @@ class RemoteHandle implements SessionHandle {
   readonly id: string;
   readonly #link: MachineLink;
   readonly #warn: (message: string) => void;
+  /** The link went under the run: the daemon may still be running it. */
+  readonly #cutOff: (session: string) => void;
   readonly #activityListeners = new Set<
     (kind: DaemonRunEvent["kind"]) => void
   >();
   #running = false;
 
-  constructor(id: string, link: MachineLink, warn: (message: string) => void) {
+  constructor(
+    id: string,
+    link: MachineLink,
+    warn: (message: string) => void,
+    cutOff: (session: string) => void,
+  ) {
     this.id = id;
     this.#link = link;
     this.#warn = warn;
+    this.#cutOff = cutOff;
   }
 
   get running(): boolean {
@@ -132,17 +146,31 @@ class RemoteHandle implements SessionHandle {
           ...(onEvent === undefined ? {} : { onEvent }),
         },
       );
+    } catch (error) {
+      if (
+        error instanceof LinkError &&
+        (error.kind === "lost" || error.kind === "timeout")
+      )
+        this.#cutOff(this.id);
+      throw error;
     } finally {
       this.#running = false;
     }
   }
 
   abort(): void {
-    this.#link.pipe
-      .call("sessions", "abort", { session: this.id })
-      .catch((error: unknown) =>
-        this.#warn(`[eta] could not stop ${this.id}: ${String(error)}`),
-      );
+    this.stop().catch((error: unknown) =>
+      this.#warn(`[eta] could not stop ${this.id}: ${String(error)}`),
+    );
+  }
+
+  async stop(): Promise<void> {
+    await this.#link.pipe.call(
+      "sessions",
+      "abort",
+      { session: this.id },
+      { timeoutMs: STOP_TIMEOUT_MS },
+    );
   }
 
   onActivity(listener: (kind: DaemonRunEvent["kind"]) => void): () => void {
@@ -153,9 +181,36 @@ class RemoteHandle implements SessionHandle {
 
 export class RemotePlace implements SessionPlace {
   readonly #deps: RemotePlaceDeps;
+  /**
+   * Sessions whose run the link went under, by machine: the daemon may still be running them,
+   * and nobody here waits for what they say. They are told to stop when the machine is back.
+   */
+  readonly #cutOff = new Map<string, Set<string>>();
 
   constructor(deps: RemotePlaceDeps) {
     this.#deps = deps;
+    deps.hub.onReady((link) => this.#tidy(link));
+  }
+
+  /** A machine's link went down, and why. */
+  onLost(listener: (machineId: string, reason: string) => void): () => void {
+    return this.#deps.hub.onLost(listener);
+  }
+
+  /** Stop what a machine that came back may still be running for replies that already ended. */
+  #tidy(link: MachineLink): void {
+    const sessions = this.#cutOff.get(link.machineId);
+    if (sessions === undefined) return;
+    this.#cutOff.delete(link.machineId);
+    for (const session of sessions) {
+      link.pipe
+        .call("sessions", "abort", { session }, { timeoutMs: STOP_TIMEOUT_MS })
+        .catch((error: unknown) =>
+          this.#deps.warn(
+            `[eta] could not stop ${session} on ${link.machineId} after the link came back: ${String(error)}`,
+          ),
+        );
+    }
   }
 
   async ensure(input: EnsureInput): Promise<SessionHandle> {
@@ -209,7 +264,11 @@ export class RemotePlace implements SessionPlace {
     });
     if (session !== input.existing) input.created(session);
     mirrors.register(session, machine.id);
-    return new RemoteHandle(session, link, this.#deps.warn);
+    return new RemoteHandle(session, link, this.#deps.warn, (cut) => {
+      const sessions = this.#cutOff.get(machine.id) ?? new Set<string>();
+      sessions.add(cut);
+      this.#cutOff.set(machine.id, sessions);
+    });
   }
 
   async configure(

@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { WireError } from "@/lib/wire";
 import {
   useAgentRuntimeChoices,
   useDeleteAgent,
@@ -163,6 +164,8 @@ function AgentEditorForm({
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const updateAgent = useUpdateAgent();
   const { agents } = useAgents();
+  // The host refuses to delete a Captain as an ordinary agent: its editor does not offer it.
+  const captain = agent.systemRole === "captain";
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [tab, setTab] = useState<Tab>("general");
   const form = useForm<AgentForm>({
@@ -240,7 +243,16 @@ function AgentEditorForm({
             toast.success(translateText("common:feedback.saved"));
             onDone();
           },
-          onError: (error) => toast.error(error.message),
+          onError: (error) => {
+            // The host writes the agent before it re-applies its sessions, so a call that ran
+            // out of time has still saved: say so, and close like a success. A refusal is real.
+            if (error instanceof WireError && error.code === "timeout") {
+              toast.success(translateText("feedback.savedApplyLater"));
+              onDone();
+            } else {
+              toast.error(error.message);
+            }
+          },
         },
       );
     },
@@ -291,16 +303,25 @@ function AgentEditorForm({
           )}
         </section>
       </div>
-      <DialogFooter className="shrink-0 border-t p-3 sm:justify-between">
-        <Button
-          type="button"
-          variant="ghost"
-          className="text-destructive hover:text-destructive"
-          onClick={() => setConfirmDelete(true)}
-        >
-          <TrashIcon aria-hidden="true" data-icon="inline-start" />
-          {translateText("actions.delete")}
-        </Button>
+      <DialogFooter
+        className={cn(
+          "shrink-0 border-t p-3",
+          // With nothing on the left, a space-between footer would push the buttons over to the
+          // edge they are not on: the Captain's footer keeps them where they belong.
+          captain ? "sm:justify-end" : "sm:justify-between",
+        )}
+      >
+        {captain ? null : (
+          <Button
+            type="button"
+            variant="ghost"
+            className="text-destructive hover:text-destructive"
+            onClick={() => setConfirmDelete(true)}
+          >
+            <TrashIcon aria-hidden="true" data-icon="inline-start" />
+            {translateText("actions.delete")}
+          </Button>
+        )}
         <div className="flex gap-2">
           <Button type="button" variant="outline" onClick={onDone}>
             {translateText("common:actions.cancel")}
@@ -310,12 +331,14 @@ function AgentEditorForm({
           </Button>
         </div>
       </DialogFooter>
-      <DeleteAgentDialog
-        agent={agent}
-        open={confirmDelete}
-        onOpenChange={setConfirmDelete}
-        onDeleted={onDone}
-      />
+      {captain ? null : (
+        <DeleteAgentDialog
+          agent={agent}
+          open={confirmDelete}
+          onOpenChange={setConfirmDelete}
+          onDeleted={onDone}
+        />
+      )}
     </form>
   );
 }

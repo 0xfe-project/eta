@@ -7,6 +7,7 @@ import type { TaskRunStore } from "../tasks/runs";
 import type { CaptainAudit } from "./audit";
 import type { CaptainService } from "./service";
 import type { CaptainStore } from "./store";
+import { isActive } from "../tasks/status";
 
 export interface CaptainSupervisorDeps {
   store: CaptainStore;
@@ -27,7 +28,6 @@ export interface CaptainSupervisorDeps {
 const MINUTE = 60_000;
 const TICK = MINUTE;
 const CHANGE_DEBOUNCE_MS = 150;
-const ACTIVE = new Set(["todo", "in_progress"]);
 
 /** Reserved signal from a future proactive source. No source is enabled in this release. */
 interface CaptainWakeEvent {
@@ -237,7 +237,7 @@ export class CaptainSupervisor {
         });
         continue;
       }
-      if (!ACTIVE.has(task.status)) continue;
+      if (!isActive(task.status)) continue;
       const open = this.#deps.runs.openOf(task.id);
       if (open.length > 0) {
         const offline = open.filter((run) => {

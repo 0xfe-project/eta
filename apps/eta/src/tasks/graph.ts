@@ -3,6 +3,7 @@ import type {
   TaskDependencyState,
   TaskWorkspaceMode,
 } from "@eta/client-contracts";
+import { reviewedOrDone } from "./status";
 /**
  * The task graph: which task waits for which, which task is part of which, and what follows.
  *
@@ -89,10 +90,6 @@ const branchOf = (task: Pick<GraphTask, "number">): string =>
 /** Why a cycle through the tree is one: said whenever subtasks are part of the question. */
 const TREE_HINT =
   " (a subtask waits for what its parents wait for, and waiting for a parent is waiting for its subtasks)";
-
-/** In review or done: what a dependency needs, unless it requires done. */
-const reviewedOrDone = (status: BoardTaskStatus): boolean =>
-  status === "in_review" || status === "done";
 
 /**
  * A parent's status from its subtasks that are not cancelled, the first rule that holds: all done,

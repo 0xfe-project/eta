@@ -54,7 +54,12 @@ import { CaptainStore } from "./captain/store";
 import { CaptainSupervisor } from "./captain/supervisor";
 import { captainSessionTools } from "./captain/tools";
 import { AttachmentStore } from "./conversations/attachments";
-import { combineRunHooks, Engine, RESTART_TEXT } from "./conversations/engine";
+import {
+  combineRunHooks,
+  Engine,
+  RESTART_STOP_NOTE,
+  RESTART_TEXT,
+} from "./conversations/engine";
 import { conversationsPlugin } from "./conversations/plugin";
 import { ConversationStore } from "./conversations/store";
 import { ConversationTargets } from "./conversations/targets";
@@ -66,7 +71,6 @@ import { EmailStore } from "./email/store";
 import { emailSessionTools } from "./email/tools";
 import { Inbox } from "./inbox/inbox";
 import { inboxPlugin } from "./inbox/plugin";
-import { SettingStore } from "./inbox/setting";
 import { InteractionStore } from "./inbox/store";
 import { MachineHub } from "./machines/hub";
 import { sshRunner } from "./machines/install";
@@ -103,6 +107,7 @@ import {
   sessionKeyOf,
   taskKey,
 } from "./session-owner";
+import { SettingStore } from "./settings/store";
 import { skillFilesPlugin } from "./skills/plugin";
 import { SkillFileService } from "./skills/service";
 import { TaskArchiver } from "./tasks/archiver";
@@ -133,6 +138,12 @@ export interface RoutinesOptions {
   reviseTimeoutMs?: number;
   /** False leaves the timer off, and the scheduler looks at the clock only when told to. */
   timer?: boolean;
+}
+
+/** What a test sets to move a reply's stop along; a real host leaves it alone. */
+export interface RepliesOptions {
+  /** How long a run told to stop has before its reply is stopped without it (5 seconds). */
+  stopGraceMs?: number;
 }
 
 /** What a test sets to keep tasks from running; a real host leaves all of it alone. */
@@ -209,6 +220,7 @@ export function createProduct(options: {
   places?: Places | undefined;
   routines?: RoutinesOptions;
   tasks?: TasksOptions;
+  replies?: RepliesOptions;
   /** Whether this product starts Captain; tests that are not about Captain leave it off. */
   captain?: boolean | undefined;
   /** Overrides of what a published site may hold. */
@@ -262,7 +274,7 @@ export function createProduct(options: {
   machines.markDaemonsOffline();
   // Nothing is running yet, so whatever the last process left in flight cannot be, and no
   // question it asked can still be answered.
-  timeline.failInterrupted(RESTART_TEXT);
+  timeline.failInterrupted(RESTART_TEXT, RESTART_STOP_NOTE);
   // And a message whose lane was in that run is not waiting for anything any more.
   timeline.releaseHeld();
   const interactions = new InteractionStore(db);
@@ -618,6 +630,7 @@ export function createProduct(options: {
     changed,
     warn,
     remote: remotePlace,
+    stopGraceMs: options.replies?.stopGraceMs,
     pluginStamp: (agent) => plugins.stampOf(agent.id),
     pluginsRead: () => plugins.registry.refresh(),
     sessionStamp: (conversationId) =>

@@ -66,6 +66,12 @@ function strings(value: unknown): string[] {
     : [];
 }
 
+function record(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
 export function encodeLogoAlt(envelope: EtaMailEnvelope): string {
   const { from } = envelope.payload;
   return `${LOGO_PREFIX}${Buffer.from(
@@ -157,14 +163,14 @@ function headerValue(headers: EmailHeaders, name: string): string | undefined {
 /** Normalize whatever arrived on the wire into the payload shape, or nothing. */
 function readPayload(raw: unknown): EtaMailPayload | null {
   if (raw === null || typeof raw !== "object") return null;
-  const envelope = raw as Record<string, unknown>;
+  const envelope = record(raw) ?? {};
   if (envelope.protocol !== "eta-mp/1") return null;
-  const payload = (envelope.payload ?? null) as Record<string, unknown> | null;
-  if (payload === null || typeof payload !== "object") return null;
-  const from = (payload.from ?? {}) as Record<string, unknown>;
-  const work = (payload.work ?? {}) as Record<string, unknown>;
-  const ask = (payload.ask ?? {}) as Record<string, unknown>;
-  const human = (payload.human ?? {}) as Record<string, unknown>;
+  const payload = record(envelope.payload);
+  if (payload === undefined) return null;
+  const from = record(payload.from) ?? {};
+  const work = record(payload.work) ?? {};
+  const ask = record(payload.ask) ?? {};
+  const human = record(payload.human) ?? {};
   const decided = Array.isArray(payload.decided) ? payload.decided : [];
   return {
     protocol: "eta-mp/1",
@@ -197,7 +203,7 @@ function readPayload(raw: unknown): EtaMailPayload | null {
     },
     decided: decided.flatMap((item) => {
       if (item === null || typeof item !== "object") return [];
-      const entry = item as Record<string, unknown>;
+      const entry = record(item) ?? {};
       const value = text(entry.text);
       return value === null
         ? []
@@ -215,9 +221,11 @@ function parseLogo(html: string): Partial<EtaMailPayloadFrom> {
   const alt = $('img[alt^="ETA-A1:"]').first().attr("alt") ?? "";
   if (!alt.startsWith(LOGO_PREFIX)) return {};
   try {
-    const raw = JSON.parse(
+    const parsed: unknown = JSON.parse(
       Buffer.from(alt.slice(LOGO_PREFIX.length), "base64url").toString("utf8"),
-    ) as Record<string, unknown>;
+    );
+    const raw = record(parsed);
+    if (raw === undefined) return {};
     return {
       agentId: text(raw.agentId),
       agentName: text(raw.agentName),

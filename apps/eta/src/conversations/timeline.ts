@@ -518,22 +518,29 @@ export class Timeline {
 
   /**
    * Replies a dead process left in flight end here: nothing is running them, so they can only be
-   * failures, and saying so is better than a row that says `working` forever. Returns the
-   * conversations that had one.
+   * failures, and saying so is better than a row that says `working` forever. One the user was
+   * stopping is what they asked for: it ends as stopped, with `stopNote` saying why it ended here.
+   * Returns the conversations that had one.
    */
-  failInterrupted(text: string): string[] {
+  failInterrupted(text: string, stopNote: string): string[] {
     const now = Date.now();
     const ids = new Set<string>();
     this.#db.transaction(() => {
       for (const row of this.active()) {
+        const stopped = row.status === "stopping";
         this.#db
           .query(
-            `UPDATE message SET status = 'failed', text = ?, data = ?, revision = revision + 1, updated_at = ?
+            `UPDATE message SET status = ?, text = ?, data = ?, revision = revision + 1, updated_at = ?
               WHERE id = ?`,
           )
           .run(
-            text,
-            JSON.stringify({ ...row.data, code: "restart" }),
+            stopped ? "stopped" : "failed",
+            stopped ? row.text : text,
+            JSON.stringify({
+              ...row.data,
+              code: "restart",
+              ...(stopped ? { stopNote } : {}),
+            }),
             now,
             row.id,
           );

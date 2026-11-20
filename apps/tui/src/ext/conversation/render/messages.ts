@@ -15,6 +15,12 @@ export const renderMessages = defineMessages({
     fullOutput: "full output: {path}",
     plan: "☰ Plan",
     stopped: "■ Stopped",
+    stoppedUnanswered: "It did not stop when asked, so it was stopped here",
+    stoppedUnreachable:
+      "Could not tell it to stop ({error}), so it was stopped here",
+    stoppedLinkLost: "The link to its machine was lost, so it was stopped here",
+    stoppedRestart:
+      "The host restarted while it was stopping, so it was stopped here",
     failedRestart: "The host restarted before this reply was finished",
     failedRunFailed: "The run failed",
     failedUnavailable: "The reply could not run",
@@ -44,6 +50,10 @@ export const renderMessages = defineMessages({
     fullOutput: "完整输出：{path}",
     plan: "☰ 计划",
     stopped: "■ 已停止",
+    stoppedUnanswered: "它没有响应停止，已在这边停止",
+    stoppedUnreachable: "没能通知它停下（{error}），已在这边停止",
+    stoppedLinkLost: "和它所在机器的连接断了，已在这边停止",
+    stoppedRestart: "停止时宿主重启了，已在这边停止",
     failedRestart: "宿主重启了，这条回复没有写完",
     failedRunFailed: "运行失败",
     failedUnavailable: "跑不起来",

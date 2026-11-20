@@ -195,6 +195,57 @@ describe("editing an agent in tabs", () => {
   });
 });
 
+describe("deleting an agent", () => {
+  // The footer's own name for it: the button that opens the confirmation.
+  const deleteButton = () =>
+    buttons().find((button) => button.textContent === "删除智能体");
+  const footer = () =>
+    document.querySelector('[data-slot="dialog-footer"]') as HTMLElement;
+
+  // A fresh list, and the editor opened on one of them.
+  const open = async (agent: AgentView) => {
+    await act(async () =>
+      useWorkspaceStore
+        .getState()
+        .setAgentEditor({ open: false, agentId: null }),
+    );
+    host.set("agents", { list: [agent] });
+    await settle();
+    await act(async () =>
+      useWorkspaceStore
+        .getState()
+        .setAgentEditor({ open: true, agentId: agent.id }),
+    );
+    await settle();
+  };
+
+  it("is not offered on the Captain's own settings", async () => {
+    await open(
+      agentView({
+        id: "captain",
+        name: "Captain",
+        systemRole: "captain",
+        model: "c:m1",
+      }),
+    );
+    expect(dialogText()).toContain("Captain");
+    // The host refuses to delete a Captain as an ordinary agent: the editor does not offer
+    // it, and nothing is left behind to confirm it either.
+    expect(deleteButton()).toBeUndefined();
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+    // With nothing on the left, the buttons it does have stay on the right.
+    expect(footer().children).toHaveLength(1);
+    expect(footer().className).toContain("sm:justify-end");
+    expect(footer().className).not.toContain("sm:justify-between");
+  });
+
+  it("is still offered on an ordinary agent", async () => {
+    await open(agentView({ id: "a2", name: "助手", model: "c:m1" }));
+    expect(deleteButton()?.textContent).toBe("删除智能体");
+    expect(footer().className).toContain("sm:justify-between");
+  });
+});
+
 describe("picking a model", () => {
   it("shows the new model at once and saves it", async () => {
     const trigger = document.getElementById("agent-model")!;
