@@ -278,6 +278,7 @@ export function Connection(props: {
                 title={uiText("whereShouldEtaRun")}
                 layout={props.layout}
                 inset={16}
+                titleLine={24}
                 dialog
               />
             </If>
@@ -290,6 +291,7 @@ export function Connection(props: {
                 }
                 layout={props.layout}
                 inset={16}
+                titleLine={24}
                 dialog
               />
             </If>
@@ -424,7 +426,7 @@ export function Connection(props: {
                             paddingHorizontal: 24,
                             opacity: !draft().trim() || busy() ? 0.5 : 1,
                           }
-                        : undefined
+                        : { paddingHorizontal: 12 }
                     }
                     disabled={!draft().trim() || busy()}
                     onPress={connect}

@@ -30,6 +30,7 @@ export function DownloadStatus(props: { layout: Layout }) {
         title={uiText("downloadingTheHost")}
         layout={props.layout}
         inset={16}
+        titleLine={props.layout === "phone" ? undefined : 24}
         dialog
       />
       <View style={{ padding: 16, gap: 12 }}>
