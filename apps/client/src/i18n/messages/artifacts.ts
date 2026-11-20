@@ -55,7 +55,7 @@ export const artifactsMessages = {
   openInNewWindow: ["Open in new window", "新窗口打开"],
   previewUnavailable: ["Preview unavailable", "无法预览"],
   searchArtifacts: ["Search artifacts", "搜索产物"],
-  searchByTitle: ["Search by title", "按标题搜索"],
+  searchTitles: ["Search titles", "搜索标题"],
   sharePublicly: ["Share publicly", "公开分享"],
   shareThisVersionPublicly: [
     "Share this version publicly?",

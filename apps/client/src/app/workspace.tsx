@@ -269,8 +269,9 @@ export function Workspace(props: {
         >
           <If
             when={
-              page() === "chat" &&
-              (props.layout === "tablet" || (phone() && !mobileOpen()))
+              (page() === "chat" &&
+                (props.layout === "tablet" || (phone() && !mobileOpen()))) ||
+              (page() === "captain" && props.layout === "tablet")
             }
           >
             <ChatList

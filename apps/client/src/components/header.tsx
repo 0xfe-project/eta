@@ -30,8 +30,13 @@ export function Header(props: {
       style={{
         ...row,
         flexShrink: 0,
-        height: props.layout === "phone" ? 46 : sizes.header,
+        height: props.layout === "phone" ? 48 : sizes.header,
         paddingHorizontal: props.inset ?? (props.layout === "phone" ? 16 : 22),
+        // A phone's 40pt back button carries its own inset.
+        paddingLeft:
+          props.layout === "phone" && props.onBack !== undefined
+            ? 4
+            : (props.inset ?? (props.layout === "phone" ? 16 : 22)),
         borderBottomWidth: 1,
         borderColor: color().border,
         backgroundColor:
@@ -43,13 +48,17 @@ export function Header(props: {
       }}
     >
       <If when={props.onBack !== undefined}>
-        <BackButton onPress={() => props.onBack?.()} />
+        <BackButton
+          size={props.layout === "phone" ? 40 : undefined}
+          iconSize={props.layout === "phone" ? 18 : undefined}
+          onPress={() => props.onBack?.()}
+        />
       </If>
       <View style={{ minWidth: 0, flexShrink: 1 }}>
         <Label
           weight={props.dialog ? 500 : 600}
           size={props.layout === "phone" || props.dialog ? 16 : 14}
-          line={props.subtitle ? 18 : undefined}
+          line={props.subtitle ? 18 : 20}
           lines={1}
         >
           {props.title}

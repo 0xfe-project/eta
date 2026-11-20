@@ -35,9 +35,11 @@ export function GroupRow(props: {
       style={{
         minHeight: phone() ? 64 : 53,
         flexShrink: 0,
-        paddingHorizontal: phone() ? 16 : 14,
-        paddingVertical: 7,
-        gap: phone() ? 8 : 2,
+        paddingLeft: phone() ? 16 : 14,
+        paddingRight: phone() ? 12 : 14,
+        paddingTop: phone() ? 0 : 8,
+        paddingBottom: phone() ? 0 : 6,
+        gap: phone() ? 12 : 2,
         borderBottomWidth: 1,
         borderColor: c().border,
         cursor: "pointer",
@@ -46,24 +48,35 @@ export function GroupRow(props: {
       }}
     >
       <If when={phone()}>
-        <View style={{ ...row, width: 40, flexShrink: 0 }}>
+        <View style={{ ...row, width: 36, paddingLeft: 2, flexShrink: 0 }}>
           <Each of={people()}>
-            {(person) => <AgentFace id={person().agentId} size={16} />}
+            {(person, index) => (
+              <View style={{ marginLeft: index() ? -4 : 0 }}>
+                <AgentFace id={person().agentId} size={16} />
+              </View>
+            )}
           </Each>
         </View>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Label lines={1}>{props.group.name}</Label>
-          <Label size={12} tone="muted" lines={1}>
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <Label line={20} lines={1}>
+            {props.group.name}
+          </Label>
+          <Label size={11} line={14} tone="muted" lines={1}>
             {props.group.preview}
           </Label>
         </View>
         <If when={props.group.unread > 0}>
           <StatusDot color={c().blue} />
         </If>
-        <Label size={10} tone="muted">
+        <Label
+          size={11}
+          line={14}
+          tone="muted"
+          style={{ width: 28, textAlign: "right", flexShrink: 0 }}
+        >
           {time()}
         </Label>
-        <Icon name="right" size={12} tone="faint" />
+        <RowChevron />
       </If>
       <If when={!phone()}>
         <View style={{ ...row, gap: 6 }}>
@@ -72,7 +85,7 @@ export function GroupRow(props: {
               {(person) => <AgentFace id={person().agentId} size={16} />}
             </Each>
           </View>
-          <Label size={16} line={20} lines={1} style={{ flex: 1 }}>
+          <Label size={16} line={22} lines={1} style={{ flex: 1 }}>
             {props.group.name}
           </Label>
           <Label size={10} line={14} tone="muted">
@@ -127,29 +140,45 @@ export function AgentRow(props: {
       style={{
         ...row,
         height: props.phone ? 52 : 33,
-        paddingHorizontal: 16,
+        paddingLeft: 16,
+        paddingRight: props.phone ? 12 : 16,
         flexShrink: 0,
-        gap: props.phone ? 26 : 8,
+        gap: props.phone ? 12 : 8,
         borderBottomWidth: 1,
         borderColor: c().border,
         cursor: "pointer",
       }}
     >
-      <AgentFace id={props.agent.id} size={20} />
-      <Label lines={1} style={{ flex: 1 }}>
+      <View
+        style={{
+          width: props.phone ? 36 : 20,
+          paddingLeft: props.phone ? 2 : 0,
+          flexShrink: 0,
+        }}
+      >
+        <AgentFace id={props.agent.id} size={20} />
+      </View>
+      <Label line={20} lines={1} style={{ flex: 1 }}>
         {props.agent.name}
       </Label>
       <If when={props.phone}>
-        <Label size={11} tone="muted">
+        <Label
+          size={11}
+          line={14}
+          tone="muted"
+          lines={1}
+          style={{ minWidth: 32, textAlign: "right", flexShrink: 0 }}
+        >
           {props.agent.status === "working"
             ? uiText("working2")
             : uiText("idle")}
         </Label>
-        <Icon name="right" size={12} tone="faint" />
+        <RowChevron />
       </If>
       <If when={!props.phone}>
         <StatusDot
-          color={props.agent.status === "working" ? c().blue : "#bdbdbd"}
+          color={props.agent.status === "working" ? c().blue : c().muted}
+          opacity={props.agent.status === "working" ? 1 : 0.4}
         />
       </If>
     </View>
@@ -171,5 +200,16 @@ export function AgentRow(props: {
         <AgentFace id={props.agent.id} size={24} />
       </RailEntry>
     </If>
+  );
+}
+
+/** The 14px foreground caret at 45% in a 16px slot that ends phone list rows. */
+function RowChevron() {
+  return (
+    <View style={{ width: 16, alignItems: "center", flexShrink: 0 }}>
+      <View style={{ opacity: 0.45 }}>
+        <Icon name="right" size={14} />
+      </View>
+    </View>
   );
 }

@@ -46,7 +46,11 @@ export function TabletRail(props: Navigation) {
           <NavItem
             item={item()}
             layout="tablet"
-            selected={props.page === item()[0]}
+            // Captain is a conversation: the Chat page stays the one selected.
+            selected={
+              props.page === item()[0] ||
+              (props.page === "captain" && item()[0] === "chat")
+            }
             count={item()[0] === "tasks" ? check() : 0}
             onPress={() => props.onNavigate(item()[0])}
           />

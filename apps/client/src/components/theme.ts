@@ -29,7 +29,7 @@ export const light = {
 const dark: typeof light = {
   canvas: "#0a0a0a",
   surface: "#090909",
-  selected: "#232323",
+  selected: "#161616",
   ink: "#fafafa",
   muted: "#a3a3a3",
   mutedInk: "#c5c5c5",

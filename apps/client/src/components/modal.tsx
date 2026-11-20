@@ -49,9 +49,8 @@ export function Modal(props: {
     maxHeight: "100%",
     height: props.height,
     backgroundColor: color().canvas,
-    borderWidth: props.sheet || props.phonePage ? 0 : 1,
-    borderTopWidth: props.phonePage ? 0 : 1,
-    borderColor: props.sheet ? color().border : color().strong,
+    borderWidth: props.phonePage ? 0 : 1,
+    borderColor: color().strong,
     overflow: "hidden",
     ...props.panelStyle,
   });
@@ -79,14 +78,14 @@ export function Modal(props: {
         <If when={props.sheet}>
           <View
             style={{
-              height: 13,
+              height: 16,
+              paddingTop: 8,
               alignItems: "center",
-              justifyContent: "center",
               flexShrink: 0,
             }}
           >
             <View
-              style={{ width: 36, height: 4, backgroundColor: color().border }}
+              style={{ width: 36, height: 4, backgroundColor: color().strong }}
             />
           </View>
         </If>

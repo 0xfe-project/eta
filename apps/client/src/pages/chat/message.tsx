@@ -14,7 +14,7 @@ import {
   runFromOf,
   savedSteps,
 } from "@eta/client-contracts";
-import { effect, signal, View } from "nsh";
+import { effect, List, signal, View } from "nsh";
 import {
   Button,
   Caption,
@@ -27,9 +27,10 @@ import {
 import { AgentFace } from "../../components/agent-face";
 import { uiText } from "../../i18n";
 import { clock, follow, useHost } from "../../services/host";
-import { TaskSummary } from "../tasks/status";
+import { subtasksOf, TaskSummary } from "../tasks/status";
 import { Proposal, Question } from "./approvals";
 import { ArtifactRow } from "./artifacts/row";
+import { CaptainReview, reviewItemsOf } from "./captain-review";
 import { activeReply } from "./member-status";
 import { messageTime } from "./message-time";
 import { ProcessStep } from "./process-step";
@@ -52,34 +53,9 @@ export function Message(props: {
   const details = signal(false);
   const item = () => props.item;
   const review = () => {
-    if (item().author !== "system") return undefined;
-    const metadata = item().data.captainReview;
-    if (
-      metadata &&
-      typeof metadata === "object" &&
-      "reviews" in metadata &&
-      Array.isArray(metadata.reviews)
-    )
-      return metadata.reviews.flatMap((entry: unknown) => {
-        if (
-          !entry ||
-          typeof entry !== "object" ||
-          !("body" in entry) ||
-          typeof entry.body !== "string"
-        )
-          return [];
-        return [entry.body];
-      });
-    const older = /<captain-review>([\s\S]*?)<\/captain-review>/.exec(
-      item().text,
-    )?.[1];
-    return older
-      ?.split(/^\d+\. \[[^\]]+\]\s*/m)
-      .slice(1)
-      .map((entry) => (entry.split("\n{")[0] ?? "").trim())
-      .filter(Boolean);
+    const items = reviewItemsOf(item());
+    return items.length ? items : undefined;
   };
-  const expandedReview = signal(false);
   let previousId: string | undefined;
   effect(() => {
     const id = item().id;
@@ -138,13 +114,15 @@ export function Message(props: {
         "archived",
       ),
     ].find((entry) => entry.id === item().data.taskId);
+  const card = () =>
+    item().kind === "task_card" || item().kind === "task_draft";
   return (
     <View
       style={{
         alignSelf: "stretch",
-        gap: 4,
-        paddingVertical: props.phone ? 0 : 16,
-        paddingHorizontal: props.phone || props.compact ? 0 : 16,
+        gap: item().author === "user" || card() ? 4 : 0,
+        paddingVertical: props.phone || card() ? 0 : 16,
+        paddingHorizontal: props.phone || props.compact || card() ? 0 : 16,
       }}
     >
       <If when={item().author === "user"}>
@@ -212,6 +190,11 @@ export function Message(props: {
           {(value) => (
             <TaskSummary
               task={value()}
+              subtasks={
+                value().subtasks?.total
+                  ? subtasksOf(host.tasks(), value())
+                  : undefined
+              }
               onPress={() => props.onTask(value().id)}
             />
           )}
@@ -251,7 +234,7 @@ export function Message(props: {
         }
       >
         <If when={item().agentId}>
-          <View style={{ ...row, gap: 8, marginBottom: 5 }}>
+          <View style={{ ...row, gap: 8, marginBottom: 10 }}>
             <AgentFace id={item().agentId} size={14} />
             <Label size={12} weight={600}>
               {host.agent(item().agentId)?.name ??
@@ -282,11 +265,15 @@ export function Message(props: {
                 <Icon
                   name={details() ? "down" : "right"}
                   size={8}
-                  tone="faint"
+                  tone="muted"
                 />
-                <Caption text={uiText("thinkingProcess")} />
+                <Caption
+                  text={uiText("thinkingProcess")}
+                  style={{ letterSpacing: 0.8, color: c().faint }}
+                />
                 <View style={{ flex: 1 }} />
                 <Caption
+                  style={{ letterSpacing: 0.8, color: c().faint }}
                   text={uiText(
                     steps().length === 1
                       ? "oneProcessStep"
@@ -318,13 +305,14 @@ export function Message(props: {
               style={{
                 ...row,
                 height: 24,
-                paddingHorizontal: 8,
+                paddingLeft: 10,
+                paddingRight: 4,
                 justifyContent: "space-between",
                 borderBottomWidth: 1,
                 borderColor: c().border,
               }}
             >
-              <Label size={10} tone="muted">
+              <Label size={10} line={12} tone="muted">
                 {steps().length
                   ? uiText("processSteps", { length: steps().length })
                   : item().status === "queued"
@@ -337,6 +325,8 @@ export function Message(props: {
                 label={uiText("stop")}
                 size={18}
                 labelSize={10}
+                labelWeight={600}
+                style={{ paddingHorizontal: 7 }}
                 disabled={item().status === "stopping"}
                 onPress={() =>
                   void host.action(() =>
@@ -348,21 +338,45 @@ export function Message(props: {
                 }
               />
             </View>
-            <Each
-              of={details() ? steps() : steps().slice(-5)}
-              key={(step) => step.id}
+            <If
+              when={!details() && steps().length > 5}
+              else={
+                <Each of={steps()} key={(step) => step.id}>
+                  {(step) => <ProcessStep value={step()} />}
+                </Each>
+              }
             >
-              {(step) => <ProcessStep value={step()} />}
-            </Each>
+              {/* A fixed window on the newest steps; older ones scroll up. */}
+              <List
+                style={{ height: 176, flexShrink: 0 }}
+                each={steps()}
+                keyExtractor={(step) => step.id}
+                initialScrollAtEnd
+                estimatedItemSize={33}
+                maintainVisibleContentPosition={{
+                  autoscrollToBottomThreshold: 40,
+                }}
+              >
+                {(step) => <ProcessStep value={step()} />}
+              </List>
+            </If>
           </View>
           <If when={steps().length > 5}>
-            <View style={{ alignItems: "flex-end" }}>
-              <Button
-                label={details() ? uiText("viewLess") : uiText("viewMore")}
-                labelSize={10}
-                tone="ghost"
+            <View
+              style={{ alignItems: "flex-end", paddingRight: 8, marginTop: 8 }}
+            >
+              <View
+                role="button"
+                accessibilityLabel={
+                  details() ? uiText("viewLess") : uiText("viewMore")
+                }
                 onPress={() => details.set(!details())}
-              />
+                style={{ cursor: "pointer" }}
+              >
+                <Label size={11} line={14} tone="muted">
+                  {details() ? uiText("viewLess") : uiText("viewMore")}
+                </Label>
+              </View>
             </View>
           </If>
         </If>
@@ -373,38 +387,26 @@ export function Message(props: {
               <If
                 when={item().status === "failed"}
                 else={
-                  <Markdown value={item().text} line={props.phone ? 22 : 24} />
+                  <View style={{ paddingHorizontal: 2 }}>
+                    <Markdown
+                      value={item().text}
+                      line={props.phone ? 22 : 24}
+                    />
+                  </View>
                 }
               >
-                <Label line={props.phone ? 22 : 24} tone="amber">
+                <Label
+                  line={props.phone ? 22 : 24}
+                  tone="amber"
+                  style={{ paddingHorizontal: 2 }}
+                >
                   {item().text}
                 </Label>
               </If>
             </If>
           }
         >
-          {(items) => (
-            <View
-              style={{
-                borderWidth: 1,
-                borderColor: c().border,
-                padding: 8,
-                gap: 5,
-              }}
-            >
-              <Button
-                label={uiText("captainReview", { length: items().length })}
-                end={expandedReview() ? "down" : "right"}
-                tone="ghost"
-                onPress={() => expandedReview.set(!expandedReview())}
-              />
-              <If when={expandedReview()}>
-                <Each of={items()} key="index">
-                  {(body) => <Markdown value={body()} line={20} />}
-                </Each>
-              </If>
-            </View>
-          )}
+          {(items) => <CaptainReview items={items()} time={stamp()} />}
         </If>
         <Each of={widgets()} key={(widget) => widget.id}>
           {(widget) => (
@@ -423,18 +425,20 @@ export function Message(props: {
           )}
         </Each>
         <If when={question()}>{(entry) => <Question item={entry()} />}</If>
-        <Label
-          size={10}
-          line={14}
-          tone="faint"
-          style={{
-            marginTop: 4,
-            letterSpacing: props.phone ? 0 : 0.4,
-            textTransform: props.phone ? "none" : "uppercase",
-          }}
-        >
-          {stamp()}
-        </Label>
+        <If when={!review()}>
+          <Label
+            size={10}
+            line={14}
+            tone="faint"
+            style={{
+              marginTop: 8,
+              letterSpacing: props.phone ? 0 : 0.4,
+              textTransform: props.phone ? "none" : "uppercase",
+            }}
+          >
+            {stamp()}
+          </Label>
+        </If>
       </If>
     </View>
   );

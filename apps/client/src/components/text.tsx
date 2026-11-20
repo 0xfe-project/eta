@@ -64,6 +64,8 @@ export function Markdown(props: {
   line?: number;
   streaming?: boolean;
   compactHeadings?: boolean;
+  /** 12/16 text with 16/22 headings, for a narrow panel. */
+  dense?: boolean;
 }) {
   const c = colors();
   const fonts = Fonts();
@@ -71,12 +73,16 @@ export function Markdown(props: {
     fonts().mono
       ? { fontFamily: fontFamily(fonts().mono, "monospace") }
       : undefined;
-  const heading = {
-    fontSize: 15,
-    lineHeight: 20,
-    marginTop: 16,
-    marginBottom: 6,
-  };
+  const heading = props.dense
+    ? {
+        fontSize: 16,
+        lineHeight: 22,
+        fontWeight: 600,
+        marginTop: 0,
+        marginBottom: 0,
+      }
+    : { fontSize: 15, lineHeight: 20, marginTop: 16, marginBottom: 6 };
+  const headings = props.compactHeadings || props.dense;
   return (
     <TextView
       markdown={props.value}
@@ -86,16 +92,16 @@ export function Markdown(props: {
       styles={{
         root: {
           fontFamily: fontFamily(fonts().interface),
-          fontSize: 14,
-          lineHeight: props.line ?? 24,
+          fontSize: props.dense ? 12 : 14,
+          lineHeight: props.line ?? (props.dense ? 16 : 24),
           color: c().ink,
         },
         paragraph: { marginTop: 0, marginBottom: 0 },
         codeBlock: code(),
         code: code(),
-        heading1: props.compactHeadings ? heading : undefined,
-        heading2: props.compactHeadings ? heading : undefined,
-        heading3: props.compactHeadings ? heading : undefined,
+        heading1: headings ? heading : undefined,
+        heading2: headings ? heading : undefined,
+        heading3: headings ? heading : undefined,
         link: { color: c().blue },
       }}
       codeBlockActions={[{ id: "copy" }]}

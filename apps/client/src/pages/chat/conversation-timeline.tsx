@@ -72,7 +72,9 @@ export function ConversationTimeline(props: {
           contentStyle={{
             paddingLeft: 16,
             paddingRight: props.rail ? 60 : 16,
-            paddingTop: phone() ? 16 : 12,
+            // The header's slot stays, empty, with a gap after it: take that
+            // gap back while there is nothing older to load.
+            paddingTop: (phone() ? 16 : 12) - (props.hasOlder ? 0 : 12),
             paddingBottom: 12,
             gap: 12,
           }}

@@ -92,7 +92,7 @@ export function ProcessStep(props: { value: RunBlock }) {
                 style={{
                   ...row,
                   minHeight: 33,
-                  paddingHorizontal: 9,
+                  paddingHorizontal: 10,
                   gap: 8,
                   borderBottomWidth: 1,
                   borderColor: c().border,
@@ -114,9 +114,13 @@ export function ProcessStep(props: { value: RunBlock }) {
                       ? {
                           backgroundColor: c().button,
                           color: c().buttonInk,
-                          paddingHorizontal: 6,
+                          paddingHorizontal: 8,
+                          paddingVertical: 2,
+                          lineHeight: 12,
+                          letterSpacing: 1,
+                          fontWeight: 600,
                         }
-                      : undefined
+                      : { lineHeight: 12, letterSpacing: 1, color: c().faint }
                   }
                 />
               </View>

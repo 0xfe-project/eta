@@ -52,7 +52,6 @@ export function EmailProposal(props: { item: EmailProposalView }) {
       <View style={{ ...row, gap: 6, justifyContent: "flex-end" }}>
         <Button
           label={uiText("discard")}
-          tone="danger"
           disabled={busy()}
           onPress={() => void decide(false)}
         />

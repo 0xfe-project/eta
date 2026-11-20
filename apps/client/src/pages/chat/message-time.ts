@@ -1,7 +1,7 @@
 import { formatLocale, uiText } from "../../i18n";
 import { clock } from "../../services/host";
 
-export function messageDate(at: number) {
+function messageDate(at: number) {
   const day = new Date(at);
   const today = new Date();
   const yesterday = new Date();

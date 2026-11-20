@@ -23,12 +23,14 @@ import {
 import { AgentFace } from "../../components/agent-face";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { PendingStrip } from "./approvals";
 import { ArtifactPreview } from "./artifacts/preview";
 import { Composer } from "./composer";
 import { ConversationActions } from "./conversation-actions";
 import { ConversationPanel } from "./conversation-panel";
 import { ConversationTimeline } from "./conversation-timeline";
 import { indexInserts, InsertMessage } from "./insert-message";
+import { activeReply } from "./member-status";
 import { InviteAgents, StewardMenu } from "./members";
 import { MemberRun } from "./run/member-run";
 
@@ -86,6 +88,8 @@ export function Conversation(props: {
       .find((item) => item.id === (info()?.projectId ?? summary()?.projectId));
   const stewardId = () => (info() ? info()!.stewardId : summary()?.stewardId);
   const timeline = () => host.section<TimelineSection>(target(), "timeline");
+  const asking = () =>
+    host.pending().filter((entry) => entry.conversationId === props.id);
   const messages = () => [
     ...new Map(
       [...older(), ...(timeline()?.messages ?? [])].map((message) => [
@@ -177,16 +181,31 @@ export function Conversation(props: {
           inset={10}
         >
           <If when={!phone() && project() && group()}>
-            <Button
-              label={project()?.name ?? ""}
-              icon="folder"
-              tone="ghost"
+            <View
+              role="button"
+              accessibilityLabel={project()?.name ?? ""}
               onPress={() => {
                 panel.set("Context");
                 if (props.layout === "desktop") projectInfo.set(true);
                 else drawer.set(true);
               }}
-            />
+              hoverStyle={{ backgroundColor: c().selected }}
+              style={{
+                ...row,
+                gap: 4,
+                paddingVertical: 2,
+                paddingHorizontal: 6,
+                borderWidth: 1,
+                borderColor: c().border,
+                flexShrink: 0,
+                cursor: "pointer",
+              }}
+            >
+              <Icon name="folder" size={12} tone="muted" />
+              <Label size={12} line={16} tone="muted" lines={1}>
+                {project()?.name ?? ""}
+              </Label>
+            </View>
           </If>
           <If when={!phone() && group()}>
             <StewardMenu
@@ -195,8 +214,8 @@ export function Conversation(props: {
               current={stewardId()}
             />
           </If>
-          <If when={!phone()}>
-            <View style={{ ...row, gap: 8 }}>
+          <If when={!phone() && members().length > 1}>
+            <View style={{ ...row, gap: 8, marginLeft: 4 }}>
               <Each of={members()} key={(entry) => entry.agentId}>
                 {(entry) => <AgentFace id={entry().agentId} size={12} />}
               </Each>
@@ -240,6 +259,11 @@ export function Conversation(props: {
             alignSelf: "center",
           }}
         >
+          <If when={!phone() && asking().length}>
+            <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+              <PendingStrip items={asking()} />
+            </View>
+          </If>
           <ConversationTimeline
             rows={indexed().rows}
             additions={indexed().additions}
@@ -292,6 +316,18 @@ export function Conversation(props: {
             alignWithContent={props.alignComposer}
             held={timeline()?.held ?? []}
             widgetDraft={widgetDraft()}
+            onStopMember={(agentId) => {
+              const reply = messages().findLast(
+                (message) =>
+                  message.agentId === agentId && activeReply(message.status),
+              );
+              void host.action(() =>
+                host.call("conversations", "stop", {
+                  conversationId: props.id,
+                  messageId: reply?.id,
+                }),
+              );
+            }}
           />
         </View>
       </View>

@@ -54,7 +54,7 @@ export function StewardMenu(props: {
             ...row,
             height: 22,
             gap: 6,
-            paddingHorizontal: 5,
+            paddingHorizontal: 6,
             borderWidth: 1,
             borderColor: c().border,
             cursor: "pointer",

@@ -77,7 +77,7 @@ export function ArtifactRow(props: {
             pointerEvents: "none",
           }}
         >
-          <Icon name="artifact" size={12} />
+          <Icon name="artifact" size={12} tone="mutedInk" />
         </View>
         <View
           style={{ ...grow, gap: list() ? 2 : 0, pointerEvents: "box-none" }}
@@ -117,7 +117,7 @@ export function ArtifactRow(props: {
                     style={{
                       ...row,
                       flexShrink: 0,
-                      paddingHorizontal: 3,
+                      paddingHorizontal: 4,
                       borderWidth: 1,
                       borderColor: c().border,
                       cursor: "pointer",
@@ -132,8 +132,8 @@ export function ArtifactRow(props: {
                   >
                     <Label
                       size={10}
-                      line={12}
-                      tone="mutedInk"
+                      line={14}
+                      tone="muted"
                     >{`#${task().number}`}</Label>
                   </View>
                 )}

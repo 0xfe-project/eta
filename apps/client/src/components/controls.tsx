@@ -1,4 +1,4 @@
-import type { JSX, TextStyle, ViewStyle } from "nsh";
+import type { JSX, TextStyle, ViewRef, ViewStyle } from "nsh";
 import type { IconName } from "./icons";
 import { View } from "nsh";
 import { Input, Menu, MenuItem } from "nsh/base";
@@ -11,11 +11,13 @@ export function Button(props: {
   icon?: IconName;
   end?: IconName;
   iconOnly?: boolean;
+  iconSize?: number;
   tone?: "primary" | "plain" | "ghost" | "danger";
   selected?: boolean;
   disabled?: boolean;
   size?: number;
   labelSize?: number;
+  labelWeight?: number;
   dimDisabled?: boolean;
   style?: ViewStyle;
   onPress: () => void;
@@ -74,13 +76,17 @@ export function Button(props: {
       }}
     >
       <If when={props.icon !== undefined}>
-        <Icon name={props.icon!} tone={textTone()} size={12} />
+        <Icon
+          name={props.icon!}
+          tone={textTone()}
+          size={props.iconSize ?? 12}
+        />
       </If>
       <If when={!props.iconOnly}>
         <Label
           size={props.labelSize ?? 12}
           line={16}
-          weight={props.selected ? 600 : 400}
+          weight={props.labelWeight ?? (props.selected ? 600 : 400)}
           tone={textTone()}
         >
           {props.label}
@@ -105,6 +111,7 @@ export function Field(props: {
   maxLength?: number;
   multiline?: boolean;
   style?: TextStyle;
+  inputRef?: (ref: ViewRef) => void;
   onChange: (value: string) => void;
   onSubmit?: () => void;
   onBlur?: () => void;
@@ -118,7 +125,10 @@ export function Field(props: {
   );
   return (
     <Input
-      ref={picker.ref}
+      ref={(ref) => {
+        picker.ref(ref);
+        props.inputRef?.(ref);
+      }}
       onMouseEnter={picker.onMouseEnter}
       onMouseLeave={picker.onMouseLeave}
       accessibilityLabel={props.label}

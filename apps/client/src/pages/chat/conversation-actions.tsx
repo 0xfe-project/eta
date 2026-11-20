@@ -214,7 +214,6 @@ export function ConversationActions(props: {
             </Label>
             <Button
               label={uiText("removeMember")}
-              tone="danger"
               disabled={busy() || props.members.length <= 1}
               onPress={() =>
                 void save(

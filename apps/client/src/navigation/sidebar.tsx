@@ -35,6 +35,11 @@ export function NavItem(props: {
       accessibilityState={{ selected: props.selected }}
       onPress={() => props.onPress()}
       hoverStyle={{ backgroundColor: c().selected }}
+      focusVisibleStyle={{
+        outlineWidth: 1,
+        outlineColor: c().blue,
+        outlineOffset: -1,
+      }}
       style={{
         ...(wide() ? row : { alignItems: "center", justifyContent: "center" }),
         height: wide() ? 28 : phone() ? 63 : 48,
@@ -190,7 +195,11 @@ export function DesktopSidebar(
                 <NavItem
                   item={item()}
                   layout="desktop"
-                  selected={props.page === item()[0]}
+                  // Captain is a conversation: the Chat page stays the one selected.
+                  selected={
+                    props.page === item()[0] ||
+                    (props.page === "captain" && item()[0] === "chat")
+                  }
                   count={item()[0] === "tasks" ? check() : 0}
                   onPress={() => props.onNavigate(item()[0])}
                 />

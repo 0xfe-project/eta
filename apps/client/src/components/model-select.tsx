@@ -74,31 +74,63 @@ export function ModelSelect(props: {
       searchStyle={{
         color: c().ink,
         placeholderColor: c().muted,
-        paddingHorizontal: 8,
-        height: 32,
-        backgroundColor: c().surface,
+        fontSize: 12,
+        lineHeight: 16,
+        paddingHorizontal: 10,
+        height: 34,
+        backgroundColor: c().selected,
+        borderBottomWidth: 1,
+        borderColor: c().border,
       }}
-      groupStyle={{ paddingHorizontal: 9, paddingTop: 6, paddingBottom: 3 }}
+      groupStyle={{ paddingHorizontal: 10, paddingTop: 8, paddingBottom: 4 }}
       itemStyle={{
         minHeight: 28,
-        paddingHorizontal: 9,
+        paddingHorizontal: 0,
         color: c().ink,
         fontSize: 12,
       }}
+      renderItem={(item) => (
+        <View
+          style={{
+            ...row,
+            flex: 1,
+            height: 28,
+            gap: 8,
+            paddingHorizontal: 10,
+            backgroundColor:
+              item.value === props.value ? c().selected : "transparent",
+          }}
+        >
+          <Label
+            size={12}
+            line={16}
+            lines={1}
+            tone={item.disabled ? "faint" : "ink"}
+            style={{ flex: 1 }}
+          >
+            {item.title}
+          </Label>
+          <View style={{ width: 12, height: 12, flexShrink: 0 }}>
+            <If when={item.value === props.value}>
+              <Icon name="check" size={12} />
+            </If>
+          </View>
+        </View>
+      )}
       trigger={
         <View
           style={{
             ...row,
-            minHeight: 32,
+            height: 28,
             gap: 8,
-            paddingHorizontal: 9,
+            paddingHorizontal: 8,
             borderWidth: 1,
-            borderColor: c().strong,
+            borderColor: c().border,
             backgroundColor: c().canvas,
             cursor: "pointer",
           }}
         >
-          <Label size={12} lines={1} style={{ flex: 1 }}>
+          <Label size={12} line={16} lines={1} style={{ flex: 1 }}>
             {items().find((item) => item.value === props.value)?.title ??
               props.placeholder ??
               uiText("selectModel")}

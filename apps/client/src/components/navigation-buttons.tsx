@@ -6,6 +6,7 @@ interface NavigationButtonProps {
   onPress: () => void;
   disabled?: boolean;
   size?: number;
+  iconSize?: number;
   style?: ViewStyle;
 }
 
@@ -20,6 +21,7 @@ export function BackButton(props: NavigationButtonProps) {
       onPress={props.onPress}
       disabled={props.disabled}
       size={props.size}
+      iconSize={props.iconSize}
       style={props.style}
     />
   );
@@ -36,6 +38,7 @@ export function CloseButton(props: NavigationButtonProps) {
       onPress={props.onPress}
       disabled={props.disabled}
       size={props.size}
+      iconSize={props.iconSize}
       style={props.style}
     />
   );

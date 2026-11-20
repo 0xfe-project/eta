@@ -2,6 +2,7 @@ import type {
   CaptainOperationView,
   RoutineSummary,
 } from "@eta/client-contracts";
+import type { JSX } from "nsh";
 import type { Layout } from "../../components";
 import { Scroll, signal, View } from "nsh";
 import {
@@ -20,7 +21,7 @@ import { CloseButton } from "../../components/navigation-buttons";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { follow, relativeTime, useHost } from "../../services/host";
-import { taskNeedsAttention } from "../tasks/status";
+import { TaskGlyph, taskNeedsAttention } from "../tasks/status";
 import { Proposal, Question } from "./approvals";
 
 export function Pending(props: {
@@ -125,6 +126,252 @@ export function Pending(props: {
       </View>
     );
   }
+  function SectionHeader(props: { label: string; count: number }) {
+    return (
+      <View
+        style={{
+          ...row,
+          height: 28,
+          gap: 8,
+          paddingHorizontal: 12,
+          flexShrink: 0,
+          borderBottomWidth: 1,
+          borderColor: c().border,
+        }}
+      >
+        <Caption text={props.label} />
+        <Label size={10} line={14} tone="muted">
+          {props.count}
+        </Label>
+      </View>
+    );
+  }
+  function PanelRow(props: {
+    title: string;
+    detail: string;
+    detailTone?: "amber" | "ink" | "muted";
+    detailSize?: number;
+    action: string;
+    actionLink?: boolean;
+    actionTone?: "ink" | "muted";
+    children?: JSX.Element;
+    onPress: () => void;
+  }) {
+    return (
+      <View
+        role="button"
+        accessibilityLabel={props.title}
+        onPress={props.onPress}
+        hoverStyle={{ backgroundColor: c().selected }}
+        style={{
+          ...row,
+          height: 52,
+          gap: 10,
+          paddingHorizontal: 12,
+          flexShrink: 0,
+          borderBottomWidth: 1,
+          borderColor: c().border,
+          cursor: "pointer",
+        }}
+      >
+        <View
+          style={{
+            ...row,
+            justifyContent: "center",
+            width: 16,
+            height: 16,
+            flexShrink: 0,
+          }}
+        >
+          {props.children}
+        </View>
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <Label size={13} line={17} lines={1}>
+            {props.title}
+          </Label>
+          <Label
+            size={props.detailSize ?? 11}
+            line={props.detailSize === 12 ? 20 : 14}
+            tone={props.detailTone ?? "muted"}
+            lines={1}
+          >
+            {props.detail}
+          </Label>
+        </View>
+        <Label
+          size={props.actionLink ? 11 : 10}
+          line={14}
+          tone={props.actionTone ?? "ink"}
+          style={{
+            width: 56,
+            flexShrink: 0,
+            textAlign: "right",
+            textDecorationLine: props.actionLink ? "underline" : "none",
+          }}
+        >
+          {props.action}
+        </Label>
+        <Icon name="right" size={10} tone="muted" />
+      </View>
+    );
+  }
+  function PanelPending() {
+    const asks = () => items().length + proposals().length;
+    return (
+      <If
+        when={asks() + reviews().length + reports().length}
+        else={<Empty title={uiText("nothingIsWaitingForYou")} />}
+      >
+        <Scroll style={grow} scrollbar={false}>
+          <If when={asks()}>
+            <View
+              style={{
+                ...row,
+                gap: 6,
+                paddingTop: 14,
+                paddingBottom: 10,
+                paddingHorizontal: 12,
+                borderBottomWidth: 1,
+                borderColor: c().border,
+              }}
+            >
+              <Caption
+                text={uiText("waitingForYouCaption")}
+                style={{ lineHeight: 12 }}
+              />
+              <Label size={10} line={12} tone="muted">
+                {asks()}
+              </Label>
+            </View>
+            <Each of={items()} key={(entry) => entry.id}>
+              {(entry) => (
+                <AskRow
+                  caption={uiText("confirmationRequestFrom", {
+                    name: host.agent(entry().agentId)?.name ?? uiText("agent"),
+                  })}
+                  text={entry().prompt}
+                  onPress={() => chosenId.set(entry().id)}
+                />
+              )}
+            </Each>
+            <Each of={proposals()} key={(op) => op.id}>
+              {(op) => (
+                <AskRow
+                  caption={uiText("proposalFromCaptain")}
+                  text={String(
+                    op().payload.title ??
+                      op().payload.name ??
+                      op().kind.replaceAll("_", " "),
+                  )}
+                  onPress={() => proposalId.set(op().id)}
+                />
+              )}
+            </Each>
+          </If>
+          <If when={reviews().length}>
+            <SectionHeader
+              label={uiText("tasksToCheckCaption")}
+              count={reviews().length}
+            />
+            <Each of={reviews()} key={(item) => item.id}>
+              {(item) => (
+                <PanelRow
+                  title={`#${item().number} ${item().title}`}
+                  detail={
+                    item().status === "blocked"
+                      ? uiText("prerequisiteCancelledShort")
+                      : uiText("taskInReview")
+                  }
+                  detailTone={item().status === "blocked" ? "ink" : "amber"}
+                  detailSize={item().status === "blocked" ? 11 : 12}
+                  action={
+                    item().status === "blocked"
+                      ? uiText("decideAction")
+                      : uiText("reviewAction")
+                  }
+                  actionLink
+                  onPress={() => props.onTask?.(item().id)}
+                >
+                  <TaskGlyph status={item().status} size={14} />
+                </PanelRow>
+              )}
+            </Each>
+          </If>
+          <If when={props.onRoutines && reports().length}>
+            <SectionHeader
+              label={uiText("routines2")}
+              count={reports().length}
+            />
+            <Each of={reports()} key={(routine) => routine.id}>
+              {(routine) => (
+                <PanelRow
+                  title={routine().name}
+                  detail={
+                    routine().unseenFailures
+                      ? uiText("failureCount", {
+                          count: routine().unseenFailures,
+                        })
+                      : uiText("newReport", {
+                          unseenReports: routine().unseenReports,
+                        })
+                  }
+                  detailTone={routine().unseenFailures ? "ink" : "muted"}
+                  action={
+                    routine().unseenFailures
+                      ? uiText("failed")
+                      : uiText("newBadge")
+                  }
+                  actionTone={routine().unseenFailures ? "ink" : "muted"}
+                  onPress={() => props.onRoutines?.(routine().id)}
+                >
+                  <Icon
+                    name="routines"
+                    size={14}
+                    tone={routine().unseenFailures ? "red" : "muted"}
+                  />
+                </PanelRow>
+              )}
+            </Each>
+          </If>
+        </Scroll>
+      </If>
+    );
+  }
+  function AskRow(props: {
+    caption: string;
+    text: string;
+    onPress: () => void;
+  }) {
+    return (
+      <View
+        role="button"
+        accessibilityLabel={props.text}
+        onPress={props.onPress}
+        hoverStyle={{ backgroundColor: c().selected }}
+        style={{
+          gap: 3,
+          paddingVertical: 10,
+          paddingHorizontal: 12,
+          borderBottomWidth: 1,
+          borderColor: c().border,
+          cursor: "pointer",
+        }}
+      >
+        <Label
+          size={10}
+          line={12}
+          tone="amber"
+          lines={1}
+          style={{ letterSpacing: 1, textTransform: "uppercase" }}
+        >
+          {props.caption}
+        </Label>
+        <Label size={12} line={16}>
+          {props.text}
+        </Label>
+      </View>
+    );
+  }
   return (
     <View style={{ ...grow, backgroundColor: c().canvas }}>
       <If when={!props.conversationId}>
@@ -136,72 +383,79 @@ export function Pending(props: {
           </Label>
         </Header>
       </If>
+      <If when={props.conversationId}>
+        <PanelPending />
+      </If>
       <If
-        when={phone() && !props.conversationId}
+        when={!props.conversationId && phone()}
         else={
-          <If
-            when={
-              items().length +
-                proposals().length +
-                reviews().length +
-                (props.onRoutines ? reports().length : 0) >
-              0
-            }
-            else={<Empty title={uiText("nothingIsWaitingForYou")} />}
-          >
-            <Scroll style={grow}>
-              <View style={{ gap: 8, padding: 12 }}>
-                <Each of={items()} key={(entry) => entry.id}>
-                  {(entry) => <Question item={entry()} />}
-                </Each>
-                <Each of={proposals()} key={(op) => op.id}>
-                  {(op) => <Proposal operation={op()} />}
-                </Each>
-                <If when={reviews().length}>
-                  <Caption
-                    text={uiText("tasksToCheck", { length: reviews().length })}
-                  />
-                  <Each of={reviews()} key={(item) => item.id}>
-                    {(item) => (
-                      <PendingRow
-                        title={`#${item().number} ${item().title}`}
-                        detail={
-                          item().status === "blocked"
-                            ? uiText("prerequisiteCancelledDecide")
-                            : uiText("inReviewReview")
-                        }
-                        icon="tasks"
-                        onPress={() => props.onTask?.(item().id)}
-                      />
-                    )}
+          <If when={!props.conversationId}>
+            <If
+              when={
+                items().length +
+                  proposals().length +
+                  reviews().length +
+                  (props.onRoutines ? reports().length : 0) >
+                0
+              }
+              else={<Empty title={uiText("nothingIsWaitingForYou")} />}
+            >
+              <Scroll style={grow}>
+                <View style={{ gap: 8, padding: 12 }}>
+                  <Each of={items()} key={(entry) => entry.id}>
+                    {(entry) => <Question item={entry()} />}
                   </Each>
-                </If>
-                <If when={props.onRoutines && reports().length}>
-                  <Caption
-                    text={uiText("routines", { length: reports().length })}
-                  />
-                  <Each of={reports()} key={(routine) => routine.id}>
-                    {(routine) => (
-                      <PendingRow
-                        title={routine().name}
-                        detail={
-                          routine().unseenFailures
-                            ? uiText("failedWithCount", {
-                                unseenFailures: routine().unseenFailures,
-                              })
-                            : uiText("newReport", {
-                                unseenReports: routine().unseenReports,
-                              })
-                        }
-                        icon="routines"
-                        attention={routine().unseenFailures > 0}
-                        onPress={() => props.onRoutines?.(routine().id)}
-                      />
-                    )}
+                  <Each of={proposals()} key={(op) => op.id}>
+                    {(op) => <Proposal operation={op()} />}
                   </Each>
-                </If>
-              </View>
-            </Scroll>
+                  <If when={reviews().length}>
+                    <Caption
+                      text={uiText("tasksToCheck", {
+                        length: reviews().length,
+                      })}
+                    />
+                    <Each of={reviews()} key={(item) => item.id}>
+                      {(item) => (
+                        <PendingRow
+                          title={`#${item().number} ${item().title}`}
+                          detail={
+                            item().status === "blocked"
+                              ? uiText("prerequisiteCancelledDecide")
+                              : uiText("inReviewReview")
+                          }
+                          icon="tasks"
+                          onPress={() => props.onTask?.(item().id)}
+                        />
+                      )}
+                    </Each>
+                  </If>
+                  <If when={props.onRoutines && reports().length}>
+                    <Caption
+                      text={uiText("routines", { length: reports().length })}
+                    />
+                    <Each of={reports()} key={(routine) => routine.id}>
+                      {(routine) => (
+                        <PendingRow
+                          title={routine().name}
+                          detail={
+                            routine().unseenFailures
+                              ? uiText("failedWithCount", {
+                                  unseenFailures: routine().unseenFailures,
+                                })
+                              : uiText("newReport", {
+                                  unseenReports: routine().unseenReports,
+                                })
+                          }
+                          icon="routines"
+                          attention={routine().unseenFailures > 0}
+                          onPress={() => props.onRoutines?.(routine().id)}
+                        />
+                      )}
+                    </Each>
+                  </If>
+                </View>
+              </Scroll>
+            </If>
           </If>
         }
       >
@@ -316,9 +570,9 @@ export function Pending(props: {
             title={uiText("questionFromWithCount", {
               value1: host.agent(entry().agentId)?.name ?? "Agent",
             })}
-            height={474}
-            phone
-            sheet
+            height={phone() ? 474 : undefined}
+            phone={phone()}
+            sheet={phone()}
             hideHeader
             overPhoneNavigation
             onClose={() => chosenId.set("")}
@@ -358,9 +612,9 @@ export function Pending(props: {
         {(entry) => (
           <Modal
             title={uiText("proposalFromCaptain")}
-            height={430}
-            phone
-            sheet
+            height={phone() ? 430 : undefined}
+            phone={phone()}
+            sheet={phone()}
             overPhoneNavigation
             onClose={() => proposalId.set("")}
           >

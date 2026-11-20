@@ -12,35 +12,43 @@ export function ComposerRecipients(props: {
   steward?: string | null;
   mentions: string[] | null;
   recipients: string[];
-  running: boolean;
+  /** The members whose reply is still running. */
+  running: string[];
+  /** How many of the user's messages wait for a running reply to end. */
+  held: number;
   names: string;
-  mode: "steer" | "queue";
+  /** The recipients a new message would wait for, by name. */
+  waitsFor: string;
   onChangeMentions: (mentions: string[] | null) => void;
   onToggleRecipient: (agentId: string) => void;
+  onToggleHeld: () => void;
+  onStop: (agentId: string) => void;
 }) {
   const c = colors();
   const host = useHost();
+  const everyone = () => props.mentions?.length === props.members.length;
+  // The queued count sits on the first running chip only.
+  const heldOn = () =>
+    props.running.find((id) =>
+      props.members.some((member) => member.agentId === id),
+    );
   return (
     <View
       style={{
         flexDirection: props.phone ? "column-reverse" : "row",
         alignItems: props.phone ? "flex-start" : "center",
         justifyContent: "space-between",
-        gap: 5,
+        gap: 6,
       }}
     >
       <View style={{ ...row, gap: 6, flexWrap: "wrap" }}>
         <View
           role="button"
           accessibilityLabel={uiText("everyone")}
-          accessibilityState={{
-            selected: props.mentions?.length === props.members.length,
-          }}
+          accessibilityState={{ selected: everyone() }}
           onPress={() =>
             props.onChangeMentions(
-              props.mentions?.length === props.members.length
-                ? null
-                : props.members.map((member) => member.agentId),
+              everyone() ? null : props.members.map((member) => member.agentId),
             )
           }
           hoverStyle={{ backgroundColor: c().selected }}
@@ -52,7 +60,6 @@ export function ComposerRecipients(props: {
             paddingRight: 10,
             borderWidth: 1,
             borderColor: c().border,
-            backgroundColor: c().surface,
             cursor: "pointer",
           }}
         >
@@ -64,9 +71,10 @@ export function ComposerRecipients(props: {
               height: 14,
               borderWidth: 1,
               borderColor: c().strong,
+              backgroundColor: c().canvas,
             }}
           >
-            <If when={props.mentions?.length === props.members.length}>
+            <If when={everyone()}>
               <Icon name="check" size={10} />
             </If>
           </View>
@@ -75,71 +83,107 @@ export function ComposerRecipients(props: {
           </Label>
         </View>
         <Each of={props.members} key={(member) => member.agentId}>
-          {(member) => (
-            <View
-              role="button"
-              accessibilityLabel={
-                host.agent(member().agentId)?.name ?? uiText("agent")
-              }
-              accessibilityState={{
-                selected: props.recipients.includes(member().agentId),
-              }}
-              onPress={() => props.onToggleRecipient(member().agentId)}
-              hoverStyle={{ backgroundColor: c().selected }}
-              style={{
-                ...row,
-                height: 28,
-                gap: 6,
-                paddingLeft: 6,
-                paddingRight: 10,
-                borderWidth: 1,
-                borderColor: props.recipients.includes(member().agentId)
-                  ? c().ink
-                  : c().border,
-                cursor: "pointer",
-                backgroundColor: props.recipients.includes(member().agentId)
-                  ? c().canvas
-                  : c().surface,
-              }}
-            >
-              <AgentFace id={member().agentId} size={16} />
-              <Label
-                size={12}
-                line={16}
-                lines={1}
-                tone={
-                  props.recipients.includes(member().agentId)
-                    ? "ink"
-                    : "mutedInk"
-                }
-                weight={props.recipients.includes(member().agentId) ? 600 : 400}
+          {(member) => {
+            const id = () => member().agentId;
+            const selected = () => props.recipients.includes(id());
+            const running = () => props.running.includes(id());
+            const name = () => host.agent(id())?.name ?? uiText("agent");
+            return (
+              <View
+                role="button"
+                accessibilityLabel={name()}
+                accessibilityState={{ selected: selected() }}
+                onPress={() => props.onToggleRecipient(id())}
+                hoverStyle={{ backgroundColor: c().selected }}
+                style={{
+                  ...row,
+                  height: 28,
+                  gap: 6,
+                  paddingLeft: 6,
+                  paddingRight: running() ? 4 : 10,
+                  borderWidth: 1,
+                  borderColor: selected() ? c().ink : c().border,
+                  cursor: "pointer",
+                  backgroundColor: selected() ? c().canvas : "transparent",
+                }}
               >
-                {host.agent(member().agentId)?.name ?? uiText("agent")}
-              </Label>
-              <If when={!props.phone && member().agentId === props.steward}>
-                <Label size={10} tone="muted">
-                  {uiText("steward")}
+                <AgentFace id={id()} size={16} />
+                <Label
+                  size={12}
+                  line={16}
+                  lines={1}
+                  tone={selected() ? "ink" : "mutedInk"}
+                  weight={selected() ? 600 : 400}
+                >
+                  {running()
+                    ? uiText("memberWriting", { name: name() })
+                    : name()}
                 </Label>
-              </If>
-            </View>
-          )}
+                <If when={running()}>
+                  <StatusDot color={c().blue} />
+                </If>
+                <If when={!props.phone && id() === props.steward}>
+                  <Label size={10} line={12} tone="muted">
+                    {uiText("steward")}
+                  </Label>
+                </If>
+                <If when={running()}>
+                  <If when={props.held && heldOn() === id()}>
+                    <View
+                      role="button"
+                      accessibilityLabel={uiText("queuedMessages", {
+                        count: props.held,
+                      })}
+                      onPress={props.onToggleHeld}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <Label
+                        size={11}
+                        line={14}
+                        tone="mutedInk"
+                        style={{ textDecorationLine: "underline" }}
+                      >
+                        {uiText("queuedMessages", { count: props.held })}
+                      </Label>
+                    </View>
+                  </If>
+                  <View
+                    role="button"
+                    accessibilityLabel={uiText("stopMember", { name: name() })}
+                    onPress={() => props.onStop(id())}
+                    hoverStyle={{ backgroundColor: c().selected }}
+                    style={{
+                      ...row,
+                      justifyContent: "center",
+                      width: 18,
+                      height: 18,
+                      borderWidth: 1,
+                      borderColor: c().strong,
+                      backgroundColor: c().canvas,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <Icon name="stop" size={10} />
+                  </View>
+                </If>
+              </View>
+            );
+          }}
         </Each>
       </View>
       <View style={{ ...row, gap: 6 }}>
-        <StatusDot color={props.running ? c().blue : c().green} />
-        <Label size={12} line={16} tone="muted">
-          {props.names
-            ? props.running
-              ? `${props.names} · ${uiText(props.mode === "steer" ? "steer" : "queue")}`
-              : uiText(
+        <StatusDot color={props.waitsFor ? c().blue : c().green} />
+        <Label size={12} line={16} tone={props.waitsFor ? "blue" : "mutedInk"}>
+          {props.waitsFor
+            ? uiText("waitsUntilFinishes", { names: props.waitsFor })
+            : props.names
+              ? uiText(
                   props.recipients.length > 1
                     ? "recipientsReply"
                     : "recipientReplies",
-                  {
-                    names: props.names,
-                  },
+                  { names: props.names },
                 )
-            : uiText("chooseWhoShouldReply")}
+              : uiText("chooseWhoShouldReply")}
         </Label>
       </View>
     </View>
