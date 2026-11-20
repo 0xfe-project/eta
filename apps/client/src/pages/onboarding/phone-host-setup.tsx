@@ -1,0 +1,100 @@
+import { safeAreaInsets, View } from "nsh";
+import { colors, grow, Label, row } from "../../components";
+import { uiText } from "../../i18n";
+
+export function PhoneHostSetup(props: { noModel: boolean; hostName?: string }) {
+  const c = colors();
+  const insets = safeAreaInsets();
+  const hostname = () => {
+    if (!props.hostName) return "This host";
+    const name = new URL(props.hostName).hostname;
+    return /^\d+\./.test(name) ? name : name.split(".")[0];
+  };
+  return (
+    <View style={grow}>
+      <View
+        style={{
+          paddingHorizontal: 16,
+          paddingTop: 32,
+          paddingBottom: 26,
+          gap: 4,
+        }}
+      >
+        <Label size={24} line={32}>
+          {uiText("isntReadyYet", { hostname: hostname() })}
+        </Label>
+        <Label size={13} line={18} tone="muted">
+          {props.noModel
+            ? uiText("twoStepsLeftOpenEtaOn")
+            : uiText("oneStepLeftOpenEtaOn")}
+        </Label>
+      </View>
+      <View style={{ borderTopWidth: 1, borderColor: c().border }}>
+        <If when={props.noModel}>
+          <SetupStep
+            number={1}
+            title={uiText("bindAModel")}
+            detail={uiText("thereIsNoProviderYetAdd")}
+          />
+        </If>
+        <SetupStep
+          number={props.noModel ? 2 : 1}
+          title={uiText("installAnAgent")}
+          detail={uiText("agentsAreWhoYouTalkTo")}
+          waiting={props.noModel}
+        />
+      </View>
+      <View style={{ ...grow }} />
+      <Label
+        size={12}
+        line={16}
+        tone="muted"
+        style={{
+          paddingHorizontal: 16,
+          paddingBottom: Math.max(4, 34 - insets().bottom),
+        }}
+      >
+        {uiText("thisPageUpdatesByItselfWhen")}
+      </Label>
+    </View>
+  );
+}
+
+function SetupStep(props: {
+  number: number;
+  title: string;
+  detail: string;
+  waiting?: boolean;
+}) {
+  const c = colors();
+  return (
+    <View
+      style={{
+        ...row,
+        alignItems: "flex-start",
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        gap: 16,
+        borderBottomWidth: 1,
+        borderColor: c().border,
+      }}
+    >
+      <Label
+        size={12}
+        line={20}
+        tone={props.waiting ? "muted" : "ink"}
+        style={{ width: 16 }}
+      >
+        {props.number}
+      </Label>
+      <View style={{ ...grow, gap: 3 }}>
+        <Label size={14} line={20} tone={props.waiting ? "mutedInk" : "ink"}>
+          {props.title}
+        </Label>
+        <Label size={13} line={18} tone="muted">
+          {props.detail}
+        </Label>
+      </View>
+    </View>
+  );
+}

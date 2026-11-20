@@ -1,0 +1,66 @@
+export const artifactsMessages = {
+  artifactLoadError: ["Unable to load Artifacts", "无法加载产物"],
+  artifactsLoading: ["Loading artifacts…", "正在加载产物…"],
+  artifactsEmptyHelp: [
+    "Pages published by agents in this group appear here.",
+    "此群组中的智能体发布的页面会出现在这里。",
+  ],
+  artifactVersionOption: [
+    "Version {{number}}{{latest}}",
+    "版本 {{number}}{{latest}}",
+  ],
+  latestArtifactVersion: [" (latest)", "（最新）"],
+  anyoneWithTheLinkCanOpen: [
+    "Anyone with the link can open this version until you unshare it.",
+    "取消共享前，任何获得链接的人都可以打开此版本。",
+  ],
+  artifactActions: ["Artifact actions", "产物操作"],
+  artifactVersion: ["Artifact version", "产物版本"],
+  artifactPublisherUnavailable: ["Publisher unavailable", "发布者不可用"],
+  artifactOpenTask: ["Open task #{{number}}", "打开任务 #{{number}}"],
+  availableAsAZipDownload: ["Available as a ZIP download", "可下载 ZIP 文件"],
+  copyPublicLink: ["Copy public link", "复制公开链接"],
+  artifactUnexpectedDownload: [
+    "The host returned a file that is not a ZIP archive.",
+    "Host 返回的文件不是 ZIP 压缩包。",
+  ],
+  artifactDownloadFailed: [
+    "The ZIP download failed (HTTP {{status}}).",
+    "ZIP 下载失败（HTTP {{status}}）。",
+  ],
+  artifactSavedTo: ["Saved to {{path}}", "已保存到 {{path}}"],
+  artifactCopyPath: ["Copy path", "复制路径"],
+  exportPdf: ["Export PDF", "导出 PDF"],
+  artifactPdfPreparing: ["Preparing the PDF…", "正在准备 PDF…"],
+  artifactPdfRenderError: [
+    "Eta couldn't create a PDF for this version.",
+    "Eta 无法为此版本生成 PDF。",
+  ],
+  artifactPdfTooLarge: [
+    "This PDF is too large to export.",
+    "此 PDF 过大，无法导出。",
+  ],
+  artifactPdfResourcesError: [
+    "Some of the files in this artifact could not be loaded. Reopen the preview and retry.",
+    "部分制品文件无法加载。请重新打开预览后重试。",
+  ],
+  artifactPreviewLoadError: [
+    "The artifact couldn't be loaded from the host.",
+    "无法从主机加载制品。",
+  ],
+  noArtifactsYet: ["No artifacts yet", "暂无产物"],
+  noMatchingArtifacts: ["No matching artifacts", "没有匹配的产物"],
+  openInBrowser: ["Open in browser", "在浏览器中打开"],
+  openingPreview: ["Opening preview…", "正在打开预览…"],
+  openInNewWindow: ["Open in new window", "新窗口打开"],
+  previewUnavailable: ["Preview unavailable", "无法预览"],
+  searchArtifacts: ["Search artifacts", "搜索产物"],
+  searchByTitle: ["Search by title", "按标题搜索"],
+  sharePublicly: ["Share publicly", "公开分享"],
+  shareThisVersionPublicly: [
+    "Share this version publicly?",
+    "公开共享此版本？",
+  ],
+  unshare: ["Unshare", "取消共享"],
+  version: ["{{title}} · Version {{value2}}", "{{title}} · 版本 {{value2}}"],
+} as const;

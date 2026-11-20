@@ -119,7 +119,12 @@ try {
     staging = mkdtempSync(join(generated, "desktop-source-"));
     if (updateEnabled) {
       for (const file of readdirSync(cwd)) {
-        if (file.endsWith(".tsx") || file.endsWith(".ts") || file === "assets")
+        if (
+          file.endsWith(".tsx") ||
+          file.endsWith(".ts") ||
+          file === "assets" ||
+          file === "src"
+        )
           cpSync(join(cwd, file), join(staging, file), { recursive: true });
       }
       const entry = command.indexOf("App.tsx", 1);

@@ -1,0 +1,219 @@
+import type { JSX } from "nsh";
+import type { HostUpdate } from "./host-update";
+import { View } from "nsh";
+import { Select } from "nsh/base";
+import { Button, colors, Icon, Label, row } from "../../../components";
+import { uiText } from "../../../i18n";
+import { useHost } from "../../../services/host";
+import { GroupHeading } from "./group-heading";
+
+function SettingBand(props: {
+  title: string;
+  detail: string;
+  children?: JSX.Element;
+}) {
+  const c = colors();
+  return (
+    <View
+      style={{
+        ...row,
+        justifyContent: "space-between",
+        gap: 8,
+        minHeight: 55,
+        paddingHorizontal: 16,
+        paddingVertical: 7,
+        borderBottomWidth: 1,
+        borderColor: c().border,
+      }}
+    >
+      <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+        <Label size={14} line={20}>
+          {props.title}
+        </Label>
+        <Label size={12} line={16} tone="muted">
+          {props.detail}
+        </Label>
+      </View>
+      {props.children}
+    </View>
+  );
+}
+
+export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
+  const c = colors();
+  const host = useHost();
+  const { advanced, check, source, token, editable, save, edit } = props.update;
+  const advancedOpen = () =>
+    advanced() ??
+    ((!!source() && source()!.source !== "build") || !!check()?.error);
+  const channelName = () =>
+    check()?.prerelease
+      ? uiText("updatePreReleases")
+      : uiText("updateFullReleases");
+  const sourceKind = () =>
+    source()?.source === "env"
+      ? uiText("updateEnvironment")
+      : source()?.source === "setting"
+        ? uiText("updateSettingsSource")
+        : uiText("updateDefaultSource");
+  const tokenKind = () =>
+    token()?.from === "Settings"
+      ? uiText("updateTokenSaved")
+      : token()?.from === "gh"
+        ? "GitHub CLI"
+        : (token()?.from ?? uiText("updateNoToken"));
+  const tokenHint = () => {
+    const credential = token();
+    if (!credential?.saved || credential.from === "Settings")
+      return uiText("updatePrivateTokenHint");
+    return credential.saved !== credential.host
+      ? uiText("updateTokenOtherHost", { host: credential.saved })
+      : uiText("updateTokenPriority", {
+          source: credential.from ?? uiText("updateTokenEnvironment"),
+        });
+  };
+
+  return (
+    <>
+      <GroupHeading title={uiText("whichVersions")} phone={props.phone} />
+      <View
+        style={{
+          ...(props.phone ? {} : row),
+          minHeight: 71,
+          gap: props.phone ? 4 : 14,
+          paddingHorizontal: 16,
+          paddingVertical: 7,
+          borderBottomWidth: 1,
+          borderColor: c().border,
+        }}
+      >
+        <View
+          style={{ flex: props.phone ? undefined : 1, minWidth: 0, gap: 2 }}
+        >
+          <Label size={14} line={19}>
+            {uiText("channel")}
+          </Label>
+          <If when={!props.phone}>
+            <Label size={12} line={16} tone="muted">
+              {uiText("preReleasesRcBetaGetNew")}
+            </Label>
+          </If>
+        </View>
+        <View style={{ width: props.phone ? "100%" : 160, flexShrink: 0 }}>
+          <Select
+            accessibilityLabel={uiText("channel")}
+            items={[
+              { value: "full", title: uiText("updateFullReleases") },
+              { value: "pre", title: uiText("updatePreReleases") },
+            ]}
+            value={check()?.prerelease ? "pre" : "full"}
+            cover={false}
+            offset={2}
+            disabled={!editable() || !host.can("upgrade.setPrerelease")}
+            popupStyle={{
+              borderWidth: 1,
+              borderColor: c().strong,
+              backgroundColor: c().canvas,
+            }}
+            itemStyle={{
+              color: c().ink,
+              fontSize: 12,
+              minHeight: 29,
+              paddingHorizontal: 10,
+            }}
+            trigger={
+              <View
+                style={{
+                  ...row,
+                  height: props.phone ? 32 : 24,
+                  gap: 6,
+                  paddingHorizontal: 10,
+                  borderWidth: 1,
+                  borderColor: c().strong,
+                  backgroundColor: c().canvas,
+                }}
+              >
+                <Label size={12} lines={1} style={{ flex: 1 }}>
+                  {channelName()}
+                </Label>
+                <Icon name="down" size={9} tone="muted" />
+              </View>
+            }
+            onChange={({ value }) => {
+              if (value && (value === "pre") !== check()?.prerelease)
+                void save("setPrerelease", { prerelease: value === "pre" });
+            }}
+          />
+        </View>
+        <If when={props.phone}>
+          <Label size={12} line={17} tone="muted">
+            {uiText("preReleasesRcBetaGetNew")}
+          </Label>
+        </If>
+      </View>
+      <GroupHeading title={uiText("whereUpdatesComeFrom")} phone={props.phone}>
+        <View
+          role="button"
+          accessibilityLabel={uiText("advanced")}
+          accessibilityState={{ expanded: advancedOpen() }}
+          onPress={() => advanced.set(!advancedOpen())}
+          hoverStyle={{ backgroundColor: c().selected }}
+          focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+          style={{
+            ...row,
+            height: props.phone ? 28 : 24,
+            width: 98,
+            paddingHorizontal: 10,
+            justifyContent: "space-between",
+            borderWidth: 1,
+            borderColor: c().strong,
+            cursor: "pointer",
+          }}
+        >
+          <Label size={12}>{uiText("advanced")}</Label>
+          <View
+            style={{
+              transform: advancedOpen() ? [{ rotate: "180deg" }] : undefined,
+            }}
+          >
+            <Icon name="down" size={9} tone="muted" />
+          </View>
+        </View>
+      </GroupHeading>
+      <If when={advancedOpen() ? source() : undefined}>
+        {(upstream) => (
+          <SettingBand
+            title={uiText("updatesFrom")}
+            detail={`${upstream().label} · ${sourceKind()}`}
+          >
+            <If
+              when={
+                upstream().source !== "env" && host.can("upgrade.setUpstream")
+              }
+            >
+              <Button
+                label={uiText("change")}
+                disabled={!editable()}
+                onPress={() => edit("upstream")}
+              />
+            </If>
+          </SettingBand>
+        )}
+      </If>
+      <If when={advancedOpen() && token()?.host}>
+        <SettingBand
+          title={uiText("accessToken")}
+          detail={`${tokenKind()} · ${tokenHint()}`}
+        >
+          <If when={host.can("upgrade.setToken")}>
+            <Button
+              label={token()?.saved ? uiText("change") : uiText("set")}
+              disabled={!editable()}
+              onPress={() => edit("token")}
+            />
+          </If>
+        </SettingBand>
+      </If>
+    </>
+  );
+}
