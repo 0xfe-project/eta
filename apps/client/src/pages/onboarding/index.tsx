@@ -6,6 +6,7 @@ import {
   Button,
   colors,
   grow,
+  Header,
   Icon,
   Label,
   Modal,
@@ -20,6 +21,14 @@ import { ProviderEditor } from "../settings/models/provider-editor";
 import { ModelSources } from "../settings/models/sources";
 import { PersonaStep } from "./persona-step";
 import { WelcomeStep } from "./welcome";
+
+// Footer buttons: 12pt from the edge to the label (the primary's 1pt border
+// counts), 8 before a leading icon, a 6pt gap, and half opacity when disabled.
+const footerButton = (disabled = false) => ({
+  paddingHorizontal: 11,
+  gap: 6,
+  opacity: disabled ? 0.5 : 1,
+});
 
 /** "A", "A and B", "A, B and C". */
 function listText(items: string[]) {
@@ -61,6 +70,11 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
     );
   // The agents get the first usable model, as on the web.
   const chosenModel = () => models()[0]?.id;
+  const installBlocked = () =>
+    working() ||
+    !chosenModel() ||
+    !selected().length ||
+    Boolean(cardsMissing());
   const already = () => cards().filter((card) => installed(card.id)).length;
   const showCount = () =>
     step() === 3 ||
@@ -101,7 +115,18 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
         height={props.phone ? "90%" : undefined}
         onClose={props.onClose}
         dismissible={false}
+        hideHeader={!props.phone}
       >
+        <If when={!props.phone}>
+          <Header
+            title={uiText("setUpEta")}
+            layout="desktop"
+            dialog
+            inset={16}
+            end={12}
+            titleLine={24}
+          />
+        </If>
         <If when={step() > 0}>
           <View
             style={{
@@ -274,7 +299,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                 style={{
                   alignSelf: "flex-start",
                   gap: 6,
-                  paddingHorizontal: sources().length ? 0 : 12,
+                  paddingHorizontal: sources().length ? 0 : 11,
                 }}
               />
             </View>
@@ -347,7 +372,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                 justifyContent: "center",
               }}
             >
-              <Icon name="info" size={14} tone="red" />
+              <Icon name="warning" size={14} tone="red" />
             </View>
             <Label style={{ flex: 1, minWidth: 0 }}>
               {uiText("installFailed", { message: error() })}
@@ -372,6 +397,11 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                 icon="back"
                 disabled={working()}
                 onPress={() => step.update((value) => value - 1)}
+                style={{
+                  ...footerButton(working()),
+                  paddingLeft: 8,
+                  paddingRight: 12,
+                }}
               />
             </If>
             <If when={step() === 0 || (step() === 1 && !chosenModel())}>
@@ -403,6 +433,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                 label={uiText("getStarted")}
                 tone="primary"
                 onPress={() => step.set(1)}
+                style={footerButton()}
               />
             </If>
             <If when={step() === 1}>
@@ -411,6 +442,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                 tone="primary"
                 disabled={!chosenModel()}
                 onPress={() => step.set(2)}
+                style={footerButton(!chosenModel())}
               />
             </If>
             <If when={step() === 2}>
@@ -423,13 +455,9 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                       : uiText("installAgents")
                 }
                 tone="primary"
-                disabled={
-                  working() ||
-                  !chosenModel() ||
-                  !selected().length ||
-                  Boolean(cardsMissing())
-                }
+                disabled={installBlocked()}
                 onPress={() => void install()}
+                style={footerButton(installBlocked())}
               />
             </If>
             <If when={step() === 3}>
@@ -437,6 +465,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                 label={uiText("done")}
                 tone="primary"
                 onPress={props.onClose}
+                style={footerButton()}
               />
             </If>
           </View>

@@ -60,7 +60,7 @@ export function PersonaStep(props: {
         </If>
         <If when={props.missing}>
           <View style={emptyState}>
-            <Icon name="info" size={16} tone="red" />
+            <Icon name="warning" size={16} tone="red" />
             <Label weight={500} style={{ textAlign: "center" }}>
               {uiText("unableToLoadAgents")}
             </Label>
