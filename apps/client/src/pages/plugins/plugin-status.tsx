@@ -1,6 +1,6 @@
 import type { PluginView } from "@eta/client-contracts";
 import { View } from "nsh";
-import { colors, Icon, Label } from "../../components";
+import { colors, Empty, Icon, Label } from "../../components";
 import { uiText } from "../../i18n";
 
 export function PluginGlyph(props: { size: number }) {
@@ -46,5 +46,23 @@ export function Status(props: { item: PluginView; phone?: boolean }) {
     >
       {missing() ? uiText("needsConfiguring") : uiText("canBeEnabled")}
     </Label>
+  );
+}
+
+/** No plugins: the design's empty state, under the intro. */
+export function NoPlugins(props: { width: number }) {
+  return (
+    <Empty
+      title={uiText("noPluginsYet")}
+      description={uiText("noPluginsHint")}
+      icon="plugins"
+      iconSize={32}
+      descriptionWidth={props.width}
+      style={{
+        flex: undefined,
+        justifyContent: "flex-start",
+        paddingVertical: 40,
+      }}
+    />
   );
 }

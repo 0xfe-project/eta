@@ -3,7 +3,10 @@ export const skillsMessages = {
   skillHost: ["Host", "主机"],
   skillDevice: ["Device", "设备"],
   skillProjectMenu: ["Select project", "选择项目"],
-  skillChooseProject: ["Choose a project", "选择一个项目"],
+  skillChooseProject: [
+    "Choose a project on this device",
+    "请选择此设备上的项目",
+  ],
   skillReload: ["Reload skills", "重新加载技能"],
   skillReloadReader: ["Reload skill file", "重新加载技能文件"],
   skillSelect: ["Select a skill", "选择一个技能"],
@@ -14,8 +17,37 @@ export const skillsMessages = {
   loadingSkill: ["Loading skill…", "正在加载技能…"],
   loadingSkills: ["Loading skills…", "正在加载技能…"],
   metadata: ["Metadata", "元数据"],
-  noMatchingSkills: ["No matching skills", "没有匹配的技能"],
-  noSkillsInThisDirectory: ["No skills in this directory", "此目录没有技能"],
+  noMatchingSkills: [
+    "No search results in the loaded entries",
+    "已加载条目中无搜索结果",
+  ],
+  noMatchingSkillsHint: [
+    "Change or clear your search to see other skills.",
+    "修改或清空搜索词，查看其他技能。",
+  ],
+  noSkillsInThisDirectory: ["No skills", "暂无技能"],
+  noSkillsHint: [
+    "Switch devices or scopes to browse other skills.",
+    "切换设备或范围，查看其他位置的技能。",
+  ],
+  skillDirectoryMissing: [
+    "The skills directory does not exist.",
+    "技能目录不存在。",
+  ],
+  skillDirectoryMissingHint: [
+    "Switch devices or scopes to see skills in another location.",
+    "切换设备或范围，查看其他位置的技能。",
+  ],
+  skillChooseDevice: ["Choose a device", "请选择设备"],
+  skillChooseDeviceHint: [
+    "Choose a device in the top-right corner to see its skills.",
+    "在右上角选择设备，查看这台设备上的技能。",
+  ],
+  skillChooseProjectHint: [
+    "Choose a project above, or switch to Personal to see this device’s personal skills.",
+    "在上方选择项目，或切换到「个人」查看这台设备上的个人技能。",
+  ],
+  skillUnableToLoadFile: ["Unable to load {{name}}", "无法加载 {{name}}"],
   personal: ["Personal", "个人"],
   searchLoadedSkills: ["Search loaded skills", "搜索已加载技能"],
   selectAFile: ["Select a file", "选择文件"],

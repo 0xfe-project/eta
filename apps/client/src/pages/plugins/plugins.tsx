@@ -17,7 +17,7 @@ import { follow, useHost } from "../../services/host";
 import { AddPlugin, ConfigurePlugin } from "./configure";
 import { pluginText } from "./labels";
 import { PluginDetail } from "./plugin-detail";
-import { PluginGlyph, Status } from "./plugin-status";
+import { NoPlugins, PluginGlyph, Status } from "./plugin-status";
 import { Skills } from "./skills/list";
 import { PluginTablet } from "./tablet-list";
 import { pluginWarnings, PluginWarningsDialog } from "./warnings";
@@ -57,6 +57,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
   }
   follow(() => "plugins");
 
+  const hoveredTab = signal("");
   function tabs(tablet = false) {
     const items = ["Plugins", "Skills"];
     const label = (item: string) =>
@@ -92,6 +93,9 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                 accessibilityLabel={label(item())}
                 accessibilityState={{ selected: tab() === item() }}
                 onPress={() => tab.set(item())}
+                // An inactive tab only darkens its label on hover, with no fill.
+                onMouseEnter={() => hoveredTab.set(item())}
+                onMouseLeave={() => hoveredTab.set("")}
                 style={{
                   flex: tablet || phone() ? 1 : undefined,
                   alignItems: "center",
@@ -104,7 +108,13 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                 <Label
                   size={12}
                   line={16}
-                  tone={tab() === item() ? "buttonInk" : "muted"}
+                  tone={
+                    tab() === item()
+                      ? "buttonInk"
+                      : hoveredTab() === item()
+                        ? "ink"
+                        : "muted"
+                  }
                 >
                   {label(item())}
                 </Label>
@@ -145,7 +155,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
           {uiText("pluginsGiveAgentsSkillsAndMcp")}
         </Label>
         <If when={!list().length}>
-          <Label tone="muted">{uiText("noPluginsInstalled")}</Label>
+          <NoPlugins width={300} />
         </If>
         <View
           style={{
@@ -235,9 +245,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                         {uiText("pluginsIntroPhone")}
                       </Label>
                       <If when={!list().length}>
-                        <Label tone="muted" style={{ paddingHorizontal: 16 }}>
-                          {uiText("noPluginsInstalled")}
-                        </Label>
+                        <NoPlugins width={240} />
                       </If>
                       <If when={needsConfig().length}>
                         <PluginRows
@@ -305,18 +313,40 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
       </If>
       <If when={remove()}>
         <Modal
-          title={uiText("removePlugin")}
+          title={uiText("removePluginTitle", { name: remove() })}
           phone={phone()}
+          compact={!phone()}
+          titleWeight={500}
+          width={480}
           overPhoneNavigation={phone()}
           onClose={() => remove.set("")}
         >
-          <View style={{ padding: 16, gap: 12 }}>
-            <Label>{uiText("removeFromThisHost", { remove: remove() })}</Label>
-            <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>
-              <Button label={uiText("cancel")} onPress={() => remove.set("")} />
+          <View style={phone() ? { padding: 16, gap: 12 } : undefined}>
+            <Label
+              size={12}
+              line={18}
+              tone="muted"
+              style={phone() ? undefined : { paddingTop: 6 }}
+            >
+              {uiText("removePluginDescription")}
+            </Label>
+            <View
+              style={{
+                ...row,
+                justifyContent: "flex-end",
+                gap: 8,
+                paddingTop: phone() ? 0 : 20,
+              }}
+            >
+              <Button
+                label={uiText("cancel")}
+                size={28}
+                onPress={() => remove.set("")}
+              />
               <Button
                 label={uiText("remove2")}
-                tone="danger"
+                tone="primary"
+                size={28}
                 onPress={() =>
                   void host.action(async () => {
                     const name = remove();

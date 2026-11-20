@@ -11,6 +11,7 @@ import { cleanup, effect, openUrl, Scroll, signal, untracked, View } from "nsh";
 import {
   Button,
   colors,
+  Empty,
   grow,
   Header,
   Icon,
@@ -289,14 +290,24 @@ export function SkillDetail(props: {
     >
       <View ref={contentStart.set} style={{ padding: 12, gap: 12 }}>
         <If when={failure()}>
-          <Label size={12} tone="red">
-            {failure()}
-          </Label>
-          <Button
-            label={uiText("retry")}
-            onPress={refresh}
-            style={{ alignSelf: "flex-start" }}
-          />
+          <View style={{ alignItems: "flex-start", gap: 4 }}>
+            <Empty
+              title={uiText("skillUnableToLoadFile", {
+                name: fileName() || props.skill.name,
+              })}
+              description={failure()}
+              icon="warning"
+              iconSize={32}
+              iconTone="red"
+              descriptionWidth={320}
+              style={{
+                flex: undefined,
+                alignSelf: "stretch",
+                paddingVertical: 40,
+              }}
+            />
+            <Button label={uiText("retry")} size={28} onPress={refresh} />
+          </View>
         </If>
         <If when={preview()?.metadata}>
           <View
@@ -455,14 +466,29 @@ export function SkillDetail(props: {
           accessibilityLabel={uiText("skillDiagnostics")}
           style={{
             paddingHorizontal: phone() ? 16 : tablet() ? 12 : 24,
+            paddingTop: tablet() ? 12 : 0,
+            paddingBottom: phone() || tablet() ? 0 : 8,
             gap: 4,
           }}
         >
           <Each of={diagnostics()} key={(message) => message}>
             {(message) => (
-              <Label size={11} tone="amber">
-                {message()}
-              </Label>
+              // A small warning mark beside foreground text: red or amber
+              // stays a status mark, never the message.
+              <View style={{ ...row, alignItems: "flex-start", gap: 8 }}>
+                <View
+                  style={{
+                    width: 6,
+                    height: 6,
+                    marginTop: 5,
+                    flexShrink: 0,
+                    backgroundColor: c().warning,
+                  }}
+                />
+                <Label size={12} line={16} style={{ flex: 1, minWidth: 0 }}>
+                  {message()}
+                </Label>
+              </View>
             )}
           </Each>
         </View>

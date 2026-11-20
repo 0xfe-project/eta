@@ -6,12 +6,14 @@ import type {
   PluginView,
 } from "@eta/client-contracts";
 import { Scroll, signal, View } from "nsh";
-import { Dialog } from "nsh/base";
+import { Dialog, Input } from "nsh/base";
 import {
   Button,
   colors,
   Field,
   fill,
+  fontFamily,
+  Fonts,
   grow,
   Label,
   Modal,
@@ -25,55 +27,88 @@ import { pluginConfigText, PluginSelect } from "./config-fields";
 
 export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
   const host = useHost();
+  const c = colors();
+  const fonts = Fonts();
   const repo = signal("");
   const rev = signal("");
   const path = signal("");
   const busy = signal(false);
+  const submit = async () => {
+    if (busy() || !repo().trim()) return;
+    busy.set(true);
+    const result = await host.action(() =>
+      host.call("plugins", "add", {
+        repo: repo().trim(),
+        rev: rev().trim() || undefined,
+        path: path().trim() || undefined,
+      }),
+    );
+    busy.set(false);
+    if (result) props.onClose();
+  };
+  // Placeholder-only fields, the first one focused, as the design draws them.
+  const field = (
+    label: string,
+    value: () => string,
+    onChange: (value: string) => void,
+    first = false,
+  ) => (
+    <Input
+      accessibilityLabel={label}
+      placeholder={label}
+      value={value()}
+      autoFocus={first && !props.phone}
+      submitBehavior="submit"
+      onSubmit={() => void submit()}
+      onChange={(event) => onChange(event.value)}
+      focusStyle={{ borderColor: c().ink }}
+      style={{
+        color: c().ink,
+        placeholderColor: c().faint,
+        backgroundColor: c().canvas,
+        fontFamily: fontFamily(fonts().interface),
+        fontSize: props.phone ? 13 : 12,
+        lineHeight: props.phone ? 18 : 16,
+        height: props.phone ? 40 : 28,
+        paddingHorizontal: props.phone ? 10 : 8,
+        borderWidth: 1,
+        borderColor: c().strong,
+        borderRadius: 0,
+      }}
+    />
+  );
   return (
     <Modal
-      title={uiText("addFromGit")}
+      title={uiText("addPluginTitle")}
       phone={props.phone}
+      compact={!props.phone}
+      titleWeight={500}
+      width={512}
       onClose={props.onClose}
     >
-      <View style={{ padding: 16, gap: 8 }}>
-        <Field
-          label={uiText("repository")}
-          placeholder={uiText("gitRepositoryUrl")}
-          value={repo()}
-          onChange={repo.set}
-        />
-        <Field
-          label={uiText("revision")}
-          placeholder={uiText("branchTagOrCommit")}
-          value={rev()}
-          onChange={rev.set}
-        />
-        <Field
-          label={uiText("pluginPath")}
-          placeholder={uiText("directoryInTheRepositoryOptional")}
-          value={path()}
-          onChange={path.set}
-        />
-        <Button
-          label={busy() ? uiText("adding") : uiText("addPlugin")}
-          tone="primary"
-          disabled={!repo().trim() || busy()}
-          onPress={() =>
-            void (async () => {
-              if (busy()) return;
-              busy.set(true);
-              const result = await host.action(() =>
-                host.call("plugins", "add", {
-                  repo: repo().trim(),
-                  rev: rev().trim() || undefined,
-                  path: path().trim() || undefined,
-                }),
-              );
-              busy.set(false);
-              if (result) props.onClose();
-            })()
-          }
-        />
+      <View style={props.phone ? { padding: 16 } : undefined}>
+        <Label size={12} line={18} tone="muted" style={{ paddingTop: 6 }}>
+          {uiText("addPluginDescription")}
+        </Label>
+        <View style={{ gap: 12, paddingTop: 14 }}>
+          {field(uiText("repository"), repo, repo.set, true)}
+          {field(uiText("branchTagOrCommit"), rev, rev.set)}
+          {field(uiText("directoryInTheRepositoryOptional"), path, path.set)}
+        </View>
+        <View style={{ ...row, justifyContent: "flex-end", paddingTop: 20 }}>
+          <Button
+            label={busy() ? uiText("adding") : uiText("addPluginSubmit")}
+            tone="primary"
+            size={props.phone ? 36 : 28}
+            dimDisabled={false}
+            style={{
+              opacity: !repo().trim() || busy() ? 0.5 : 1,
+              ...(props.phone ? { flex: 1 } : {}),
+            }}
+            disabled={!repo().trim() || busy()}
+            onPress={() => void submit()}
+          />
+        </View>
       </View>
     </Modal>
   );
@@ -167,23 +202,23 @@ export function ConfigurePlugin(props: {
   const form = () => (
     <>
       <Scroll
-        // The tablet dialog fits its fields and scrolls only once it reaches its height cap.
-        style={props.tablet ? { flexShrink: 1, minHeight: 0 } : grow}
+        // The dialog fits its fields and scrolls only once it reaches its height cap.
+        style={props.phone ? grow : { flexShrink: 1, minHeight: 0 }}
       >
         <View
           style={
-            props.tablet
-              ? {
+            props.phone
+              ? { padding: 16, gap: 18 }
+              : {
                   paddingHorizontal: 16,
                   paddingTop: 4,
                   paddingBottom: 16,
                   gap: 16,
                 }
-              : { padding: 16, gap: props.phone ? 18 : 16 }
           }
         >
-          <If when={!props.tablet}>
-            <Label size={12} line={props.phone ? 16 : 18} tone="muted">
+          <If when={props.phone}>
+            <Label size={12} line={16} tone="muted">
               {pluginConfigText("fields")}
             </Label>
           </If>
@@ -494,13 +529,13 @@ export function ConfigurePlugin(props: {
   );
   return (
     <If
-      when={props.tablet}
+      when={!props.phone}
       else={
         <Modal
           title={title()}
-          phone={props.phone}
-          phonePage={props.phone}
-          height={props.phone ? "100%" : 480}
+          phone
+          phonePage
+          height="100%"
           onClose={props.onClose}
         >
           {form()}
@@ -510,8 +545,17 @@ export function ConfigurePlugin(props: {
       <Dialog
         accessibilityLabel={title()}
         animation="none"
-        style={{ ...fill, paddingTop: 56, alignItems: "center" }}
-        backdropStyle={{ backgroundColor: c().sheetShade }}
+        // The same dialog on both: below the tablet header, centred on desktop.
+        style={{
+          ...fill,
+          alignItems: "center",
+          ...(props.tablet
+            ? { paddingTop: 56 }
+            : { justifyContent: "center", paddingVertical: 24 }),
+        }}
+        backdropStyle={{
+          backgroundColor: props.tablet ? c().sheetShade : c().modalShade,
+        }}
         onOpenChange={({ open }) => {
           if (!open) props.onClose();
         }}

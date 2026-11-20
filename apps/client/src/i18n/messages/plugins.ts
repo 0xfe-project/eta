@@ -5,8 +5,16 @@ export const pluginsMessages = {
   pluginAboveMaximum: ["Maximum {{value}}", "最大值为 {{value}}"],
   addFromGit: ["Add from git", "从 git 添加"],
   adding: ["Adding…", "正在添加…"],
-  addPlugin: ["Add plugin", "添加插件"],
-  branchTagOrCommit: ["Branch, tag, or commit", "分支、标签或提交"],
+  addPluginTitle: ["Add a plugin from git", "从 git 添加插件"],
+  addPluginDescription: [
+    "It is resolved to one commit and stays there until you update it.",
+    "它会固定到一个提交，直到你更新它。",
+  ],
+  addPluginSubmit: ["Add", "添加"],
+  branchTagOrCommit: [
+    "Branch, tag or commit (HEAD by default)",
+    "分支、标签或提交（默认 HEAD）",
+  ],
   checkThisValueAgainstThePlugins: [
     "Check this value against the plugin’s requirements.",
     "请核对这个值是否符合插件要求。",
@@ -16,12 +24,15 @@ export const pluginsMessages = {
   configure: ["Configure", "配置"],
   configureWithCount: ["Configure {{name}}", "配置 {{name}}"],
   directoryInTheRepositoryOptional: [
-    "Directory in the repository (optional)",
-    "仓库中的目录（选填）",
+    "Path inside the repository (root by default)",
+    "仓库内的路径（默认根目录）",
   ],
-  gitRepositoryUrl: ["Git repository URL", "Git 仓库 URL"],
   localDirectory: ["Local directory", "本地目录"],
-  noPluginsInstalled: ["No plugins installed.", "尚未安装插件。"],
+  noPluginsYet: ["No plugins yet", "还没有插件"],
+  noPluginsHint: [
+    "Put a plugin in ~/.eta/plugins/<name>/, or add one from a git repository.",
+    "把插件放到 ~/.eta/plugins/<name>/，或从 git 仓库添加。",
+  ],
   noWarnings: ["No warnings", "暂无警告"],
   pluginActions: ["Plugin actions", "插件操作"],
   pluginMachineMissing: [
@@ -53,11 +64,11 @@ export const pluginsMessages = {
   pluginsNeedAttention: ["Needs attention", "需要处理"],
   pluginsInstalledCount: ["Installed · {{count}}", "已安装 · {{count}}"],
   refreshPlugins: ["Refresh plugins", "刷新插件"],
-  removeFromThisHost: [
-    "Remove {{remove}} from this host?",
-    "从此主机移除 {{remove}}？",
+  removePluginTitle: ["Remove {{name}}?", "移除 {{name}}？"],
+  removePluginDescription: [
+    "Its fetched files are deleted. Its configuration and PLUGIN_DATA stay, for when it is added again.",
+    "已拉取的文件会被删除。它的配置和 PLUGIN_DATA 会保留，下次添加时继续使用。",
   ],
-  removePlugin: ["Remove plugin?", "移除插件？"],
   repository: ["Repository", "仓库地址"],
   revision: ["Revision", "版本"],
   select: ["Select {{name}}", "选择 {{name}}"],

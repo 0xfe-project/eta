@@ -27,11 +27,13 @@ import {
   Header,
   Icon,
   Label,
+  ListSkeleton,
   row,
 } from "../../../components";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
 import { SkillDetail } from "./detail";
+import { SkillSelect } from "./select";
 
 export function Skills(props: {
   layout: Layout;
@@ -50,6 +52,7 @@ export function Skills(props: {
   const failure = signal("");
   const retry = signal(0);
   const resolved = signal<SkillTarget>();
+  const missing = signal(false);
   follow(() => "machines");
 
   const phone = () => props.layout === "phone";
@@ -125,6 +128,7 @@ export function Skills(props: {
     selectedPath.set("");
     entries.set([]);
     resolved.set(undefined);
+    missing.set(false);
     loading.set(Boolean(locationKey));
     failure.set("");
     if (!locationKey) return;
@@ -146,6 +150,7 @@ export function Skills(props: {
             });
           if (!active) return;
           loaded.push(...reply.result.entries);
+          if (!reply.result.exists) missing.set(true);
           resolvedTarget = reply.target;
           offset = reply.result.next;
         } while (offset !== null);
@@ -173,31 +178,56 @@ export function Skills(props: {
 
   function deviceMenu(width: 160 | "100%") {
     return (
-      <ActionMenu
-        label={uiText("skillDevice")}
-        value={machine()?.name ?? uiText("skillHost")}
-        truncateValue
-        triggerStyle={{
-          width,
-          height: phone() ? 32 : 28,
-          paddingHorizontal: 8,
-          borderColor: phone() ? c().border : c().strong,
-        }}
+      <If
+        when={phone()}
+        else={
+          <SkillSelect
+            label={uiText("skillDevice")}
+            placeholder={uiText("skillChooseDevice")}
+            value={machine()?.id}
+            items={devices().map((item) => ({
+              value: item.id,
+              title: item.name,
+              suffix:
+                item.kind === "primary"
+                  ? uiText("skillPrimaryDevice")
+                  : undefined,
+            }))}
+            triggerStyle={{ width }}
+            onChange={(id) => {
+              selectedPath.set("");
+              projectId.set("");
+              device.set(id);
+            }}
+          />
+        }
       >
-        <Each of={devices()} key={(item) => item.id}>
-          {(item) => (
-            <ActionItem
-              label={item().name}
-              checked={machine()?.id === item().id}
-              onSelect={() => {
-                selectedPath.set("");
-                projectId.set("");
-                device.set(item().id);
-              }}
-            />
-          )}
-        </Each>
-      </ActionMenu>
+        <ActionMenu
+          label={uiText("skillDevice")}
+          value={machine()?.name ?? uiText("skillHost")}
+          truncateValue
+          triggerStyle={{
+            width,
+            height: 32,
+            paddingHorizontal: 8,
+            borderColor: c().border,
+          }}
+        >
+          <Each of={devices()} key={(item) => item.id}>
+            {(item) => (
+              <ActionItem
+                label={item().name}
+                checked={machine()?.id === item().id}
+                onSelect={() => {
+                  selectedPath.set("");
+                  projectId.set("");
+                  device.set(item().id);
+                }}
+              />
+            )}
+          </Each>
+        </ActionMenu>
+      </If>
     );
   }
 
@@ -258,33 +288,49 @@ export function Skills(props: {
         </Each>
       </View>
       <If when={scope() === "project"}>
-        <ActionMenu
-          label={uiText("skillProjectMenu")}
-          value={
-            project()
-              ? `${project()!.name} · ${project()!.display}`
-              : uiText("skillChooseProject")
+        <If
+          when={phone()}
+          else={
+            <SkillSelect
+              label={uiText("skillProjectMenu")}
+              placeholder={uiText("skillChooseProject")}
+              value={project()?.id}
+              items={projects().map((item) => ({
+                value: item.id,
+                title: `${item.name} · ${item.display}`,
+              }))}
+              triggerStyle={{ width: tablet() ? "100%" : 200 }}
+              onChange={(id) => {
+                selectedPath.set("");
+                projectId.set(id);
+              }}
+            />
           }
-          truncateValue
-          triggerStyle={{
-            width: tablet() || phone() ? "100%" : 200,
-            height: 28,
-            paddingHorizontal: 8,
-          }}
         >
-          <Each of={projects()} key={(item) => item.id}>
-            {(item) => (
-              <ActionItem
-                label={item().name}
-                checked={item().id === project()?.id}
-                onSelect={() => {
-                  selectedPath.set("");
-                  projectId.set(item().id);
-                }}
-              />
-            )}
-          </Each>
-        </ActionMenu>
+          <ActionMenu
+            label={uiText("skillProjectMenu")}
+            value={
+              project()
+                ? `${project()!.name} · ${project()!.display}`
+                : uiText("skillChooseProject")
+            }
+            truncateValue
+            triggerStyle={{ width: "100%", height: 28, paddingHorizontal: 8 }}
+          >
+            <Each of={projects()} key={(item) => item.id}>
+              {(item) => (
+                <ActionItem
+                  label={item().name}
+                  checked={item().id === project()?.id}
+                  onSelect={() => {
+                    selectedPath.set("");
+                    projectId.set(item().id);
+                  }}
+                />
+              )}
+            </Each>
+          </ActionMenu>
+        </If>
       </If>
       <If when={!tablet() && !phone()}>
         <View style={{ flex: 1 }} />
@@ -316,35 +362,85 @@ export function Skills(props: {
     </View>
   );
 
+  // What the list slot shows with no skills to list: one state at a time,
+  // under the controls, as the design draws it.
+  const emptyCopy = (): { title: string; hint?: string } => {
+    if (!available()) return { title: uiText("thisHostDoesNotProvideSkill") };
+    if (!machine())
+      return {
+        title: uiText("skillChooseDevice"),
+        hint: uiText("skillChooseDeviceHint"),
+      };
+    if (scope() === "project" && !project())
+      return {
+        title: uiText("skillChooseProject"),
+        hint: uiText("skillChooseProjectHint"),
+      };
+    if (!location()) return { title: uiText("skillDirectoryUnavailable") };
+    if (missing())
+      return {
+        title: uiText("skillDirectoryMissing"),
+        hint: uiText("skillDirectoryMissingHint"),
+      };
+    if (query().trim() && entries().length)
+      return {
+        title: uiText("noMatchingSkills"),
+        hint: uiText("noMatchingSkillsHint"),
+      };
+    return {
+      title: uiText("noSkillsInThisDirectory"),
+      hint: uiText("noSkillsHint"),
+    };
+  };
+  const emptyStyle = {
+    flex: undefined,
+    justifyContent: "flex-start",
+    paddingVertical: 40,
+  } as const;
+  const emptyWidth = () => (tablet() ? 220 : phone() ? 240 : 260);
+  const emptyState = () => (
+    <If
+      when={!loading()}
+      else={
+        <ListSkeleton
+          label={uiText("loadingSkills")}
+          style={{ paddingHorizontal: tablet() ? 6 : phone() ? 8 : 16 }}
+        />
+      }
+    >
+      <If
+        when={failure()}
+        else={
+          <Empty
+            title={emptyCopy().title}
+            description={emptyCopy().hint}
+            icon="book"
+            iconSize={32}
+            titleWeight={500}
+            titleTone="ink"
+            descriptionWidth={emptyWidth()}
+            style={emptyStyle}
+          />
+        }
+      >
+        <Empty
+          title={uiText("unableToLoadSkills")}
+          description={failure()}
+          icon="warning"
+          iconSize={32}
+          iconTone="red"
+          descriptionWidth={emptyWidth()}
+          style={emptyStyle}
+        >
+          <Button label={uiText("retry")} size={28} onPress={refresh} />
+        </Empty>
+      </If>
+    </If>
+  );
   const list = () => (
     <>
       {controls()}
-      <If
-        when={visible().length}
-        else={
-          <Empty
-            title={
-              !available()
-                ? uiText("thisHostDoesNotProvideSkill")
-                : loading()
-                  ? uiText("loadingSkills")
-                  : failure()
-                    ? uiText("unableToLoadSkills")
-                    : !location()
-                      ? uiText("skillDirectoryUnavailable")
-                      : query().trim()
-                        ? uiText("noMatchingSkills")
-                        : uiText("noSkillsInThisDirectory")
-            }
-            description={failure() || undefined}
-            icon="folder"
-          >
-            <If when={failure()}>
-              <Button label={uiText("retry")} onPress={refresh} />
-            </If>
-          </Empty>
-        }
-      >
+      <If when={visible().length} else={emptyState()}>
         <Scroll style={grow} scrollbar={false}>
           <View
             style={
@@ -543,7 +639,25 @@ export function Skills(props: {
         <View style={grow}>
           <If
             when={showing()}
-            else={<Empty title={uiText("skillSelect")} icon="folder" />}
+            else={
+              <If
+                when={visible().length}
+                else={
+                  // Nothing listed: the detail pane keeps only its blank header bar.
+                  <View
+                    style={{
+                      height: 40,
+                      flexShrink: 0,
+                      backgroundColor: c().surface,
+                      borderBottomWidth: 1,
+                      borderColor: c().border,
+                    }}
+                  />
+                }
+              >
+                <Empty title={uiText("skillSelect")} icon="folder" />
+              </If>
+            }
           >
             {reader()}
           </If>
