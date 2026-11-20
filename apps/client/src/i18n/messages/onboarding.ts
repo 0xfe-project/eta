@@ -36,6 +36,7 @@ export const onboardingMessages = {
   installing: ["Installing…", "正在安装…"],
   isntReadyYet: ["{{hostname}} isn't ready yet", "{{hostname}} 尚未就绪"],
   loadingAgents: ["Loading agents…", "正在加载智能体…"],
+  loadingEllipsis: ["Loading…", "加载中…"],
   sourceApiKey: ["API key", "API 密钥"],
   sourceModelCount: ["{{length}} models", "{{length}} 个模型"],
   nextStep: ["Next", "下一步"],

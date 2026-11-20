@@ -9,7 +9,81 @@ export interface Persona {
   description: string;
 }
 
+// Skeleton bars of the two placeholder rows: name and description widths.
+const skeletonRows = {
+  wide: [
+    [88, 420],
+    [120, 340],
+  ],
+  phone: [
+    [88, 220],
+    [120, 180],
+  ],
+};
+
+/** Loading · persona rows: a checkbox square, a name bar, a description bar
+ * and a short trailing bar, two rows as on the web. */
+function PersonaSkeleton(props: { phone: boolean }) {
+  const c = colors();
+  const bar = (width: number, height: number) => (
+    <View
+      style={{
+        width,
+        maxWidth: "100%",
+        height,
+        flexShrink: 0,
+        backgroundColor: c().border,
+      }}
+    />
+  );
+  return (
+    <View role="progressbar" accessibilityLabel={uiText("loadingAgents")}>
+      <Each of={props.phone ? skeletonRows.phone : skeletonRows.wide}>
+        {(widths) => (
+          <View
+            style={{
+              ...row,
+              alignItems: "flex-start",
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              gap: 12,
+              borderBottomWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <View
+              style={{
+                width: 16,
+                height: 16,
+                marginTop: 2,
+                flexShrink: 0,
+                backgroundColor: c().border,
+              }}
+            />
+            <View style={{ flex: 1, minWidth: 0, gap: 6, paddingTop: 4 }}>
+              {bar(widths()[0], 12)}
+              {bar(widths()[1], 10)}
+            </View>
+            <View
+              style={{
+                ...row,
+                width: 96,
+                height: 20,
+                flexShrink: 0,
+                justifyContent: "flex-end",
+              }}
+            >
+              {bar(40, 10)}
+            </View>
+          </View>
+        )}
+      </Each>
+    </View>
+  );
+}
+
 export function PersonaStep(props: {
+  phone: boolean;
   cards: Persona[];
   loading: boolean;
   missing: boolean;
@@ -54,9 +128,7 @@ export function PersonaStep(props: {
       </View>
       <View style={{ paddingBottom: 8 }}>
         <If when={props.loading}>
-          <Label tone="muted" style={{ padding: 16 }}>
-            {uiText("loadingAgents")}
-          </Label>
+          <PersonaSkeleton phone={props.phone} />
         </If>
         <If when={props.missing}>
           <View style={emptyState}>

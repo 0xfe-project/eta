@@ -29,6 +29,8 @@ const footerButton = (disabled = false) => ({
   gap: 6,
   opacity: disabled ? 0.5 : 1,
 });
+// On a phone the footer's buttons are 36pt tall, as is step 1's first Add source.
+const phoneButton = 36;
 
 /** "A", "A and B", "A, B and C". */
 function listText(items: string[]) {
@@ -111,22 +113,23 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
       <Modal
         title={uiText("setUpEta")}
         phone={props.phone}
+        // A phone gets the whole screen, as the web's /onboard page.
+        phonePage={props.phone}
+        overPhoneNavigation={props.phone}
         width={640}
-        height={props.phone ? "90%" : undefined}
+        height={props.phone ? "100%" : undefined}
         onClose={props.onClose}
         dismissible={false}
-        hideHeader={!props.phone}
+        hideHeader
       >
-        <If when={!props.phone}>
-          <Header
-            title={uiText("setUpEta")}
-            layout="desktop"
-            dialog
-            inset={16}
-            end={12}
-            titleLine={24}
-          />
-        </If>
+        <Header
+          title={uiText("setUpEta")}
+          layout="desktop"
+          dialog
+          inset={16}
+          end={12}
+          titleLine={24}
+        />
         <If when={step() > 0}>
           <View
             style={{
@@ -294,7 +297,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                 label={uiText("addSource")}
                 icon="plus"
                 tone={sources().length ? "ghost" : "primary"}
-                size={sources().length ? 24 : 28}
+                size={sources().length ? 24 : props.phone ? phoneButton : 28}
                 onPress={() => adding.set(true)}
                 style={{
                   alignSelf: "flex-start",
@@ -306,6 +309,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
           </If>
           <If when={step() === 2}>
             <PersonaStep
+              phone={props.phone}
               cards={cards()}
               loading={loadingCards()}
               missing={Boolean(cardsMissing())}
@@ -383,19 +387,30 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
           style={{
             ...row,
             flexShrink: 0,
-            paddingVertical: 12,
+            paddingTop: 12,
+            paddingBottom: props.phone ? 28 : 12,
             paddingHorizontal: 16,
             borderTopWidth: 1,
             borderColor: c().border,
             gap: 8,
           }}
         >
-          <View style={{ ...row, flex: 1, gap: 8 }}>
+          <View
+            style={{
+              ...row,
+              gap: 8,
+              flexGrow: 1,
+              // Step 2's Previous keeps its width; the count beside it wraps.
+              flexShrink: step() === 2 ? 0 : 1,
+              flexBasis: step() === 2 ? "auto" : 0,
+            }}
+          >
             <If when={step() === 2}>
               <Button
                 label={uiText("previousStep")}
                 icon="back"
                 disabled={working()}
+                size={props.phone ? phoneButton : undefined}
                 onPress={() => step.update((value) => value - 1)}
                 style={{
                   ...footerButton(working()),
@@ -412,9 +427,19 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
               </Label>
             </If>
           </View>
-          <View style={{ ...row, gap: 12 }}>
-            <If when={showCount()}>
+          <View style={{ ...row, flexShrink: 1, gap: 12 }}>
+            <If when={step() === 2 && loadingCards()}>
               <Label size={12} line={16} tone="muted">
+                {uiText("loadingEllipsis")}
+              </Label>
+            </If>
+            <If when={showCount()}>
+              <Label
+                size={12}
+                line={16}
+                tone="muted"
+                style={{ flexShrink: 1, textAlign: "right" }}
+              >
                 {step() === 2 && !working()
                   ? uiText("toInstall", {
                       length: selected().length,
@@ -432,6 +457,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
               <Button
                 label={uiText("getStarted")}
                 tone="primary"
+                size={props.phone ? phoneButton : undefined}
                 onPress={() => step.set(1)}
                 style={footerButton()}
               />
@@ -440,6 +466,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
               <Button
                 label={uiText("nextStep")}
                 tone="primary"
+                size={props.phone ? phoneButton : undefined}
                 disabled={!chosenModel()}
                 onPress={() => step.set(2)}
                 style={footerButton(!chosenModel())}
@@ -455,6 +482,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                       : uiText("installAgents")
                 }
                 tone="primary"
+                size={props.phone ? phoneButton : undefined}
                 disabled={installBlocked()}
                 onPress={() => void install()}
                 style={footerButton(installBlocked())}
@@ -464,6 +492,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
               <Button
                 label={uiText("done")}
                 tone="primary"
+                size={props.phone ? phoneButton : undefined}
                 onPress={props.onClose}
                 style={footerButton()}
               />
