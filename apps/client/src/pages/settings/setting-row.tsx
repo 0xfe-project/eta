@@ -2,10 +2,11 @@ import type { AgentUsage, AgentView } from "@eta/client-contracts";
 import type { IconName } from "../../components/icons";
 import { View } from "nsh";
 import { ActionItem, colors, Icon, Label, row } from "../../components";
+import { AgentFace } from "../../components/agent-face";
 import { useModels } from "../../components/model-select";
 import { formatLocale, uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
-import { EntityRow, LetterBox, WarningLine } from "./section";
+import { EntityRow, WarningLine } from "./section";
 
 /** 48,213 → "48k": a token count the way a row's meta line says it. */
 function tokens(count: number) {
@@ -90,7 +91,7 @@ export function AgentSetting(props: {
   return (
     <EntityRow
       title={props.agent.name}
-      leading={<LetterBox name={props.agent.name} size={props.avatar} />}
+      leading={<AgentFace id={props.agent.id} size={props.avatar ?? 24} />}
       leadingSize={props.phone ? 28 : props.avatar}
       stacked={props.phone}
       caret={props.phone}

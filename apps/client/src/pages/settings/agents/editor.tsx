@@ -1,13 +1,13 @@
 import type { AgentEditorProps } from "./form";
 import { Scroll, signal, View } from "nsh";
 import { Button, colors, grow, Label, Modal, row } from "../../../components";
+import { AgentFace } from "../../../components/agent-face";
 import {
   BackButton,
   CloseButton,
 } from "../../../components/navigation-buttons";
-import { localizedText, uiText } from "../../../i18n";
 
-import { LetterBox } from "../section";
+import { localizedText, uiText } from "../../../i18n";
 import { createAgentForm } from "./form";
 import { AgentGeneral } from "./general";
 import { AgentInstructions } from "./instructions";
@@ -114,7 +114,7 @@ export function AgentEditor(props: AgentEditorProps) {
           style={{ ...row, flex: 1, minWidth: 0, gap: phoneEditor() ? 8 : 10 }}
         >
           <If when={!creating}>
-            <LetterBox name={title()} />
+            <AgentFace id={props.id} size={24} />
           </If>
           <If
             when={phoneEditor()}
