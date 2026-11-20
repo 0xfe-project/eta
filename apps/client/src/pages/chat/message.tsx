@@ -156,11 +156,12 @@ export function Message(props: {
         alignSelf: "stretch",
         gap: item().author === "user" || card() ? 4 : props.phone ? 8 : 0,
         // A review card and a failed reply are one block each, 24 apart.
-        paddingVertical:
-          props.phone || card()
-            ? 0
-            : review() || item().status === "failed"
-              ? 6
+        paddingVertical: card()
+          ? 0
+          : review() || item().status === "failed"
+            ? 6
+            : props.phone
+              ? 0
               : 16,
         paddingHorizontal: props.phone || props.compact || card() ? 0 : 16,
       }}
@@ -549,12 +550,9 @@ export function Message(props: {
               size={10}
               line={12}
               tone="muted"
-              style={{
-                letterSpacing: props.phone ? 0 : 1,
-                textTransform: props.phone ? "none" : "uppercase",
-              }}
+              style={{ letterSpacing: 1, textTransform: "uppercase" }}
             >
-              {stamp()}
+              {messageTime(item().createdAt, false)}
             </Label>
             <Label size={14} line={18} tone="warning">
               {`⚠ ${failure()}`}

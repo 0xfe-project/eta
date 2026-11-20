@@ -1,7 +1,15 @@
 import type { ArtifactView, MemberView } from "@eta/client-contracts";
 import type { JSX } from "nsh";
 import { Scroll, View } from "nsh";
-import { Caption, colors, grow, Icon, Label, row } from "../../components";
+import {
+  Caption,
+  colors,
+  Empty,
+  grow,
+  Icon,
+  Label,
+  row,
+} from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { CloseButton } from "../../components/navigation-buttons";
 import { uiText } from "../../i18n";
@@ -107,6 +115,18 @@ export function PhoneConversationInfo(props: {
             </InfoRow>
           )}
         </Each>
+        <If when={!artifacts().length}>
+          <Empty
+            icon="appWindow"
+            iconSize={24}
+            title={uiText("noArtifactsYet")}
+            titleLine={20}
+            description={uiText("artifactsEmptyHelp")}
+            descriptionSize={10}
+            descriptionLine={16}
+            style={{ flex: 0, paddingVertical: 32 }}
+          />
+        </If>
       </Scroll>
     </View>
   );
