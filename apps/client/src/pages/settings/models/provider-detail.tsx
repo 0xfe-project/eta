@@ -22,6 +22,7 @@ import { ToggleSwitch } from "../../../components/toggle-switch";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { LetterBox, PaneBack, SectionHeader, WarningLine } from "../section";
+import { BalanceSummary } from "./balance-summary";
 import { logoKey, useSourceLogos } from "./logos";
 import { ProviderEditor } from "./provider-editor";
 
@@ -288,6 +289,10 @@ export function ProviderDetail(props: {
         >
           {check()?.error}
         </Label>
+      </If>
+      {/* Off phones the balance stays above both tabs; the phone shows it with the models. */}
+      <If when={!props.phone || tab() === "models"}>
+        <BalanceSummary id={props.id} />
       </If>
       <If
         when={tab() === "models"}

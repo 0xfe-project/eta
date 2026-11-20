@@ -1,4 +1,4 @@
-import type { JSX, ViewStyle } from "nsh";
+import type { JSX, ViewRef, ViewStyle } from "nsh";
 import { Image, View, windowSize } from "nsh";
 import { ActionMenu, Button, colors, Icon, Label, row } from "../../components";
 import { StatusDot } from "../../components/status-dot";
@@ -205,6 +205,10 @@ export function EntityRow(props: {
    */
   stacked?: boolean;
   onPress?: () => void;
+  /** The pressable part, e.g. to take focus back when a detail closes. */
+  controlRef?: (node: ViewRef) => void;
+  /** Read instead of the title, when the row says more than its name. */
+  accessibilityLabel?: string;
 }) {
   const c = colors();
   const trailingHeight = () => (props.stacked ? 28 : 24);
@@ -222,8 +226,13 @@ export function EntityRow(props: {
       }}
     >
       <View
+        ref={(node) => props.controlRef?.(node)}
         role={props.onPress ? "button" : undefined}
-        accessibilityLabel={props.onPress ? props.title : undefined}
+        accessibilityLabel={
+          props.onPress
+            ? (props.accessibilityLabel ?? props.title)
+            : props.accessibilityLabel
+        }
         onPress={props.onPress}
         style={{
           ...row,

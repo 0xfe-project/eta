@@ -800,3 +800,252 @@ describe("listing models with models.dev's facts in one call", () => {
     await h.unload();
   });
 });
+
+describe("account balances through the saved source", () => {
+  it("isolates official products, credentials, regions and currencies; requires an explicit paid lookup", async () => {
+    const request = vi.fn(async (url: string, init: RequestInit) => {
+      expect(init.redirect).toBe("error");
+      const token = new Headers(init.headers).get("authorization");
+      if (url === "https://api.deepseek.com/user/balance") {
+        expect(token).toBe("Bearer synthetic-d");
+        return Response.json({
+          balance_infos: [
+            { currency: "USD", total_balance: "0" },
+            { currency: "CNY", total_balance: "12.340000000000001" },
+            { currency: "other", total_balance: "42" },
+          ],
+        });
+      }
+      const china = url === "https://api.moonshot.cn/v1/users/me/balance";
+      if (!china)
+        expect(url).toBe("https://api.moonshot.ai/v1/users/me/balance");
+      expect(token).toBe(
+        china ? "Bearer synthetic-cn" : "Bearer synthetic-global",
+      );
+      return new Response(
+        '{"code":0,"status":true,"data":{"available_balance":0.123456789123456789,"cash_balance":-2}}',
+      );
+    });
+    const h = await harness({ fetch: request as unknown as typeof fetch });
+    const sources = [
+      ["d", "deepseek", "https://api.deepseek.com"],
+      ["cn", "moonshot-cn", "https://api.moonshot.cn/v1"],
+      ["global", "moonshot-global", "https://api.moonshot.ai/v1"],
+      ["missing", "deepseek", "https://api.deepseek.com"],
+      ["spoof", "deepseek", "https://example.test"],
+      ["custom", "openai-compatible", "https://api.deepseek.com"],
+      ["router", "openrouter", "https://openrouter.ai/api/v1"],
+      ["spend", "opencode", "https://opencode.ai/inference/openai/v1"],
+      ["cross", "moonshot-cn", "https://api.moonshot.ai/v1"],
+    ];
+    await writeFile(
+      h.store.path,
+      JSON.stringify({
+        providers: sources.map(([id, kind, baseUrl]) => ({
+          id,
+          kind,
+          baseUrl,
+          models: [],
+          apiKey: id === "missing" ? undefined : `synthetic-${id}`,
+        })),
+      }),
+    );
+    await h.load();
+    try {
+      const read = async (id: string, refresh = true) =>
+        (await callResult(h, "readBalance", { id, refresh })).result;
+      expect(await read("d", false)).toEqual({ state: "query" });
+      for (const [id, state] of [
+        ["missing", "missing_key"],
+        ["spoof", "unsupported"],
+        ["custom", "unsupported"],
+        ["cross", "unsupported"],
+        ["router", "forbidden"],
+        ["spend", "spend_only"],
+      ]) {
+        expect(await read(id!)).toEqual({ state });
+      }
+      expect(request).not.toHaveBeenCalled();
+      const [one, two] = await Promise.all([read("d"), read("d")]);
+      expect(one).toMatchObject({
+        state: "available",
+        partial: true,
+        lines: [
+          { currency: "USD", available: "0" },
+          { currency: "CNY", available: "12.340000000000001" },
+        ],
+      });
+      expect(two).toEqual(one);
+      expect(await read("d")).toEqual(one);
+      expect(request).toHaveBeenCalledTimes(1);
+      for (const [id, currency] of [
+        ["cn", "CNY"],
+        ["global", "USD"],
+      ]) {
+        expect(await read(id!)).toMatchObject({
+          state: "available",
+          lines: [{ currency, available: "0.123456789123456789" }],
+        });
+      }
+    } finally {
+      await h.unload();
+    }
+  });
+
+  it("fences an in-flight balance across credential replacement and expires historical values", async () => {
+    const pending = Promise.withResolvers<Response>();
+    const started = Promise.withResolvers<void>();
+    const request = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        started.resolve();
+        return pending.promise;
+      })
+      .mockResolvedValueOnce(
+        Response.json({
+          balance_infos: [
+            { currency: "USD", total_balance: "0.01" },
+            { currency: "CNY", total_balance: null },
+          ],
+        }),
+      )
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(new Response(null, { status: 403 }));
+    const h = await harness({ fetch: request as unknown as typeof fetch });
+    const save = (key: string) =>
+      writeFile(
+        h.store.path,
+        JSON.stringify({
+          providers: [
+            {
+              id: "d",
+              kind: "deepseek",
+              baseUrl: "https://api.deepseek.com",
+              apiKey: key,
+              models: [],
+            },
+          ],
+        }),
+      );
+    const read = async (refresh = true) =>
+      (await callResult(h, "readBalance", { id: "d", refresh })).result;
+    await save("first");
+    await h.load();
+    try {
+      const now = Date.now();
+      const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+      const old = read();
+      await started.promise;
+      await save("second");
+      expect(await read()).toMatchObject({
+        state: "available",
+        failedCurrencies: ["CNY"],
+        lines: [{ currency: "USD", available: "0.01" }],
+      });
+      pending.resolve(
+        Response.json({
+          balance_infos: [{ currency: "CNY", total_balance: "81" }],
+        }),
+      );
+      expect(await old).toEqual({ state: "unavailable" });
+      clock.mockReturnValue(now + 60_000);
+      expect(await read()).toMatchObject({
+        state: "unavailable",
+        lines: [{ currency: "USD", available: "0.01" }],
+      });
+      clock.mockReturnValue(now + 1_810_000);
+      expect(await read(false)).not.toHaveProperty("lines");
+      expect(await read()).toMatchObject({ state: "forbidden" });
+      expect(await read()).not.toHaveProperty("lines");
+      expect(request).toHaveBeenCalledTimes(4);
+    } finally {
+      await h.unload();
+    }
+  });
+
+  it("classifies the Host deadline without reporting zero", async () => {
+    const timeout = AbortSignal.abort(
+      new DOMException("deadline", "TimeoutError"),
+    );
+    const h = await harness({
+      fetch: (async (_url: unknown, options?: RequestInit) => {
+        options?.signal?.throwIfAborted();
+        throw new Error("deadline expected");
+      }) as unknown as typeof fetch,
+    });
+    await writeFile(
+      h.store.path,
+      JSON.stringify({
+        providers: [
+          {
+            id: "d",
+            kind: "deepseek",
+            baseUrl: "https://api.deepseek.com",
+            apiKey: "test",
+            models: [],
+          },
+        ],
+      }),
+    );
+    await h.load();
+    try {
+      vi.spyOn(AbortSignal, "timeout").mockReturnValue(timeout);
+      const reply = await callResult(h, "readBalance", {
+        id: "d",
+        refresh: true,
+      });
+      expect(reply.result).toMatchObject({ state: "timeout" });
+      expect(reply.result).not.toHaveProperty("lines");
+    } finally {
+      await h.unload();
+    }
+  });
+
+  it.each([
+    [401, "invalid_key"],
+    [403, "forbidden"],
+    [429, "rate_limited"],
+    [502, "unavailable"],
+  ] as const)(
+    "reports HTTP %i without changing connection health",
+    async (status, state) => {
+      const request = vi.fn(
+        async () =>
+          new Response(null, { status, headers: { "Retry-After": "72" } }),
+      );
+      const h = await harness({ fetch: request as unknown as typeof fetch });
+      await writeFile(
+        h.store.path,
+        JSON.stringify({
+          providers: [
+            {
+              id: "d",
+              kind: "deepseek",
+              baseUrl: "https://api.deepseek.com",
+              apiKey: "fixture",
+              models: [],
+            },
+          ],
+        }),
+      );
+      await h.load();
+      try {
+        const reply = await callResult(h, "readBalance", {
+          id: "d",
+          refresh: true,
+        });
+        expect(reply.result).toMatchObject({ state });
+        expect(reply.result).not.toHaveProperty("lines");
+        if (status === 429)
+          expect(
+            Date.parse((reply.result as { retryAt: string }).retryAt),
+          ).toBeGreaterThan(Date.now() + 70_000);
+        await callResult(h, "readBalance", { id: "d", refresh: true });
+        expect(request).toHaveBeenCalledTimes(1);
+        expect(h.wire.snapshot("providers")?.sections.checks).toEqual({});
+      } finally {
+        await h.unload();
+      }
+    },
+  );
+});

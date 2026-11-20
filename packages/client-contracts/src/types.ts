@@ -259,6 +259,8 @@ export interface ProviderSummary {
   kind: ProviderKind;
   baseUrl: string;
   hasApiKey: boolean;
+  /** Opaque generation of the bound account and its credentials, when balance reads are supported. */
+  balanceRevision?: string;
   headers?: ProviderHeaders;
   models: EtaModelConfig[];
   lastRefreshedAt?: string;

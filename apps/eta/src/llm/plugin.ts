@@ -101,9 +101,13 @@ export function llmPlugin(deps: LlmPluginDeps, applied: () => void) {
         })();
         return syncing;
       };
+      let quotaRead = 0;
       const readQuota = async (): Promise<void> => {
         try {
-          quota = await gateway.usage();
+          const read = ++quotaRead;
+          const next = await gateway.usage();
+          if (read !== quotaRead) return;
+          quota = next;
           if (!closed) wire.pushNow("llm");
         } catch (error) {
           warn(`[eta] llm: could not read quota: ${String(error)}`);
@@ -123,10 +127,11 @@ export function llmPlugin(deps: LlmPluginDeps, applied: () => void) {
 
       const registrations = [
         wire.handle("llm", "refresh", async () => {
+          const read = ++quotaRead;
           const checked = await explained(() => gateway.refresh());
           connections = checked.connections;
           catalog = checked.models;
-          quota = checked.quota;
+          if (read === quotaRead) quota = checked.quota;
           await models.update(catalog);
           wire.pushNow("llm");
           return { result: {} };
@@ -164,12 +169,17 @@ export function llmPlugin(deps: LlmPluginDeps, applied: () => void) {
             throw new Error("llm.setEnabled needs enabled");
           const id = args.string("id");
           await explained(() => gateway.setEnabled(id, enabled));
+          quotaRead++;
+          quota = quota.filter((item) => item.connectionId !== id);
           await sync();
+          if (enabled) void readQuota();
           return { result: {} };
         }),
         wire.handle("llm", "remove", async (call) => {
           const id = new Args(call).string("id");
           await explained(() => gateway.remove(id));
+          quotaRead++;
+          quota = quota.filter((item) => item.connectionId !== id);
           await sync();
           return { result: {} };
         }),

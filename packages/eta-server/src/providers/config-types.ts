@@ -17,6 +17,24 @@ import type {
 } from "@eta/client-contracts";
 import type { ThinkingLevel } from "@eta/core";
 
+import { createHmac, randomBytes } from "node:crypto";
+
+const balanceSalt = randomBytes(32);
+/** Opaque to clients, local to this Host instance, stable across model-list edits. */
+export function balanceRevision(provider: EtaProviderConfig): string {
+  return createHmac("sha256", balanceSalt)
+    .update(
+      JSON.stringify([
+        provider.id,
+        provider.kind,
+        provider.baseUrl,
+        provider.apiKey,
+        provider.headers,
+      ]),
+    )
+    .digest("hex");
+}
+
 export const MODEL_THINKING_LEVELS = [
   "off",
   "minimal",
@@ -166,6 +184,11 @@ export function providerSummary(provider: EtaProviderConfig): ProviderSummary {
     id: provider.id,
     ...(provider.name === undefined ? {} : { name: provider.name }),
     kind: provider.kind ?? "openai-compatible",
+    ...(provider.kind === "deepseek" ||
+    provider.kind === "moonshot-cn" ||
+    provider.kind === "moonshot-global"
+      ? { balanceRevision: balanceRevision(provider) }
+      : {}),
     baseUrl: provider.baseUrl,
     hasApiKey:
       typeof provider.apiKey === "string" && provider.apiKey.length > 0,

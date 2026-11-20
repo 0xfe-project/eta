@@ -5,7 +5,7 @@
 import type { LlmLogin } from "@eta/client-contracts";
 import type { Connector, ConnectorContext, Usage } from "./connectors";
 import type { Connection } from "./state";
-import { clampPercent, getWithToken, Logins, windowKind } from "./connectors";
+import { getWithToken, Logins, usagePercent, windowKind } from "./connectors";
 import { LlmError } from "./problems";
 
 const BILLING_URL = "https://cli-chat-proxy.grok.com/v1/billing?format=credits";
@@ -112,13 +112,12 @@ export class XAI implements Connector {
     const period = billing.config?.currentPeriod;
     const start = Date.parse(period?.start ?? "");
     const end = Date.parse(period?.end ?? "");
-    if (end > start) {
+    const used = usagePercent(billing.config?.creditUsagePercent);
+    if (end > start && used !== undefined) {
       const seconds = Math.round((end - start) / 1000);
       usage.windows.push({
         kind: windowKind(seconds, "weekly"),
-        used: clampPercent(
-          Number(billing.config?.creditUsagePercent ?? 0) || 0,
-        ),
+        used,
         resetsAt: new Date(end).toISOString(),
         durationSeconds: seconds,
       });

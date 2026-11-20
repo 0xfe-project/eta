@@ -522,6 +522,9 @@ describe("adding a source", () => {
       ["CCodex", "GGrok"],
       [
         "DDeepSeek",
+        "MMoonshot (China)",
+        "MMoonshot (International)",
+        "OOpenRouter",
         "KKimi for Coding",
         "GGLM Coding Plan (CN)",
         "GGLM Coding Plan (Global)",

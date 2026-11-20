@@ -3,6 +3,7 @@ import type {
   EmailAccountView,
   ProviderSummary,
 } from "@eta/client-contracts";
+import type { ViewRef } from "nsh";
 import type { Layout } from "../../components";
 import type { AppearanceProps } from "./appearance";
 import type { SourceChoice } from "./models/sources";
@@ -34,6 +35,7 @@ import { ProviderDetail } from "./models/provider-detail";
 import { ProviderEditor } from "./models/provider-editor";
 import { ModelSourceList, useModelSources } from "./models/source-list";
 import { ModelSources } from "./models/sources";
+import { SubscriptionDetail } from "./models/subscription-detail";
 import { SettingsNavigation } from "./navigation";
 import { sections, useSettingsOverview } from "./overview";
 import { emptyStyle, EntityRow, SectionHeader } from "./section";
@@ -63,13 +65,21 @@ export function Settings(
   const sourceChoice = signal<SourceChoice | undefined>(undefined);
   const provider = signal<ProviderSummary | "new" | undefined>(undefined);
   const sources = signal(false);
+  const connector = signal<string>();
+  let returnTo: string | undefined;
+  function sourceRef(id: string, node: ViewRef) {
+    if (id !== returnTo) return;
+    returnTo = undefined;
+    queueMicrotask(() => node.focus());
+  }
   const acpAgent = signal<{ machineId: string; id: string } | undefined>(
     undefined,
   );
   const mailbox = signal<EmailAccountView | "new" | undefined>(undefined);
   const phone = () => props.layout === "phone";
   const showingProvider = () =>
-    section() === "Model services" && provider() && provider() !== "new";
+    section() === "Model services" &&
+    (connector() || (provider() && provider() !== "new"));
   const { providers, machines, email, externalAgents, summary } =
     useSettingsOverview(() => props.theme);
   const selectedAcp = () => {
@@ -213,7 +223,7 @@ export function Settings(
               </If>
               <If when={current() === "Model services"}>
                 <If
-                  when={provider() && provider() !== "new"}
+                  when={showingProvider()}
                   else={
                     <If
                       when={sourceCount()}
@@ -241,17 +251,39 @@ export function Settings(
                     >
                       <Scroll style={grow} scrollbar={false}>
                         <ModelSourceList
-                          onProvider={(item) => provider.set(item)}
+                          phone={phone()}
+                          onRef={sourceRef}
+                          onProvider={(item) => {
+                            returnTo = `source:${item.id}`;
+                            provider.set(item);
+                          }}
+                          onAccount={(id, name) => {
+                            returnTo = `account:${id}`;
+                            connector.set(name);
+                          }}
                         />
                       </Scroll>
                     </If>
                   }
                 >
-                  <ProviderDetail
-                    id={(provider() as ProviderSummary).id}
-                    phone={phone()}
-                    onClose={() => provider.set(undefined)}
-                  />
+                  <If
+                    when={connector()}
+                    else={
+                      <ProviderDetail
+                        id={
+                          (provider() as ProviderSummary | undefined)?.id ?? ""
+                        }
+                        phone={phone()}
+                        onClose={() => provider.set(undefined)}
+                      />
+                    }
+                  >
+                    <SubscriptionDetail
+                      connector={connector()!}
+                      phone={phone()}
+                      onClose={() => connector.set(undefined)}
+                    />
+                  </If>
                 </If>
               </If>
               <If when={current() === "Machines"}>
