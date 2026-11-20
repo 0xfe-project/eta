@@ -77,7 +77,7 @@ export function Email(props: {
   const proposals = () =>
     host
       .list<EmailProposalView>(target() ?? "", "proposals")
-      .filter((item) => item.status === "pending" || item.status === "failed");
+      .filter((item) => item.status !== "discarded");
   const assignments = () =>
     host.list<EmailAssignmentView>(target() ?? "", "assignments");
   const deleteIds = () => (checked().length ? checked() : [selected()]);
@@ -286,7 +286,7 @@ export function Email(props: {
                   height: 40,
                   gap: 8,
                   justifyContent: "flex-end",
-                  paddingHorizontal: phone() ? 16 : 12,
+                  paddingHorizontal: 12,
                   borderBottomWidth: 1,
                   borderColor: c().border,
                 }}
@@ -317,7 +317,6 @@ export function Email(props: {
                   }
                 >
                   <ListNotice
-                    phone={phone()}
                     title={
                       folder() === "Inbox"
                         ? uiText("inboxIsEmpty")
@@ -385,7 +384,6 @@ export function Email(props: {
                   onMarkUnread={() => void markUnread(entry().id)}
                   onAssignment={(assignment) => handledBy.set(assignment)}
                   onOpenSession={openSession}
-                  onContext={(message) => threadContext.set(message)}
                 />
               )}
             </If>
@@ -396,7 +394,6 @@ export function Email(props: {
         {(message) => (
           <EmailContext
             message={message()}
-            layout={props.layout}
             onClose={() => threadContext.set(undefined)}
           />
         )}
@@ -438,18 +435,54 @@ export function Email(props: {
         />
       </If>
       <If when={deleting()}>
-        <Modal
-          title={
-            deleteIds().length === 1
-              ? uiText("deleteOneEmail")
-              : uiText("deleteCountEmails", { count: deleteIds().length })
-          }
+        <DeleteMail
+          count={deleteIds().length}
           phone={phone()}
-          compact={!phone()}
-          titleWeight={500}
           onClose={() => deleting.set(false)}
-        >
-          <View style={phone() ? { padding: 16 } : { paddingTop: 6 }}>
+          onDelete={() =>
+            void host.action(async () => {
+              await host.call("email", "deleteThreads", {
+                threadIds: deleteIds(),
+              });
+              checked.set([]);
+              selected.set("");
+              deleting.set(false);
+            })
+          }
+        />
+      </If>
+    </View>
+  );
+}
+
+/** Confirm before deleting: a compact dialog off phones; on a phone a sheet
+ * over the tab bar with no close glyph and full-width Delete mail / Cancel. */
+function DeleteMail(props: {
+  count: number;
+  phone: boolean;
+  onClose: () => void;
+  onDelete: () => void;
+}) {
+  const title = () =>
+    props.count === 1
+      ? uiText("deleteOneEmail")
+      : uiText("deleteCountEmails", { count: props.count });
+  return (
+    <Modal
+      title={title()}
+      phone={props.phone}
+      sheet={props.phone}
+      plainSheetHeader={props.phone}
+      overPhoneNavigation={props.phone}
+      hideHeader={props.phone}
+      compact={!props.phone}
+      titleWeight={500}
+      onClose={props.onClose}
+    >
+      <If
+        when={props.phone}
+        else={
+          <View style={{ paddingTop: 6 }}>
             <Label size={12} line={18} tone="muted">
               {uiText("deleteEmailsDescription")}
             </Label>
@@ -464,28 +497,54 @@ export function Email(props: {
               <Button
                 label={uiText("cancel")}
                 size={28}
-                onPress={() => deleting.set(false)}
+                onPress={props.onClose}
               />
               <Button
                 label={uiText("deleteMail")}
                 tone="primary"
                 size={28}
-                onPress={() =>
-                  void host.action(async () => {
-                    await host.call("email", "deleteThreads", {
-                      threadIds: deleteIds(),
-                    });
-                    checked.set([]);
-                    selected.set("");
-                    deleting.set(false);
-                  })
-                }
+                onPress={props.onDelete}
               />
             </View>
           </View>
-        </Modal>
+        }
+      >
+        <View style={{ ...row, height: 44, paddingLeft: 16, paddingRight: 8 }}>
+          <Label weight={600} line={20} style={{ flex: 1 }}>
+            {title()}
+          </Label>
+        </View>
+        <Label
+          line={20}
+          tone="mutedInk"
+          style={{ paddingHorizontal: 16, paddingBottom: 12 }}
+        >
+          {uiText("deleteEmailsDescription")}
+        </Label>
+        <View
+          style={{
+            gap: 8,
+            paddingHorizontal: 16,
+            paddingTop: 8,
+            paddingBottom: 24,
+          }}
+        >
+          <Button
+            label={uiText("deleteMail")}
+            tone="primary"
+            size={40}
+            labelSize={13}
+            onPress={props.onDelete}
+          />
+          <Button
+            label={uiText("cancel")}
+            size={40}
+            labelSize={13}
+            onPress={props.onClose}
+          />
+        </View>
       </If>
-    </View>
+    </Modal>
   );
 }
 
@@ -510,8 +569,10 @@ function NoMailbox(props: { phone: boolean; onSettings: () => void }) {
 
 /** A note at the top of the list column: the envelope, a line, and maybe an
  * action. No mailbox, or a folder with nothing in it. */
+/** An empty list: an empty folder keeps the same 40pt band on every size;
+ * the phone's no-mailbox state sits lower with an ink glyph. */
 function ListNotice(props: {
-  phone: boolean;
+  phone?: boolean;
   title: string;
   children?: JSX.Element;
 }) {

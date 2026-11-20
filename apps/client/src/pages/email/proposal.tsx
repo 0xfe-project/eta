@@ -5,8 +5,8 @@ import { Button, colors, Field, Icon, Label, row } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
-/** An email an agent proposed, waiting for the user: open by default, it
- * folds to a one-line note. */
+/** An email an agent proposed. One still waiting for the user is open by
+ * default; a sent or sending one folds to a one-line note and opens read-only. */
 export function EmailProposal(props: { item: EmailProposalView }) {
   const host = useHost();
   const c = colors();
@@ -14,8 +14,18 @@ export function EmailProposal(props: { item: EmailProposalView }) {
   const body = signal(props.item.markdown);
   const to = signal(props.item.to);
   const busy = signal(false);
-  const open = signal(true);
+  const closed = () =>
+    props.item.status === "accepted" || props.item.status === "sending";
+  const open = signal(!closed());
   const failed = () => props.item.status === "failed";
+  const status = () =>
+    props.item.status === "accepted"
+      ? uiText("proposalSent")
+      : props.item.status === "sending"
+        ? uiText("proposalSending")
+        : failed()
+          ? uiText("sendFailed")
+          : uiText("needsConfirmation");
   async function decide(send: boolean) {
     if (busy()) return;
     busy.set(true);
@@ -55,15 +65,17 @@ export function EmailProposal(props: { item: EmailProposalView }) {
           {props.item.kind === "reply" ? uiText("reply") : uiText("newEmail")}
         </Label>
         <View style={{ ...row, gap: 6 }}>
-          <View
-            style={{
-              width: 6,
-              height: 6,
-              backgroundColor: failed() ? c().red : c().warning,
-            }}
-          />
+          <If when={!closed()}>
+            <View
+              style={{
+                width: 6,
+                height: 6,
+                backgroundColor: failed() ? c().red : c().warning,
+              }}
+            />
+          </If>
           <Label size={12} line={16} tone="muted">
-            {failed() ? uiText("sendFailed") : uiText("needsConfirmation")}
+            {status()}
           </Label>
         </View>
         <View
@@ -90,7 +102,11 @@ export function EmailProposal(props: { item: EmailProposalView }) {
             }}
           >
             <Label size={12} line={16} tone="muted" style={{ flex: 1 }}>
-              {uiText("proposalNotSentHint")}
+              {props.item.status === "accepted"
+                ? uiText("proposalSentHint")
+                : props.item.status === "sending"
+                  ? uiText("proposalSendingHint")
+                  : uiText("proposalNotSentHint")}
             </Label>
             <Label size={12} line={16} tone="muted">
               {uiText("expand")}
@@ -98,61 +114,80 @@ export function EmailProposal(props: { item: EmailProposalView }) {
           </View>
         }
       >
-        <View style={{ gap: 8 }}>
-          <ProposalRow label={uiText("to2")}>
-            <Field
-              label={uiText("to2")}
-              value={to()}
-              onChange={to.set}
-              style={fieldStyle}
+        <If
+          when={!closed()}
+          else={
+            <View style={{ gap: 8 }}>
+              <ProposalRow label={uiText("to2")}>
+                <ProposalValue value={props.item.to} />
+              </ProposalRow>
+              <ProposalRow label={uiText("subject")}>
+                <ProposalValue value={props.item.subject} />
+              </ProposalRow>
+              <ProposalRow label={uiText("body")} top>
+                <ProposalValue value={props.item.markdown} body />
+              </ProposalRow>
+            </View>
+          }
+        >
+          <View style={{ gap: 8 }}>
+            <ProposalRow label={uiText("to2")}>
+              <Field
+                label={uiText("to2")}
+                value={to()}
+                onChange={to.set}
+                style={fieldStyle}
+              />
+            </ProposalRow>
+            <ProposalRow label={uiText("subject")}>
+              <Field
+                label={uiText("subject")}
+                value={subject()}
+                onChange={subject.set}
+                style={fieldStyle}
+              />
+            </ProposalRow>
+            <ProposalRow label={uiText("body")} top>
+              <Field
+                label={uiText("emailBody")}
+                value={body()}
+                onChange={body.set}
+                multiline
+                style={{
+                  ...fieldStyle,
+                  height: undefined,
+                  minHeight: 48,
+                  paddingVertical: 6,
+                  lineHeight: 18,
+                }}
+              />
+            </ProposalRow>
+          </View>
+          <If when={props.item.error}>
+            <Label size={12} line={16} tone="red">
+              {props.item.error}
+            </Label>
+          </If>
+          <View style={{ ...row, gap: 8, justifyContent: "flex-end" }}>
+            <Button
+              label={uiText("discard")}
+              icon="trash"
+              iconSize={12}
+              tone="ghost"
+              size={24}
+              style={{ gap: 6 }}
+              disabled={busy()}
+              onPress={() => void decide(false)}
             />
-          </ProposalRow>
-          <ProposalRow label={uiText("subject")}>
-            <Field
-              label={uiText("subject")}
-              value={subject()}
-              onChange={subject.set}
-              style={fieldStyle}
+            <Button
+              label={uiText("confirmAndSend")}
+              tone="primary"
+              size={24}
+              disabled={busy() || !to().trim()}
+              onPress={() => void decide(true)}
             />
-          </ProposalRow>
-          <ProposalRow label={uiText("body")} top>
-            <Field
-              label={uiText("emailBody")}
-              value={body()}
-              onChange={body.set}
-              multiline
-              style={{
-                ...fieldStyle,
-                height: undefined,
-                minHeight: 48,
-                paddingVertical: 6,
-                lineHeight: 18,
-              }}
-            />
-          </ProposalRow>
-        </View>
-        <If when={props.item.error}>
-          <Label size={12} line={16} tone="red">
-            {props.item.error}
-          </Label>
+          </View>
         </If>
-        <View style={{ ...row, gap: 8, justifyContent: "flex-end" }}>
-          <Button
-            label={uiText("discard")}
-            icon="trash"
-            iconSize={12}
-            tone="ghost"
-            style={{ gap: 6 }}
-            disabled={busy()}
-            onPress={() => void decide(false)}
-          />
-          <Button
-            label={uiText("confirmAndSend")}
-            tone="primary"
-            disabled={busy() || !to().trim()}
-            onPress={() => void decide(true)}
-          />
-        </View>
       </If>
     </View>
   );
@@ -186,6 +221,29 @@ function ProposalRow(props: {
         {props.label}
       </Label>
       {props.children}
+    </View>
+  );
+}
+
+/** A sent proposal's field, shown as text in the field's box. */
+function ProposalValue(props: { value: string; body?: boolean }) {
+  const c = colors();
+  return (
+    <View
+      style={{
+        flex: 1,
+        minWidth: 0,
+        justifyContent: "center",
+        minHeight: props.body ? 48 : 28,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderWidth: 1,
+        borderColor: c().strong,
+      }}
+    >
+      <Label size={12} line={props.body ? 18 : 16}>
+        {props.value}
+      </Label>
     </View>
   );
 }

@@ -6,7 +6,6 @@ import type {
   TranscriptSection,
   ViewCore,
 } from "@eta/client-contracts";
-import type { Layout } from "../../components";
 import { runBlocks } from "@eta/client-contracts";
 import { Scroll, signal, View } from "nsh";
 import { Select } from "nsh/base";
@@ -122,23 +121,126 @@ function MetaStat(props: {
   );
 }
 
+function shown(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "boolean") return value ? "✓" : "—";
+  if (typeof value === "string") return value || "—";
+  if (typeof value === "number") return String(value);
+  return "";
+}
+
+/** One line for a payload value: a short list, an object's keys, or text. */
+function summarize(value: unknown): string {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "—";
+    if (value.every((item) => typeof item !== "object" || item === null)) {
+      const visible = value.slice(0, 5).map(shown).join(" · ");
+      return value.length > 5 ? `${visible} …` : visible;
+    }
+    return `${value.length} ×`;
+  }
+  if (typeof value === "object" && value !== null) {
+    const keys = Object.keys(value);
+    return keys.length === 0 ? "—" : keys.slice(0, 5).join(" · ");
+  }
+  const text = shown(value).replace(/\s+/g, " ").trim();
+  return text.length > 180 ? `${text.slice(0, 177)}…` : text;
+}
+
+/** The payload's top-level entries, the card's additional business context. */
+function payloadEntries(value: unknown): [string, string][] {
+  const entries: [string, unknown][] = Array.isArray(value)
+    ? value.map((item, index) => [String(index + 1), item])
+    : typeof value === "object" && value !== null
+      ? Object.entries(value)
+      : [];
+  return entries.map(([key, item]) => [key, summarize(item)]);
+}
+
+/** A labelled row in the context table: 10pt muted name, 11pt value. */
+function ContextRow(props: {
+  label: string;
+  value: string;
+  labelWidth: number;
+  last?: boolean;
+}) {
+  const c = colors();
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        gap: 12,
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderBottomWidth: props.last ? 0 : 1,
+        borderColor: c().border,
+      }}
+    >
+      <Label
+        size={10}
+        line={16}
+        tone="muted"
+        style={{ width: props.labelWidth, flexShrink: 0 }}
+      >
+        {props.label}
+      </Label>
+      <Label size={11} line={16} style={{ flex: 1, minWidth: 0 }}>
+        {props.value}
+      </Label>
+    </View>
+  );
+}
+
+/** A 10pt muted band that heads a group of context rows. */
+function ContextBand(props: { label: string; count?: string }) {
+  const c = colors();
+  return (
+    <View
+      style={{
+        ...row,
+        justifyContent: "space-between",
+        backgroundColor: c().selected,
+        paddingVertical: 4,
+        paddingHorizontal: 12,
+      }}
+    >
+      <Label size={10} line={16} tone="muted">
+        {props.label}
+      </Label>
+      <If when={props.count}>
+        <Label size={10} line={16} tone="muted">
+          {props.count}
+        </Label>
+      </If>
+    </View>
+  );
+}
+
 /**
- * The agent part of a message: inline under it and folded on desktop, open in
- * the thread context drawer with its facts two to a row on tablet.
+ * The agent part of a message: inline under it and folded on desktop and
+ * phones, open in the thread context drawer on tablet. Its facts sit two to a
+ * row in the drawer and on a phone.
  */
 export function EmailMetaCard(props: {
   meta: EmailMetaView;
   drawer?: boolean;
+  phone?: boolean;
 }) {
   const c = colors();
   const open = signal(props.drawer ?? false);
+  const technical = signal(false);
+  const half = () => Boolean(props.drawer || props.phone);
+  const labelWidth = () => (props.phone ? 96 : 140);
   const route = () =>
     [
       [uiText("metaAgentId"), props.meta.agentId],
       [uiText("metaSessionId"), props.meta.sessionId],
       [uiText("mailThread"), props.meta.mailThreadId],
       [uiText("metaTask"), props.meta.taskId],
+      [uiText("metaCarrier"), props.meta.carrier],
     ].filter((entry): entry is [string, string] => !!entry[1]);
+  const extra = () => payloadEntries(props.meta.payload);
+  const total = () => route().length + extra().length;
   return (
     <View
       style={{
@@ -195,8 +297,7 @@ export function EmailMetaCard(props: {
                 borderColor: c().border,
                 paddingVertical: 2,
                 paddingHorizontal: 6,
-                flexShrink: 1,
-                minWidth: 0,
+                flexShrink: 0,
               }}
             >
               {dataPoints(props.meta.packetCount)}
@@ -206,7 +307,7 @@ export function EmailMetaCard(props: {
             {[
               props.meta.agentName ?? "—",
               props.meta.protocol ?? "—",
-              entries(route().length),
+              entries(total()),
             ].join(" · ")}
           </Label>
         </View>
@@ -232,29 +333,29 @@ export function EmailMetaCard(props: {
           <View
             style={{
               flexDirection: "row",
-              flexWrap: props.drawer ? "wrap" : "nowrap",
+              flexWrap: half() ? "wrap" : "nowrap",
               borderLeftWidth: 1,
               borderTopWidth: 1,
               borderColor: c().border,
             }}
           >
             <MetaStat
-              half={props.drawer}
+              half={half()}
               label={uiText("agent")}
               value={props.meta.agentName ?? "—"}
             />
             <MetaStat
-              half={props.drawer}
+              half={half()}
               label={uiText("protocol")}
               value={props.meta.protocol ?? "—"}
             />
             <MetaStat
-              half={props.drawer}
+              half={half()}
               label={uiText("dataPoints")}
               value={dataPoints(props.meta.packetCount)}
             />
             <MetaStat
-              half={props.drawer}
+              half={half()}
               label={uiText("signature")}
               value={signatureText(props.meta)}
               verified={props.meta.signatureValid === true}
@@ -281,48 +382,106 @@ export function EmailMetaCard(props: {
                 {uiText("context")}
               </Label>
               <Label size={10} line={16} tone="muted">
-                {entries(route().length)}
+                {entries(total())}
               </Label>
             </View>
-            <Label
-              size={10}
-              line={16}
-              tone="muted"
-              style={{
-                backgroundColor: c().selected,
-                paddingVertical: 4,
-                paddingHorizontal: 12,
-              }}
-            >
-              {uiText("communicationRoute")}
-            </Label>
+            <ContextBand label={uiText("communicationRoute")} />
             <Each of={route()} key={(entry) => entry[0]}>
               {(entry) => (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    gap: 12,
-                    paddingVertical: 6,
-                    paddingHorizontal: 12,
-                    borderBottomWidth:
-                      entry()[0] === route().at(-1)?.[0] ? 0 : 1,
-                    borderColor: c().border,
-                  }}
-                >
-                  <Label
-                    size={10}
-                    line={16}
-                    tone="muted"
-                    style={{ width: 140, flexShrink: 0 }}
-                  >
-                    {entry()[0]}
-                  </Label>
-                  <Label size={11} line={16} style={{ flex: 1, minWidth: 0 }}>
-                    {entry()[1]}
-                  </Label>
-                </View>
+                <ContextRow
+                  label={entry()[0]}
+                  value={entry()[1]}
+                  labelWidth={labelWidth()}
+                />
               )}
             </Each>
+            <ContextBand
+              label={uiText("additionalContext")}
+              count={entries(extra().length)}
+            />
+            <If
+              when={extra().length}
+              else={
+                <View
+                  style={{ gap: 2, paddingVertical: 8, paddingHorizontal: 12 }}
+                >
+                  <Label size={11} line={16}>
+                    {uiText("noExtraContext")}
+                  </Label>
+                  <Label size={10} line={16} tone="muted">
+                    {uiText("noExtraContextHint")}
+                  </Label>
+                </View>
+              }
+            >
+              <Each of={extra().slice(0, 6)} key={(entry) => entry[0]}>
+                {(entry) => (
+                  <ContextRow
+                    label={entry()[0]}
+                    value={entry()[1]}
+                    labelWidth={labelWidth()}
+                    last={entry()[0] === extra().slice(0, 6).at(-1)?.[0]}
+                  />
+                )}
+              </Each>
+            </If>
+          </View>
+          <View
+            style={{
+              backgroundColor: c().canvas,
+              borderWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <View
+              role="button"
+              accessibilityLabel={uiText("technicalDetails")}
+              accessibilityState={{ expanded: technical() }}
+              onPress={() => technical.set(!technical())}
+              style={{
+                ...row,
+                gap: 8,
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+                cursor: "pointer",
+              }}
+            >
+              <View
+                style={{
+                  transform: technical() ? [{ rotate: "180deg" }] : undefined,
+                }}
+              >
+                <Icon name="down" size={12} tone="muted" />
+              </View>
+              <Label size={12} line={16}>
+                {uiText("technicalDetails")}
+              </Label>
+            </View>
+            <If when={technical()}>
+              <View style={{ borderTopWidth: 1, borderColor: c().border }}>
+                <ContextRow
+                  label={uiText("protocol")}
+                  value={props.meta.protocol ?? "—"}
+                  labelWidth={labelWidth()}
+                />
+                <ContextRow
+                  label={uiText("dataPoints")}
+                  value={dataPoints(props.meta.packetCount)}
+                  labelWidth={labelWidth()}
+                />
+                <ContextRow
+                  label={uiText("signature")}
+                  value={signatureText(props.meta)}
+                  labelWidth={labelWidth()}
+                />
+                <ContextRow
+                  label={uiText("decode")}
+                  value={props.meta.decodeError ?? uiText("decodeSucceeded")}
+                  labelWidth={labelWidth()}
+                  last
+                />
+              </View>
+            </If>
           </View>
         </View>
       </If>
@@ -330,68 +489,25 @@ export function EmailMetaCard(props: {
   );
 }
 
+/** Tablet: the thread's agent context in a side drawer, opened from the pane
+ * header. Desktop and phones fold the same card under the message. */
 export function EmailContext(props: {
   message: EmailMessageView;
-  layout: Layout;
   onClose: () => void;
 }) {
-  const c = colors();
   const meta = () => props.message.meta;
-  const phone = () => props.layout === "phone";
   return (
     <Modal
       title={uiText("threadContext")}
       width={360}
-      height={phone() ? "74%" : "100%"}
-      side={!phone()}
-      phone={phone()}
+      height="100%"
+      side
       onClose={props.onClose}
     >
       <Scroll style={grow} scrollbar={false}>
         <View style={{ padding: 12, gap: 12 }}>
-          <If
-            when={!phone() && meta()?.carrier !== "none" ? meta() : undefined}
-          >
+          <If when={meta()?.carrier !== "none" ? meta() : undefined}>
             {(value) => <EmailMetaCard meta={value()} drawer />}
-          </If>
-          <If when={phone() && meta() && meta()!.carrier !== "none"}>
-            <View
-              style={{
-                padding: 12,
-                backgroundColor: c().surface,
-                borderWidth: 1,
-                borderColor: c().border,
-              }}
-            >
-              <Label weight={600}>{uiText("agentCommunicationContext")}</Label>
-              <EmailInfo
-                label={uiText("agent")}
-                value={meta()?.agentName ?? meta()?.agentId}
-              />
-              <EmailInfo label={uiText("protocol")} value={meta()?.protocol} />
-              <EmailInfo
-                label={uiText("dataPoints")}
-                value={String(meta()?.packetCount ?? 0)}
-              />
-              <EmailInfo
-                label={uiText("signature")}
-                value={meta() ? signatureText(meta()!) : undefined}
-              />
-              <EmailInfo
-                label={uiText("mailThread")}
-                value={meta()?.mailThreadId}
-              />
-              <EmailInfo label={uiText("session")} value={meta()?.sessionId} />
-              <EmailInfo label="Task" value={meta()?.taskId} />
-              <EmailInfo
-                label={uiText("currentWork")}
-                value={meta()?.payload?.work.doing}
-              />
-              <EmailInfo
-                label={uiText("question")}
-                value={meta()?.payload?.ask.question}
-              />
-            </View>
           </If>
           <If when={meta()?.decodeError}>
             <Label size={12} tone="red">
@@ -481,13 +597,28 @@ export function AssignEmail(props: {
           : uiText("handToAnAgent")
       }
       phone={props.phone}
+      sheet={props.phone}
+      plainSheetHeader={props.phone}
+      overPhoneNavigation={props.phone}
       compact={!props.phone}
       titleWeight={500}
       onClose={props.onClose}
     >
-      <View style={props.phone ? { padding: 16 } : { paddingTop: 14 }}>
-        <View style={{ gap: 12 }}>
+      <View style={props.phone ? undefined : { paddingTop: 14 }}>
+        <View
+          style={
+            props.phone
+              ? {
+                  gap: 16,
+                  paddingHorizontal: 16,
+                  paddingTop: 4,
+                  paddingBottom: 8,
+                }
+              : { gap: 12 }
+          }
+        >
           <AssignField
+            phone={props.phone}
             label={uiText("agent")}
             value={agent()}
             items={host
@@ -496,6 +627,7 @@ export function AssignEmail(props: {
             onChange={(value) => agent.set(value)}
           />
           <AssignField
+            phone={props.phone}
             label={uiText("project2")}
             value={project()}
             items={host
@@ -508,11 +640,18 @@ export function AssignEmail(props: {
             onChange={(value) => project.set(value)}
           />
         </View>
-        <View style={{ ...row, justifyContent: "flex-end", paddingTop: 20 }}>
+        <View
+          style={
+            props.phone
+              ? { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 24 }
+              : { ...row, justifyContent: "flex-end", paddingTop: 20 }
+          }
+        >
           <Button
             label={uiText("startProcessing")}
             tone="primary"
-            size={28}
+            size={props.phone ? 40 : 28}
+            labelSize={props.phone ? 13 : undefined}
             disabled={!agent() || !project() || busy()}
             onPress={() =>
               void (async () => {
@@ -539,8 +678,10 @@ export function AssignEmail(props: {
   );
 }
 
-/** A labelled 28pt select, the design's Agent and Project fields. */
+/** A labelled select, the design's Agent and Project fields: 28pt, 40pt on
+ * a phone. */
 function AssignField(props: {
+  phone: boolean;
   label: string;
   value: string;
   items: { value: string; title: string }[];
@@ -574,8 +715,8 @@ function AssignField(props: {
             style={{
               ...row,
               gap: 8,
-              height: 28,
-              paddingHorizontal: 8,
+              height: props.phone ? 40 : 28,
+              paddingHorizontal: props.phone ? 12 : 8,
               borderWidth: 1,
               borderColor: c().border,
               backgroundColor: c().canvas,
@@ -586,7 +727,7 @@ function AssignField(props: {
               {props.items.find((item) => item.value === props.value)?.title ??
                 ""}
             </Label>
-            <Icon name="down" size={10} tone="muted" />
+            <Icon name="down" size={props.phone ? 14 : 10} tone="muted" />
           </View>
         }
         onChange={({ value }) => {

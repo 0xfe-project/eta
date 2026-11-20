@@ -2,7 +2,6 @@ import type { EmailMessageView } from "@eta/client-contracts";
 import { signal, View } from "nsh";
 import { TextView } from "nsh/base";
 import {
-  Button,
   colors,
   fontFamily,
   Fonts,
@@ -12,7 +11,7 @@ import {
   row,
 } from "../../components";
 import { formatLocale, uiText } from "../../i18n";
-import { EmailInfo, EmailMetaCard } from "./thread-context";
+import { EmailMetaCard } from "./thread-context";
 
 export function isAgentMail(subject: string): boolean {
   return /^\[eta-mp\]/i.test(subject);
@@ -77,22 +76,7 @@ function mailTime(at: number) {
   return `${monthDay(date)}, ${hourMinute(date)}`;
 }
 
-function RfcHeaders(props: { message: EmailMessageView }) {
-  return (
-    <>
-      <EmailInfo label={uiText("from")} value={props.message.from} />
-      <EmailInfo label={uiText("to2")} value={props.message.to} />
-      <EmailInfo label="Message-ID" value={props.message.rfcMessageId} />
-      <EmailInfo label="In-Reply-To" value={props.message.inReplyTo} />
-      <EmailInfo
-        label="References"
-        value={props.message.references.join(", ")}
-      />
-    </>
-  );
-}
-
-/** One header off phones: a 112pt muted name, the value in the mono face,
+/** One header: a 112pt muted name, the value in the mono face,
  * and a dash for a header the message does not carry. */
 function RfcLine(props: { label: string; value?: string | null }) {
   const fonts = Fonts();
@@ -288,9 +272,9 @@ export function MailMessage(props: {
   message: EmailMessageView;
   subject: string;
   phone: boolean;
-  /** Desktop folds the agent context under the message; tablet opens it from the pane header. */
+  /** Desktop and phones fold the agent context under the message; tablet
+   * opens it from the pane header. */
   inlineContext: boolean;
-  onContext: () => void;
 }) {
   const c = colors();
   const headers = signal(false);
@@ -391,60 +375,59 @@ export function MailMessage(props: {
       </If>
       <If when={props.message.rfcMessageId}>
         <View
-          role="button"
-          accessibilityLabel={uiText("rfc5322Headers")}
-          accessibilityState={{ expanded: headers() }}
-          onPress={() => headers.set(!headers())}
-          hoverStyle={{ backgroundColor: c().selected }}
           style={{
-            ...row,
-            gap: 8,
             borderWidth: 1,
             borderColor: c().border,
-            paddingVertical: props.phone ? 10 : 8,
-            paddingHorizontal: 12,
             ...(props.phone
               ? { marginTop: 12, marginHorizontal: 16 }
               : undefined),
-            cursor: "pointer",
           }}
         >
           <View
+            role="button"
+            accessibilityLabel={uiText("rfc5322Headers")}
+            accessibilityState={{ expanded: headers() }}
+            onPress={() => headers.set(!headers())}
+            hoverStyle={{ backgroundColor: c().selected }}
             style={{
-              transform: headers() ? [{ rotate: "180deg" }] : undefined,
+              ...row,
+              gap: 8,
+              paddingVertical: props.phone ? 10 : 8,
+              paddingHorizontal: 12,
+              cursor: "pointer",
             }}
           >
-            <Icon
-              name="down"
-              size={props.phone ? 12 : 14}
-              tone={props.phone ? "ink" : "muted"}
-            />
+            <View
+              style={{
+                transform: headers() ? [{ rotate: "180deg" }] : undefined,
+              }}
+            >
+              <Icon
+                name="down"
+                size={props.phone ? 12 : 14}
+                tone={props.phone ? "ink" : "muted"}
+              />
+            </View>
+            <Label size={11} line={props.phone ? 14 : 16} weight={600}>
+              {uiText("rfc5322Headers")}
+            </Label>
+            <Label
+              size={props.phone ? 11 : 10}
+              line={props.phone ? 14 : 16}
+              tone="muted"
+              lines={1}
+              style={{ flex: 1 }}
+            >
+              {props.message.rfcMessageId}
+            </Label>
           </View>
-          <Label size={11} line={props.phone ? 14 : 16} weight={600}>
-            {uiText("rfc5322Headers")}
-          </Label>
-          <Label
-            size={props.phone ? 11 : 10}
-            line={props.phone ? 14 : 16}
-            tone="muted"
-            lines={1}
-            style={{ flex: 1 }}
-          >
-            {props.message.rfcMessageId}
-          </Label>
-        </View>
-      </If>
-      <If when={headers()}>
-        <If
-          when={props.phone}
-          else={
+          <If when={headers()}>
             <View
               style={{
                 gap: 4,
                 paddingVertical: 8,
                 paddingHorizontal: 12,
-                borderWidth: 1,
-                borderTopWidth: 0,
+                borderTopWidth: 1,
                 borderColor: c().border,
               }}
             >
@@ -455,40 +438,18 @@ export function MailMessage(props: {
                 value={props.message.references.join(", ")}
               />
             </View>
-          }
-        >
-          <View
-            style={{
-              borderTopWidth: 1,
-              borderColor: c().border,
-              marginHorizontal: 16,
-            }}
-          >
-            <RfcHeaders message={props.message} />
-          </View>
-        </If>
+          </If>
+        </View>
       </If>
-      <If when={meta()}>
+      <If when={props.inlineContext ? meta() : undefined}>
         {(value) => (
-          <If
-            when={props.inlineContext}
-            else={
-              <If when={props.phone}>
-                <Button
-                  label={uiText("threadContext")}
-                  icon="context"
-                  style={{
-                    alignSelf: "flex-start",
-                    marginTop: 12,
-                    marginHorizontal: 16,
-                  }}
-                  onPress={props.onContext}
-                />
-              </If>
+          <View
+            style={
+              props.phone ? { marginTop: 12, marginHorizontal: 16 } : undefined
             }
           >
-            <EmailMetaCard meta={value()} />
-          </If>
+            <EmailMetaCard meta={value()} phone={props.phone} />
+          </View>
         )}
       </If>
     </View>

@@ -34,15 +34,28 @@ export function ThreadDetail(props: {
   onMarkUnread: () => void;
   onAssignment: (assignment: EmailAssignmentView) => void;
   onOpenSession: (assignment: EmailAssignmentView) => void;
-  onContext: (message: EmailMessageView) => void;
 }) {
   const c = colors();
   const host = useHost();
-  // Desktop opens a processing row in place; the id of the open one.
+  // Off phones a processing row opens in place; the id of the open one.
   const open = signal("");
   const agentName = (id: string) => host.agent(id)?.name ?? uiText("agent");
   const projectName = (id: string) =>
     host.projects().find((item) => item.id === id)?.name ?? "Project";
+  // A proposal shows in its processing agent's log, oldest first; the rest,
+  // still waiting for the user, sit under the messages.
+  const sessionProposals = (sessionId: string) =>
+    props.proposals
+      .filter((item) => item.sessionId === sessionId)
+      .sort((a, b) => a.createdAt - b.createdAt);
+  const looseProposals = () =>
+    props.proposals.filter(
+      (item) =>
+        (item.status === "pending" || item.status === "failed") &&
+        !props.assignments.some(
+          (assignment) => assignment.sessionId === item.sessionId,
+        ),
+    );
   const agentMail = () =>
     isAgentMail(props.thread.subject) ||
     props.messages.some(
@@ -146,47 +159,66 @@ export function ThreadDetail(props: {
               <If
                 when={!props.phone}
                 else={
-                  <View
-                    role="button"
-                    accessibilityLabel={uiText("processingAgent", {
-                      value1: agentName(assignment().agentId),
-                    })}
-                    onPress={() => props.onAssignment(assignment())}
-                    hoverStyle={{ backgroundColor: c().selected }}
-                    style={{
-                      ...row,
-                      gap: 12,
-                      paddingVertical: 12,
-                      paddingLeft: 16,
-                      paddingRight: 12,
-                      borderBottomWidth: 1,
-                      borderColor: c().border,
-                      cursor: "pointer",
-                    }}
-                  >
-                    <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                      <Label size={10} line={12} tone="muted">
-                        {uiText("processingAgent2")}
-                      </Label>
-                      <View style={{ ...row, gap: 8 }}>
-                        <AgentFace id={assignment().agentId} size={16} />
-                        <Label size={14} line={20} weight={600} lines={1}>
-                          {agentName(assignment().agentId)}
+                  <>
+                    <View
+                      role="button"
+                      accessibilityLabel={uiText("processingAgent", {
+                        value1: agentName(assignment().agentId),
+                      })}
+                      onPress={() => props.onAssignment(assignment())}
+                      hoverStyle={{ backgroundColor: c().selected }}
+                      style={{
+                        ...row,
+                        gap: 12,
+                        paddingVertical: 12,
+                        paddingLeft: 16,
+                        paddingRight: 12,
+                        borderBottomWidth: 1,
+                        borderColor: c().border,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                        <Label size={10} line={12} tone="muted">
+                          {uiText("processingAgent2")}
+                        </Label>
+                        <View style={{ ...row, gap: 8 }}>
+                          <AgentFace id={assignment().agentId} size={16} />
+                          <Label size={14} line={20} weight={600} lines={1}>
+                            {agentName(assignment().agentId)}
+                          </Label>
+                        </View>
+                        <Label size={12} line={16} tone="muted" lines={1}>
+                          {uiText("project", {
+                            value1: projectName(assignment().projectId),
+                          })}
                         </Label>
                       </View>
-                      <Label size={12} line={16} tone="muted" lines={1}>
-                        {uiText("project", {
-                          value1: projectName(assignment().projectId),
-                        })}
-                      </Label>
+                      <View style={{ ...row, gap: 4, flexShrink: 0 }}>
+                        <Label size={12} line={16} tone="mutedInk">
+                          {uiText("view")}
+                        </Label>
+                        <Icon name="right" size={14} />
+                      </View>
                     </View>
-                    <View style={{ ...row, gap: 4, flexShrink: 0 }}>
-                      <Label size={12} line={16} tone="mutedInk">
-                        {uiText("view")}
-                      </Label>
-                      <Icon name="right" size={14} />
-                    </View>
-                  </View>
+                    <If when={sessionProposals(assignment().sessionId).length}>
+                      <View
+                        style={{
+                          gap: 12,
+                          padding: 16,
+                          borderBottomWidth: 1,
+                          borderColor: c().border,
+                        }}
+                      >
+                        <Each
+                          of={sessionProposals(assignment().sessionId)}
+                          key={(item) => item.id}
+                        >
+                          {(item) => <EmailProposal item={item()} />}
+                        </Each>
+                      </View>
+                    </If>
+                  </>
                 }
               >
                 <View
@@ -194,25 +226,16 @@ export function ThreadDetail(props: {
                   accessibilityLabel={uiText("processingAgent", {
                     value1: agentName(assignment().agentId),
                   })}
-                  accessibilityState={
-                    props.desktop
-                      ? { expanded: open() === assignment().id }
-                      : undefined
-                  }
+                  accessibilityState={{ expanded: open() === assignment().id }}
                   onPress={() =>
-                    props.desktop
-                      ? open.set(
-                          open() === assignment().id ? "" : assignment().id,
-                        )
-                      : props.onAssignment(assignment())
+                    open.set(open() === assignment().id ? "" : assignment().id)
                   }
                   hoverStyle={{ backgroundColor: c().selected }}
                   style={{
                     ...row,
                     gap: 12,
                     paddingVertical: 10,
-                    borderBottomWidth:
-                      props.desktop && open() === assignment().id ? 0 : 1,
+                    borderBottomWidth: open() === assignment().id ? 0 : 1,
                     borderColor: c().border,
                     cursor: "pointer",
                   }}
@@ -235,7 +258,7 @@ export function ThreadDetail(props: {
                   <View
                     style={{
                       transform:
-                        props.desktop && open() === assignment().id
+                        open() === assignment().id
                           ? [{ rotate: "180deg" }]
                           : undefined,
                     }}
@@ -243,9 +266,10 @@ export function ThreadDetail(props: {
                     <Icon name="down" size={14} tone="muted" />
                   </View>
                 </View>
-                <If when={props.desktop && open() === assignment().id}>
+                <If when={open() === assignment().id}>
                   <AssignmentInline
                     assignment={assignment()}
+                    proposals={sessionProposals(assignment().sessionId)}
                     onOpenSession={() => props.onOpenSession(assignment())}
                   />
                 </If>
@@ -258,12 +282,11 @@ export function ThreadDetail(props: {
                 message={message()}
                 subject={props.thread.subject}
                 phone={props.phone}
-                inlineContext={props.desktop}
-                onContext={() => props.onContext(message())}
+                inlineContext={props.desktop || props.phone}
               />
             )}
           </Each>
-          <Each of={props.proposals} key={(item) => item.id}>
+          <Each of={looseProposals()} key={(item) => item.id}>
             {(item) => (
               <View
                 style={

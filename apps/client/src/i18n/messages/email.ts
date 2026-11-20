@@ -1,5 +1,6 @@
 export const emailMessages = {
   sentFolder: ["Sent", "已发送"],
+  additionalContext: ["Additional business context", "附加业务上下文"],
   agentCommunicationContext: [
     "Agent communication context",
     "智能体通信上下文",
@@ -13,8 +14,9 @@ export const emailMessages = {
   ],
   chooseAnEmailToRead: ["Choose an email to read", "选择一封邮件查看内容"],
   countSelected: ["{{count}} selected", "已选 {{count}} 封"],
-  currentWork: ["Current work", "当前工作"],
   dataPoints: ["Data points", "数据点"],
+  decode: ["Decode", "解码"],
+  decodeSucceeded: ["Succeeded", "成功"],
   deleteOneEmail: ["Delete 1 email?", "删除 1 封邮件？"],
   deleteCountEmails: ["Delete {{count}} emails?", "删除 {{count}} 封邮件？"],
   deleteEmailsDescription: [
@@ -40,12 +42,18 @@ export const emailMessages = {
   loadingSession: ["Loading session…", "正在加载会话…"],
   metaAgentId: ["Agent ID", "Agent ID"],
   metaSessionId: ["Session ID", "Session ID"],
+  metaCarrier: ["Payload carrier", "载荷载体"],
   metaTask: ["Task", "Task"],
   dataPoint: ["{{count}} data point", "{{count}} 个数据点"],
   dataPointCount: ["{{count}} data points", "{{count}} 个数据点"],
   mailThread: ["Mail thread", "邮件线程"],
   markUnread: ["Mark unread", "标为未读"],
   noMailboxConnected: ["No mailbox connected", "还没有绑定邮箱"],
+  noExtraContext: ["No additional business context", "无额外业务上下文"],
+  noExtraContextHint: [
+    "The agent, session, and mail-thread identity were still decoded from the logo and data points.",
+    "Agent、Session 和邮件线程信息仍已从 logo 与数据点中解出。",
+  ],
   noSentMail: ["No sent mail yet.", "还没有发送记录。"],
   noStepsYet: ["No steps yet", "还没有步骤。"],
   noSubject: ["(No subject)", "(无主题)"],
@@ -70,6 +78,16 @@ export const emailMessages = {
   newEmail: ["New email", "新邮件"],
   needsConfirmation: ["Needs confirmation", "待确认"],
   sendFailed: ["Send failed", "发送失败"],
+  proposalSent: ["Sent", "已发送"],
+  proposalSending: ["Sending", "发送中"],
+  proposalSentHint: [
+    "Email sent. Expand to view the recipients, subject, and body.",
+    "邮件已发送，展开可查看收件人、主题和正文",
+  ],
+  proposalSendingHint: [
+    "Email is being sent. Expand to view its content.",
+    "邮件正在发送，展开可查看当前内容",
+  ],
   expand: ["Expand", "展开"],
   proposalNotSentHint: [
     "Not sent yet. Expand to review and confirm sending.",
@@ -77,7 +95,6 @@ export const emailMessages = {
   ],
   body: ["Body", "正文"],
   confirmAndSend: ["Confirm and send", "确认发送"],
-  session: ["Session", "会话"],
   signature: ["Signature", "签名"],
   signatureInvalid: ["Invalid", "校验失败"],
   signatureUnchecked: ["Signed, unchecked", "已签名，未校验"],
@@ -85,6 +102,7 @@ export const emailMessages = {
   unsigned: ["Unsigned", "未签名"],
   startProcessing: ["Start processing", "开始处理"],
   subject: ["Subject", "主题"],
+  technicalDetails: ["View technical details", "查看技术详情"],
   threadContext: ["Thread context", "会话上下文"],
   to2: ["To", "收件人"],
 } as const;

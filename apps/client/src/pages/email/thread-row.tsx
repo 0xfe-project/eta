@@ -46,19 +46,14 @@ export function ThreadRow(props: {
           })}
           checked={props.checked}
           onChange={props.onCheck}
-          size={props.phone ? 15 : 14}
-          outlineOnly={props.phone}
+          size={14}
           indicatorStyle={
-            props.checked && !props.phone
-              ? { borderColor: c().button }
-              : undefined
+            props.checked ? { borderColor: c().button } : undefined
           }
-          style={
-            props.phone ? { flexShrink: 0 } : { marginTop: 4, flexShrink: 0 }
-          }
+          style={{ marginTop: 4, flexShrink: 0 }}
         />
       </If>
-      <If when={props.phone && !props.selecting}>
+      <If when={props.phone}>
         <View style={{ width: 16, alignItems: "center", flexShrink: 0 }}>
           <View
             style={{

@@ -1,6 +1,7 @@
 import type {
   EmailAssignmentView,
   EmailMessageView,
+  EmailProposalView,
   TranscriptSection,
   ViewCore,
 } from "@eta/client-contracts";
@@ -9,6 +10,7 @@ import { Scroll, signal, View } from "nsh";
 import { Button, colors, Icon, Label, Modal, row } from "../../components";
 import { formatLocale, uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { EmailProposal } from "./proposal";
 import { EmailInfo } from "./thread-context";
 
 export function AssignmentDetail(props: {
@@ -95,15 +97,21 @@ export function AssignmentDetail(props: {
   );
 }
 
-/** Desktop: the processing row opened in place, with the run's state, its
- * answer once it finished, and the steps it took folded under a log row. */
+/** Off phones: the processing row opened in place, with the run's state, its
+ * answer once it finished, and the steps it took folded under a log row with
+ * the emails it proposed. The log starts open while one waits for the user. */
 export function AssignmentInline(props: {
   assignment: EmailAssignmentView;
+  proposals: EmailProposalView[];
   onOpenSession: () => void;
 }) {
   const host = useHost();
   const c = colors();
-  const logOpen = signal(false);
+  const logOpen = signal(
+    props.proposals.some(
+      (item) => item.status === "pending" || item.status === "failed",
+    ),
+  );
   const target = () => `sessions.${props.assignment.sessionId}`;
   follow(target);
   const core = () => host.section<ViewCore>(target(), "core");
@@ -188,13 +196,7 @@ export function AssignmentInline(props: {
             cursor: "pointer",
           }}
         >
-          <View
-            style={{
-              transform: logOpen() ? [{ rotate: "90deg" }] : undefined,
-            }}
-          >
-            <Icon name="right" size={10} tone="muted" />
-          </View>
+          <Icon name={logOpen() ? "down" : "right"} size={10} tone="muted" />
           <Label size={12} line={16}>
             {uiText("processingLog")}
           </Label>
@@ -209,7 +211,7 @@ export function AssignmentInline(props: {
             }}
           >
             <If
-              when={steps().length}
+              when={steps().length || props.proposals.length}
               else={
                 <Label size={12} line={16} tone="muted">
                   {host.state().missing[target()]
@@ -222,7 +224,11 @@ export function AssignmentInline(props: {
             >
               <Each of={steps()} key={(step) => step.id}>
                 {(step) => (
-                  <Label size={12} line={18} tone="mutedInk">
+                  <Label
+                    size={12}
+                    line={18}
+                    tone={"text" in step() ? undefined : "mutedInk"}
+                  >
                     {"text" in step()
                       ? (step() as { text: string }).text
                       : "name" in step()
@@ -230,6 +236,9 @@ export function AssignmentInline(props: {
                         : ""}
                   </Label>
                 )}
+              </Each>
+              <Each of={props.proposals} key={(item) => item.id}>
+                {(item) => <EmailProposal item={item()} />}
               </Each>
             </If>
           </View>
