@@ -13,6 +13,7 @@ export function SkillFileTree(props: {
   onRead: (path: string) => void;
 }) {
   const c = colors();
+  const phone = () => props.layout === "phone";
   return (
     <Scroll
       style={
@@ -27,7 +28,7 @@ export function SkillFileTree(props: {
       }
       scrollbar={false}
     >
-      <View style={{ padding: 4 }}>
+      <View style={{ padding: 4, gap: phone() ? 2 : 0 }}>
         <If when={props.directory}>
           <Button
             label={uiText("parentDirectory")}
@@ -63,8 +64,8 @@ export function SkillFileTree(props: {
                 hoverStyle={{ backgroundColor: c().selected }}
                 style={{
                   ...row,
-                  height: 24,
-                  paddingHorizontal: 8,
+                  height: phone() ? 32 : 24,
+                  paddingHorizontal: phone() ? 10 : 8,
                   gap: 5,
                   opacity: item().kind === "blocked" ? 0.45 : 1,
                   backgroundColor:
@@ -75,7 +76,11 @@ export function SkillFileTree(props: {
                 <If when={item().kind === "directory"}>
                   <Icon name="folder" size={12} />
                 </If>
-                <Label size={12} lines={1}>
+                <Label
+                  size={phone() ? 13 : 12}
+                  line={phone() ? 18 : undefined}
+                  lines={1}
+                >
                   {item().path}
                 </Label>
               </View>

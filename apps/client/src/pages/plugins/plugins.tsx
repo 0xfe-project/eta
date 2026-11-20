@@ -3,6 +3,7 @@ import type { Layout } from "../../components";
 import { Scroll, signal, View } from "nsh";
 import {
   Button,
+  Caption,
   colors,
   grow,
   Header,
@@ -16,12 +17,12 @@ import { follow, useHost } from "../../services/host";
 import { AddPlugin, ConfigurePlugin } from "./configure";
 import { pluginText } from "./labels";
 import { PluginDetail } from "./plugin-detail";
-import { Status } from "./plugin-status";
+import { PluginGlyph, Status } from "./plugin-status";
 import { Skills } from "./skills/list";
 import { PluginTablet } from "./tablet-list";
 import { pluginWarnings, PluginWarningsDialog } from "./warnings";
 
-export function Plugins(props: { layout: Layout }) {
+export function Plugins(props: { layout: Layout; onBack?: () => void }) {
   const host = useHost();
   const c = colors();
   const tab = signal("Plugins");
@@ -38,6 +39,10 @@ export function Plugins(props: { layout: Layout }) {
   const detail = () =>
     list().find((item) => item.name === selected()) ??
     (tabletPlugins() ? list()[0] : undefined);
+  const needsConfig = () =>
+    list().filter((item) => item.state === "needs_config");
+  const installed = () =>
+    list().filter((item) => item.state !== "needs_config");
   const warningPlugin = () => list().find((item) => item.name === warnings());
   const sourcePlugin = () => list().find((item) => item.name === source());
   async function refreshPlugins() {
@@ -62,8 +67,8 @@ export function Plugins(props: { layout: Layout }) {
           ...row,
           paddingHorizontal: tablet ? 14 : phone() ? 16 : 24,
           height: tablet ? 40 : undefined,
-          paddingTop: tablet ? 0 : 16,
-          paddingBottom: tablet ? 0 : 8,
+          paddingTop: tablet ? 0 : phone() ? 12 : 16,
+          paddingBottom: tablet ? 0 : phone() ? 4 : 8,
           flexShrink: 0,
           borderBottomWidth: tablet ? 1 : 0,
           borderColor: c().border,
@@ -73,7 +78,7 @@ export function Plugins(props: { layout: Layout }) {
           style={{
             ...row,
             alignItems: "stretch",
-            flex: tablet ? 1 : undefined,
+            flex: tablet || phone() ? 1 : undefined,
             height: 28,
             borderWidth: 1,
             borderColor: c().strong,
@@ -88,7 +93,7 @@ export function Plugins(props: { layout: Layout }) {
                 accessibilityState={{ selected: tab() === item() }}
                 onPress={() => tab.set(item())}
                 style={{
-                  flex: tablet ? 1 : undefined,
+                  flex: tablet || phone() ? 1 : undefined,
                   alignItems: "center",
                   justifyContent: "center",
                   paddingHorizontal: 12,
@@ -126,6 +131,46 @@ export function Plugins(props: { layout: Layout }) {
       )}
     </If>
   );
+  const desktopList = () => (
+    <Scroll style={grow} scrollbar={false}>
+      <View
+        style={{
+          paddingHorizontal: 24,
+          paddingTop: 8,
+          paddingBottom: 16,
+          gap: 16,
+        }}
+      >
+        <Label size={12} line={20} tone="muted" style={{ maxWidth: 1000 }}>
+          {uiText("pluginsGiveAgentsSkillsAndMcp")}
+        </Label>
+        <If when={!list().length}>
+          <Label tone="muted">{uiText("noPluginsInstalled")}</Label>
+        </If>
+        <View
+          style={{
+            ...row,
+            flexWrap: "wrap",
+            alignItems: "flex-start",
+            gap: 12,
+          }}
+        >
+          <Each of={list()} key={(item) => item.name}>
+            {(item) => (
+              <PluginCard
+                item={item()}
+                onWarnings={() => warnings.set(item().name)}
+                onSource={() => source.set(item().name)}
+                onUpdate={() => void update(item().name)}
+                onRemove={() => remove.set(item().name)}
+                onConfigure={() => config.set(item().name)}
+              />
+            )}
+          </Each>
+        </View>
+      </View>
+    </Scroll>
+  );
   return (
     <View style={grow}>
       <If
@@ -135,7 +180,14 @@ export function Plugins(props: { layout: Layout }) {
             when={phone() && detail()}
             else={
               <>
-                <If when={tab() === "Plugins"}>
+                <If when={phone() && tab() === "Plugins"}>
+                  <Header
+                    title={uiText("plugins")}
+                    layout="phone"
+                    onBack={props.onBack}
+                  />
+                </If>
+                <If when={!phone() && tab() === "Plugins"}>
                   <Header
                     title={uiText("plugins")}
                     layout={props.layout}
@@ -157,64 +209,53 @@ export function Plugins(props: { layout: Layout }) {
                       />
                     </View>
                   </Header>
-                  {tabs()}
                 </If>
+                <If when={tab() === "Plugins"}>{tabs()}</If>
                 <If
                   when={tab() === "Plugins"}
                   else={
                     <Skills
                       layout={props.layout}
+                      onBack={props.onBack}
                       tabs={() => tabs(props.layout === "tablet")}
                     />
                   }
                 >
-                  <Scroll style={grow} scrollbar={false}>
-                    <View
-                      style={{
-                        paddingHorizontal: phone() ? 16 : 24,
-                        paddingTop: 8,
-                        paddingBottom: 16,
-                        gap: 16,
-                      }}
-                    >
+                  <If when={phone()} else={desktopList()}>
+                    <Scroll style={grow} scrollbar={false}>
                       <Label
                         size={12}
-                        line={20}
+                        line={16}
                         tone="muted"
-                        style={{ maxWidth: 1000 }}
+                        style={{ paddingHorizontal: 16, paddingVertical: 12 }}
                       >
-                        {uiText("pluginsGiveAgentsSkillsAndMcp")}
+                        {uiText("pluginsIntroPhone")}
                       </Label>
                       <If when={!list().length}>
-                        <Label tone="muted">
+                        <Label tone="muted" style={{ paddingHorizontal: 16 }}>
                           {uiText("noPluginsInstalled")}
                         </Label>
                       </If>
-                      <View
-                        style={{
-                          ...row,
-                          flexWrap: "wrap",
-                          alignItems: "flex-start",
-                          gap: 12,
-                        }}
-                      >
-                        <Each of={list()} key={(item) => item.name}>
-                          {(item) => (
-                            <PluginCard
-                              item={item()}
-                              layout={props.layout}
-                              onSelect={() => selected.set(item().name)}
-                              onWarnings={() => warnings.set(item().name)}
-                              onSource={() => source.set(item().name)}
-                              onUpdate={() => void update(item().name)}
-                              onRemove={() => remove.set(item().name)}
-                              onConfigure={() => config.set(item().name)}
-                            />
-                          )}
-                        </Each>
-                      </View>
-                    </View>
-                  </Scroll>
+                      <If when={needsConfig().length}>
+                        <PluginRows
+                          caption={uiText("pluginsNeedAttention")}
+                          items={needsConfig()}
+                          first
+                          onSelect={selected.set}
+                        />
+                      </If>
+                      <If when={installed().length}>
+                        <PluginRows
+                          caption={uiText("pluginsInstalledCount", {
+                            count: installed().length,
+                          })}
+                          items={installed()}
+                          first={!needsConfig().length}
+                          onSelect={selected.set}
+                        />
+                      </If>
+                    </Scroll>
+                  </If>
                 </If>
               </>
             }
@@ -292,8 +333,6 @@ export function Plugins(props: { layout: Layout }) {
 
 function PluginCard(props: {
   item: PluginView;
-  layout: Layout;
-  onSelect: () => void;
   onWarnings: () => void;
   onSource: () => void;
   onUpdate: () => void;
@@ -301,18 +340,12 @@ function PluginCard(props: {
   onConfigure: () => void;
 }) {
   const c = colors();
-  const phone = () => props.layout === "phone";
   const git = () =>
     props.item.source.kind === "git" ? props.item.source : undefined;
   return (
     <View
-      role={phone() ? "button" : undefined}
-      accessibilityLabel={phone() ? props.item.name : undefined}
-      onPress={phone() ? props.onSelect : undefined}
-      activeStyle={{ backgroundColor: c().selected }}
       style={{
-        width: phone() ? "100%" : 267,
-        minHeight: phone() ? 108 : undefined,
+        width: 267,
         padding: 12,
         backgroundColor: c().canvas,
         borderWidth: 1,
@@ -346,13 +379,7 @@ function PluginCard(props: {
           </View>
         </View>
       </View>
-      <Label
-        size={12}
-        line={18}
-        tone="muted"
-        lines={2}
-        style={{ height: phone() ? undefined : 36 }}
-      >
+      <Label size={12} line={18} tone="muted" lines={2} style={{ height: 36 }}>
         {props.item.description}
       </Label>
       <View style={{ gap: 4 }}>
@@ -376,15 +403,13 @@ function PluginCard(props: {
                 >
                   {`${source().repo} @ ${source().sha.slice(0, 12)}`}
                 </Label>
-                <If when={!phone()}>
-                  <Button
-                    label={uiText("sourceFor", { name: props.item.name })}
-                    icon="more"
-                    iconOnly
-                    tone="ghost"
-                    onPress={props.onSource}
-                  />
-                </If>
+                <Button
+                  label={uiText("sourceFor", { name: props.item.name })}
+                  icon="more"
+                  iconOnly
+                  tone="ghost"
+                  onPress={props.onSource}
+                />
               </>
             )}
           </If>
@@ -403,42 +428,40 @@ function PluginCard(props: {
           {props.item.problem}
         </Label>
       </If>
-      <If when={!phone()}>
-        <View
-          style={{
-            ...row,
-            height: 36,
-            borderTopWidth: 1,
-            borderColor: c().border,
-            paddingTop: 8,
-            gap: 4,
-            justifyContent: "flex-end",
-          }}
-        >
-          <If when={pluginWarnings(props.item).length}>
-            <Button
-              label={uiText("warnings")}
-              tone="ghost"
-              onPress={props.onWarnings}
-            />
-          </If>
-          <If when={props.item.source.kind === "git"}>
-            <Button
-              label={uiText("update")}
-              tone="ghost"
-              onPress={props.onUpdate}
-            />
-            <Button
-              label={uiText("remove2")}
-              tone="ghost"
-              onPress={props.onRemove}
-            />
-          </If>
-          <If when={props.item.fields.length}>
-            <Button label={uiText("configure")} onPress={props.onConfigure} />
-          </If>
-        </View>
-      </If>
+      <View
+        style={{
+          ...row,
+          height: 36,
+          borderTopWidth: 1,
+          borderColor: c().border,
+          paddingTop: 8,
+          gap: 4,
+          justifyContent: "flex-end",
+        }}
+      >
+        <If when={pluginWarnings(props.item).length}>
+          <Button
+            label={uiText("warnings")}
+            tone="ghost"
+            onPress={props.onWarnings}
+          />
+        </If>
+        <If when={props.item.source.kind === "git"}>
+          <Button
+            label={uiText("update")}
+            tone="ghost"
+            onPress={props.onUpdate}
+          />
+          <Button
+            label={uiText("remove2")}
+            tone="ghost"
+            onPress={props.onRemove}
+          />
+        </If>
+        <If when={props.item.fields.length}>
+          <Button label={uiText("configure")} onPress={props.onConfigure} />
+        </If>
+      </View>
     </View>
   );
 }
@@ -480,5 +503,73 @@ function PluginSourceDialog(props: { item: PluginView; onClose: () => void }) {
         />
       </View>
     </Modal>
+  );
+}
+
+function PluginRows(props: {
+  caption: string;
+  items: PluginView[];
+  first?: boolean;
+  onSelect: (name: string) => void;
+}) {
+  const c = colors();
+  return (
+    <>
+      <View
+        style={{
+          paddingHorizontal: 16,
+          paddingTop: props.first ? 8 : 16,
+          paddingBottom: 6,
+        }}
+      >
+        <Caption text={props.caption} />
+      </View>
+      <View style={{ borderBottomWidth: 1, borderColor: c().border }}>
+        <Each of={props.items} key={(item) => item.name}>
+          {(item) => (
+            <View
+              role="button"
+              accessibilityLabel={item().name}
+              onPress={() => props.onSelect(item().name)}
+              activeStyle={{ backgroundColor: c().selected }}
+              style={{
+                ...row,
+                height: item().state === "needs_config" ? 64 : 60,
+                gap: 12,
+                paddingLeft: 16,
+                paddingRight: 12,
+                borderTopWidth: 1,
+                borderColor: c().border,
+                backgroundColor: c().canvas,
+              }}
+            >
+              <PluginGlyph size={32} />
+              <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+                <Label size={14} line={20} lines={1}>
+                  {item().name}
+                </Label>
+                <Label size={11} line={14} tone="muted" lines={1}>
+                  {[
+                    item().version,
+                    uiText("skillsMcpServers", {
+                      length: item().skills.length,
+                      value2: item().servers.length,
+                    }),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </Label>
+              </View>
+              <If when={item().state === "needs_config"}>
+                <Status item={item()} />
+              </If>
+              <View style={{ width: 16, alignItems: "center" }}>
+                <Icon name="right" size={14} />
+              </View>
+            </View>
+          )}
+        </Each>
+      </View>
+    </>
   );
 }

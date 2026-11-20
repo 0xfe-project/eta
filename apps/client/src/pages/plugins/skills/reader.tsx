@@ -357,6 +357,7 @@ export function SkillFile(props: {
                 heading3: { fontSize: 14, lineHeight: 20 },
                 paragraph: { marginTop: 0, marginBottom: 0 },
                 list: { gap: 6 },
+                listMarker: { color: c().ink },
                 link: { color: c().blue },
               }}
               codeBlockActions={[{ id: "copy" }]}

@@ -174,7 +174,7 @@ export function SkillDetail(props: {
       onPress={refresh}
     />
   );
-  const crumbs = () => [props.location, props.scope].join(" / ");
+  const crumbs = () => [props.location, props.scope].join("  /  ");
   async function resource(path: string) {
     return props.call<SkillFileContent>("read", { detail: handle(), path });
   }
@@ -371,12 +371,7 @@ export function SkillDetail(props: {
   return (
     <View style={grow}>
       <If when={phone()}>
-        <Header
-          title={props.skill.name}
-          layout="phone"
-          onBack={previousFile}
-          inset={12}
-        />
+        <Header title={props.skill.name} layout="phone" onBack={previousFile} />
         <View
           style={{
             paddingHorizontal: 16,
@@ -404,6 +399,7 @@ export function SkillDetail(props: {
               paddingHorizontal: 10,
               borderWidth: 1,
               borderColor: showFiles() ? c().ink : c().strong,
+              backgroundColor: showFiles() ? c().selected : undefined,
               cursor: "pointer",
             }}
           >
@@ -446,7 +442,7 @@ export function SkillDetail(props: {
             {previousButton()}
           </View>
           <View style={{ ...row, gap: 4, minHeight: 24 }}>
-            <Label size={12} line={16} tone="muted">{`${crumbs()} /`}</Label>
+            <Label size={12} line={16} tone="muted">{`${crumbs()}  /`}</Label>
             <Label size={12} line={16} weight={600}>
               {props.skill.name}
             </Label>

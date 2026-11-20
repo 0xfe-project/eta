@@ -50,6 +50,14 @@ interface DetailProps {
   onRefresh: () => Promise<void>;
 }
 
+// A read shows how long ago it happened; "now" and dates read as they are.
+function readTime(at: number) {
+  const age = Date.now() - at;
+  return age >= 60_000 && age < 86_400_000
+    ? uiText("pluginReadAgo", { time: relativeTime(at) })
+    : relativeTime(at);
+}
+
 // A ghost button keeps a transparent frame so it is as wide as a bordered one.
 const ghostFrame = { borderWidth: 1, borderColor: "transparent" };
 
@@ -68,6 +76,11 @@ export function PluginDetail(props: DetailProps) {
       .slice()
       .sort((a, b) => b.at - a.at);
   const configure = () => props.item.fields.length > 0;
+  // On a phone each block carries the design's own top spacing.
+  const section = (top: number) =>
+    props.phone
+      ? { gap: 6, paddingHorizontal: 16, paddingTop: top }
+      : { gap: 6 };
   const needsConfig = () => props.item.state === "needs_config";
   function update() {
     if (updating()) return;
@@ -133,12 +146,7 @@ export function PluginDetail(props: DetailProps) {
           </View>
         }
       >
-        <Header
-          title={props.item.name}
-          layout="phone"
-          onBack={props.onBack}
-          inset={16}
-        >
+        <Header title={props.item.name} layout="phone" onBack={props.onBack}>
           <View style={{ flex: 1 }} />
           <If when={git()}>
             <Button
@@ -153,22 +161,31 @@ export function PluginDetail(props: DetailProps) {
       </If>
       <Scroll style={grow} scrollbar={false}>
         <View
-          style={{ padding: props.phone ? 16 : 20, gap: props.phone ? 14 : 20 }}
+          style={props.phone ? { paddingBottom: 16 } : { padding: 20, gap: 20 }}
         >
           <If when={props.phone}>
-            <View style={{ ...row, gap: 12 }}>
+            <View
+              style={{
+                ...row,
+                gap: 12,
+                paddingHorizontal: 16,
+                paddingTop: 16,
+                paddingBottom: 4,
+              }}
+            >
               <PluginGlyph size={40} />
-              <View style={{ gap: 3, flex: 1 }}>
+              <View style={{ gap: 4, flex: 1 }}>
                 <View style={{ ...row, gap: 8 }}>
                   <Label
                     size={16}
+                    line={20}
                     weight={600}
                     lines={1}
                     style={{ flexShrink: 1 }}
                   >
                     {props.item.name}
                   </Label>
-                  <Label size={12} tone="muted" lines={1}>
+                  <Label size={12} line={16} tone="muted" lines={1}>
                     {props.item.version ?? ""}
                   </Label>
                 </View>
@@ -183,9 +200,22 @@ export function PluginDetail(props: DetailProps) {
               pluginWarnings(props.item).length
             }
           >
-            <View style={{ gap: 14 }}>
+            <View style={props.phone ? undefined : { gap: 14 }}>
               <If when={props.item.description}>
-                <Label size={props.phone ? 13 : 12} line={18} tone="mutedInk">
+                <Label
+                  size={props.phone ? 13 : 12}
+                  line={18}
+                  tone="mutedInk"
+                  style={
+                    props.phone
+                      ? {
+                          paddingHorizontal: 16,
+                          paddingTop: 8,
+                          paddingBottom: 12,
+                        }
+                      : undefined
+                  }
+                >
                   {props.item.description}
                 </Label>
               </If>
@@ -194,15 +224,29 @@ export function PluginDetail(props: DetailProps) {
                   label={uiText("configure")}
                   tone={needsConfig() ? "primary" : "plain"}
                   size={40}
+                  labelSize={14}
+                  style={{ marginHorizontal: 16 }}
                   onPress={props.onConfigure}
                 />
               </If>
               <If when={pluginWarnings(props.item).length}>
-                <PluginWarnings item={props.item} onRefresh={props.onRefresh} />
+                <PluginWarnings
+                  item={props.item}
+                  phone={props.phone}
+                  style={
+                    props.phone
+                      ? {
+                          marginHorizontal: 16,
+                          marginTop: configure() ? 16 : 0,
+                        }
+                      : undefined
+                  }
+                  onRefresh={props.onRefresh}
+                />
               </If>
             </View>
           </If>
-          <View style={{ gap: 6 }}>
+          <View style={section(20)}>
             <Caption text={text("source")} />
             <View
               style={{
@@ -252,7 +296,7 @@ export function PluginDetail(props: DetailProps) {
               </View>
             </View>
           </View>
-          <View style={{ gap: 6 }}>
+          <View style={section(16)}>
             <Caption text={text("runs")} />
             <View style={{ borderWidth: 1, borderColor: c().border }}>
               <Each of={props.item.servers} key={(server) => server.name}>
@@ -281,7 +325,7 @@ export function PluginDetail(props: DetailProps) {
                       <Label
                         size={10}
                         line={14}
-                        tone="mutedInk"
+                        tone={props.phone ? "ink" : "mutedInk"}
                         style={{
                           paddingHorizontal: 5,
                           borderWidth: 1,
@@ -296,7 +340,7 @@ export function PluginDetail(props: DetailProps) {
                           size={10}
                           line={14}
                           tone="muted"
-                        >{`${text("env")}: ${server().env.join(", ")}`}</Label>
+                        >{`${text(props.phone ? "envShort" : "env")}: ${server().env.join(", ")}`}</Label>
                       </If>
                       <If when={server().headers.length}>
                         <Label
@@ -323,7 +367,7 @@ export function PluginDetail(props: DetailProps) {
             </View>
           </View>
           <If when={reads().length}>
-            <View style={{ gap: 6 }}>
+            <View style={section(16)}>
               <Caption text={text("audit")} />
               <View style={{ borderWidth: 1, borderColor: c().border }}>
                 <Each of={reads()} key={(entry) => entry.id}>
@@ -332,7 +376,7 @@ export function PluginDetail(props: DetailProps) {
                       style={{
                         ...row,
                         gap: props.phone ? 8 : 10,
-                        minHeight: 30,
+                        minHeight: props.phone ? 36 : 30,
                         paddingHorizontal: 10,
                         borderTopWidth: index() ? 1 : 0,
                         borderColor: c().border,
@@ -343,7 +387,7 @@ export function PluginDetail(props: DetailProps) {
                         {`${entry().agentName ?? text("deletedAgent")} · ${entry().field}`}
                       </Label>
                       <Label size={10} line={14} tone="muted">
-                        {relativeTime(entry().at)}
+                        {readTime(entry().at)}
                       </Label>
                     </View>
                   )}
@@ -373,6 +417,7 @@ export function PluginDetail(props: DetailProps) {
             label={uiText("remove2")}
             hint={text("removeDetail")}
             icon="archive"
+            divider
             disabled={updating()}
             onPress={() => {
               actions.set(false);
@@ -389,6 +434,8 @@ function ActionRow(props: {
   label: string;
   hint: string;
   icon: "refresh" | "archive";
+  /** The sheet header already draws the line above the first row. */
+  divider?: boolean;
   disabled: boolean;
   onPress: () => void;
 }) {
@@ -403,16 +450,18 @@ function ActionRow(props: {
       style={{
         ...row,
         gap: 12,
-        minHeight: 48,
-        borderBottomWidth: 1,
+        minHeight: 52,
+        borderTopWidth: props.divider ? 1 : 0,
         borderColor: c().border,
         paddingHorizontal: 16,
         cursor: "pointer",
       }}
     >
-      <Icon name={props.icon} size={15} />
-      <View style={{ flex: 1 }}>
-        <Label size={14}>{props.label}</Label>
+      <Icon name={props.icon} size={18} />
+      <View style={{ flex: 1, gap: 2 }}>
+        <Label size={14} line={18}>
+          {props.label}
+        </Label>
         <Label size={11} line={14} tone="muted">
           {props.hint}
         </Label>

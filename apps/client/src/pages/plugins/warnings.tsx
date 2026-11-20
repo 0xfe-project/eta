@@ -1,4 +1,5 @@
 import type { PluginView } from "@eta/client-contracts";
+import type { ViewStyle } from "nsh";
 import { Scroll, signal, View } from "nsh";
 import { Button, colors, Icon, Label, Modal, row } from "../../components";
 import { CloseButton } from "../../components/navigation-buttons";
@@ -146,35 +147,53 @@ export function PluginWarningsDialog(props: {
 
 export function PluginWarnings(props: {
   item: PluginView;
+  phone?: boolean;
+  style?: ViewStyle;
   onRefresh: () => Promise<void>;
 }) {
   const c = colors();
   const checking = signal(false);
   return (
-    <View style={{ borderWidth: 1, borderColor: c().border }}>
+    <View
+      style={{
+        borderWidth: 1,
+        borderColor: c().border,
+        ...(props.phone ? { paddingLeft: 12, paddingBottom: 4, gap: 8 } : {}),
+        ...props.style,
+      }}
+    >
       <View
         style={{
           ...row,
-          gap: 8,
-          height: 32,
-          paddingHorizontal: 10,
           borderBottomWidth: 1,
           borderColor: c().border,
+          ...(props.phone
+            ? { gap: 6, paddingTop: 2, paddingBottom: 6 }
+            : { gap: 8, height: 32, paddingHorizontal: 10 }),
         }}
       >
         <Icon name="info" size={14} />
-        <Label weight={600} size={12} line={16}>
+        <Label
+          weight={600}
+          size={props.phone ? 13 : 12}
+          line={props.phone ? 18 : 16}
+        >
           {uiText("warningsFor", { name: props.item.name })}
         </Label>
       </View>
-      <View style={{ padding: 10, gap: 8 }}>
+      <View style={props.phone ? { gap: 8 } : { padding: 10, gap: 8 }}>
         <WarningsText item={props.item} inline />
         <Button
           label={checking() ? uiText("checking") : uiText("checkAgain")}
           disabled={checking()}
           icon="refresh"
-          labelSize={11}
-          style={{ alignSelf: "flex-start", marginTop: 2 }}
+          size={props.phone ? 28 : undefined}
+          labelSize={props.phone ? 12 : 11}
+          style={
+            props.phone
+              ? { alignSelf: "flex-start", gap: 6, paddingHorizontal: 10 }
+              : { alignSelf: "flex-start", marginTop: 2 }
+          }
           onPress={() => {
             if (checking()) return;
             checking.set(true);

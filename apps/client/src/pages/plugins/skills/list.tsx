@@ -33,7 +33,11 @@ import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
 import { SkillDetail } from "./detail";
 
-export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
+export function Skills(props: {
+  layout: Layout;
+  tabs: () => JSX.Element;
+  onBack?: () => void;
+}) {
   const host = useHost();
   const c = colors();
   const device = signal("");
@@ -173,7 +177,12 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
         label={uiText("skillDevice")}
         value={machine()?.name ?? uiText("skillHost")}
         truncateValue
-        triggerStyle={{ width, height: 28, paddingHorizontal: 8 }}
+        triggerStyle={{
+          width,
+          height: phone() ? 32 : 28,
+          paddingHorizontal: 8,
+          borderColor: phone() ? c().border : c().strong,
+        }}
       >
         <Each of={devices()} key={(item) => item.id}>
           {(item) => (
@@ -205,12 +214,12 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
         gap: tablet() || phone() ? 8 : 12,
         paddingHorizontal: tablet() ? 14 : phone() ? 16 : 24,
         paddingTop: tablet() ? 10 : 8,
-        paddingBottom: tablet() ? 10 : 16,
+        paddingBottom: tablet() ? 10 : phone() ? 12 : 16,
         borderBottomWidth: tablet() ? 1 : 0,
         borderColor: c().border,
       }}
     >
-      <If when={tablet()}>{deviceMenu("100%")}</If>
+      <If when={tablet() || phone()}>{deviceMenu("100%")}</If>
       <View
         style={{
           ...row,
@@ -286,13 +295,18 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
           placeholder={uiText("searchLoadedSkills")}
           value={query()}
           onChange={query.set}
-          style={{ width: "100%", height: 28, fontSize: 12, paddingRight: 25 }}
+          style={{
+            width: "100%",
+            height: phone() ? 32 : 28,
+            fontSize: 12,
+            paddingRight: 25,
+          }}
         />
         <View
           style={{
             position: "absolute",
             right: 8,
-            top: 8,
+            top: phone() ? 10 : 8,
             pointerEvents: "none",
           }}
         >
@@ -336,13 +350,15 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
             style={
               tablet()
                 ? {}
-                : {
-                    ...row,
-                    flexWrap: "wrap",
-                    alignItems: "stretch",
-                    paddingHorizontal: phone() ? 16 : 24,
-                    gap: 12,
-                  }
+                : phone()
+                  ? { borderBottomWidth: 1, borderColor: c().border }
+                  : {
+                      ...row,
+                      flexWrap: "wrap",
+                      alignItems: "stretch",
+                      paddingHorizontal: 24,
+                      gap: 12,
+                    }
             }
           >
             <Each of={visible()} key={(entry) => entry.path}>
@@ -364,11 +380,15 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
                           borderBottomWidth: 1,
                           gap: 10,
                         }
-                      : {
-                          width: phone() ? "100%" : 267,
-                          padding: 12,
-                          borderWidth: 1,
-                        }),
+                      : phone()
+                        ? {
+                            ...row,
+                            paddingHorizontal: 16,
+                            height: 64,
+                            borderTopWidth: 1,
+                            gap: 12,
+                          }
+                        : { width: 267, padding: 12, borderWidth: 1 }),
                     borderColor: c().border,
                     backgroundColor:
                       selectedPath() === entry().path
@@ -377,11 +397,11 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
                     cursor: "pointer",
                   }}
                 >
-                  <If when={tablet()}>
+                  <If when={tablet() || phone()}>
                     <View
                       style={{
-                        width: 28,
-                        height: 28,
+                        width: phone() ? 32 : 28,
+                        height: phone() ? 32 : 28,
                         alignItems: "center",
                         justifyContent: "center",
                         borderWidth: 1,
@@ -389,28 +409,41 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
                         backgroundColor: c().selected,
                       }}
                     >
-                      <Icon name="artifact" size={16} tone="mutedInk" />
+                      <Icon
+                        name="artifact"
+                        size={phone() ? 18 : 16}
+                        tone="mutedInk"
+                      />
                     </View>
                   </If>
-                  <View style={{ flex: 1, minWidth: 0, gap: tablet() ? 2 : 4 }}>
+                  <View
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      gap: tablet() || phone() ? 2 : 4,
+                    }}
+                  >
                     <Label
                       size={tablet() ? 13 : 14}
                       line={tablet() ? 18 : 20}
-                      weight={tablet() ? 400 : 500}
+                      weight={tablet() || phone() ? 400 : 500}
                       lines={1}
                     >
                       {entry().name}
                     </Label>
                     <Label
-                      size={tablet() ? 10 : 12}
-                      line={tablet() ? 14 : 16}
+                      size={tablet() ? 10 : phone() ? 11 : 12}
+                      line={tablet() || phone() ? 14 : 16}
                       tone="muted"
-                      lines={tablet() ? 1 : 2}
-                      style={{ height: tablet() ? undefined : 32 }}
+                      lines={tablet() || phone() ? 1 : 2}
+                      style={{ height: tablet() || phone() ? undefined : 32 }}
                     >
                       {entry().description}
                     </Label>
                   </View>
+                  <If when={phone()}>
+                    <Icon name="right" size={16} />
+                  </If>
                 </View>
               )}
             </Each>
@@ -442,7 +475,15 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
       when={tablet()}
       else={
         <>
-          <If when={!phone() || !showing()}>
+          <If when={phone() && !showing()}>
+            <Header
+              title={uiText("plugins")}
+              layout="phone"
+              onBack={props.onBack}
+            />
+            {props.tabs()}
+          </If>
+          <If when={!phone()}>
             <Header title={uiText("plugins")} layout={props.layout} inset={10}>
               <View style={{ flex: 1 }} />
               <If when={!showing()}>

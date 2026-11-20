@@ -157,6 +157,13 @@ export function ConfigurePlugin(props: {
     borderColor: c().strong,
     placeholderColor: c().faint,
   });
+  const phoneField = () => ({
+    height: 40,
+    fontSize: 13,
+    lineHeight: 18,
+    paddingHorizontal: 10,
+    borderColor: c().strong,
+  });
   const form = () => (
     <>
       <Scroll
@@ -172,11 +179,11 @@ export function ConfigurePlugin(props: {
                   paddingBottom: 16,
                   gap: 16,
                 }
-              : { padding: 16, gap: props.phone ? 12 : 16 }
+              : { padding: 16, gap: props.phone ? 18 : 16 }
           }
         >
           <If when={!props.tablet}>
-            <Label size={12} line={18} tone="muted">
+            <Label size={12} line={props.phone ? 16 : 18} tone="muted">
               {pluginConfigText("fields")}
             </Label>
           </If>
@@ -185,19 +192,32 @@ export function ConfigurePlugin(props: {
               const item = () => field();
               const value = () => valueOf(item());
               return (
-                <View style={{ gap: props.phone ? 5 : 6 }}>
+                <View style={{ gap: 6 }}>
                   <If when={item().type !== "boolean"}>
-                    <View style={{ ...row, gap: props.phone ? 5 : 6 }}>
+                    <View
+                      style={{
+                        ...row,
+                        alignItems: "baseline",
+                        gap: props.phone ? 8 : 6,
+                      }}
+                    >
                       <Label
                         size={props.phone ? 13 : 12}
-                        line={props.phone ? undefined : 16}
-                        weight={props.phone ? 500 : 400}
+                        line={props.phone ? 18 : 16}
                       >
                         {item().title}
                       </Label>
-                      <Label size={10} line={14} tone="muted">
+                      <Label
+                        size={props.phone ? 11 : 10}
+                        line={14}
+                        tone="muted"
+                      >
                         {pluginConfigText(
-                          item().required ? "required" : "optional",
+                          item().required
+                            ? "required"
+                            : props.phone
+                              ? "optionalTag"
+                              : "optional",
                         )}
                       </Label>
                     </View>
@@ -215,7 +235,7 @@ export function ConfigurePlugin(props: {
                         else={
                           <Field
                             label={item().title}
-                            style={props.phone ? undefined : compactField()}
+                            style={props.phone ? phoneField() : compactField()}
                             masked={item().secret}
                             placeholder={
                               item().secret &&
@@ -247,25 +267,18 @@ export function ConfigurePlugin(props: {
                           />
                         }
                       >
-                        <View style={{ ...row, gap: props.phone ? 8 : 10 }}>
-                          <View
-                            style={{
-                              flex: 1,
-                              minWidth: 0,
-                              gap: props.phone ? 0 : 2,
-                            }}
-                          >
+                        <View style={{ ...row, gap: props.phone ? 12 : 10 }}>
+                          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                             <Label
                               size={props.phone ? 13 : 12}
-                              line={props.phone ? undefined : 16}
-                              weight={props.phone ? 500 : 400}
+                              line={props.phone ? 18 : 16}
                             >
                               {item().title}
                             </Label>
                             <If when={item().description}>
                               <Label
                                 size={props.phone ? 11 : 10}
-                                line={props.phone ? undefined : 14}
+                                line={14}
                                 tone="muted"
                               >
                                 {item().description}
@@ -309,6 +322,7 @@ export function ConfigurePlugin(props: {
                                   : null
                               }
                               disabled={busy()}
+                              phone={props.phone}
                               onChange={(next) => set(spec().name, next)}
                             />
                           }
@@ -366,7 +380,11 @@ export function ConfigurePlugin(props: {
                   </If>
                   <If when={item().secret}>
                     <View style={{ ...row, gap: 8 }}>
-                      <Label size={11} line={16} tone="mutedInk">
+                      <Label
+                        size={11}
+                        line={props.phone ? 14 : 16}
+                        tone={props.phone ? "muted" : "mutedInk"}
+                      >
                         {pluginConfigText("access")}
                       </Label>
                       <If
@@ -388,6 +406,7 @@ export function ConfigurePlugin(props: {
                           }))}
                           value={item().level}
                           compact
+                          phone={props.phone}
                           disabled={accessBusy() || busy()}
                           onChange={(next) =>
                             void setLevel(item(), next as PluginAgentLevel)
@@ -426,7 +445,11 @@ export function ConfigurePlugin(props: {
               );
             }}
           </Each>
-          <Label size={10} line={14} tone="muted">
+          <Label
+            size={props.phone ? 11 : 10}
+            line={props.phone ? 15 : 14}
+            tone="muted"
+          >
             {pluginConfigText("encrypted")}
           </Label>
         </View>
@@ -436,22 +459,28 @@ export function ConfigurePlugin(props: {
           ...row,
           justifyContent: "flex-end",
           paddingVertical: 12,
-          paddingHorizontal: props.phone ? 12 : 16,
-          gap: props.phone ? 8 : 10,
+          paddingHorizontal: 16,
+          gap: props.phone ? 12 : 10,
           borderTopWidth: 1,
           borderColor: c().border,
         }}
       >
         <If when={props.item.state === "needs_config"}>
-          <Label size={11} line={16} tone="muted" style={{ flex: 1 }}>
+          <Label
+            size={11}
+            line={props.phone ? 14 : 16}
+            tone="muted"
+            style={{ flex: 1 }}
+          >
             {pluginConfigText("missing")}
           </Label>
         </If>
         <Button
           label={uiText("save")}
           tone="primary"
-          labelSize={props.phone ? undefined : 11}
-          style={props.phone ? undefined : { paddingHorizontal: 10 }}
+          size={props.phone ? 36 : undefined}
+          labelSize={props.phone ? 13 : 11}
+          style={{ paddingHorizontal: props.phone ? 20 : 10 }}
           disabled={
             busy() ||
             accessBusy() ||
@@ -472,7 +501,6 @@ export function ConfigurePlugin(props: {
           phone={props.phone}
           phonePage={props.phone}
           height={props.phone ? "100%" : 480}
-          overPhoneNavigation={props.phone}
           onClose={props.onClose}
         >
           {form()}

@@ -29,6 +29,7 @@ export const pluginsMessages = {
     "{{machine}} 上缺少 {{commands}}",
   ],
   pluginPath: ["Plugin path", "插件路径"],
+  pluginReadAgo: ["{{time}} ago", "{{time}}前"],
   pluginRequiredMissing: [
     'Required field "{{title}}" is missing.',
     "缺少必填项“{{title}}”。",
@@ -45,6 +46,12 @@ export const pluginsMessages = {
     "Plugins give agents skills and MCP servers, from ~/.eta/plugins/ or from git. Configuration is global; each agent chooses which plugins to use.",
     "插件给智能体带来 skill 和 MCP 服务器，来自 ~/.eta/plugins/ 或 git 仓库。配置全局一份，每个智能体选择启用哪些。",
   ],
+  pluginsIntroPhone: [
+    "Plugins give agents skills and MCP servers. A plugin that needs configuring is skipped until it is fixed.",
+    "插件给智能体带来 skill 和 MCP 服务器。需要配置的插件在修好之前会被跳过。",
+  ],
+  pluginsNeedAttention: ["Needs attention", "需要处理"],
+  pluginsInstalledCount: ["Installed · {{count}}", "已安装 · {{count}}"],
   refreshPlugins: ["Refresh plugins", "刷新插件"],
   removeFromThisHost: [
     "Remove {{remove}} from this host?",
