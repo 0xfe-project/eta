@@ -2,8 +2,8 @@ import type { RoutineSummary, RunView } from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, Icon, Label, Markdown, row } from "../../components";
 import { StatusDot } from "../../components/status-dot";
-import { localizedText, uiText } from "../../i18n";
-import { feedTime, mobileSchedule, runAgo, runHistory } from "./schedule";
+import { uiText } from "../../i18n";
+import { clockDistance, feedTime, runHistory, scheduleLabel } from "./schedule";
 
 export function RoutineHistory(props: {
   runs: RoutineSummary["runs"];
@@ -11,21 +11,21 @@ export function RoutineHistory(props: {
 }) {
   const c = colors();
   return (
-    <View style={{ ...row, gap: 4 }}>
+    <View style={{ ...row, gap: props.full ? 4 : 2, flexShrink: 0 }}>
       <Each of={runHistory(props.runs)} key="index">
         {(status) => (
           <View
             style={{
               ...(props.full
                 ? { flex: 1, height: 8 }
-                : { width: 13, height: 6 }),
+                : { width: 8, height: 8 }),
               backgroundColor:
                 status() === "failed"
                   ? c().red
                   : status() === "running"
                     ? c().blue
                     : status() === "sent" || status() === "no_news"
-                      ? c().green
+                      ? c().ink
                       : c().border,
             }}
           />
@@ -41,63 +41,65 @@ export function PhoneRoutineRow(props: {
   onOpen: () => void;
 }) {
   const c = colors();
-  const recent = () => props.item.runs[0];
-  const failed = () => recent()?.status === "failed";
-  const details = () =>
-    [
-      mobileSchedule(props.item.schedule),
-      props.paused
-        ? uiText("captainIsOff")
-        : !props.item.enabled
-          ? uiText("paused")
-          : failed()
-            ? localizedText("last run failed", "上次运行失败")
-            : recent()?.status === "running"
-              ? uiText("running")
-              : recent()?.status === "skipped"
-                ? localizedText("last run skipped", "上次运行已跳过")
-                : recent()
-                  ? localizedText(
-                      `ran ${runAgo(recent()!.startedAt)}`,
-                      `${runAgo(recent()!.startedAt)}运行`,
-                    )
-                  : undefined,
-      props.item.unseenReports
-        ? localizedText(
-            `${props.item.unseenReports} new ${props.item.unseenReports === 1 ? "report" : "reports"}`,
-            `${props.item.unseenReports} 份新报告`,
-          )
-        : undefined,
-    ]
-      .filter(Boolean)
-      .join(" · ");
+  const failed = () => props.item.runs[0]?.status === "failed";
+  const status = () =>
+    props.paused
+      ? uiText("captainIsOff")
+      : !props.item.enabled
+        ? uiText("paused")
+        : props.item.nextRunAt
+          ? uiText("nextWithCount", {
+              clockDistance: clockDistance(props.item.nextRunAt!),
+            })
+          : uiText("noUpcomingRun");
 
   return (
     <View
       role="button"
       accessibilityLabel={props.item.name}
-      accessibilityDescription={details()}
+      accessibilityDescription={`${scheduleLabel(props.item.schedule)} · ${status()}`}
       onPress={props.onOpen}
       hoverStyle={{ backgroundColor: c().selected }}
       focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
       style={{
         ...row,
-        minHeight: 76,
-        paddingHorizontal: 16,
-        gap: 14,
+        paddingVertical: 12,
+        paddingLeft: 16,
+        paddingRight: 12,
+        gap: 12,
         borderBottomWidth: 1,
         borderColor: c().border,
         cursor: "pointer",
       }}
     >
-      <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-        <Label lines={1} line={20}>
-          {props.item.name}
-        </Label>
-        <Label size={11} lines={1} line={14} tone={failed() ? "ink" : "muted"}>
-          {details()}
-        </Label>
-        <RoutineHistory runs={props.item.runs} />
+      <View style={{ flex: 1, minWidth: 0, gap: 3, paddingBottom: 6 }}>
+        <View style={{ ...row, gap: 8 }}>
+          <Label lines={1} line={20} style={{ flex: 1, minWidth: 0 }}>
+            {props.item.name}
+          </Label>
+          <If when={!props.paused}>
+            <RoutineHistory runs={props.item.runs} />
+          </If>
+        </View>
+        <View style={{ ...row, gap: 8 }}>
+          <Label
+            size={11}
+            line={14}
+            tone="muted"
+            lines={1}
+            style={{ flex: 1, minWidth: 0 }}
+          >
+            {scheduleLabel(props.item.schedule)}
+          </Label>
+          <Label
+            size={11}
+            line={14}
+            tone={props.paused ? "amber" : "muted"}
+            lines={1}
+          >
+            {status()}
+          </Label>
+        </View>
       </View>
       <If
         when={props.item.unseenFailures || failed() || props.item.unseenReports}
@@ -106,7 +108,7 @@ export function PhoneRoutineRow(props: {
           color={props.item.unseenFailures || failed() ? c().red : c().blue}
         />
       </If>
-      <Icon name="right" size={10} tone="muted" />
+      <Icon name="right" size={14} />
     </View>
   );
 }
@@ -129,11 +131,17 @@ export function reportBody(run: RunView) {
 }
 
 /** The newest report, in full, at the top of a routine's feed. */
-export function LatestReportCard(props: { run: RunView; onOpen: () => void }) {
+export function LatestReportCard(props: {
+  run: RunView;
+  /** The phone shows the whole report in a tighter card. */
+  phone?: boolean;
+  onOpen: () => void;
+}) {
   const c = colors();
+  const inset = () => (props.phone ? 12 : 16);
   return (
     <View style={{ borderWidth: 1, borderColor: c().border }}>
-      <View style={{ padding: 16, gap: 6 }}>
+      <View style={{ padding: inset(), gap: 6 }}>
         <Label size={12} line={16} tone="muted">
           {feedTime(props.run.startedAt)}
         </Label>
@@ -142,7 +150,11 @@ export function LatestReportCard(props: { run: RunView; onOpen: () => void }) {
             {runTitle(props.run)}
           </Label>
           <If when={props.run.report}>
-            <View style={{ maxHeight: 280, overflow: "hidden" }}>
+            <View
+              style={
+                props.phone ? undefined : { maxHeight: 280, overflow: "hidden" }
+              }
+            >
               <Markdown value={reportBody(props.run)} line={22} />
             </View>
           </If>
@@ -152,7 +164,7 @@ export function LatestReportCard(props: { run: RunView; onOpen: () => void }) {
         style={{
           ...row,
           height: 32,
-          paddingHorizontal: 16,
+          paddingHorizontal: inset(),
           borderTopWidth: 1,
           borderColor: c().border,
         }}

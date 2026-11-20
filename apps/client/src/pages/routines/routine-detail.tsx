@@ -35,7 +35,8 @@ export function RoutineDetail(props: {
   onToggle: () => void;
 }) {
   const c = colors();
-  const inset = () => (props.layout === "phone" ? 16 : 24);
+  const phone = () => props.layout === "phone";
+  const inset = () => (phone() ? 16 : 24);
   const latest = () => props.runs.find((run) => run.status === "sent");
   const earlier = () => props.runs.filter((run) => run.id !== latest()?.id);
   // Two cards a row on the desktop, one on the narrower layouts.
@@ -140,12 +141,12 @@ export function RoutineDetail(props: {
         <View
           style={{
             ...row,
-            minHeight: 32,
+            ...(phone() ? { height: 44 } : { minHeight: 32 }),
             paddingHorizontal: inset(),
             gap: 12,
           }}
         >
-          <If when={props.routine.nextRunAt}>
+          <If when={phone() ? null : props.routine.nextRunAt}>
             {(at) => (
               <Label
                 size={12}
@@ -160,7 +161,10 @@ export function RoutineDetail(props: {
           <Label size={12} line={16} tone="mutedInk" style={{ flex: 1 }}>
             {props.routine.nextRunAt
               ? uiText("nextReportOn", {
-                  day: dayWord(props.routine.nextRunAt!),
+                  // The phone has no time column, so the time joins the day.
+                  day: phone()
+                    ? `${dayWord(props.routine.nextRunAt!)} ${clockTime(props.routine.nextRunAt!)}`
+                    : dayWord(props.routine.nextRunAt!),
                   clockDistance: clockDistance(props.routine.nextRunAt!),
                 })
               : props.routine.enabled
@@ -188,6 +192,7 @@ export function RoutineDetail(props: {
             >
               <LatestReportCard
                 run={run()}
+                phone={phone()}
                 onOpen={() => props.onReport(run().id)}
               />
             </View>
@@ -196,10 +201,10 @@ export function RoutineDetail(props: {
         <If when={earlier().length}>
           <View
             style={{
-              paddingTop: 8,
-              paddingBottom: 16,
+              ...(phone()
+                ? { padding: 16, gap: 12 }
+                : { paddingTop: 8, paddingBottom: 16, gap: 8 }),
               paddingHorizontal: inset(),
-              gap: 8,
               borderTopWidth: 1,
               borderColor: c().border,
             }}
@@ -218,7 +223,7 @@ export function RoutineDetail(props: {
                           onOpen={() => props.onReport(run().id)}
                           onRetry={props.onRun}
                           canRetry={props.canRun}
-                          compact={props.layout !== "desktop"}
+                          compact={props.layout === "tablet"}
                         />
                       )}
                     </Each>

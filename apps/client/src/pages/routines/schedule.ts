@@ -27,12 +27,6 @@ export function scheduleLabel(schedule: RoutineSchedule) {
   }
 }
 
-export function mobileSchedule(schedule: RoutineSchedule) {
-  return schedule.kind === "daily"
-    ? localizedText(`Every day ${schedule.time}`, `每天 ${schedule.time}`)
-    : scheduleLabel(schedule);
-}
-
 export function runAgo(at: number) {
   const minutes = Math.max(0, Math.floor((Date.now() - at) / 60_000));
   const formatter = new Intl.RelativeTimeFormat(formatLocale(), {

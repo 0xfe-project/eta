@@ -14,14 +14,15 @@ import {
   Modal,
   row,
 } from "../../components";
+import { StatusDot } from "../../components/status-dot";
 import { formatLocale, localizedText, uiText } from "../../i18n";
 import { reportBody, RoutineHistory } from "./history";
 import {
   clockTime,
   feedTime,
-  mobileSchedule,
   routineTime,
   runAgo,
+  scheduleLabel,
 } from "./schedule";
 
 interface RoutineReportProps {
@@ -99,7 +100,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
         ));
   const schedule = () =>
     [
-      mobileSchedule(props.routine.schedule),
+      scheduleLabel(props.routine.schedule),
       props.run.status === "skipped"
         ? undefined
         : localizedText("run by Captain", "由 Captain 运行"),
@@ -294,7 +295,11 @@ export function RoutineReport(props: RoutineReportProps) {
       focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
       style={{ cursor: enabled ? "pointer" : "default" }}
     >
-      <Label size={12} line={16} tone={enabled ? "ink" : "faint"}>
+      <Label
+        size={12}
+        line={16}
+        tone={enabled ? "ink" : props.phone ? "muted" : "faint"}
+      >
         {label}
       </Label>
     </View>
@@ -305,8 +310,8 @@ export function RoutineReport(props: RoutineReportProps) {
         style={{
           ...row,
           paddingHorizontal: inset(),
-          gap: 16,
-          height: 48,
+          gap: props.phone ? 12 : 16,
+          height: props.phone ? 40 : 48,
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
@@ -316,7 +321,10 @@ export function RoutineReport(props: RoutineReportProps) {
             when={!props.phone}
             else={
               <Label size={12} line={16} tone="muted">
-                {uiText("report")}
+                {`${uiText("reports")}${uiText("reportPosition", {
+                  index: props.index + 1,
+                  count: props.count,
+                })}`}
               </Label>
             }
           >
@@ -337,12 +345,14 @@ export function RoutineReport(props: RoutineReportProps) {
             </Label>
           </If>
         </View>
-        <Label size={12} line={16} tone="muted">
-          {uiText("reportPosition", {
-            index: props.index + 1,
-            count: props.count,
-          })}
-        </Label>
+        <If when={!props.phone}>
+          <Label size={12} line={16} tone="muted">
+            {uiText("reportPosition", {
+              index: props.index + 1,
+              count: props.count,
+            })}
+          </Label>
+        </If>
         {move(uiText("newer"), props.index > 0, -1)}
         {move(uiText("older"), props.index + 1 < props.count, 1)}
       </View>
@@ -350,16 +360,30 @@ export function RoutineReport(props: RoutineReportProps) {
         <View
           style={{
             alignItems: "center",
-            paddingTop: 20,
+            paddingTop: props.phone ? 16 : 20,
             paddingBottom: 16,
             paddingHorizontal: inset(),
           }}
         >
-          <View style={{ ...column, gap: 6 }}>
+          <View
+            style={{
+              ...column,
+              gap: props.phone ? 8 : 6,
+              // On the phone a missed run sits in a card.
+              ...(props.phone && failed()
+                ? {
+                    gap: 6,
+                    padding: 12,
+                    borderWidth: 1,
+                    borderColor: c().border,
+                  }
+                : undefined),
+            }}
+          >
             <Label size={12} line={16} tone="muted">
               {date()}
             </Label>
-            <View style={{ gap: 8 }}>
+            <View style={{ gap: props.phone && failed() ? 6 : 8 }}>
               <If
                 when={failed()}
                 else={
@@ -380,18 +404,33 @@ export function RoutineReport(props: RoutineReportProps) {
                   </>
                 }
               >
-                <Label size={16} line={22} weight={600}>
-                  {uiText("noReport")}
-                </Label>
+                <If
+                  when={props.phone}
+                  else={
+                    <Label size={16} line={22} weight={600}>
+                      {uiText("noReport")}
+                    </Label>
+                  }
+                >
+                  <View style={{ ...row, gap: 8 }}>
+                    <StatusDot color={c().red} />
+                    <Label size={14} line={20} weight={600} tone="muted">
+                      {uiText("noReport")}
+                    </Label>
+                  </View>
+                </If>
                 <Label line={22} tone="muted">
                   {props.run.error ?? uiText("theRoutineWasSkipped")}
                 </Label>
-                <Button
-                  label={uiText("retry")}
-                  disabled={!props.canRetry}
-                  onPress={props.onRetry}
-                  style={{ alignSelf: "flex-start" }}
-                />
+                <View style={{ ...row, paddingTop: props.phone ? 4 : 0 }}>
+                  <Button
+                    label={uiText("retry")}
+                    disabled={!props.canRetry}
+                    onPress={props.onRetry}
+                    size={props.phone ? 30 : undefined}
+                    style={props.phone ? { paddingHorizontal: 12 } : undefined}
+                  />
+                </View>
               </If>
             </View>
           </View>

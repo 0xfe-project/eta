@@ -142,9 +142,16 @@ export function Routines(props: {
         />
       </If>
       <If when={phone() && !selected()}>
-        <Label size={11} line={14} tone="muted">
-          {uiText("pending")}
-        </Label>
+        <ActionMenu
+          label={uiText("routineActions")}
+          iconSize={18}
+          triggerStyle={{ width: 40, height: 40 }}
+        >
+          <ActionItem
+            label={uiText("newRoutine")}
+            onSelect={() => editing.set("new")}
+          />
+        </ActionMenu>
       </If>
       <If when={phone() && info() && !current()}>
         <ActionMenu
@@ -218,11 +225,13 @@ export function Routines(props: {
       <View
         style={{
           paddingHorizontal: phone() ? 12 : props.layout === "tablet" ? 14 : 11,
-          paddingVertical: props.layout === "desktop" ? 7 : 12,
+          paddingTop: props.layout === "desktop" ? 7 : 12,
+          // The phone notice ends on a 6px spacer under its text.
+          paddingBottom: props.layout === "desktop" ? 7 : phone() ? 18 : 12,
           marginHorizontal: phone() ? 16 : props.layout === "tablet" ? 12 : 21,
           marginTop: props.layout === "desktop" ? 11 : 12,
           marginBottom: phone() ? 4 : props.layout === "tablet" ? 12 : 0,
-          gap: props.layout === "desktop" ? 0 : 4,
+          gap: props.layout === "desktop" ? 0 : phone() ? 6 : 4,
           borderWidth: 1,
           borderColor: `${c().amber}66`,
           backgroundColor: c().amberFill,
@@ -230,15 +239,15 @@ export function Routines(props: {
       >
         <Label
           size={tablet() ? 13 : 14}
-          line={tablet() ? 18 : undefined}
-          weight={tablet() ? 600 : 500}
+          line={tablet() ? 18 : phone() ? 20 : undefined}
+          weight={props.layout === "desktop" ? 500 : 600}
         >
           {uiText("captainIsOffSoRoutinesAre")}
         </Label>
         <Label
           size={tablet() ? 11 : 12}
-          line={16}
-          tone={tablet() ? "mutedInk" : "muted"}
+          line={phone() ? 18 : 16}
+          tone={props.layout === "desktop" ? "muted" : "mutedInk"}
         >
           {status()?.reason === "no_model"
             ? uiText("captainHasNoModelChooseOne")
@@ -335,7 +344,9 @@ export function Routines(props: {
                   style={
                     props.layout === "desktop"
                       ? { paddingVertical: 11, paddingHorizontal: 14 }
-                      : undefined
+                      : phone() && paused()
+                        ? { borderTopWidth: 1, borderColor: c().border }
+                        : undefined
                   }
                 >
                   <Each of={list()} key={(item) => item.id}>
