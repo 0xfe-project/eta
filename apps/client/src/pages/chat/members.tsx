@@ -1,0 +1,323 @@
+import type { MemberView } from "@eta/client-contracts";
+import type { Layout } from "../../components";
+import { Scroll, signal, View, windowSize } from "nsh";
+import { Dialog, Menu, MenuItem, MenuSeparator } from "nsh/base";
+import {
+  Button,
+  colors,
+  fill,
+  grow,
+  Icon,
+  Label,
+  Modal,
+  row,
+} from "../../components";
+import { AgentFace } from "../../components/agent-face";
+import { CheckControl } from "../../components/check-control";
+import { CloseButton } from "../../components/navigation-buttons";
+import { formatLocale, uiText } from "../../i18n";
+import { useHost } from "../../services/host";
+
+export function StewardMenu(props: {
+  conversationId: string;
+  members: MemberView[];
+  current?: string | null;
+}) {
+  const host = useHost();
+  const c = colors();
+  async function choose(agentId: string | null) {
+    if (agentId === (props.current ?? null)) return;
+    await host.action(() =>
+      host.call("conversations", "setSteward", {
+        conversationId: props.conversationId,
+        agentId,
+      }),
+    );
+  }
+  const itemStyle = { ...row, gap: 8, paddingHorizontal: 10, height: 30 };
+  return (
+    <Menu
+      placement="bottom"
+      align="start"
+      offset={3}
+      popupStyle={{
+        width: 172,
+        borderWidth: 1,
+        borderColor: c().strong,
+        backgroundColor: c().canvas,
+      }}
+      trigger={
+        <View
+          accessibilityLabel={uiText("steward2")}
+          hoverStyle={{ backgroundColor: c().selected }}
+          style={{
+            ...row,
+            height: 22,
+            gap: 6,
+            paddingHorizontal: 5,
+            borderWidth: 1,
+            borderColor: c().border,
+            cursor: "pointer",
+          }}
+        >
+          <If when={props.current}>
+            <AgentFace id={props.current} size={10} />
+          </If>
+          <Label size={11} line={16} tone="muted">
+            {host.agent(props.current)?.name ?? uiText("steward2")}
+          </Label>
+          <Icon name="down" size={8} tone="muted" />
+        </View>
+      }
+    >
+      <Each of={props.members} key={(member) => member.agentId}>
+        {(member) => (
+          <MenuItem
+            role="menuitemradio"
+            checked={member().agentId === props.current}
+            accessibilityLabel={
+              host.agent(member().agentId)?.name ?? uiText("agent")
+            }
+            style={itemStyle}
+            hoverStyle={{ backgroundColor: c().selected }}
+            indicatorStyle={{ width: 0 }}
+            onSelect={() => void choose(member().agentId)}
+          >
+            <AgentFace id={member().agentId} size={10} />
+            <Label size={11} style={{ flex: 1 }}>
+              {host.agent(member().agentId)?.name ?? uiText("agent")}
+            </Label>
+            <If when={member().agentId === props.current}>
+              <Icon name="check" size={10} />
+            </If>
+          </MenuItem>
+        )}
+      </Each>
+      <MenuSeparator style={{ height: 1, backgroundColor: c().border }} />
+      <MenuItem
+        role="menuitemradio"
+        checked={!props.current}
+        indicatorStyle={{ width: 0 }}
+        style={itemStyle}
+        hoverStyle={{ backgroundColor: c().selected }}
+        onSelect={() => void choose(null)}
+      >
+        <Label size={11} style={{ flex: 1 }}>
+          {uiText("noSteward")}
+        </Label>
+        <If when={!props.current}>
+          <Icon name="check" size={10} />
+        </If>
+      </MenuItem>
+    </Menu>
+  );
+}
+
+export function InviteAgents(props: {
+  conversationId: string;
+  members: MemberView[];
+  layout: Layout;
+  onClose: () => void;
+}) {
+  const host = useHost();
+  const c = colors();
+  const phone = () => props.layout === "phone";
+  const title = () => uiText("inviteAgents");
+  const selected = signal<string[]>([]);
+  const saving = signal(false);
+  const candidates = () =>
+    host
+      .people()
+      .filter(
+        (agent) => !props.members.some((member) => member.agentId === agent.id),
+      );
+  const inviteIds = () =>
+    selected().filter((id) => candidates().some((agent) => agent.id === id));
+  async function invite() {
+    const agentIds = inviteIds();
+    if (saving() || !agentIds.length) return;
+    saving.set(true);
+    const result = await host.action(() =>
+      host.call("conversations", "invite", {
+        conversationId: props.conversationId,
+        agentIds,
+      }),
+    );
+    saving.set(false);
+    if (result) props.onClose();
+  }
+  const placement = () => ({
+    left: Math.max(
+      16,
+      Math.min(windowSize().width / 2 + 16, windowSize().width - 400),
+    ),
+    top: Math.max(
+      16,
+      Math.min(windowSize().height / 2 - 32, windowSize().height - 264),
+    ),
+  });
+  const content = () => (
+    <>
+      <If when={!phone()}>
+        <View
+          style={{
+            ...row,
+            justifyContent: "space-between",
+            minHeight: 38,
+            paddingHorizontal: 14,
+          }}
+        >
+          <Label size={14} weight={500}>
+            {title()}
+          </Label>
+          <CloseButton size={18} disabled={saving()} onPress={props.onClose} />
+        </View>
+      </If>
+      <View
+        style={{
+          paddingHorizontal: phone() ? 16 : 14,
+          paddingTop: phone() ? 16 : 2,
+          gap: phone() ? 10 : 12,
+          ...(phone() ? grow : {}),
+        }}
+      >
+        <Label tone="muted" size={phone() ? 12 : 10} line={16}>
+          {uiText("membersCanReadTheGroupChat")}
+        </Label>
+        <Scroll
+          style={
+            phone()
+              ? grow
+              : {
+                  maxHeight: Math.max(
+                    64,
+                    Math.min(225, windowSize().height - placement().top - 148),
+                  ),
+                }
+          }
+          scrollbar={false}
+        >
+          <Each of={candidates()} key={(agent) => agent.id}>
+            {(agent) => (
+              <CheckControl
+                size={14}
+                checked={selected().includes(agent().id)}
+                label={agent().name}
+                onChange={(checked) =>
+                  selected.update((ids) =>
+                    checked
+                      ? [...ids, agent().id]
+                      : ids.filter((id) => id !== agent().id),
+                  )
+                }
+                style={{
+                  ...row,
+                  gap: 8,
+                  paddingHorizontal: phone() ? 4 : 0,
+                  minHeight: phone() ? 52 : 32,
+                  borderBottomWidth: phone() ? 1 : 0,
+                  borderColor: c().border,
+                  cursor: "pointer",
+                }}
+              >
+                <AgentFace id={agent().id} size={phone() ? 24 : 12} />
+                <Label style={{ flex: phone() ? 1 : undefined }}>
+                  {agent().name}
+                </Label>
+                <Label size={10} tone="muted">
+                  {agent().runtime === "eta"
+                    ? uiText("etaBuiltIn")
+                    : agent().runtime}
+                </Label>
+              </CheckControl>
+            )}
+          </Each>
+          <If when={!candidates().length}>
+            <Label tone="muted">{uiText("allAgentsAreAlreadyMembers")}</Label>
+          </If>
+        </Scroll>
+      </View>
+      <View
+        style={{
+          ...row,
+          justifyContent: "flex-end",
+          padding: 14,
+          gap: 8,
+          marginTop: phone() ? 0 : 4,
+          borderTopWidth: phone() ? 1 : 0,
+          borderColor: c().border,
+        }}
+      >
+        <If when={!phone() && candidates().length && !inviteIds().length}>
+          <Label size={10} tone="muted" style={{ flex: 1 }}>
+            {formatLocale().startsWith("zh")
+              ? "勾选要邀请的智能体"
+              : "Tick the agents to invite"}
+          </Label>
+        </If>
+        <Button
+          label={uiText("cancel")}
+          size={28}
+          tone={phone() ? "ghost" : "plain"}
+          disabled={saving()}
+          onPress={props.onClose}
+        />
+        <Button
+          label={uiText("invite", { length: inviteIds().length })}
+          tone="primary"
+          size={28}
+          disabled={saving() || !inviteIds().length}
+          onPress={() => void invite()}
+        />
+      </View>
+    </>
+  );
+  return (
+    <If
+      when={props.layout === "tablet"}
+      else={
+        <Modal
+          title={title()}
+          width={384}
+          height={phone() ? 380 : undefined}
+          phone={phone()}
+          sheet={phone()}
+          hideHeader={!phone()}
+          overPhoneNavigation
+          dismissible={!saving()}
+          onClose={props.onClose}
+        >
+          {content()}
+        </Modal>
+      }
+    >
+      <Dialog
+        accessibilityLabel={title()}
+        animation="none"
+        style={fill}
+        backdropStyle={{ backgroundColor: c().modalShade }}
+        closeOnEscape={!saving()}
+        closeOnBackdropPress={!saving()}
+        onOpenChange={({ open }) => {
+          if (!open && !saving()) props.onClose();
+        }}
+      >
+        <View
+          role="dialog"
+          accessibilityLabel={title()}
+          style={{
+            position: "absolute",
+            ...placement(),
+            width: 384,
+            maxWidth: "100%",
+            borderWidth: 1,
+            borderColor: c().border,
+            backgroundColor: c().canvas,
+          }}
+        >
+          {content()}
+        </View>
+      </Dialog>
+    </If>
+  );
+}

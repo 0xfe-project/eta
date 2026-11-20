@@ -1,0 +1,86 @@
+import { View } from "nsh";
+import { Select } from "nsh/base";
+import { colors, Icon, Label, row } from "../../components";
+import { formatLocale } from "../../i18n";
+
+const pluginConfigCopy = {
+  fields: [
+    "Fill in the fields this plugin declares. These values go to its MCP servers.",
+    "填写插件声明的字段。这些值会提供给插件的 MCP 服务器。",
+  ],
+  required: ["Required", "必填"],
+  optional: ["(optional)", "（选填）"],
+  access: ["Agent access", "智能体访问权限"],
+  none: ["None (plugin process only)", "无（仅插件进程）"],
+  read: ["Read", "读取"],
+  file: ["File", "文件"],
+  value: ["Value", "值"],
+  encrypted: [
+    "The configuration is stored encrypted on the Host, and secrets are not shown again.",
+    "配置在 Host 上加密保存，密钥不会再次显示。",
+  ],
+  missing: [
+    "Something required is missing; it will still need configuring.",
+    "仍有必填项缺失，插件还需要配置。",
+  ],
+  blank: ["Select a value", "请选择"],
+} as const;
+
+export function pluginConfigText(key: keyof typeof pluginConfigCopy) {
+  return pluginConfigCopy[key][formatLocale().startsWith("zh") ? 1 : 0];
+}
+
+export function PluginSelect(props: {
+  label: string;
+  items: { value: string; title: string }[];
+  value: string | null;
+  disabled?: boolean;
+  compact?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const c = colors();
+  return (
+    <Select
+      accessibilityLabel={props.label}
+      items={props.items}
+      value={props.value}
+      cover={false}
+      offset={2}
+      disabled={props.disabled}
+      popupStyle={{
+        borderWidth: 1,
+        borderColor: c().strong,
+        backgroundColor: c().canvas,
+      }}
+      itemStyle={{
+        minHeight: 28,
+        paddingHorizontal: 8,
+        color: c().ink,
+        fontSize: 12,
+      }}
+      trigger={
+        <View
+          style={{
+            ...row,
+            gap: 8,
+            minHeight: props.compact ? 24 : 28,
+            paddingHorizontal: 8,
+            borderWidth: 1,
+            borderColor: c().strong,
+            backgroundColor: c().canvas,
+            cursor: "pointer",
+          }}
+        >
+          <Label size={props.compact ? 11 : 12} lines={1} style={{ flex: 1 }}>
+            {props.items.find((item) => item.value === props.value)?.title ??
+              pluginConfigText("blank")}
+          </Label>
+          <Icon name="down" size={9} tone="muted" />
+        </View>
+      }
+      onChange={({ value }) => {
+        if (value !== null && value !== props.value) props.onChange(value);
+      }}
+    />
+  );
+}

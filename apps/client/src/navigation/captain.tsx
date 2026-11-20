@@ -1,0 +1,102 @@
+import { View } from "nsh";
+import { colors, Label, row } from "../components";
+import { AgentFace } from "../components/agent-face";
+import { useText } from "../i18n";
+import { useHost } from "../services/host";
+import { CaptainContextRing } from "./captain-context-ring";
+
+export function CaptainFace(props: { size: number }) {
+  const host = useHost();
+  return <AgentFace id={host.captain()?.id ?? "Captain"} size={props.size} />;
+}
+
+export function CaptainCard(props: { onPress: () => void }) {
+  const text = useText();
+  const host = useHost();
+  const c = colors();
+  return (
+    <View style={{ flexShrink: 0, padding: 14 }}>
+      <View
+        role="button"
+        accessibilityLabel={text("captain")}
+        onPress={() => props.onPress()}
+        hoverStyle={{ backgroundColor: c().selected }}
+        style={{
+          ...row,
+          alignItems: "flex-start",
+          gap: 12,
+          minHeight: 54,
+          paddingVertical: 8,
+          paddingHorizontal: 14,
+          borderWidth: 1,
+          borderColor: c().border,
+          backgroundColor: c().canvas,
+          cursor: "pointer",
+        }}
+      >
+        <CaptainFace size={24} />
+        <View style={{ flex: 1, gap: 1 }}>
+          <View style={{ ...row, gap: 8 }}>
+            <Label weight={500}>{text("captain")}</Label>
+            <Label size={10} tone="muted">
+              {text(host.captain()?.status === "working" ? "working" : "idle")}
+            </Label>
+          </View>
+          <Label size={10} line={15} tone="muted" lines={1}>
+            {text("captainNoConversation")}
+          </Label>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+export function RailCaptain(props: { selected: boolean; onPress: () => void }) {
+  const c = colors();
+  const text = useText();
+  return (
+    <View
+      style={{
+        height: 80,
+        flexShrink: 0,
+        alignItems: "center",
+        paddingTop: 7,
+        borderBottomWidth: 1,
+        borderColor: c().border,
+      }}
+    >
+      <View
+        role="button"
+        accessibilityLabel={text("captain")}
+        accessibilityState={{ selected: props.selected }}
+        onPress={props.onPress}
+        hoverStyle={{ backgroundColor: c().selected }}
+        focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+        style={{
+          width: 48,
+          height: 64,
+          alignItems: "center",
+          gap: 3,
+          backgroundColor: props.selected ? c().selected : "transparent",
+          cursor: "pointer",
+        }}
+      >
+        <View
+          style={{
+            width: 44,
+            height: 44,
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          <CaptainContextRing />
+          <CaptainFace size={36} />
+        </View>
+        <Label size={10} line={14}>
+          {text("captain")}
+        </Label>
+      </View>
+    </View>
+  );
+}

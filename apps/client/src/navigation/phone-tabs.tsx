@@ -1,0 +1,145 @@
+import type { CaptainOperationView } from "@eta/client-contracts";
+import type { Navigation } from "./routes";
+import { Image, View } from "nsh";
+import { colors, Label, row, sizes } from "../components";
+import { pickerTarget } from "../components/element-picker";
+import { phoneTabPaths } from "../components/icons";
+import { useText } from "../i18n";
+import { useHost } from "../services/host";
+import { CaptainFace } from "./captain";
+
+const phoneTabs = [
+  ["chat", "chat"],
+  ["pending", "pending"],
+  ["captain", "captain"],
+  ["tasks", "tasks"],
+  ["more", "more"],
+] as const;
+
+type PhoneTab = (typeof phoneTabs)[number];
+
+function PhoneTabItem(props: {
+  tab: PhoneTab;
+  selected: boolean;
+  count: number;
+  onPress: () => void;
+}) {
+  const c = colors();
+  const text = useText();
+  const picker = pickerTarget(
+    "PhoneTabItem",
+    "apps/client/src/navigation/phone-tabs.tsx",
+  );
+  const page = () => props.tab[0];
+  const glyph = () => {
+    const name = page();
+    if (name === "captain") return "";
+    const paths = phoneTabPaths[name][props.selected ? "selected" : "idle"];
+    const color = props.selected ? c().ink : c().muted;
+    const markup = paths
+      .map(
+        (path) =>
+          `<path d="${path.d}" fill="${color}" opacity="${"opacity" in path ? path.opacity : 1}"/>`,
+      )
+      .join("");
+    return `data:image/svg+xml,${encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">${markup}</svg>`,
+    )}`;
+  };
+  return (
+    <View
+      {...picker}
+      role="button"
+      accessibilityLabel={text(props.tab[1])}
+      accessibilityState={{ selected: props.selected }}
+      onPress={() => props.onPress()}
+      style={{
+        flex: 1,
+        height: 63,
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 4,
+        position: "relative",
+        cursor: "pointer",
+      }}
+    >
+      <If when={page() === "captain"}>
+        <CaptainFace size={32} />
+      </If>
+      <If when={page() !== "captain"}>
+        <Image
+          src={glyph()}
+          fadeDuration={0}
+          style={{ width: 22, height: 22, flexShrink: 0 }}
+        />
+        <Label
+          size={10}
+          line={12}
+          weight={props.selected ? 600 : 400}
+          tone={props.selected ? "ink" : "muted"}
+        >
+          {text(props.tab[1])}
+        </Label>
+      </If>
+      <If when={props.count > 0}>
+        <View
+          style={{
+            position: "absolute",
+            top: 8,
+            left: "55%",
+            height: 14,
+            minWidth: 14,
+            paddingHorizontal: 3,
+            backgroundColor: c().blue,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Label size={10} line={12} style={{ color: "#ffffff" }}>
+            {props.count}
+          </Label>
+        </View>
+      </If>
+    </View>
+  );
+}
+
+export function PhoneNavigation(props: Navigation) {
+  const c = colors();
+  const host = useHost();
+  const waiting = () =>
+    host.pending().length +
+    host.tasks().filter((task) => task.status === "in_review").length +
+    host
+      .list<CaptainOperationView>("captain", "operations")
+      .filter((op) => op.requiresApproval && op.status === "pending").length;
+  return (
+    <View
+      web={{ element: "nav" }}
+      style={{
+        ...row,
+        height: sizes.phoneNav,
+        flexShrink: 0,
+        borderTopWidth: 1,
+        borderColor: c().border,
+        backgroundColor: c().canvas,
+      }}
+    >
+      <Each of={phoneTabs}>
+        {(tab) => (
+          <PhoneTabItem
+            tab={tab()}
+            selected={
+              props.page === tab()[0] ||
+              (tab()[0] === "pending" && props.page === "routines") ||
+              (tab()[0] === "more" &&
+                ["email", "plugins", "settings"].includes(props.page))
+            }
+            count={tab()[0] === "pending" ? waiting() : 0}
+            onPress={() => props.onNavigate(tab()[0])}
+          />
+        )}
+      </Each>
+    </View>
+  );
+}

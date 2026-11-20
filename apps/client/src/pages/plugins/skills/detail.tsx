@@ -1,0 +1,482 @@
+import type {
+  SkillFileContent,
+  SkillFileEntry,
+  SkillFileResults,
+  SkillSummary,
+} from "@eta/client-contracts";
+import type { ScrollRef, ViewRef } from "nsh";
+import type { Layout } from "../../../components";
+import type { SkillReadingPosition } from "./reader";
+import { cleanup, effect, openUrl, Scroll, signal, untracked, View } from "nsh";
+import {
+  Button,
+  colors,
+  grow,
+  Header,
+  Icon,
+  Label,
+  row,
+} from "../../../components";
+import { uiText } from "../../../i18n";
+import { SkillFileTree } from "./file-tree";
+import { SkillFile, skillFileLink } from "./reader";
+
+export type SkillCall = <T>(
+  action: string,
+  input: Record<string, unknown>,
+) => Promise<T>;
+
+export function SkillDetail(props: {
+  skill: SkillSummary;
+  call: SkillCall;
+  layout: Layout;
+  location: string;
+  scope: string;
+  onClose: () => void;
+}) {
+  const c = colors();
+  const handle = signal("");
+  const files = signal<SkillFileEntry[]>([]);
+  const file = signal<SkillFileContent>();
+  const fileName = signal("");
+  const directory = signal("");
+  const showFiles = signal(false);
+  const metadata = signal(false);
+  const history = signal<{ path: string; y: number; metadata: boolean }[]>([]);
+  const position = signal<SkillReadingPosition>();
+  const scroll = signal<ScrollRef>();
+  const contentStart = signal<ViewRef>();
+  const failure = signal("");
+  const reading = signal(false);
+  const retry = signal(0);
+  const openDiagnostics = signal<string[]>([]);
+  const phone = () => props.layout === "phone";
+  const tablet = () => props.layout === "tablet";
+  let request = 0;
+  let linkRequest = 0;
+  let scrollY = 0;
+  function showError(error: unknown) {
+    failure.set(error instanceof Error ? error.message : String(error));
+  }
+
+  effect(() => {
+    const skill = props.skill.path;
+    const call = props.call;
+    retry();
+    let active = true;
+    let opened: string | undefined;
+    cleanup(() => {
+      active = false;
+      request++;
+      if (opened) void call("close", { detail: opened }).catch(() => {});
+    });
+    request++;
+    handle.set("");
+    files.set([]);
+    file.set(undefined);
+    fileName.set("");
+    directory.set("");
+    metadata.set(false);
+    history.set([]);
+    position.set(undefined);
+    scrollY = 0;
+    reading.set(false);
+    failure.set("");
+    openDiagnostics.set([]);
+    void call<SkillFileResults["open"]>("open", { skill }).then(
+      (result) => {
+        opened = result.detail;
+        if (active) {
+          openDiagnostics.set(result.diagnostics);
+          handle.set(opened);
+        } else void call("close", { detail: opened }).catch(() => {});
+      },
+      (error) => {
+        if (active) showError(error);
+      },
+    );
+  });
+
+  effect(() => {
+    const detail = handle();
+    const path = directory();
+    files.set([]);
+    if (!detail) return;
+    const call = props.call;
+    let active = true;
+    cleanup(() => {
+      active = false;
+    });
+    void (async () => {
+      try {
+        let offset: number | null = 0;
+        const entries: SkillFileEntry[] = [];
+        do {
+          const result: SkillFileResults["directory"] = await call(
+            "directory",
+            { detail, path, offset },
+          );
+          if (!active) return;
+          entries.push(...result.entries);
+          offset = result.next;
+        } while (offset !== null);
+        files.set(entries);
+        if (!path && !untracked(fileName)) void read("SKILL.md");
+      } catch (error) {
+        if (active) showError(error);
+      }
+    })();
+  });
+
+  async function read(
+    path: string,
+    target: SkillReadingPosition = { kind: "offset", y: 0 },
+    expandedMetadata = false,
+  ) {
+    const detail = handle();
+    if (!detail) return;
+    const version = ++request;
+    file.set(undefined);
+    fileName.set(path);
+    metadata.set(expandedMetadata);
+    position.set(undefined);
+    scrollY = target.kind === "offset" ? target.y : 0;
+    failure.set("");
+    reading.set(true);
+    try {
+      const result = await props.call<SkillFileContent>("read", {
+        detail,
+        path,
+      });
+      if (version === request) {
+        file.set(result);
+        position.set(target);
+      }
+    } catch (error) {
+      if (version === request) showError(error);
+    } finally {
+      if (version === request) reading.set(false);
+    }
+  }
+
+  const preview = () => {
+    const content = file();
+    return content?.kind === "text" ? content.preview : undefined;
+  };
+  const refresh = () => retry.update((count) => count + 1);
+  const reload = () => (
+    <Button
+      label={uiText("skillReloadReader")}
+      icon="refresh"
+      iconOnly
+      tone={tablet() ? "plain" : "ghost"}
+      onPress={refresh}
+    />
+  );
+  const crumbs = () => [props.location, props.scope].join(" / ");
+  async function resource(path: string) {
+    return props.call<SkillFileContent>("read", { detail: handle(), path });
+  }
+  async function followFileLink(url: string, focusTarget?: ViewRef) {
+    if (!file()) return;
+    const navigation = ++linkRequest;
+    if (/^https?:\/\//i.test(url)) {
+      void openUrl(url).catch(showError);
+      return;
+    }
+    const source = fileName();
+    const link = skillFileLink(source, url);
+    if (!link) return;
+    const target: SkillReadingPosition =
+      link.heading === undefined
+        ? { kind: "offset", y: 0 }
+        : { kind: "heading", heading: link.heading };
+    if (link.path === source) {
+      position.set(target);
+      return;
+    }
+    const sourceRequest = request;
+    const [preview, origin, focused] = await Promise.all([
+      scroll()?.measure(),
+      contentStart()?.measure(),
+      focusTarget?.measure(),
+    ]).catch(() => []);
+    if (navigation !== linkRequest || sourceRequest !== request) return;
+    // Tab can scroll to a link before the scroll event reaches the reader.
+    let y =
+      preview && origin
+        ? Math.max(0, preview.pagePosition.y - origin.pagePosition.y)
+        : scrollY;
+    if (preview && origin && focused) {
+      const fromTop = focused.pagePosition.y - preview.pagePosition.y;
+      const viewerHeight = preview.bounds.size.height;
+      const linkHeight = focused.bounds.size.height;
+      if (fromTop < 0 || fromTop + linkHeight > viewerHeight) {
+        // Fast Tab/Enter can leave an older focus scroll in flight. Return to the link that opened the file.
+        y = Math.max(0, y + fromTop - (viewerHeight - linkHeight) / 2);
+      }
+    }
+    history.update((entries) => [
+      ...entries,
+      { path: source, y, metadata: metadata() },
+    ]);
+    directory.set(link.path.split("/").slice(0, -1).join("/"));
+    void read(link.path, target);
+  }
+  function previousFile() {
+    const prior = history().at(-1);
+    if (!prior) {
+      props.onClose();
+      return;
+    }
+    history.update((entries) => entries.slice(0, -1));
+    showFiles.set(false);
+    directory.set(prior.path.split("/").slice(0, -1).join("/"));
+    void read(prior.path, { kind: "offset", y: prior.y }, prior.metadata);
+  }
+  function toggleFiles() {
+    if (showFiles()) position.set({ kind: "offset", y: scrollY });
+    showFiles.set(!showFiles());
+  }
+  async function scrollToHeading(anchor: ViewRef, isCurrent: () => boolean) {
+    const start = contentStart();
+    const preview = scroll();
+    if (!start || !preview) return;
+    const [target, origin] = await Promise.all([
+      anchor.measure(),
+      start.measure(),
+    ]);
+    if (!isCurrent() || !target || !origin) return;
+    // An inline text marker sits on the first line's baseline. Leave the heading above it visible.
+    preview.scrollTo({
+      y: Math.max(0, target.pagePosition.y - origin.pagePosition.y - 36),
+      animated: false,
+    });
+    position.set(undefined);
+  }
+  const previousButton = (iconOnly = false) => (
+    <If when={history().length}>
+      <Button
+        label={uiText("skillPreviousFile")}
+        icon="back"
+        iconOnly={iconOnly}
+        tone="ghost"
+        onPress={previousFile}
+      />
+    </If>
+  );
+  const diagnostics = () => {
+    const content = file();
+    return [
+      ...new Set([
+        ...props.skill.diagnostics,
+        ...openDiagnostics(),
+        ...(content?.kind === "text" ? content.diagnostics : []),
+      ]),
+    ];
+  };
+
+  const filePreview = () => (
+    <Scroll
+      ref={scroll.set}
+      style={grow}
+      scrollbar={false}
+      onScroll={({ offset }) => {
+        if (file()) scrollY = offset.y;
+      }}
+    >
+      <View
+        ref={contentStart.set}
+        style={{ paddingHorizontal: 12, paddingBottom: 12, gap: 8 }}
+      >
+        <If when={failure()}>
+          <Label size={12} tone="red">
+            {failure()}
+          </Label>
+          <Button
+            label={uiText("retry")}
+            onPress={refresh}
+            style={{ alignSelf: "flex-start" }}
+          />
+        </If>
+        <If when={preview()?.metadata}>
+          <View style={{ borderBottomWidth: 1, borderColor: c().border }}>
+            <Button
+              label={uiText("metadata")}
+              icon={metadata() ? "down" : "right"}
+              tone="ghost"
+              size={36}
+              style={{ justifyContent: "flex-start", paddingHorizontal: 0 }}
+              onPress={() => metadata.set(!metadata())}
+            />
+            <If when={metadata()}>
+              <Label
+                size={12}
+                line={16}
+                tone="muted"
+                style={{ paddingLeft: 16, paddingBottom: 8 }}
+              >
+                {preview()!.metadata}
+              </Label>
+            </If>
+          </View>
+        </If>
+        <If
+          when={file()}
+          else={
+            <If when={!failure()}>
+              <Label tone="muted" size={12} style={{ paddingTop: 8 }}>
+                {reading() || !handle()
+                  ? uiText("loadingSkill")
+                  : uiText("selectAFile")}
+              </Label>
+            </If>
+          }
+        >
+          {(content) => (
+            <SkillFile
+              content={content()}
+              path={fileName()}
+              position={position()}
+              onLink={(url, focusTarget) =>
+                void followFileLink(url, focusTarget)
+              }
+              onOffset={(y) => scroll()?.scrollTo({ y, animated: false })}
+              onHeading={(anchor, active) =>
+                void scrollToHeading(anchor, active)
+              }
+              read={resource}
+            />
+          )}
+        </If>
+      </View>
+    </Scroll>
+  );
+
+  return (
+    <View style={grow}>
+      <If when={phone()}>
+        <Header
+          title={props.skill.name}
+          layout="phone"
+          onBack={previousFile}
+          inset={12}
+        />
+        <View
+          style={{
+            paddingHorizontal: 16,
+            paddingTop: 5,
+            paddingBottom: 8,
+            gap: 2,
+          }}
+        >
+          <View style={{ ...row, height: 29 }}>
+            <Label size={11} tone="muted" style={{ flex: 1 }}>
+              {crumbs()}
+            </Label>
+            {reload()}
+          </View>
+          <View
+            role="button"
+            accessibilityLabel={uiText("files")}
+            accessibilityState={{ expanded: showFiles() }}
+            onPress={toggleFiles}
+            style={{
+              ...row,
+              height: 28,
+              gap: 6,
+              alignSelf: "flex-start",
+              paddingHorizontal: 10,
+              borderWidth: 1,
+              borderColor: showFiles() ? c().ink : c().strong,
+              cursor: "pointer",
+            }}
+          >
+            <Icon name="folder" size={11} />
+            <Label size={12}>{uiText("files")}</Label>
+            <If when={!showFiles() && fileName()}>
+              <Label size={11} tone="muted">
+                {fileName()}
+              </Label>
+            </If>
+          </View>
+        </View>
+      </If>
+      <If when={tablet()}>
+        <Header title={props.skill.name} layout="tablet" inset={14}>
+          <Label
+            size={12}
+            tone="muted"
+            style={{ flex: 1 }}
+          >{`${props.scope} · ${props.location}`}</Label>
+          {previousButton(true)}
+          {reload()}
+        </Header>
+      </If>
+      <If when={!tablet() && !phone()}>
+        <View style={{ paddingHorizontal: 24, paddingBottom: 8, gap: 6 }}>
+          <View style={{ ...row, gap: 8 }}>
+            <Button
+              label={uiText("skillBackToList")}
+              tone="ghost"
+              onPress={props.onClose}
+            />
+            {previousButton()}
+          </View>
+          <View style={{ ...row, gap: 6 }}>
+            <Label size={12} tone="muted">{`${crumbs()} /`}</Label>
+            <Label size={12} weight={600}>
+              {props.skill.name}
+            </Label>
+            {reload()}
+          </View>
+        </View>
+      </If>
+      <If when={diagnostics().length}>
+        <View
+          accessibilityLabel={uiText("skillDiagnostics")}
+          style={{
+            paddingHorizontal: phone() ? 16 : tablet() ? 12 : 24,
+            gap: 4,
+          }}
+        >
+          <Each of={diagnostics()} key={(message) => message}>
+            {(message) => (
+              <Label size={11} tone="amber">
+                {message()}
+              </Label>
+            )}
+          </Each>
+        </View>
+      </If>
+      <View
+        style={{
+          ...grow,
+          ...row,
+          alignItems: "stretch",
+          marginHorizontal: phone() ? 16 : tablet() ? 12 : 24,
+          marginTop: tablet() ? 12 : 0,
+          marginBottom: phone() || tablet() ? 12 : 16,
+          borderWidth: 1,
+          borderColor: c().border,
+        }}
+      >
+        <If when={!phone() || showFiles()}>
+          <SkillFileTree
+            layout={props.layout}
+            directory={directory()}
+            files={files()}
+            selected={fileName()}
+            onDirectory={directory.set}
+            onRead={(path) => {
+              history.set([]);
+              showFiles.set(false);
+              void read(path);
+            }}
+          />
+        </If>
+        <If when={!phone() || !showFiles()}>{filePreview()}</If>
+      </View>
+    </View>
+  );
+}
