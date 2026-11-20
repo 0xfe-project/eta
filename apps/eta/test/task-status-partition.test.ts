@@ -3,8 +3,8 @@
  * `Record<BoardTaskStatus, …>`, so a new status fails the type check until it has a row; this
  * file pins what each row means.
  */
-import { describe, expect, it } from "vitest";
 import { TASK_STATUSES } from "@eta/client-contracts";
+import { describe, expect, it } from "vitest";
 import {
   finished,
   isActive,
