@@ -21,7 +21,8 @@ import { StatusDot } from "../../../components/status-dot";
 import { ToggleSwitch } from "../../../components/toggle-switch";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
-import { PaneBack, SectionHeader, WarningLine } from "../section";
+import { LetterBox, PaneBack, SectionHeader, WarningLine } from "../section";
+import { logoKey, useSourceLogos } from "./logos";
 import { ProviderEditor } from "./provider-editor";
 
 export function ProviderDetail(props: {
@@ -30,6 +31,7 @@ export function ProviderDetail(props: {
   onClose: () => void;
 }) {
   const host = useHost();
+  const logo = useSourceLogos();
   const c = colors();
   const config = () => host.section<ProvidersView>("providers", "config");
   const provider = () =>
@@ -183,7 +185,18 @@ export function ProviderDetail(props: {
     <View style={grow}>
       <SectionHeader
         title={provider() ? providerLabel(provider()!) : props.id}
-        leading={<PaneBack onPress={props.onClose} />}
+        leading={
+          <>
+            <PaneBack onPress={props.onClose} />
+            {/* The phone's header names the source by its logo too; the desktop pane does not. */}
+            <If when={props.phone}>
+              <LetterBox
+                name={provider() ? providerLabel(provider()!) : props.id}
+                logo={logo(logoKey.provider(props.id))}
+              />
+            </If>
+          </>
+        }
         phone={props.phone}
       >
         <If when={check()}>

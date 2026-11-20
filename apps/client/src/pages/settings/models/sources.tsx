@@ -20,6 +20,7 @@ import { CloseButton } from "../../../components/navigation-buttons";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { EntityRow, LetterBox, SectionHeader } from "../section";
+import { logoKey, useSourceLogos } from "./logos";
 
 export interface SourceChoice {
   kind: ProviderKind;
@@ -44,6 +45,7 @@ export function ModelSources(props: {
   const host = useHost();
   const c = colors();
   const accounts = () => host.section<LlmAccounts>("llm", "accounts");
+  const logo = useSourceLogos();
   const login = signal<LlmLogin | undefined>(undefined);
   const apiKey = signal("");
   const busy = signal(false);
@@ -173,7 +175,9 @@ export function ModelSources(props: {
                 </If>
                 <EntityRow
                   title="Eta Token Plan"
-                  leading={<LetterBox name="Eta" />}
+                  leading={
+                    <LetterBox name="Eta" logo={logo(logoKey.kind("eta"))} />
+                  }
                   leadingSize={props.phone ? 28 : undefined}
                   stacked={props.phone}
                   meta={uiText("etasOwnGatewayOneKeyFor")}
@@ -193,6 +197,7 @@ export function ModelSources(props: {
                     <SourceRow
                       phone={props.phone}
                       title={modelSource(kind())?.name ?? kind()}
+                      logo={logo(logoKey.kind(kind()))}
                       onPress={() => choose({ kind: kind() })}
                     />
                   )}
@@ -210,6 +215,7 @@ export function ModelSources(props: {
                       <SourceRow
                         phone={props.phone}
                         title={connector().name}
+                        logo={logo(logoKey.connector(connector().id))}
                         onPress={() => {
                           if (!busy()) void start(connector().id);
                         }}
@@ -224,7 +230,7 @@ export function ModelSources(props: {
                 <SourceRow
                   phone={props.phone}
                   title={uiText("openaiCompatibleEndpoint")}
-                  logo="OpenAI"
+                  letter="OpenAI"
                   meta={
                     props.phone ? undefined : uiText("openaiCompatibleHint")
                   }
@@ -233,6 +239,7 @@ export function ModelSources(props: {
                 <SourceRow
                   phone={props.phone}
                   title={uiText("localModels")}
+                  logo={logo(logoKey.local)}
                   meta={uiText("localModelsHint")}
                   onPress={() =>
                     choose({ kind: "openai-compatible", local: true })
@@ -393,7 +400,9 @@ function SourceSteps() {
 function SourceRow(props: {
   phone: boolean;
   title: string;
-  logo?: string;
+  /** The name whose first letter stands in for a logo, when it is not the title's. */
+  letter?: string;
+  logo?: string | undefined;
   meta?: string;
   onPress: () => void;
 }) {
@@ -404,7 +413,9 @@ function SourceRow(props: {
       else={
         <EntityRow
           title={props.title}
-          leading={<LetterBox name={props.logo ?? props.title} />}
+          leading={
+            <LetterBox name={props.letter ?? props.title} logo={props.logo} />
+          }
           meta={props.meta}
           lane={false}
           caret
@@ -437,7 +448,7 @@ function SourceRow(props: {
             justifyContent: "center",
           }}
         >
-          <LetterBox name={props.logo ?? props.title} />
+          <LetterBox name={props.letter ?? props.title} logo={props.logo} />
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Label line={20} weight={500}>

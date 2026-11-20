@@ -12,6 +12,7 @@ import { ActionItem, colors } from "../../../components";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { EntityRow, LetterBox } from "../section";
+import { logoKey, useSourceLogos } from "./logos";
 
 /** Every model source in one list: the gateway's accounts first, then the config's providers. */
 export function useModelSources() {
@@ -30,6 +31,7 @@ export function ModelSourceList(props: {
   const host = useHost();
   const c = colors();
   const { providers, accounts } = useModelSources();
+  const logo = useSourceLogos();
   const checks = () =>
     host.section<Record<string, ProviderCheck>>("providers", "checks") ?? {};
   const models = () => host.list<LlmModel>("llm", "models");
@@ -64,7 +66,10 @@ export function ModelSourceList(props: {
             title={connector(item())?.name ?? item().label}
             titleTone={item().state === "disabled" ? "muted" : "ink"}
             leading={
-              <LetterBox name={connector(item())?.name ?? item().label} />
+              <LetterBox
+                name={connector(item())?.name ?? item().label}
+                logo={logo(logoKey.connector(item().connector))}
+              />
             }
             meta={uiText("sourceModelCount", {
               count: models().filter(
@@ -98,7 +103,12 @@ export function ModelSourceList(props: {
         {(item) => (
           <EntityRow
             title={providerLabel(item())}
-            leading={<LetterBox name={providerLabel(item())} />}
+            leading={
+              <LetterBox
+                name={providerLabel(item())}
+                logo={logo(logoKey.provider(item().id))}
+              />
+            }
             meta={uiText("sourceModelCount", { count: item().models.length })}
             status={providerStatus(item())}
             caret

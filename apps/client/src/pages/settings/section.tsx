@@ -1,8 +1,9 @@
 import type { JSX, ViewStyle } from "nsh";
-import { View, windowSize } from "nsh";
+import { Image, View, windowSize } from "nsh";
 import { ActionMenu, Button, colors, Icon, Label, row } from "../../components";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
+import { tintedLogo } from "./models/logos";
 
 /** An empty pane says so right under its header, not in the middle of the pane. */
 export const emptyStyle: ViewStyle = {
@@ -309,23 +310,48 @@ export function EntityRow(props: {
   );
 }
 
-/** The 24px box with an entity's first letter, standing in for a logo or avatar. */
-export function LetterBox(props: { name: string; size?: number }) {
+/**
+ * The 24px box standing in for an entity's logo or avatar: its models.dev logo (one colour, drawn
+ * in the text colour at 60% of the box) when there is one, else its name's first letter.
+ */
+export function LetterBox(props: {
+  name: string;
+  size?: number;
+  logo?: string | undefined;
+}) {
   const c = colors();
+  const size = () => props.size ?? 24;
   return (
     <View
       style={{
-        width: props.size ?? 24,
-        height: props.size ?? 24,
+        width: size(),
+        height: size(),
+        flexShrink: 0,
         alignItems: "center",
         justifyContent: "center",
         borderWidth: 1,
         borderColor: c().strong,
       }}
     >
-      <Label size={12} line={16} weight={600}>
-        {props.name.slice(0, 1).toUpperCase()}
-      </Label>
+      <If
+        when={props.logo}
+        else={
+          <Label size={12} line={16} weight={600}>
+            {props.name.slice(0, 1).toUpperCase()}
+          </Label>
+        }
+      >
+        {(logo) => (
+          <Image
+            src={tintedLogo(logo(), c().ink)}
+            fadeDuration={0}
+            style={{
+              width: Math.round(size() * 0.6),
+              height: Math.round(size() * 0.6),
+            }}
+          />
+        )}
+      </If>
     </View>
   );
 }
