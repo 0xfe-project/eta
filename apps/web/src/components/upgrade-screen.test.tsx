@@ -173,4 +173,45 @@ describe("the screen over an upgrade", () => {
       status: null,
     });
   });
+
+  it("treats a status with an unknown phase as no status", async () => {
+    status({
+      ...upgrade(),
+      phase: "melting",
+    } as unknown as UpgradeStatusView);
+    const host = buildProductHost();
+    host.install();
+    host.hello();
+    await mount(<Watch />);
+    await flush();
+    expect(JSON.parse(document.body.textContent ?? "")).toEqual({
+      reachable: true,
+      status: null,
+    });
+  });
+
+  it("reads a well-formed status as it was sent", async () => {
+    const sent = upgrade({
+      state: "running",
+      phase: "waiting",
+      finishedAt: 2,
+      download: { received: 10, total: 20 },
+      busy: [
+        { kind: "task", name: "Ship it", number: 7 },
+        { kind: "reply", name: "eta" },
+      ],
+      error: "slow",
+      log: ["one", "two"],
+    });
+    status(sent);
+    const host = buildProductHost();
+    host.install();
+    host.hello();
+    await mount(<Watch />);
+    await flush();
+    expect(JSON.parse(document.body.textContent ?? "")).toEqual({
+      reachable: true,
+      status: sent,
+    });
+  });
 });
