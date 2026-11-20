@@ -1,4 +1,5 @@
 import type { BoardTaskStatus, BoardTaskView } from "@eta/client-contracts";
+import type { ViewRef } from "nsh";
 import { Image, View } from "nsh";
 import { Caption, colors, Icon, Label, row } from "../../components";
 import { uiText } from "../../i18n";
@@ -285,6 +286,7 @@ export function TaskSummary(props: {
   subtasks?: BoardTaskView[];
   /** The phone transcript's folded card: a right caret and the kind "Task". */
   phone?: boolean;
+  controlRef?: (node: ViewRef) => void;
   onPress: () => void;
 }) {
   const c = colors();
@@ -303,6 +305,7 @@ export function TaskSummary(props: {
       .join(" · ");
   return (
     <View
+      ref={(node) => props.controlRef?.(node)}
       role="button"
       onPress={() => props.onPress()}
       hoverStyle={{ backgroundColor: c().selected }}

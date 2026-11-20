@@ -1,5 +1,6 @@
 import type {
   MemberStatus,
+  MemberView,
   MessageKind,
   MessageStatus,
   MessageView,
@@ -491,15 +492,29 @@ export class Timeline {
   }
 
   /** Where each agent stands in a conversation, by what it has in flight there. */
-  memberStatuses(conversationId: string): Map<string, MemberStatus> {
-    const statuses = new Map<string, MemberStatus>();
+  memberActivity(conversationId: string) {
+    const activity = new Map<
+      string,
+      Pick<MemberView, "status" | "activeReplyId">
+    >();
     for (const row of this.active(conversationId)) {
       if (row.agentId === null) continue;
-      const known = statuses.get(row.agentId);
-      if (known === undefined || rank(row.status) > rank(known))
-        statuses.set(row.agentId, row.status as MemberStatus);
+      const known = activity.get(row.agentId);
+      if (known && row.status === "queued") continue;
+      const status =
+        known && rank(known.status) > rank(row.status)
+          ? known.status
+          : (row.status as MemberStatus);
+      // Queued turns may follow the running one. Never choose between two live replies.
+      const target =
+        (!known || known.status === "queued") &&
+        (row.status === "working" || row.status === "waiting_for_input");
+      activity.set(
+        row.agentId,
+        target ? { status, activeReplyId: row.id } : { status },
+      );
     }
-    return statuses;
+    return activity;
   }
 
   /** What each agent is doing anywhere: waiting on the user outranks working. */

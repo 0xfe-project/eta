@@ -365,18 +365,34 @@ describe("the timeline", () => {
     const b1 = timeline.queueReply(conv.id, bob.id, user);
     const b2 = timeline.queueReply(conv.id, bob.id, user);
     timeline.transition(b1.id, ["queued"], "working");
+    expect(timeline.memberActivity(conv.id).get(bob.id)).toEqual({
+      status: "working",
+      activeReplyId: b1.id,
+    });
     timeline.transition(b2.id, ["queued"], "working");
     timeline.transition(b2.id, ["working"], "waiting_for_input");
-    expect(timeline.memberStatuses(conv.id).get("ada")).toBe("queued");
-    expect(timeline.memberStatuses(conv.id).get(bob.id)).toBe(
-      "waiting_for_input",
-    );
+    expect(timeline.memberActivity(conv.id).get("ada")).toEqual({
+      status: "queued",
+    });
+    expect(timeline.memberActivity(conv.id).get(bob.id)).toEqual({
+      status: "waiting_for_input",
+    });
     expect(timeline.agentStatuses().get(bob.id)).toBe("waiting_for_input");
     // Waiting its turn is not working.
     expect(timeline.agentStatuses().has("ada")).toBe(false);
     timeline.transition(a.id, ["queued"], "working");
     timeline.transition(a.id, ["working"], "stopping");
     expect(timeline.agentStatuses().get("ada")).toBe("working");
+    expect(timeline.memberActivity(conv.id).get("ada")).toEqual({
+      status: "stopping",
+    });
+    timeline.finish(b1.id, { status: "done", text: "finished" });
+    expect(timeline.memberActivity(conv.id).get(bob.id)).toEqual({
+      status: "waiting_for_input",
+      activeReplyId: b2.id,
+    });
+    timeline.finish(b2.id, { status: "done", text: "finished" });
+    expect(timeline.memberActivity(conv.id).has(bob.id)).toBe(false);
   });
 
   it("fails what was in flight, and only that", () => {

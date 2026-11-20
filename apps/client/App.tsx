@@ -34,6 +34,7 @@ import {
   ElementPicking,
 } from "./src/components/element-picker";
 import { createLanguagePreference, LanguageSettings, uiText } from "./src/i18n";
+import { resumeComposerOutbox } from "./src/pages/chat/composer-draft";
 import { Connection, WorkspaceSkeleton } from "./src/pages/connection";
 import { HostRestartScreen } from "./src/pages/connection/host-restart";
 import {
@@ -65,6 +66,7 @@ function pairingAddress(
 
 function App() {
   const host = createHost();
+  resumeComposerOutbox(host);
   const language = createLanguagePreference();
   const elementPicker = createElementPicker();
   const initial = defaultAddress();

@@ -3,8 +3,8 @@ import type {
   MemberView,
   MessageView,
 } from "@eta/client-contracts";
-import type { JSX, ListRef } from "nsh";
-import { computed, List, signal, View } from "nsh";
+import type { JSX, ListRef, ViewRef } from "nsh";
+import { cleanup, computed, effect, List, signal, View } from "nsh";
 import {
   Button,
   colors,
@@ -17,8 +17,14 @@ import {
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { Message } from "./message";
+import { TaskDraftDetail } from "./task-draft-detail";
 
 export function ConversationTimeline(props: {
+  projectName?: string;
+  title: string;
+  accessible: boolean;
+  onAccessLost: () => void;
+  onReadDraft?: () => void;
   rows: MessageView[];
   additions: Map<string, MessageView[]>;
   recipients: Map<string, string[]>;
@@ -40,6 +46,7 @@ export function ConversationTimeline(props: {
   onInsertClose: () => void;
   insertPanel: () => JSX.Element;
   onTask: (id: string) => void;
+  onPending?: () => void;
   onArtifact: (artifact: ArtifactView, version?: number) => void;
   onWidgetDraft: (conversationId: string, text: string) => void;
 }) {
@@ -49,6 +56,92 @@ export function ConversationTimeline(props: {
   const markedMessage = signal("");
   const phone = () => props.phone;
   const sameFailures = computed(() => sameFailureAsNext(props.rows));
+  // The owning conversation is keyed by id. Always read the current row, including a remote confirmation.
+  const reading = signal<string>();
+  const selected = () => {
+    const id = reading();
+    return id && props.accessible
+      ? props.rows.find(
+          (row) =>
+            row.id === id &&
+            (row.kind === "task_draft" || row.kind === "task_card"),
+        )
+      : undefined;
+  };
+  const actions = new Map<string, () => void>();
+  let timelineFocus: ViewRef | undefined;
+  let pendingFocus: string | undefined;
+  let top: { id: string; offset: number } | undefined;
+  let focusTimer: ReturnType<typeof setTimeout>;
+  cleanup(() => clearTimeout(focusTimer));
+
+  function readDraft(message: MessageView) {
+    pendingFocus = undefined;
+    clearTimeout(focusTimer);
+    top = undefined;
+    const rows = props.rows;
+    void transcriptList?.measureScrollPosition().then((position) => {
+      const id = position && rows[position.index]?.id;
+      if (id && reading() === message.id) top = { id, offset: position.offset };
+    });
+    props.onReadDraft?.();
+    reading.set(message.id);
+  }
+  function closeDraft() {
+    const draft = reading();
+    if (!draft) return;
+    const current = selected();
+    reading.set(undefined);
+    if (top) {
+      const { id, offset } = top;
+      const index = props.rows.findIndex((row) => row.id === id);
+      if (index >= 0)
+        transcriptList?.scrollToIndex({
+          index,
+          viewOffset: -offset,
+          animated: false,
+        });
+    }
+    focusTimer = setTimeout(() => {
+      if (!current) {
+        timelineFocus?.focus();
+        return;
+      }
+      const focus = actions.get(current.id);
+      if (focus) {
+        focus();
+        return;
+      }
+      const index = props.rows.findIndex((row) => row.id === current.id);
+      if (index < 0) {
+        timelineFocus?.focus();
+        return;
+      }
+      pendingFocus = current.id;
+      transcriptList?.scrollToIndex({
+        index,
+        viewPosition: 0.5,
+        animated: false,
+      });
+    }, 0);
+  }
+  effect(() => {
+    if (!reading()) return;
+    if (!props.accessible) {
+      reading.set(undefined);
+      props.onAccessLost();
+    } else if (!selected()) closeDraft();
+  });
+  function registerAction(id: string, focus: () => void) {
+    actions.set(id, focus);
+    if (pendingFocus === id) {
+      pendingFocus = undefined;
+      focusTimer = setTimeout(focus, 0);
+    }
+    return () => {
+      if (actions.get(id) === focus) actions.delete(id);
+    };
+  }
   return (
     <If
       when={props.loaded && !props.noCachedMessages}
@@ -76,7 +169,15 @@ export function ConversationTimeline(props: {
         </If>
       }
     >
-      <View style={{ ...grow, position: "relative" }}>
+      <View
+        role="region"
+        focusable
+        accessibilityLabel={props.title}
+        ref={(node) => {
+          timelineFocus = node;
+        }}
+        style={{ ...grow, position: "relative" }}
+      >
         <List
           style={grow}
           ref={(node) => {
@@ -133,6 +234,8 @@ export function ConversationTimeline(props: {
           {(message) => (
             <Message
               item={message()}
+              onReadDraft={readDraft}
+              registerAction={registerAction}
               additions={props.additions.get(message().id) ?? []}
               canInsert={
                 host.state().status === "open" &&
@@ -148,6 +251,7 @@ export function ConversationTimeline(props: {
               captain={props.captain}
               members={props.members}
               onTask={props.onTask}
+              onPending={props.onPending}
               onArtifact={props.onArtifact}
               onWidgetDraft={(text) =>
                 props.onWidgetDraft(message().conversationId, text)
@@ -155,6 +259,16 @@ export function ConversationTimeline(props: {
             />
           )}
         </List>
+        <If when={selected()}>
+          {(message) => (
+            <TaskDraftDetail
+              message={message()}
+              projectName={props.projectName}
+              phone={phone()}
+              onClose={closeDraft}
+            />
+          )}
+        </If>
         <If when={props.rail && props.hasMessages}>
           <View
             style={{

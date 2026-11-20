@@ -975,7 +975,7 @@ export class CaptainService {
       );
       const activityBaseline = Math.max(fromSeq, ...assignmentSeq.values());
       const hasNew = conversation.lastSeq > activityBaseline;
-      const memberStatus = this.#deps.timeline.memberStatuses(conversation.id);
+      const activity = this.#deps.timeline.memberActivity(conversation.id);
       const allAssignmentIds = assignments.map((assignment) => assignment.id);
       const assignmentIdSet = new Set(allAssignmentIds);
       const newAssignmentIds = assignments
@@ -992,13 +992,13 @@ export class CaptainService {
       ];
       if (
         targets.some((agentId) =>
-          ACTIVE_MEMBER.has(memberStatus.get(agentId) ?? ""),
+          ACTIVE_MEMBER.has(activity.get(agentId)?.status ?? ""),
         )
       )
         continue;
 
       const waiting = targets.some(
-        (agentId) => memberStatus.get(agentId) === "waiting_for_input",
+        (agentId) => activity.get(agentId)?.status === "waiting_for_input",
       );
       const relatedTasks = tasks.filter(
         (task) =>
@@ -1074,7 +1074,7 @@ export class CaptainService {
           memberStatuses: Object.fromEntries(
             targets.map((agentId) => [
               agentId,
-              memberStatus.get(agentId) ?? "idle",
+              activity.get(agentId)?.status ?? "idle",
             ]),
           ),
           taskIds: relatedTasks.map((task) => task.id),
@@ -1167,8 +1167,8 @@ export class CaptainService {
     const { identity } = await this.ensure();
     const director = await this.direct();
     const captainStatus = this.#deps.timeline
-      .memberStatuses(director.conversationId)
-      .get(identity.agentId);
+      .memberActivity(director.conversationId)
+      .get(identity.agentId)?.status;
     const anywhere = this.#deps.timeline.agentStatuses().get(identity.agentId);
     if (
       anywhere === "working" ||

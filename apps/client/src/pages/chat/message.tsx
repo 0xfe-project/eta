@@ -7,7 +7,7 @@ import type {
   TranscriptSection,
   ViewCore,
 } from "@eta/client-contracts";
-import type { JSX } from "nsh";
+import type { JSX, ViewRef } from "nsh";
 import {
   captainProposalOf,
   publishedRefs,
@@ -36,6 +36,7 @@ import { CaptainReview, reviewItemsOf } from "./captain-review";
 import { activeReply } from "./member-status";
 import { messageTime } from "./message-time";
 import { ProcessStep } from "./process-step";
+import { draftTitle } from "./task-draft-detail";
 import { Widget, widgetFrom } from "./widgets/widget";
 
 /** How each code the host fails a reply with is said. */
@@ -65,12 +66,21 @@ export function Message(props: {
   onArtifact: (artifact: ArtifactView, version: number) => void;
   onWidgetDraft: (text: string) => void;
   onTask: (id: string) => void;
+  onPending?: () => void;
+  onReadDraft: (item: MessageView) => void;
+  registerAction: (id: string, focus: () => void) => () => void;
 }) {
   const host = useHost();
   const c = colors();
   const details = signal(false);
   const draftOpen = signal(false);
   const item = () => props.item;
+  let action: ViewRef | undefined;
+  effect(() => {
+    const message = item();
+    if (message.kind === "task_draft" || message.kind === "task_card")
+      return props.registerAction(message.id, () => action?.focus());
+  });
   const review = () => {
     const items = reviewItemsOf(item());
     return items.length ? items : undefined;
@@ -267,6 +277,9 @@ export function Message(props: {
         <If when={task()}>
           {(value) => (
             <TaskSummary
+              controlRef={(node) => {
+                action = node;
+              }}
               task={value()}
               subtasks={
                 value().subtasks?.total
@@ -336,7 +349,7 @@ export function Message(props: {
                 lines={1}
                 style={{ flex: 1, minWidth: props.phone ? 200 : 0 }}
               >
-                {String(item().data.title ?? item().text)}
+                {draftTitle(item())}
               </Label>
               <View
                 style={{
@@ -350,6 +363,16 @@ export function Message(props: {
                   {uiText("draftNeedsConfirming")}
                 </Label>
               </View>
+              <Button
+                label={uiText("readDraft")}
+                size={22}
+                labelSize={12}
+                tone="ghost"
+                controlRef={(node) => {
+                  action = node;
+                }}
+                onPress={() => props.onReadDraft(item())}
+              />
               <Button
                 label={uiText("confirmTask")}
                 size={22}
@@ -571,7 +594,13 @@ export function Message(props: {
             </If>
           }
         >
-          {(items) => <CaptainReview items={items()} time={stamp()} />}
+          {(items) => (
+            <CaptainReview
+              items={items()}
+              time={messageTime(item().createdAt, false)}
+              onPending={props.onPending}
+            />
+          )}
         </If>
         <Each of={widgets()} key={(widget) => widget.id}>
           {(widget) => (

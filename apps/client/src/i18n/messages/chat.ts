@@ -109,6 +109,28 @@ export const chatMessages = {
     "加入后可以查看群聊，并在被 @ 时回复。",
   ],
   mention: ["Mention {{name}}", "提及 {{name}}"],
+  projectFile: ["Project file", "项目文件"],
+  sendingMessage: ["Sending…", "发送中…"],
+  archivedComposer: ["This conversation is archived.", "此对话已归档。"],
+  emptyComposer: [
+    "Add a member to send a message.",
+    "添加成员后即可发送消息。",
+  ],
+  removePaste: ["Remove pasted text", "移除粘贴文本"],
+  pastedBlock: ["Pasted text · {{size}}", "粘贴文本 · {{size}}"],
+  pastedFile: ["Pasted text.txt", "粘贴文本.txt"],
+  attachmentCountLimit: [
+    "A message can carry up to {{count}} attachments.",
+    "每条消息最多可带 {{count}} 个附件。",
+  ],
+  composerFileTooLarge: [
+    "{{name}} exceeds the attachment size limit.",
+    "附件 {{name}} 超出大小限制。",
+  ],
+  composerTooLong: [
+    "Messages can contain up to 100,000 characters.",
+    "每条消息最多可发 100,000 个字符。",
+  ],
   mentionAnAgent: ["Mention an agent", "提及智能体"],
   message: ["Message", "消息"],
   messageJoinedThisRun: ["Message joined this run", "消息已加入本次运行"],

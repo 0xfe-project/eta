@@ -81,7 +81,12 @@ export default {
       ignore: ["types/highlight.js.d.ts"],
     },
     "apps/client": {
-      entry: ["App.tsx"],
+      entry: [
+        "App.tsx",
+        "test/**/*.test.tsx",
+        "test/composer-fixture.tsx",
+        "test/fixtures/*.tsx",
+      ],
       ignoreDependencies: [
         // The Native Shell runtime provides them; nothing installs them.
         "nsh",

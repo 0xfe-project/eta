@@ -1,4 +1,4 @@
-import type { JSX, TextStyle, ViewRef, ViewStyle } from "nsh";
+import type { InputRef, JSX, TextStyle, ViewRef, ViewStyle } from "nsh";
 import type { IconName } from "./icons";
 import type { light } from "./theme";
 import { platform, signal, View } from "nsh";
@@ -10,6 +10,7 @@ import { colors, focusRing, fontFamily, Fonts, grow, row } from "./theme";
 
 export function Button(props: {
   label: string;
+  controlRef?: (node: ViewRef) => void;
   icon?: IconName;
   end?: IconName;
   iconOnly?: boolean;
@@ -43,6 +44,10 @@ export function Button(props: {
   return (
     <View
       {...picker}
+      ref={(node) => {
+        picker.ref(node);
+        props.controlRef?.(node);
+      }}
       role="button"
       accessibilityLabel={props.label}
       accessibilityState={{
@@ -111,19 +116,36 @@ export function Button(props: {
   );
 }
 
-export function Field(props: {
-  label: string;
-  value: string;
-  placeholder?: string;
-  masked?: boolean;
-  maxLength?: number;
-  multiline?: boolean;
-  style?: TextStyle;
-  inputRef?: (ref: ViewRef) => void;
-  onChange: (value: string) => void;
-  onSubmit?: () => void;
-  onBlur?: () => void;
-}) {
+type FieldInputProps = Pick<
+  Parameters<typeof Input>[0],
+  | "role"
+  | "accessibilityState"
+  | "accessibilityControls"
+  | "accessibilityActiveDescendant"
+  | "readonly"
+  | "onContentSizeChange"
+  | "onSelectionChange"
+  | "onFocus"
+  | "onCompositionChange"
+  | "pasteBehavior"
+  | "onPaste"
+>;
+
+export function Field(
+  props: FieldInputProps & {
+    label: string;
+    value: string;
+    placeholder?: string;
+    masked?: boolean;
+    maxLength?: number;
+    multiline?: boolean;
+    style?: TextStyle;
+    inputRef?: (ref: InputRef) => void;
+    onChange: (value: string) => void;
+    onSubmit?: () => void;
+    onBlur?: () => void;
+  },
+) {
   const color = colors();
   const fonts = Fonts();
   const picker = pickerTarget(
@@ -137,6 +159,17 @@ export function Field(props: {
         picker.ref(ref);
         props.inputRef?.(ref);
       }}
+      role={props.role}
+      accessibilityState={props.accessibilityState}
+      accessibilityControls={props.accessibilityControls}
+      accessibilityActiveDescendant={props.accessibilityActiveDescendant}
+      readonly={props.readonly}
+      onContentSizeChange={props.onContentSizeChange}
+      onSelectionChange={props.onSelectionChange}
+      onFocus={props.onFocus}
+      onCompositionChange={props.onCompositionChange}
+      pasteBehavior={props.pasteBehavior}
+      onPaste={props.onPaste}
       onMouseEnter={picker.onMouseEnter}
       onMouseLeave={picker.onMouseLeave}
       accessibilityLabel={props.label}
