@@ -76,26 +76,32 @@ export function ConversationMembers(props: {
               style={{
                 ...row,
                 alignItems: "flex-start",
-                padding: 12,
-                gap: 10,
+                paddingVertical: 14,
+                paddingHorizontal: 12,
+                gap: 12,
               }}
             >
-              <View
-                style={{
-                  ...row,
-                  justifyContent: "center",
-                  width: 40,
-                  height: 40,
-                  flexShrink: 0,
-                  borderWidth: 3,
-                  borderColor: c().selected,
-                  borderRadius: 20,
-                }}
+              <If
+                when={entry().sessionId}
+                else={<AgentFace id={entry().agentId} size={28} />}
               >
-                <AgentFace id={entry().agentId} size={26} />
-              </View>
+                <View
+                  style={{
+                    ...row,
+                    justifyContent: "center",
+                    width: 40,
+                    height: 40,
+                    flexShrink: 0,
+                    borderWidth: 3,
+                    borderColor: c().selected,
+                    borderRadius: 20,
+                  }}
+                >
+                  <AgentFace id={entry().agentId} size={26} />
+                </View>
+              </If>
               <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                <View style={{ ...row, gap: 8 }}>
+                <View style={{ ...row, gap: entry().sessionId ? 6 : 8 }}>
                   <Label line={18} lines={1}>
                     {host.agent(entry().agentId)?.name ?? uiText("agent")}
                   </Label>

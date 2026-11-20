@@ -27,7 +27,7 @@ import { PendingStrip } from "./approvals";
 import { ArtifactPreview } from "./artifacts/preview";
 import { Composer } from "./composer";
 import { ConversationActions } from "./conversation-actions";
-import { ConversationPanel } from "./conversation-panel";
+import { ConversationPanel, panelAttention } from "./conversation-panel";
 import { ConversationTimeline } from "./conversation-timeline";
 import { indexInserts, InsertMessage } from "./insert-message";
 import { activeReply } from "./member-status";
@@ -223,13 +223,29 @@ export function Conversation(props: {
           </If>
           <View style={{ flex: 1 }} />
           <If when={props.layout !== "desktop"}>
-            <Button
-              label={phone() ? uiText("conversationInfo") : uiText("panel")}
-              icon={phone() ? "info" : "sidebar"}
-              iconOnly={phone()}
-              tone={phone() ? "ghost" : "plain"}
-              onPress={() => drawer.set(true)}
-            />
+            <View>
+              <Button
+                label={phone() ? uiText("conversationInfo") : uiText("panel")}
+                icon={phone() ? "info" : "sidebar"}
+                iconOnly={phone()}
+                tone={phone() ? "ghost" : "plain"}
+                labelSize={11}
+                style={{ gap: 6 }}
+                onPress={() => drawer.set(true)}
+              />
+              <If when={!phone() && panelAttention(host, props.id)}>
+                <View
+                  style={{
+                    position: "absolute",
+                    top: -3,
+                    right: -3,
+                    width: 6,
+                    height: 6,
+                    backgroundColor: c().blue,
+                  }}
+                />
+              </If>
+            </View>
           </If>
         </Header>
         <If when={offline()}>
@@ -276,6 +292,7 @@ export function Conversation(props: {
             paging={paging()}
             phone={phone()}
             compact={props.layout === "tablet" || props.alignComposer}
+            captain={props.captain}
             rail={props.rail}
             onPageOlder={() => void history()}
             onInsert={(message) => {
@@ -313,6 +330,7 @@ export function Conversation(props: {
             steward={stewardId()}
             group={group()}
             phone={phone()}
+            tablet={props.layout === "tablet"}
             alignWithContent={props.alignComposer}
             held={timeline()?.held ?? []}
             widgetDraft={widgetDraft()}

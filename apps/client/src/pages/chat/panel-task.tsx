@@ -87,6 +87,8 @@ export function PanelTask(props: {
                     backgroundColor: c()[fills[item().status]],
                     justifyContent: "flex-start",
                   }}
+                  leading={<TaskGlyph status={item().status} size={14} />}
+                  valueTone={tones[item().status]}
                   value={statusName(item().status)}
                 >
                   <Each of={TASK_STATUSES}>

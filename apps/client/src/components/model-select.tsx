@@ -66,6 +66,7 @@ export function ModelSelect(props: {
       cover={false}
       offset={2}
       popupStyle={{
+        minWidth: 336,
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
@@ -78,7 +79,7 @@ export function ModelSelect(props: {
         lineHeight: 16,
         paddingHorizontal: 10,
         height: 34,
-        backgroundColor: c().selected,
+        backgroundColor: "transparent",
         borderBottomWidth: 1,
         borderColor: c().border,
       }}

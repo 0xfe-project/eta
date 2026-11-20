@@ -1,5 +1,6 @@
 import type { JSX, TextStyle, ViewRef, ViewStyle } from "nsh";
 import type { IconName } from "./icons";
+import type { light } from "./theme";
 import { View } from "nsh";
 import { Input, Menu, MenuItem } from "nsh/base";
 import { pickerTarget } from "./element-picker";
@@ -170,6 +171,10 @@ export function Field(props: {
 export function ActionMenu(props: {
   label: string;
   value?: string;
+  /** Drawn before the value, such as a status glyph. */
+  leading?: JSX.Element;
+  /** The colour of the value and its caret. */
+  valueTone?: keyof typeof light;
   truncateValue?: boolean;
   triggerStyle?: ViewStyle;
   children?: JSX.Element;
@@ -208,18 +213,25 @@ export function ActionMenu(props: {
             ...props.triggerStyle,
           }}
         >
+          {props.leading}
           <If when={props.value}>
             <Label
               size={12}
+              tone={props.valueTone}
               lines={props.truncateValue ? 1 : undefined}
-              style={props.truncateValue ? { flex: 1, minWidth: 0 } : undefined}
+              style={
+                props.truncateValue || props.leading
+                  ? { flex: 1, minWidth: 0 }
+                  : undefined
+              }
             >
               {props.value}
             </Label>
           </If>
           <Icon
             name={props.value ? "down" : "more"}
-            size={props.value ? 9 : 17}
+            size={props.value ? (props.valueTone ? 14 : 9) : 17}
+            tone={props.valueTone}
           />
         </View>
       }

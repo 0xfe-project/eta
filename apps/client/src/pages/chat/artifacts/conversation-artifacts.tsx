@@ -152,7 +152,9 @@ export function ConversationArtifacts(props: {
           }
         >
           <Empty
-            icon="panel"
+            icon="artifact"
+            iconSize={32}
+            style={{ gap: 8 }}
             title={
               host.state().missing.artifacts
                 ? uiText("artifactLoadError")

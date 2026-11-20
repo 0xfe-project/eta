@@ -43,6 +43,7 @@ export function Message(props: {
   onInsert: () => void;
   phone: boolean;
   compact?: boolean;
+  captain?: boolean;
   members: MemberView[];
   onArtifact: (artifact: ArtifactView, version: number) => void;
   onWidgetDraft: (text: string) => void;
@@ -233,7 +234,7 @@ export function Message(props: {
           !operation()
         }
       >
-        <If when={item().agentId}>
+        <If when={!props.captain && item().agentId}>
           <View style={{ ...row, gap: 8, marginBottom: 10 }}>
             <AgentFace id={item().agentId} size={14} />
             <Label size={12} weight={600}>

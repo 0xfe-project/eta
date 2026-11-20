@@ -8,6 +8,7 @@ export function Empty(props: {
   title: string;
   description?: string;
   icon?: IconName;
+  iconSize?: number;
   children?: JSX.Element;
   style?: ViewStyle;
 }) {
@@ -23,7 +24,7 @@ export function Empty(props: {
       }}
     >
       <If when={props.icon !== undefined}>
-        <Icon name={props.icon!} size={20} tone="muted" />
+        <Icon name={props.icon!} size={props.iconSize ?? 20} tone="muted" />
       </If>
       <Label
         weight={props.description ? 500 : 400}

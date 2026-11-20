@@ -22,6 +22,8 @@ export function ConversationTimeline(props: {
   paging: boolean;
   phone: boolean;
   compact?: boolean;
+  /** Captain's own conversation: its replies need no name row. */
+  captain?: boolean;
   rail?: boolean;
   onPageOlder: () => void;
   onInsert: (message: MessageView) => void;
@@ -106,6 +108,7 @@ export function ConversationTimeline(props: {
               onInsert={() => props.onInsert(message())}
               phone={phone()}
               compact={props.compact}
+              captain={props.captain}
               members={props.members}
               onTask={props.onTask}
               onArtifact={props.onArtifact}

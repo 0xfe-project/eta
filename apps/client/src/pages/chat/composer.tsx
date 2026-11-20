@@ -32,6 +32,8 @@ export function Composer(props: {
   steward?: string | null;
   group: boolean;
   phone: boolean;
+  /** Tablet: the mention menu spans the whole message box. */
+  tablet?: boolean;
   alignWithContent?: boolean;
   held: MessageView[];
   widgetDraft?: { conversationId: string; text: string } | undefined;
@@ -326,13 +328,16 @@ export function Composer(props: {
               position: "absolute",
               bottom: "100%",
               left: -1,
+              right: props.tablet ? -1 : undefined,
               zIndex: 3,
-              width: 300,
-              maxWidth: "100%",
+              width: props.tablet ? undefined : 300,
+              maxWidth: props.tablet ? undefined : "100%",
               borderWidth: 1,
               borderColor: c().strong,
               backgroundColor: c().canvas,
-              boxShadow: [{ x: 0, y: 4, blur: 12, color: `${c().ink}1f` }],
+              boxShadow: props.tablet
+                ? undefined
+                : [{ x: 0, y: 4, blur: 12, color: `${c().ink}1f` }],
             }}
           >
             <Caption

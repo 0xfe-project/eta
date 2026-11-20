@@ -37,6 +37,25 @@ const panelTabs = [
   ["Artifacts", "panel", "chatArtifacts"],
 ] as const;
 
+/** How many things in a conversation wait for the user: the Pending tab count. */
+export function panelAttention(host: ReturnType<typeof useHost>, id: string) {
+  return (
+    host.pending().filter((entry) => entry.conversationId === id).length +
+    host
+      .tasks()
+      .filter((entry) => entry.conversationId === id)
+      .filter(taskNeedsAttention).length +
+    host
+      .list<CaptainOperationView>("captain", "operations")
+      .filter(
+        (op) =>
+          op.status === "pending" &&
+          op.requiresApproval &&
+          op.payload.originConversationId === id,
+      ).length
+  );
+}
+
 export function ConversationPanel(props: {
   id: string;
   layout: Layout;
@@ -68,21 +87,14 @@ export function ConversationPanel(props: {
   const panel = props.tab;
   const model = props.model;
   const phone = () => props.layout === "phone";
-  const pending = () =>
-    host.pending().filter((entry) => entry.conversationId === props.id);
   const tasks = () =>
     host.tasks().filter((entry) => entry.conversationId === props.id);
-  const needsAttention = () =>
-    pending().length +
-    tasks().filter(taskNeedsAttention).length +
-    host
-      .list<CaptainOperationView>("captain", "operations")
-      .filter(
-        (op) =>
-          op.status === "pending" &&
-          op.requiresApproval &&
-          op.payload.originConversationId === props.id,
-      ).length;
+  const needsAttention = () => panelAttention(host, props.id);
+  const artifactCount = () =>
+    host.artifacts().filter((entry) => entry.conversationId === props.id)
+      .length;
+  /** The tablet drawer: tabs start at the left, the close button sits at the right. */
+  const docked = () => props.drawer && !phone();
   const approvals = () =>
     host
       .list<CaptainOperationView>("captain", "operations")
@@ -95,8 +107,10 @@ export function ConversationPanel(props: {
         <View
           style={{
             ...row,
-            justifyContent: "center",
+            justifyContent: docked() ? "space-between" : "center",
             gap: 2,
+            paddingLeft: docked() ? 10 : 0,
+            paddingRight: docked() ? 8 : 0,
             height: 40,
             flexShrink: 0,
             borderBottomWidth: 1,
@@ -149,15 +163,27 @@ export function ConversationPanel(props: {
                         {needsAttention()}
                       </Label>
                     </If>
+                    <If
+                      when={
+                        tab()[0] === "Artifacts" &&
+                        selected() &&
+                        artifactCount()
+                      }
+                    >
+                      <Label size={11} line={16} tone="muted">
+                        {artifactCount()}
+                      </Label>
+                    </If>
                   </View>
                 );
               }}
             </Each>
           </View>
-          <If when={props.drawer && !phone()}>
+          <If when={docked()}>
             <CloseButton
+              iconSize={14}
+              style={{ backgroundColor: "transparent" }}
               onPress={props.onCloseDrawer}
-              style={{ position: "absolute", right: 8 }}
             />
           </If>
         </View>
