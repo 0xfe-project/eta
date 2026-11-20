@@ -87,6 +87,7 @@ export function HostFields(props: {
           style={{
             ...fieldStyle(),
             ...(props.tablet && props.token ? { letterSpacing: 2.24 } : {}),
+            ...(props.plain && props.token ? { letterSpacing: 1.6 } : {}),
             ...(props.tokenWrong ? { borderColor: c().ink } : {}),
           }}
         />

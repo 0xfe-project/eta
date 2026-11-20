@@ -36,6 +36,7 @@ function lastSeen(address?: HostAddress, lastOnline?: number | null) {
           toLocaleTimeString: new Date(lastOnline).toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
+            hourCycle: "h23",
           }),
         })
     : host;
@@ -171,7 +172,7 @@ export function LostPhoneConnection(
         <Label size={64} line={64} style={{ letterSpacing: -1.28 }}>
           ETA
         </Label>
-        <Label size={24} line={32}>
+        <Label size={24} line={32} style={{ letterSpacing: -0.24 }}>
           {uiText("lostTheConnectionToTheHost")}
         </Label>
         <Label tone="muted">{lastSeen(props.address, props.lastOnline)}</Label>

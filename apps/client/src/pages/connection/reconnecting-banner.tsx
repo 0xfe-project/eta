@@ -10,18 +10,19 @@ export function ReconnectingBanner(props: {
     <View
       style={{
         ...row,
-        padding: 8,
-        paddingHorizontal: 14,
+        paddingVertical: props.phone ? 10 : 8,
+        paddingHorizontal: props.phone ? 16 : 14,
         gap: 8,
-        backgroundColor: props.phone ? c().surface : c().amberFill,
+        backgroundColor: props.phone ? c().selected : c().amberFill,
         borderBottomWidth: props.phone ? 1 : 0,
         borderColor: c().border,
         flexShrink: 0,
       }}
     >
       <Label
-        size={12}
-        tone={props.phone ? "muted" : "amber"}
+        size={props.phone ? 13 : 12}
+        line={props.phone ? 18 : undefined}
+        tone={props.phone ? "ink" : "amber"}
         style={{ flex: 1 }}
       >
         {props.phone

@@ -6,7 +6,7 @@ export function scannerDocument(source: string): string {
 <title>Scan an Eta code</title>
 <style>
 * { box-sizing: border-box }
-body { margin: 0; color: white; background: #0a0b0c; font: 14px system-ui, sans-serif }
+body { margin: 0; color: white; background: #0a0b0c; font: 14px/18px "Inter Variable", Inter, system-ui, sans-serif }
 video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover }
 .dim { position: fixed; inset: 0; background: #0000008c; pointer-events: none }
 .frame { position: fixed; width: min(240px, 76vw); aspect-ratio: 1; top: 50%; left: 50%;
@@ -24,7 +24,7 @@ video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover 
   text-align: center; padding: 0 16px; display: grid; gap: 6px }
 strong { font-size: 14px; line-height: 18px; font-weight: 400 }
 small { color: #ffffffb3; font-size: 12px; line-height: 16px }
-button { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 16px;
+button { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 6px;
   border: 0; background: transparent; color: white;
   font: inherit; min-height: 44px; padding: 0 10px; cursor: pointer }
 </style>
