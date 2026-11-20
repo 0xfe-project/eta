@@ -19,6 +19,7 @@ import { follow, relativeTime, useHost } from "../../../services/host";
 import { TaskGlyph } from "../../tasks/status";
 import { EntityRow, SectionHeader } from "../section";
 import { SettingRow } from "../setting-row";
+import { MachineRunsLimit, RevokeMachine } from "./machine-dialogs";
 import { machineStatus } from "./machines";
 
 export function MachineDetail(props: {
@@ -30,7 +31,6 @@ export function MachineDetail(props: {
   const host = useHost();
   const c = colors();
   const fingerprint = signal("");
-  const limit = signal("");
   const editing = signal(false);
   const removing = signal(false);
   const busy = signal(false);
@@ -54,10 +54,7 @@ export function MachineDetail(props: {
         ),
     );
   const runsAtOnce = () => `${active().length} / ${props.item.maxActiveRuns}`;
-  const editLimit = () => {
-    limit.set(String(props.item.maxActiveRuns));
-    editing.set(true);
-  };
+  const editLimit = () => editing.set(true);
   /** "#12 · Bo · 8m": the task, who runs it here, and for how long. */
   const runMeta = (task: BoardTaskView) => {
     const run = host
@@ -364,65 +361,19 @@ export function MachineDetail(props: {
         </View>
       </If>
       <If when={editing()}>
-        <Modal
-          title={uiText("taskRunsAtOnce")}
+        <MachineRunsLimit
+          item={props.item}
           phone={props.phone}
-          sheet={props.phone}
           onClose={() => editing.set(false)}
-        >
-          <View style={{ padding: 16, gap: 8 }}>
-            <Label size={12} tone="muted">
-              {uiText("chooseHowManyTaskRunsCan")}
-            </Label>
-            <Field
-              label={uiText("maximumTaskRuns")}
-              value={limit()}
-              onChange={limit.set}
-            />
-            <Button
-              label={uiText("saveLimit")}
-              tone="primary"
-              disabled={busy() || !/^(?:[1-9]|1\d|20)$/.test(limit().trim())}
-              onPress={() =>
-                void act(
-                  () =>
-                    host.call("machines", "setMaxActiveRuns", {
-                      machineId: props.item.id,
-                      maxActiveRuns: Number(limit().trim()),
-                    }),
-                  () => editing.set(false),
-                )
-              }
-            />
-          </View>
-        </Modal>
+        />
       </If>
       <If when={removing()}>
-        <Modal
-          title={uiText("removeMachine2")}
+        <RevokeMachine
+          item={props.item}
           phone={props.phone}
-          sheet={props.phone}
           onClose={() => removing.set(false)}
-        >
-          <View style={{ padding: 16, gap: 8 }}>
-            <Label>
-              {uiText("willNoLongerBeAbleTo", { name: props.item.name })}
-            </Label>
-            <Button
-              label={uiText("removeMachine")}
-              disabled={busy()}
-              onPress={() =>
-                void act(
-                  () =>
-                    host.call("machines", "revoke", {
-                      machineId: props.item.id,
-                    }),
-                  props.onClose,
-                )
-              }
-            />
-          </View>
-        </Modal>
+          onRevoked={props.onClose}
+        />
       </If>
     </Modal>
   );

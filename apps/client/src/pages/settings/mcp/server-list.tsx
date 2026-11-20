@@ -65,7 +65,11 @@ export function McpSettings(props: { layout: Layout; onBack: () => void }) {
             when={list().length}
             else={
               <Empty
-                title={uiText("noMcpServersConfigured")}
+                icon="plug"
+                iconSize={24}
+                title={uiText("mcpEmptyTitle")}
+                titleWeight={500}
+                description={uiText("mcpEmptyHint")}
                 titleLine={20}
                 descriptionLine={16}
                 descriptionWidth={320}

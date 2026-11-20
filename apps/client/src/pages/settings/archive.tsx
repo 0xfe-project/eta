@@ -12,6 +12,7 @@ import { Scroll, signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
+  Button,
   colors,
   Empty,
   grow,
@@ -19,9 +20,10 @@ import {
   Label,
   row,
 } from "../../components";
-import { uiText, useText } from "../../i18n";
+import { formatLocale, uiText, useText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { messageTime } from "../chat/message-time";
+import { TaskGlyph } from "../tasks/status";
 import { emptyStyle, EntityRow, SectionHeader } from "./section";
 
 export function ArchiveSettings(props: { phone?: boolean }) {
@@ -130,24 +132,29 @@ export function ArchiveSettings(props: { phone?: boolean }) {
           </View>
         </If>
       </If>
-      <SectionHeader
-        title={text("archived")}
-        count={conversations().length + tasks().length || undefined}
-        phone={props.phone}
-      />
-      <If
-        when={conversations().length + tasks().length}
-        else={
-          <Empty
-            title={uiText("nothingArchived")}
-            titleLine={20}
-            descriptionLine={16}
-            descriptionWidth={320}
-            style={emptyStyle}
-          />
-        }
-      >
-        <Scroll style={grow} scrollbar={false}>
+      <Scroll style={grow} scrollbar={false}>
+        <SectionHeader
+          title={text("archived")}
+          count={conversations().length || undefined}
+          phone={props.phone}
+        />
+        <If
+          when={conversations().length}
+          else={
+            <View
+              style={{
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                borderBottomWidth: 1,
+                borderColor: c().border,
+              }}
+            >
+              <Label size={12} line={16} tone="muted">
+                {uiText("archivedConversationsEmpty")}
+              </Label>
+            </View>
+          }
+        >
           <Each
             of={conversations()}
             key={(item: ConversationSummary) => item.id}
@@ -191,28 +198,105 @@ export function ArchiveSettings(props: { phone?: boolean }) {
               />
             )}
           </Each>
+        </If>
+        <SectionHeader
+          title={uiText("archivedTasks")}
+          count={tasks().length || undefined}
+          phone={props.phone}
+        />
+        <If
+          when={tasks().length}
+          else={
+            <Empty
+              icon="archive"
+              iconSize={24}
+              title={uiText("archivedTasksEmpty")}
+              titleWeight={500}
+              description={uiText("archivedTasksEmptyHint")}
+              titleLine={20}
+              descriptionLine={16}
+              descriptionWidth={360}
+              style={emptyStyle}
+            />
+          }
+        >
           <Each of={tasks()} key={(item) => item.id}>
             {(item) => (
-              <EntityRow
-                title={`#${item().number} ${item().title}`}
-                leading={
-                  props.phone ? undefined : (
-                    <Icon name="tasks" size={16} tone="muted" />
-                  )
-                }
-                lane={false}
-                menuLabel={item().title}
-                menu={
-                  <ActionItem
-                    label={uiText("restore")}
-                    onSelect={() => restoreTask(item().id)}
-                  />
-                }
+              <ArchivedTaskRow
+                task={item()}
+                onRestore={() => restoreTask(item().id)}
               />
             )}
           </Each>
-        </Scroll>
-      </If>
+        </If>
+      </Scroll>
+    </View>
+  );
+}
+
+/** One archived task: its status, number and title, who put it away and when, and Restore. */
+function ArchivedTaskRow(props: {
+  task: BoardTaskView;
+  onRestore: () => void;
+}) {
+  const host = useHost();
+  const c = colors();
+  const by = () => {
+    const who = props.task.archivedBy;
+    if (who === "auto") return uiText("archivedByAuto");
+    if (who === "user" || who == null) return uiText("archivedByUser");
+    return host.agent(who)?.name ?? who;
+  };
+  const when = () =>
+    new Date(props.task.archivedAt ?? props.task.updatedAt).toLocaleDateString(
+      formatLocale(),
+      { month: "short", day: "numeric" },
+    );
+  return (
+    <View
+      style={{
+        ...row,
+        minHeight: 40,
+        flexShrink: 0,
+        gap: 10,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderBottomWidth: 1,
+        borderColor: c().border,
+      }}
+    >
+      <View
+        style={{
+          width: 24,
+          height: 24,
+          flexShrink: 0,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <TaskGlyph status={props.task.status} size={14} />
+      </View>
+      <Label
+        size={12}
+        line={16}
+        tone="muted"
+        style={{ width: 32, flexShrink: 0 }}
+      >
+        {`#${props.task.number}`}
+      </Label>
+      <Label line={20} style={{ flex: 1, minWidth: 0 }}>
+        {props.task.title}
+      </Label>
+      <Label size={12} line={16} tone="muted" style={{ flexShrink: 0 }}>
+        {`${by()} · ${when()}`}
+      </Label>
+      <Button
+        label={uiText("restore")}
+        size={24}
+        labelSize={12}
+        style={{ flexShrink: 0, paddingHorizontal: 8 }}
+        onPress={props.onRestore}
+      />
     </View>
   );
 }

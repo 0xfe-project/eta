@@ -139,8 +139,6 @@ export const settingsMessages = {
   models2: ["Models", "选模型"],
   needsAttention: ["Needs attention", "需要处理"],
   noApiKeySaved: ["No API key saved", "未保存 API 密钥"],
-  noMcpServersConfigured: ["No MCP servers configured", "尚未配置 MCP 服务器"],
-  nothingArchived: ["Nothing archived", "暂无归档"],
   off: ["Off", "关"],
   openaiCompatibleEndpoint: ["OpenAI-compatible API", "OpenAI 兼容 API"],
   openaiCompatibleSource: ["OpenAI-compatible source", "OpenAI 兼容来源"],
@@ -258,5 +256,34 @@ export const settingsMessages = {
   modelDelisted: [
     "Delisted. Kept until you turn it off.",
     "已下架。关闭前会一直保留。",
+  ],
+  sourceConnectionTab: ["Connection", "连接"],
+  sourceAdvanced: ["Advanced: URL, headers", "高级：URL、请求头"],
+  sourceUrl: ["URL", "URL"],
+  sourceHeaders: ["Headers", "请求头"],
+  sourceNoHeaders: ["None", "无"],
+  searchModels: ["Search models", "搜索模型"],
+  noMatchingModels: ["No matching models", "没有匹配的模型"],
+  archivedConversationsEmpty: [
+    "No archived conversations.",
+    "没有已归档的对话。",
+  ],
+  archivedTasks: ["Archived tasks", "已归档的任务"],
+  archivedTasksEmpty: ["No archived tasks", "没有已归档的任务"],
+  archivedTasksEmptyHint: [
+    "Done or cancelled tasks are archived after a quiet while, and any task can be archived from its … menu.",
+    "完成或取消的任务没有动静一段时间后会自动归档，也可以在任务的「…」菜单里手动归档。",
+  ],
+  archivedByAuto: ["Auto", "自动"],
+  archivedByUser: ["You", "你"],
+  mcpEmptyTitle: ["No MCP servers", "没有 MCP 服务器"],
+  mcpEmptyHint: [
+    "Add servers to ~/.eta/mcp.json or a project’s .mcp.json.",
+    "在 ~/.eta/mcp.json 或项目的 .mcp.json 里添加。",
+  ],
+  emailEmptyTitle: ["No mailboxes yet.", "还没有邮箱账号。"],
+  emailEmptyHint: [
+    "Connect one to send and receive email.",
+    "绑一个，才能收发邮件。",
   ],
 } as const;

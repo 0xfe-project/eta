@@ -97,6 +97,11 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
         <If when={offer()}>
           <Button
             label={offerLabel()}
+            size={props.phone ? 40 : undefined}
+            labelSize={props.phone ? 14 : undefined}
+            style={
+              props.phone ? { marginTop: 8, alignSelf: "stretch" } : undefined
+            }
             disabled={!canUpdate()}
             onPress={() => {
               error.set("");
@@ -194,7 +199,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
           }
         >
           <If when={active() || offer()}>
-            <View style={{ alignItems: "flex-start" }}>{updateAction()}</View>
+            <View style={{ alignItems: "stretch" }}>{updateAction()}</View>
           </If>
         </If>
       </View>

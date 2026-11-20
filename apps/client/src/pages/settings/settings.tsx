@@ -301,7 +301,19 @@ export function Settings(
                   else={
                     <If
                       when={email().length}
-                      else={info(uiText("noMailboxConnected"))}
+                      else={
+                        <Empty
+                          icon="email"
+                          iconSize={24}
+                          title={uiText("emailEmptyTitle")}
+                          titleWeight={500}
+                          description={uiText("emailEmptyHint")}
+                          titleLine={20}
+                          descriptionLine={16}
+                          descriptionWidth={320}
+                          style={emptyStyle}
+                        />
+                      }
                     >
                       <Scroll style={grow} scrollbar={false}>
                         <Each of={email()} key={(item) => item.id}>
