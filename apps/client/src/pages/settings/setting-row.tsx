@@ -57,6 +57,8 @@ export function AgentSetting(props: {
   agent: AgentView;
   /** The avatar's side: the tablet draws it at 28, the dialog at 24. */
   avatar?: number;
+  /** The phone stacks the status under the name and says what the agent wears. */
+  phone?: boolean;
   onPress: () => void;
 }) {
   const host = useHost();
@@ -70,10 +72,18 @@ export function AgentSetting(props: {
     host
       .section<readonly AgentUsage[]>("usage", "agents")
       ?.find((entry) => entry.agentId === props.agent.id)?.windows["7d"].total;
+  const brief = () =>
+    props.agent.persona ||
+    props.agent.instructions.split("\n")[0] ||
+    uiText("agentNoInstructions");
   const meta = () =>
     [
       model()?.name ?? props.agent.model ?? props.agent.runtime,
-      usage() ? uiText("agentModelUsage", { usage: tokens(usage()!) }) : "",
+      props.phone
+        ? brief()
+        : usage()
+          ? uiText("agentModelUsage", { usage: tokens(usage()!) })
+          : "",
     ]
       .filter(Boolean)
       .join(" · ");
@@ -81,7 +91,9 @@ export function AgentSetting(props: {
     <EntityRow
       title={props.agent.name}
       leading={<LetterBox name={props.agent.name} size={props.avatar} />}
-      leadingSize={props.avatar}
+      leadingSize={props.phone ? 28 : props.avatar}
+      stacked={props.phone}
+      caret={props.phone}
       meta={
         <If
           when={missing()}

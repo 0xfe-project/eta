@@ -98,6 +98,8 @@ export const machinesMessages = {
     "此一次性命令的有效期至 {{toLocaleString}}。",
   ],
   updateMachine: ["Update machine", "更新机器"],
+  machineRunWorking: ["Working", "运行中"],
+  updateMachineTo: ["Update to {{version}}", "更新到 {{version}}"],
   userHostOrSshAlias: ["user@host or SSH alias", "user@host 或 SSH 别名"],
   wantsToConnectPasteTheFingerprint: [
     "{{name}} wants to connect. Paste the fingerprint from its terminal.",

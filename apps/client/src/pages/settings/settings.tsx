@@ -27,7 +27,7 @@ import { ArchiveSettings } from "./archive";
 import { ExternalAgentDetail } from "./external-agent";
 import { ExternalAgentList } from "./external-agent-list";
 import { Machines } from "./machines/machines";
-import { MailboxEditor } from "./mailbox-editor";
+import { MailboxEditor, mailboxProvider } from "./mailbox-editor";
 import { McpSettings } from "./mcp/server-list";
 import { ProviderDetail } from "./models/provider-detail";
 import { ProviderEditor } from "./models/provider-editor";
@@ -100,11 +100,23 @@ export function Settings(
       : name === "Email"
         ? uiText("settingsEmailHint")
         : undefined;
+  /** Panes that draw their own header instead of the section header. */
+  const ownHeader = (name: SettingsSection) =>
+    name === "Machines" ||
+    name === "MCP servers" ||
+    (name === "Email" && !!mailbox()) ||
+    !!showingProvider();
+  /** The phone draws the section header's buttons 28px tall. */
+  const actionSize = () => (phone() ? 28 : undefined);
+  const actionStyle = () =>
+    phone() ? { paddingHorizontal: 10, gap: 6 } : undefined;
   const actions = (name: SettingsSection) => (
     <>
       <If when={name === "Agents"}>
         <Button
           label={uiText("new")}
+          size={actionSize()}
+          style={actionStyle()}
           icon="plus"
           onPress={() => agent.set("new")}
         />
@@ -112,6 +124,8 @@ export function Settings(
       <If when={name === "Model services"}>
         <Button
           label={uiText("addSource")}
+          size={actionSize()}
+          style={actionStyle()}
           icon="plus"
           onPress={() => sources.set(true)}
         />
@@ -119,6 +133,8 @@ export function Settings(
       <If when={name === "Email"}>
         <Button
           label={uiText("connectMailbox")}
+          size={actionSize()}
+          style={actionStyle()}
           icon="plus"
           onPress={() => mailbox.set("new")}
         />
@@ -142,12 +158,7 @@ export function Settings(
         <If when={section()}>
           {(current) => (
             <View style={grow}>
-              <If
-                when={
-                  phone() &&
-                  (current() === "Appearance" || current() === "Update")
-                }
-              >
+              <If when={phone() && !ownHeader(current())}>
                 <Header
                   title={text("settings")}
                   layout={props.layout}
@@ -157,42 +168,16 @@ export function Settings(
               </If>
               <If
                 when={
-                  phone() &&
+                  !ownHeader(current()) &&
                   current() !== "Update" &&
-                  current() !== "Machines" &&
-                  current() !== "MCP servers" &&
-                  !(current() === "Email" && mailbox()) &&
-                  !showingProvider()
-                }
-              >
-                <Header
-                  title={sectionTitle(current())}
-                  layout={current() === "Appearance" ? "desktop" : props.layout}
-                  inset={current() === "Appearance" ? 16 : undefined}
-                  onBack={
-                    current() !== "Appearance"
-                      ? () => section.set(undefined)
-                      : undefined
-                  }
-                >
-                  {actions(current())}
-                </Header>
-              </If>
-              <If
-                when={
-                  !phone() &&
-                  current() !== "Update" &&
-                  current() !== "Machines" &&
-                  current() !== "MCP servers" &&
-                  current() !== "Archived" &&
-                  !(current() === "Email" && mailbox()) &&
-                  !showingProvider()
+                  current() !== "Archived"
                 }
               >
                 <SectionHeader
                   title={sectionTitle(current())}
                   count={sectionCount(current())}
                   description={sectionHint(current())}
+                  phone={phone()}
                 >
                   {actions(current())}
                 </SectionHeader>
@@ -208,6 +193,7 @@ export function Settings(
                         <AgentSetting
                           agent={item()}
                           avatar={props.layout === "tablet" ? 28 : undefined}
+                          phone={phone()}
                           onPress={() => agent.set(item().id)}
                         />
                       )}
@@ -270,7 +256,13 @@ export function Settings(
               <If when={current() === "External agents"}>
                 <If
                   when={externalAgents().length || offlineMachines().length}
-                  else={info(uiText("settingsNoExternalAgents"))}
+                  else={
+                    <Empty
+                      title={uiText("settingsNoExternalAgents")}
+                      description={uiText("settingsNoExternalAgentsHint")}
+                      style={emptyStyle}
+                    />
+                  }
                 >
                   <Scroll style={grow} scrollbar={false}>
                     <ExternalAgentList
@@ -299,8 +291,16 @@ export function Settings(
                               leading={
                                 <Icon name="email" size={16} tone="muted" />
                               }
-                              meta={`${item().address} · ${item().imapHost}`}
+                              leadingSize={phone() ? 28 : undefined}
+                              meta={`${item().address} · ${
+                                phone()
+                                  ? (mailboxProvider(item()) ??
+                                    uiText("mailCustom"))
+                                  : item().imapHost
+                              }`}
                               laneWidth={112}
+                              stacked={phone()}
+                              caret={phone()}
                               status={
                                 item().status === "ready"
                                   ? {
@@ -346,7 +346,7 @@ export function Settings(
                 </If>
               </If>
               <If when={current() === "Archived"}>
-                <ArchiveSettings />
+                <ArchiveSettings phone={phone()} />
               </If>
               <If when={current() === "Appearance"}>
                 <Appearance

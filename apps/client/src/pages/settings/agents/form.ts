@@ -46,10 +46,14 @@ export function createAgentForm(props: AgentEditorProps) {
   const selectStyle = () => ({
     height: controlHeight(),
     ...(compact() ? { paddingLeft: 10, paddingRight: 8 } : {}),
+    ...(phoneEditor() ? { paddingHorizontal: 12 } : {}),
   });
   const fieldStyle = () => ({
     height: controlHeight(),
     fontSize: 12,
+    ...(phoneEditor()
+      ? { paddingHorizontal: 10, borderColor: c().strong }
+      : {}),
     ...(compact()
       ? {
           lineHeight: 16,

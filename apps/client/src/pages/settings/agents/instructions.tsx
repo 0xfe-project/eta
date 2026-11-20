@@ -84,7 +84,7 @@ export function PersonaField(props: { form: AgentForm }) {
 }
 
 export function AgentInstructions(props: { form: AgentForm }) {
-  const { creating, instructions, saved } = props.form;
+  const { creating, instructions, saved, phoneEditor } = props.form;
   const c = colors();
   const limit = () =>
     Math.max(agentInstructionsLimit, saved?.instructions.length ?? 0);
@@ -99,32 +99,73 @@ export function AgentInstructions(props: { form: AgentForm }) {
     <If
       when={creating}
       else={
-        <View>
-          <SectionHeader
-            title={uiText("instructions")}
-            description={instructionsHelp()}
+        <If
+          when={phoneEditor()}
+          else={
+            <View>
+              <SectionHeader
+                title={uiText("instructions")}
+                description={instructionsHelp()}
+              >
+                <Label size={12} line={16} tone="muted">
+                  {count()}
+                </Label>
+              </SectionHeader>
+              <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+                <Field
+                  label={uiText("instructions")}
+                  multiline
+                  maxLength={limit()}
+                  style={{
+                    height: 250,
+                    fontSize: 12,
+                    lineHeight: 18,
+                    padding: 10,
+                    borderColor: c().strong,
+                  }}
+                  value={instructions()}
+                  onChange={instructions.set}
+                />
+              </View>
+            </View>
+          }
+        >
+          <View
+            style={{
+              gap: 8,
+              paddingHorizontal: 16,
+              paddingVertical: 8,
+              borderBottomWidth: 1,
+              borderColor: c().border,
+            }}
           >
-            <Label size={12} line={16} tone="muted">
-              {count()}
-            </Label>
-          </SectionHeader>
-          <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+            <View style={{ ...row, justifyContent: "space-between" }}>
+              <Label line={20}>{uiText("instructions")}</Label>
+              <If when={instructions().length}>
+                <Label size={12} line={16} tone="muted">
+                  {count()}
+                </Label>
+              </If>
+            </View>
             <Field
               label={uiText("instructions")}
               multiline
               maxLength={limit()}
               style={{
-                height: 250,
+                height: 240,
                 fontSize: 12,
                 lineHeight: 18,
-                padding: 10,
+                padding: 12,
                 borderColor: c().strong,
               }}
               value={instructions()}
               onChange={instructions.set}
             />
+            <Label size={12} line={16} tone="muted">
+              {instructionsHelp()}
+            </Label>
           </View>
-        </View>
+        </If>
       }
     >
       <View style={{ padding: 14, gap: 12 }}>

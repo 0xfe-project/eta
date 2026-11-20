@@ -6,10 +6,16 @@ import { CheckControl } from "../../../components/check-control";
 import { localizedText, uiText } from "../../../i18n";
 
 import { useHost } from "../../../services/host";
-import { emptyStyle, SectionHeader, StatusLane, WarningLine } from "../section";
+import {
+  emptyStyle,
+  SectionHeader,
+  StatusLane,
+  StatusLine,
+  WarningLine,
+} from "../section";
 
 export function AgentPlugins(props: { form: AgentForm }) {
-  const { plugins } = props.form;
+  const { plugins, phoneEditor } = props.form;
   const host = useHost();
   const c = colors();
   const activePlugins = () => host.list<PluginView>("plugins");
@@ -29,13 +35,39 @@ export function AgentPlugins(props: { form: AgentForm }) {
       ) + (servers ? ` (${servers})` : ""),
     ].join(" · ");
   };
+  /** The phone lists the counts and the servers on lines of their own. */
+  const counts = (item: PluginView) =>
+    localizedText(
+      `${item.skills.length} skills · ${item.servers.length} MCP servers`,
+      `${item.skills.length} 项技能 · ${item.servers.length} 个 MCP 服务器`,
+    );
+  const serverLine = (item: PluginView) =>
+    item.servers
+      .map((server) => `${transports[server.transport]} · ${server.name}`)
+      .join(", ");
+  const status = (item: PluginView) =>
+    item.state === "ready"
+      ? {
+          label: phoneEditor()
+            ? uiText("pluginCanBeEnabled")
+            : uiText("pluginCanEnable"),
+          color: c().faint,
+        }
+      : {
+          label: phoneEditor()
+            ? uiText("pluginNeedsConfiguring")
+            : uiText("pluginNeedsSetup"),
+          color: c().amber,
+        };
   return (
     <View>
-      <SectionHeader
-        title={uiText("plugins")}
-        count={activePlugins().length}
-        description={uiText("pluginsHint")}
-      />
+      <If when={!phoneEditor()}>
+        <SectionHeader
+          title={uiText("plugins")}
+          count={activePlugins().length}
+          description={uiText("pluginsHint")}
+        />
+      </If>
       <If
         when={activePlugins().length}
         else={<Empty title={uiText("noPluginsInstalled")} style={emptyStyle} />}
@@ -57,8 +89,8 @@ export function AgentPlugins(props: { form: AgentForm }) {
                   )
                 }
                 size={16}
-                markSize={12}
-                indicatorStyle={{ margin: 4 }}
+                markSize={phoneEditor() ? 10 : 12}
+                indicatorStyle={{ margin: phoneEditor() ? 6 : 4 }}
                 style={{
                   ...row,
                   alignItems: "flex-start",
@@ -70,35 +102,52 @@ export function AgentPlugins(props: { form: AgentForm }) {
                   cursor: ready() || checked() ? "pointer" : "default",
                 }}
               >
-                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                  <Label line={20} weight={500}>
-                    {item().name}
-                  </Label>
-                  <If
-                    when={checked() && !ready()}
-                    else={
+                <If
+                  when={phoneEditor()}
+                  else={
+                    <>
+                      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                        <Label line={20} weight={500}>
+                          {item().name}
+                        </Label>
+                        <If
+                          when={checked() && !ready()}
+                          else={
+                            <Label size={12} line={16} tone="muted">
+                              {meta(item())}
+                            </Label>
+                          }
+                        >
+                          <WarningLine
+                            text={localizedText(
+                              "Its configuration no longer fits. Sessions skip it.",
+                              "其配置已不适用，会话会跳过此插件。",
+                            )}
+                          />
+                        </If>
+                      </View>
+                      <StatusLane width={108} status={status(item())} />
+                    </>
+                  }
+                >
+                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                    <Label line={20} weight={500}>
+                      {item().name}
+                    </Label>
+                    <StatusLine status={status(item())} />
+                    <Label size={12} line={16} tone="muted">
+                      {counts(item())}
+                    </Label>
+                    <If when={serverLine(item())}>
                       <Label size={12} line={16} tone="muted">
-                        {meta(item())}
+                        {serverLine(item())}
                       </Label>
-                    }
-                  >
-                    <WarningLine
-                      text={localizedText(
-                        "Its configuration no longer fits. Sessions skip it.",
-                        "其配置已不适用，会话会跳过此插件。",
-                      )}
-                    />
-                  </If>
-                </View>
-                <StatusLane
-                  width={108}
-                  status={{
-                    label: ready()
-                      ? uiText("pluginCanEnable")
-                      : uiText("pluginNeedsSetup"),
-                    color: ready() ? c().faint : c().amber,
-                  }}
-                />
+                    </If>
+                    <If when={checked() && !ready()}>
+                      <WarningLine text={uiText("pluginConfigurationStale")} />
+                    </If>
+                  </View>
+                </If>
               </CheckControl>
             );
           }}

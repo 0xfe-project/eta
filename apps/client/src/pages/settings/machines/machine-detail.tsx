@@ -1,4 +1,8 @@
-import type { BoardTaskDetail, MachineView } from "@eta/client-contracts";
+import type {
+  BoardTaskDetail,
+  BoardTaskView,
+  MachineView,
+} from "@eta/client-contracts";
 import { Scroll, signal, View } from "nsh";
 import {
   Button,
@@ -9,8 +13,11 @@ import {
   Modal,
   row,
 } from "../../../components";
+import { StatusDot } from "../../../components/status-dot";
 import { uiText } from "../../../i18n";
-import { follow, useHost } from "../../../services/host";
+import { follow, relativeTime, useHost } from "../../../services/host";
+import { TaskGlyph } from "../../tasks/status";
+import { EntityRow, SectionHeader } from "../section";
 import { SettingRow } from "../setting-row";
 import { machineStatus } from "./machines";
 
@@ -46,11 +53,37 @@ export function MachineDetail(props: {
             (run.status === "starting" || run.status === "running"),
         ),
     );
+  const runsAtOnce = () => `${active().length} / ${props.item.maxActiveRuns}`;
+  const editLimit = () => {
+    limit.set(String(props.item.maxActiveRuns));
+    editing.set(true);
+  };
+  /** "#12 · Bo · 8m": the task, who runs it here, and for how long. */
+  const runMeta = (task: BoardTaskView) => {
+    const run = host
+      .section<BoardTaskDetail>(`tasks.${task.id}`, "task")
+      ?.runs.filter(
+        (entry) =>
+          entry.machineId === props.item.id &&
+          (entry.status === "starting" || entry.status === "running"),
+      )
+      .at(-1);
+    const agentId =
+      run?.agentId ?? task.assigneeAgentId ?? task.createdBy.agentId;
+    return [
+      `#${task.number}`,
+      host.people().find((agent) => agent.id === agentId)?.name,
+      run?.startedAt ? relativeTime(run.startedAt) : undefined,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  };
   const rowStyle = () => ({
     ...row,
     minHeight: 44,
     paddingHorizontal: 16,
-    gap: 12,
+    paddingVertical: props.phone ? 8 : undefined,
+    gap: props.phone ? 16 : 12,
     borderBottomWidth: 1,
     borderColor: c().border,
   });
@@ -107,45 +140,120 @@ export function MachineDetail(props: {
                   <If when={field()[1]}>
                     <View style={rowStyle()}>
                       <Label style={{ flexShrink: 0 }}>{field()[0]}</Label>
-                      <Label
-                        size={12}
-                        lines={2}
-                        style={{ flex: 1, minWidth: 0, textAlign: "right" }}
+                      <View
+                        style={{
+                          ...row,
+                          flex: 1,
+                          minWidth: 0,
+                          gap: 6,
+                          justifyContent: "flex-end",
+                        }}
                       >
-                        {field()[1]}
-                      </Label>
+                        <If
+                          when={
+                            props.phone &&
+                            field()[0] === uiText("machineBuild") &&
+                            props.item.build === "outdated"
+                          }
+                        >
+                          <StatusDot color={c().amber} />
+                        </If>
+                        <Label
+                          size={12}
+                          line={16}
+                          lines={2}
+                          tone={
+                            props.phone &&
+                            field()[0] === uiText("machineBuild") &&
+                            props.item.build === "outdated"
+                              ? "mutedInk"
+                              : "ink"
+                          }
+                          style={{ flexShrink: 1, textAlign: "right" }}
+                        >
+                          {field()[1]}
+                        </Label>
+                      </View>
                     </View>
                   </If>
                 )}
               </Each>
-              <View style={rowStyle()}>
-                <Label style={{ flex: 1 }}>{uiText("taskRunsAtOnce")}</Label>
-                <Button
-                  label={`${active().length} / ${props.item.maxActiveRuns}`}
-                  tone="ghost"
-                  end="right"
-                  onPress={() => {
-                    limit.set(String(props.item.maxActiveRuns));
-                    editing.set(true);
-                  }}
+              <If
+                when={props.phone}
+                else={
+                  <View style={rowStyle()}>
+                    <Label style={{ flex: 1 }}>
+                      {uiText("taskRunsAtOnce")}
+                    </Label>
+                    <Button
+                      label={runsAtOnce()}
+                      tone="ghost"
+                      end="right"
+                      onPress={editLimit}
+                    />
+                  </View>
+                }
+              >
+                <View
+                  role="button"
+                  accessibilityLabel={uiText("taskRunsAtOnce")}
+                  onPress={editLimit}
+                  style={{ ...rowStyle(), cursor: "pointer" }}
+                >
+                  <Label line={20} style={{ flex: 1 }}>
+                    {uiText("taskRunsAtOnce")}
+                  </Label>
+                  <Label size={12} line={16}>
+                    {runsAtOnce()}
+                  </Label>
+                </View>
+              </If>
+              <If
+                when={props.phone}
+                else={
+                  <View style={rowStyle()}>
+                    <Label weight={600}>{uiText("runningOnThisMachine")}</Label>
+                    <Label size={12} tone="muted">
+                      {active().length}
+                    </Label>
+                  </View>
+                }
+              >
+                <SectionHeader
+                  title={uiText("runningOnThisMachine")}
+                  count={active().length}
+                  phone
                 />
-              </View>
-              <View style={rowStyle()}>
-                <Label weight={600}>{uiText("runningOnThisMachine")}</Label>
-                <Label size={12} tone="muted">
-                  {active().length}
-                </Label>
-              </View>
+              </If>
               <Each of={active()} key={(item) => item.id}>
                 {(item) => (
-                  <SettingRow
-                    icon="tasks"
-                    title={item().title}
-                    detail={uiText("workingWithCount", {
-                      number: item().number,
-                    })}
-                    onPress={() => props.onTask(item().id)}
-                  />
+                  <If
+                    when={props.phone}
+                    else={
+                      <SettingRow
+                        icon="tasks"
+                        title={item().title}
+                        detail={uiText("workingWithCount", {
+                          number: item().number,
+                        })}
+                        onPress={() => props.onTask(item().id)}
+                      />
+                    }
+                  >
+                    <EntityRow
+                      title={item().title}
+                      leading={<TaskGlyph status={item().status} size={16} />}
+                      leadingSize={28}
+                      stacked
+                      caret
+                      status={{
+                        label: uiText("machineRunWorking"),
+                        color: c().blue,
+                      }}
+                      meta={runMeta(item())}
+                      onPress={() => props.onTask(item().id)}
+                    />
+                  </If>
                 )}
               </Each>
             </>
@@ -184,9 +292,13 @@ export function MachineDetail(props: {
           }
         >
           <View style={rowStyle()}>
-            <Label style={{ flex: 1 }}>{uiText("removeMachine")}</Label>
+            <Label line={20} style={{ flex: 1 }}>
+              {uiText("removeMachine")}
+            </Label>
             <Button
               label={uiText("remove2")}
+              size={props.phone ? 28 : undefined}
+              style={props.phone ? { paddingHorizontal: 10 } : undefined}
               onPress={() => removing.set(true)}
             />
           </View>
@@ -210,8 +322,16 @@ export function MachineDetail(props: {
             when={pending()}
             else={
               <Button
-                label={uiText("updateMachine")}
+                label={
+                  props.phone && host.upgradeCheck()?.version
+                    ? uiText("updateMachineTo", {
+                        version: host.upgradeCheck()!.version,
+                      })
+                    : uiText("updateMachine")
+                }
                 tone="primary"
+                size={props.phone ? 32 : undefined}
+                style={props.phone ? { alignSelf: "stretch" } : undefined}
                 disabled={busy()}
                 onPress={() =>
                   void act(() =>
@@ -226,6 +346,8 @@ export function MachineDetail(props: {
             <Button
               label={uiText("approve")}
               tone="primary"
+              size={props.phone ? 32 : undefined}
+              style={props.phone ? { alignSelf: "stretch" } : undefined}
               disabled={busy() || !fingerprint().trim()}
               onPress={() =>
                 void act(

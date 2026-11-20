@@ -1,8 +1,23 @@
 export const settingsMessages = {
+  autoArchivePhoneHint: [
+    "Done or cancelled tasks whose timeline has had nothing new go to Archived. Anything new brings them back.",
+    "时间线没有新内容的已完成或已取消任务会移到「已归档」。有新内容时会自动回来。",
+  ],
+  autoArchiveSaving: ["Saving…", "正在保存…"],
+  agentNoInstructions: ["No instructions set", "未设置指令"],
+  settingsUpdateUpToDate: [
+    "{{version}} · up to date",
+    "{{version}} · 已是最新版本",
+  ],
+  settingsUpdateAvailable: [
+    "{{version}} · {{latest}} available",
+    "{{version}} · 可更新到 {{latest}}",
+  ],
   settingsNoAgents: ["No agents yet", "暂无智能体"],
-  settingsNoExternalAgents: [
-    "No external agents configured",
-    "尚未配置外部智能体",
+  settingsNoExternalAgents: ["No external agents", "还没有外部智能体"],
+  settingsNoExternalAgentsHint: [
+    "Add an agent that speaks the Agent Client Protocol (ACP) by the command that starts it.",
+    "按启动命令添加一个支持 Agent Client Protocol（ACP）的智能体。",
   ],
   copyLink: ["Copy link", "复制链接"],
   signOut: ["Sign out", "退出登录"],
@@ -155,6 +170,8 @@ export const settingsMessages = {
   removing: ["Removing…", "正在移除…"],
   runsOn: ["Runs on", "运行机器"],
   runtime: ["Runtime", "运行方式"],
+  externalAgentMachine: ["Machine", "机器"],
+  externalAgentCommand: ["Command", "命令"],
   runtimeDefault: ["Runtime default", "运行时默认模型"],
   saveSource: ["Save source", "保存来源"],
   signIn: ["Sign in", "登录"],
@@ -202,6 +219,9 @@ export const settingsMessages = {
   sourceDisabled: ["Disabled", "已停用"],
   sourceRecommended: ["Recommended", "推荐"],
   sourceStep: ["Step {{step}} of 3", "第 {{step}} 步，共 3 步"],
+  sourceStepSource: ["Source", "来源"],
+  sourceStepConnect: ["Connect", "连接"],
+  sourceStepModels: ["Models", "模型"],
   openaiCompatibleHint: [
     "Any endpoint that speaks the OpenAI protocol",
     "任何支持 OpenAI 协议的端点",
@@ -225,6 +245,12 @@ export const settingsMessages = {
   ],
   pluginCanEnable: ["Can enable", "可启用"],
   pluginNeedsSetup: ["Needs setup", "待配置"],
+  pluginCanBeEnabled: ["Can be enabled", "可以启用"],
+  pluginNeedsConfiguring: ["Needs configuring", "需要配置"],
+  pluginConfigurationStale: [
+    "Its configuration no longer fits: this agent's sessions skip it.",
+    "其配置已不适用：此智能体的会话会跳过它。",
+  ],
   sourceApiKey: ["API key", "API key"],
   settingsChange: ["Change", "更改"],
   modelThinking: ["Thinking: {{level}}", "思考：{{level}}"],

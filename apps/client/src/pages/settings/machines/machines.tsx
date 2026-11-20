@@ -217,10 +217,16 @@ export function Machines(props: {
             onBack={props.onBack}
           />
         </If>
-        <SectionHeader title={text("machines")} count={visible().length}>
+        <SectionHeader
+          title={text("machines")}
+          count={visible().length}
+          phone={phone()}
+        >
           <If when={host.can("machines.phoneLink")}>
             <Button
               label={uiText("connectPhone")}
+              size={phone() ? 28 : undefined}
+              style={phone() ? { paddingHorizontal: 10 } : undefined}
               onPress={() => pairing.set(true)}
             />
           </If>
@@ -228,6 +234,8 @@ export function Machines(props: {
             <Button
               label={uiText("addMachine")}
               icon="plus"
+              size={phone() ? 28 : undefined}
+              style={phone() ? { paddingHorizontal: 10, gap: 6 } : undefined}
               onPress={() => adding.set(true)}
             />
           </If>

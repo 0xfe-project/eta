@@ -18,6 +18,10 @@ export function SectionHeader(props: {
   count?: string | number;
   description?: string;
   muted?: boolean;
+  /** The phone's header row is 28px, fitting its 28px buttons. */
+  phone?: boolean;
+  /** The header row's height when it differs, e.g. 20 for a bare title in a sheet. */
+  rowHeight?: number;
   leading?: JSX.Element;
   children?: JSX.Element;
 }) {
@@ -33,7 +37,13 @@ export function SectionHeader(props: {
         borderColor: c().border,
       }}
     >
-      <View style={{ ...row, height: 24, gap: 8 }}>
+      <View
+        style={{
+          ...row,
+          height: props.rowHeight ?? (props.phone ? 28 : 24),
+          gap: 8,
+        }}
+      >
         {props.leading}
         <View
           style={{
@@ -102,6 +112,18 @@ export function StatusLane(props: { status?: EntityStatus; width?: number }) {
   );
 }
 
+/** The phone's status line under an entity's name: a 6px square and a short label. */
+export function StatusLine(props: { status: EntityStatus }) {
+  return (
+    <View style={{ ...row, height: 16, gap: 6, flexShrink: 0 }}>
+      <StatusDot color={props.status.color} />
+      <Label size={12} line={16} tone="mutedInk" lines={1}>
+        {props.status.label}
+      </Label>
+    </View>
+  );
+}
+
 /** A 12px warning line under an entity's name. */
 export function WarningLine(props: { text: string }) {
   return (
@@ -129,9 +151,15 @@ export function EntityRow(props: {
   menuLabel?: string;
   menu?: JSX.Element;
   caret?: boolean;
+  /**
+   * The phone stacks the status under the name instead of a lane; its trailing slot is 28px tall
+   * and only there for a caret.
+   */
+  stacked?: boolean;
   onPress?: () => void;
 }) {
   const c = colors();
+  const trailingHeight = () => (props.stacked ? 28 : 24);
   return (
     <View
       style={{
@@ -182,6 +210,9 @@ export function EntityRow(props: {
           >
             {props.title}
           </Label>
+          <If when={props.stacked ? props.status : undefined}>
+            {(status) => <StatusLine status={status()} />}
+          </If>
           <If when={typeof props.meta === "string"}>
             <Label size={12} line={16} tone="muted">
               {props.meta as string}
@@ -191,26 +222,28 @@ export function EntityRow(props: {
             {props.meta}
           </If>
         </View>
-        <If when={props.lane !== false}>
+        <If when={props.lane !== false && !props.stacked}>
           <StatusLane status={props.status} width={props.laneWidth} />
         </If>
       </View>
       <If
-        when={props.menu}
+        when={props.menu && !props.stacked}
         else={
-          <View
-            style={{
-              width: 24,
-              height: 24,
-              flexShrink: 0,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <If when={props.caret}>
-              <Icon name="right" size={16} tone="mutedInk" />
-            </If>
-          </View>
+          <If when={!props.stacked || props.caret}>
+            <View
+              style={{
+                width: 24,
+                height: trailingHeight(),
+                flexShrink: 0,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <If when={props.caret}>
+                <Icon name="right" size={16} tone="mutedInk" />
+              </If>
+            </View>
+          </If>
         }
       >
         <ActionMenu

@@ -31,6 +31,7 @@ const keySources: ProviderKind[] = [
   "zai",
   "opencode",
   "opencode-go",
+  "commandcode",
 ];
 
 export function ModelSources(props: {
@@ -121,7 +122,7 @@ export function ModelSources(props: {
     <Modal
       title={uiText("addModelSource")}
       width={576}
-      height={login() ? 360 : 600}
+      height={props.phone ? 712 : login() ? 360 : 600}
       phone={props.phone}
       sheet={props.phone}
       overPhoneNavigation
@@ -135,48 +136,57 @@ export function ModelSources(props: {
             when={login()}
             else={
               <>
-                <SectionHeader
-                  title={uiText("source")}
-                  count={uiText("sourceStep", { step: 1 })}
-                  description={uiText("pickWhereTheModelsComeFrom")}
-                />
+                <If
+                  when={props.phone}
+                  else={
+                    <SectionHeader
+                      title={uiText("source")}
+                      count={uiText("sourceStep", { step: 1 })}
+                      description={uiText("pickWhereTheModelsComeFrom")}
+                    />
+                  }
+                >
+                  <SourceSteps />
+                </If>
                 <EntityRow
                   title="Eta Token Plan"
                   leading={<LetterBox name="Eta" />}
+                  leadingSize={props.phone ? 28 : undefined}
+                  stacked={props.phone}
                   meta={uiText("etasOwnGatewayOneKeyFor")}
                   status={{
                     label: uiText("sourceRecommended"),
                     color: c().blue,
                   }}
-                  caret
+                  caret={!props.phone}
                   onPress={() => choose({ kind: "eta" })}
                 />
-                <SectionHeader title={uiText("providerApiKeys")} />
+                <SectionHeader
+                  title={uiText("providerApiKeys")}
+                  rowHeight={props.phone ? 20 : undefined}
+                />
                 <Each of={keySources}>
                   {(kind) => (
-                    <EntityRow
+                    <SourceRow
+                      phone={props.phone}
                       title={modelSource(kind())?.name ?? kind()}
-                      leading={
-                        <LetterBox name={modelSource(kind())?.name ?? kind()} />
-                      }
-                      lane={false}
-                      caret
                       onPress={() => choose({ kind: kind() })}
                     />
                   )}
                 </Each>
                 <If when={accounts()?.connectors.length}>
-                  <SectionHeader title={uiText("subscriptions")} />
+                  <SectionHeader
+                    title={uiText("subscriptions")}
+                    rowHeight={props.phone ? 20 : undefined}
+                  />
                   <Each
                     of={accounts()?.connectors ?? []}
                     key={(connector) => connector.id}
                   >
                     {(connector) => (
-                      <EntityRow
+                      <SourceRow
+                        phone={props.phone}
                         title={connector().name}
-                        leading={<LetterBox name={connector().name} />}
-                        lane={false}
-                        caret
                         onPress={() => {
                           if (!busy()) void start(connector().id);
                         }}
@@ -184,21 +194,23 @@ export function ModelSources(props: {
                     )}
                   </Each>
                 </If>
-                <SectionHeader title={uiText("custom")} />
-                <EntityRow
+                <SectionHeader
+                  title={uiText("custom")}
+                  rowHeight={props.phone ? 20 : undefined}
+                />
+                <SourceRow
+                  phone={props.phone}
                   title={uiText("openaiCompatibleEndpoint")}
-                  leading={<LetterBox name="OpenAI" />}
-                  meta={uiText("openaiCompatibleHint")}
-                  lane={false}
-                  caret
+                  logo="OpenAI"
+                  meta={
+                    props.phone ? undefined : uiText("openaiCompatibleHint")
+                  }
                   onPress={() => choose({ kind: "openai-compatible" })}
                 />
-                <EntityRow
+                <SourceRow
+                  phone={props.phone}
                   title={uiText("localModels")}
-                  leading={<LetterBox name={uiText("localModels")} />}
                   meta={uiText("localModelsHint")}
-                  lane={false}
-                  caret
                   onPress={() =>
                     choose({ kind: "openai-compatible", local: true })
                   }
@@ -292,16 +304,129 @@ export function ModelSources(props: {
           ...row,
           justifyContent: "flex-end",
           paddingHorizontal: 16,
-          paddingVertical: 12,
+          paddingVertical: props.phone ? 8 : 12,
+          borderTopWidth: props.phone ? 1 : 0,
+          borderColor: c().border,
         }}
       >
         <Button
           label={uiText("cancel")}
-          style={{ paddingHorizontal: 12 }}
+          size={props.phone ? 32 : undefined}
+          style={{ paddingHorizontal: props.phone ? 14 : 12 }}
           onPress={close}
           disabled={busy()}
         />
       </View>
     </Modal>
+  );
+}
+
+/** The phone's steps of adding a source; this sheet is the first. */
+function SourceSteps() {
+  const c = colors();
+  const steps = () => [
+    uiText("sourceStepSource"),
+    uiText("sourceStepConnect"),
+    uiText("sourceStepModels"),
+  ];
+  return (
+    <View
+      style={{
+        ...row,
+        height: 36,
+        flexShrink: 0,
+        alignItems: "stretch",
+        borderBottomWidth: 1,
+        borderColor: c().border,
+      }}
+    >
+      <Each of={steps()}>
+        {(label, index) => (
+          <View
+            style={{
+              flex: 1,
+              alignItems: "center",
+              justifyContent: "center",
+              borderBottomWidth: index() === 0 ? 2 : 0,
+              borderColor: c().ink,
+            }}
+          >
+            <Label
+              size={12}
+              line={16}
+              weight={index() === 0 ? 600 : 400}
+              tone={index() === 0 ? "ink" : "mutedInk"}
+            >
+              {`${index() + 1} ${label()}`}
+            </Label>
+          </View>
+        )}
+      </Each>
+    </View>
+  );
+}
+
+/** A source to pick: an entity row in the dialog, a bare 28px logo and name on the phone. */
+function SourceRow(props: {
+  phone: boolean;
+  title: string;
+  logo?: string;
+  meta?: string;
+  onPress: () => void;
+}) {
+  const c = colors();
+  return (
+    <If
+      when={props.phone}
+      else={
+        <EntityRow
+          title={props.title}
+          leading={<LetterBox name={props.logo ?? props.title} />}
+          meta={props.meta}
+          lane={false}
+          caret
+          onPress={props.onPress}
+        />
+      }
+    >
+      <View
+        role="button"
+        accessibilityLabel={props.title}
+        onPress={props.onPress}
+        style={{
+          ...row,
+          alignItems: props.meta ? "flex-start" : "center",
+          flexShrink: 0,
+          gap: 10,
+          paddingHorizontal: 16,
+          paddingVertical: 6,
+          borderBottomWidth: 1,
+          borderColor: c().border,
+          cursor: "pointer",
+        }}
+      >
+        <View
+          style={{
+            width: 28,
+            height: 28,
+            flexShrink: 0,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <LetterBox name={props.logo ?? props.title} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Label line={20} weight={500}>
+            {props.title}
+          </Label>
+          <If when={props.meta}>
+            <Label size={12} line={16} tone="muted">
+              {props.meta}
+            </Label>
+          </If>
+        </View>
+      </View>
+    </If>
   );
 }

@@ -36,27 +36,31 @@ export function AgentEditor(props: AgentEditorProps) {
   const step = signal<1 | 2>(1);
   const deleting = signal(false);
   const title = () => saved?.name ?? localizedText("New agent", "新建智能体");
+  /** Wide editors pin the row under the Instructions and Plugins tabs; the phone lists it after them. */
+  const pinned = () => !props.phone && tab() !== "general";
   function deleteRow() {
     return (
       <If when={canDelete()}>
         <View
           style={{
             ...row,
-            justifyContent: "space-between",
-            minHeight: 40,
+            minHeight: props.phone ? 44 : 40,
             gap: 16,
             paddingHorizontal: 16,
             paddingVertical: 8,
-            borderBottomWidth: tab() === "general" ? 1 : 0,
-            borderTopWidth: tab() === "general" ? 0 : 1,
+            borderBottomWidth: pinned() ? 0 : 1,
+            borderTopWidth: pinned() ? 1 : 0,
             borderColor: c().border,
           }}
         >
-          <Label line={20}>{localizedText("Delete agent", "删除智能体")}</Label>
+          <Label line={20} style={{ flex: 1 }}>
+            {localizedText("Delete agent", "删除智能体")}
+          </Label>
           <Button
             label={localizedText("Delete", "删除")}
             icon="archive"
             disabled={busy()}
+            size={props.phone ? 28 : undefined}
             style={{ gap: 6, paddingHorizontal: 10 }}
             onPress={() => deleting.set(true)}
           />
@@ -93,23 +97,39 @@ export function AgentEditor(props: AgentEditorProps) {
       <View
         style={{
           ...row,
-          minHeight: phoneEditor() ? 45 : creating ? 44 : 40,
-          gap: phoneEditor() ? 12 : 10,
-          paddingHorizontal: phoneEditor() ? 16 : 11,
+          minHeight: phoneEditor() ? 48 : creating ? 44 : 40,
+          gap: phoneEditor() ? 4 : 10,
+          paddingHorizontal: phoneEditor() ? 8 : 11,
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
       >
         <If when={phoneEditor()}>
-          <BackButton disabled={busy()} onPress={close} />
+          <BackButton disabled={busy()} size={40} onPress={close} />
         </If>
-        <If when={!creating}>
-          <LetterBox name={title()} />
-        </If>
-        <Label size={16} line={22} style={{ flex: 1 }} weight={500}>
-          {title()}
-        </Label>
-        <If when={!phoneEditor()}>
+        <View
+          style={{ ...row, flex: 1, minWidth: 0, gap: phoneEditor() ? 8 : 10 }}
+        >
+          <If when={!creating}>
+            <LetterBox name={title()} />
+          </If>
+          <If
+            when={phoneEditor()}
+            else={
+              <Label size={16} line={22} style={{ flex: 1 }} weight={500}>
+                {title()}
+              </Label>
+            }
+          >
+            <Label line={20} weight={600} lines={1} style={{ flex: 1 }}>
+              {title()}
+            </Label>
+          </If>
+        </View>
+        <If
+          when={!phoneEditor()}
+          else={<View style={{ width: 40, height: 40, flexShrink: 0 }} />}
+        >
           <CloseButton disabled={busy()} onPress={close} />
         </If>
       </View>
@@ -160,19 +180,30 @@ export function AgentEditor(props: AgentEditorProps) {
                       </View>
                     }
                   >
-                    <Button
-                      label={tabLabel(entry())}
-                      selected={tab() === entry()}
-                      tone="ghost"
-                      size={40}
+                    <View
+                      role="tab"
+                      accessibilityLabel={tabLabel(entry())}
+                      accessibilityState={{ selected: tab() === entry() }}
+                      onPress={() => tab.set(entry())}
                       style={{
                         flex: 1,
-                        borderBottomWidth: 2,
-                        borderColor: tab() === entry() ? c().ink : c().border,
-                        backgroundColor: c().canvas,
+                        height: 40,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderBottomWidth: tab() === entry() ? 2 : 0,
+                        borderColor: c().ink,
+                        cursor: "pointer",
                       }}
-                      onPress={() => tab.set(entry())}
-                    />
+                    >
+                      <Label
+                        size={12}
+                        line={16}
+                        weight={tab() === entry() ? 600 : 400}
+                        tone={tab() === entry() ? "ink" : "mutedInk"}
+                      >
+                        {tabLabel(entry())}
+                      </Label>
+                    </View>
                   </If>
                 )}
               </Each>
@@ -192,8 +223,9 @@ export function AgentEditor(props: AgentEditorProps) {
                 <If when={tab() === "plugins"}>
                   <AgentPlugins form={form} />
                 </If>
+                <If when={!pinned() && tab() !== "general"}>{deleteRow()}</If>
               </Scroll>
-              <If when={tab() !== "general"}>{deleteRow()}</If>
+              <If when={pinned()}>{deleteRow()}</If>
             </View>
           </View>
         }
@@ -242,8 +274,8 @@ export function AgentEditor(props: AgentEditorProps) {
         style={{
           ...row,
           paddingHorizontal: phoneEditor() || !creating ? 16 : 14,
-          paddingVertical: phoneEditor() || creating ? undefined : 12,
-          minHeight: phoneEditor() ? 49 : creating ? 50 : undefined,
+          paddingVertical: phoneEditor() ? 8 : creating ? undefined : 12,
+          minHeight: creating && !phoneEditor() ? 50 : undefined,
           justifyContent: "flex-end",
           gap: 8,
           borderTopWidth: 1,
@@ -257,7 +289,7 @@ export function AgentEditor(props: AgentEditorProps) {
           size={phoneEditor() ? 32 : undefined}
           style={
             phoneEditor()
-              ? { minWidth: 70 }
+              ? { paddingHorizontal: 14 }
               : creating
                 ? undefined
                 : { paddingHorizontal: 12 }
@@ -270,6 +302,8 @@ export function AgentEditor(props: AgentEditorProps) {
             label={localizedText("Previous", "上一步")}
             onPress={() => step.set(1)}
             disabled={busy()}
+            size={phoneEditor() ? 32 : undefined}
+            style={phoneEditor() ? { paddingHorizontal: 14 } : undefined}
           />
         </If>
         <If
@@ -281,7 +315,14 @@ export function AgentEditor(props: AgentEditorProps) {
               }
               tone="primary"
               disabled={!canSave()}
-              style={creating ? undefined : { paddingHorizontal: 12 }}
+              size={phoneEditor() ? 32 : undefined}
+              style={
+                phoneEditor()
+                  ? { paddingHorizontal: 14 }
+                  : creating
+                    ? undefined
+                    : { paddingHorizontal: 12 }
+              }
               onPress={() => void save()}
             />
           }
@@ -290,6 +331,8 @@ export function AgentEditor(props: AgentEditorProps) {
             label={uiText("next")}
             tone="primary"
             disabled={!name().trim()}
+            size={phoneEditor() ? 32 : undefined}
+            style={phoneEditor() ? { paddingHorizontal: 14 } : undefined}
             onPress={() => step.set(2)}
           />
         </If>
