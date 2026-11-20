@@ -19,6 +19,7 @@ import type { Connector, KeyGroups } from "./connectors";
 import type { Connection } from "./state";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { CpaHttpError } from "@cpajs/cpa/client";
+import { billingRetryAt } from "@eta/client-contracts";
 import { excludesAll, updateKeys } from "./connectors";
 import { codeOf, LlmError, notFound, problem } from "./problems";
 import {
@@ -52,6 +53,14 @@ type ConfiguredModel = NonNullable<KeyGroups[number]["models"]>[number];
 const USAGE_TIMEOUT_MS = 15_000;
 
 /** The outcome of an account's latest check. */
+interface AccountRead {
+  revision?: string | undefined;
+  reading: Promise<LlmQuota>;
+  abort: AbortController;
+  retryAt: number;
+  failures: number;
+}
+
 interface Check {
   started: number;
   done: number;
@@ -82,6 +91,7 @@ export class Gateway {
     string,
     { connector: Connector; expires: number }
   >();
+  readonly #usage = new Map<string, AccountRead>();
   #refreshing: Promise<GatewayStatus & { quota: LlmQuota[] }> | undefined;
 
   constructor(options: GatewayOptions) {
@@ -254,6 +264,7 @@ export class Gateway {
         return next.length === 0 ? rest : { ...rest, "excluded-models": next };
       });
     }
+    this.#forgetUsage(id);
     return connectionView(await this.#connection(id));
   }
 
@@ -263,6 +274,7 @@ export class Gateway {
     if (source.kind === "file")
       await this.#cpa().credentials.delete(source.name);
     else await this.#editKey(source.provider, source.key, () => undefined);
+    this.#forgetUsage(id);
     this.#checks.delete(id);
   }
 
@@ -468,63 +480,136 @@ export class Gateway {
    */
   async usage(): Promise<LlmQuota[]> {
     const connections = await this.#connections();
-    const jobs = connections.flatMap((connection) => {
-      const connector = this.#byId.get(connection.connector);
-      return connector?.usage === undefined || connection.state === "disabled"
-        ? []
-        : [{ connection, connector }];
-    });
-    return Promise.all(
-      jobs.map(async ({ connection, connector }): Promise<LlmQuota> => {
-        const signal = AbortSignal.timeout(USAGE_TIMEOUT_MS);
-        const started = this.#now();
-        const apiKey = this.#apiKey(connection.connector);
-        let usage;
-        let failure: unknown;
-        try {
-          usage = await connector.usage!(connection, signal);
-        } catch (error) {
-          failure = error;
-        }
-        if (
-          rejected(codeOf(failure)) &&
-          !apiKey &&
-          connection.source.kind === "file"
-        ) {
-          try {
-            await this.#cpa().credentials.refresh(
-              { name: connection.source.name },
-              { signal },
-            );
-            usage = await connector.usage!(connection, signal);
-            failure = undefined;
-          } catch (error) {
-            // The refresh failing leaves the first answer standing.
-            if (codeOf(error) !== undefined) failure = error;
-          }
-        }
-        this.#record(connection.id, {
-          started,
-          done: this.#now(),
-          error: checkError(failure, apiKey),
-        });
-        return {
-          connectionId: connection.id,
-          ...(usage?.plan === undefined || usage.plan === ""
-            ? {}
-            : { plan: usage.plan }),
-          windows: usage?.windows ?? [],
-          ...(failure === undefined
-            ? {}
-            : {
-                error:
-                  failure instanceof LlmError
-                    ? failure.view
-                    : problem("usage_unavailable", "Could not read the usage."),
-              }),
-        };
-      }),
+    const enabled = connections.filter(
+      (connection) => connection.state !== "disabled",
     );
+    const ids = new Set(enabled.map((connection) => connection.id));
+    for (const id of this.#usage.keys()) {
+      if (!ids.has(id)) this.#forgetUsage(id);
+    }
+    const reads = enabled.flatMap((connection) => {
+      const connector = this.#byId.get(connection.connector);
+      if (!connector?.usage) return [];
+      if (this.#usage.get(connection.id)?.revision !== connection.quotaRevision)
+        this.#forgetUsage(connection.id);
+      const current = this.#usage.get(connection.id);
+      if (current && this.#now() < current.retryAt) return [current];
+      const abort = new AbortController();
+      const entry: AccountRead = {
+        revision: connection.quotaRevision,
+        abort,
+        retryAt: Infinity,
+        failures: current?.failures ?? 0,
+        reading: this.#accountUsage(connection, connector, abort.signal),
+      };
+      this.#usage.set(connection.id, entry);
+      entry.reading = entry.reading.then(
+        (quota) => {
+          entry.retryAt = quota.retryAt
+            ? Math.max(this.#now() + 15_000, Date.parse(quota.retryAt))
+            : this.#now() + 15_000;
+          if (
+            quota.error?.code === "model_forbidden" ||
+            quota.error?.code === "invalid_api_key" ||
+            quota.error?.code === "login_expired"
+          )
+            entry.retryAt = Infinity;
+          entry.failures =
+            quota.error?.code === "rate_limited" ? entry.failures + 1 : 0;
+          return quota;
+        },
+        (error) => {
+          if (this.#usage.get(connection.id) === entry)
+            this.#usage.delete(connection.id);
+          throw error;
+        },
+      );
+      return [entry];
+    });
+    const result = await Promise.all(reads.map((entry) => entry.reading));
+    return result.filter(
+      (quota, index) => this.#usage.get(quota.connectionId) === reads[index],
+    );
+  }
+
+  #forgetUsage(id: string): void {
+    this.#usage.get(id)?.abort.abort();
+    this.#usage.delete(id);
+  }
+
+  async #accountUsage(
+    connection: Connection,
+    connector: Connector,
+    cancel: AbortSignal,
+  ): Promise<LlmQuota> {
+    const signal = AbortSignal.any([
+      AbortSignal.timeout(USAGE_TIMEOUT_MS),
+      cancel,
+    ]);
+    const started = this.#now();
+    const apiKey = this.#apiKey(connection.connector);
+    let usage;
+    let failure: unknown;
+    try {
+      usage = await connector.usage!(connection, signal);
+    } catch (error) {
+      failure = error;
+    }
+    if (
+      rejected(codeOf(failure)) &&
+      !apiKey &&
+      connection.source.kind === "file"
+    ) {
+      try {
+        await this.#cpa().credentials.refresh(
+          { name: connection.source.name },
+          { signal },
+        );
+        usage = await connector.usage!(connection, signal);
+        failure = undefined;
+      } catch (error) {
+        // The refresh failing leaves the first answer standing.
+        if (codeOf(error) !== undefined) failure = error;
+      }
+    }
+    if (!cancel.aborted)
+      this.#record(connection.id, {
+        started,
+        done: this.#now(),
+        error: checkError(failure, apiKey),
+      });
+    const retryAt =
+      failure instanceof LlmError && failure.code === "rate_limited"
+        ? billingRetryAt(
+            failure.retryAfter,
+            this.#usage.get(connection.id)?.failures ?? 0,
+            this.#now(),
+          )
+        : undefined;
+    return {
+      connectionId: connection.id,
+      ...(connection.quotaRevision
+        ? { quotaRevision: connection.quotaRevision }
+        : {}),
+      ...(retryAt === undefined
+        ? {}
+        : { retryAt: new Date(retryAt).toISOString() }),
+      ...(usage?.plan === undefined || usage.plan === ""
+        ? {}
+        : { plan: usage.plan }),
+      windows: usage?.windows ?? [],
+      ...(failure === undefined
+        ? { observedAt: new Date(this.#now()).toISOString() }
+        : {}),
+      ...(failure === undefined
+        ? {}
+        : {
+            error:
+              failure instanceof LlmError
+                ? failure.view
+                : problem("usage_unavailable", "Could not read the usage."),
+          }),
+    };
   }
 
   /** Keep the newest check: one that started earlier and finished later says less. */

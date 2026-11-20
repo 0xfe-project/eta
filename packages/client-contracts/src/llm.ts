@@ -95,6 +95,8 @@ export interface LlmConnector {
 
 /** One connected account or key. It never carries a token. */
 export interface LlmConnection {
+  /** Binds quota to this generation of a saved login. */
+  quotaRevision?: string | undefined;
   id: string;
   connector: string;
   label: string;
@@ -130,6 +132,28 @@ export interface LlmModel {
   retryAt?: string | undefined;
 }
 
+/** A calendar month, including a local daylight-saving transition. */
+export function isMonthDuration(seconds: number): boolean {
+  return seconds >= 28 * 86400 - 3600 && seconds <= 31 * 86400 + 3600;
+}
+
+/** When a rate-limited billing endpoint may be read again. */
+export function billingRetryAt(
+  header: string | undefined,
+  failures: number,
+  now: number,
+): number {
+  const value = header?.trim();
+  const time =
+    value && /^\d+$/.test(value)
+      ? now + Number(value) * 1000
+      : Date.parse(value ?? "");
+  if (Number.isFinite(new Date(time).getTime())) return time;
+  return (
+    now + Math.min(600_000, 30_000 * 2 ** failures * (1 + Math.random() / 10))
+  );
+}
+
 /** One subscription window. `used` is the percent already consumed, 0 to 100. */
 export interface LlmQuotaWindow {
   kind: "5h" | "weekly" | "monthly";
@@ -140,9 +164,14 @@ export interface LlmQuotaWindow {
 
 /** What a provider reports about one account's subscription. */
 export interface LlmQuota {
+  quotaRevision?: string | undefined;
   connectionId: string;
   plan?: string | undefined;
   windows: LlmQuotaWindow[];
+  /** Successful Host observation, after validating the upstream percentages. */
+  observedAt?: string | undefined;
+  /** Retry time returned for a rate-limited subscription read. */
+  retryAt?: string | undefined;
   /** Set when the read failed; the windows are then empty. */
   error?: LlmProblem | undefined;
 }

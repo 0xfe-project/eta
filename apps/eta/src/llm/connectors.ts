@@ -13,6 +13,7 @@ import type {
 import type { Connection } from "./state";
 import { randomBytes } from "node:crypto";
 import { CpaHttpError } from "@cpajs/cpa/client";
+import { isMonthDuration } from "@eta/client-contracts";
 import { LlmError, notFound } from "./problems";
 
 /** What a provider reports about one account's subscription. */
@@ -129,6 +130,17 @@ export async function getWithToken<T extends object>(
       "The login was rejected (HTTP 401) reading the usage.",
     );
   }
+  if (response.status_code === 429 || response.status_code === 403) {
+    const error = new LlmError(
+      response.status_code === 429 ? "rate_limited" : "model_forbidden",
+      "Usage lookup rejected.",
+      { status: response.status_code },
+    );
+    error.retryAfter = Object.entries(response.header ?? {}).find(
+      ([name]) => name.toLowerCase() === "retry-after",
+    )?.[1][0];
+    throw error;
+  }
   if (response.status_code < 200 || response.status_code >= 300)
     throw unreadable(`usage: status ${response.status_code}`);
   try {
@@ -147,12 +159,22 @@ export function windowKind(
 ): LlmQuotaWindow["kind"] {
   if (seconds <= 0) return fallback;
   if (seconds <= 6 * 3600) return "5h";
-  if (seconds >= 27 * 24 * 3600) return "monthly";
+  if (isMonthDuration(seconds)) return "monthly";
   return "weekly";
 }
 
-export const clampPercent = (value: number): number =>
-  Math.min(Math.max(value, 0), 100);
+export function usagePercent(value: unknown): number | undefined {
+  const number =
+    typeof value === "string" && /^\d+(?:\.\d+)?$/.test(value)
+      ? Number(value)
+      : value;
+  return typeof number === "number" &&
+    Number.isFinite(number) &&
+    number >= 0 &&
+    number <= 100
+    ? number
+    : undefined;
+}
 
 // --- API keys in CPA's config ------------------------------------------------------------------
 

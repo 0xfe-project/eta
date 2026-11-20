@@ -16,10 +16,10 @@ import {
 } from "@cpajs/codex-auth";
 import { uploadToCpa } from "@cpajs/codex-auth/cpa";
 import {
-  clampPercent,
   getWithToken,
   Logins,
   randomId,
+  usagePercent,
   windowKind,
 } from "./connectors";
 import { LlmError } from "./problems";
@@ -180,24 +180,21 @@ export class Codex implements Connector {
     ] as const;
     return {
       plan: codexPlanName(body.plan_type ?? ""),
-      windows: windows.flatMap(([window, fallback]) =>
-        window === undefined || window === null
-          ? []
-          : [
-              {
-                kind: windowKind(window.limit_window_seconds ?? 0, fallback),
-                used: clampPercent(window.used_percent ?? 0),
-                ...(window.limit_window_seconds === undefined
-                  ? {}
-                  : { durationSeconds: window.limit_window_seconds }),
-                ...(window.reset_at === undefined || window.reset_at <= 0
-                  ? {}
-                  : {
-                      resetsAt: new Date(window.reset_at * 1000).toISOString(),
-                    }),
-              },
-            ],
-      ),
+      windows: windows.flatMap(([window, fallback]) => {
+        const used = usagePercent(window?.used_percent);
+        if (!window || used === undefined) return [];
+        const reset = new Date((window.reset_at ?? 0) * 1000);
+        return [
+          {
+            kind: windowKind(window.limit_window_seconds ?? 0, fallback),
+            used,
+            ...(window.limit_window_seconds === undefined
+              ? {}
+              : { durationSeconds: window.limit_window_seconds }),
+            ...(reset.getTime() > 0 ? { resetsAt: reset.toISOString() } : {}),
+          },
+        ];
+      }),
     };
   }
 }

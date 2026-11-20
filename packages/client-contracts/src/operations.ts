@@ -61,6 +61,7 @@ export const PROVIDER_ACTIONS = [
   "discover",
   "check",
   "logos",
+  "readBalance",
 ] as const;
 
 export interface CreateSessionInput {
@@ -176,7 +177,32 @@ export interface ProviderInput {
   headers?: import("./types").ProviderHeaders | null;
   models: import("./types").EtaModelConfig[];
 }
+export interface BalanceLine {
+  currency: "CNY" | "USD";
+  available: string;
+}
+
+export interface ProviderBalance {
+  state:
+    | "available"
+    | "query"
+    | "missing_key"
+    | "invalid_key"
+    | "forbidden"
+    | "timeout"
+    | "rate_limited"
+    | "unavailable"
+    | "unsupported"
+    | "spend_only";
+  lines?: BalanceLine[];
+  observedAt?: string;
+  partial?: boolean;
+  failedCurrencies?: BalanceLine["currency"][];
+  retryAt?: string;
+}
+
 export interface ProviderArgs {
+  readBalance: { id: string; refresh?: boolean };
   save: { revision: string; provider: ProviderInput };
   delete: { revision: string; id: string };
   setNetwork: { revision: string } & import("./types").NetworkConfig;

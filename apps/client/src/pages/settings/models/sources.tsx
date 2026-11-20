@@ -29,6 +29,9 @@ export interface SourceChoice {
 
 const keySources: ProviderKind[] = [
   "deepseek",
+  "moonshot-cn",
+  "moonshot-global",
+  "openrouter",
   "kimi-coding",
   "zai-coding-cn",
   "zai",

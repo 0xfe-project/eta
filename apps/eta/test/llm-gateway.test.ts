@@ -182,7 +182,11 @@ describe("the gateway's accounts", () => {
 
     // The check reads the key, and finds nothing to report.
     const [quota] = await gateway.usage();
-    expect(quota).toEqual({ connectionId: key!.id, windows: [] });
+    expect(quota).toEqual({
+      connectionId: key!.id,
+      windows: [],
+      observedAt: expect.any(String),
+    });
     expect((await gateway.connections())[0]!.checkedAt).toBeDefined();
 
     // Disabled: the account and its models say so; enabled again: back.

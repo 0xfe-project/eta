@@ -23,6 +23,7 @@ import type {
   LlmProblem,
 } from "@eta/client-contracts";
 import type { KeyGroups } from "./connectors";
+import { createHash } from "node:crypto";
 import { problem } from "./problems";
 
 /** A connection with what the gateway needs to act on it; the view drops the rest. */
@@ -73,6 +74,18 @@ export function fileConnection(
     (cooldown) => Date.parse(cooldown.retry_at) > now,
   );
   const base = {
+    quotaRevision: createHash("sha256")
+      .update(
+        JSON.stringify([
+          entry.auth_index,
+          entry.id_token?.chatgpt_account_id,
+          entry.name,
+          entry.email,
+          entry.created_at,
+          entry.updated_at ?? entry.modtime,
+        ]),
+      )
+      .digest("hex"),
     id: entry.auth_index,
     authIndex: entry.auth_index,
     connector,

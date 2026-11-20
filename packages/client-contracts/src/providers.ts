@@ -144,6 +144,24 @@ export const MODEL_SOURCES = {
       },
     ],
   },
+  "moonshot-cn": {
+    name: "Moonshot (China)",
+    baseUrl: "https://api.moonshot.cn/v1",
+    auth: "key",
+    models: "endpoint",
+  },
+  "moonshot-global": {
+    name: "Moonshot (International)",
+    baseUrl: "https://api.moonshot.ai/v1",
+    auth: "key",
+    models: "endpoint",
+  },
+  openrouter: {
+    name: "OpenRouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+    auth: "key",
+    models: "endpoint",
+  },
   "kimi-coding": {
     name: "Kimi for Coding",
     baseUrl: "https://api.kimi.com/coding/v1",

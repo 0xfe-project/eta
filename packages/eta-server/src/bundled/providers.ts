@@ -27,6 +27,7 @@ import type { ProviderConfigStore } from "../providers/store";
 import type { WireService } from "../wire-service";
 import { modelSource } from "@eta/client-contracts";
 import { Service } from "cordis";
+import { ProviderBalances } from "../providers/balance";
 import {
   checkConnection,
   checkOf,
@@ -139,6 +140,7 @@ export function providersPlugin(options: ProvidersPluginOptions) {
         // The last check of each provider, since this host started. Only a save that changes how
         // a provider is reached, or a delete, forgets one; nothing re-checks by itself.
         const checks = new Map<string, ProviderCheck>();
+        const balances = new ProviderBalances(options.store, options.fetch);
         const logos = new ProviderLogos(options.fetch);
         let checksRevision = 0;
         const record = (id: string, check: ProviderCheck | undefined): void => {
@@ -353,6 +355,16 @@ export function providersPlugin(options: ProvidersPluginOptions) {
               },
             };
           }),
+          wire.handle("providers", "readBalance", async (call) => {
+            const args = (call.args ?? {}) as Partial<
+              ProviderArgs["readBalance"]
+            >;
+            if (typeof args.id !== "string")
+              throw new Error("providers.readBalance needs an id");
+            return {
+              result: await balances.read(args.id, args.refresh === true),
+            };
+          }),
           wire.handle("providers", "logos", async (call) => {
             const { sources } = (call.args ?? {}) as Partial<
               ProviderArgs["logos"]
@@ -427,6 +439,7 @@ export function providersPlugin(options: ProvidersPluginOptions) {
         // notifies for its own writes as well, so a provider saved from the settings page takes
         // the same path.
         options.store.watch((view) => {
+          balances.invalidate(view);
           latest = view;
           wire.pushNow("providers");
           void Promise.resolve(options.onModelsChanged?.()).catch(
@@ -439,6 +452,7 @@ export function providersPlugin(options: ProvidersPluginOptions) {
         const stopWatching = (): void => options.store.stop();
         return () => {
           for (const off of registrations.splice(0)) off();
+          balances.invalidate();
           stopWatching();
         };
       });

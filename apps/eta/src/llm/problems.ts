@@ -47,6 +47,7 @@ export function problem(
 
 /** A refusal the gateway explains: the wire passes `problem` (code and params) to the client. */
 export class LlmError extends Error {
+  retryAfter?: string | undefined;
   readonly problem: { code: LlmCode; params?: LlmParams };
   constructor(
     code: LlmCode,
