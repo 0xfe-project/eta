@@ -134,6 +134,7 @@ export function Email(props: {
               }
               icon="refresh"
               iconOnly={phone()}
+              iconSize={phone() ? 18 : undefined}
               tone={phone() ? "ghost" : undefined}
               size={phone() ? 40 : undefined}
               disabled={refreshing()}
@@ -148,7 +149,6 @@ export function Email(props: {
               />
               <ActionItem
                 label={uiText("delete")}
-                tone="red"
                 onSelect={() => deleting.set(true)}
               />
             </ActionMenu>
@@ -301,7 +301,6 @@ export function Email(props: {
                 />
                 <Button
                   label={uiText("delete")}
-                  tone="danger"
                   onPress={() => deleting.set(true)}
                 />
               </View>
@@ -452,7 +451,6 @@ export function Email(props: {
             <Label>{uiText("deleteTheSelectedThreadsFromEta")}</Label>
             <Button
               label={uiText("delete")}
-              tone="danger"
               onPress={() =>
                 void host.action(async () => {
                   await host.call("email", "deleteThreads", {

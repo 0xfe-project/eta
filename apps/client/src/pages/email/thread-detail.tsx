@@ -129,6 +129,8 @@ export function ThreadDetail(props: {
               <Button
                 label={uiText("handToAnAgent")}
                 tone="primary"
+                icon="send"
+                iconSize={14}
                 size={28}
                 style={{ paddingHorizontal: 12, gap: 6 }}
                 onPress={props.onAssign}
@@ -256,7 +258,8 @@ export function ThreadDetail(props: {
         >
           <Button
             label={uiText("handToAnAgent")}
-            icon="return"
+            icon="send"
+            iconSize={14}
             size={40}
             labelSize={13}
             tone="primary"

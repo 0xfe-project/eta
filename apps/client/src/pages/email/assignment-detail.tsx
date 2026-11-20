@@ -22,6 +22,7 @@ export function AssignmentDetail(props: {
       title={uiText("processingAgent2")}
       phone={props.phone}
       sheet={props.phone}
+      plainSheetHeader={props.phone}
       overPhoneNavigation={props.phone}
       side={!props.phone}
       width={360}

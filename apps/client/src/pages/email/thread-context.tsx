@@ -345,8 +345,6 @@ export function EmailContext(props: {
       height={phone() ? "74%" : "100%"}
       side={!phone()}
       phone={phone()}
-      blurBackdrop={phone()}
-      panelStyle={phone() ? undefined : { borderWidth: 0, borderLeftWidth: 1 }}
       onClose={props.onClose}
     >
       <Scroll style={grow} scrollbar={false}>
