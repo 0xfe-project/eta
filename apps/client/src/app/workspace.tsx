@@ -306,6 +306,7 @@ export function Workspace(props: {
                     id={captain()}
                     layout={props.layout}
                     captain
+                    onPending={() => navigate("pending")}
                     onTask={openTask}
                     onRelatedTask={openRelatedTask}
                     onRoutines={showRoutine}
@@ -324,6 +325,7 @@ export function Workspace(props: {
                     id={id()}
                     captain={page() === "captain"}
                     layout={props.layout}
+                    onPending={() => navigate("pending")}
                     onTask={openTask}
                     onRelatedTask={openRelatedTask}
                     onRoutines={showRoutine}
@@ -465,9 +467,7 @@ export function Workspace(props: {
       <If
         when={task() && page() !== "tasks" && (phone() || page() === "pending")}
       >
-        <View
-          style={{ ...fill, bottom: phone() ? sizes.phoneNav : 0, zIndex: 10 }}
-        >
+        <View style={{ ...fill, zIndex: 10 }}>
           <Each of={[task()]}>
             {(id) => (
               <TaskDetail

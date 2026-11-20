@@ -69,15 +69,23 @@ function SheetQuestion(props: {
       }}
     >
       <Scroll style={props.sheet ? grow : undefined} scrollbar={false}>
-        <View style={{ padding: props.sheet ? 16 : 12, gap: 8 }}>
+        <View
+          style={
+            props.sheet
+              ? { paddingTop: 4, paddingHorizontal: 16, gap: 12 }
+              : { padding: 12, gap: 8 }
+          }
+        >
           <If when={props.sheet} else={<Caption text={uiText("question")} />}>
-            <Label size={11} tone="muted">
+            <Label size={11} line={14} tone="muted">
               {[conversation()?.name, relativeTime(props.item.createdAt)]
                 .filter(Boolean)
                 .join(" · ")}
             </Label>
           </If>
-          <Label size={props.sheet ? 16 : 14}>{props.item.prompt}</Label>
+          <Label size={props.sheet ? 16 : 14} line={props.sheet ? 22 : 20}>
+            {props.item.prompt}
+          </Label>
           <View
             style={
               props.sheet ? { gap: 8 } : { ...row, flexWrap: "wrap", gap: 6 }
@@ -123,7 +131,14 @@ function SheetQuestion(props: {
                 : uiText("yourAnswerProgress")
             }
             onChange={reply.set}
-            style={props.sheet ? { height: 43 } : undefined}
+            style={
+              props.sheet
+                ? {
+                    height: 44,
+                    paddingHorizontal: 12,
+                  }
+                : undefined
+            }
           />
         </View>
       </Scroll>
@@ -132,18 +147,29 @@ function SheetQuestion(props: {
           ...row,
           justifyContent: "flex-end",
           gap: 8,
-          padding: props.sheet ? 16 : 12,
+          ...(props.sheet
+            ? { height: 64, paddingHorizontal: 16, flexShrink: 0 }
+            : { padding: 12 }),
           borderTopWidth: props.sheet ? 1 : 0,
           borderColor: c().border,
         }}
       >
-        <If when={props.sheet && props.onConversation}>
-          <Button
-            label={uiText("openConversation")}
-            tone="ghost"
+        <If when={props.sheet}>
+          <View
+            role={props.onConversation ? "button" : undefined}
+            accessibilityLabel={uiText("openConversation")}
             onPress={() => props.onConversation?.()}
-          />
-          <View style={{ flex: 1 }} />
+            style={{
+              flex: 1,
+              cursor: props.onConversation ? "pointer" : "default",
+            }}
+          >
+            <If when={props.onConversation}>
+              <Label size={12} line={16} tone="muted">
+                {uiText("openConversation")}
+              </Label>
+            </If>
+          </View>
         </If>
         <If when={!props.sheet}>
           <Button
@@ -156,6 +182,8 @@ function SheetQuestion(props: {
           label={props.sheet ? uiText("sendAnswer") : uiText("answer")}
           tone="primary"
           size={props.sheet ? 36 : undefined}
+          labelWeight={props.sheet ? 600 : undefined}
+          style={props.sheet ? { paddingHorizontal: 16 } : undefined}
           disabled={busy() || (!selected().length && !reply().trim())}
           onPress={() => void submit()}
         />
@@ -172,82 +200,103 @@ function SheetProposal(props: {
   const host = useHost();
   const c = colors();
   const working = signal(false);
+  const op = () => props.operation;
+  const pending = () => op().requiresApproval && op().status === "pending";
   const title = () =>
-    String(
-      props.operation.payload.name ??
-        props.operation.payload.title ??
-        props.operation.kind.replaceAll("_", " "),
-    );
+    String(op().payload.name ?? op().payload.title ?? kindName(op().kind));
+  const conversation = () =>
+    host
+      .conversations()
+      .find((item) => item.id === op().payload.originConversationId);
   async function decide(decision: "approve" | "reject") {
     if (working()) return;
     working.set(true);
     await host.action(() =>
       host.call("captain", "decideOperation", {
-        operationId: props.operation.id,
+        operationId: op().id,
         decision,
       }),
     );
     working.set(false);
   }
   return (
-    <View
-      style={{
-        ...(props.sheet ? grow : {}),
-        borderWidth: props.sheet ? 0 : 1,
-        borderColor: c().border,
-        padding: props.sheet ? 16 : 10,
-        gap: props.sheet ? 10 : 5,
-      }}
-    >
-      <Caption text={props.operation.kind.replaceAll("_", " ")} />
-      <Label weight={600} size={props.sheet ? 16 : 14}>
-        {title()}
-      </Label>
-      <Each
-        of={Object.entries(props.operation.payload).filter(
-          ([key, value]) =>
-            !["name", "title"].includes(key) &&
-            !key.endsWith("Id") &&
-            typeof value === "string",
-        )}
-      >
-        {(detail) => (
-          <Label size={12} tone="muted">
-            {String(detail()[1])}
-          </Label>
-        )}
-      </Each>
-      <If
-        when={
-          props.operation.requiresApproval &&
-          props.operation.status === "pending"
-        }
-        else={
-          <Label size={12} tone="muted">
-            {props.operation.error ?? props.operation.status}
-          </Label>
-        }
-      >
-        <If when={props.sheet}>
-          <View style={{ flex: 1 }} />
-        </If>
-        <View style={{ ...row, justifyContent: "flex-end", gap: 6 }}>
-          <If when={props.sheet && props.onConversation}>
-            <Button
-              label={uiText("openConversation")}
-              tone="ghost"
-              onPress={() => props.onConversation?.()}
+    <View style={grow}>
+      <Scroll style={grow} scrollbar={false}>
+        <View style={{ paddingTop: 4, paddingHorizontal: 16, gap: 14 }}>
+          <View style={{ gap: 4 }}>
+            <Caption
+              phone
+              text={[
+                kindName(op().kind),
+                conversation()?.name,
+                relativeTime(op().createdAt),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             />
-            <View style={{ flex: 1 }} />
+            <Label size={16} line={22}>
+              {title()}
+            </Label>
+          </View>
+          <Each of={proposalFields(op(), host).filter(([, value]) => value)}>
+            {(field) => (
+              <View style={{ gap: 4 }}>
+                <Caption phone text={uiText(field()[0])} />
+                <Label size={13} line={19}>
+                  {field()[1]}
+                </Label>
+              </View>
+            )}
+          </Each>
+          <If
+            when={pending()}
+            else={
+              <Label size={12} line={16} tone="muted">
+                {op().error ?? op().status}
+              </Label>
+            }
+          >
+            <If when={props.onConversation}>
+              <View
+                role="button"
+                accessibilityLabel={uiText("openConversation")}
+                onPress={() => props.onConversation?.()}
+                style={{ cursor: "pointer" }}
+              >
+                <Label size={12} line={16} tone="muted">
+                  {uiText("proposalSeeConversation")}
+                </Label>
+              </View>
+            </If>
           </If>
+        </View>
+      </Scroll>
+      <If when={pending()}>
+        <View
+          style={{
+            ...row,
+            height: 64,
+            flexShrink: 0,
+            gap: 8,
+            paddingHorizontal: 16,
+            borderTopWidth: 1,
+            borderColor: c().border,
+          }}
+        >
           <Button
             label={uiText("reject")}
+            size={36}
+            style={{ paddingHorizontal: 16 }}
             disabled={working()}
             onPress={() => void decide("reject")}
           />
+          <View style={{ flex: 1 }} />
           <Button
-            label={uiText("approve")}
+            label={uiText("proposalCreate")}
             tone="primary"
+            size={36}
+            labelWeight={600}
+            style={{ paddingHorizontal: 20 }}
             disabled={working()}
             onPress={() => void decide("approve")}
           />
@@ -255,6 +304,58 @@ function SheetProposal(props: {
       </If>
     </View>
   );
+}
+
+const proposalKinds: Record<string, Parameters<typeof uiText>[0]> = {
+  create_group: "proposalNewGroup",
+  create_agent: "proposalNewAgent",
+  create_routine: "proposalNewRoutine",
+};
+
+function kindName(kind: string) {
+  return proposalKinds[kind]
+    ? uiText(proposalKinds[kind]!)
+    : kind.replaceAll("_", " ");
+}
+
+/** What a proposal of each kind will make, as label and value pairs. */
+function proposalFields(
+  op: CaptainOperationView,
+  host: ReturnType<typeof useHost>,
+): [Parameters<typeof uiText>[0], string][] {
+  const payload = op.payload;
+  const text = (key: string) =>
+    typeof payload[key] === "string" ? (payload[key] as string) : "";
+  const names = (ids: unknown) =>
+    Array.isArray(ids)
+      ? ids
+          .map((id) => host.agent(String(id))?.name)
+          .filter(Boolean)
+          .join(", ")
+      : "";
+  switch (op.kind) {
+    case "create_group":
+      return [
+        ["proposalDirectory", text("path") || text("projectName")],
+        ["proposalMembers", names(payload.memberIds)],
+        ["proposalSteward", names([payload.stewardId])],
+        ["proposalGoal", text("goal")],
+      ];
+    case "create_agent":
+      return [
+        ["proposalPurpose", text("purpose")],
+        ["proposalPersona", text("persona")],
+        ["proposalModel", text("model")],
+        ["proposalRuntime", text("runtime")],
+      ];
+    case "create_routine":
+      return [
+        ["proposalWhen", text("scheduleText")],
+        ["proposalBrief", text("brief")],
+      ];
+    default:
+      return [];
+  }
 }
 
 /** A question an agent asked: a card in the transcript, a sheet on a phone. */
@@ -497,12 +598,6 @@ export function PendingStrip(props: { items: InteractionView[] }) {
   );
 }
 
-const proposalKinds: Record<string, Parameters<typeof uiText>[0]> = {
-  create_group: "proposalNewGroup",
-  create_agent: "proposalNewAgent",
-  create_routine: "proposalNewRoutine",
-};
-
 /** A change Captain proposed: a card in the transcript, a sheet on a phone. */
 export function Proposal(props: {
   operation: CaptainOperationView;
@@ -527,40 +622,9 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
   const payload = () => op().payload;
   const text = (key: string) =>
     typeof payload()[key] === "string" ? (payload()[key] as string) : "";
-  const names = (ids: unknown) =>
-    Array.isArray(ids)
-      ? ids
-          .map((id) => host.agent(String(id))?.name)
-          .filter(Boolean)
-          .join(", ")
-      : "";
   const title = () =>
     text("name") || text("title") || op().kind.replaceAll("_", " ");
-  const fields = (): [Parameters<typeof uiText>[0], string][] => {
-    switch (op().kind) {
-      case "create_group":
-        return [
-          ["proposalDirectory", text("path") || text("projectName")],
-          ["proposalMembers", names(payload().memberIds)],
-          ["proposalSteward", names([payload().stewardId])],
-          ["proposalGoal", text("goal")],
-        ];
-      case "create_agent":
-        return [
-          ["proposalPurpose", text("purpose")],
-          ["proposalPersona", text("persona")],
-          ["proposalModel", text("model")],
-          ["proposalRuntime", text("runtime")],
-        ];
-      case "create_routine":
-        return [
-          ["proposalWhen", text("scheduleText")],
-          ["proposalBrief", text("brief")],
-        ];
-      default:
-        return [];
-    }
-  };
+  const fields = () => proposalFields(op(), host);
   const badge = (): [
     Parameters<typeof uiText>[0],
     "ink" | "green" | "muted",
@@ -619,9 +683,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
           tone="muted"
           style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
         >
-          {proposalKinds[op().kind]
-            ? uiText(proposalKinds[op().kind]!)
-            : op().kind.replaceAll("_", " ")}
+          {kindName(op().kind)}
         </Label>
         <Label size={12} line={16} weight={600} lines={1} style={{ flex: 1 }}>
           {title()}

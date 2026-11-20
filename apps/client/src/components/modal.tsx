@@ -59,7 +59,11 @@ export function Modal(props: {
       !props.sheet && !props.phonePage && props.blurBackdrop !== false;
     const usesSystemMaterial = platform.os === "macos" || platform.os === "ios";
     return {
-      backgroundColor: props.phonePage ? color().canvas : color().modalShade,
+      backgroundColor: props.phonePage
+        ? color().canvas
+        : props.sheet
+          ? color().sheetShade
+          : color().modalShade,
       backdropFilter: blur ? "blur(3px)" : undefined,
       // A solid mask keeps Apple's blur while removing the system material tint.
       maskImage:

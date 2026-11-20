@@ -121,24 +121,24 @@ export function Message(props: {
     <View
       style={{
         alignSelf: "stretch",
-        gap: item().author === "user" || card() ? 4 : 0,
+        gap: item().author === "user" || card() ? 4 : props.phone ? 8 : 0,
         paddingVertical: props.phone || card() ? 0 : 16,
         paddingHorizontal: props.phone || props.compact || card() ? 0 : 16,
       }}
     >
       <If when={item().author === "user"}>
-        <View style={{ alignItems: "flex-end", gap: 6 }}>
+        <View style={{ alignItems: "flex-end", gap: props.phone ? 4 : 6 }}>
           <View
             style={{
               maxWidth: props.phone ? "84%" : "72%",
               borderWidth: 1,
               borderColor: c().border,
-              backgroundColor: c().surface,
+              backgroundColor: props.phone ? c().selected : c().surface,
               paddingVertical: 8,
               paddingHorizontal: 12,
             }}
           >
-            <Label line={props.phone ? 22 : 23}>{item().text}</Label>
+            <Label line={props.phone ? 20 : 23}>{item().text}</Label>
             <Each of={props.additions} key={(addition) => addition.id}>
               {(addition) => (
                 <View
@@ -159,7 +159,7 @@ export function Message(props: {
             </Each>
             <Each of={attached()} key={(file) => file.id}>
               {(file) => (
-                <Label line={props.phone ? 22 : 23}>
+                <Label line={props.phone ? 20 : 23}>
                   {`[${file().name} · ${(file().size / 1024).toFixed(1)} KB]`}
                 </Label>
               )}
@@ -167,8 +167,8 @@ export function Message(props: {
           </View>
           <Label
             size={10}
-            line={14}
-            tone="faint"
+            line={props.phone ? 12 : 14}
+            tone={props.phone ? "muted" : "faint"}
             style={{
               textTransform: props.phone ? "none" : "uppercase",
               letterSpacing: props.phone ? 0 : 0.4,
@@ -196,6 +196,7 @@ export function Message(props: {
                   ? subtasksOf(host.tasks(), value())
                   : undefined
               }
+              phone={props.phone}
               onPress={() => props.onTask(value().id)}
             />
           )}
@@ -235,9 +236,18 @@ export function Message(props: {
         }
       >
         <If when={!props.captain && item().agentId}>
-          <View style={{ ...row, gap: 8, marginBottom: 10 }}>
-            <AgentFace id={item().agentId} size={14} />
-            <Label size={12} weight={600}>
+          <View
+            style={{
+              ...row,
+              gap: props.phone && !active() ? 6 : 8,
+              marginBottom: props.phone ? 0 : 10,
+            }}
+          >
+            <AgentFace
+              id={item().agentId}
+              size={props.phone ? (active() ? 18 : 16) : 14}
+            />
+            <Label size={12} line={16} weight={600}>
               {host.agent(item().agentId)?.name ??
                 (item().author === "captain" ? "Captain" : uiText("agent"))}
             </Label>
@@ -265,8 +275,8 @@ export function Message(props: {
               >
                 <Icon
                   name={details() ? "down" : "right"}
-                  size={8}
-                  tone="muted"
+                  size={props.phone ? 10 : 8}
+                  tone={props.phone ? "faint" : "muted"}
                 />
                 <Caption
                   text={uiText("thinkingProcess")}
@@ -275,14 +285,14 @@ export function Message(props: {
                 <View style={{ flex: 1 }} />
                 <Caption
                   style={{ letterSpacing: 0.8, color: c().faint }}
-                  text={uiText(
+                  text={`${props.phone ? "· " : ""}${uiText(
                     steps().length === 1
                       ? "oneProcessStep"
                       : "processStepCount",
                     {
                       count: steps().length,
                     },
-                  )}
+                  )}`}
                 />
               </View>
               <If when={details()}>
@@ -429,10 +439,10 @@ export function Message(props: {
         <If when={!review()}>
           <Label
             size={10}
-            line={14}
-            tone="faint"
+            line={props.phone ? 12 : 14}
+            tone={props.phone ? "muted" : "faint"}
             style={{
-              marginTop: 8,
+              marginTop: props.phone ? 0 : 8,
               letterSpacing: props.phone ? 0 : 0.4,
               textTransform: props.phone ? "none" : "uppercase",
             }}

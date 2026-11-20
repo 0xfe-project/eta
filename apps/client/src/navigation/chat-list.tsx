@@ -75,7 +75,12 @@ export function ChatList(
       }}
     >
       <If when={props.layout !== "desktop"}>
-        <Header title={text("chat")} layout={props.layout} inset={12}>
+        <Header
+          title={text("chat")}
+          layout={props.layout}
+          inset={phone() ? 16 : 12}
+          end={phone() ? 4 : undefined}
+        >
           <View style={{ flex: 1 }} />
           <If when={phone()}>
             <Button
@@ -83,6 +88,9 @@ export function ChatList(
               icon="search"
               iconOnly
               tone="ghost"
+              size={40}
+              iconSize={16}
+              style={{ marginRight: -8 }}
               onPress={() => searching.set(!searching())}
             />
           </If>
@@ -91,6 +99,8 @@ export function ChatList(
             icon="plus"
             iconOnly
             tone={phone() ? "ghost" : "plain"}
+            size={phone() ? 40 : undefined}
+            iconSize={phone() ? 16 : undefined}
             onPress={() => props.onCreate()}
           />
         </Header>
@@ -148,7 +158,7 @@ export function ChatList(
               justifyContent: "center",
             }}
           >
-            <Caption text={text("groups")} />
+            <Caption text={text("groups")} phone />
           </View>
         </If>
         <Each of={groups()} key={(group) => group.id}>
@@ -170,14 +180,15 @@ export function ChatList(
         <If when={phone()}>
           <View
             style={{
-              height: 44,
+              height: 36,
+              marginTop: 8,
               borderBottomWidth: 1,
               borderColor: c().border,
               paddingHorizontal: 16,
               justifyContent: "center",
             }}
           >
-            <Caption text={text("agents")} />
+            <Caption text={text("agents")} phone />
           </View>
           <Each of={host.people()} key={(agent) => agent.id}>
             {(agent) => (

@@ -5,6 +5,7 @@ import { colors, Label, row, sizes } from "../components";
 import { pickerTarget } from "../components/element-picker";
 import { phoneTabPaths } from "../components/icons";
 import { useText } from "../i18n";
+import { taskNeedsAttention } from "../pages/tasks/status";
 import { useHost } from "../services/host";
 import { CaptainFace } from "./captain";
 
@@ -109,7 +110,7 @@ export function PhoneNavigation(props: Navigation) {
   const host = useHost();
   const waiting = () =>
     host.pending().length +
-    host.tasks().filter((task) => task.status === "in_review").length +
+    host.tasks().filter(taskNeedsAttention).length +
     host
       .list<CaptainOperationView>("captain", "operations")
       .filter((op) => op.requiresApproval && op.status === "pending").length;

@@ -140,23 +140,28 @@ export function MemberRun(props: {
       <View
         style={{
           paddingHorizontal: inset,
-          paddingTop: props.phone ? 8 : 10,
-          paddingBottom: 8,
+          paddingTop: props.phone ? 12 : 10,
+          paddingBottom: props.phone ? 12 : 8,
           flexShrink: 0,
-          gap: 6,
+          gap: props.phone ? 8 : 6,
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
       >
         <View style={{ ...row, height: props.phone ? 24 : 28, gap: 8 }}>
           <AgentFace id={props.agentId} size={18} />
-          <Label size={12} lines={1}>
+          <Label
+            size={props.phone ? 14 : 12}
+            line={props.phone ? 18 : undefined}
+            lines={1}
+          >
             {props.executorName ??
               host.agent(props.agentId)?.name ??
               uiText("agent")}
           </Label>
           <Label
-            size={11}
+            size={props.phone ? 12 : 11}
+            line={props.phone ? 16 : undefined}
             tone="muted"
             lines={1}
             style={{ flex: 1, minWidth: 0 }}
@@ -234,7 +239,12 @@ export function MemberRun(props: {
                 </Each>
               </View>
               <View
-                style={{ ...row, flexWrap: "wrap", columnGap: 12, rowGap: 1 }}
+                style={{
+                  ...row,
+                  flexWrap: "wrap",
+                  columnGap: 12,
+                  rowGap: props.phone ? 4 : 1,
+                }}
               >
                 <Each
                   of={Object.keys(runKinds) as (keyof typeof runKinds)[]}
@@ -258,15 +268,39 @@ export function MemberRun(props: {
                           style={{
                             ...row,
                             gap: 4,
-                            minHeight: props.phone ? 28 : 18,
+                            minHeight: props.phone ? 14 : 18,
                             cursor: "pointer",
                           }}
                         >
-                          <StatusDot color={runKinds[kind()].color} size={8} />
-                          <Label size={11} line={16} tone="muted">
+                          <If
+                            when={props.phone}
+                            else={
+                              <StatusDot
+                                color={runKinds[kind()].color}
+                                size={8}
+                              />
+                            }
+                          >
+                            <Label
+                              size={11}
+                              line={14}
+                              style={{ color: runKinds[kind()].color }}
+                            >
+                              ■
+                            </Label>
+                          </If>
+                          <Label
+                            size={11}
+                            line={props.phone ? 14 : 16}
+                            tone="muted"
+                          >
                             {uiText(runKinds[kind()].label)}
                           </Label>
-                          <Label size={11} line={16} weight={500}>
+                          <Label
+                            size={11}
+                            line={props.phone ? 14 : 16}
+                            weight={500}
+                          >
                             {runDuration(duration())}
                           </Label>
                         </View>

@@ -93,4 +93,5 @@ export const routinesMessages = {
     "What should Captain do each time?",
     "Captain 每次应当做什么？",
   ],
+  olderReports: ["Older reports", "较早的报告"],
 } as const;

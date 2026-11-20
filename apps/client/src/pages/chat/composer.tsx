@@ -443,7 +443,7 @@ export function Composer(props: {
               cursor: uploading() || busy() ? "default" : "pointer",
             }}
           >
-            <Icon name="clip" size={14} tone="muted" />
+            <Icon name="clip" size={props.phone ? 16 : 14} tone="muted" />
           </View>
           <View style={{ flex: props.phone ? 0 : 1 }} />
           <Button
@@ -452,6 +452,7 @@ export function Composer(props: {
             iconOnly={props.phone}
             end={props.phone ? undefined : "return"}
             size={props.phone ? 32 : 28}
+            iconSize={props.phone ? 16 : undefined}
             labelSize={11}
             labelWeight={500}
             style={props.phone ? undefined : { paddingHorizontal: 10, gap: 8 }}

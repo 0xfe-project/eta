@@ -41,7 +41,14 @@ export function ComposerRecipients(props: {
         gap: 6,
       }}
     >
-      <View style={{ ...row, gap: 6, flexWrap: "wrap" }}>
+      <View
+        style={{
+          ...row,
+          gap: 6,
+          flexWrap: props.phone ? "nowrap" : "wrap",
+          ...(props.phone ? { alignSelf: "stretch", overflow: "hidden" } : {}),
+        }}
+      >
         <View
           role="button"
           accessibilityLabel={uiText("everyone")}
@@ -58,6 +65,7 @@ export function ComposerRecipients(props: {
             gap: 6,
             paddingLeft: 8,
             paddingRight: 10,
+            flexShrink: 0,
             borderWidth: 1,
             borderColor: c().border,
             cursor: "pointer",
@@ -100,7 +108,8 @@ export function ComposerRecipients(props: {
                   height: 28,
                   gap: 6,
                   paddingLeft: 6,
-                  paddingRight: running() ? 4 : 10,
+                  paddingRight: running() ? 4 : props.phone ? 8 : 10,
+                  flexShrink: 0,
                   borderWidth: 1,
                   borderColor: selected() ? c().ink : c().border,
                   cursor: "pointer",
@@ -109,8 +118,8 @@ export function ComposerRecipients(props: {
               >
                 <AgentFace id={id()} size={16} />
                 <Label
-                  size={12}
-                  line={16}
+                  size={props.phone ? 11 : 12}
+                  line={props.phone ? 14 : 16}
                   lines={1}
                   tone={selected() ? "ink" : "mutedInk"}
                   weight={selected() ? 600 : 400}
@@ -173,7 +182,11 @@ export function ComposerRecipients(props: {
       </View>
       <View style={{ ...row, gap: 6 }}>
         <StatusDot color={props.waitsFor ? c().blue : c().green} />
-        <Label size={12} line={16} tone={props.waitsFor ? "blue" : "mutedInk"}>
+        <Label
+          size={props.phone ? 11 : 12}
+          line={props.phone ? 14 : 16}
+          tone={props.waitsFor ? "blue" : "mutedInk"}
+        >
           {props.waitsFor
             ? uiText("waitsUntilFinishes", { names: props.waitsFor })
             : props.names

@@ -248,7 +248,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
         }}
       >
         <Button
-          label={localizedText("Older reports", "较早的报告")}
+          label={uiText("olderReports")}
           tone="ghost"
           disabled={props.index + 1 >= props.count}
           onPress={() => props.onMove(1)}
@@ -257,8 +257,10 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
         <Button
           label={uiText("runNow")}
           tone="primary"
-          icon="right"
+          icon="play"
           size={36}
+          labelWeight={600}
+          style={{ paddingHorizontal: 16, gap: 6 }}
           disabled={!props.canRetry}
           onPress={props.onRetry}
         />

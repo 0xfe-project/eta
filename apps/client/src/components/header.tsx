@@ -14,6 +14,12 @@ export function Header(props: {
   subtitleTone?: "green" | "amber" | "muted";
   layout?: Layout;
   inset?: number;
+  /** Right padding when the trailing control carries its own inset (a phone's 40pt button). */
+  end?: number;
+  /** A phone conversation's 44pt bar with a 15/18 title. */
+  compact?: boolean;
+  /** Drawn before the title, such as an avatar. */
+  leading?: JSX.Element;
   dialog?: boolean;
   children?: JSX.Element;
   onBack?: () => void;
@@ -23,6 +29,7 @@ export function Header(props: {
     "Header",
     "apps/client/src/components/header.tsx",
   );
+  const phone = () => props.layout === "phone";
   return (
     <View
       {...picker}
@@ -30,13 +37,14 @@ export function Header(props: {
       style={{
         ...row,
         flexShrink: 0,
-        height: props.layout === "phone" ? 48 : sizes.header,
-        paddingHorizontal: props.inset ?? (props.layout === "phone" ? 16 : 22),
+        height: phone() ? (props.compact ? 44 : 48) : sizes.header,
+        paddingHorizontal: props.inset ?? (phone() ? 16 : 22),
         // A phone's 40pt back button carries its own inset.
         paddingLeft:
-          props.layout === "phone" && props.onBack !== undefined
-            ? 4
-            : (props.inset ?? (props.layout === "phone" ? 16 : 22)),
+          phone() && props.onBack !== undefined
+            ? 0
+            : (props.inset ?? (phone() ? 16 : 22)),
+        paddingRight: props.end ?? props.inset ?? (phone() ? 16 : 22),
         borderBottomWidth: 1,
         borderColor: color().border,
         backgroundColor:
@@ -49,16 +57,20 @@ export function Header(props: {
     >
       <If when={props.onBack !== undefined}>
         <BackButton
-          size={props.layout === "phone" ? 40 : undefined}
-          iconSize={props.layout === "phone" ? 18 : undefined}
+          size={phone() ? 40 : undefined}
+          iconSize={phone() ? (props.compact ? 16 : 18) : undefined}
+          style={phone() ? { marginRight: -8 } : undefined}
           onPress={() => props.onBack?.()}
         />
       </If>
+      {props.leading}
       <View style={{ minWidth: 0, flexShrink: 1 }}>
         <Label
           weight={props.dialog ? 500 : 600}
-          size={props.layout === "phone" || props.dialog ? 16 : 14}
-          line={props.subtitle ? 18 : 20}
+          size={
+            phone() && props.compact ? 15 : phone() || props.dialog ? 16 : 14
+          }
+          line={props.subtitle || (phone() && props.compact) ? 18 : 20}
           lines={1}
         >
           {props.title}

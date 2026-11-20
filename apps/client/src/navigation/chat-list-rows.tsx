@@ -1,7 +1,7 @@
 import type { AgentView, ConversationSummary } from "@eta/client-contracts";
 import type { Layout } from "../components";
 import { View } from "nsh";
-import { colors, Icon, Label, row } from "../components";
+import { colors, Label, row, RowChevron } from "../components";
 import { AgentFace } from "../components/agent-face";
 import { StatusDot } from "../components/status-dot";
 import { uiText } from "../i18n";
@@ -200,16 +200,5 @@ export function AgentRow(props: {
         <AgentFace id={props.agent.id} size={24} />
       </RailEntry>
     </If>
-  );
-}
-
-/** The 14px foreground caret at 45% in a 16px slot that ends phone list rows. */
-function RowChevron() {
-  return (
-    <View style={{ width: 16, alignItems: "center", flexShrink: 0 }}>
-      <View style={{ opacity: 0.45 }}>
-        <Icon name="right" size={14} />
-      </View>
-    </View>
   );
 }

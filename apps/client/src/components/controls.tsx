@@ -177,6 +177,8 @@ export function ActionMenu(props: {
   valueTone?: keyof typeof light;
   truncateValue?: boolean;
   triggerStyle?: ViewStyle;
+  /** The size of the "more" glyph of a menu without a value. */
+  iconSize?: number;
   children?: JSX.Element;
 }) {
   const c = colors();
@@ -230,7 +232,9 @@ export function ActionMenu(props: {
           </If>
           <Icon
             name={props.value ? "down" : "more"}
-            size={props.value ? (props.valueTone ? 14 : 9) : 17}
+            size={
+              props.value ? (props.valueTone ? 14 : 9) : (props.iconSize ?? 17)
+            }
             tone={props.valueTone}
           />
         </View>

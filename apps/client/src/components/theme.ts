@@ -24,6 +24,8 @@ export const light = {
   redFill: "#fce9eb",
   shade: "#00000020",
   modalShade: "#0000001e",
+  /** A phone sheet's scrim: the foreground at 16%. */
+  sheetShade: "#11111129",
 };
 
 const dark: typeof light = {
@@ -48,6 +50,7 @@ const dark: typeof light = {
   redFill: "#3a1d21",
   shade: "#00000080",
   modalShade: "#00000048",
+  sheetShade: "#00000048",
 };
 
 export const Palette = context<() => typeof light>(() => light);

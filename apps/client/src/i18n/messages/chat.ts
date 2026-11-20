@@ -246,6 +246,20 @@ export const chatMessages = {
     "「{{name}}」已就绪，在侧栏可以找到它。",
   ],
   pendingApprovals: ["Pending approvals {{count}}", "待批准 {{count}}"],
+  proposalWaitingForApproval: [
+    "1 proposal waiting for your approval",
+    "1 项提议等待你批准",
+  ],
+  proposalsWaitingForApproval: [
+    "{{count}} proposals waiting for your approval",
+    "{{count}} 项提议等待你批准",
+  ],
+  reviewProposals: ["Review", "查看"],
+  proposalWhyCaption: ["Why", "原因"],
+  proposalSeeConversation: [
+    "Open the conversation to see how Captain got here.",
+    "打开对话，看看 Captain 是怎么得出这个提议的。",
+  ],
   nothingIsWaitingForApproval: [
     "Nothing is waiting for approval.",
     "没有等待批准的事项。",

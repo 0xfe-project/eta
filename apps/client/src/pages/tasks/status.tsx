@@ -233,6 +233,8 @@ function runText(task: BoardTaskView) {
 export function TaskSummary(props: {
   task: BoardTaskView;
   subtasks?: BoardTaskView[];
+  /** The phone transcript's folded card: a right caret and the kind "Task". */
+  phone?: boolean;
   onPress: () => void;
 }) {
   const c = colors();
@@ -266,10 +268,14 @@ export function TaskSummary(props: {
           borderColor: c().border,
         }}
       >
-        <Icon name="down" size={8} tone="muted" />
+        <Icon
+          name={props.phone ? "right" : "down"}
+          size={props.phone ? 10 : 8}
+          tone={props.phone ? "faint" : "muted"}
+        />
         <TaskGlyph status={props.task.status} size={12} />
         <Caption
-          text={uiText("taskCard")}
+          text={uiText(props.phone ? "taskKind" : "taskCard")}
           style={{ letterSpacing: 1.4, color: c().faint, flexShrink: 0 }}
         />
         <Label size={12} line={16} tone="muted">

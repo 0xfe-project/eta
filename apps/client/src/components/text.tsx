@@ -1,7 +1,7 @@
 import type { JSX, TextStyle } from "nsh";
 import type { IconName } from "./icons";
 import type { light } from "./theme";
-import { Image, Text } from "nsh";
+import { Image, Text, View } from "nsh";
 import { TextView } from "nsh/base";
 import { iconPaths } from "./icons";
 import { colors, fontFamily, Fonts } from "./theme";
@@ -109,15 +109,36 @@ export function Markdown(props: {
   );
 }
 
-export function Caption(props: { text: string; style?: TextStyle }) {
+export function Caption(props: {
+  text: string;
+  /** The phone's tighter 10/12 caption with 0.08em tracking. */
+  phone?: boolean;
+  tone?: keyof typeof light;
+  style?: TextStyle;
+}) {
   return (
     <Label
       size={10}
-      line={14}
-      tone="muted"
-      style={{ letterSpacing: 1.2, textTransform: "uppercase", ...props.style }}
+      line={props.phone ? 12 : 14}
+      tone={props.tone ?? "muted"}
+      style={{
+        letterSpacing: props.phone ? 0.8 : 1.2,
+        textTransform: "uppercase",
+        ...props.style,
+      }}
     >
       {props.text}
     </Label>
+  );
+}
+
+/** The 14px foreground caret at 45% in a 16px slot that ends phone list rows. */
+export function RowChevron() {
+  return (
+    <View style={{ width: 16, alignItems: "center", flexShrink: 0 }}>
+      <View style={{ opacity: 0.45 }}>
+        <Icon name="right" size={14} />
+      </View>
+    </View>
   );
 }

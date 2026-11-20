@@ -1,5 +1,6 @@
 import type {
   ArtifactView,
+  CaptainOperationView,
   ConversationInfo,
   HistoryResult,
   MemberView,
@@ -21,12 +22,15 @@ import {
   sizes,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
+import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
+import { CaptainFace } from "../../navigation/captain";
 import { follow, useHost } from "../../services/host";
 import { PendingStrip } from "./approvals";
 import { ArtifactPreview } from "./artifacts/preview";
 import { Composer } from "./composer";
 import { ConversationActions } from "./conversation-actions";
+import { PhoneConversationInfo } from "./conversation-info";
 import { ConversationPanel, panelAttention } from "./conversation-panel";
 import { ConversationTimeline } from "./conversation-timeline";
 import { indexInserts, InsertMessage } from "./insert-message";
@@ -42,6 +46,8 @@ export function Conversation(props: {
   onTask: (id: string) => void;
   onRelatedTask: (id: string) => void;
   onRoutines: (id?: string) => void;
+  /** Opens the Pending tab, from Captain's approvals strip on a phone. */
+  onPending?: () => void;
   contentWidth?: number;
   alignComposer?: boolean;
   rail?: boolean;
@@ -88,6 +94,10 @@ export function Conversation(props: {
       .find((item) => item.id === (info()?.projectId ?? summary()?.projectId));
   const stewardId = () => (info() ? info()!.stewardId : summary()?.stewardId);
   const timeline = () => host.section<TimelineSection>(target(), "timeline");
+  const approvals = () =>
+    host
+      .list<CaptainOperationView>("captain", "operations")
+      .filter((op) => op.requiresApproval && op.status === "pending");
   const asking = () =>
     host.pending().filter((entry) => entry.conversationId === props.id);
   const messages = () => [
@@ -139,6 +149,11 @@ export function Conversation(props: {
     }
     paging.set(false);
   }
+  function closeDrawer() {
+    drawer.set(false);
+    member.set(undefined);
+    props.onCloseTask();
+  }
   function Panel() {
     return (
       <ConversationPanel
@@ -178,8 +193,20 @@ export function Conversation(props: {
           title={title()}
           layout={props.layout}
           onBack={props.onBack}
-          inset={10}
+          inset={phone() ? (props.captain ? 16 : undefined) : 10}
+          end={phone() && !props.captain ? 4 : undefined}
+          compact={phone() && !props.captain}
+          leading={
+            phone() && props.captain ? <CaptainFace size={24} /> : undefined
+          }
         >
+          <If when={phone() && props.captain}>
+            <Label size={11} line={14} tone="muted">
+              {uiText(
+                host.captain()?.status === "working" ? "working" : "idle",
+              )}
+            </Label>
+          </If>
           <If when={!phone() && project() && group()}>
             <View
               role="button"
@@ -221,14 +248,18 @@ export function Conversation(props: {
               </Each>
             </View>
           </If>
-          <View style={{ flex: 1 }} />
-          <If when={props.layout !== "desktop"}>
+          <If when={!phone()}>
+            <View style={{ flex: 1 }} />
+          </If>
+          <If when={props.layout === "tablet" || (phone() && !props.captain)}>
             <View>
               <Button
                 label={phone() ? uiText("conversationInfo") : uiText("panel")}
                 icon={phone() ? "info" : "sidebar"}
                 iconOnly={phone()}
                 tone={phone() ? "ghost" : "plain"}
+                size={phone() ? 40 : undefined}
+                iconSize={phone() ? 16 : undefined}
                 labelSize={11}
                 style={{ gap: 6 }}
                 onPress={() => drawer.set(true)}
@@ -248,6 +279,40 @@ export function Conversation(props: {
             </View>
           </If>
         </Header>
+        <If when={phone() && props.captain && approvals().length}>
+          <View
+            role="button"
+            accessibilityLabel={uiText("reviewProposals")}
+            onPress={() => props.onPending?.()}
+            style={{
+              ...row,
+              height: 44,
+              flexShrink: 0,
+              gap: 8,
+              paddingLeft: 16,
+              paddingRight: 12,
+              backgroundColor: c().selected,
+              borderBottomWidth: 1,
+              borderColor: c().border,
+              cursor: "pointer",
+            }}
+          >
+            <StatusDot color={c().amber} />
+            <Label size={12} line={16} lines={1} style={{ flex: 1 }}>
+              {approvals().length === 1
+                ? uiText("proposalWaitingForApproval")
+                : uiText("proposalsWaitingForApproval", {
+                    count: approvals().length,
+                  })}
+            </Label>
+            <Label size={12} line={16} weight={600}>
+              {uiText("reviewProposals")}
+            </Label>
+            <View style={{ opacity: 0.45 }}>
+              <Icon name="right" size={14} />
+            </View>
+          </View>
+        </If>
         <If when={offline()}>
           <View
             role="alert"
@@ -368,18 +433,29 @@ export function Conversation(props: {
           title={phone() ? uiText("conversationInfo") : uiText("panel")}
           width={360}
           side={!phone()}
-          hideHeader={!phone()}
+          hideHeader
+          sheet={phone()}
           blurBackdrop={false}
-          overPhoneNavigation={!phone()}
-          height={phone() ? "70%" : "100%"}
+          overPhoneNavigation
+          height={phone() ? Math.max(0, windowSize().height - 104) : "100%"}
           phone={phone()}
-          onClose={() => {
-            drawer.set(false);
-            member.set(undefined);
-            props.onCloseTask();
-          }}
+          onClose={closeDrawer}
         >
-          <Panel />
+          <If when={phone()} else={<Panel />}>
+            <PhoneConversationInfo
+              id={props.id}
+              name={title()}
+              project={project()?.display ?? project()?.path}
+              members={members()}
+              onClose={closeDrawer}
+              onInspect={member.set}
+              onTask={(id) => {
+                drawer.set(false);
+                props.onTask(id);
+              }}
+              onArtifact={openArtifact}
+            />
+          </If>
         </Modal>
       </If>
       <If when={inserting()}>
