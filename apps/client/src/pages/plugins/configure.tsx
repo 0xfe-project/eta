@@ -25,6 +25,13 @@ import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { pluginConfigText, PluginSelect } from "./config-fields";
 
+/** A phone bottom sheet's edge: one strong rule along its top only. */
+export const sheetEdge = {
+  borderWidth: 0,
+  borderLeftWidth: 0,
+  borderTopWidth: 1,
+};
+
 export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
   const host = useHost();
   const c = colors();
@@ -67,10 +74,10 @@ export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
         placeholderColor: c().faint,
         backgroundColor: c().canvas,
         fontFamily: fontFamily(fonts().interface),
-        fontSize: props.phone ? 13 : 12,
-        lineHeight: props.phone ? 18 : 16,
+        fontSize: props.phone ? 14 : 12,
+        lineHeight: props.phone ? 20 : 16,
         height: props.phone ? 40 : 28,
-        paddingHorizontal: props.phone ? 10 : 8,
+        paddingHorizontal: props.phone ? 12 : 8,
         borderWidth: 1,
         borderColor: c().strong,
         borderRadius: 0,
@@ -81,25 +88,53 @@ export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
     <Modal
       title={uiText("addPluginTitle")}
       phone={props.phone}
+      sheet={props.phone}
+      plainSheetHeader={props.phone}
+      panelStyle={props.phone ? sheetEdge : undefined}
+      overPhoneNavigation={props.phone}
       compact={!props.phone}
       titleWeight={500}
       width={512}
       onClose={props.onClose}
     >
-      <View style={props.phone ? { padding: 16 } : undefined}>
-        <Label size={12} line={18} tone="muted" style={{ paddingTop: 6 }}>
+      {/* Phone: a bottom sheet with 14/20 copy, 40pt fields 10pt apart and a
+          full-width 44pt Add. */}
+      <View
+        style={
+          props.phone ? { paddingHorizontal: 16, paddingBottom: 24 } : undefined
+        }
+      >
+        <Label
+          size={props.phone ? 14 : 12}
+          line={props.phone ? 20 : 18}
+          tone="muted"
+          style={props.phone ? undefined : { paddingTop: 6 }}
+        >
           {uiText("addPluginDescription")}
         </Label>
-        <View style={{ gap: 12, paddingTop: 14 }}>
+        <View
+          style={{
+            gap: props.phone ? 10 : 12,
+            paddingTop: props.phone ? 16 : 14,
+          }}
+        >
           {field(uiText("repository"), repo, repo.set, true)}
           {field(uiText("branchTagOrCommit"), rev, rev.set)}
           {field(uiText("directoryInTheRepositoryOptional"), path, path.set)}
         </View>
-        <View style={{ ...row, justifyContent: "flex-end", paddingTop: 20 }}>
+        <View
+          style={{
+            ...row,
+            justifyContent: "flex-end",
+            paddingTop: props.phone ? 16 : 20,
+          }}
+        >
           <Button
             label={busy() ? uiText("adding") : uiText("addPluginSubmit")}
             tone="primary"
-            size={props.phone ? 36 : 28}
+            size={props.phone ? 44 : 28}
+            labelSize={props.phone ? 14 : undefined}
+            labelWeight={props.phone ? 500 : undefined}
             dimDisabled={false}
             style={{
               opacity: !repo().trim() || busy() ? 0.5 : 1,

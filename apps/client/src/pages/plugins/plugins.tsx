@@ -14,7 +14,7 @@ import {
 } from "../../components";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
-import { AddPlugin, ConfigurePlugin } from "./configure";
+import { AddPlugin, ConfigurePlugin, sheetEdge } from "./configure";
 import { pluginText } from "./labels";
 import { PluginDetail } from "./plugin-detail";
 import { NoPlugins, PluginGlyph, Status } from "./plugin-status";
@@ -195,7 +195,27 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                     title={uiText("plugins")}
                     layout="phone"
                     onBack={props.onBack}
-                  />
+                  >
+                    {/* Touch-sized outline buttons, 8pt apart. */}
+                    <View style={{ ...row, gap: 8 }}>
+                      <Button
+                        label={uiText("refreshPlugins")}
+                        icon="refresh"
+                        iconOnly
+                        iconSize={14}
+                        size={32}
+                        onPress={() => void refreshPlugins()}
+                      />
+                      <Button
+                        label={uiText("addFromGit")}
+                        icon="plus"
+                        iconSize={14}
+                        size={32}
+                        style={{ gap: 6, paddingHorizontal: 10 }}
+                        onPress={() => add.set(true)}
+                      />
+                    </View>
+                  </Header>
                 </If>
                 <If when={!phone() && tab() === "Plugins"}>
                   <Header
@@ -315,16 +335,25 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
         <Modal
           title={uiText("removePluginTitle", { name: remove() })}
           phone={phone()}
+          sheet={phone()}
+          plainSheetHeader={phone()}
+          panelStyle={phone() ? sheetEdge : undefined}
           compact={!phone()}
           titleWeight={500}
           width={480}
           overPhoneNavigation={phone()}
           onClose={() => remove.set("")}
         >
-          <View style={phone() ? { padding: 16, gap: 12 } : undefined}>
+          {/* Phone: a bottom sheet with 14/20 copy and two 44pt buttons
+              sharing the row. */}
+          <View
+            style={
+              phone() ? { paddingHorizontal: 16, paddingBottom: 24 } : undefined
+            }
+          >
             <Label
-              size={12}
-              line={18}
+              size={phone() ? 14 : 12}
+              line={phone() ? 20 : 18}
               tone="muted"
               style={phone() ? undefined : { paddingTop: 6 }}
             >
@@ -335,18 +364,23 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                 ...row,
                 justifyContent: "flex-end",
                 gap: 8,
-                paddingTop: phone() ? 0 : 20,
+                paddingTop: 20,
               }}
             >
               <Button
                 label={uiText("cancel")}
-                size={28}
+                size={phone() ? 44 : 28}
+                labelSize={phone() ? 14 : undefined}
+                style={phone() ? { flex: 1 } : undefined}
                 onPress={() => remove.set("")}
               />
               <Button
                 label={uiText("remove2")}
                 tone="primary"
-                size={28}
+                size={phone() ? 44 : 28}
+                labelSize={phone() ? 14 : undefined}
+                labelWeight={phone() ? 500 : undefined}
+                style={phone() ? { flex: 1 } : undefined}
                 onPress={() =>
                   void host.action(async () => {
                     const name = remove();

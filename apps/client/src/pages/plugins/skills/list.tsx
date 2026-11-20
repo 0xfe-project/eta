@@ -578,7 +578,16 @@ export function Skills(props: {
               title={uiText("plugins")}
               layout="phone"
               onBack={props.onBack}
-            />
+            >
+              <Button
+                label={uiText("skillReload")}
+                icon="refresh"
+                iconOnly
+                iconSize={14}
+                size={32}
+                onPress={refresh}
+              />
+            </Header>
             {props.tabs()}
           </If>
           <If when={!phone()}>
