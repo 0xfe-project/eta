@@ -26,6 +26,8 @@ export const light = {
   warningInk: "#955a00",
   red: "#c61623",
   redFill: "#fce9eb",
+  /** The design's --color-ring: the keyboard focus ring. */
+  ring: "#737373",
   shade: "#00000020",
   modalShade: "#0000001e",
   /** The foreground at 16%: the scrim of phone sheets, tablet drawers and
@@ -55,6 +57,7 @@ const dark: typeof light = {
   warningInk: "#de9300",
   red: "#ff6874",
   redFill: "#3a1d21",
+  ring: "#a1a1a1",
   shade: "#00000080",
   modalShade: "#00000048",
   sheetShade: "#0a0a0a99",
@@ -67,6 +70,12 @@ export const palette = (mode: "light" | "dark") =>
 
 export function colors() {
   return Palette();
+}
+
+/** The design's keyboard focus: a 2px ring in `ring`, 2px outside the view.
+ * Only keyboard focus shows it (`focusVisibleStyle`); a press shows none. */
+export function focusRing(c: typeof light): ViewStyle {
+  return { outlineWidth: 2, outlineColor: c.ring, outlineOffset: 2 };
 }
 
 export const row: ViewStyle = { flexDirection: "row", alignItems: "center" };

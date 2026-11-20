@@ -1,7 +1,7 @@
 import type { JSX, ViewRef } from "nsh";
 import type { IconName } from "../components/icons";
 import { View } from "nsh";
-import { colors, Icon, Label } from "../components";
+import { colors, focusRing, Icon, Label } from "../components";
 
 export function RailButton(props: {
   label: string;
@@ -28,7 +28,7 @@ export function RailButton(props: {
       ref={props.attach}
       onPress={props.onPress}
       hoverStyle={{ backgroundColor: c().selected }}
-      focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+      focusVisibleStyle={focusRing(c())}
       style={{
         width: props.width ?? props.size ?? 28,
         height: props.size ?? 28,
@@ -89,11 +89,7 @@ export function RailEntry(props: {
       accessibilityState={{ selected: props.selected }}
       onPress={props.onPress}
       hoverStyle={{ backgroundColor: c().selected }}
-      focusVisibleStyle={{
-        outlineWidth: 1,
-        outlineColor: c().blue,
-        outlineOffset: -1,
-      }}
+      focusVisibleStyle={focusRing(c())}
       style={{
         position: "relative",
         height: props.agent ? 48 : 41,

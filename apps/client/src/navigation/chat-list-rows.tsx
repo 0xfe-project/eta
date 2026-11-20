@@ -1,7 +1,7 @@
 import type { AgentView, ConversationSummary } from "@eta/client-contracts";
 import type { Layout } from "../components";
 import { View } from "nsh";
-import { colors, Label, row, RowChevron } from "../components";
+import { colors, focusRing, Label, row, RowChevron } from "../components";
 import { AgentFace } from "../components/agent-face";
 import { StatusDot } from "../components/status-dot";
 import { uiText } from "../i18n";
@@ -32,6 +32,7 @@ export function GroupRow(props: {
       accessibilityState={{ selected: props.selected }}
       onPress={() => props.onPress()}
       hoverStyle={{ backgroundColor: c().selected }}
+      focusVisibleStyle={focusRing(c())}
       style={{
         minHeight: phone() ? 64 : 53,
         flexShrink: 0,
@@ -137,6 +138,7 @@ export function AgentRow(props: {
       accessibilityLabel={props.agent.name}
       onPress={() => props.onPress()}
       hoverStyle={{ backgroundColor: c().selected }}
+      focusVisibleStyle={focusRing(c())}
       style={{
         ...row,
         height: props.phone ? 52 : 33,

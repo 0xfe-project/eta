@@ -11,6 +11,7 @@ import {
   Button,
   Caption,
   colors,
+  focusRing,
   grow,
   Icon,
   Label,
@@ -139,6 +140,7 @@ export function ConversationPanel(props: {
                       if (props.taskId) props.onCloseTask();
                     }}
                     hoverStyle={{ backgroundColor: c().canvas }}
+                    focusVisibleStyle={focusRing(c())}
                     style={{
                       ...row,
                       gap: 6,

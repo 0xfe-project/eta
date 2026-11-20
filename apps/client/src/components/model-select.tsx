@@ -61,8 +61,8 @@ export function ModelSelect(props: {
       value={props.value || null}
       placeholder={props.placeholder ?? uiText("selectModel")}
       searchable
-      searchPlaceholder="Search models"
-      searchAccessibilityLabel="Search models"
+      searchPlaceholder={uiText("searchModels")}
+      searchAccessibilityLabel={uiText("searchModels")}
       cover={false}
       offset={2}
       popupStyle={{
@@ -90,6 +90,19 @@ export function ModelSelect(props: {
         color: c().ink,
         fontSize: 12,
       }}
+      empty={
+        <View
+          style={{
+            alignItems: "center",
+            paddingVertical: 24,
+            paddingHorizontal: 10,
+          }}
+        >
+          <Label size={12} line={16} tone="muted">
+            {uiText("noModelsMatch")}
+          </Label>
+        </View>
+      }
       renderItem={(item) => (
         <View
           style={{

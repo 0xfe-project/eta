@@ -1,7 +1,7 @@
 import type { MessageView } from "@eta/client-contracts";
 import type { light } from "../../components/theme";
 import { signal, View } from "nsh";
-import { colors, Label, row } from "../../components";
+import { colors, Icon, Label, row } from "../../components";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -214,8 +214,9 @@ function Observation(props: { item: CaptainReviewItem }) {
             role="button"
             accessibilityState={{ expanded: raw() }}
             onPress={() => raw.set(!raw())}
-            style={{ cursor: "pointer" }}
+            style={{ ...row, gap: 4, cursor: "pointer" }}
           >
+            <Icon name={raw() ? "down" : "right"} size={8} tone="faint" />
             <Label
               size={10}
               line={12}

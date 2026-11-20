@@ -113,6 +113,12 @@ export function Conversation(props: {
     { message: MessageView; recipients: string[] } | undefined
   >(undefined);
   const lateInsert = signal(false);
+  // The late-insert toast goes by itself, as a toast does.
+  effect(() => {
+    if (!lateInsert()) return;
+    const timer = setTimeout(() => lateInsert.set(false), 6000);
+    return () => clearTimeout(timer);
+  });
   const phone = () => props.layout === "phone";
   const offline = () => phone() && host.state().status === "reconnecting";
   const noCachedMessages = () => offline() && !messages().length;
@@ -368,6 +374,24 @@ export function Conversation(props: {
                 recipients: indexed().recipients.get(message.id) ?? [],
               });
             }}
+            insertingId={inserting()?.message.id}
+            onInsertClose={() => inserting.set(undefined)}
+            insertPanel={() => (
+              <If when={inserting()}>
+                {(entry) => (
+                  <InsertMessage
+                    message={entry().message}
+                    initialRecipients={entry().recipients}
+                    recipients={() =>
+                      indexed().recipients.get(entry().message.id) ?? []
+                    }
+                    phone={phone()}
+                    onLate={() => lateInsert.set(true)}
+                    onClose={() => inserting.set(undefined)}
+                  />
+                )}
+              </If>
+            )}
             onTask={(id) => {
               props.onTask(id);
               if (!phone()) drawer.set(true);
@@ -378,15 +402,33 @@ export function Conversation(props: {
             }
           />
           <If when={lateInsert()}>
-            <View style={{ ...row, paddingHorizontal: 12, gap: 8 }}>
-              <Label size={12} tone="muted" style={{ flex: 1 }}>
-                {uiText("theTurnEndedYourAdditionWas")}
-              </Label>
-              <Button
-                label={uiText("dismiss")}
-                tone="ghost"
+            {/* A toast over the end of the transcript, just above the composer. */}
+            <View style={{ height: 0, zIndex: 10 }}>
+              <View
+                role="button"
+                accessibilityLabel={uiText("dismiss")}
                 onPress={() => lateInsert.set(false)}
-              />
+                style={{
+                  ...row,
+                  position: "absolute",
+                  bottom: 12,
+                  right: 16,
+                  left: phone() ? 16 : undefined,
+                  width: phone() ? undefined : 356,
+                  gap: 8,
+                  paddingVertical: 12,
+                  paddingHorizontal: 14,
+                  borderWidth: 1,
+                  borderColor: c().border,
+                  backgroundColor: c().canvas,
+                  boxShadow: [{ x: 0, y: 4, blur: 16, color: "#0a0a0a14" }],
+                  cursor: "pointer",
+                }}
+              >
+                <Label size={12} line={16} style={{ flex: 1 }}>
+                  {uiText("insertEnded")}
+                </Label>
+              </View>
             </View>
           </If>
           <Composer
@@ -458,20 +500,6 @@ export function Conversation(props: {
             />
           </If>
         </Modal>
-      </If>
-      <If when={inserting()}>
-        {(entry) => (
-          <InsertMessage
-            message={entry().message}
-            initialRecipients={entry().recipients}
-            recipients={() =>
-              indexed().recipients.get(entry().message.id) ?? []
-            }
-            phone={phone()}
-            onLate={() => lateInsert.set(true)}
-            onClose={() => inserting.set(undefined)}
-          />
-        )}
       </If>
       <If when={projectInfo() && project()}>
         <Modal

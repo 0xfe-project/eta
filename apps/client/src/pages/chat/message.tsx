@@ -7,6 +7,7 @@ import type {
   TranscriptSection,
   ViewCore,
 } from "@eta/client-contracts";
+import type { JSX } from "nsh";
 import {
   captainProposalOf,
   publishedRefs,
@@ -15,6 +16,7 @@ import {
   savedSteps,
 } from "@eta/client-contracts";
 import { effect, List, signal, View } from "nsh";
+import { Popover } from "nsh/base";
 import {
   Button,
   Caption,
@@ -36,11 +38,26 @@ import { messageTime } from "./message-time";
 import { ProcessStep } from "./process-step";
 import { Widget, widgetFrom } from "./widgets/widget";
 
+/** How each code the host fails a reply with is said. */
+const failureReasons: Record<string, Parameters<typeof uiText>[0]> = {
+  restart: "replyRestart",
+  run_failed: "runGenericFailure",
+  unavailable: "replyUnavailable",
+  gone: "replyGone",
+};
+
 export function Message(props: {
   item: MessageView;
   additions: MessageView[];
   canInsert: boolean;
   onInsert: () => void;
+  /** The insert popover under this user message is open. */
+  inserting?: boolean;
+  onInsertClose?: () => void;
+  /** What the insert popover holds while it is open. */
+  insertPanel?: () => JSX.Element;
+  /** The next reply of the same member failed the same way: say so, not why. */
+  sameFailureAsNext?: boolean;
   phone: boolean;
   compact?: boolean;
   captain?: boolean;
@@ -52,6 +69,7 @@ export function Message(props: {
   const host = useHost();
   const c = colors();
   const details = signal(false);
+  const draftOpen = signal(false);
   const item = () => props.item;
   const review = () => {
     const items = reviewItemsOf(item());
@@ -60,7 +78,10 @@ export function Message(props: {
   let previousId: string | undefined;
   effect(() => {
     const id = item().id;
-    if (id !== previousId) details.set(false);
+    if (id !== previousId) {
+      details.set(false);
+      draftOpen.set(false);
+    }
     previousId = id;
   });
   const active = () => activeReply(item().status);
@@ -115,6 +136,18 @@ export function Message(props: {
         "archived",
       ),
     ].find((entry) => entry.id === item().data.taskId);
+  const draftDescription = () =>
+    typeof item().data.description === "string"
+      ? (item().data.description as string)
+      : "";
+  const failure = () => {
+    if (props.sameFailureAsNext) return uiText("replySameFailure");
+    const code = String(item().data.code ?? "");
+    const reason = failureReasons[code] ?? "replyFailed";
+    // The host's own words say why; after a restart they only repeat it.
+    const detail = code === "restart" || !item().text ? "" : ` ${item().text}`;
+    return `${uiText(reason)}${detail}`;
+  };
   const card = () =>
     item().kind === "task_card" || item().kind === "task_draft";
   return (
@@ -122,7 +155,13 @@ export function Message(props: {
       style={{
         alignSelf: "stretch",
         gap: item().author === "user" || card() ? 4 : props.phone ? 8 : 0,
-        paddingVertical: props.phone || card() ? 0 : 16,
+        // A review card and a failed reply are one block each, 24 apart.
+        paddingVertical:
+          props.phone || card()
+            ? 0
+            : review() || item().status === "failed"
+              ? 6
+              : 16,
         paddingHorizontal: props.phone || props.compact || card() ? 0 : 16,
       }}
     >
@@ -165,25 +204,62 @@ export function Message(props: {
               )}
             </Each>
           </View>
-          <Label
-            size={10}
-            line={props.phone ? 12 : 14}
-            tone={props.phone ? "muted" : "faint"}
-            style={{
-              textTransform: props.phone ? "none" : "uppercase",
-              letterSpacing: props.phone ? 0 : 0.4,
-            }}
-          >
-            {stamp()}
-          </Label>
-          <If when={props.canInsert}>
-            <Button
-              label={uiText("insert")}
-              tone="ghost"
-              size={26}
-              onPress={props.onInsert}
-            />
-          </If>
+          <View style={{ ...row, gap: 8 }}>
+            <Label
+              size={10}
+              line={props.phone ? 12 : 14}
+              tone={props.phone ? "muted" : "faint"}
+              style={{
+                textTransform: props.phone ? "none" : "uppercase",
+                letterSpacing: props.phone ? 0 : 0.4,
+              }}
+            >
+              {stamp()}
+            </Label>
+            <If when={props.canInsert || props.inserting}>
+              <Popover
+                open={props.inserting ?? false}
+                placement="bottom"
+                align="end"
+                offset={6}
+                margin={8}
+                onOpenChange={(event) => {
+                  if (event.open) props.onInsert();
+                  else props.onInsertClose?.();
+                }}
+                popupStyle={{
+                  borderWidth: 1,
+                  borderColor: c().border,
+                  backgroundColor: c().canvas,
+                  boxShadow: [{ x: 0, y: 4, blur: 16, color: "#0a0a0a14" }],
+                }}
+                trigger={
+                  <View
+                    accessibilityLabel={uiText("insertMessage")}
+                    hoverStyle={{ borderColor: c().ink }}
+                    style={{
+                      paddingVertical: 1,
+                      paddingHorizontal: 6,
+                      borderWidth: 1,
+                      borderColor: props.inserting ? c().ink : c().border,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <Label
+                      size={10}
+                      line={12}
+                      tone={props.inserting ? "ink" : "muted"}
+                      style={{ letterSpacing: 1, textTransform: "uppercase" }}
+                    >
+                      {uiText("insert")}
+                    </Label>
+                  </View>
+                }
+              >
+                {props.insertPanel?.()}
+              </Popover>
+            </If>
+          </View>
         </View>
       </If>
       <If when={item().kind === "task_card" || item().kind === "task_draft"}>
@@ -202,27 +278,102 @@ export function Message(props: {
           )}
         </If>
         <If when={item().kind === "task_draft"}>
+          {/* Folded to one line, as a turn's process is: what it is, its
+           * title, that it waits for you and the way to confirm it. */}
           <View
             style={{
-              padding: 10,
+              alignSelf: "stretch",
+              maxWidth: props.phone ? undefined : 560,
               borderWidth: 1,
               borderColor: c().border,
-              gap: 6,
             }}
           >
-            <Caption text={uiText("taskDraft")} />
-            <Label>{String(item().data.title ?? item().text)}</Label>
-            <Button
-              label={uiText("confirmTask")}
-              onPress={() =>
-                void host.action(() =>
-                  host.call("tasks", "confirmDraft", {
-                    conversationId: item().conversationId,
-                    messageId: item().id,
-                  }),
-                )
+            <View
+              role={draftDescription() ? "button" : undefined}
+              accessibilityLabel={uiText("taskDraft")}
+              accessibilityState={
+                draftDescription() ? { expanded: draftOpen() } : undefined
               }
-            />
+              onPress={
+                draftDescription()
+                  ? () => draftOpen.set(!draftOpen())
+                  : undefined
+              }
+              style={{
+                ...row,
+                flexWrap: props.phone ? "wrap" : "nowrap",
+                columnGap: 8,
+                rowGap: 6,
+                paddingVertical: 6,
+                paddingHorizontal: 10,
+                cursor: draftDescription() ? "pointer" : undefined,
+              }}
+            >
+              <If when={draftDescription()}>
+                <Icon
+                  name={draftOpen() ? "down" : "right"}
+                  size={10}
+                  tone="faint"
+                />
+              </If>
+              <Label
+                size={10}
+                line={14}
+                tone="faint"
+                style={{
+                  flexShrink: 0,
+                  letterSpacing: 1.4,
+                  textTransform: "uppercase",
+                }}
+              >
+                {uiText("taskDraft")}
+              </Label>
+              <Label
+                size={12}
+                line={16}
+                weight={500}
+                lines={1}
+                style={{ flex: 1, minWidth: props.phone ? 200 : 0 }}
+              >
+                {String(item().data.title ?? item().text)}
+              </Label>
+              <View
+                style={{
+                  flexShrink: 0,
+                  paddingHorizontal: 5,
+                  borderWidth: 1,
+                  borderColor: c().warning,
+                }}
+              >
+                <Label size={10} line={14} tone="warningInk">
+                  {uiText("draftNeedsConfirming")}
+                </Label>
+              </View>
+              <Button
+                label={uiText("confirmTask")}
+                size={22}
+                labelSize={12}
+                onPress={() =>
+                  void host.action(() =>
+                    host.call("tasks", "confirmDraft", {
+                      conversationId: item().conversationId,
+                      messageId: item().id,
+                    }),
+                  )
+                }
+              />
+            </View>
+            <If when={draftOpen() && draftDescription()}>
+              <View
+                style={{
+                  padding: 10,
+                  borderTopWidth: 1,
+                  borderColor: c().border,
+                }}
+              >
+                <Markdown value={draftDescription()} line={20} />
+              </View>
+            </If>
           </View>
         </If>
       </If>
@@ -391,28 +542,33 @@ export function Message(props: {
             </View>
           </If>
         </If>
+        <If when={item().status === "failed" && !review()}>
+          {/* A failed reply is its time, then why, as a warning line. */}
+          <View style={{ gap: 8 }}>
+            <Label
+              size={10}
+              line={12}
+              tone="muted"
+              style={{
+                letterSpacing: props.phone ? 0 : 1,
+                textTransform: props.phone ? "none" : "uppercase",
+              }}
+            >
+              {stamp()}
+            </Label>
+            <Label size={14} line={18} tone="warning">
+              {`⚠ ${failure()}`}
+            </Label>
+          </View>
+        </If>
         <If
           when={review()}
           else={
             <If when={item().text}>
-              <If
-                when={item().status === "failed"}
-                else={
-                  <View style={{ paddingHorizontal: 2 }}>
-                    <Markdown
-                      value={item().text}
-                      line={props.phone ? 22 : 24}
-                    />
-                  </View>
-                }
-              >
-                <Label
-                  line={props.phone ? 22 : 24}
-                  tone="amber"
-                  style={{ paddingHorizontal: 2 }}
-                >
-                  {item().text}
-                </Label>
+              <If when={item().status !== "failed"}>
+                <View style={{ paddingHorizontal: 2 }}>
+                  <Markdown value={item().text} line={props.phone ? 22 : 24} />
+                </View>
               </If>
             </If>
           }
@@ -436,7 +592,7 @@ export function Message(props: {
           )}
         </Each>
         <If when={question()}>{(entry) => <Question item={entry()} />}</If>
-        <If when={!review()}>
+        <If when={!review() && item().status !== "failed"}>
           <Label
             size={10}
             line={props.phone ? 12 : 14}

@@ -160,9 +160,12 @@ export function ConversationArtifacts(props: {
           >
             <Empty
               icon={host.state().missing.artifacts ? "warning" : "appWindow"}
-              iconSize={32}
+              iconSize={24}
               iconTone={host.state().missing.artifacts ? "red" : "muted"}
-              style={{ paddingVertical: 40 }}
+              titleLine={20}
+              descriptionSize={10}
+              descriptionLine={16}
+              style={{ flex: 0, marginTop: 4, paddingVertical: 48 }}
               title={
                 host.state().missing.artifacts
                   ? uiText("artifactLoadError")

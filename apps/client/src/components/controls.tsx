@@ -5,7 +5,7 @@ import { platform, View } from "nsh";
 import { Input, Menu, MenuItem } from "nsh/base";
 import { pickerTarget } from "./element-picker";
 import { Icon, Label } from "./text";
-import { colors, fontFamily, Fonts, row } from "./theme";
+import { colors, focusRing, fontFamily, Fonts, row } from "./theme";
 
 export function Button(props: {
   label: string;
@@ -54,11 +54,7 @@ export function Button(props: {
       hoverStyle={{
         backgroundColor: primary() ? color().ink : color().selected,
       }}
-      focusVisibleStyle={{
-        outlineWidth: 1,
-        outlineColor: color().blue,
-        outlineOffset: 1,
-      }}
+      focusVisibleStyle={focusRing(color())}
       style={{
         ...row,
         justifyContent: "center",

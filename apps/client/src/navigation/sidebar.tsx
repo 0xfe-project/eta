@@ -3,7 +3,7 @@ import type { Layout } from "../components";
 import type { ChatListProps } from "./chat-list";
 import type { Destination, Navigation } from "./routes";
 import { View } from "nsh";
-import { colors, Icon, Label, row, sizes } from "../components";
+import { colors, focusRing, Icon, Label, row, sizes } from "../components";
 import { pickerTarget } from "../components/element-picker";
 import { useText } from "../i18n";
 import { useHost } from "../services/host";
@@ -35,11 +35,7 @@ export function NavItem(props: {
       accessibilityState={{ selected: props.selected }}
       onPress={() => props.onPress()}
       hoverStyle={{ backgroundColor: c().selected }}
-      focusVisibleStyle={{
-        outlineWidth: 1,
-        outlineColor: c().blue,
-        outlineOffset: -1,
-      }}
+      focusVisibleStyle={focusRing(c())}
       style={{
         ...(wide() ? row : { alignItems: "center", justifyContent: "center" }),
         height: wide() ? 28 : phone() ? 63 : 48,

@@ -1,6 +1,6 @@
 import type { Navigation } from "./routes";
 import { View } from "nsh";
-import { colors, sizes } from "../components";
+import { colors, focusRing, sizes } from "../components";
 import { useText } from "../i18n";
 import { useHost } from "../services/host";
 import { CaptainFace } from "./captain";
@@ -32,6 +32,7 @@ export function TabletRail(props: Navigation) {
         accessibilityLabel={text("captain")}
         onPress={() => props.onNavigate("captain")}
         hoverStyle={{ backgroundColor: c().selected }}
+        focusVisibleStyle={focusRing(c())}
         style={{
           height: 56,
           alignItems: "center",

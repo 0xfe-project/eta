@@ -12,6 +12,7 @@ export type { Layout } from "./theme";
 export {
   colors,
   fill,
+  focusRing,
   fontFamily,
   Fonts,
   grow,

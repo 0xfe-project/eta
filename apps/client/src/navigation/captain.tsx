@@ -1,6 +1,6 @@
 import type { CaptainIdentityView } from "@eta/client-contracts";
 import { View } from "nsh";
-import { colors, Label, row } from "../components";
+import { colors, focusRing, Label, row } from "../components";
 import { AgentFace } from "../components/agent-face";
 import { uiText, useText } from "../i18n";
 import { messageTime } from "../pages/chat/message-time";
@@ -32,6 +32,7 @@ export function CaptainCard(props: { onPress: () => void }) {
         accessibilityLabel={text("captain")}
         onPress={() => props.onPress()}
         hoverStyle={{ backgroundColor: c().selected }}
+        focusVisibleStyle={focusRing(c())}
         style={{
           ...row,
           alignItems: "flex-start",
@@ -86,7 +87,7 @@ export function RailCaptain(props: { selected: boolean; onPress: () => void }) {
         accessibilityState={{ selected: props.selected }}
         onPress={props.onPress}
         hoverStyle={{ backgroundColor: c().selected }}
-        focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+        focusVisibleStyle={focusRing(c())}
         style={{
           width: 48,
           height: 64,
