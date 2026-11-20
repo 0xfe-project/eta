@@ -850,17 +850,16 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     const browser = await chromium.launch({ channel: "chrome" });
     const context = await browser.newContext({
       viewport: { width: 1180, height: 760 },
-      locale: "zh-CN",
+      // The labels below are the page's English ones.
+      locale: "en-US",
       colorScheme: "light",
     });
     const page = await context.newPage();
     const shot = (file: string) =>
       page.screenshot({ path: join(SHOTS, `${process.platform}-${file}.png`) });
     const settings = async (): Promise<void> => {
+      // On a desktop-wide window Settings is a page of its own, not a dialog.
       await page.goto(`http://127.0.0.1:${PORT}/?settings=update`);
-      await page
-        .getByRole("dialog", { name: "Settings" })
-        .waitFor({ timeout: 30_000 });
       await page.getByTestId("host-version").waitFor({ timeout: 30_000 });
     };
     const shown = async (): Promise<string> => {
@@ -873,13 +872,13 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     want("the page says the old build", await shown(), "0.9.0");
     await shot("1-update-available");
     await page.getByRole("button", { name: /^Update to / }).click();
-    await page.getByRole("dialog", { name: "Update host?" }).waitFor();
+    await page.getByRole("dialog", { name: /^Update the Host to / }).waitFor();
     await shot("2-confirm");
     await page
-      .getByRole("dialog", { name: "Update host?" })
+      .getByRole("dialog", { name: /^Update the Host to / })
       .getByRole("button", { name: "Update", exact: true })
       .click();
-    const screen = page.getByRole("status", {
+    const screen = page.getByRole("alert", {
       name: "Host update in progress",
     });
     await screen.waitFor({ timeout: 60_000 });
@@ -898,14 +897,14 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     pinLatest("0.9.3");
     await settings();
     await page.getByRole("button", { name: /^Update to / }).click();
-    await page.getByRole("dialog", { name: "Update host?" }).waitFor();
+    await page.getByRole("dialog", { name: /^Update the Host to / }).waitFor();
     await page
-      .getByRole("dialog", { name: "Update host?" })
+      .getByRole("dialog", { name: /^Update the Host to / })
       .getByRole("button", { name: "Update", exact: true })
       .click();
     try {
       await page
-        .getByText("The update didn't succeed", { exact: true })
+        .getByText("Last update failed", { exact: true })
         .waitFor({ timeout: 180_000 });
       await shot("5-rolled-back");
       want("it went back", await fileVersion(), "0.9.1");
