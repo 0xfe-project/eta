@@ -2,8 +2,31 @@ import type { Layout } from "../../components";
 import type { HostAddress } from "../../services/host";
 import type { ConnectionFailure } from "./diagnostics";
 import { View } from "nsh";
-import { Button, colors, grow, Header, Label, row } from "../../components";
+import {
+  Button,
+  colors,
+  fontFamily,
+  Fonts,
+  grow,
+  Header,
+  Label,
+  row,
+} from "../../components";
 import { uiText } from "../../i18n";
+
+function Mono(props: { children?: string }) {
+  const fonts = Fonts();
+  return (
+    <Label
+      size={12}
+      line={16}
+      tone="muted"
+      style={{ fontFamily: fontFamily(fonts().mono, "monospace") }}
+    >
+      {props.children}
+    </Label>
+  );
+}
 
 interface RetryProps {
   address?: HostAddress;
@@ -45,15 +68,13 @@ export function ConnectionError(
             props.address
           }
         >
-          <Label>{props.address?.origin}</Label>
+          <Mono>{props.address?.origin}</Mono>
         </If>
         <Label size={14} line={20} tone="mutedInk">
           {props.message[1]}
         </Label>
         <If when={props.problem === "local" && props.error}>
-          <Label size={12} line={16} tone="red">
-            {props.error}
-          </Label>
+          <Mono>{props.error}</Mono>
         </If>
       </View>
       <View

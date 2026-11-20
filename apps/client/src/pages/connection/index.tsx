@@ -2,7 +2,7 @@ import type { Layout } from "../../components";
 import type { HostAddress } from "../../services/host";
 import type { ConnectionFailure } from "./diagnostics";
 import { parseConnectLink } from "@eta/client-contracts/connect-link";
-import { effect, platform, signal, View } from "nsh";
+import { cleanup, effect, platform, signal, View } from "nsh";
 import { Button, colors, grow, Header, Label, row } from "../../components";
 import { uiText } from "../../i18n";
 import { addressFrom, useHost } from "../../services/host";
@@ -103,6 +103,24 @@ export function Connection(props: {
       problem.set(reason);
       if (reason === "token") host.start(null);
     });
+  });
+
+  effect(() => {
+    const address = attempt();
+    if (problem() !== "lost" || !address) return;
+    let waiting = false;
+    const timer = setInterval(() => {
+      if (waiting) return;
+      waiting = true;
+      void diagnose(address)
+        .then((reason) => {
+          if (reason !== "address" && problem() === "lost") begin(address);
+        })
+        .finally(() => {
+          waiting = false;
+        });
+    }, 5000);
+    cleanup(() => clearInterval(timer));
   });
 
   function begin(address: HostAddress) {
@@ -310,7 +328,7 @@ export function Connection(props: {
                           : uiText("runOnThisComputer")
                       }
                       description={uiText("theHostAndItsDataStay")}
-                      selected={localBusy()}
+                      selected={false}
                       disabled={!canStartHost || busy()}
                       onPress={() => void launch()}
                     />
@@ -380,7 +398,7 @@ export function Connection(props: {
                     label={
                       connecting()
                         ? uiText("connecting")
-                        : remoteFailure() || problem() === "token"
+                        : remoteFailure()
                           ? uiText("retry")
                           : uiText("connect")
                     }

@@ -26,8 +26,8 @@ export const connectionMessages = {
   ],
   connectLostTitle: ["Lost the connection to the host", "主机连接已断开"],
   connectAgentsContinue: [
-    "Agents keep running on the host. Retry when you can reach it again.",
-    "智能体仍在主机上运行。主机可连接后请重试。",
+    "Agents keep running on the host. This window goes back by itself once it answers.",
+    "智能体仍在主机上运行。主机恢复响应后，此窗口会自动返回。",
   ],
   connectScannerUnavailable: [
     "This device can't scan. Paste the connect link or fill in the form.",
@@ -44,8 +44,8 @@ export const connectionMessages = {
   downloadingTheHost: ["Downloading the host", "正在下载主机"],
   findingARelease: ["Finding a release…", "正在查找版本…"],
   getANewLinkFromThe: [
-    "Get a new link from the host in Settings → Machines → Connect phone.",
-    "请前往主机的「设置 → 机器 → 连接手机」获取新链接。",
+    "Get a new link from the host: Settings → Machines → Connect a phone.",
+    "从主机获取新链接：设置 → 机器 → 连接手机。",
   ],
   hostAddressOrEtaLink: ["Host address or Eta link", "主机地址或 Eta 链接"],
   hostToken: ["Host token", "主机令牌"],
