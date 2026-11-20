@@ -6,6 +6,7 @@ import type {
 } from "@eta/client-contracts";
 import type { Signal } from "nsh";
 import type { Layout } from "../../components";
+import type { ConversationAction } from "./conversation-actions";
 import { Scroll, View } from "nsh";
 import {
   Button,
@@ -74,7 +75,7 @@ export function ConversationPanel(props: {
   onToggleSteps: (session: string) => void;
   onInspect: (value: { id: string; session: string }) => void;
   onInvite: () => void;
-  onActions: () => void;
+  onActions: (action: ConversationAction) => void;
   onTask: (id: string) => void;
   onRelatedTask: (id: string) => void;
   onCloseTask: () => void;
@@ -298,6 +299,8 @@ export function ConversationPanel(props: {
                     onToggleSteps={props.onToggleSteps}
                     onInspect={props.onInspect}
                     onInvite={props.onInvite}
+                    captain={props.captain}
+                    tablet={props.layout === "tablet"}
                     onActions={props.onActions}
                   />
                 </If>

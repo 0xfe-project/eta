@@ -1,11 +1,12 @@
 import type { JSX, TextStyle, ViewRef, ViewStyle } from "nsh";
 import type { IconName } from "./icons";
 import type { light } from "./theme";
-import { platform, View } from "nsh";
+import { platform, signal, View } from "nsh";
 import { Input, Menu, MenuItem } from "nsh/base";
+import { useText } from "../i18n";
 import { pickerTarget } from "./element-picker";
 import { Icon, Label } from "./text";
-import { colors, focusRing, fontFamily, Fonts, row } from "./theme";
+import { colors, focusRing, fontFamily, Fonts, grow, row } from "./theme";
 
 export function Button(props: {
   label: string;
@@ -189,6 +190,11 @@ export function ActionMenu(props: {
   triggerStyle?: ViewStyle;
   /** The size of the "more" glyph of a menu without a value. */
   iconSize?: number;
+  /** As a sheet: a title row with a close button under the grabber. */
+  sheetTitle?: string;
+  /** As a popup: its width, and a lifted shadow (the design's tablet menus). */
+  popupWidth?: number;
+  lifted?: boolean;
   children?: JSX.Element;
 }) {
   const c = colors();
@@ -196,11 +202,18 @@ export function ActionMenu(props: {
     "ActionMenu",
     "apps/client/src/components/controls.tsx",
   );
+  const text = useText();
+  // Open, for the pressed trigger; a titled sheet closes itself from its
+  // close button.
+  const open = signal(false);
+  const titled = () => touchSheet && !!props.sheetTitle;
   return (
     <Menu
       placement="bottom"
       align="end"
       offset={3}
+      open={titled() ? open() : undefined}
+      onOpenChange={(event) => open.set(event.open)}
       popupStyle={
         touchSheet
           ? {
@@ -211,10 +224,14 @@ export function ActionMenu(props: {
               backgroundColor: c().canvas,
             }
           : {
-              width: 172,
+              width: props.popupWidth ?? 172,
+              paddingVertical: props.lifted ? 4 : 0,
               borderWidth: 1,
               borderColor: c().strong,
               backgroundColor: c().canvas,
+              boxShadow: props.lifted
+                ? [{ x: 0, y: 8, blur: 24, color: "#0000001f" }]
+                : undefined,
             }
       }
       backdropStyle={{ backgroundColor: c().sheetShade }}
@@ -231,8 +248,10 @@ export function ActionMenu(props: {
             paddingHorizontal: 7,
             gap: 7,
             cursor: "pointer",
-            borderWidth: props.value ? 1 : 0,
+            borderWidth: props.value || open() ? 1 : 0,
             borderColor: c().strong,
+            // A "more" menu stays pressed while it is open.
+            backgroundColor: open() && !props.value ? c().selected : undefined,
             ...props.triggerStyle,
           }}
         >
@@ -265,6 +284,24 @@ export function ActionMenu(props: {
         <View style={{ alignItems: "center", paddingTop: 8, paddingBottom: 4 }}>
           <View style={{ width: 36, height: 4, backgroundColor: c().strong }} />
         </View>
+        <If when={props.sheetTitle}>
+          <View
+            style={{ ...row, height: 44, paddingLeft: 16, paddingRight: 8 }}
+          >
+            <Label size={14} line={20} weight={600} lines={1} style={grow}>
+              {props.sheetTitle}
+            </Label>
+            <Button
+              label={text("close")}
+              icon="close"
+              iconOnly
+              iconSize={16}
+              tone="ghost"
+              size={32}
+              onPress={() => open.set(false)}
+            />
+          </View>
+        </If>
       </If>
       {props.children}
     </Menu>
@@ -273,6 +310,10 @@ export function ActionMenu(props: {
 
 export function ActionItem(props: {
   label: string;
+  /** Muted text at the end of the row, such as a count. */
+  detail?: string;
+  /** The design's tablet menu row: 14px text in a 32px row. */
+  roomy?: boolean;
   disabled?: boolean;
   checked?: boolean;
   tone?: "red";
@@ -295,20 +336,27 @@ export function ActionItem(props: {
               borderTopWidth: 1,
               borderColor: c().border,
             }
-          : { ...row, minHeight: 33, paddingHorizontal: 9, gap: 6 }
+          : props.roomy
+            ? { ...row, minHeight: 32, paddingHorizontal: 12, gap: 8 }
+            : { ...row, minHeight: 33, paddingHorizontal: 9, gap: 6 }
       }
       hoverStyle={{ backgroundColor: c().selected }}
       indicatorStyle={{ width: 0 }}
       onSelect={props.onSelect}
     >
       <Label
-        size={touchSheet ? 14 : 12}
-        line={touchSheet ? 18 : undefined}
+        size={touchSheet || props.roomy ? 14 : 12}
+        line={touchSheet ? 18 : props.roomy ? 20 : undefined}
         tone={props.tone}
         style={{ flex: 1 }}
       >
         {props.label}
       </Label>
+      <If when={props.detail}>
+        <Label size={12} line={16} tone="muted" style={{ flexShrink: 0 }}>
+          {props.detail}
+        </Label>
+      </If>
       <If when={props.checked}>
         <Icon name="check" size={12} />
       </If>

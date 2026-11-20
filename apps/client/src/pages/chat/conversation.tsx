@@ -8,6 +8,7 @@ import type {
   TimelineSection,
 } from "@eta/client-contracts";
 import type { Layout } from "../../components";
+import type { ConversationAction } from "./conversation-actions";
 import type { PanelTab } from "./conversation-panel";
 import { computed, effect, signal, View, windowSize } from "nsh";
 import {
@@ -59,7 +60,7 @@ export function Conversation(props: {
   const panel = signal<PanelTab>("Context");
   const drawer = signal(false);
   const invite = signal(false);
-  const actions = signal(false);
+  const actions = signal<ConversationAction | undefined>(undefined);
   const projectInfo = signal(false);
   const member = signal<{ id: string; session: string }>();
   const memberSteps = signal("");
@@ -181,7 +182,7 @@ export function Conversation(props: {
         }
         onInspect={member.set}
         onInvite={() => invite.set(true)}
-        onActions={() => actions.set(true)}
+        onActions={actions.set}
         onTask={props.onTask}
         onRelatedTask={props.onRelatedTask}
         onCloseTask={props.onCloseTask}
@@ -490,6 +491,9 @@ export function Conversation(props: {
               name={title()}
               project={project()?.display ?? project()?.path}
               members={members()}
+              info={info()}
+              captain={props.captain}
+              onActions={actions.set}
               onClose={closeDrawer}
               onInspect={member.set}
               onTask={(id) => {
@@ -512,14 +516,14 @@ export function Conversation(props: {
           </Label>
         </Modal>
       </If>
-      <If when={actions() ? info() : undefined}>
-        {(active) => (
+      <If when={actions() && info() ? actions() : undefined}>
+        {(action) => (
           <ConversationActions
-            info={active()}
+            info={info()!}
             members={members()}
-            captain={props.captain}
+            action={action()}
             phone={phone()}
-            onClose={() => actions.set(false)}
+            onClose={() => actions.set(undefined)}
           />
         )}
       </If>

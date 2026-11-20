@@ -11,6 +11,8 @@ export function PhonePairing(props: { phone: boolean; onClose: () => void }) {
   const qr = signal<{ link: string; url: string; image: string } | undefined>(
     undefined,
   );
+  /** The host answers on a loopback address, which a phone can't reach. */
+  const loopback = signal(false);
   const address = signal("");
   const error = signal("");
   const busy = signal(false);
@@ -21,6 +23,7 @@ export function PhonePairing(props: { phone: boolean; onClose: () => void }) {
     busy.set(true);
     error.set("");
     qr.set(undefined);
+    loopback.set(false);
     copied.set(false);
     try {
       const link = await host.call<{ link: string; url: string }>(
@@ -28,14 +31,11 @@ export function PhonePairing(props: { phone: boolean; onClose: () => void }) {
         "phoneLink",
         url ? { url } : {},
       );
-      if (
+      loopback.set(
         /^(?:localhost|\[::1\]|127(?:\.\d+){3})$/.test(
           new URL(link.url).hostname,
-        )
-      ) {
-        error.set("Enter a host address that your phone can reach.");
-        return;
-      }
+        ),
+      );
       const image = qrCode(0, "M");
       image.addData(link.link);
       image.make();
@@ -44,9 +44,7 @@ export function PhonePairing(props: { phone: boolean; onClose: () => void }) {
         image: `data:image/svg+xml;base64,${btoa(image.createSvgTag(4, 16))}`,
       });
     } catch {
-      error.set(
-        "The code couldn't be generated. Check the host address and retry.",
-      );
+      error.set(uiText("phoneCodeFailed"));
     } finally {
       busy.set(false);
     }
@@ -64,6 +62,11 @@ export function PhonePairing(props: { phone: boolean; onClose: () => void }) {
         </View>
       </If>
       <If when={qr()}>
+        <If when={loopback()}>
+          <Label size={10} line={16} tone="mutedInk">
+            {uiText("phoneCantReachThisAddress")}
+          </Label>
+        </If>
         <View
           role="button"
           accessibilityLabel={
@@ -94,11 +97,13 @@ export function PhonePairing(props: { phone: boolean; onClose: () => void }) {
             accessibilityLabel={uiText("etaPairingCode")}
           />
         </View>
-        <Label size={10} line={16} tone="mutedInk">
-          {copied()
-            ? uiText("connectLinkCopiedItContainsYour")
-            : uiText("inEtaOnYourPhoneTap")}
-        </Label>
+        <If when={!loopback() || copied()}>
+          <Label size={10} line={16} tone="mutedInk">
+            {copied()
+              ? uiText("connectLinkCopiedItContainsYour")
+              : uiText("inEtaOnYourPhoneTap")}
+          </Label>
+        </If>
       </If>
       <If when={!qr()}>
         <Label size={12} line={16} tone={error() ? "red" : "muted"}>

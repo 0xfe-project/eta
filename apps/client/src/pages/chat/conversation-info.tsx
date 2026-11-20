@@ -1,5 +1,10 @@
-import type { ArtifactView, MemberView } from "@eta/client-contracts";
+import type {
+  ArtifactView,
+  ConversationInfo,
+  MemberView,
+} from "@eta/client-contracts";
 import type { JSX } from "nsh";
+import type { ConversationAction } from "./conversation-actions";
 import { Scroll, View } from "nsh";
 import {
   Caption,
@@ -15,6 +20,7 @@ import { CloseButton } from "../../components/navigation-buttons";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskGlyph } from "../tasks/status";
+import { ConversationActionsMenu } from "./conversation-actions";
 import { memberStatus } from "./member-status";
 import { messageTime } from "./message-time";
 
@@ -24,6 +30,9 @@ export function PhoneConversationInfo(props: {
   name: string;
   project?: string;
   members: MemberView[];
+  info?: ConversationInfo;
+  captain?: boolean;
+  onActions: (action: ConversationAction) => void;
   onClose: () => void;
   onInspect: (value: { id: string; session: string }) => void;
   onTask: (id: string) => void;
@@ -62,7 +71,20 @@ export function PhoneConversationInfo(props: {
         <CloseButton size={32} iconSize={16} onPress={props.onClose} />
       </View>
       <Scroll style={grow} scrollbar={false}>
-        <Section label={uiText("members")} count={props.members.length} first />
+        <Section label={uiText("members")} count={props.members.length} first>
+          <ConversationActionsMenu
+            info={props.info}
+            captain={props.captain}
+            triggerStyle={{
+              minWidth: 28,
+              height: 24,
+              paddingHorizontal: 3,
+              marginLeft: "auto",
+              marginRight: -6,
+            }}
+            onOpen={props.onActions}
+          />
+        </Section>
         <Each of={props.members} key={(member) => member.agentId}>
           {(member) => (
             <InfoRow
@@ -131,7 +153,12 @@ export function PhoneConversationInfo(props: {
     </View>
   );
 
-  function Section(section: { label: string; count: number; first?: boolean }) {
+  function Section(section: {
+    label: string;
+    count: number;
+    first?: boolean;
+    children?: JSX.Element;
+  }) {
     return (
       <View
         style={{
@@ -150,6 +177,7 @@ export function PhoneConversationInfo(props: {
         <Label size={10} line={12} tone="muted">
           {section.count}
         </Label>
+        {section.children}
       </View>
     );
   }

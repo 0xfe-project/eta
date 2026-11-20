@@ -1,39 +1,127 @@
 import type { ConversationInfo, MemberView } from "@eta/client-contracts";
+import type { ViewStyle } from "nsh";
 import { Scroll, signal, View } from "nsh";
-import { Button, Field, Label, Modal, row } from "../../components";
+import {
+  ActionItem,
+  ActionMenu,
+  Button,
+  Field,
+  Label,
+  Modal,
+  row,
+} from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
-type Section =
-  | "Conversation actions"
-  | "Edit conversation"
-  | "Members"
-  | "Related tasks"
-  | "Remove member"
-  | "Change steward";
+/** What a conversation's actions open: a dialog for each that needs one. */
+export interface ConversationAction {
+  section: "Edit conversation" | "Related tasks" | "Remove member";
+  /** The member to remove. */
+  agentId?: string;
+}
+
+/**
+ * The members header's "…": a menu (a sheet on touch screens) of the
+ * conversation's own actions. The steward and the removal of a member are on
+ * each member's row.
+ */
+export function ConversationActionsMenu(props: {
+  info?: ConversationInfo;
+  captain?: boolean;
+  /** The tablet menu's 14px rows. */
+  roomy?: boolean;
+  triggerStyle?: ViewStyle;
+  onOpen: (action: ConversationAction) => void;
+}) {
+  const host = useHost();
+  const linked = () =>
+    host
+      .tasks()
+      .filter((task) => props.info && task.conversationId === props.info.id)
+      .length;
+  return (
+    <If
+      when={props.info}
+      else={
+        <Button
+          label={uiText("conversationActions")}
+          icon="more"
+          iconOnly
+          tone="ghost"
+          disabled
+          onPress={() => {}}
+          style={props.triggerStyle}
+        />
+      }
+    >
+      {(info) => (
+        <ActionMenu
+          label={uiText("conversationActions")}
+          sheetTitle={info().name}
+          popupWidth={props.roomy ? 160 : undefined}
+          lifted={props.roomy}
+          triggerStyle={props.triggerStyle}
+        >
+          <ActionItem
+            label={uiText(
+              info().kind === "group" || props.captain
+                ? "editGroupInfo"
+                : "editConversation",
+            )}
+            roomy={props.roomy}
+            onSelect={() => props.onOpen({ section: "Edit conversation" })}
+          />
+          <ActionItem
+            label={uiText("relatedTasks")}
+            detail={linked() ? String(linked()) : undefined}
+            roomy={props.roomy}
+            onSelect={() => props.onOpen({ section: "Related tasks" })}
+          />
+          {/* Captain's conversation is the way to Captain: the host refuses
+              to archive it. */}
+          <If when={!props.captain || info().archived}>
+            <ActionItem
+              label={uiText(info().archived ? "unarchive" : "archive")}
+              roomy={props.roomy}
+              onSelect={() =>
+                void host.action(() =>
+                  host.call("conversations", "update", {
+                    conversationId: info().id,
+                    archived: !info().archived,
+                  }),
+                )
+              }
+            />
+          </If>
+        </ActionMenu>
+      )}
+    </If>
+  );
+}
 
 export function ConversationActions(props: {
   info: ConversationInfo;
   members: MemberView[];
   phone: boolean;
-  captain?: boolean;
+  action: ConversationAction;
   onClose: () => void;
 }) {
   const host = useHost();
-  const section = signal<Section>("Conversation actions");
+  const section = () => props.action.section;
   const name = signal(props.info.name);
   const goal = signal(props.info.goal);
   const decisions = signal(props.info.decided);
-  const removing = signal("");
+  const removing = () => props.action.agentId ?? "";
   const busy = signal(false);
   const error = signal("");
   const group = () => props.info.kind === "group";
   const memberName = (id: string) => host.agent(id)?.name ?? id;
-
-  function open(next: Section) {
-    error.set("");
-    section.set(next);
-  }
+  const title = () =>
+    section() === "Edit conversation"
+      ? uiText(group() ? "editGroupInfo" : "editConversation")
+      : section() === "Related tasks"
+        ? uiText("relatedTasks")
+        : uiText("removeMember");
   async function save(operation: () => Promise<unknown>, then?: () => void) {
     if (busy()) return;
     busy.set(true);
@@ -58,7 +146,7 @@ export function ConversationActions(props: {
     });
   return (
     <Modal
-      title={section()}
+      title={title()}
       width={432}
       phone={props.phone}
       sheet={props.phone}
@@ -69,43 +157,6 @@ export function ConversationActions(props: {
     >
       <Scroll style={{ maxHeight: 460 }}>
         <View style={{ padding: 16, gap: 10 }}>
-          <If when={section() === "Conversation actions"}>
-            <Button
-              label={uiText("editConversation")}
-              onPress={() => open("Edit conversation")}
-            />
-            <Button
-              label={uiText("relatedTasks")}
-              onPress={() => open("Related tasks")}
-            />
-            <If when={group()}>
-              <Button
-                label={uiText("manageMembers")}
-                onPress={() => open("Members")}
-              />
-              <Button
-                label={uiText("changeSteward")}
-                disabled={props.info.archived}
-                onPress={() => open("Change steward")}
-              />
-            </If>
-            <If when={!props.captain}>
-              <Button
-                label={
-                  props.info.archived
-                    ? uiText("restoreConversation")
-                    : uiText("archiveConversation")
-                }
-                disabled={busy()}
-                onPress={() =>
-                  void save(
-                    () => update({ archived: !props.info.archived }),
-                    props.onClose,
-                  )
-                }
-              />
-            </If>
-          </If>
           <If when={section() === "Edit conversation"}>
             <If when={group()}>
               <Label>{uiText("groupName")}</Label>
@@ -182,29 +233,6 @@ export function ConversationActions(props: {
               }}
             </Each>
           </If>
-          <If when={section() === "Members"}>
-            <Each of={props.members} key={(member) => member.agentId}>
-              {(member) => (
-                <View style={{ ...row, gap: 8 }}>
-                  <Label style={{ flex: 1 }}>
-                    {memberName(member().agentId)}
-                  </Label>
-                  <Button
-                    label={uiText("remove", {
-                      memberName: memberName(member().agentId),
-                    })}
-                    disabled={
-                      busy() || props.members.length <= 1 || props.info.archived
-                    }
-                    onPress={() => {
-                      removing.set(member().agentId);
-                      open("Remove member");
-                    }}
-                  />
-                </View>
-              )}
-            </Each>
-          </If>
           <If when={section() === "Remove member"}>
             <Label>
               {uiText("removeFrom", {
@@ -222,42 +250,6 @@ export function ConversationActions(props: {
                       conversationId: props.info.id,
                       agentId: removing(),
                     }),
-                  () => open("Members"),
-                )
-              }
-            />
-          </If>
-          <If when={section() === "Change steward"}>
-            <Each of={props.members} key={(member) => member.agentId}>
-              {(member) => (
-                <Button
-                  label={memberName(member().agentId)}
-                  selected={props.info.stewardId === member().agentId}
-                  disabled={busy()}
-                  onPress={() =>
-                    void save(
-                      () =>
-                        host.call("conversations", "setSteward", {
-                          conversationId: props.info.id,
-                          agentId: member().agentId,
-                        }),
-                      props.onClose,
-                    )
-                  }
-                />
-              )}
-            </Each>
-            <Button
-              label={uiText("noSteward")}
-              selected={!props.info.stewardId}
-              disabled={busy()}
-              onPress={() =>
-                void save(
-                  () =>
-                    host.call("conversations", "setSteward", {
-                      conversationId: props.info.id,
-                      agentId: null,
-                    }),
                   props.onClose,
                 )
               }
@@ -266,18 +258,12 @@ export function ConversationActions(props: {
           <If when={error()}>
             <Label tone="red">{error()}</Label>
           </If>
-          <If when={section() !== "Conversation actions"}>
+          <If when={section() === "Remove member"}>
             <Button
-              label={uiText("back")}
+              label={uiText("cancel")}
               tone="ghost"
               disabled={busy()}
-              onPress={() =>
-                open(
-                  section() === "Remove member"
-                    ? "Members"
-                    : "Conversation actions",
-                )
-              }
+              onPress={props.onClose}
             />
           </If>
         </View>

@@ -1,4 +1,5 @@
 import type { ConversationInfo, MemberView } from "@eta/client-contracts";
+import type { ConversationAction } from "./conversation-actions";
 import { View } from "nsh";
 import {
   ActionItem,
@@ -12,6 +13,7 @@ import { AgentFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { ConversationActionsMenu } from "./conversation-actions";
 import { activeReply, memberStatus } from "./member-status";
 import { MemberStepsLedger, MemberStepsToggle } from "./member-steps";
 
@@ -24,7 +26,10 @@ export function ConversationMembers(props: {
   onToggleSteps: (session: string) => void;
   onInspect: (member: { id: string; session: string }) => void;
   onInvite: () => void;
-  onActions: () => void;
+  captain?: boolean;
+  /** The tablet's roomier menu. */
+  tablet?: boolean;
+  onActions: (action: ConversationAction) => void;
 }) {
   const host = useHost();
   const c = colors();
@@ -59,13 +64,12 @@ export function ConversationMembers(props: {
               onPress={props.onInvite}
             />
           </If>
-          <Button
-            label={uiText("conversationActions")}
-            icon="more"
-            iconOnly
-            tone="ghost"
-            disabled={!props.info}
-            onPress={props.onActions}
+          <ConversationActionsMenu
+            info={props.info}
+            captain={props.captain}
+            roomy={props.tablet}
+            triggerStyle={{ minWidth: 24, height: 24, paddingHorizontal: 3 }}
+            onOpen={props.onActions}
           />
         </View>
       </View>
@@ -182,7 +186,12 @@ export function ConversationMembers(props: {
                       disabled={
                         props.members.length <= 1 || props.info?.archived
                       }
-                      onSelect={props.onActions}
+                      onSelect={() =>
+                        props.onActions({
+                          section: "Remove member",
+                          agentId: entry().agentId,
+                        })
+                      }
                     />
                   </If>
                   <If when={entry().sessionId}>

@@ -34,7 +34,6 @@ export function NewConversation(props: {
     machineName,
     place,
   } = picker;
-  const name = signal("");
   const picked = signal<string[] | undefined>(undefined);
   const agents = () =>
     picked() ??
@@ -43,7 +42,6 @@ export function NewConversation(props: {
       .slice(0, 1)
       .map((agent) => agent.id);
   const steward = signal<string | null | undefined>(undefined);
-  const advanced = signal(false);
   const currentSteward = () =>
     steward() === null ? null : (steward() ?? agents()[0]);
   const toggleAgent = (id: string) => {
@@ -102,7 +100,6 @@ export function NewConversation(props: {
         "create",
         {
           projectId: project.id,
-          name: name().trim() || undefined,
           agentIds: agents(),
           stewardId: currentSteward(),
         },
@@ -231,13 +228,9 @@ export function NewConversation(props: {
               machineName={machineName()}
               phone={phone()}
               agentIds={agents()}
-              advanced={advanced()}
-              name={name()}
               stewardId={currentSteward()}
               onToggleAgent={toggleAgent}
-              onName={name.set}
               onSteward={steward.set}
-              onStart={() => void start()}
             />
           )}
         </If>
@@ -282,18 +275,6 @@ export function NewConversation(props: {
           borderColor: c().border,
         }}
       >
-        <If when={directory()}>
-          <Button
-            label={localizedText("Conversation options", "对话选项")}
-            icon="more"
-            iconOnly
-            tone="ghost"
-            size={30}
-            selected={advanced()}
-            onPress={() => advanced.set(!advanced())}
-            style={{ marginRight: "auto" }}
-          />
-        </If>
         <Button
           label={methodEntry() ? uiText("cancel") : uiText("back")}
           tone="ghost"
