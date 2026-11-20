@@ -162,11 +162,13 @@ export {
   DEFAULT_RING_CAPACITY,
   type EventRing,
 } from "./ring";
+export type { RuntimeIdlePolicy } from "./runtime-idle";
 export type {
   ListedRuntimes,
   RuntimeCompaction,
   RuntimeExtras,
   RuntimeListing,
+  RuntimeResidency,
   SessionRuntime,
   SessionRuntimeInput,
   SessionRuntimes,

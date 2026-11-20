@@ -83,6 +83,8 @@ export function createAcpRuntimes(
       return {
         models: acpModels(input.runtime, () => catalog.models(id)),
         delegate,
+        residency: () => delegate.residency(),
+        release: async () => await delegate.release(),
         dispose: async () => await delegate.dispose(),
       };
     },

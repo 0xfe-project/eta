@@ -516,6 +516,39 @@ describe("cancelling and losing the agent", () => {
     expect(stateOf(reopened)).toMatchObject({ prompts: 2, openedBy: "resume" });
   });
 
+  it("lets an idle agent's process go and picks its session up at the next run", async () => {
+    const policy = { idleMs: 60_000, maxResident: 0, everyMs: 3_600_000 };
+    for (const caps of ["resume", "load"]) {
+      const { manager } = setup(
+        { env: { FAKE_ACP_CAPS: caps } },
+        { runtimeIdle: policy },
+      );
+      const managed = await manager.create({
+        cwd: "/tmp",
+        runtime: "acp.fake",
+      });
+      await run(managed, "one");
+      expect(await manager.sweepRuntimes()).toEqual([]);
+      expect(await manager.sweepRuntimes(Date.now() + 120_000)).toEqual([
+        managed.meta.id,
+      ]);
+      await run(managed, "state");
+      expect(stateOf(managed)).toMatchObject({ prompts: 2, openedBy: caps });
+    }
+  });
+
+  it("never lets go of an agent that could not pick its session up again", async () => {
+    const { manager } = setup(
+      { env: { FAKE_ACP_CAPS: "none" } },
+      { runtimeIdle: { idleMs: 60_000, maxResident: 0, everyMs: 3_600_000 } },
+    );
+    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    await run(managed, "one");
+    expect(await manager.sweepRuntimes(Date.now() + 120_000)).toEqual([]);
+    await run(managed, "state");
+    expect(stateOf(managed)).toMatchObject({ prompts: 2, openedBy: "new" });
+  });
+
   it("loads where the agent cannot resume, and drops the replay", async () => {
     const { manager } = setup({ env: { FAKE_ACP_CAPS: "load" } });
     const created = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });

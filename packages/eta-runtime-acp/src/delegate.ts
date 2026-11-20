@@ -11,6 +11,9 @@
  *   `session/new` otherwise, and whenever the agent no longer has the old one.
  * - A process that died is noticed at the next run, which starts another and picks the session up
  *   again the same way.
+ * - An idle agent's process can be let go (`release`) the same way, where the agent can pick its
+ *   session up again: one that can do neither `session/resume` nor `session/load` is never let go,
+ *   since a new session would not know the conversation.
  * - Cancelling is `session/cancel`; the agent answers the prompt as `cancelled`. One that does
  *   not, in time, loses its process.
  * - The host's tools reach the agent as an MCP server on this machine (`eta`), where the agent
@@ -201,6 +204,10 @@ export class AcpDelegate implements RunDelegate {
   #run: RunDelegateContext | undefined;
   /** The host's tools, served to the agent and listed anew at every run. */
   readonly #host: HostTools;
+  /** The release in flight: an open waits for the old process to be gone. */
+  #releasing: Promise<void> | undefined;
+  /** When this session last did something: a run, or an update from the agent. */
+  #lastActive = Date.now();
 
   constructor(options: AcpDelegateOptions) {
     this.#options = options;
@@ -225,6 +232,7 @@ export class AcpDelegate implements RunDelegate {
       return { status: "failed", error: "the agent is already in a turn" };
     this.#running = true;
     this.#run = context;
+    this.#lastActive = Date.now();
     try {
       let opened: Opened;
       try {
@@ -259,13 +267,55 @@ export class AcpDelegate implements RunDelegate {
     } finally {
       this.#running = false;
       this.#run = undefined;
+      this.#lastActive = Date.now();
     }
+  }
+
+  /** Whether an agent process is up for this session, and when the session last did anything. */
+  residency(): { resident: boolean; lastActive: number } {
+    return {
+      resident: this.#opened !== undefined && !this.#opened.process.lost,
+      lastActive: this.#lastActive,
+    };
+  }
+
+  /**
+   * Let the agent's process go between runs, keeping the conversation: the next run picks the
+   * agent's session up again. Only an agent that can (`session/resume` or `session/load`); answers
+   * whether it was let go.
+   */
+  async release(): Promise<boolean> {
+    const opened = this.#opened;
+    if (
+      opened === undefined ||
+      this.#disposed ||
+      this.#running ||
+      this.#releasing !== undefined ||
+      this.#native === undefined
+    )
+      return false;
+    const { capabilities } = opened;
+    if (
+      capabilities.sessionCapabilities?.resume == null &&
+      capabilities.loadSession !== true
+    )
+      return false;
+    this.#opened = undefined;
+    this.#releasing = opened.process
+      .stop()
+      .catch(() => undefined)
+      .finally(() => {
+        this.#releasing = undefined;
+      });
+    await this.#releasing;
+    return true;
   }
 
   /** Let the agent go: its questions, its session, its process. */
   async dispose(): Promise<void> {
     this.#disposed = true;
     this.#permissions?.abort();
+    await this.#releasing;
     const opened = this.#opened;
     this.#opened = undefined;
     await this.#host.close();
@@ -328,6 +378,8 @@ export class AcpDelegate implements RunDelegate {
   }
 
   async #open(context: RunDelegateContext): Promise<Opened> {
+    // A process being let go still holds the agent's session: the next one waits for it to be gone.
+    await this.#releasing;
     const known = this.#opened;
     if (known !== undefined) {
       if (!known.process.lost) return known;
@@ -606,6 +658,7 @@ export class AcpDelegate implements RunDelegate {
   #update(notification: SessionNotification): void {
     if (this.#replaying) return;
     if (notification.sessionId !== this.#native) return;
+    this.#lastActive = Date.now();
     const { update } = notification;
     if (update.sessionUpdate === "config_option_update") {
       this.#learn(update.configOptions);

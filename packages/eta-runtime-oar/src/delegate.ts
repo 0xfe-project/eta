@@ -23,6 +23,11 @@
  * - **`/compact`** is the runtime's own (`Session.compact`), between turns only. It holds the
  *   runtime's input while it works, so a run that starts meanwhile waits for it. A session not
  *   open yet is opened just for that: its host tools need a run to serve them.
+ * - **Release:** an idle runtime's process can be let go (`release`) and the conversation resumed at
+ *   the next run, as a model change does. Not while anything is under way: a run, a compaction, a
+ *   turn the runtime began itself, or a task it runs in the background, which would die with it.
+ * - **A process that dies** is let go whenever it happens: in a turn the turn fails, between runs
+ *   the next run opens it again, resuming the conversation.
  * - **A turn the runtime opens itself** (Claude Code answering a background task's
  *   notification, after the run that started the task ended) is a run too: the delegate watches
  *   the runtime between runs, and the first sign of such a turn asks the host for a run
@@ -228,6 +233,12 @@ export class OarDelegate implements RunDelegate {
   /** Stops waiting for the compaction in flight. */
   #compactWait: AbortController | undefined;
   #disposed = false;
+  /** The runtime's tasks still running (a background shell, a subagent): they live in its process. */
+  readonly #tasks = new Set<string>();
+  /** The release in flight: an open waits for the old process to be gone. */
+  #releasing: Promise<void> | undefined;
+  /** When this session last did something: a run, a compaction, a runtime event. */
+  #lastActive = Date.now();
 
   constructor(options: OarDelegateOptions) {
     this.#options = options;
@@ -252,6 +263,7 @@ export class OarDelegate implements RunDelegate {
     if (this.#disposed)
       return { status: "failed", error: "the session is closed" };
     this.#run = context;
+    this.#lastActive = Date.now();
     try {
       // A compaction holds the runtime's input: a prompt now would be refused.
       await until(this.#compacting, context.signal);
@@ -321,6 +333,7 @@ export class OarDelegate implements RunDelegate {
     } finally {
       this.#run = undefined;
       this.#calls = undefined;
+      this.#lastActive = Date.now();
       // A turn the runtime began as this run was ending gets a run of its own.
       if (this.#adopted !== undefined) this.#wake();
     }
@@ -349,14 +362,77 @@ export class OarDelegate implements RunDelegate {
    */
   #watch(session: Session): void {
     this.#unwatch?.();
+    this.#tasks.clear();
     this.#unwatch = session.events((event: Event) => {
-      if (this.#following || this.#adopted !== undefined) return;
       if (this.#opened?.session !== session) return;
+      this.#lastActive = Date.now();
+      this.#track(event);
+      if (event.kind === "exited") {
+        // Between runs nobody else hears it: without this, every later run would prompt a dead one.
+        if (!this.#following) this.#lost(session);
+        return;
+      }
+      if (this.#following || this.#adopted !== undefined) return;
       if (event.sessionId !== session.id || event.agentPath.length > 0) return;
       if (!TURN_SIGNS.has(event.kind)) return;
       this.#adopted = event.seq;
       this.#wake();
     });
+  }
+
+  /** Which of the runtime's tasks are running: a release would end them. */
+  #track(event: Event): void {
+    if (event.kind === "task_started") this.#tasks.add(event.taskId);
+    else if (event.kind === "task_ended") this.#tasks.delete(event.taskId);
+    else if (
+      event.kind === "task_updated" &&
+      event.status !== undefined &&
+      event.status !== "running" &&
+      event.status !== "pending" &&
+      event.status !== "paused"
+    )
+      this.#tasks.delete(event.taskId);
+  }
+
+  /** Whether a runtime process is up for this session, and when the session last did anything. */
+  residency(): { resident: boolean; lastActive: number } {
+    return {
+      resident: this.#opened !== undefined || this.#opening !== undefined,
+      lastActive: this.#lastActive,
+    };
+  }
+
+  /**
+   * Let the runtime's process go while nothing is under way, keeping the conversation: the next
+   * run resumes it, as after a restart. Answers whether it was let go.
+   */
+  async release(): Promise<boolean> {
+    const opened = this.#opened;
+    if (
+      opened === undefined ||
+      this.#disposed ||
+      this.#opening !== undefined ||
+      this.#releasing !== undefined ||
+      this.#run !== undefined ||
+      this.#compacting !== undefined ||
+      this.#following ||
+      this.#adopted !== undefined ||
+      this.#tasks.size > 0 ||
+      opened.session.status().value.kind !== "idle"
+    )
+      return false;
+    this.#opened = undefined;
+    this.#unwatch?.();
+    this.#unwatch = undefined;
+    this.#resume = opened.session.id;
+    this.#releasing = opened.session
+      .dispose()
+      .catch(() => undefined)
+      .finally(() => {
+        this.#releasing = undefined;
+      });
+    await this.#releasing;
+    return true;
   }
 
   /**
@@ -389,6 +465,7 @@ export class OarDelegate implements RunDelegate {
     this.#compacting = this.#compact(config, opened, wait.signal)
       .then(report)
       .finally(() => {
+        this.#lastActive = Date.now();
         this.#compacting = undefined;
         this.#compactWait = undefined;
       });
@@ -402,6 +479,7 @@ export class OarDelegate implements RunDelegate {
   ): Promise<Pick<RuntimeCompaction, "outcome" | "reason">> {
     let session = opened?.session;
     try {
+      await this.#releasing;
       session ??= await this.#openForCompaction(config);
       if (session.compact === undefined) return { outcome: "unsupported" };
       return compactionOf(
@@ -435,6 +513,7 @@ export class OarDelegate implements RunDelegate {
     this.#disposed = true;
     this.#compactWait?.abort();
     await this.#compacting;
+    await this.#releasing;
     const opened =
       this.#opened ?? (await this.#opening?.catch(() => undefined));
     this.#opened = undefined;
@@ -479,6 +558,10 @@ export class OarDelegate implements RunDelegate {
       this.#resume = current.session.id;
       await current.session.dispose().catch(() => undefined);
     }
+    // A process being let go still holds the conversation: the next one waits for it to be gone.
+    await this.#releasing;
+    if (this.#opened !== undefined)
+      return await this.#ensure(context, settings);
     this.#opening = this.#open(context, settings);
     try {
       this.#opened = await this.#opening;
@@ -796,6 +879,9 @@ export class OarDelegate implements RunDelegate {
     if (this.#opened?.session !== session) return;
     this.#opened = undefined;
     this.#resume = session.id;
+    this.#tasks.clear();
+    this.#unwatch?.();
+    this.#unwatch = undefined;
     void session.dispose().catch(() => undefined);
   }
 }

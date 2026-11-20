@@ -1065,6 +1065,28 @@ describe("a session on an external runtime", () => {
     await manager.closeAll();
   });
 
+  it("opens the runtime again when its process died between runs", async () => {
+    const { prompts, say, patch } = handDriven();
+    const { manager, opened } = setup(() => undefined, { patch });
+    const managed = await manager.create({ cwd: "/work", runtime: "claude" });
+    const first = run(managed, "before");
+    await tick();
+    say({ kind: "turn_ended", outcome: { kind: "completed" } });
+    expect((await first).status).toBe("completed");
+    const native = opened[0]!.session.id;
+    // Killed while nobody was listening for a turn: an OOM killer, a user's `kill`.
+    say({ kind: "exited", code: null });
+    await tick();
+    const second = run(managed, "after");
+    await tick();
+    expect(opened).toHaveLength(2);
+    expect(opened[1]!.options.resume).toBe(native);
+    expect(prompts.at(-1)!.input).toBe("after");
+    say({ kind: "turn_ended", outcome: { kind: "completed" } });
+    expect((await second).status).toBe("completed");
+    await manager.closeAll();
+  });
+
   it("aborts the runtime's turn", async () => {
     const { manager } = setup(
       async (turn) =>
@@ -1360,6 +1382,104 @@ describe("a turn the runtime opens itself", () => {
       "user:any report yet?",
       "assistant:The audit is running.",
     ]);
+    await manager.closeAll();
+  });
+});
+
+describe("letting an idle runtime's process go", () => {
+  const idle = { idleMs: 60_000, maxResident: 0, everyMs: 3_600_000 };
+  const later = () => Date.now() + 120_000;
+
+  it("lets an idle one go and resumes its conversation at the next run", async () => {
+    const { manager, turns, opened } = setup((turn) => turn.say("ok"), {
+      runtimeIdle: idle,
+    });
+    const managed = await manager.create({ cwd: "/work", runtime: "claude" });
+    await run(managed, "before");
+    const native = managed.meta.runtimeSession;
+    expect(await manager.sweepRuntimes()).toEqual([]);
+    expect(await manager.sweepRuntimes(later())).toEqual([managed.meta.id]);
+    // The process is gone: the runtime answered the dispose with its exit.
+    expect(
+      opened[0]!.session
+        .records()
+        .some(
+          (record) =>
+            record.kind === "response" && record.body.kind === "exited",
+        ),
+    ).toBe(true);
+    // Nothing left to let go.
+    expect(await manager.sweepRuntimes(later())).toEqual([]);
+    await run(managed, "after");
+    expect(opened).toHaveLength(2);
+    expect(turns[1]!.options.resume).toBe(native);
+    expect(transcript(managed)).toEqual([
+      "user:before",
+      "assistant:ok",
+      "user:after",
+      "assistant:ok",
+    ]);
+    await manager.closeAll();
+  });
+
+  it("keeps it while a run is under way", async () => {
+    let finish: (() => void) | undefined;
+    const { manager } = setup(
+      async (turn) => {
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        turn.say("done");
+      },
+      { runtimeIdle: idle },
+    );
+    const managed = await manager.create({ cwd: "/work", runtime: "claude" });
+    const running = run(managed, "work");
+    await tick();
+    expect(await manager.sweepRuntimes(later())).toEqual([]);
+    finish!();
+    await running;
+    expect(await manager.sweepRuntimes(later())).toEqual([managed.meta.id]);
+    await manager.closeAll();
+  });
+
+  it("keeps it while a task runs in the background, and lets it go once that ends", async () => {
+    let task: { end: () => void } | undefined;
+    const { manager } = setup(
+      (turn) => {
+        task = turn.task({ taskType: "shell", background: true });
+        turn.say("started");
+      },
+      { runtimeIdle: idle },
+    );
+    const managed = await manager.create({ cwd: "/work", runtime: "claude" });
+    await run(managed, "start it");
+    expect(await manager.sweepRuntimes(later())).toEqual([]);
+    task!.end();
+    await tick();
+    expect(await manager.sweepRuntimes(later())).toEqual([managed.meta.id]);
+    await manager.closeAll();
+  });
+
+  it("keeps no more than the cap, letting the least recently active go first", async () => {
+    const { manager } = setup((turn) => turn.say("ok"), {
+      runtimeIdle: { idleMs: 0, maxResident: 1, everyMs: 3_600_000 },
+    });
+    const older = await manager.create({ cwd: "/work", runtime: "claude" });
+    await run(older, "one");
+    await tick(5);
+    const newer = await manager.create({ cwd: "/work", runtime: "claude" });
+    await run(newer, "two");
+    expect(await manager.sweepRuntimes()).toEqual([older.meta.id]);
+    expect(await manager.sweepRuntimes()).toEqual([]);
+    await manager.closeAll();
+  });
+
+  it("never lets one go when there is no policy", async () => {
+    const { manager } = setup((turn) => turn.say("ok"), { runtimeIdle: null });
+    const managed = await manager.create({ cwd: "/work", runtime: "claude" });
+    await run(managed, "hello");
+    expect(await manager.sweepRuntimes(later())).toEqual([]);
     await manager.closeAll();
   });
 });
