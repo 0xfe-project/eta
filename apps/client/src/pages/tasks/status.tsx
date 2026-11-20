@@ -17,6 +17,28 @@ export function statusName(status: BoardTaskStatus) {
   return uiText(statusKeys[status]);
 }
 
+const statusHints = {
+  backlog: "statusHintBacklog",
+  todo: "statusHintTodo",
+  in_progress: "statusHintInProgress",
+  in_review: "statusHintInReview",
+  done: "statusHintDone",
+  blocked: "statusHintBlocked",
+  cancelled: "statusHintCancelled",
+} as const satisfies Record<BoardTaskStatus, Parameters<typeof uiText>[0]>;
+
+/** What moving a task to a status does, under its name in the status menu. */
+export function statusHint(status: BoardTaskStatus, waiting = 0) {
+  if (status === "cancelled" && waiting)
+    return uiText(
+      waiting === 1
+        ? "statusHintCancelledDependent"
+        : "statusHintCancelledDependents",
+      { count: waiting },
+    );
+  return uiText(statusHints[status]);
+}
+
 export const tones = {
   backlog: "faint",
   todo: "ink",

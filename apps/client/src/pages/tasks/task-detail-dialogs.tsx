@@ -18,7 +18,7 @@ import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskReviewDialog } from "./review-dialog";
 import { TaskRunLog } from "./run-log";
-import { statusName } from "./status";
+import { statusHint, statusName, TaskGlyph } from "./status";
 
 export function TaskDetailDialogs(props: {
   id: string;
@@ -27,6 +27,7 @@ export function TaskDetailDialogs(props: {
   state: TaskDetailState;
 }) {
   const host = useHost();
+  const c = colors();
   const {
     activeArchiveTargets,
     archive,
@@ -61,15 +62,50 @@ export function TaskDetailDialogs(props: {
           sheet
           onClose={() => status.set(false)}
         >
-          <View style={{ padding: 16, gap: 6 }}>
+          <View style={{ paddingBottom: 8 }}>
             <Each of={TASK_STATUSES}>
               {(entry) => (
-                <Button
-                  label={statusName(entry())}
-                  selected={entry() === task()?.status}
-                  disabled={submitting()}
-                  onPress={() => change(entry())}
-                />
+                <View
+                  role="button"
+                  accessibilityLabel={statusName(entry())}
+                  accessibilityState={{
+                    selected: entry() === task()?.status,
+                    disabled: submitting(),
+                  }}
+                  onPress={() => {
+                    if (!submitting()) change(entry());
+                  }}
+                  activeStyle={{ backgroundColor: c().selected }}
+                  style={{
+                    ...row,
+                    alignItems: "flex-start",
+                    minHeight: 52,
+                    paddingVertical: 9,
+                    paddingHorizontal: 16,
+                    gap: 12,
+                    borderTopWidth: 1,
+                    borderColor: c().border,
+                    backgroundColor:
+                      entry() === task()?.status ? c().selected : undefined,
+                  }}
+                >
+                  <View style={{ ...row, height: 18 }}>
+                    <TaskGlyph status={entry()} size={14} />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Label size={14} line={18}>
+                      {statusName(entry())}
+                    </Label>
+                    <Label size={11} line={14} tone="muted">
+                      {statusHint(entry(), task()?.dependents?.length ?? 0)}
+                    </Label>
+                  </View>
+                  <View style={{ ...row, width: 14, height: 18 }}>
+                    <If when={entry() === task()?.status}>
+                      <Icon name="check" size={14} />
+                    </If>
+                  </View>
+                </View>
               )}
             </Each>
           </View>

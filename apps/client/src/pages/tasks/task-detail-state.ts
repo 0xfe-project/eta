@@ -30,6 +30,9 @@ export function createTaskDetailState(props: {
   const plan = signal(false);
   const editTitle = signal("");
   const editDescription = signal("");
+  /** The desktop page's title and description, each edited in place on its own. */
+  const renaming = signal(false);
+  const describing = signal(false);
   const log = signal<TaskRunView | undefined>(undefined);
   const status = signal(false);
   const review = signal<"done" | "todo" | undefined>(undefined);
@@ -89,6 +92,25 @@ export function createTaskDetailState(props: {
     submitting.set(true);
     await host.action(work);
     submitting.set(false);
+  }
+  /** Saves the title being edited in place; an empty or unchanged one is dropped. */
+  function saveTitle() {
+    const title = editTitle().trim();
+    if (!renaming()) return;
+    renaming.set(false);
+    if (!title || title === task()?.title) return;
+    void mutate(async () => {
+      await host.call("tasks", "update", { taskId: props.id, title });
+    });
+  }
+  function saveDescription() {
+    void mutate(async () => {
+      await host.call("tasks", "update", {
+        taskId: props.id,
+        description: editDescription(),
+      });
+      describing.set(false);
+    });
   }
   function change(next: BoardTaskStatus) {
     void mutate(async () => {
@@ -164,6 +186,10 @@ export function createTaskDetailState(props: {
     plan,
     editTitle,
     editDescription,
+    renaming,
+    describing,
+    saveTitle,
+    saveDescription,
     log,
     status,
     review,

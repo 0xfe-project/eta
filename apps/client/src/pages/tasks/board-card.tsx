@@ -116,7 +116,8 @@ export function BoardCard(props: {
         onPanStart={props.draggable ? gesture.onPanStart : undefined}
         onPanEnd={props.draggable ? gesture.onPanEnd : undefined}
         onPress={() => props.onOpen()}
-        hoverStyle={{ backgroundColor: c().selected }}
+        hoverStyle={{ borderColor: `${c().ink}4d` }}
+        activeStyle={{ borderColor: `${c().ink}4d` }}
         style={{
           paddingVertical: tablet() ? 8 : 7.2,
           paddingHorizontal: tablet() ? 8 : 9,

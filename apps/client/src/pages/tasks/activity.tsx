@@ -43,8 +43,23 @@ const activityKeys: Partial<
   unarchived: "activityUnarchived",
 };
 
+/** A stopped or failed turn says why in its sentence, one line, not under it. */
+function inlineBody(entry: TaskActivityView) {
+  return (
+    (entry.kind === "run_interrupted" || entry.kind === "run_failed") &&
+    !!entry.body?.trim()
+  );
+}
+
 /** What an entry says on a desktop task page: a sentence, the task at the other end quoted. */
 function taskActivitySentence(entry: TaskActivityView): string {
+  if (inlineBody(entry))
+    return uiText(
+      entry.kind === "run_failed"
+        ? "activityTurnFailed"
+        : "activityTurnStopped",
+      { reason: entry.body!.trim().replace(/\s+/g, " ") },
+    );
   if (entry.kind === "status") {
     const from = entry.data.from as BoardTaskStatus;
     const to = entry.data.to as BoardTaskStatus;
@@ -146,7 +161,7 @@ export function TaskActivity(props: {
                     ? `${uiText("createdByName", { name: actor(entry()) })} · ${taskWhen(entry().createdAt)}`
                     : `${actor(entry())} · ${capitalized(taskActivitySentence(entry()))} · ${taskWhen(entry().createdAt)}`}
                 </Label>
-                <If when={entry().body}>
+                <If when={entry().body && !inlineBody(entry())}>
                   <Markdown value={entry().body ?? ""} line={20} />
                 </If>
               </View>
@@ -197,7 +212,7 @@ export function TaskActivity(props: {
                   {taskMoment(entry().createdAt)}
                 </Label>
               </View>
-              <If when={entry().body}>
+              <If when={entry().body && !inlineBody(entry())}>
                 <Markdown value={entry().body ?? ""} line={18} />
               </If>
             </View>

@@ -10,6 +10,9 @@ import {
   Button,
   Caption,
   colors,
+  Field,
+  fontFamily,
+  Fonts,
   grow,
   Icon,
   Label,
@@ -259,11 +262,14 @@ function DesktopOverview(props: {
     activity,
     canComment,
     cancelling,
+    describing,
     editDescription,
-    editing,
     editTitle,
+    renaming,
     replacing,
     resolveBlock,
+    saveDescription,
+    saveTitle,
     search,
     submitting,
   } = props.state;
@@ -311,14 +317,47 @@ function DesktopOverview(props: {
             </Label>
             <View style={{ ...row, gap: 10, paddingBottom: parent() ? 0 : 22 }}>
               <TaskGlyph status={item().status} size={parent() ? 20 : 16} />
-              <Label
-                size={parent() ? 20 : 18}
-                line={parent() ? 24 : 22}
-                weight={parent() ? 600 : 700}
-                style={{ flex: 1 }}
+              <If
+                when={renaming()}
+                else={
+                  <View
+                    role="button"
+                    accessibilityLabel={uiText("changeTitle")}
+                    onPress={() => {
+                      editTitle.set(item().title);
+                      renaming.set(true);
+                    }}
+                    style={{ flex: 1, minWidth: 0, cursor: "text" }}
+                  >
+                    <Label
+                      size={parent() ? 20 : 18}
+                      line={parent() ? 24 : 22}
+                      weight={parent() ? 600 : 700}
+                    >
+                      {item().title}
+                    </Label>
+                  </View>
+                }
               >
-                {item().title}
-              </Label>
+                <Field
+                  label={uiText("changeTitle")}
+                  value={editTitle()}
+                  onChange={editTitle.set}
+                  onSubmit={saveTitle}
+                  onBlur={saveTitle}
+                  inputRef={(ref) => queueMicrotask(() => ref.focus())}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    height: 32,
+                    paddingHorizontal: 8,
+                    borderColor: c().ink,
+                    fontSize: 16,
+                    lineHeight: 20,
+                    fontWeight: 600,
+                  }}
+                />
+              </If>
             </View>
           </View>
           <Prerequisites
@@ -344,44 +383,56 @@ function DesktopOverview(props: {
               when={parent()}
               else={
                 <View style={{ gap: 12, paddingBottom: 20 }}>
-                  <If when={!opensWithHeading()}>
-                    <Label size={16} line={20} weight={700}>
-                      {uiText("goal")}
-                    </Label>
-                  </If>
-                  <Markdown
-                    value={item().description}
-                    size={12}
-                    line={16}
-                    heading={{
-                      size: 16,
-                      line: 20,
-                      weight: 700,
-                      space: 0,
-                      after: 0,
-                    }}
-                    compactHeadings
-                  />
-                  <View
-                    role="button"
-                    accessibilityLabel={uiText("editDescription")}
-                    onPress={() => {
-                      editTitle.set(item().title);
-                      editDescription.set(item().description);
-                      editing.set(true);
-                    }}
-                    style={{
-                      ...row,
-                      alignSelf: "flex-start",
-                      gap: 5,
-                      cursor: "pointer",
-                    }}
+                  <If
+                    when={!describing()}
+                    else={
+                      <DescriptionEditor
+                        value={editDescription()}
+                        disabled={submitting()}
+                        onChange={editDescription.set}
+                        onCancel={() => describing.set(false)}
+                        onSave={saveDescription}
+                      />
+                    }
                   >
-                    <Icon name="pencil" size={10} tone="muted" />
-                    <Label size={10} line={12} tone="muted">
-                      {uiText("editDescription")}
-                    </Label>
-                  </View>
+                    <If when={!opensWithHeading()}>
+                      <Label size={16} line={20} weight={700}>
+                        {uiText("goal")}
+                      </Label>
+                    </If>
+                    <Markdown
+                      value={item().description}
+                      size={12}
+                      line={16}
+                      heading={{
+                        size: 16,
+                        line: 20,
+                        weight: 700,
+                        space: 0,
+                        after: 0,
+                      }}
+                      compactHeadings
+                    />
+                    <View
+                      role="button"
+                      accessibilityLabel={uiText("editDescription")}
+                      onPress={() => {
+                        editDescription.set(item().description);
+                        describing.set(true);
+                      }}
+                      style={{
+                        ...row,
+                        alignSelf: "flex-start",
+                        gap: 5,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <Icon name="pencil" size={10} tone="muted" />
+                      <Label size={10} line={12} tone="muted">
+                        {uiText("editDescription")}
+                      </Label>
+                    </View>
+                  </If>
                 </View>
               }
             >
@@ -730,5 +781,53 @@ export function TaskOverview(props: {
         </View>
       </If>
     </If>
+  );
+}
+
+/** The description edited in place: its raw markdown in a 240px-high box, Cancel and Save under it. */
+function DescriptionEditor(props: {
+  value: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  const c = colors();
+  const fonts = Fonts();
+  return (
+    <View style={{ gap: 8 }}>
+      <Field
+        label={uiText("editDescription")}
+        value={props.value}
+        onChange={props.onChange}
+        multiline
+        inputRef={(ref) => queueMicrotask(() => ref.focus())}
+        style={{
+          minHeight: 240,
+          height: undefined,
+          paddingVertical: 10,
+          paddingHorizontal: 12,
+          borderColor: c().ink,
+          fontFamily: fontFamily(fonts().mono),
+          fontSize: 13,
+          lineHeight: 22,
+        }}
+      />
+      <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>
+        <Button
+          label={uiText("cancel")}
+          tone="ghost"
+          style={{ paddingHorizontal: 10 }}
+          onPress={props.onCancel}
+        />
+        <Button
+          label={uiText("save")}
+          tone="primary"
+          disabled={props.disabled}
+          style={{ paddingHorizontal: 10 }}
+          onPress={props.onSave}
+        />
+      </View>
+    </View>
   );
 }

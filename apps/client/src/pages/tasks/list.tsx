@@ -306,7 +306,18 @@ export function TabletTaskList(props: {
             accessibilityLabel={task().title}
             accessibilityState={{ selected: task().id === props.selected }}
             onPress={() => props.onOpen(task().id)}
-            hoverStyle={{ backgroundColor: c().selected }}
+            hoverStyle={{
+              backgroundColor:
+                task().id === props.selected
+                  ? c().selected
+                  : `${c().selected}80`,
+            }}
+            activeStyle={{
+              backgroundColor:
+                task().id === props.selected
+                  ? c().selected
+                  : `${c().selected}80`,
+            }}
             style={{
               ...row,
               height: 52,
@@ -370,7 +381,8 @@ export function TaskTableRow(props: {
       role="button"
       accessibilityLabel={props.item.title}
       onPress={props.onOpen}
-      hoverStyle={{ backgroundColor: c().selected }}
+      hoverStyle={{ backgroundColor: `${c().selected}80` }}
+      focusVisibleStyle={{ backgroundColor: `${c().selected}99` }}
       style={{
         ...row,
         height: 32,

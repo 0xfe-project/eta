@@ -1,17 +1,17 @@
 import type { Layout } from "../../components";
 import { View } from "nsh";
 import {
-  ActionItem,
-  ActionMenu,
   Button,
   colors,
   grow,
   Header,
+  Icon,
   Label,
   row,
 } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { TaskMenu, TaskMenuItem } from "./menu";
 import { TaskPlan } from "./plan";
 import { Segmented } from "./segmented";
 import { TaskDetailSkeleton } from "./skeleton";
@@ -30,6 +30,9 @@ export function TaskDetail(props: {
   const host = useHost();
   const c = colors();
   const state = createTaskDetailState(props);
+  /** The desktop page, which edits its title and description in place and
+   * starts over from its rail, so its … menu only archives. */
+  const page = () => props.layout === "desktop" && !props.docked;
   /** Beside the task list on tablet: no way back, the list is there. */
   const paned = () => props.layout === "tablet" && !props.docked;
   const {
@@ -96,24 +99,50 @@ export function TaskDetail(props: {
               onPress={() => panel.set(true)}
             />
           </If>
-          <ActionMenu label={uiText("taskActions")}>
-            <ActionItem
-              label={uiText("edit")}
-              onSelect={() => {
-                editTitle.set(task()?.title ?? "");
-                editDescription.set(task()?.description ?? "");
-                editing.set(true);
-              }}
-            />
+          <TaskMenu
+            width={172}
+            align="end"
+            trigger={
+              <View
+                accessibilityLabel={uiText("taskActions")}
+                hoverStyle={{ backgroundColor: c().selected }}
+                expandedStyle={{ backgroundColor: c().selected }}
+                style={{
+                  ...row,
+                  justifyContent: "center",
+                  minWidth: 32,
+                  height: 30,
+                  cursor: "pointer",
+                }}
+              >
+                <Icon name="more" size={17} />
+              </View>
+            }
+          >
+            <If when={!page() || task()?.children?.length}>
+              <TaskMenuItem
+                label={uiText("edit")}
+                height={30}
+                onSelect={() => {
+                  editTitle.set(task()?.title ?? "");
+                  editDescription.set(task()?.description ?? "");
+                  editing.set(true);
+                }}
+              />
+            </If>
             <If when={phone() && !task()?.children?.length}>
-              <ActionItem
+              <TaskMenuItem
                 label={uiText("changeStatus")}
+                height={30}
                 onSelect={() => status.set(true)}
               />
             </If>
-            <If when={!task()?.children?.length && task()?.runs.length}>
-              <ActionItem
+            <If
+              when={!page() && !task()?.children?.length && task()?.runs.length}
+            >
+              <TaskMenuItem
                 label={uiText("rerun")}
+                height={30}
                 onSelect={() =>
                   void host.action(() =>
                     host.call("tasks", "rerun", { taskId: props.id }),
@@ -121,10 +150,11 @@ export function TaskDetail(props: {
                 }
               />
             </If>
-            <ActionItem
+            <TaskMenuItem
               label={
                 task()?.archivedAt ? uiText("unarchive") : uiText("archive")
               }
+              height={30}
               onSelect={() => {
                 if (task()?.archivedAt)
                   void host.action(() =>
@@ -133,7 +163,7 @@ export function TaskDetail(props: {
                 else archive.set(true);
               }}
             />
-          </ActionMenu>
+          </TaskMenu>
         </If>
       </Header>
       <If

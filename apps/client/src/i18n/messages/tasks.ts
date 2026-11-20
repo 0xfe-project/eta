@@ -244,7 +244,6 @@ export const tasksMessages = {
   addDependency: ["Add dependency", "添加依赖"],
   addTask: ["Add task", "添加任务"],
   allExecutors: ["All executors", "所有执行者"],
-  allTasks: ["All tasks", "所有任务"],
   archiveTask: ["Archive task?", "归档任务？"],
   archivingStopsOngoingTaskRunsArchive: [
     "Archiving stops ongoing task runs. Archive it?",
@@ -316,7 +315,7 @@ export const tasksMessages = {
     "Reply; a running task reads it right away",
     "回复；执行中的任务会直接读到",
   ],
-  rerun: ["Rerun", "重新运行"],
+  rerun: ["Start over", "从头重跑"],
   runLog: ["Run log", "运行日志"],
   saveTask: ["Save task", "保存任务"],
   searchTasks: ["Search tasks", "搜索任务"],
@@ -412,4 +411,45 @@ export const tasksMessages = {
   dependencyWaitsForThis: ["Waits for this", "等待此任务"],
   minutesShort: ["{{count}} min", "{{count}} 分钟"],
   taskThen: ["Then: {{title}}", "接下来：{{title}}"],
+  partOfCaption: ["Part of", "属于"],
+  archivedTitle: ["Archived", "已归档"],
+  backToBoard: ["Back to board", "回到看板"],
+  searchTitleOrNumber: ["Search title or number", "搜索标题、编号"],
+  noArchivedTasks: ["No archived tasks", "没有已归档的任务"],
+  noArchivedTasksMatch: ["No archived tasks match", "没有符合的已归档任务"],
+  noArchivedTasksDescription: [
+    "Done or cancelled tasks are archived after a quiet while, and any task can be archived from its … menu.",
+    "完成或取消的任务没有动静一段时间后会自动归档，也可以在任务的「…」菜单里手动归档。",
+  ],
+  startOverHint: [
+    "A comment lets the executor carry on where it stopped; this opens a session that remembers nothing.",
+    "评论会让执行者接着上次往下做；这样是开一个它什么都不记得的新会话。",
+  ],
+  changeTitle: ["Change title", "修改标题"],
+  statusHintBacklog: ["Parked; it won't start", "先放着，不会开始执行"],
+  statusHintTodo: ["Queued for the executor to start", "排队等执行者开始"],
+  statusHintInProgress: ["The executor is working on it", "执行者正在做"],
+  statusHintInReview: [
+    "Finished, waiting for you; tasks that depend on it go ahead",
+    "做完了，等你看；依赖它的任务会被放行",
+  ],
+  statusHintDone: ["Accepted", "验收通过"],
+  statusHintBlocked: ["Needs your decision to go on", "需要你决定才能继续"],
+  statusHintCancelled: ["Dropped", "不做了"],
+  statusHintCancelledDependent: [
+    "Dropped; the {{count}} task waiting for it becomes blocked",
+    "不做了；等它的 {{count}} 个任务会转为受阻",
+  ],
+  statusHintCancelledDependents: [
+    "Dropped; the {{count}} tasks waiting for it become blocked",
+    "不做了；等它的 {{count}} 个任务会转为受阻",
+  ],
+  activityTurnStopped: [
+    "This turn stopped: {{reason}}",
+    "这一轮已停止：{{reason}}",
+  ],
+  activityTurnFailed: [
+    "This turn failed: {{reason}}",
+    "这一轮失败了：{{reason}}",
+  ],
 } as const;

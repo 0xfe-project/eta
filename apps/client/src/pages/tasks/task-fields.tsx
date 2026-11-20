@@ -9,6 +9,7 @@ import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 import { taskMoment } from "./facts";
+import { StatusOptions, TaskMenu } from "./menu";
 import { activeTaskRun } from "./run-log";
 import { statusName, TaskGlyph, TaskStatus, tones } from "./status";
 
@@ -291,6 +292,9 @@ export function TaskRail(detail: {
       | (typeof statusFill)[keyof typeof statusFill]
       | undefined;
   const runText = () => taskRunText(item());
+  /** A stopped or finished run starts over from the rail; a running one has Stop instead. */
+  const canStartOver = () =>
+    !item().children?.length && !!run() && !activeTaskRun(run()!);
   function mutate(work: () => Promise<unknown>) {
     void detail.state.mutate(async () => {
       await work();
@@ -299,53 +303,50 @@ export function TaskRail(detail: {
   return (
     <View style={{ gap: 14 }}>
       <RailRow label={uiText("status")}>
-        <View style={{ gap: 4, flex: 1 }}>
-          <View
-            role="button"
-            accessibilityLabel={uiText("changeStatus")}
-            onPress={() => status.set(!status())}
-            style={{
-              ...row,
-              alignSelf: "flex-start",
-              height: 28,
-              minWidth: 128,
-              paddingHorizontal: 8,
-              gap: 6,
-              borderWidth: 1,
-              borderColor: tint() ? c()[tones[item().status]] : c().strong,
-              backgroundColor: tint() ? c()[tint()!] : c().canvas,
-              cursor: "pointer",
-            }}
-          >
-            <TaskGlyph status={item().status} size={14} />
-            <Label
-              size={12}
-              line={16}
-              tone={tint() ? tones[item().status] : "ink"}
-              style={{ flex: 1 }}
+        <TaskMenu
+          width={264}
+          caption={uiText("changeStatus")}
+          open={status()}
+          onOpenChange={status.set}
+          trigger={
+            <View
+              accessibilityLabel={uiText("changeStatus")}
+              style={{
+                ...row,
+                alignSelf: "flex-start",
+                height: 28,
+                minWidth: 128,
+                paddingHorizontal: 8,
+                gap: 6,
+                borderWidth: 1,
+                borderColor: tint() ? c()[tones[item().status]] : c().strong,
+                backgroundColor: tint() ? c()[tint()!] : c().canvas,
+                cursor: "pointer",
+              }}
             >
-              {statusName(item().status)}
-            </Label>
-            <Icon
-              name="down"
-              size={10}
-              tone={tint() ? tones[item().status] : "ink"}
-            />
-          </View>
-          <If when={status()}>
-            <View style={{ gap: 4 }}>
-              <Each of={TASK_STATUSES}>
-                {(entry) => (
-                  <Button
-                    label={statusName(entry())}
-                    selected={entry() === item().status}
-                    onPress={() => change(entry())}
-                  />
-                )}
-              </Each>
+              <TaskGlyph status={item().status} size={14} />
+              <Label
+                size={12}
+                line={16}
+                tone={tint() ? tones[item().status] : "ink"}
+                style={{ flex: 1 }}
+              >
+                {statusName(item().status)}
+              </Label>
+              <Icon
+                name="down"
+                size={10}
+                tone={tint() ? tones[item().status] : "ink"}
+              />
             </View>
-          </If>
-        </View>
+          }
+        >
+          <StatusOptions
+            current={item().status}
+            waiting={item().dependents?.length ?? 0}
+            onChange={change}
+          />
+        </TaskMenu>
       </RailRow>
       <RailRow label={uiText("executor")}>
         <Label size={12} line={16} weight={600}>
@@ -403,8 +404,37 @@ export function TaskRail(detail: {
           <Label size={10} line={12} weight={600}>
             {runText()}
           </Label>
+          <If when={canStartOver()}>
+            <View
+              role="button"
+              accessibilityLabel={uiText("rerun")}
+              onPress={() =>
+                mutate(() => host.call("tasks", "rerun", { taskId: item().id }))
+              }
+              hoverStyle={{ backgroundColor: c().selected }}
+              style={{
+                ...row,
+                height: 20,
+                paddingHorizontal: 4,
+                gap: 4,
+                cursor: "pointer",
+              }}
+            >
+              <Icon name="refresh" size={11} />
+              <Label size={10} line={12} weight={600}>
+                {uiText("rerun")}
+              </Label>
+            </View>
+          </If>
         </View>
       </RailRow>
+      <If when={canStartOver()}>
+        <View style={{ paddingLeft: 76, marginTop: -10 }}>
+          <Label size={10} line={14} tone="muted">
+            {uiText("startOverHint")}
+          </Label>
+        </View>
+      </If>
       <If when={item().dependsOn?.length}>
         <RailRow label={uiText("taskWaitsForLabel")} top>
           <View style={{ gap: 6, flex: 1 }}>
