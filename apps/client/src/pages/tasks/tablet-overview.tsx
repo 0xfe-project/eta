@@ -1,18 +1,23 @@
 import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { TaskDetailState } from "./task-detail-state";
-import { TASK_STATUSES } from "@eta/client-contracts";
 import { Scroll, View } from "nsh";
-import { Menu, MenuItem } from "nsh/base";
 import { colors, grow, Icon, Label, Markdown, row } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "./activity";
 import { NeighbourStrip, Prerequisites, Subtasks } from "./dependencies";
 import { taskMoment } from "./facts";
+import { StatusOptions, TaskMenu } from "./menu";
+import { activeTaskRun } from "./run-log";
 import { Segmented } from "./segmented";
 import { statusName, TaskGlyph, tones } from "./status";
 import { statusFill, TaskCommentBox, taskRunText } from "./task-fields";
-import { RunLine } from "./task-overview";
+import {
+  DescriptionEditor,
+  EditDescriptionLink,
+  RunLine,
+  TitleInPlace,
+} from "./task-overview";
 
 /** A task's page on tablet: its properties under the title, the run line and the reply box pinned below. */
 export function TabletOverview(props: {
@@ -25,9 +30,12 @@ export function TabletOverview(props: {
     activity,
     canComment,
     cancelling,
+    describing,
+    editDescription,
     plan,
     replacing,
     resolveBlock,
+    saveDescription,
     search,
     submitting,
   } = props.state;
@@ -80,9 +88,13 @@ export function TabletOverview(props: {
           </View>
           <View style={{ ...row, gap: 8 }}>
             <TaskGlyph status={item().status} size={18} />
-            <Label size={18} line={22} weight={600} style={{ flex: 1 }}>
-              {item().title}
-            </Label>
+            <TitleInPlace
+              title={item().title}
+              state={props.state}
+              size={18}
+              line={22}
+              weight={600}
+            />
             <If
               when={!parent()}
               else={
@@ -107,33 +119,58 @@ export function TabletOverview(props: {
             onCancel={() => cancelling.set(true)}
             onTask={props.onTask}
           />
-          <Properties item={item()} />
+          <Properties item={item()} state={props.state} />
           <If
             when={parent()}
             else={<NeighbourStrip item={item()} tablet onTask={props.onTask} />}
           >
             <Subtasks item={item()} tablet onTask={props.onTask} />
           </If>
-          <If when={item().description}>
+          <If when={describing()}>
+            <DescriptionEditor
+              tablet
+              value={editDescription()}
+              disabled={submitting()}
+              onChange={editDescription.set}
+              onCancel={() => describing.set(false)}
+              onSave={saveDescription}
+            />
+          </If>
+          <If when={!describing()}>
             <View style={{ gap: parent() ? 3 : 4 }}>
-              <If when={parent() || !/^\s*#/.test(item().description)}>
+              <If
+                when={
+                  item().description &&
+                  (parent() || !/^\s*#/.test(item().description))
+                }
+              >
                 <Label size={13} line={16} weight={600}>
                   {parent() ? uiText("description") : uiText("goal")}
                 </Label>
               </If>
-              <Markdown
-                value={item().description}
-                size={12}
-                line={16}
-                heading={{
-                  size: 13,
-                  line: 16,
-                  weight: 600,
-                  space: 0,
-                  after: -8,
-                }}
-                compactHeadings
-              />
+              <If when={item().description}>
+                <Markdown
+                  value={item().description}
+                  size={12}
+                  line={16}
+                  heading={{
+                    size: 13,
+                    line: 16,
+                    weight: 600,
+                    space: 0,
+                    after: -8,
+                  }}
+                  compactHeadings
+                />
+              </If>
+              <View style={{ paddingTop: item().description ? 4 : 0 }}>
+                <EditDescriptionLink
+                  onPress={() => {
+                    editDescription.set(item().description);
+                    describing.set(true);
+                  }}
+                />
+              </View>
             </View>
           </If>
           <TaskActivity phone={false} tablet entries={activity()} />
@@ -149,28 +186,28 @@ export function TabletOverview(props: {
   );
 }
 
-/** The status next to the title: tinted in the status's colour while it runs or waits for review. */
+/**
+ * The status next to the title, tinted in the status's colour while it runs or
+ * waits for review; it opens the "Change status" popover, a hint under each status.
+ */
 function StatusSelect(props: {
   item: BoardTaskDetail;
   state: TaskDetailState;
 }) {
   const c = colors();
+  const { change, status } = props.state;
   const tint = () =>
     statusFill[props.item.status as keyof typeof statusFill] as
       | (typeof statusFill)[keyof typeof statusFill]
       | undefined;
   const ink = () => (tint() ? tones[props.item.status] : "ink");
   return (
-    <Menu
-      placement="bottom"
+    <TaskMenu
+      width={264}
       align="end"
-      offset={3}
-      popupStyle={{
-        width: 172,
-        borderWidth: 1,
-        borderColor: c().strong,
-        backgroundColor: c().canvas,
-      }}
+      caption={uiText("changeStatus")}
+      open={status()}
+      onOpenChange={status.set}
       trigger={
         <View
           accessibilityLabel={uiText("changeStatus")}
@@ -202,37 +239,24 @@ function StatusSelect(props: {
         </View>
       }
     >
-      <Each of={TASK_STATUSES}>
-        {(entry) => (
-          <MenuItem
-            role="menuitemradio"
-            checked={props.item.status === entry()}
-            accessibilityLabel={statusName(entry())}
-            style={{ ...row, minHeight: 33, paddingHorizontal: 9, gap: 6 }}
-            hoverStyle={{ backgroundColor: c().selected }}
-            indicatorStyle={{ width: 0 }}
-            onSelect={() => props.state.change(entry())}
-          >
-            <TaskGlyph status={entry()} size={12} />
-            <Label size={12} style={{ flex: 1 }}>
-              {statusName(entry())}
-            </Label>
-            <If when={props.item.status === entry()}>
-              <Icon name="check" size={12} />
-            </If>
-          </MenuItem>
-        )}
-      </Each>
-    </Menu>
+      <StatusOptions
+        current={props.item.status}
+        waiting={props.item.dependents?.length ?? 0}
+        onChange={change}
+      />
+    </TaskMenu>
   );
 }
 
 /** Every property of the task in two columns: what it is on the left, what it waits on the right. */
-function Properties(props: { item: BoardTaskDetail }) {
+function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
   const c = colors();
   const host = useHost();
   const item = () => props.item;
   const parent = () => !!item().children?.length;
+  const run = () => item().runs.at(-1);
+  /** A stopped or finished run starts over from its row, as on the desktop rail. */
+  const canStartOver = () => !parent() && !!run() && !activeTaskRun(run()!);
   const executor = () =>
     host.agent(item().assigneeAgentId ?? item().createdBy.agentId)?.name ??
     uiText("unassigned");
@@ -342,6 +366,37 @@ function Properties(props: { item: BoardTaskDetail }) {
                     >
                       {field()[1]}
                     </Label>
+                    <If
+                      when={field()[0] === uiText("taskRun") && canStartOver()}
+                    >
+                      <View
+                        role="button"
+                        accessibilityLabel={uiText("rerun")}
+                        accessibilityDescription={uiText("startOverHint")}
+                        onPress={() =>
+                          void props.state.mutate(async () => {
+                            await host.call("tasks", "rerun", {
+                              taskId: item().id,
+                            });
+                          })
+                        }
+                        hoverStyle={{ backgroundColor: c().selected }}
+                        style={{
+                          ...row,
+                          height: 18,
+                          marginVertical: -2,
+                          paddingHorizontal: 4,
+                          gap: 4,
+                          flexShrink: 0,
+                          cursor: "pointer",
+                        }}
+                      >
+                        <Icon name="refresh" size={11} />
+                        <Label size={11} line={14} weight={600}>
+                          {uiText("rerun")}
+                        </Label>
+                      </View>
+                    </If>
                   </If>
                 </View>
               )}

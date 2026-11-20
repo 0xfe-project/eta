@@ -484,13 +484,17 @@ export function TaskOverview(props: {
     activity,
     canComment,
     cancelling,
+    describing,
+    editDescription,
     executor,
     log,
     phone,
     replacing,
     resolveBlock,
+    saveDescription,
     search,
     side,
+    status,
     stop,
     submitting,
   } = props.state;
@@ -589,19 +593,41 @@ export function TaskOverview(props: {
                 </Label>
                 <View style={{ ...row, gap: phone() ? 8 : 10 }}>
                   <TaskGlyph status={item().status} size={phone() ? 18 : 16} />
-                  <Label
-                    size={phone() ? 18 : 20}
-                    line={phone() ? 24 : 26}
-                    weight={600}
-                    style={{ flex: 1 }}
+                  <If
+                    when={phone()}
+                    else={
+                      <Label
+                        size={20}
+                        line={26}
+                        weight={600}
+                        style={{ flex: 1 }}
+                      >
+                        {item().title}
+                      </Label>
+                    }
                   >
-                    {item().title}
-                  </Label>
+                    <TitleInPlace
+                      title={item().title}
+                      state={props.state}
+                      size={18}
+                      line={24}
+                      weight={600}
+                    />
+                  </If>
                 </View>
                 <If when={phone()}>
-                  <Label size={12} line={16} tone={statusTone()}>
-                    {statusLine()}
-                  </Label>
+                  <View
+                    role={parent() ? undefined : "button"}
+                    accessibilityLabel={
+                      parent() ? undefined : uiText("changeStatus")
+                    }
+                    onPress={parent() ? undefined : () => status.set(true)}
+                    style={{ alignSelf: "flex-start" }}
+                  >
+                    <Label size={12} line={16} tone={statusTone()}>
+                      {statusLine()}
+                    </Label>
+                  </View>
                 </If>
               </View>
               <If when={phone()}>
@@ -621,7 +647,26 @@ export function TaskOverview(props: {
               <If when={item().children?.length}>
                 <Subtasks item={item()} phone={phone()} onTask={props.onTask} />
               </If>
-              <If when={item().description}>
+              <If when={phone() && describing()}>
+                <DescriptionEditor
+                  phone
+                  value={editDescription()}
+                  disabled={submitting()}
+                  onChange={editDescription.set}
+                  onCancel={() => describing.set(false)}
+                  onSave={saveDescription}
+                />
+              </If>
+              <If when={phone() && !describing() && !item().description.trim()}>
+                <EditDescriptionLink
+                  size={11}
+                  onPress={() => {
+                    editDescription.set("");
+                    describing.set(true);
+                  }}
+                />
+              </If>
+              <If when={item().description && !(phone() && describing())}>
                 <View
                   style={{
                     gap: 6,
@@ -657,6 +702,15 @@ export function TaskOverview(props: {
                     }
                     compactHeadings={phone()}
                   />
+                  <If when={phone()}>
+                    <EditDescriptionLink
+                      size={11}
+                      onPress={() => {
+                        editDescription.set(item().description);
+                        describing.set(true);
+                      }}
+                    />
+                  </If>
                 </View>
               </If>
               <If
@@ -784,18 +838,31 @@ export function TaskOverview(props: {
   );
 }
 
-/** The description edited in place: its raw markdown in a 240px-high box, Cancel and Save under it. */
-function DescriptionEditor(props: {
+/**
+ * The description edited in place: its raw markdown in a box outlined in ink,
+ * Cancel and Save under it. 240px high at 13px on desktop and tablet; on a
+ * phone 200px at 14/20 with 32px buttons.
+ */
+export function DescriptionEditor(props: {
   value: string;
   disabled: boolean;
+  /** Tablet's 19px lines and 24px buttons. */
+  tablet?: boolean;
+  phone?: boolean;
   onChange: (value: string) => void;
   onCancel: () => void;
   onSave: () => void;
 }) {
   const c = colors();
   const fonts = Fonts();
+  const button = () =>
+    props.phone
+      ? { size: 32, labelSize: 14, padding: 14 }
+      : props.tablet
+        ? { size: 24, labelSize: 12, padding: 10 }
+        : { size: undefined, labelSize: undefined, padding: 10 };
   return (
-    <View style={{ gap: 8 }}>
+    <View style={{ gap: props.phone ? 16 : 8 }}>
       <Field
         label={uiText("editDescription")}
         value={props.value}
@@ -803,31 +870,107 @@ function DescriptionEditor(props: {
         multiline
         inputRef={(ref) => queueMicrotask(() => ref.focus())}
         style={{
-          minHeight: 240,
+          minHeight: props.phone ? 200 : 240,
           height: undefined,
           paddingVertical: 10,
           paddingHorizontal: 12,
           borderColor: c().ink,
           fontFamily: fontFamily(fonts().mono),
-          fontSize: 13,
-          lineHeight: 22,
+          fontSize: props.phone ? 14 : 13,
+          lineHeight: props.phone ? 20 : props.tablet ? 19 : 22,
         }}
       />
       <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>
         <Button
           label={uiText("cancel")}
           tone="ghost"
-          style={{ paddingHorizontal: 10 }}
+          size={button().size}
+          labelSize={button().labelSize}
+          style={{ paddingHorizontal: button().padding }}
           onPress={props.onCancel}
         />
         <Button
           label={uiText("save")}
           tone="primary"
           disabled={props.disabled}
-          style={{ paddingHorizontal: 10 }}
+          size={button().size}
+          labelSize={button().labelSize}
+          style={{ paddingHorizontal: button().padding }}
           onPress={props.onSave}
         />
       </View>
     </View>
+  );
+}
+
+/** The muted pencil link under a description that opens it in place. */
+export function EditDescriptionLink(props: {
+  size?: number;
+  onPress: () => void;
+}) {
+  const size = () => props.size ?? 10;
+  return (
+    <View
+      role="button"
+      accessibilityLabel={uiText("editDescription")}
+      onPress={props.onPress}
+      style={{ ...row, alignSelf: "flex-start", gap: 5, cursor: "pointer" }}
+    >
+      <Icon name="pencil" size={size()} tone="muted" />
+      <Label size={size()} line={size() + 2} tone="muted">
+        {uiText("editDescription")}
+      </Label>
+    </View>
+  );
+}
+
+/** A title that turns into a field when pressed, saved on Enter or when it loses focus. */
+export function TitleInPlace(props: {
+  title: string;
+  state: TaskDetailState;
+  size: number;
+  line: number;
+  weight: number;
+}) {
+  const c = colors();
+  const { editTitle, renaming, saveTitle } = props.state;
+  return (
+    <If
+      when={renaming()}
+      else={
+        <View
+          role="button"
+          accessibilityLabel={uiText("changeTitle")}
+          onPress={() => {
+            editTitle.set(props.title);
+            renaming.set(true);
+          }}
+          style={{ flex: 1, minWidth: 0, cursor: "text" }}
+        >
+          <Label size={props.size} line={props.line} weight={props.weight}>
+            {props.title}
+          </Label>
+        </View>
+      }
+    >
+      <Field
+        label={uiText("changeTitle")}
+        value={editTitle()}
+        onChange={editTitle.set}
+        onSubmit={saveTitle}
+        onBlur={saveTitle}
+        inputRef={(ref) => queueMicrotask(() => ref.focus())}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          height: props.line + 8,
+          paddingHorizontal: 8,
+          borderColor: c().ink,
+          fontSize: props.size - 2,
+          lineHeight: props.line - 4,
+          fontWeight: 600,
+        }}
+      />
+    </If>
   );
 }

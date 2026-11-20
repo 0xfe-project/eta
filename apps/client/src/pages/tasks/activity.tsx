@@ -159,7 +159,10 @@ export function TaskActivity(props: {
                 <Label size={12} line={16} tone="mutedInk">
                   {entry().kind === "created"
                     ? `${uiText("createdByName", { name: actor(entry()) })} · ${taskWhen(entry().createdAt)}`
-                    : `${actor(entry())} · ${capitalized(taskActivitySentence(entry()))} · ${taskWhen(entry().createdAt)}`}
+                    : inlineBody(entry())
+                      ? // A turn's closing note ends the line; the time would read as part of the note.
+                        `${actor(entry())} · ${capitalized(taskActivitySentence(entry()))}`
+                      : `${actor(entry())} · ${capitalized(taskActivitySentence(entry()))} · ${taskWhen(entry().createdAt)}`}
                 </Label>
                 <If when={entry().body && !inlineBody(entry())}>
                   <Markdown value={entry().body ?? ""} line={20} />

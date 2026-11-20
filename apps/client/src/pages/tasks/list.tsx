@@ -162,7 +162,7 @@ export function PhoneTaskList(props: {
                         role="button"
                         accessibilityLabel={entry().title}
                         onPress={() => props.onOpen(entry().id)}
-                        activeStyle={{ backgroundColor: c().selected }}
+                        activeStyle={{ backgroundColor: `${c().selected}80` }}
                         style={{
                           ...row,
                           height: 56,

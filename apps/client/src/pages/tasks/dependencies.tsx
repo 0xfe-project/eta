@@ -5,7 +5,7 @@ import type {
   TaskDependencyView,
   TaskRefView,
 } from "@eta/client-contracts";
-import { View } from "nsh";
+import { platform, View } from "nsh";
 import { Button, Caption, colors, Icon, Label, row } from "../../components";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
@@ -34,7 +34,11 @@ export function TaskLink(link: {
       role="button"
       accessibilityLabel={link.item.title}
       onPress={() => link.onTask(link.item.taskId)}
-      hoverStyle={{ backgroundColor: c().selected }}
+      // A touch leaves no hover behind: the row fills only while pressed there.
+      hoverStyle={
+        platform.desktop ? { backgroundColor: c().selected } : undefined
+      }
+      activeStyle={{ backgroundColor: `${c().selected}99` }}
       style={{
         ...row,
         height: link.height ?? 44,
