@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export const SECTIONS = ["decision", "preference", "lesson"] as const;
+const SECTIONS = ["decision", "preference", "lesson"] as const;
 export type MemorySection = (typeof SECTIONS)[number];
 
 function isSection(value: string): value is MemorySection {
@@ -14,7 +14,7 @@ export interface FileEntry {
   path: string;
 }
 
-export const hashText = (text: string): string =>
+const hashText = (text: string): string =>
   createHash("sha256").update(text).digest("hex").slice(0, 12);
 
 export function parseMemoryFile(path: string, text: string): FileEntry[] {
