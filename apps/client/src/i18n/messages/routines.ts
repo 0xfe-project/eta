@@ -53,6 +53,7 @@ export const routinesMessages = {
   earlierReports: ["Earlier reports", "更早的报告"],
   editRoutine: ["Edit routine", "编辑定时任务"],
   everyHour: ["Every hour", "每小时"],
+  frequency: ["Frequency", "频率"],
   everyHours: ["Every {{hours}} hours", "每 {{hours}} 小时"],
   intervalHour: ["1 hour", "1 小时"],
   intervalHours: ["{{hours}} hours", "{{hours}} 小时"],

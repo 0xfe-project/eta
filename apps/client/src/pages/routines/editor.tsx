@@ -27,12 +27,107 @@ import { useHost } from "../../services/host";
 import { upcomingTimes, weekday } from "./schedule";
 
 /**
+ * The phone form's select: a 36pt trigger with 14pt text, opening the
+ * design's titled bottom sheet of 48pt rows with the selected one tinted.
+ */
+function PhoneSelect(props: {
+  label: string;
+  title: string;
+  value: string;
+  options: { label: string; checked: boolean; onSelect: () => void }[];
+  triggerStyle?: ViewStyle;
+}) {
+  const c = colors();
+  return (
+    <Menu
+      placement="bottom"
+      align="start"
+      offset={3}
+      popupStyle={{
+        width: "100%",
+        maxHeight: "80%",
+        paddingBottom: 24,
+        borderTopWidth: 1,
+        borderColor: c().strong,
+        backgroundColor: c().canvas,
+      }}
+      backdropStyle={{ backgroundColor: c().sheetShade }}
+      trigger={
+        <View
+          accessibilityLabel={props.label}
+          hoverStyle={{ backgroundColor: c().selected }}
+          focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+          style={{
+            ...row,
+            height: 36,
+            gap: 8,
+            paddingHorizontal: 10,
+            cursor: "pointer",
+            borderWidth: 1,
+            borderColor: c().border,
+            backgroundColor: c().canvas,
+            ...props.triggerStyle,
+          }}
+        >
+          <Label size={14} line={20} lines={1} style={{ flex: 1, minWidth: 0 }}>
+            {props.value}
+          </Label>
+          <Icon name="down" size={14} tone="muted" />
+        </View>
+      }
+    >
+      <View style={{ alignItems: "center", paddingTop: 8, paddingBottom: 4 }}>
+        <View style={{ width: 36, height: 4, backgroundColor: c().strong }} />
+      </View>
+      <View style={{ ...row, height: 44, paddingHorizontal: 16 }}>
+        <Label size={14} line={20} weight={600}>
+          {props.title}
+        </Label>
+      </View>
+      <Each of={props.options}>
+        {(option) => (
+          <MenuItem
+            role="menuitemradio"
+            checked={option().checked}
+            accessibilityLabel={option().label}
+            style={{
+              ...row,
+              height: 48,
+              flexShrink: 0,
+              paddingHorizontal: 16,
+              borderTopWidth: 1,
+              borderColor: c().border,
+              backgroundColor: option().checked ? c().selected : undefined,
+            }}
+            hoverStyle={{ backgroundColor: c().selected }}
+            indicatorStyle={{ width: 0 }}
+            onSelect={option().onSelect}
+          >
+            <Label size={14} line={20} style={{ flex: 1 }}>
+              {option().label}
+            </Label>
+            <View style={{ width: 16, height: 16, flexShrink: 0 }}>
+              <If when={option().checked}>
+                <Icon name="check" size={16} />
+              </If>
+            </View>
+          </MenuItem>
+        )}
+      </Each>
+    </Menu>
+  );
+}
+
+/**
  * The form's selects. With a pointer they open as the design's popover under
  * the trigger's left edge (so they never cover the routine list); a touch
- * screen keeps the shared menu, which is a bottom sheet there.
+ * screen keeps the shared menu, which is a bottom sheet there, and a phone
+ * has its own titled sheet.
  */
 function ScheduleSelect(props: {
   label: string;
+  /** The phone sheet's title. */
+  title?: string;
   value: string;
   options: { label: string; checked: boolean; onSelect: () => void }[];
   tablet?: boolean;
@@ -44,21 +139,34 @@ function ScheduleSelect(props: {
     <If
       when={platform.desktop && !props.phone}
       else={
-        <ActionMenu
-          label={props.label}
-          value={props.value}
-          triggerStyle={props.triggerStyle}
+        <If
+          when={props.phone}
+          else={
+            <ActionMenu
+              label={props.label}
+              value={props.value}
+              triggerStyle={props.triggerStyle}
+            >
+              <Each of={props.options}>
+                {(option) => (
+                  <ActionItem
+                    label={option().label}
+                    checked={option().checked}
+                    onSelect={option().onSelect}
+                  />
+                )}
+              </Each>
+            </ActionMenu>
+          }
         >
-          <Each of={props.options}>
-            {(option) => (
-              <ActionItem
-                label={option().label}
-                checked={option().checked}
-                onSelect={option().onSelect}
-              />
-            )}
-          </Each>
-        </ActionMenu>
+          <PhoneSelect
+            label={props.label}
+            title={props.title ?? props.label}
+            value={props.value}
+            options={props.options}
+            triggerStyle={props.triggerStyle}
+          />
+        </If>
       }
     >
       <Menu
@@ -222,14 +330,16 @@ export function RoutineEditor(props: {
     const all = Intl.supportedValuesOf("timeZone");
     return all.includes(timezone()) ? all : [timezone(), ...all];
   };
+  // The phone sheet: 36px controls with 14px text, a footer bar under the fields.
+  const sheet = () => props.phone && !props.inline;
   // The tablet form uses 32px controls with a 10px inset; the desktop one 28px and 8px.
-  const control = () => (props.tablet ? 32 : 28);
-  const controlInset = () => (props.tablet ? 10 : 8);
+  const control = () => (sheet() ? 36 : props.tablet ? 32 : 28);
+  const controlInset = () => (sheet() || props.tablet ? 10 : 8);
   const input = () => ({
     height: control(),
     paddingHorizontal: controlInset(),
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: sheet() ? 14 : 12,
+    lineHeight: sheet() ? 20 : 16,
   });
   const select = () => ({
     height: control(),
@@ -241,7 +351,7 @@ export function RoutineEditor(props: {
     hours === 1 ? uiText("intervalHour") : uiText("intervalHours", { hours });
   const field = (label: string, content: JSX.Element, width?: number) => (
     <View style={{ gap: 6, width: width ?? "100%", maxWidth: "100%" }}>
-      <Label size={12} line={16}>
+      <Label size={12} line={16} tone={sheet() ? "mutedInk" : undefined}>
         {label}
       </Label>
       {content}
@@ -252,7 +362,7 @@ export function RoutineEditor(props: {
       <View
         style={{
           ...row,
-          width: props.tablet ? 110 : 114,
+          width: sheet() ? 140 : props.tablet ? 110 : 114,
           height: control(),
           gap: 8,
           paddingHorizontal: controlInset(),
@@ -269,8 +379,8 @@ export function RoutineEditor(props: {
           style={{ ...row }}
           renderSegment={(entry) => (
             <Label
-              size={12}
-              line={16}
+              size={sheet() ? 14 : 12}
+              line={sheet() ? 20 : 16}
               style={{ marginLeft: entry.segment === "period" ? 4 : 0 }}
             >
               {entry.label}
@@ -278,23 +388,71 @@ export function RoutineEditor(props: {
           )}
           separatorStyle={{
             fontFamily: fontFamily(fonts().interface),
-            fontSize: 12,
-            lineHeight: 16,
+            fontSize: sheet() ? 14 : 12,
+            lineHeight: sheet() ? 20 : 16,
             color: c().ink,
           }}
         />
-        <Icon name="routines" size={12} />
+        <Icon name="routines" size={sheet() ? 14 : 12} />
       </View>
     </If>
+  );
+  const actions = () => (
+    <View
+      style={{
+        ...row,
+        gap: 8,
+        justifyContent: "flex-end",
+        ...(sheet()
+          ? {
+              paddingTop: 12,
+              paddingHorizontal: 16,
+              paddingBottom: 24,
+              borderTopWidth: 1,
+              borderColor: c().border,
+            }
+          : { paddingTop: 4 }),
+      }}
+    >
+      <Button
+        label={uiText("cancel")}
+        size={sheet() ? 36 : 28}
+        labelSize={sheet() ? 14 : undefined}
+        disabled={busy()}
+        style={{ paddingHorizontal: 14 }}
+        onPress={props.onClose}
+      />
+      <Button
+        label={props.item ? uiText("save") : uiText("routineCreate")}
+        tone="primary"
+        size={sheet() ? 36 : 28}
+        labelSize={sheet() ? 14 : undefined}
+        disabled={!valid() || busy()}
+        dimDisabled={!sheet()}
+        style={{
+          paddingHorizontal: 14,
+          opacity:
+            sheet() || (valid() && !busy()) ? 1 : props.tablet ? 0.55 : 0.5,
+          // The phone sheet draws a disabled primary in the faint fill.
+          ...(sheet() && (!valid() || busy())
+            ? { backgroundColor: c().faint, borderColor: c().faint }
+            : {}),
+        }}
+        onPress={() => void save()}
+      />
+    </View>
   );
   const form = () => (
     <View
       style={{
         paddingVertical: props.inline && !props.tablet ? 20 : 16,
+        paddingTop: sheet() ? 12 : undefined,
         paddingHorizontal: props.tablet ? 24 : props.inline ? 28 : 16,
         gap: props.tablet ? 14 : 16,
         width: "100%",
         maxWidth: props.inline ? 800 : undefined,
+        borderTopWidth: sheet() ? 1 : 0,
+        borderColor: c().border,
       }}
     >
       <If when={props.inline}>
@@ -349,21 +507,36 @@ export function RoutineEditor(props: {
             value={brief()}
             onChange={brief.set}
             multiline
-            style={{
-              height: props.tablet ? 110 : 112,
-              padding: 10,
-              fontSize: 12,
-              lineHeight: 18,
-            }}
+            style={
+              sheet()
+                ? {
+                    height: props.item ? 96 : 124,
+                    paddingVertical: 8,
+                    paddingHorizontal: 10,
+                    fontSize: 14,
+                    lineHeight: 20,
+                  }
+                : {
+                    height: props.tablet ? 110 : 112,
+                    padding: 10,
+                    fontSize: 12,
+                    lineHeight: 18,
+                  }
+            }
           />
           <If when={props.tablet}>
             <Label size={11} line={16} tone="muted">
               {uiText("routineRunByCaptain")}
             </Label>
           </If>
+          <If when={sheet()}>
+            <Label size={12} line={18} tone="muted">
+              {uiText("routineRunByCaptain")}
+            </Label>
+          </If>
         </>,
       )}
-      <If when={!props.tablet}>
+      <If when={!props.tablet && !sheet()}>
         <Label size={12} line={18} tone="muted">
           {uiText("routineRunByCaptain")}
         </Label>
@@ -374,10 +547,17 @@ export function RoutineEditor(props: {
           <View style={{ ...row, gap: 8, flexWrap: "wrap" }}>
             <ScheduleSelect
               label={uiText("scheduleFrequency")}
+              title={uiText("frequency")}
               value={uiText(kinds[kind()])}
               tablet={props.tablet}
               phone={props.phone}
-              triggerStyle={select()}
+              triggerStyle={
+                sheet()
+                  ? kind() === "hourly"
+                    ? { flex: 1, minWidth: 0 }
+                    : { width: kind() === "cron" ? 150 : 120, flexShrink: 0 }
+                  : select()
+              }
               options={(Object.keys(kinds) as RoutineSchedule["kind"][]).map(
                 (option) => ({
                   label: uiText(kinds[option]),
@@ -452,7 +632,9 @@ export function RoutineEditor(props: {
                 value={interval(every())}
                 tablet={props.tablet}
                 phone={props.phone}
-                triggerStyle={select()}
+                triggerStyle={
+                  sheet() ? { width: 120, flexShrink: 0 } : select()
+                }
                 options={HOURLY_STEPS.map((hours) => ({
                   label: interval(hours),
                   checked: every() === hours,
@@ -466,7 +648,10 @@ export function RoutineEditor(props: {
                 placeholder="0 8 * * 1-5"
                 value={cron()}
                 onChange={cron.set}
-                style={{ ...input(), width: 160 }}
+                style={{
+                  ...input(),
+                  ...(sheet() ? { flex: 1, minWidth: 0 } : { width: 160 }),
+                }}
               />
             </If>
           </View>
@@ -503,51 +688,41 @@ export function RoutineEditor(props: {
       )}
       {field(
         uiText("timeZone"),
-        <ActionMenu
-          label={uiText("timeZone")}
-          value={timezone()}
-          truncateValue
-          triggerStyle={select()}
+        <If
+          when={sheet()}
+          else={
+            <ActionMenu
+              label={uiText("timeZone")}
+              value={timezone()}
+              truncateValue
+              triggerStyle={select()}
+            >
+              <Each of={zones()}>
+                {(zone) => (
+                  <ActionItem
+                    label={zone()}
+                    checked={timezone() === zone()}
+                    onSelect={() => timezone.set(zone())}
+                  />
+                )}
+              </Each>
+            </ActionMenu>
+          }
         >
-          <Each of={zones()}>
-            {(zone) => (
-              <ActionItem
-                label={zone()}
-                checked={timezone() === zone()}
-                onSelect={() => timezone.set(zone())}
-              />
-            )}
-          </Each>
-        </ActionMenu>,
-        props.tablet ? 240 : 366,
+          <PhoneSelect
+            label={uiText("timeZone")}
+            title={uiText("timeZone")}
+            value={timezone()}
+            options={zones().map((zone) => ({
+              label: zone,
+              checked: timezone() === zone,
+              onSelect: () => timezone.set(zone),
+            }))}
+          />
+        </If>,
+        sheet() ? undefined : props.tablet ? 240 : 366,
       )}
-      <View
-        style={{
-          ...row,
-          gap: 8,
-          justifyContent: "flex-end",
-          paddingTop: 4,
-        }}
-      >
-        <Button
-          label={uiText("cancel")}
-          size={28}
-          disabled={busy()}
-          style={{ paddingHorizontal: 14 }}
-          onPress={props.onClose}
-        />
-        <Button
-          label={props.item ? uiText("save") : uiText("routineCreate")}
-          tone="primary"
-          size={28}
-          disabled={!valid() || busy()}
-          style={{
-            paddingHorizontal: 14,
-            opacity: !valid() || busy() ? (props.tablet ? 0.55 : 0.5) : 1,
-          }}
-          onPress={() => void save()}
-        />
-      </View>
+      <If when={!sheet()}>{actions()}</If>
     </View>
   );
   return (
@@ -555,12 +730,22 @@ export function RoutineEditor(props: {
       when={props.inline}
       else={
         <Modal
-          title={props.item ? uiText("editRoutine") : uiText("newRoutine")}
+          title={
+            props.item
+              ? props.phone
+                ? uiText("edit")
+                : uiText("editRoutine")
+              : uiText("newRoutine")
+          }
           phone={props.phone}
+          sheet={props.phone}
+          plainSheetHeader={props.phone}
+          overPhoneNavigation={props.phone}
           width={540}
           onClose={props.onClose}
         >
-          {form()}
+          <Scroll style={{ flexShrink: 1 }}>{form()}</Scroll>
+          <If when={sheet()}>{actions()}</If>
         </Modal>
       }
     >
