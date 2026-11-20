@@ -1,11 +1,13 @@
 export const onboardingMessages = {
-  addAModelSource: ["Add a model source", "添加模型来源"],
   addASourceToContinue: ["Add a source to continue", "添加模型来源以继续"],
   agentsAreWhoYouTalkTo: [
     "Agents are who you talk to and hand tasks to.",
     "你可以与智能体对话，或把任务交给它们。",
   ],
-  areInstalled: [" are installed. ", " 已安装。"],
+  alreadyInstalled: [
+    " · {{length}} already installed",
+    " · {{length}} 个已安装",
+  ],
   aSubscriptionAProviderApiKey: [
     "A subscription, a provider API key, or local models like Ollama.",
     "可以使用订阅、提供方 API 密钥，或 Ollama 等本地模型。",
@@ -13,17 +15,30 @@ export const onboardingMessages = {
   bindAModel: ["Bind a model", "绑定模型"],
   complete: ["Complete", "完成"],
   connectAModel: ["Connect a model", "绑定模型"],
-  continue: ["Continue", "是否继续？"],
+  isConnected: ["{{names}} is connected.", "{{names}} 已连接。"],
+  areConnected: ["{{names}} are connected.", "{{names}} 已连接。"],
+  isInstalledSayHello: [
+    "{{names}} is installed. Say hello in Chat.",
+    "{{names}} 已安装。去聊天中打个招呼。",
+  ],
+  areInstalledSayHello: [
+    "{{names}} are installed. Say hello in Chat.",
+    "{{names}} 已安装。去聊天中打个招呼。",
+  ],
+  listAnd: ["{{items}} and {{last}}", "{{items}}和{{last}}"],
+  listSeparator: [", ", "、"],
   getStarted: ["Get started", "开始使用"],
   gettingYourAgentsReady: ["Getting your agents ready.", "正在准备智能体。"],
   installAgents: ["Install agents", "安装智能体"],
   installAnAgent: ["Install an agent", "安装智能体"],
   installed: ["Installed", "已安装"],
-  installFailed: ["Install failed:", "安装失败："],
+  installFailed: ["Install failed: {{message}}", "安装失败：{{message}}"],
   installing: ["Installing…", "正在安装…"],
   isntReadyYet: ["{{hostname}} isn't ready yet", "{{hostname}} 尚未就绪"],
   loadingAgents: ["Loading agents…", "正在加载智能体…"],
-  modelsAvailable: ["{{length}} models available", "{{length}} 个可用模型"],
+  sourceApiKey: ["API key", "API 密钥"],
+  sourceModelCount: ["{{length}} models", "{{length}} 个模型"],
+  nextStep: ["Next", "下一步"],
   nextInstallAgents: ["Next: Install agents", "下一步：安装智能体"],
   noPersonaCardsToInstall: [
     "No persona cards to install",
@@ -38,12 +53,8 @@ export const onboardingMessages = {
     "还有一步。请在电脑上打开 Eta 完成设置。",
   ],
   pickAFewToStart: ["Pick a few to start.", "先选择几个智能体。"],
+  previousStep: ["Previous", "上一步"],
   retryInstall: ["Retry install", "重试安装"],
-  sayHelloInChat: ["Say hello in Chat.", "去聊天中打个招呼。"],
-  selectAModelFromAConnected: [
-    "Select a model from a connected source.",
-    "从已连接的来源中选择一个模型。",
-  ],
   setUpEta: ["Set up eta", "设置 Eta"],
   theHostDidntAnswerCheckYour: [
     "The host didn't answer. Check your connection to the host.",

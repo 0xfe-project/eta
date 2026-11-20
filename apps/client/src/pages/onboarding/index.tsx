@@ -4,7 +4,6 @@ import type { Persona } from "./persona-step";
 import { Scroll, signal, View } from "nsh";
 import {
   Button,
-  Caption,
   colors,
   grow,
   Icon,
@@ -12,15 +11,24 @@ import {
   Modal,
   row,
 } from "../../components";
-import { ModelSelect, useModels } from "../../components/model-select";
+import { useModels } from "../../components/model-select";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { ProviderDetail } from "../settings/models/provider-detail";
 import { ProviderEditor } from "../settings/models/provider-editor";
-
 import { ModelSources } from "../settings/models/sources";
 import { PersonaStep } from "./persona-step";
 import { WelcomeStep } from "./welcome";
+
+/** "A", "A and B", "A, B and C". */
+function listText(items: string[]) {
+  if (items.length < 2) return items.join("");
+  return uiText("listAnd", {
+    items: items.slice(0, -1).join(uiText("listSeparator")),
+    last: items.at(-1),
+  });
+}
 
 export function Onboard(props: { phone: boolean; onClose: () => void }) {
   const host = useHost();
@@ -28,7 +36,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
   const step = signal(0);
   const adding = signal(false);
   const custom = signal<SourceChoice | undefined>(undefined);
-  const model = signal("");
+  const detail = signal("");
   const unchecked = signal<string[]>([]);
   const installedHere = signal<string[]>([]);
   const working = signal(false);
@@ -41,6 +49,8 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
   follow(() => "personas");
   const providers = () => host.section<ProvidersView>("providers", "config");
   const models = useModels();
+  const sources = () =>
+    (providers()?.providers ?? []).filter((source) => source.id !== "llm");
   const cards = () => host.list<Persona>("personas", "cards");
   const installed = (id: string) =>
     installedHere().includes(id) ||
@@ -49,17 +59,12 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
     cards().filter(
       (card) => !installed(card.id) && !unchecked().includes(card.id),
     );
-  const chosenModel = () =>
-    models().some((entry) => entry.id === model()) ? model() : models()[0]?.id;
-  function dialogHeight() {
-    if (props.phone) return "90%";
-    if (step() === 0) return 527;
-    if (step() === 1) return models().length ? 330 : 270;
-    if (step() === 3) return 227;
-    if (cardsMissing()) return 392;
-    if (!loadingCards() && !cards().length) return 328;
-    return error() ? 552 : 510;
-  }
+  // The agents get the first usable model, as on the web.
+  const chosenModel = () => models()[0]?.id;
+  const already = () => cards().filter((card) => installed(card.id)).length;
+  const showCount = () =>
+    step() === 3 ||
+    (step() === 2 && !cardsMissing() && !loadingCards() && cards().length > 0);
   async function install() {
     const model = chosenModel();
     if (!model || working()) return;
@@ -93,94 +98,184 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
         title={uiText("setUpEta")}
         phone={props.phone}
         width={640}
-        height={dialogHeight()}
+        height={props.phone ? "90%" : undefined}
         onClose={props.onClose}
-        dismissible={!working()}
+        dismissible={false}
       >
         <If when={step() > 0}>
           <View
             style={{
               ...row,
               height: 40,
+              flexShrink: 0,
               paddingHorizontal: 16,
-              gap: 8,
+              gap: 12,
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
           >
-            <If when={step() < 3} else={<Icon name="check" size={12} />}>
-              <Caption text={`${step()}/2`} />
-            </If>
-            <Label size={12} weight={600} style={{ flex: 1 }}>
-              {step() === 1
-                ? uiText("connectAModel")
-                : step() === 2
-                  ? uiText("installAgents")
-                  : uiText("complete")}
-            </Label>
-            <If when={step() < 3}>
-              <Label size={12} tone="muted">
+            <View style={{ ...row, gap: 8 }}>
+              <If when={step() < 3} else={<Icon name="check" size={12} />}>
+                <Label
+                  size={10}
+                  line={12}
+                  tone="muted"
+                  style={{ letterSpacing: 0.8 }}
+                >
+                  {`${step()}/2`}
+                </Label>
+              </If>
+              <Label size={12} line={16} weight={600}>
                 {step() === 1
-                  ? uiText("nextInstallAgents")
-                  : uiText("lastStep")}
+                  ? uiText("connectAModel")
+                  : step() === 2
+                    ? uiText("installAgents")
+                    : uiText("complete")}
               </Label>
-            </If>
-            <Each of={[1, 2]}>
-              {(num) => (
-                <StatusDot
-                  color={
-                    step() === num()
-                      ? c().ink
-                      : step() > num()
-                        ? c().faint
-                        : c().border
-                  }
-                  size={8}
-                />
-              )}
-            </Each>
+            </View>
+            <Label
+              size={12}
+              line={16}
+              tone="muted"
+              style={{ flex: 1, textAlign: "right" }}
+            >
+              {step() === 1
+                ? uiText("nextInstallAgents")
+                : step() === 2
+                  ? uiText("lastStep")
+                  : ""}
+            </Label>
+            <View style={{ ...row, gap: 4 }}>
+              <Each of={[1, 2]}>
+                {(num) => (
+                  <If
+                    when={step() >= num()}
+                    else={
+                      <View
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderWidth: 1,
+                          borderColor: c().strong,
+                        }}
+                      />
+                    }
+                  >
+                    <StatusDot
+                      color={step() === num() ? c().ink : c().faint}
+                      size={8}
+                    />
+                  </If>
+                )}
+              </Each>
+            </View>
           </View>
         </If>
-        <Scroll style={grow} scrollbar={false}>
+        <Scroll
+          style={props.phone ? grow : { flexShrink: 1, minHeight: 0 }}
+          scrollbar={false}
+        >
           <If when={step() === 0}>
             <WelcomeStep phone={props.phone} />
           </If>
           <If when={step() === 1}>
-            <View style={{ padding: 16, paddingTop: 24, gap: 8 }}>
-              <Label size={16} weight={600}>
+            <View style={{ padding: 16, paddingTop: 24, gap: 4 }}>
+              <Label size={16} line={24} weight={600}>
                 {uiText("whichModelShouldYourAgentsUse")}
               </Label>
-              <Label tone="muted">
-                {models().length
-                  ? uiText("selectAModelFromAConnected")
+              <Label tone="mutedInk">
+                {sources().length
+                  ? uiText(
+                      sources().length > 1 ? "areConnected" : "isConnected",
+                      {
+                        names: listText(
+                          sources().map((source) => source.name ?? source.id),
+                        ),
+                      },
+                    )
                   : uiText("aSubscriptionAProviderApiKey")}
               </Label>
-              <If when={models().length}>
-                <View
-                  style={{
-                    gap: 6,
-                    padding: 10,
-                    borderWidth: 1,
-                    borderColor: c().border,
-                  }}
-                >
-                  <Caption
-                    text={uiText("modelsAvailable", {
-                      length: models().length,
-                    })}
-                  />
-                  <ModelSelect
-                    value={chosenModel() ?? ""}
-                    onChange={model.set}
-                  />
-                </View>
-              </If>
+            </View>
+            <View style={{ paddingHorizontal: 16, paddingBottom: 24, gap: 8 }}>
+              <Each of={sources()} key={(source) => source.id}>
+                {(source) => (
+                  <View
+                    role="button"
+                    accessibilityLabel={source().name ?? source().id}
+                    onPress={() => detail.set(source().id)}
+                    hoverStyle={{ backgroundColor: c().selected }}
+                    style={{
+                      ...row,
+                      alignItems: "flex-start",
+                      gap: 10,
+                      paddingVertical: 8,
+                      paddingHorizontal: 12,
+                      borderWidth: 1,
+                      borderColor: c().border,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 24,
+                        height: 24,
+                        flexShrink: 0,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderWidth: 1,
+                        borderColor: c().strong,
+                      }}
+                    >
+                      <Icon name="plugins" size={14} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                      <Label weight={500}>{source().name ?? source().id}</Label>
+                      <Label size={12} line={16} tone="muted">
+                        {[
+                          ...(source().hasApiKey
+                            ? [uiText("sourceApiKey")]
+                            : []),
+                          uiText("sourceModelCount", {
+                            length: source().models.length,
+                          }),
+                        ].join(" · ")}
+                      </Label>
+                    </View>
+                    <View
+                      style={{
+                        ...row,
+                        width: 80,
+                        height: 20,
+                        gap: 6,
+                        flexShrink: 0,
+                      }}
+                    >
+                      <StatusDot
+                        color={source().models.length ? c().green : c().amber}
+                      />
+                      <Label size={12} line={16} tone="mutedInk">
+                        {source().models.length
+                          ? uiText("working2")
+                          : uiText("needsAttention")}
+                      </Label>
+                    </View>
+                    <View style={{ marginTop: 2 }}>
+                      <Icon name="right" size={16} tone="mutedInk" />
+                    </View>
+                  </View>
+                )}
+              </Each>
               <Button
-                label={uiText("addAModelSource")}
+                label={uiText("addSource")}
                 icon="plus"
-                tone={models().length ? "ghost" : "primary"}
+                tone={sources().length ? "ghost" : "primary"}
+                size={sources().length ? 24 : 28}
                 onPress={() => adding.set(true)}
-                style={{ alignSelf: "flex-start" }}
+                style={{
+                  alignSelf: "flex-start",
+                  gap: 6,
+                  paddingHorizontal: sources().length ? 0 : 12,
+                }}
               />
             </View>
           </If>
@@ -189,12 +284,13 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
               cards={cards()}
               loading={loadingCards()}
               missing={Boolean(cardsMissing())}
+              missingReason={host.state().error ?? ""}
               working={working()}
               activeCard={activeCard()}
-              error={error()}
               installedCount={installedHere().length}
               total={total()}
               installed={installed}
+              installedHere={(id) => installedHere().includes(id)}
               selected={(id) => !unchecked().includes(id)}
               onToggle={(id) =>
                 unchecked.update((ids) =>
@@ -206,106 +302,164 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
             />
           </If>
           <If when={step() === 3}>
-            <View style={{ padding: 24, gap: 8 }}>
-              <Label size={16} weight={600}>
+            <View
+              style={{ paddingHorizontal: 16, paddingVertical: 24, gap: 4 }}
+            >
+              <Label size={16} line={24} weight={600}>
                 {uiText("yourAgentsAreReady")}
               </Label>
-              <Label tone="muted">
-                {cards()
-                  .filter((card) => installedHere().includes(card.id))
-                  .map((card) => card.name)
-                  .join(", ")}
-                {installedHere().length ? uiText("areInstalled") : ""}
-                {uiText("sayHelloInChat")}
+              <Label tone="mutedInk">
+                {uiText(
+                  already() > 1
+                    ? "areInstalledSayHello"
+                    : "isInstalledSayHello",
+                  {
+                    names: listText(
+                      cards()
+                        .filter((card) => installed(card.id))
+                        .map((card) => card.name),
+                    ),
+                  },
+                )}
               </Label>
             </View>
           </If>
         </Scroll>
+        <If when={step() === 2 && error()}>
+          <View
+            style={{
+              ...row,
+              alignItems: "flex-start",
+              flexShrink: 0,
+              gap: 8,
+              paddingVertical: 10,
+              paddingHorizontal: 16,
+              borderTopWidth: 1,
+              borderColor: c().border,
+              backgroundColor: c().selected,
+            }}
+          >
+            <View
+              style={{
+                width: 16,
+                height: 20,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Icon name="info" size={14} tone="red" />
+            </View>
+            <Label style={{ flex: 1, minWidth: 0 }}>
+              {uiText("installFailed", { message: error() })}
+            </Label>
+          </View>
+        </If>
         <View
           style={{
             ...row,
-            padding: 12,
+            flexShrink: 0,
+            paddingVertical: 12,
             paddingHorizontal: 16,
             borderTopWidth: 1,
             borderColor: c().border,
             gap: 8,
           }}
         >
-          <If when={step() === 2}>
-            <Button
-              label={uiText("previous")}
-              icon="back"
-              disabled={working()}
-              onPress={() => step.update((value) => value - 1)}
-            />
-          </If>
-          <Label size={12} tone="muted" style={{ flex: 1 }}>
-            {step() === 0
-              ? uiText("youCanChangeAnyOfThis")
-              : step() === 2
-                ? working()
-                  ? uiText("ofInstalled", {
-                      length: installedHere().length,
-                      total: total(),
-                    })
-                  : uiText("toInstall", {
+          <View style={{ ...row, flex: 1, gap: 8 }}>
+            <If when={step() === 2}>
+              <Button
+                label={uiText("previousStep")}
+                icon="back"
+                disabled={working()}
+                onPress={() => step.update((value) => value - 1)}
+              />
+            </If>
+            <If when={step() === 0 || (step() === 1 && !chosenModel())}>
+              <Label size={12} line={16} tone="muted">
+                {step() === 0
+                  ? uiText("youCanChangeAnyOfThis")
+                  : uiText("addASourceToContinue")}
+              </Label>
+            </If>
+          </View>
+          <View style={{ ...row, gap: 12 }}>
+            <If when={showCount()}>
+              <Label size={12} line={16} tone="muted">
+                {step() === 2 && !working()
+                  ? uiText("toInstall", {
                       length: selected().length,
-                      value2: installedHere().length
-                        ? ` · ${installedHere().length} already installed`
+                      value2: already()
+                        ? uiText("alreadyInstalled", { length: already() })
                         : "",
                     })
-                : step() === 3
-                  ? uiText("ofInstalled", {
+                  : uiText("ofInstalled", {
                       length: installedHere().length,
                       total: total(),
-                    })
-                  : chosenModel()
-                    ? ""
-                    : uiText("addASourceToContinue")}
-          </Label>
-          <If when={step() === 0}>
-            <Button
-              label={uiText("getStarted")}
-              tone="primary"
-              onPress={() => step.set(1)}
-            />
-          </If>
-          <If when={step() === 1}>
-            <Button
-              label={uiText("continue")}
-              tone="primary"
-              disabled={!chosenModel()}
-              onPress={() => step.set(2)}
-            />
-          </If>
-          <If when={step() === 2}>
-            <Button
-              label={
-                working()
-                  ? uiText("installing")
-                  : error()
-                    ? uiText("retryInstall")
-                    : uiText("installAgents")
-              }
-              tone="primary"
-              disabled={
-                working() ||
-                !chosenModel() ||
-                !selected().length ||
-                Boolean(cardsMissing())
-              }
-              onPress={() => void install()}
-            />
-          </If>
-          <If when={step() === 3}>
-            <Button
-              label={uiText("done")}
-              tone="primary"
-              onPress={props.onClose}
-            />
-          </If>
+                    })}
+              </Label>
+            </If>
+            <If when={step() === 0}>
+              <Button
+                label={uiText("getStarted")}
+                tone="primary"
+                onPress={() => step.set(1)}
+              />
+            </If>
+            <If when={step() === 1}>
+              <Button
+                label={uiText("nextStep")}
+                tone="primary"
+                disabled={!chosenModel()}
+                onPress={() => step.set(2)}
+              />
+            </If>
+            <If when={step() === 2}>
+              <Button
+                label={
+                  working()
+                    ? uiText("installing")
+                    : error()
+                      ? uiText("retryInstall")
+                      : uiText("installAgents")
+                }
+                tone="primary"
+                disabled={
+                  working() ||
+                  !chosenModel() ||
+                  !selected().length ||
+                  Boolean(cardsMissing())
+                }
+                onPress={() => void install()}
+              />
+            </If>
+            <If when={step() === 3}>
+              <Button
+                label={uiText("done")}
+                tone="primary"
+                onPress={props.onClose}
+              />
+            </If>
+          </View>
         </View>
       </Modal>
+      <If when={detail()}>
+        <Modal
+          title={
+            sources().find((source) => source.id === detail())?.name ?? detail()
+          }
+          phone={props.phone}
+          width={640}
+          height={props.phone ? "90%" : 560}
+          hideHeader
+          onClose={() => detail.set("")}
+        >
+          <ProviderDetail
+            id={detail()}
+            phone={props.phone}
+            onClose={() => detail.set("")}
+          />
+        </Modal>
+      </If>
       <If when={adding()}>
         <ModelSources
           phone={props.phone}
