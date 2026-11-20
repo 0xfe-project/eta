@@ -15,6 +15,7 @@ import type {
   PlatformPromptInfo,
   SessionMemoryOptions,
 } from "@eta/harness";
+import type { RuntimeIdlePolicy } from "./runtime-idle";
 import type {
   RuntimeExtras,
   SessionRuntime,
@@ -57,6 +58,7 @@ import {
 import { forkWrites } from "./fork";
 import { parseModelId } from "./model-id";
 import { resolvePersona } from "./personas";
+import { runtimeIdlePolicyFromEnv } from "./runtime-idle";
 
 /**
  * Put tools on an open session, and make sure the model is offered them.
@@ -197,6 +199,11 @@ export interface SessionManagerOptions {
   runtimes?: SessionRuntimes | undefined;
   /** Called when a session cannot be opened; the list keeps its row either way. */
   warn?: ((message: string) => void) | undefined;
+  /**
+   * When an idle runtime's process is let go (`runtime-idle.ts`). Absent reads the environment;
+   * `null` never lets one go.
+   */
+  runtimeIdle?: RuntimeIdlePolicy | null | undefined;
 }
 
 /** A session's MCP: the realm's sink, and what to release when the session closes. */
@@ -267,6 +274,10 @@ export class SessionManager {
   private readonly open = new Map<string, ManagedSession>();
   /** The external runtime behind each open session that has one, let go when it closes. */
   private readonly runtimeOf = new Map<string, SessionRuntime>();
+  private readonly runtimeIdle: RuntimeIdlePolicy | null;
+  /** The idle sweep, running while a runtime session is open. */
+  private sweepTimer: ReturnType<typeof setInterval> | undefined;
+  private sweeping: Promise<void> | undefined;
 
   constructor(options: SessionManagerOptions) {
     this.store = options.store;
@@ -289,6 +300,10 @@ export class SessionManager {
     this.askObserve = options.askObserve;
     this.runtimes = options.runtimes;
     this.warn = options.warn ?? (() => undefined);
+    this.runtimeIdle =
+      options.runtimeIdle === undefined
+        ? runtimeIdlePolicyFromEnv()
+        : options.runtimeIdle;
   }
 
   /** Start a session and open it, on whatever the settings say today. */
@@ -440,6 +455,9 @@ export class SessionManager {
 
   /** Close everything this manager opened. */
   async closeAll(): Promise<void> {
+    if (this.sweepTimer !== undefined) clearInterval(this.sweepTimer);
+    this.sweepTimer = undefined;
+    await this.sweeping;
     const managed = [...this.open.values()];
     this.open.clear();
     for (const session of managed) await this.disposeSession(session);
@@ -681,11 +699,76 @@ export class SessionManager {
       const managed: ManagedSession = { meta, session };
       this.open.set(meta.id, managed);
       this.runtimeOf.set(meta.id, runtime);
+      this.startSweep();
       return managed;
     } catch (error) {
       await runtime.dispose().catch(() => undefined);
       throw error;
     }
+  }
+
+  /** Look at the runtime sessions from time to time, while there are any. */
+  private startSweep(): void {
+    const policy = this.runtimeIdle;
+    if (policy === null || this.sweepTimer !== undefined) return;
+    if (policy.idleMs <= 0 && policy.maxResident <= 0) return;
+    this.sweepTimer = setInterval(() => {
+      if (this.runtimeOf.size === 0) {
+        clearInterval(this.sweepTimer);
+        this.sweepTimer = undefined;
+        return;
+      }
+      void this.sweepRuntimes();
+    }, policy.everyMs);
+    // The sweep alone keeps nothing alive.
+    this.sweepTimer.unref?.();
+  }
+
+  /**
+   * Let idle runtime processes go: each idle past the policy's time, then, over the cap, the least
+   * recently active. A runtime that is busy, or could not resume, keeps its process and says so by
+   * answering `false`. Answers the sessions whose process was let go.
+   */
+  async sweepRuntimes(now = Date.now()): Promise<string[]> {
+    const policy = this.runtimeIdle;
+    if (policy === null) return [];
+    while (this.sweeping !== undefined) await this.sweeping;
+    const released: string[] = [];
+    const work = (async () => {
+      const resident = [...this.runtimeOf]
+        .flatMap(([id, runtime]) => {
+          const residency = runtime.residency?.();
+          return residency?.resident === true && runtime.release !== undefined
+            ? [{ id, runtime, lastActive: residency.lastActive }]
+            : [];
+        })
+        // Least recently active first.
+        .sort((a, b) => a.lastActive - b.lastActive);
+      let left = resident.length;
+      for (const entry of resident) {
+        const idle = now - entry.lastActive;
+        const stale = policy.idleMs > 0 && idle >= policy.idleMs;
+        const over = policy.maxResident > 0 && left > policy.maxResident;
+        if (!stale && !over) continue;
+        const letGo = await entry.runtime.release!().catch((error: unknown) => {
+          this.warn(
+            `[eta-server] could not release the runtime of ${entry.id}: ${String(error)}`,
+          );
+          return false;
+        });
+        if (!letGo) continue;
+        left -= 1;
+        released.push(entry.id);
+        this.warn(
+          `[eta-server] session ${entry.id}: let its runtime process go after ${Math.round(idle / 60_000)} min idle${stale ? "" : " (over the resident cap)"}; the next run resumes it`,
+        );
+      }
+    })();
+    this.sweeping = work.finally(() => {
+      this.sweeping = undefined;
+    });
+    await this.sweeping;
+    return released;
   }
 
   private async disposeSession(managed: ManagedSession): Promise<void> {

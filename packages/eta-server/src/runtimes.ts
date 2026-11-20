@@ -77,6 +77,24 @@ export interface SessionRuntime {
   compact?: (config: KernelConfig) => Promise<RuntimeCompaction>;
   /** Let the runtime go: its process, and anything it served for the session. */
   dispose: () => Promise<void>;
+  /**
+   * Whether the runtime has a process up for this session, and when the session last did anything
+   * (a run, a compaction, something the runtime said). What an idle sweep reads.
+   */
+  residency?: () => RuntimeResidency;
+  /**
+   * Let the runtime's process go while the session is idle, keeping the conversation: the next run
+   * resumes it, as after a restart. Answers `false`, and keeps the process, while anything is under
+   * way (a run, a compaction, a background task) or where the runtime could not pick the
+   * conversation up again. Unlike `dispose`, the session stays usable.
+   */
+  release?: () => Promise<boolean>;
+}
+
+export interface RuntimeResidency {
+  resident: boolean;
+  /** Epoch milliseconds. */
+  lastActive: number;
 }
 
 export interface SessionRuntimes {
