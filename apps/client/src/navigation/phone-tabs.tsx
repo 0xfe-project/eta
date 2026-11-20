@@ -87,7 +87,8 @@ function PhoneTabItem(props: {
           style={{
             position: "absolute",
             top: 8,
-            left: "55%",
+            left: "50%",
+            marginLeft: 4,
             height: 14,
             minWidth: 14,
             paddingHorizontal: 3,

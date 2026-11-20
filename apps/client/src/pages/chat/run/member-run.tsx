@@ -8,7 +8,7 @@ import type {
 import type { ViewRef } from "nsh";
 import { logBlocks, runFromOf } from "@eta/client-contracts";
 import { cleanup, computed, effect, Scroll, signal, View } from "nsh";
-import { Button, colors, grow, Label, row } from "../../../components";
+import { Button, colors, grow, Icon, Label, row } from "../../../components";
 import { AgentFace } from "../../../components/agent-face";
 import { CloseButton } from "../../../components/navigation-buttons";
 import { StatusDot } from "../../../components/status-dot";
@@ -40,6 +40,8 @@ export function MemberRun(props: {
   taskRun?: TaskRunView;
   nextRunAt?: number;
   executorName?: string;
+  /** Replaces the date and thinking level after the name, such as a task run's caption. */
+  meta?: string;
   onClose: () => void;
 }) {
   const host = useHost();
@@ -112,6 +114,13 @@ export function MemberRun(props: {
     ),
   );
 
+  const details = () => [
+    running() ? uiText("running") : "",
+    thinking()
+      ? uiText("runThinkingLevel", { level: thinking() })
+      : uiText("defaultThinking"),
+  ];
+
   function toggleAll() {
     const next = !expanded();
     expanded.set(next);
@@ -152,40 +161,68 @@ export function MemberRun(props: {
           <AgentFace id={props.agentId} size={18} />
           <Label
             size={props.phone ? 14 : 12}
-            line={props.phone ? 18 : undefined}
+            line={props.phone ? 18 : 16}
+            weight={props.phone ? 400 : 500}
             lines={1}
           >
             {props.executorName ??
               host.agent(props.agentId)?.name ??
               uiText("agent")}
           </Label>
-          <Label
-            size={props.phone ? 12 : 11}
-            line={props.phone ? 16 : undefined}
-            tone="muted"
-            lines={1}
-            style={{ flex: 1, minWidth: 0 }}
-          >
-            {[
-              stamp() ? runDate(stamp()!) : "",
-              running() ? uiText("running") : "",
-              thinking()
-                ? uiText("runThinkingLevel", { level: thinking() })
-                : uiText("defaultThinking"),
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </Label>
+          <If when={props.phone}>
+            <Label
+              size={12}
+              line={16}
+              tone="muted"
+              lines={1}
+              style={{ flex: 1, minWidth: 0 }}
+            >
+              {props.meta ??
+                [stamp() ? runDate(stamp()!) : "", ...details()]
+                  .filter(Boolean)
+                  .join(" · ")}
+            </Label>
+          </If>
           <If when={!props.phone}>
-            <Button
-              label={uiText(expanded() ? "collapseDetails" : "expandDetails")}
-              end="down"
-              tone="ghost"
-              size={24}
-              labelSize={10}
+            <If when={!props.meta && stamp()}>
+              <Label size={10} line={12} tone="muted" lines={1}>
+                {runDate(stamp()!)}
+              </Label>
+            </If>
+            <Label
+              size={12}
+              line={16}
+              tone="muted"
+              lines={1}
+              style={{ flex: 1, minWidth: 0 }}
+            >
+              {props.meta ??
+                (stamp() ? "· " : "") + details().filter(Boolean).join(" · ")}
+            </Label>
+            <View
+              role="button"
+              accessibilityLabel={uiText(
+                expanded() ? "collapseDetails" : "expandDetails",
+              )}
               onPress={toggleAll}
+              focusVisibleStyle={{
+                outlineWidth: 1,
+                outlineColor: c().blue,
+                outlineOffset: 1,
+              }}
+              style={{ ...row, gap: 4, flexShrink: 0, cursor: "pointer" }}
+            >
+              <Label size={10} line={12} tone="muted">
+                {uiText(expanded() ? "collapseDetails" : "expandDetails")}
+              </Label>
+              <Icon name="down" size={12} tone="muted" />
+            </View>
+            <CloseButton
+              size={24}
+              iconSize={16}
+              style={{ marginRight: -4 }}
+              onPress={props.onClose}
             />
-            <CloseButton size={18} onPress={props.onClose} />
           </If>
           <If
             when={

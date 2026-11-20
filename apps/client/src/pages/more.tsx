@@ -4,7 +4,6 @@ import type { IconName } from "../components/icons";
 import type { Page } from "../navigation/routes";
 import { View } from "nsh";
 import { colors, grow, Header, Icon, Label, row } from "../components";
-import { StatusDot } from "../components/status-dot";
 import { useText } from "../i18n";
 import { useHost } from "../services/host";
 
@@ -54,6 +53,7 @@ function MoreRow(props: {
       accessibilityLabel={props.title}
       onPress={props.onPress}
       hoverStyle={{ backgroundColor: c().selected }}
+      activeStyle={{ backgroundColor: c().selected }}
       style={{
         ...row,
         height: 56,
@@ -65,20 +65,38 @@ function MoreRow(props: {
         cursor: "pointer",
       }}
     >
-      <View style={{ width: 28, alignItems: "center", flexShrink: 0 }}>
-        <Icon name={props.icon} size={20} />
+      <View
+        style={{
+          width: 20,
+          height: 20,
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+        }}
+      >
+        <Icon name={props.icon} size={18} />
       </View>
       <Label line={20} style={{ flex: 1 }}>
         {props.title}
       </Label>
-      <View style={{ width: 6, flexShrink: 0 }}>
-        <If when={props.count}>
-          <StatusDot color={c().blue} />
-        </If>
-      </View>
-      <View style={{ opacity: 0.45 }}>
-        <Icon name="right" size={14} />
-      </View>
+      <If when={props.count}>
+        <View
+          style={{
+            height: 14,
+            minWidth: 14,
+            paddingHorizontal: 3,
+            backgroundColor: c().blue,
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          <Label size={10} line={12} style={{ color: "#ffffff" }}>
+            {props.count}
+          </Label>
+        </View>
+      </If>
+      <Icon name="right" size={14} />
     </View>
   );
 }

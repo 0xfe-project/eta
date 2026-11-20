@@ -16,14 +16,14 @@ export function PhoneHostSetup(props: { noModel: boolean; hostName?: string }) {
         style={{
           paddingHorizontal: 16,
           paddingTop: 32,
-          paddingBottom: 26,
-          gap: 4,
+          paddingBottom: 24,
+          gap: 8,
         }}
       >
-        <Label size={24} line={32}>
+        <Label size={24} line={30}>
           {uiText("isntReadyYet", { hostname: hostname() })}
         </Label>
-        <Label size={13} line={18} tone="muted">
+        <Label size={13} line={19} tone="muted">
           {props.noModel
             ? uiText("twoStepsLeftOpenEtaOn")
             : uiText("oneStepLeftOpenEtaOn")}
@@ -47,10 +47,11 @@ export function PhoneHostSetup(props: { noModel: boolean; hostName?: string }) {
       <View style={{ ...grow }} />
       <Label
         size={12}
-        line={16}
+        line={17}
         tone="muted"
         style={{
           paddingHorizontal: 16,
+          paddingTop: 16,
           paddingBottom: Math.max(4, 34 - insets().bottom),
         }}
       >
@@ -72,7 +73,7 @@ function SetupStep(props: {
       style={{
         ...row,
         alignItems: "flex-start",
-        paddingVertical: 14,
+        paddingVertical: 16,
         paddingHorizontal: 16,
         gap: 16,
         borderBottomWidth: 1,
@@ -80,18 +81,18 @@ function SetupStep(props: {
       }}
     >
       <Label
-        size={12}
-        line={20}
-        tone={props.waiting ? "muted" : "ink"}
+        size={13}
+        line={18}
+        tone={props.waiting ? "faint" : "ink"}
         style={{ width: 16 }}
       >
         {props.number}
       </Label>
-      <View style={{ ...grow, gap: 3 }}>
-        <Label size={14} line={20} tone={props.waiting ? "mutedInk" : "ink"}>
+      <View style={{ ...grow, gap: 4 }}>
+        <Label size={14} line={18} tone={props.waiting ? "muted" : "ink"}>
           {props.title}
         </Label>
-        <Label size={13} line={18} tone="muted">
+        <Label size={12} line={17} tone="muted">
           {props.detail}
         </Label>
       </View>
