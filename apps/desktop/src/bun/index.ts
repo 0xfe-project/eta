@@ -9,7 +9,7 @@
  * `installed.ts`), and this process is its service: the host's own upgrade stops it, replaces the
  * file and has it started again through `service.ts`. A host already serving `~/.eta` (the command
  * line's service) is opened instead of starting a second. With
- * no built page (`apps/web/dist`) the host serves the socket only and the window says so. In
+ * no built page (`apps/client/dist/Eta`) the host serves the socket only and the window says so. In
  * **remote** mode no host runs here and the window loads the remote one's page; nothing of the two
  * modes' data is shared or moved.
  *
@@ -45,8 +45,8 @@
  * their neighbours are main-menu key equivalents, so a shell with no Edit menu has no copy and
  * paste anywhere in the app. The menu is installed below, all of it roles.
  */
+import type { DownloadProgress } from "@eta/releases/install";
 import type { ApplicationMenuItemConfig } from "electrobun/main";
-import type { DownloadProgress } from "./download";
 import type { ServiceServer } from "./service";
 import type { HostLaunch, View } from "./shell";
 import { existsSync } from "node:fs";
@@ -54,6 +54,7 @@ import { mkdir } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import process from "node:process";
+import { DownloadError, downloadHost } from "@eta/releases/install";
 import Electrobun, {
   ApplicationMenu,
   BrowserWindow,
@@ -63,7 +64,6 @@ import Electrobun, {
   Utils,
 } from "electrobun/main";
 import { readConnection, writeConnection } from "./connection";
-import { DownloadError, downloadHost } from "./download";
 import { HOST_WRAPPER } from "./host";
 import { hostHome, recordedHost, runningHost } from "./installed";
 import { capabilities, startNativeBridge } from "./native";
@@ -344,10 +344,12 @@ async function startHost(
     } catch (error) {
       return { ready: false, reason: reasonOf(error) };
     }
-    built = existsSync(join(root, "apps", "web", "dist", "index.html"));
+    built = existsSync(
+      join(root, "apps", "client", "dist", "Eta", "index.html"),
+    );
     program = [bunBinary(), "apps/eta/src/main.ts"];
     flags = built
-      ? ["--web-dir", "apps/web/dist"]
+      ? ["--web-dir", "apps/client/dist/Eta"]
       : ["--allow-origin", "http://127.0.0.1:3000"];
     cwd = root;
   }
@@ -436,6 +438,40 @@ function httpOrigin(url: string): string | undefined {
     ? parsed.origin
     : undefined;
 }
+
+/**
+ * The app answers the first launch's question itself in two cases: the dev page brings its own
+ * host, and the release's smoke test (`scripts/try-app.ts`) has nobody at the window. Neither
+ * touches what a user chose.
+ */
+const { ETA_DESKTOP_CONNECTION } = process.env;
+const decided = developing || ETA_DESKTOP_CONNECTION === "local";
+const connectionFile = join(Utils.paths.userData, "connection.json");
+const shell = createShell({
+  read: async () =>
+    decided ? { mode: "local" } : await readConnection(connectionFile),
+  save: async (connection) => {
+    if (!decided) await writeConnection(connectionFile, connection);
+  },
+  startHost,
+  stopHost: stopLocalHost,
+  probe: probeRemote,
+  watch: (target, onLost) =>
+    watchRemote({ health: () => remoteHealth(target), onLost }),
+  show,
+});
+
+const pages = startShellServer({
+  view: () => shell.current(),
+  choose: (choice) => shell.choose(choice),
+  retry: () => shell.retry(),
+  openChooser: () => {
+    shell.openChooser();
+  },
+  back: () => {
+    shell.back();
+  },
+});
 
 /** The origin a view's page will have. */
 const originOf = (view: View): string | undefined =>
@@ -677,40 +713,6 @@ function show(view: View): void {
   replaced?.close();
   current = open(view, frame);
 }
-
-/**
- * The app answers the first launch's question itself in two cases: the dev page brings its own
- * host, and the release's smoke test (`scripts/try-app.ts`) has nobody at the window. Neither
- * touches what a user chose.
- */
-const { ETA_DESKTOP_CONNECTION } = process.env;
-const decided = developing || ETA_DESKTOP_CONNECTION === "local";
-const connectionFile = join(Utils.paths.userData, "connection.json");
-const shell = createShell({
-  read: async () =>
-    decided ? { mode: "local" } : await readConnection(connectionFile),
-  save: async (connection) => {
-    if (!decided) await writeConnection(connectionFile, connection);
-  },
-  startHost,
-  stopHost: stopLocalHost,
-  probe: probeRemote,
-  watch: (target, onLost) =>
-    watchRemote({ health: () => remoteHealth(target), onLost }),
-  show,
-});
-
-const pages = startShellServer({
-  view: () => shell.current(),
-  choose: (choice) => shell.choose(choice),
-  retry: () => shell.retry(),
-  openChooser: () => {
-    shell.openChooser();
-  },
-  back: () => {
-    shell.back();
-  },
-});
 
 await shell.boot();
 

@@ -1,0 +1,85 @@
+name: Package Eta client
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Client version
+        required: true
+        default: "0.1.0"
+      build:
+        description: Client build number
+        required: true
+        default: "1"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: web
+            runner: ubuntu-latest
+            file: Eta
+          - target: macos
+            runner: macos-latest
+            file: Eta.zip
+          - target: linux
+            runner: ubuntu-latest
+            file: Eta.tar.gz
+          - target: windows
+            runner: windows-latest
+            file: Eta.zip
+          - target: ios-simulator
+            runner: macos-latest
+            file: Eta.app
+          - target: android
+            runner: ubuntu-latest
+            file: Eta.apk
+          - target: android
+            runner: ubuntu-latest
+            file: Eta.aab
+            format: aab
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      ETA_HOST_UPSTREAM: ${{ github.api_url }}/repos/${{ github.repository }}
+      ETA_CLIENT_VERSION: ${{ inputs.version }}
+      ETA_CLIENT_BUILD: ${{ inputs.build }}
+      ETA_CLIENT_TARGET: ${{ matrix.target }}
+      ETA_CLIENT_FORMAT: ${{ matrix.format }}
+      ETA_CLIENT_UPDATE_URL: ${{ vars.ETA_CLIENT_UPDATE_URL }}
+      ETA_CLIENT_UPDATE_PUBLIC_KEY: ${{ vars.ETA_CLIENT_UPDATE_PUBLIC_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - uses: ./.github/actions/setup-nsh
+      - run: bun run --cwd apps/client client:check
+      - run: |
+          args=(--target "$ETA_CLIENT_TARGET" --app-version "$ETA_CLIENT_VERSION"
+                --build "$ETA_CLIENT_BUILD" --out "$RUNNER_TEMP/eta-client")
+          if [[ -n "$ETA_CLIENT_FORMAT" ]]; then args+=(--format "$ETA_CLIENT_FORMAT"); fi
+          bun run client:package "${args[@]}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: eta-client-${{ matrix.target }}${{ matrix.format && '-aab' || '' }}
+          if-no-files-found: error
+          path: ${{ runner.temp }}/eta-client/${{ matrix.file }}
+
+      - uses: actions/upload-artifact@v7
+        if: vars.ETA_CLIENT_UPDATE_URL != '' && contains(fromJSON('["macos","windows","linux"]'), matrix.target)
+        with:
+          name: eta-client-update-${{ matrix.target }}
+          if-no-files-found: error
+          path: "${{ runner.temp }}/eta-client/Eta-${{ inputs.version }}-${{ matrix.target }}-*"

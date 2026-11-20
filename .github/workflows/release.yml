@@ -107,7 +107,8 @@ jobs:
           bun-version-file: package.json
 
       - run: bun install --frozen-lockfile --ignore-scripts
-      - run: bun run --cwd apps/web build
+      - uses: ./.github/actions/setup-nsh
+      - run: bun run --cwd apps/client package:web
       - run: bun apps/eta/scripts/build-host.ts
 
       - name: Run the file on its own
@@ -131,7 +132,8 @@ jobs:
           # USERPROFILE is what a home directory is on Windows.
           HOME="$PWD/home" USERPROFILE="$PWD/home" "./$ASSET" --port 18787 &
           curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:18787/up
-          curl -fsS -o /dev/null http://127.0.0.1:18787/
+          curl -fsS http://127.0.0.1:18787/ -o index.html
+          grep -q 'id="nsh-app"' index.html
           kill $!
 
       # Once per release: what the build says about itself, with the oldest desktop app its page

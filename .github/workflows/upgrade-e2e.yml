@@ -34,6 +34,9 @@ on:
       - apps/daemon/src/windows-*.ts
       - apps/eta/src/stop.ts
       - apps/eta/src/upgrade/**
+      - apps/client/**
+      - scripts/nsh-client.ts
+      - .github/actions/setup-nsh/**
       - scripts/upgrade-e2e/**
   workflow_dispatch:
 
@@ -77,12 +80,15 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: e2e-builds
-          key: upgrade-e2e-${{ matrix.platform }}-${{ hashFiles('bun.lock', 'apps/daemon/src/**', 'apps/eta/scripts/**', 'apps/eta/src/**', 'apps/web/src/**', 'scripts/upgrade-e2e/build.ts') }}
+          key: upgrade-e2e-${{ matrix.platform }}-${{ hashFiles('bun.lock', 'apps/daemon/src/**', 'apps/eta/scripts/**', 'apps/eta/src/**', 'apps/client/**', 'scripts/nsh-client.ts', '.github/actions/setup-nsh/action.yml', 'scripts/upgrade-e2e/build.ts') }}
+
+      - uses: ./.github/actions/setup-nsh
+        if: steps.builds.outputs.cache-hit != 'true'
 
       - name: Build the hosts
         if: steps.builds.outputs.cache-hit != 'true'
         run: |
-          bun run --cwd apps/web build
+          bun run --cwd apps/client package:web
           bun scripts/upgrade-e2e/build.ts "$BUILDS"
 
       # Now, not at the end of the job: a run that fails is the one that gets rerun.

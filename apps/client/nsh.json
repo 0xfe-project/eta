@@ -1,0 +1,62 @@
+{
+  "name": "Eta",
+  "id": "dev.eta.client",
+  "version": "0.1.0",
+  "build": 1,
+  "schemes": ["eta"],
+  "web": {
+    "base": "/"
+  },
+  "capabilities": {
+    "network": {
+      "hosts": ["*"]
+    },
+    "webview": {
+      "hosts": [
+        "eta-camera.invalid",
+        "eta-artifact.invalid",
+        "eta-export.invalid"
+      ],
+      "media": ["camera"]
+    },
+    "clipboard": true,
+    "picker": true,
+    "share": true,
+    "fs": {
+      "read": ["${dataDir}/artifact-exports", "${dataDir}/downloads"],
+      "write": ["${dataDir}/artifact-exports", "${dataDir}/downloads"]
+    },
+    "openUrl": {
+      "schemes": ["http", "https", "mailto"]
+    },
+    "statusBar": true,
+    "process": {
+      "execute": [
+        "eta-host",
+        "eta-host.exe",
+        "eta-bootstrap.exe",
+        "/usr/bin/env"
+      ],
+      "env": ["XDG_DATA_HOME", "ETA_RELEASES_URL", "ETA_HOST_ORIGIN"]
+    },
+    "application": true
+  },
+  "ios": {
+    "infoPlist": {
+      "NSCameraUsageDescription": "Scan an Eta pairing code to connect to your host.",
+      "NSLocalNetworkUsageDescription": "Connect to the Eta host you choose on your local network.",
+      "NSAppTransportSecurity": {
+        "NSAllowsLocalNetworking": true,
+        "NSAllowsArbitraryLoads": true
+      }
+    }
+  },
+  "android": {
+    "usesCleartextTraffic": true
+  },
+  "macos": {
+    "infoPlist": {
+      "NSCameraUsageDescription": "Scan an Eta pairing code to connect to your host."
+    }
+  }
+}

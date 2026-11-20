@@ -43,7 +43,7 @@ export interface Embedded {
 /** Where a checkout keeps the files every host reads, by the first segment of their names. */
 const CHECKOUT: Readonly<Record<string, URL>> = {
   migrations: new URL("migrations/", import.meta.url),
-  "Eta-Logo.png": new URL("../../web/public/Eta-Logo.png", import.meta.url),
+  "Eta-Logo.png": new URL("assets/Eta-Logo.png", import.meta.url),
 };
 
 /** Set once, before anything reads a resource; a test puts it back with `undefined`. */

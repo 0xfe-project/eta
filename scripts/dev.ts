@@ -1,10 +1,10 @@
 /**
- * Start the host and Vite together without asking either platform's shell to
+ * Start the host and a frontend development server together without asking either platform's shell to
  * expand variables. Windows `cmd.exe` and macOS `/bin/sh` do not share the
  * syntax, so the package script runs this file directly and this file passes
  * argv and environment explicitly.
  */
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import process from "node:process";
 
 const root = dirname(import.meta.dirname);
@@ -28,6 +28,8 @@ const webPort = port("ETA_WEB_PORT", 3000);
 const hostOrigin =
   process.env.ETA_HOST_ORIGIN?.trim() || `http://127.0.0.1:${hostPort}`;
 const webOrigin = `http://127.0.0.1:${webPort}`;
+const webUrl = new URL(webOrigin);
+webUrl.searchParams.set("host", hostOrigin);
 const env = {
   ...process.env,
   ETA_HOST_ORIGIN: hostOrigin,
@@ -43,7 +45,7 @@ const shared = {
 };
 
 console.log(`[dev] host ${hostOrigin}`);
-console.log(`[dev] web  ${webOrigin}`);
+console.log(`[dev] web  ${webUrl.href}`);
 if (desktop) console.log("[dev] desktop enabled");
 
 const host = Bun.spawn(
@@ -62,7 +64,7 @@ const host = Bun.spawn(
 let web: Bun.Subprocess<"inherit", "inherit", "inherit">;
 try {
   web = Bun.spawn(
-    [process.execPath, "run", "--cwd", "apps/web", "dev"],
+    [process.execPath, "run", "--cwd", "apps/client", "dev", "--port", webPort],
     shared,
   );
 } catch (error) {
@@ -76,12 +78,12 @@ const children = [
 ];
 let stopping = false;
 
-async function waitForReady(url: string): Promise<boolean> {
+async function waitForHost(): Promise<boolean> {
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
     if (stopping) return false;
     try {
-      const answer = await fetch(`${url}/up`, {
+      const answer = await fetch(`${hostOrigin}/up`, {
         signal: AbortSignal.timeout(1_000),
       });
       if (answer.ok) return true;
@@ -123,29 +125,36 @@ function watch(entry: (typeof children)[number]): void {
 
 for (const child of children) watch(child);
 
+process.once("SIGINT", () => void stop(0));
+process.once("SIGTERM", () => void stop(0));
+
 if (desktop) {
-  const ready = await Promise.all([
-    waitForReady(hostOrigin),
-    waitForReady(webOrigin),
-  ]);
-  if (ready.every(Boolean)) {
-    const shell = Bun.spawn(["hutch", "run", "dev"], {
-      cwd: join(root, "apps", "desktop"),
-      env: { ...env, ETA_DESKTOP_WEB_URL: webOrigin },
-      stdin: "inherit",
-      stdout: "inherit",
-      stderr: "inherit",
-    });
+  if ((await waitForHost()) && !stopping) {
+    const target =
+      process.platform === "darwin"
+        ? "macos"
+        : process.platform === "win32"
+          ? "windows"
+          : "linux";
+    const shell = Bun.spawn(
+      [
+        process.execPath,
+        "run",
+        "--cwd",
+        "apps/client",
+        "dev:native",
+        "--target",
+        target,
+      ],
+      shared,
+    );
     const entry = { name: "desktop", process: shell };
     children.push(entry);
     watch(entry);
-  } else {
-    console.error("[dev] host or web did not become ready within 20s");
+  } else if (!stopping) {
+    console.error("[dev] host did not become ready within 20s");
     await stop(1);
   }
 }
-
-process.once("SIGINT", () => void stop(0));
-process.once("SIGTERM", () => void stop(0));
 
 await Promise.all(children.map(({ process: child }) => child.exited));

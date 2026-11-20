@@ -41,9 +41,9 @@ export interface LocalHostOptions {
   command: string[];
   cwd: string;
   env: NodeJS.ProcessEnv;
-  /** The script ahead of the host (`host.ts`), and the runtime that runs it. */
-  wrapper: string;
-  bun: string;
+  /** The optional script ahead of the host and the runtime that runs it. */
+  wrapper?: string;
+  bun?: string;
   /** Where the wrapper writes the host's first line. */
   summary: string;
 }
@@ -101,6 +101,7 @@ export class LocalHost {
   #pipe: string | undefined;
   #stopping = false;
   #port = 0;
+  #readyLine = "";
 
   constructor(options: LocalHostOptions) {
     this.#options = options;
@@ -117,19 +118,43 @@ export class LocalHost {
     await rm(summary, { force: true });
     this.#pipe = stopPipe();
     this.#stopping = false;
-    this.#child = Bun.spawn(
-      [bun, wrapper, ...command, "--port", String(this.#port)],
-      {
-        cwd,
-        env: {
-          ...env,
-          ETA_DESKTOP_SUMMARY: summary,
-          ...(this.#pipe === undefined ? {} : { ETA_STOP_PIPE: this.#pipe }),
-        },
-        stdout: "inherit",
-        stderr: "inherit",
+    this.#readyLine = "";
+    const wrapped = Boolean(bun && wrapper);
+    const argv = [...command, "--port", String(this.#port)];
+    const child = Bun.spawn(wrapped ? [bun!, wrapper!, ...argv] : argv, {
+      cwd,
+      env: {
+        ...env,
+        ETA_DESKTOP_SUMMARY: summary,
+        ...(this.#pipe === undefined ? {} : { ETA_STOP_PIPE: this.#pipe }),
       },
-    );
+      stdout: wrapped ? "inherit" : "pipe",
+      stderr: "inherit",
+    });
+    this.#child = child;
+    if (child.stdout)
+      void this.#readOutput(child, child.stdout).catch(() => {});
+  }
+
+  async #readOutput(child: Subprocess, stream: ReadableStream<Uint8Array>) {
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (this.#child === child) {
+      const { value, done } = await reader.read();
+      if (done) return;
+      const text = decoder.decode(value, { stream: true });
+      if (this.#readyLine) {
+        process.stdout.write(text);
+        continue;
+      }
+      buffer += text;
+      const end = buffer.indexOf("\n");
+      if (end !== -1) {
+        this.#readyLine = buffer.slice(0, end + 1);
+        process.stdout.write(buffer.slice(end + 1));
+      }
+    }
   }
 
   /** The port it bound, once it has said; an error if it exited or took too long first. */
@@ -139,9 +164,9 @@ export class LocalHost {
     const deadline = Date.now() + READY_MS;
     for (;;) {
       // The launcher owns this process's stdout, so the wrapper writes the line to a file.
-      const text = await readFile(this.#options.summary, "utf8").catch(
-        () => "",
-      );
+      const text = this.#options.wrapper
+        ? await readFile(this.#options.summary, "utf8").catch(() => "")
+        : this.#readyLine;
       if (text.includes("\n")) {
         const { port } = JSON.parse(text.slice(0, text.indexOf("\n"))) as {
           port: number;

@@ -10,9 +10,22 @@ ARG BUN_VERSION=1.4.3
 
 FROM oven/bun:${BUN_VERSION} AS web
 WORKDIR /repo
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+  && rm -rf /var/lib/apt/lists/*
+RUN case "${TARGETARCH:-amd64}" in amd64) arch=x86_64 ;; arm64) arch=arm64 ;; *) exit 1 ;; esac \
+  && archive="nsh-linux-$arch.tar.gz" \
+  && url="https://github.com/longbridge/nsh/releases/download/v0.6.0/$archive" \
+  && curl -fsSL --retry 3 "$url" -o "/tmp/$archive" \
+  && curl -fsSL --retry 3 "$url.sha256" -o /tmp/nsh-checksum \
+  && cd /tmp \
+  && printf '%s  %s\n' "$(awk 'NR == 1 { print $1 }' nsh-checksum)" "$archive" | sha256sum -c - \
+  && tar -xzf "$archive" \
+  && test -x /tmp/nsh/bin/nsh
+ENV PATH=/tmp/nsh/bin:$PATH
 COPY . .
 RUN bun install --frozen-lockfile --ignore-scripts
-RUN bun run --cwd apps/web build
+RUN bun run --cwd apps/client package:web
 
 FROM oven/bun:${BUN_VERSION}
 # The sessions' tools run bash and git; curl is for the healthcheck.
@@ -22,7 +35,7 @@ RUN apt-get update \
 WORKDIR /repo
 COPY . .
 RUN bun install --frozen-lockfile --production --ignore-scripts
-COPY --from=web /repo/apps/web/dist /srv/web
+COPY --from=web /repo/apps/client/dist/Eta /srv/web
 
 # The host and the sessions' bash run as the image's unprivileged `bun` user (uid 1000). /data is
 # created and owned by it *before* the VOLUME line, so a fresh named volume inherits that

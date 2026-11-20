@@ -68,7 +68,7 @@ Releases for `v*`:
 
 The host is a single uncompressed file containing the pages, database migrations, CLIProxyAPI and the daemons for every platform. It is uncompressed because zstd would save only about a third (the daemons inside are already compressed) while requiring the downloading machine to have zstd, and the checksum would no longer cover the file that actually runs.
 
-Build the same file locally with `bun run --cwd apps/web build && bun apps/eta/scripts/build-host.ts`; the artifact is in `apps/eta/out/host/`.
+Build the same file locally with `bun run --cwd apps/client package:web && bun apps/eta/scripts/build-host.ts`; the artifact is in `apps/eta/out/host/`.
 
 The CLIProxyAPI bundled in the host depends on the machine that builds it, so each platform must be built on its own runner. Adding a platform means adding a row to the `build` matrix; verify that the platform compiles first. There is no `darwin-x64` and no Windows daemon (it is not in the platform table in `apps/daemon/scripts/build.ts`).
 
@@ -79,54 +79,46 @@ git tag desktop-v0.2.0 origin/main
 git push origin desktop-v0.2.0
 ```
 
-- The version is the tag with `desktop-v` stripped, passed via `ETA_DESKTOP_VERSION` to `electrobun.config.ts`, written into `Resources/version.json` in the bundle, and read by the app at runtime (`apps/desktop/src/version.ts`). Local packaging has no such variable, so it takes `version` from `apps/desktop/package.json`. Nowhere else in the source hardcodes the version.
-- A `-` makes it a prerelease. Tags must be `desktop-vX.Y.Z` or `desktop-vX.Y.Z-suffix`.
-- Both drafts and releases pass `--latest=false` and do not take the repository's Latest.
+The `desktop-v*` workflow packages `apps/client` with Native Shell v0.6.0. It strips `desktop-v` from the tag and passes the result as the app version. A suffix marks a prerelease. The host release keeps GitHub's Latest label.
 
-Pipeline: `prepare` opens the draft; `check` runs the full `bun run check` like the host; `build` packages each platform, installs it and launches it once (`apps/desktop/scripts/try-app.ts`); on Linux, if WebKit is not installed within 8 minutes the launch is skipped and a warning is left; `publish` computes `SHA256SUMS` and publishes. There is no cross-version upgrade test, that belongs to the host.
+The workflow opens a draft, runs CI and builds on each target's own runner. It checks that every package includes the local host launcher, then publishes the draft with `SHA256SUMS`.
 
-The installer does not contain the host. The launch step picks "Run on this computer", and the app downloads the newest host it can run from the same repository (using the workflow token), so **before publishing a desktop release, the repository must already have a host Release with `eta-host.json`**, otherwise this step fails.
+| File                           | Platform    | Contents                        |
+| ------------------------------ | ----------- | ------------------------------- |
+| `eta-desktop-linux-x64.tar.gz` | Linux x64   | App directory and desktop entry |
+| `eta-desktop-darwin-arm64.dmg` | macOS arm64 | App bundle                      |
+| `eta-desktop-windows-x64.zip`  | Windows x64 | App directory with `Eta.exe`    |
+| `SHA256SUMS`                   |             | Checksums for these files       |
+
+### Local packages and store uploads
+
+Install Native Shell v0.6.0, then package for your desktop from the repository root.
+
+```sh
+bun run client:package --target macos --out dist/macos
+```
+
+The path passed to `--out` is relative to `apps/client`. The macOS build is ad hoc signed. For public distribution, sign it with a Developer ID and notarize it.
+
+Run the **Package Eta client** workflow to create downloadable CI artifacts for the web, the native desktop platforms, the iOS simulator and Android. For store builds, pass signing credentials to Native Shell when packaging, then use the corresponding upload command.
+
+```sh
+bun run client:package --target ios --sign "Apple Distribution: Your Team" --profile /path/to/profile.mobileprovision
+bun run client:publish:ios .nsh/out/Eta.ipa
+
+bun run client:package --target android --format aab --keystore /path/to/release.jks --key-alias eta
+bun run client:publish:android .nsh/out/Eta.aab
+```
+
+The upload commands read App Store Connect and Google Play credentials from the environment. Keep the credentials outside the repository. See the [Native Shell packaging guide](https://nsh.dev/docs/packaging/) for the supported flags and environment variables.
 
 ### The first time "Run on this computer" is picked
 
-The app downloads only when there is no host in `~/.eta/desktop/host/`; picking "Connect to an existing host" downloads nothing at all (`apps/desktop/src/bun/download.ts`):
+The desktop package includes a host launcher. The launcher uses the installed host when available, or checks for an already running host before downloading one. It picks a compatible stable host release, verifies its `SHA256SUMS` entry, runs `--version`, and installs it in `~/.eta/desktop/host/`. Hosts already running as system services keep their own lifecycle.
 
-1. First check `~/.eta/running-host.json`: if a host is already serving `~/.eta`, open it directly with no download. Older versions that do not write this file are not recognized here; after downloading, `eta-host running` will recognize it and still will not start a second one.
-2. Find the newest stable host Release in the repository baked into the app at build time (`ETA_HOST_UPSTREAM`, the same as the host's; `ETA_RELEASES_URL` can override it), read its `eta-host.json`, and if `minDesktop` is newer than the app look at the previous one, up to 10. Older versions without `eta-host.json` are not given to the app.
-3. Download to `~/.eta/desktop/host/eta-host.<pid>.download` (on Windows `eta-host.<pid>.download.exe`: Bun inside the app only runs `.exe` on Windows), and the window shows the shell's own progress page; verify against `SHA256SUMS`, run `--version` once to confirm the version, and only then rename it to `eta-host`. If any step fails the file is deleted and the next attempt downloads from scratch; a partial file is never treated as the host.
-4. From then on it always starts from there, and upgrades with the button on the settings page (see "The host in the desktop app").
+The launcher follows the repository set at build time with `ETA_HOST_UPSTREAM`. Set `ETA_RELEASES_URL` to use a different release server. For private GitHub repositories, authenticate with `gh` on the desktop. Selecting an existing remote host skips the local launcher.
 
-The token order is the same as for host upgrades: `GH_TOKEN`, `GITHUB_TOKEN`, `gh auth token --hostname github.com` (`gh` located using the login shell's `PATH`), and anonymous if none is available; the app has no settings page for saving a token. The failure page distinguishes causes: cannot connect, download interrupted, checksum mismatch, private repository without a token (and what to set), server refused, no usable version, the downloaded file will not run, the disk cannot be written. Each has "Retry" and "Switch connection method" (you can change to connect to a remote host).
-
-The download logic is the same code as host upgrades (`packages/releases`: `hostForDesktop`, `hostFile`, `downloadChecked`), not a copy.
-
-| File                           | Platform    | What it is                                    |
-| ------------------------------ | ----------- | --------------------------------------------- |
-| `eta-desktop-linux-x64.tar.gz` | Linux x64   | Desktop app, contains `installer`             |
-| `eta-desktop-darwin-arm64.dmg` | macOS arm64 | Desktop application                           |
-| `eta-desktop-windows-x64.zip`  | Windows x64 | Desktop application, contains `eta-Setup.exe` |
-| `SHA256SUMS`                   |             | Checksums for all of the above                |
-
-hutch only packages for the host machine it runs on, so each platform is built on its corresponding runner.
-
-### Desktop application's own updates
-
-Uses Electrobun's built-in Updater (`apps/desktop/src/bun/update.ts`), only acts when the user clicks a button: Settings → Update's "Desktop" section shows the app version, click "Check for updates" to check, click "Download" if there's a new version, then click "Restart and update" after download. No scheduled checks, doesn't check on startup, and won't install itself.
-
-- **Update URL** is the build-time `ETA_DESKTOP_UPDATE_URL` (`release-desktop.yml` reads the repository variable `vars.ETA_DESKTOP_UPDATE_URL`), written into the package's `version.json` as `baseUrl`. If not set, this section doesn't exist and no patches are generated. **The official URL hasn't been finalized yet.**
-- This URL must be **anonymously** readable: Updater sends GETs without credentials, so private repository Releases won't work. The files to place are the three from that build's `artifacts/`, names cannot be changed: `stable-<os>-<arch>-update.json`, `stable-<os>-<arch>-eta.tar.zst`, and the patch relative to the previous version `stable-<os>-<arch>-<previous hash>.patch`. When the URL is set, `release-desktop.yml` uploads them all to the Release, just copy them to that URL.
-- Check reads `update.json`, if the hash differs from the local one there's an update; add one more rule here: the version number must be newer than the current one, won't "update" to an older version.
-- Download first follows the patch chain (patches are only generated if the previous version can be fetched from the update URL at build time), if unavailable downloads the full `.tar.zst`. Updater verifies the extracted hash itself.
-- When updating the app, Updater exits the app, a helper program replaces the entire app directory then launches the new version. In local mode, host is a child process of the app, so stop host first, then hand over to Updater; if handover fails (e.g., helper program fails to start), restart host, old version continues to work, settings page explains the reason. Confirmation dialog lists work that will be interrupted by restart (the list from host's `upgrade.check`). When connected to remote host, only says host is not affected.
-- On Linux, helper program first copies to temp directory (`/tmp`) then runs, will fail on machines where `/tmp` is mounted as `noexec` (`EACCES`, tested), old version not affected.
-
-### Desktop application and host compatibility
-
-Both upgrade independently: host uses settings page button or `eta-host upgrade`, desktop app reinstall. App doesn't include host, downloads when first used. Pages in the window are provided by host, so pages may be newer or older than the app; even more so when connected to remote host. Conventions in `packages/client-contracts/src/desktop.ts`:
-
-- **Native bridge only adds, never changes.** App lists what it can do via `window.__ETA_HOST__.capabilities` (`open-external`, `save-file`, `context-menu`, `window-action`, `connection`, will only add more). Once a name is released, meaning and response don't change; to change, use a new name. Apps without this list are 0.1.0, calculated by `BASELINE_CAPABILITIES`.
-- **Pages judge by capability, not by version.** Before calling use `hasCapability(<name>)` (`apps/web/src/lib/native.ts`); if no such capability, don't show corresponding entry, nothing in browser.
-- **When really need to break compatibility, raise `MIN_DESKTOP`.** When page finds app version is lower than it, prompts to update desktop at bottom of window. `dev` builds and apps that can't tell version don't prompt. This is the only place that compares versions, should rarely be used. Each host Release's `eta-host.json` carries `minDesktop`, app can know if it can run it without downloading host.
+Host upgrades are available in Settings → Update when the host is managed by the desktop launcher or a system service. Update the desktop app by installing a newer `desktop-v*` package.
 
 ## Upgrade testing
 
@@ -398,23 +390,17 @@ The version must be newer than the running one: releases older than the current 
 
 ### The update button in settings
 
-The `upgrade` wire target provides `check`, `start`, and `cancel`, which the page uses to start the worker. Progress goes over plain HTTP: the page polls `/upgrade/status`, which requires a token just like the page does. The socket drops first and recovers last during a restart, while polling this address only needs an answer or not, so it can tell “the host machine is restarting” apart from “the upgrade is finished”.
-
-The page stays usable while downloading and waiting for the agent, and you may still need to answer the agent meanwhile. Once the service stops, a full-screen waiting page appears; when the host machine comes back it reads the result: on success it reloads the page, on rollback it explains why. Other tabs that did not read progress before the host machine stopped see the usual disconnected notice, and are prompted to refresh once it returns.
+The client uses `upgrade.check`, `upgrade.start` and `upgrade.cancel`. It reads progress from the `upgrade` target and shows a full-screen status while the host restarts. Once the socket reconnects, Settings shows the installed version or the reason the upgrade failed.
 
 The button only appears for a compiled host, and only when `io.eta.host` or the desktop app is running that file, on all three platforms. When running from source, when no service is installed, or when the service runs a different file, only the reason is shown; on Windows without an installed service it also says to run `install-service` in an administrator terminal.
 
 ### The host machine in the desktop app
 
-In local mode the desktop app is itself the host machine's service, alongside systemd, launchd, and the Windows service (`apps/desktop/src/bun/service.ts`; on the host machine side it is `apps/eta/src/upgrade/desktop.ts`). It runs `~/.eta/desktop/host/eta-host`, downloaded the first time it is needed (see “the first time you pick ‘run on this computer’”), and started from there ever after. App upgrades never touch this host machine; the host machine is upgraded only from the button in settings, so files in the installer are never modified and the signature is unaffected.
+The local launcher in `scripts/nsh-host-bootstrap.ts` supervises the host and keeps its original loopback port across upgrades. It uses the service implementation in `apps/desktop/src/bun/service.ts`.
 
-The shell opens a port on the local loopback whose token only it and the host machine know, and puts the address and token into the host machine's environment variables (the host machine removes them from the environment as soon as it starts, so processes it spawns never see them). After the button is clicked the flow is the same as with the service: the host machine asks the shell to start `eta-host upgrade --worker`; the worker is the shell's child process, not the host machine's, so it survives the host machine stopping. It downloads, verifies, and test-runs, then asks the shell to stop the host machine, backs up the database, swaps the files, asks the shell to start the new version on the original port, and checks `/up` and the migrations; on failure it swaps back to `eta-host.prev`, restores the database, and starts the old version again. The port stays the same, the window does not need to change, and the page's own waiting page refreshes once the host machine returns. The shell only runs `<host file> upgrade …` on behalf of the host machine and rejects every other command.
+The launcher provides the host with a token for a loopback service endpoint. It accepts only the host's own upgrade worker, which runs alongside the host. The worker verifies the new release, stops the host, backs up the database and starts the replacement on the previous port. If verification fails after restart, it restores the old executable and database.
 
-Quitting the app mid-upgrade: an upgrade that hasn't stopped the host yet is canceled; if the host has already been stopped, the app waits for it to finish (success or rollback) before exiting.
-
-If a host on this machine is already using `~/.eta` (the command-line-installed `io.eta.host`, or one running in a terminal), the shell no longer starts a second one; it opens that one directly and leaves its upgrade alone—its settings page reports its own status. The way to determine this is to ask the host binary (`eta-host running`): first check `~/.eta/running-host.json`, written by the running host (it only counts if the pid is alive and `/up` responds), then ask the system service manager, so older services that don't write this file are also recognized. If that host stops, the window shows a failure page after 30 seconds, just like remote mode; on retry it re-evaluates and may switch to the app's own host.
-
-When the shell is force-killed, the host is not left behind: the wrapper script between the shell and the host checks once a second whether the shell is still there, and stops the host if it isn't. On Windows it's more direct: child processes started by Bun share the same job object as the shell; as soon as the shell dies, the wrapper script and host end together on the spot, too quickly for a clean exit, so `running-host.json` is left behind, and on next startup the pid is used to determine that it is no longer alive. On normal app exit, the shell writes a line to the host's `ETA_STOP_PIPE`, and the host exits cleanly as if it had received SIGTERM (all three rounds pass on the Windows runner, `apps/desktop/test/real-host.test.ts`).
+A host already serving `~/.eta` is reused. Its own service manager handles restart and upgrade.
 
 On Windows the buttons are initiated by the service, so the host works without administrator privileges: installation has already granted this account permission to start and stop both services.
 
