@@ -122,3 +122,18 @@ export function taskMoment(at: number) {
     ? uiText("taskToday", { time: clock(at) })
     : `${taskDay(at)} ${clock(at)}`;
 }
+
+/** When something happened, on a phone task page: "26 minutes ago" within the hour, then "Today 10:20 PM", "Yesterday 11:55 PM" or the day. */
+export function taskWhen(at: number) {
+  const minutes = Math.floor(Math.max(0, Date.now() - at) / 60_000);
+  if (minutes < 1) return uiText("taskJustNow");
+  if (minutes < 60)
+    return uiText(minutes === 1 ? "taskMinuteAgo" : "taskMinutesAgo", {
+      count: minutes,
+    });
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  return new Date(at).toDateString() === yesterday.toDateString()
+    ? uiText("taskYesterday", { time: clock(at) })
+    : taskMoment(at);
+}

@@ -77,8 +77,9 @@ export function PhoneTaskList(props: {
                 }
                 style={{
                   ...row,
-                  height: group().fold ? 32 : 25,
-                  paddingHorizontal: 16,
+                  height: group().fold ? 32 : 24,
+                  paddingLeft: 16,
+                  paddingRight: group().fold ? 12 : 16,
                   borderBottomWidth: 1,
                   borderColor: c().border,
                   backgroundColor: group().fold ? c().canvas : c().surface,
@@ -87,17 +88,25 @@ export function PhoneTaskList(props: {
               >
                 <Label
                   size={10}
+                  line={12}
                   weight={600}
-                  tone={group().name === "Needs you" ? "amber" : "muted"}
-                  style={{ letterSpacing: 0.7, textTransform: "uppercase" }}
+                  tone={group().name === "Needs you" ? "amber" : "mutedInk"}
+                  style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
                 >
-                  {`${uiText(group().label)}  ${entries().length}`}
+                  {uiText(group().label)}
+                </Label>
+                <Label
+                  size={10}
+                  line={12}
+                  tone={group().name === "Needs you" ? "amber" : "muted"}
+                >
+                  {entries().length}
                 </Label>
                 <If when={group().fold}>
                   <View style={{ flex: 1 }} />
                   <Icon
                     name={open() ? "down" : "right"}
-                    size={10}
+                    size={14}
                     tone="muted"
                   />
                 </If>
@@ -125,9 +134,29 @@ export function PhoneTaskList(props: {
                       }
                       if (task.runStatus === "queued") return uiText("queued");
                       if (task.status === "in_progress")
-                        return uiText("running");
+                        return `■ ${runningFor(task)}`;
                       return statusName(task.status);
                     };
+                    /** Only the state is toned, after the muted number and owner; a blocked row is muted ink throughout. */
+                    const stateTone = () => {
+                      const task = entry();
+                      if (task.subtasks?.total) return undefined;
+                      if (task.status === "in_review") return "amber";
+                      if (
+                        task.status === "in_progress" &&
+                        task.runStatus !== "queued" &&
+                        !task.waitingOn?.length
+                      )
+                        return "blue";
+                      return undefined;
+                    };
+                    const lead = () =>
+                      `${[
+                        `#${entry().number}`,
+                        entry().subtasks?.total ? undefined : owner(),
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")} · `;
                     return (
                       <View
                         role="button"
@@ -137,8 +166,8 @@ export function PhoneTaskList(props: {
                         style={{
                           ...row,
                           height: 56,
-                          paddingLeft: 30,
-                          paddingRight: 16,
+                          paddingLeft: 16,
+                          paddingRight: 12,
                           borderBottomWidth: 1,
                           borderColor: c().border,
                           gap: 12,
@@ -151,34 +180,64 @@ export function PhoneTaskList(props: {
                                 ? "in_progress"
                                 : entry().status
                             }
-                            size={13}
+                            size={14}
                           />
                         </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Label lines={1} line={21}>
+                        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                          <Label lines={1} line={20}>
                             {entry().title}
                           </Label>
                           <Label
                             size={11}
-                            line={16}
+                            line={14}
                             lines={1}
                             tone={
-                              entry().status === "in_review" ? "amber" : "muted"
+                              entry().status === "blocked"
+                                ? "mutedInk"
+                                : "muted"
                             }
                           >
-                            {[`#${entry().number}`, owner(), state()]
-                              .filter(Boolean)
-                              .join(" · ")}
+                            {lead()}
+                            <Label
+                              size={11}
+                              line={14}
+                              tone={
+                                stateTone() ??
+                                (entry().status === "blocked"
+                                  ? "mutedInk"
+                                  : "muted")
+                              }
+                            >
+                              {state()}
+                            </Label>
                           </Label>
                         </View>
-                        <Label size={10} tone="muted">
+                        <Label size={11} line={14} tone="muted">
                           {relativeTime(entry().updatedAt)}
                         </Label>
-                        <Icon name="right" size={9} tone="muted" />
+                        <Icon name="right" size={14} tone="muted" />
                       </View>
                     );
                   }}
                 </Each>
+                <If when={entries().length === 0}>
+                  <View
+                    style={{
+                      ...row,
+                      height: 40,
+                      paddingLeft: 16,
+                      paddingRight: 12,
+                      borderBottomWidth: 1,
+                      borderColor: c().border,
+                    }}
+                  >
+                    <Label size={12} line={16} tone="muted">
+                      {uiText("noTasksInGroup", {
+                        group: uiText(group().label),
+                      })}
+                    </Label>
+                  </View>
+                </If>
               </If>
             </If>
           );

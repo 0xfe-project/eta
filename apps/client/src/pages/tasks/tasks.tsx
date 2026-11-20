@@ -106,7 +106,7 @@ export function Tasks(props: {
       >
         <Header
           title={uiText("tasks2")}
-          count={shown().length}
+          count={phone() && !shown().length ? undefined : shown().length}
           layout={props.layout}
           inset={tablet() ? 14 : undefined}
         >
@@ -290,12 +290,14 @@ export function Tasks(props: {
             style={
               host.state().missing.tasks || !host.state().targets.tasks
                 ? undefined
-                : {
-                    flex: 1,
-                    justifyContent: "flex-start",
-                    paddingTop: 64,
-                    gap: tablet() ? 8 : 10,
-                  }
+                : phone()
+                  ? { gap: 10, paddingHorizontal: 40 }
+                  : {
+                      flex: 1,
+                      justifyContent: "flex-start",
+                      paddingTop: 64,
+                      gap: tablet() ? 8 : 10,
+                    }
             }
             title={
               host.state().missing.tasks

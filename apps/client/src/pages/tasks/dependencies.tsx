@@ -6,12 +6,13 @@ import type {
   TaskRefView,
 } from "@eta/client-contracts";
 import { View } from "nsh";
-import { Button, colors, Icon, Label, row } from "../../components";
+import { Button, Caption, colors, Icon, Label, row } from "../../components";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 import { isWaiting, runningFor, stepOf, taskDay, taskHint } from "./facts";
 import { progressColor, statusName, TaskGlyph } from "./status";
 
+/** A task the open one links to, as a list row: its glyph, `#N title`, what the link says, a chevron. */
 export function TaskLink(link: {
   item: {
     taskId: string;
@@ -20,34 +21,44 @@ export function TaskLink(link: {
     status: BoardTaskStatus;
   };
   suffix?: string;
+  tone?: "blue" | "amber";
+  /** Subtask rows stand 48 high, the rest 44. */
+  height?: number;
+  /** The list's last row closes it with a bottom border. */
+  last?: boolean;
   onTask: (id: string) => void;
 }) {
   const c = colors();
   return (
     <View
       role="button"
+      accessibilityLabel={link.item.title}
       onPress={() => link.onTask(link.item.taskId)}
       hoverStyle={{ backgroundColor: c().selected }}
       style={{
         ...row,
-        minHeight: 43,
-        paddingVertical: 5,
-        gap: 8,
-        borderBottomWidth: 1,
+        height: link.height ?? 44,
+        gap: 10,
+        borderTopWidth: 1,
+        borderBottomWidth: link.last ? 1 : 0,
         borderColor: c().border,
         cursor: "pointer",
       }}
     >
-      <TaskGlyph status={link.item.status} size={12} />
+      <View style={{ width: 20, alignItems: "center" }}>
+        <TaskGlyph status={link.item.status} size={14} />
+      </View>
       <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-        <Label size={13}>{`#${link.item.number} ${link.item.title}`}</Label>
+        <Label size={13} line={18} lines={1}>
+          {`#${link.item.number} ${link.item.title}`}
+        </Label>
         <If when={link.suffix}>
-          <Label size={11} tone="muted">
+          <Label size={11} line={14} lines={1} tone={link.tone ?? "muted"}>
             {link.suffix}
           </Label>
         </If>
       </View>
-      <Icon name="right" size={10} tone="muted" />
+      <Icon name="right" size={14} tone="muted" />
     </View>
   );
 }
@@ -111,6 +122,17 @@ export function Prerequisites(props: {
         })
       : uiText("wasCancelledThisTaskStaysBlocked", { join });
   };
+  const waitingBody = () => {
+    const executor = host.agent(
+      props.item.assigneeAgentId ?? props.item.createdBy.agentId,
+    )?.name;
+    const join = waiting()
+      .map((edge) => `“${edge.title}”`)
+      .join(", ");
+    return executor
+      ? uiText("taskWaitingBody", { join, executor })
+      : uiText("waitingForThisTaskStartsWhen", { join });
+  };
   return (
     <If
       when={
@@ -123,77 +145,75 @@ export function Prerequisites(props: {
         else={
           <View
             style={{
-              padding: cancelled() ? 16 : 12,
-              gap: 7,
+              ...(cancelled() ? {} : row),
+              alignItems: "flex-start",
+              paddingVertical: cancelled() ? 14 : 10,
+              paddingHorizontal: cancelled() ? 16 : 12,
+              gap: cancelled() ? 8 : 10,
               borderWidth: 1,
-              borderColor: c().border,
+              borderColor: cancelled() ? c().border : c().strong,
               borderLeftWidth: cancelled() ? 2 : 1,
               borderLeftColor: cancelled() ? c().red : c().strong,
             }}
           >
-            <View style={{ ...row, gap: 7 }}>
-              <If when={!cancelled()}>
-                <Icon name="lock" size={15} tone="muted" />
-              </If>
-              <Label size={13} weight={600}>
+            <If when={!cancelled()}>
+              <Icon name="lock" size={14} />
+            </If>
+            <View
+              style={{
+                gap: cancelled() ? 8 : 4,
+                flex: cancelled() ? undefined : 1,
+                alignSelf: "stretch",
+              }}
+            >
+              <Label size={13} line={18} weight={600}>
                 {cancelled()
                   ? uiText("thisTaskIsStuckAndNeeds")
                   : uiText("waitingForPrerequisites")}
               </Label>
-            </View>
-            <Label size={12} line={18}>
-              {cancelled()
-                ? uiText("wasCancelledThisTaskStaysBlocked", {
-                    join: cancelledEdges()
-                      .map((edge) => `“${edge.title}” (#${edge.number})`)
-                      .join(", "),
-                  })
-                : uiText("waitingForThisTaskStartsWhen", {
-                    join: waiting()
-                      .map((edge) => `“${edge.title}”`)
-                      .join(", "),
-                  })}
-            </Label>
-            <If when={decidable()}>
-              <View style={{ gap: 6, paddingVertical: 3 }}>
-                <Button
-                  label={uiText("dontWaitStartNow")}
-                  size={40}
-                  tone="primary"
-                  disabled={props.submitting}
-                  onPress={props.onResolve}
-                />
-                <Button
-                  label={uiText("waitForAnotherTask")}
-                  size={40}
-                  disabled={props.submitting}
-                  onPress={props.onReplace}
-                />
-                <Button
-                  label={uiText("cancelThisTask")}
-                  size={40}
-                  disabled={props.submitting}
-                  onPress={props.onCancel}
-                />
-              </View>
-            </If>
-            <Each of={links()} key={(edge) => edge.taskId}>
-              {(edge) => (
-                <View
-                  role="button"
-                  onPress={() => openLink(edge())}
-                  style={{
-                    minHeight: 21,
-                    cursor: "pointer",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Label size={12} tone="blue">
-                    {linkLabel(edge())}
-                  </Label>
+              <Label size={12} line={18}>
+                {cancelled() ? stuckBody() : waitingBody()}
+              </Label>
+              <If when={decidable()}>
+                <View style={{ gap: 8 }}>
+                  <Button
+                    label={uiText("dontWaitStartNow")}
+                    size={40}
+                    labelSize={13}
+                    tone="primary"
+                    disabled={props.submitting}
+                    onPress={props.onResolve}
+                  />
+                  <Button
+                    label={uiText("waitForAnotherTask")}
+                    size={40}
+                    labelSize={13}
+                    disabled={props.submitting}
+                    onPress={props.onReplace}
+                  />
+                  <Button
+                    label={uiText("cancelThisTask")}
+                    size={40}
+                    labelSize={13}
+                    disabled={props.submitting}
+                    onPress={props.onCancel}
+                  />
                 </View>
-              )}
-            </Each>
+              </If>
+              <Each of={links()} key={(edge) => edge.taskId}>
+                {(edge) => (
+                  <View
+                    role="button"
+                    onPress={() => openLink(edge())}
+                    style={{ cursor: "pointer", alignSelf: "flex-start" }}
+                  >
+                    <Label size={12} line={16} tone="blue">
+                      {linkLabel(edge())}
+                    </Label>
+                  </View>
+                )}
+              </Each>
+            </View>
           </View>
         }
       >
@@ -544,6 +564,7 @@ export function NeighbourStrip(props: {
 export function Subtasks(props: {
   item: BoardTaskDetail;
   tablet?: boolean;
+  phone?: boolean;
   onTask: (id: string) => void;
 }) {
   const c = colors();
@@ -576,34 +597,175 @@ export function Subtasks(props: {
     if (task.status === "in_review") return uiText("forYouToCheck2");
     return taskHint(task, host.tasks()) ?? statusName(task.status);
   };
+  /** A subtask's line under its title on the phone: "Step 1 · Done", "Step 2 · Waits for #8". */
+  const phoneHint = (child: TaskRefView) => {
+    const task = board(child.taskId);
+    if (!task) return statusName(child.status);
+    if (task.status === "in_progress") return `■ ${runningFor(task)}`;
+    if (task.status === "in_review") return uiText("forYouToCheck2");
+    const step = stepOf(task, host.tasks()) ?? 1;
+    const wait = task.waitingOn?.[0];
+    const state =
+      task.status === "done"
+        ? uiText("taskDone")
+        : isWaiting(task) && wait
+          ? uiText("taskWaitsForNumber", { number: wait.number })
+          : statusName(task.status);
+    return uiText("taskStepState", { step, state });
+  };
   return (
-    <>
-      <View
-        style={{
-          paddingVertical: props.tablet ? 10 : 12,
-          paddingHorizontal: props.tablet ? 12 : 14,
-          gap: props.tablet ? 6 : 10,
-          borderWidth: 1,
-          borderColor: c().border,
-        }}
-      >
+    <If
+      when={props.phone}
+      else={
+        <>
+          <View
+            style={{
+              paddingVertical: props.tablet ? 10 : 12,
+              paddingHorizontal: props.tablet ? 12 : 14,
+              gap: props.tablet ? 6 : 10,
+              borderWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <Label
+              size={10}
+              line={12}
+              tone="muted"
+              style={{
+                letterSpacing: props.tablet ? 1 : 0.8,
+                textTransform: "uppercase",
+              }}
+            >
+              {uiText("progress")}
+            </Label>
+            <View style={{ ...row, gap: 2, height: props.tablet ? 5 : 6 }}>
+              <Each of={children()} key={(child) => child.taskId}>
+                {(child) => (
+                  <View
+                    style={{
+                      height: props.tablet ? 5 : 6,
+                      flex: 1,
+                      backgroundColor: progressColor(child().status, c()),
+                    }}
+                  />
+                )}
+              </Each>
+            </View>
+            <If when={props.item.subtasks}>
+              {(count) => (
+                <Label
+                  size={props.tablet ? 11 : 12}
+                  line={props.tablet ? 14 : 16}
+                  tone="mutedInk"
+                >
+                  {uiText("ofDoneTheParentDoesNo", {
+                    done: count().done,
+                    total: count().total,
+                  })}
+                </Label>
+              )}
+            </If>
+            <Each
+              of={highlights().filter(([, , value]) => !!value)}
+              key={(entry) => entry[0]}
+            >
+              {(entry) => (
+                <View style={{ ...row, gap: 10, alignItems: "flex-start" }}>
+                  <Label
+                    size={props.tablet ? 11 : 12}
+                    line={props.tablet ? 14 : 16}
+                    tone="muted"
+                    style={{ width: props.tablet ? 60 : 70 }}
+                  >
+                    {entry()[1]}
+                  </Label>
+                  <Label
+                    size={props.tablet ? 11 : 12}
+                    line={props.tablet ? 14 : 16}
+                    tone={entry()[0] === "To review" ? "amber" : "ink"}
+                    style={{ flex: 1 }}
+                  >
+                    {entry()[2]}
+                  </Label>
+                </View>
+              )}
+            </Each>
+          </View>
+          <View>
+            <Label
+              size={props.tablet ? 13 : 14}
+              line={props.tablet ? 16 : 18}
+              weight={600}
+              style={{ paddingBottom: props.tablet ? 4 : 8 }}
+            >
+              {`${uiText("subtasks")} ${props.item.subtasks?.done ?? 0}/${props.item.subtasks?.total ?? 0}`}
+            </Label>
+            <Each of={children()} key={(child) => child.taskId}>
+              {(child, index) => (
+                <View
+                  role="button"
+                  accessibilityLabel={child().title}
+                  onPress={() => props.onTask(child().taskId)}
+                  hoverStyle={{ backgroundColor: c().selected }}
+                  style={{
+                    ...row,
+                    height: props.tablet ? 28 : 32,
+                    gap: 8,
+                    borderTopWidth: 1,
+                    borderBottomWidth:
+                      index() === children().length - 1 ? 1 : 0,
+                    borderColor: c().border,
+                    cursor: "pointer",
+                  }}
+                >
+                  <TaskGlyph status={child().status} size={12} />
+                  <Label size={10} line={12} tone="muted" style={{ width: 24 }}>
+                    {`#${child().number}`}
+                  </Label>
+                  <Label size={12} line={16} lines={1} style={{ flex: 1 }}>
+                    {child().title}
+                  </Label>
+                  <Label
+                    size={10}
+                    line={12}
+                    lines={1}
+                    tone={
+                      child().status === "in_review"
+                        ? "amber"
+                        : child().status === "in_progress"
+                          ? "blue"
+                          : props.tablet ||
+                              (board(child().taskId) &&
+                                isWaiting(board(child().taskId)!))
+                            ? "mutedInk"
+                            : "muted"
+                    }
+                  >
+                    {hint(child())}
+                  </Label>
+                </View>
+              )}
+            </Each>
+          </View>
+        </>
+      }
+    >
+      <View style={{ gap: 8 }}>
         <Label
           size={10}
           line={12}
-          tone="muted"
-          style={{
-            letterSpacing: props.tablet ? 1 : 0.8,
-            textTransform: "uppercase",
-          }}
+          weight={600}
+          tone="mutedInk"
+          style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
         >
           {uiText("progress")}
         </Label>
-        <View style={{ ...row, gap: 2, height: props.tablet ? 5 : 6 }}>
+        <View style={{ ...row, gap: 2, height: 4 }}>
           <Each of={children()} key={(child) => child.taskId}>
             {(child) => (
               <View
                 style={{
-                  height: props.tablet ? 5 : 6,
+                  height: 4,
                   flex: 1,
                   backgroundColor: progressColor(child().status, c()),
                 }}
@@ -613,11 +775,7 @@ export function Subtasks(props: {
         </View>
         <If when={props.item.subtasks}>
           {(count) => (
-            <Label
-              size={props.tablet ? 11 : 12}
-              line={props.tablet ? 14 : 16}
-              tone="mutedInk"
-            >
+            <Label size={12} line={16} tone="mutedInk">
               {uiText("ofDoneTheParentDoesNo", {
                 done: count().done,
                 total: count().total,
@@ -625,87 +783,58 @@ export function Subtasks(props: {
             </Label>
           )}
         </If>
-        <Each
-          of={highlights().filter(([, , value]) => !!value)}
-          key={(entry) => entry[0]}
-        >
-          {(entry) => (
-            <View style={{ ...row, gap: 10, alignItems: "flex-start" }}>
-              <Label
-                size={props.tablet ? 11 : 12}
-                line={props.tablet ? 14 : 16}
-                tone="muted"
-                style={{ width: props.tablet ? 60 : 70 }}
-              >
-                {entry()[1]}
-              </Label>
-              <Label
-                size={props.tablet ? 11 : 12}
-                line={props.tablet ? 14 : 16}
-                tone={entry()[0] === "To review" ? "amber" : "ink"}
-                style={{ flex: 1 }}
-              >
-                {entry()[2]}
-              </Label>
-            </View>
-          )}
-        </Each>
+        <View style={{ gap: 4 }}>
+          <Each
+            of={highlights().filter(
+              ([key, , value]) => key !== "Done" && !!value,
+            )}
+            key={(entry) => entry[0]}
+          >
+            {(entry) => (
+              <View style={{ ...row, gap: 12, alignItems: "flex-start" }}>
+                <Label size={12} line={16} tone="muted" style={{ width: 64 }}>
+                  {entry()[1]}
+                </Label>
+                <Label
+                  size={12}
+                  line={16}
+                  tone={entry()[0] === "To review" ? "amber" : "ink"}
+                  style={{ flex: 1 }}
+                >
+                  {entry()[2]}
+                </Label>
+              </View>
+            )}
+          </Each>
+        </View>
       </View>
       <View>
-        <Label
-          size={props.tablet ? 13 : 14}
-          line={props.tablet ? 16 : 18}
-          weight={600}
-          style={{ paddingBottom: props.tablet ? 4 : 8 }}
-        >
-          {`${uiText("subtasks")} ${props.item.subtasks?.done ?? 0}/${props.item.subtasks?.total ?? 0}`}
-        </Label>
+        <Caption
+          text={uiText("taskSubtasksCount", {
+            done: props.item.subtasks?.done ?? 0,
+            total: props.item.subtasks?.total ?? 0,
+          })}
+          style={{ paddingBottom: 6 }}
+        />
         <Each of={children()} key={(child) => child.taskId}>
           {(child, index) => (
-            <View
-              role="button"
-              accessibilityLabel={child().title}
-              onPress={() => props.onTask(child().taskId)}
-              hoverStyle={{ backgroundColor: c().selected }}
-              style={{
-                ...row,
-                height: props.tablet ? 28 : 32,
-                gap: 8,
-                borderTopWidth: 1,
-                borderBottomWidth: index() === children().length - 1 ? 1 : 0,
-                borderColor: c().border,
-                cursor: "pointer",
-              }}
-            >
-              <TaskGlyph status={child().status} size={12} />
-              <Label size={10} line={12} tone="muted" style={{ width: 24 }}>
-                {`#${child().number}`}
-              </Label>
-              <Label size={12} line={16} lines={1} style={{ flex: 1 }}>
-                {child().title}
-              </Label>
-              <Label
-                size={10}
-                line={12}
-                lines={1}
-                tone={
-                  child().status === "in_review"
-                    ? "amber"
-                    : child().status === "in_progress"
-                      ? "blue"
-                      : props.tablet ||
-                          (board(child().taskId) &&
-                            isWaiting(board(child().taskId)!))
-                        ? "mutedInk"
-                        : "muted"
-                }
-              >
-                {hint(child())}
-              </Label>
-            </View>
+            <TaskLink
+              item={child()}
+              height={48}
+              suffix={phoneHint(child())}
+              tone={
+                child().status === "in_review"
+                  ? "amber"
+                  : child().status === "in_progress"
+                    ? "blue"
+                    : undefined
+              }
+              last={index() === children().length - 1}
+              onTask={props.onTask}
+            />
           )}
         </Each>
       </View>
-    </>
+    </If>
   );
 }

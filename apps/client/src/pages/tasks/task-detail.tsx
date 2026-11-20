@@ -181,31 +181,21 @@ export function TaskDetail(props: {
               <If when={item().status === "in_review"}>
                 <View
                   style={{
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
+                    gap: 8,
                     borderTopWidth: 1,
                     borderColor: c().border,
-                    paddingTop: 9,
                   }}
                 >
-                  <Label
-                    size={11}
-                    tone="muted"
-                    style={{ paddingHorizontal: 16 }}
-                  >
-                    {uiText("acceptTheResultOrSendIt")}
+                  <Label size={11} line={14} tone="muted">
+                    {uiText("taskReviewLetsDependentsGo")}
                   </Label>
                   <TaskReviewActions state={state} />
                 </View>
               </If>
               <If when={canComment(item())}>
-                <View
-                  style={{
-                    padding: 12,
-                    borderTopWidth: 1,
-                    borderColor: c().border,
-                  }}
-                >
-                  <TaskCommentBox state={state} />
-                </View>
+                <TaskCommentBox state={state} />
               </If>
             </If>
           </>

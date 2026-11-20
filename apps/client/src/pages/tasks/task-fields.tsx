@@ -20,63 +20,115 @@ export function TaskCommentBox(props: {
   const c = colors();
   const { comment, phone, post, posting, updateComment } = props.state;
   return (
+    <If when={!phone()} else={<PhoneCommentBox state={props.state} />}>
+      <View
+        style={{
+          ...row,
+          gap: 6,
+          borderWidth: 1,
+          borderColor: c().strong,
+          height: props.tablet ? 36 : 37,
+          paddingLeft: props.tablet ? 10 : 9,
+          paddingRight: props.tablet ? 10 : 4,
+        }}
+      >
+        <Field
+          label={uiText("comment")}
+          placeholder={uiText("replyARunningTaskReadsIt")}
+          value={comment()}
+          onChange={updateComment}
+          onSubmit={() => void post()}
+          style={{
+            flex: 1,
+            borderWidth: 0,
+            height: props.tablet ? 34 : 35,
+            paddingHorizontal: 0,
+            paddingVertical: 0,
+            fontSize: 12,
+            lineHeight: 16,
+          }}
+        />
+        <If
+          when={!props.tablet}
+          else={
+            <View
+              role="button"
+              accessibilityLabel={uiText("sendComment")}
+              accessibilityState={{ disabled: posting() || !comment().trim() }}
+              onPress={() => {
+                if (!posting() && comment().trim()) void post();
+              }}
+              style={{ cursor: "pointer" }}
+            >
+              <Icon name="arrowUp" size={14} />
+            </View>
+          }
+        >
+          <Button
+            label={uiText("sendComment")}
+            icon="arrowUp"
+            iconOnly
+            tone="ghost"
+            size={28}
+            disabled={posting() || !comment().trim()}
+            onPress={() => void post()}
+          />
+        </If>
+      </View>
+    </If>
+  );
+}
+
+/** The phone's reply box under the task: a borderless field, then Send on its own row. */
+function PhoneCommentBox(props: { state: TaskDetailState }) {
+  const c = colors();
+  const { comment, post, posting, updateComment } = props.state;
+  return (
     <View
       style={{
-        ...row,
-        gap: 6,
-        borderWidth: 1,
-        borderColor: c().strong,
-        height: phone() ? undefined : props.tablet ? 36 : 37,
-        paddingLeft: phone() ? 0 : props.tablet ? 10 : 9,
-        paddingRight: phone() ? 6 : props.tablet ? 10 : 4,
+        backgroundColor: c().surface,
+        borderTopWidth: 1,
+        borderColor: c().border,
       }}
     >
-      <Field
-        label={uiText("comment")}
-        placeholder={uiText("replyARunningTaskReadsIt")}
-        value={comment()}
-        onChange={updateComment}
-        onSubmit={() => void post()}
-        style={
-          phone()
-            ? { flex: 1, borderWidth: 0 }
-            : {
-                flex: 1,
-                borderWidth: 0,
-                height: props.tablet ? 34 : 35,
-                paddingHorizontal: 0,
-                paddingVertical: 0,
-                fontSize: 12,
-                lineHeight: 16,
-              }
-        }
-      />
-      <If
-        when={!props.tablet}
-        else={
-          <View
-            role="button"
-            accessibilityLabel={uiText("sendComment")}
-            accessibilityState={{ disabled: posting() || !comment().trim() }}
-            onPress={() => {
-              if (!posting() && comment().trim()) void post();
-            }}
-            style={{ cursor: "pointer" }}
-          >
-            <Icon name="arrowUp" size={14} />
-          </View>
-        }
+      <View style={{ ...row, height: 48, paddingHorizontal: 16 }}>
+        <Field
+          label={uiText("comment")}
+          placeholder={uiText("replyARunningTaskReadsIt")}
+          value={comment()}
+          onChange={updateComment}
+          onSubmit={() => void post()}
+          style={{
+            flex: 1,
+            borderWidth: 0,
+            paddingHorizontal: 0,
+            paddingVertical: 0,
+            backgroundColor: c().surface,
+            fontSize: 14,
+            lineHeight: 20,
+          }}
+        />
+      </View>
+      <View
+        style={{
+          ...row,
+          justifyContent: "flex-end",
+          height: 48,
+          paddingLeft: 16,
+          paddingRight: 12,
+          gap: 8,
+        }}
       >
         <Button
-          label={phone() ? uiText("send") : uiText("sendComment")}
-          icon="arrowUp"
-          iconOnly={!phone()}
-          tone={phone() ? "primary" : "ghost"}
-          size={28}
+          label={uiText("send")}
+          tone="primary"
+          size={32}
+          style={{ paddingHorizontal: 14 }}
           disabled={posting() || !comment().trim()}
+          dimDisabled={posting()}
           onPress={() => void post()}
         />
-      </If>
+      </View>
     </View>
   );
 }
@@ -88,20 +140,20 @@ export function TaskReviewActions(props: { state: TaskDetailState }) {
       style={{
         ...row,
         gap: 8,
-        paddingHorizontal: phone() ? 16 : 0,
-        paddingVertical: phone() ? 9 : 0,
       }}
     >
       <Button
         label={uiText("sendBack")}
         disabled={!executor() || submitting()}
         size={phone() ? 40 : 26}
+        labelSize={phone() ? 13 : undefined}
         style={{ flex: phone() ? 1 : undefined }}
         onPress={() => review.set("todo")}
       />
       <Button
         label={uiText("acceptAsDone")}
         size={phone() ? 40 : 26}
+        labelSize={phone() ? 13 : undefined}
         tone="primary"
         style={{ flex: phone() ? 1 : undefined }}
         onPress={() => review.set("done")}

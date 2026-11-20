@@ -13,17 +13,20 @@ export function activeTaskRun(run: TaskRunView): boolean {
   return isActiveRunStatus(run.status);
 }
 
-export function runCaption(run: TaskRunView, index: number): string {
+/** How long a run has gone, or went: "4m 12s". */
+export function runElapsed(run: TaskRunView): string {
   const start = run.startedAt ?? run.createdAt;
   const seconds = Math.max(
     0,
     Math.floor(((run.finishedAt ?? Date.now()) - start) / 1000),
   );
-  const elapsed =
-    seconds < 60
-      ? `${seconds}s`
-      : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-  return `Run ${index + 1} · ${elapsed}`;
+  return seconds < 60
+    ? `${seconds}s`
+    : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+export function runCaption(run: TaskRunView, index: number): string {
+  return `Run ${index + 1} · ${runElapsed(run)}`;
 }
 
 export function TaskRunLog(props: {
@@ -41,7 +44,14 @@ export function TaskRunLog(props: {
   const phone = () => props.layout === "phone";
   return (
     <Modal
-      title={`${runCaption(props.run, props.index)} · ${props.executor}`}
+      title={
+        phone()
+          ? uiText("taskRunExecutor", {
+              number: props.index + 1,
+              name: props.executor,
+            })
+          : `${runCaption(props.run, props.index)} · ${props.executor}`
+      }
       width={
         props.layout === "desktop" ? 960 : Math.max(0, windowSize().width - 144)
       }
@@ -91,7 +101,7 @@ export function TaskRunLog(props: {
           style={{
             ...row,
             paddingHorizontal: 16,
-            minHeight: 42,
+            minHeight: phone() ? 56 : 42,
             gap: 8,
             borderTopWidth: 1,
             borderColor: c().border,
