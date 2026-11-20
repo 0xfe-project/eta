@@ -49,18 +49,20 @@ export function ThreadDetail(props: {
       <Scroll style={grow} scrollbar={false}>
         <View
           style={
-            props.desktop
-              ? {
-                  width: "100%",
-                  maxWidth: 720,
-                  alignSelf: "center",
-                  paddingBottom: 24,
-                }
-              : { padding: props.phone ? 16 : 20, gap: 12 }
+            props.phone
+              ? { padding: 16, gap: 12 }
+              : props.desktop
+                ? {
+                    width: "100%",
+                    maxWidth: 720,
+                    alignSelf: "center",
+                    paddingBottom: 24,
+                  }
+                : { paddingHorizontal: 24, paddingBottom: 24 }
           }
         >
           <If
-            when={props.desktop}
+            when={!props.phone}
             else={
               <View style={{ gap: 3 }}>
                 <If when={agentMail()}>
@@ -68,33 +70,14 @@ export function ThreadDetail(props: {
                     <EmailBadge />
                   </View>
                 </If>
-                <View style={{ ...row, gap: 6 }}>
-                  <Label weight={600} size={18} style={{ flex: 1 }}>
-                    {mailSubject(props.thread.subject)}
-                  </Label>
-                  <If when={!props.phone}>
-                    <Button
-                      label={uiText("assign2")}
-                      onPress={props.onAssign}
-                    />
-                    <Button
-                      label={uiText("delete")}
-                      tone="danger"
-                      onPress={props.onDelete}
-                    />
-                    <Button
-                      label={uiText("markUnread")}
-                      onPress={props.onMarkUnread}
-                    />
-                  </If>
-                </View>
-                <If when={props.phone}>
-                  <Label size={12} tone="muted" lines={1}>
-                    {`${props.thread.peer} · ${props.thread.messageCount}${
-                      props.thread.messageCount === 1 ? " message" : " messages"
-                    }`}
-                  </Label>
-                </If>
+                <Label weight={600} size={18}>
+                  {mailSubject(props.thread.subject)}
+                </Label>
+                <Label size={12} tone="muted" lines={1}>
+                  {`${props.thread.peer} · ${props.thread.messageCount}${
+                    props.thread.messageCount === 1 ? " message" : " messages"
+                  }`}
+                </Label>
               </View>
             }
           >
@@ -148,7 +131,7 @@ export function ThreadDetail(props: {
           <Each of={props.assignments} key={(assignment) => assignment.id}>
             {(assignment) => (
               <If
-                when={props.desktop}
+                when={!props.phone}
                 else={
                   <View
                     role="button"
@@ -161,23 +144,21 @@ export function ThreadDetail(props: {
                       ...row,
                       gap: 10,
                       paddingVertical: 10,
-                      paddingHorizontal: props.phone ? 16 : 12,
-                      marginHorizontal: props.phone ? -16 : 0,
-                      minHeight: props.phone ? 76 : 0,
+                      paddingHorizontal: 16,
+                      marginHorizontal: -16,
+                      minHeight: 76,
                       borderWidth: 1,
-                      borderLeftWidth: props.phone ? 0 : 1,
-                      borderRightWidth: props.phone ? 0 : 1,
+                      borderLeftWidth: 0,
+                      borderRightWidth: 0,
                       borderColor: c().border,
                       cursor: "pointer",
                     }}
                   >
                     <AgentFace id={assignment().agentId} size={20} />
                     <View style={{ flex: 1, gap: 2 }}>
-                      <If when={props.phone}>
-                        <Label size={10} tone="muted">
-                          {uiText("processingAgent2")}
-                        </Label>
-                      </If>
+                      <Label size={10} tone="muted">
+                        {uiText("processingAgent2")}
+                      </Label>
                       <Label size={12} weight={600}>
                         {agentName(assignment().agentId)}
                       </Label>
@@ -236,14 +217,14 @@ export function ThreadDetail(props: {
                 message={message()}
                 subject={props.thread.subject}
                 phone={props.phone}
-                desktop={props.desktop}
+                inlineContext={props.desktop}
                 onContext={() => props.onContext(message())}
               />
             )}
           </Each>
           <Each of={props.proposals} key={(item) => item.id}>
             {(item) => (
-              <View style={{ paddingTop: props.desktop ? 12 : 0 }}>
+              <View style={{ paddingTop: props.phone ? 0 : 12 }}>
                 <EmailProposal item={item()} />
               </View>
             )}

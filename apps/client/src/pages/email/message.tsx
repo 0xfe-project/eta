@@ -150,7 +150,7 @@ function MailBody(props: {
   );
 }
 
-/** The desktop body: a bordered frame cut to a preview until it is expanded. */
+/** The wide body: a bordered frame cut to a preview until it is expanded. */
 function BodyPreview(props: { message: EmailMessageView; agentMail: boolean }) {
   const c = colors();
   const expanded = signal(false);
@@ -224,7 +224,8 @@ export function MailMessage(props: {
   message: EmailMessageView;
   subject: string;
   phone: boolean;
-  desktop: boolean;
+  /** Desktop folds the agent context under the message; tablet opens it from the pane header. */
+  inlineContext: boolean;
   onContext: () => void;
 }) {
   const c = colors();
@@ -239,35 +240,26 @@ export function MailMessage(props: {
       ? props.message.meta
       : undefined;
   return (
-    <View
-      style={
-        props.desktop
-          ? { gap: 10, paddingTop: 14 }
-          : {
-              padding: props.phone ? 0 : 12,
-              borderWidth: props.phone ? 0 : 1,
-              borderColor: c().border,
-              gap: 7,
-            }
-      }
-    >
+    <View style={props.phone ? { gap: 7 } : { gap: 10, paddingTop: 14 }}>
       <View style={{ ...row, gap: 8, alignItems: "flex-start" }}>
-        <If when={props.desktop}>
-          <Label
-            size={10}
-            line={12}
-            style={{
-              backgroundColor: c().selected,
-              paddingVertical: 4,
-              paddingHorizontal: 8,
-            }}
-          >
-            {props.message.direction === "incoming"
-              ? uiText("in")
-              : uiText("out")}
-          </Label>
-        </If>
-        <If when={props.phone}>
+        <If
+          when={props.phone}
+          else={
+            <Label
+              size={10}
+              line={12}
+              style={{
+                backgroundColor: c().selected,
+                paddingVertical: 4,
+                paddingHorizontal: 8,
+              }}
+            >
+              {props.message.direction === "incoming"
+                ? uiText("in")
+                : uiText("out")}
+            </Label>
+          }
+        >
           <Label
             size={10}
             line={15}
@@ -282,7 +274,7 @@ export function MailMessage(props: {
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <Label
             size={props.phone ? 12 : 14}
-            line={props.desktop ? 18 : undefined}
+            line={props.phone ? undefined : 18}
             weight={600}
             lines={1}
           >
@@ -295,35 +287,23 @@ export function MailMessage(props: {
             })}
           </Label>
         </View>
-        <Label size={props.desktop ? 10 : 11} line={16} tone="muted">
-          {props.desktop
-            ? mailTime(props.message.createdAt)
-            : relativeTime(props.message.createdAt)}
+        <Label size={props.phone ? 11 : 10} line={16} tone="muted">
+          {props.phone
+            ? relativeTime(props.message.createdAt)
+            : mailTime(props.message.createdAt)}
         </Label>
       </View>
       <If
-        when={props.desktop}
-        else={
-          <View
-            style={{
-              padding: props.phone ? 12 : 0,
-              borderWidth: props.phone ? 1 : 0,
-              borderColor: c().border,
-            }}
-          >
-            <MailBody
-              message={props.message}
-              agentMail={agentMail()}
-              html={
-                !agentMail() &&
-                !!props.message.html &&
-                (props.phone || !props.message.text)
-              }
-            />
-          </View>
-        }
+        when={props.phone}
+        else={<BodyPreview message={props.message} agentMail={agentMail()} />}
       >
-        <BodyPreview message={props.message} agentMail={agentMail()} />
+        <View style={{ padding: 12, borderWidth: 1, borderColor: c().border }}>
+          <MailBody
+            message={props.message}
+            agentMail={agentMail()}
+            html={!agentMail() && !!props.message.html}
+          />
+        </View>
       </If>
       <If when={props.message.rfcMessageId}>
         <View
@@ -362,20 +342,24 @@ export function MailMessage(props: {
           <RfcHeaders message={props.message} />
         </View>
       </If>
-      <If
-        when={props.desktop}
-        else={
-          <If when={meta()}>
-            <Button
-              label={uiText("threadContext")}
-              icon="context"
-              style={{ alignSelf: "flex-start" }}
-              onPress={props.onContext}
-            />
+      <If when={meta()}>
+        {(value) => (
+          <If
+            when={props.inlineContext}
+            else={
+              <If when={props.phone}>
+                <Button
+                  label={uiText("threadContext")}
+                  icon="context"
+                  style={{ alignSelf: "flex-start" }}
+                  onPress={props.onContext}
+                />
+              </If>
+            }
+          >
+            <EmailMetaCard meta={value()} />
           </If>
-        }
-      >
-        <If when={meta()}>{(value) => <EmailMetaCard meta={value()} />}</If>
+        )}
       </If>
     </View>
   );

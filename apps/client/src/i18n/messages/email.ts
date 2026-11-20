@@ -19,9 +19,11 @@ export const emailMessages = {
     "Connect a mailbox to read and manage email here.",
     "连接邮箱后，即可在此阅读和管理邮件。",
   ],
+  countSelected: ["{{count}} selected", "已选 {{count}} 封"],
   currentWork: ["Current work", "当前工作"],
   dataPoints: ["Data points", "数据点"],
   deleteEmailThreads: ["Delete email threads?", "删除邮件会话？"],
+  deleteMail: ["Delete mail", "删除邮件"],
   deleteTheSelectedThreadsFromEta: [
     "Delete the selected threads from Eta?",
     "要从 Eta 中删除选中的邮件会话吗？",
@@ -34,6 +36,10 @@ export const emailMessages = {
   emailBody: ["Email body", "邮件正文"],
   from: ["From", "发件人"],
   fromTo: ["From {{from}} to {{to}}", "{{from}} 发给 {{to}}"],
+  handCountToAnAgent: [
+    "Hand {{count}} to an agent",
+    "把 {{count}} 封交给 Agent",
+  ],
   handToAnAgent: ["Hand to an agent", "交给 Agent"],
   in: ["IN", "在"],
   inboxIsEmpty: ["Inbox is empty", "收件箱为空"],

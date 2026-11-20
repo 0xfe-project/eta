@@ -80,12 +80,17 @@ function entries(count: number) {
   return uiText(count === 1 ? "entry" : "entries", { count });
 }
 
-function MetaStat(props: { label: string; value: string; verified?: boolean }) {
+function MetaStat(props: {
+  label: string;
+  value: string;
+  verified?: boolean;
+  half?: boolean;
+}) {
   const c = colors();
   return (
     <View
       style={{
-        flex: 1,
+        ...(props.half ? { width: "50%" } : { flex: 1 }),
         minWidth: 0,
         gap: 2,
         paddingVertical: 8,
@@ -115,10 +120,16 @@ function MetaStat(props: { label: string; value: string; verified?: boolean }) {
   );
 }
 
-/** Desktop: the agent part of a message, inline under it and folded by default. */
-export function EmailMetaCard(props: { meta: EmailMetaView }) {
+/**
+ * The agent part of a message: inline under it and folded on desktop, open in
+ * the thread context drawer with its facts two to a row on tablet.
+ */
+export function EmailMetaCard(props: {
+  meta: EmailMetaView;
+  drawer?: boolean;
+}) {
   const c = colors();
-  const open = signal(false);
+  const open = signal(props.drawer ?? false);
   const route = () =>
     [
       [uiText("metaAgentId"), props.meta.agentId],
@@ -164,7 +175,12 @@ export function EmailMetaCard(props: { meta: EmailMetaView }) {
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
           <View style={{ ...row, gap: 8 }}>
-            <Label size={12} line={16} weight={600}>
+            <Label
+              size={12}
+              line={16}
+              weight={600}
+              style={{ flexShrink: 1, minWidth: 0 }}
+            >
               {uiText("agentCommunicationContext")}
             </Label>
             <Label
@@ -177,6 +193,8 @@ export function EmailMetaCard(props: { meta: EmailMetaView }) {
                 borderColor: c().border,
                 paddingVertical: 2,
                 paddingHorizontal: 6,
+                flexShrink: 1,
+                minWidth: 0,
               }}
             >
               {dataPoints(props.meta.packetCount)}
@@ -212,24 +230,29 @@ export function EmailMetaCard(props: { meta: EmailMetaView }) {
           <View
             style={{
               flexDirection: "row",
+              flexWrap: props.drawer ? "wrap" : "nowrap",
               borderLeftWidth: 1,
               borderTopWidth: 1,
               borderColor: c().border,
             }}
           >
             <MetaStat
+              half={props.drawer}
               label={uiText("agent")}
               value={props.meta.agentName ?? "—"}
             />
             <MetaStat
+              half={props.drawer}
               label={uiText("protocol")}
               value={props.meta.protocol ?? "—"}
             />
             <MetaStat
+              half={props.drawer}
               label={uiText("dataPoints")}
               value={dataPoints(props.meta.packetCount)}
             />
             <MetaStat
+              half={props.drawer}
               label={uiText("signature")}
               value={signatureText(props.meta)}
               verified={props.meta.signatureValid === true}
@@ -320,11 +343,18 @@ export function EmailContext(props: {
       height={phone() ? "74%" : "100%"}
       side={!phone()}
       phone={phone()}
+      blurBackdrop={phone()}
+      panelStyle={phone() ? undefined : { borderWidth: 0, borderLeftWidth: 1 }}
       onClose={props.onClose}
     >
       <Scroll style={grow} scrollbar={false}>
         <View style={{ padding: 12, gap: 12 }}>
-          <If when={meta() && meta()!.carrier !== "none"}>
+          <If
+            when={!phone() && meta()?.carrier !== "none" ? meta() : undefined}
+          >
+            {(value) => <EmailMetaCard meta={value()} drawer />}
+          </If>
+          <If when={phone() && meta() && meta()!.carrier !== "none"}>
             <View
               style={{
                 padding: 12,
@@ -361,12 +391,12 @@ export function EmailContext(props: {
                 label={uiText("question")}
                 value={meta()?.payload?.ask.question}
               />
-              <If when={meta()?.decodeError}>
-                <Label size={12} tone="red">
-                  {meta()?.decodeError}
-                </Label>
-              </If>
             </View>
+          </If>
+          <If when={meta()?.decodeError}>
+            <Label size={12} tone="red">
+              {meta()?.decodeError}
+            </Label>
           </If>
         </View>
       </Scroll>
