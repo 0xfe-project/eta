@@ -72,6 +72,8 @@ export function TaskActivity(props: {
   entries: TaskActivityView[];
   phone: boolean;
   desktop?: boolean;
+  /** The desktop sentences, tighter: one muted line each under a small heading. */
+  tablet?: boolean;
 }) {
   const host = useHost();
   const unfolded = signal(false);
@@ -81,7 +83,7 @@ export function TaskActivity(props: {
   const quiet = () => props.entries.filter(isQuiet);
   return (
     <If
-      when={props.desktop}
+      when={props.desktop || props.tablet}
       else={
         <View style={{ gap: 5, marginTop: 3 }}>
           <Caption text={uiText("activity")} />
@@ -113,8 +115,17 @@ export function TaskActivity(props: {
         </View>
       }
     >
-      <View style={{ gap: 10, paddingBottom: 16 }}>
-        <Label size={14} line={18} weight={700}>
+      <View
+        style={{
+          gap: props.tablet ? 4 : 10,
+          paddingBottom: props.tablet ? 0 : 16,
+        }}
+      >
+        <Label
+          size={props.tablet ? 13 : 14}
+          line={props.tablet ? 16 : 18}
+          weight={props.tablet ? 600 : 700}
+        >
           {uiText("activity")}
         </Label>
         <Each
@@ -122,8 +133,20 @@ export function TaskActivity(props: {
           key={(entry) => entry.id}
         >
           {(entry) => (
-            <View style={{ gap: 4, paddingLeft: 35 }}>
-              <View style={{ ...row, gap: 6, flexWrap: "wrap" }}>
+            <View style={{ gap: 4, paddingLeft: props.tablet ? 0 : 35 }}>
+              <If when={props.tablet}>
+                <Label size={10} line={12} tone="mutedInk">
+                  {`${actor(entry())} ${taskActivitySentence(entry())} ${taskMoment(entry().createdAt)}`}
+                </Label>
+              </If>
+              <View
+                style={{
+                  ...row,
+                  gap: 6,
+                  flexWrap: "wrap",
+                  display: props.tablet ? "none" : "flex",
+                }}
+              >
                 <Label size={10} line={12} tone="muted">
                   {actor(entry())}
                 </Label>
@@ -148,10 +171,21 @@ export function TaskActivity(props: {
               { count: quiet().length },
             )}
             onPress={() => unfolded.set(true)}
-            style={{ ...row, gap: 6, paddingLeft: 35, cursor: "pointer" }}
+            style={{
+              ...row,
+              gap: 6,
+              paddingLeft: props.tablet ? 0 : 35,
+              cursor: "pointer",
+            }}
           >
-            <Icon name="right" size={10} />
-            <Label size={10} line={12} tone="muted">
+            <If when={!props.tablet}>
+              <Icon name="right" size={10} />
+            </If>
+            <Label
+              size={10}
+              line={12}
+              tone={props.tablet ? "mutedInk" : "muted"}
+            >
               {uiText(
                 quiet().length === 1 ? "taskUpdates" : "taskUpdatesMany",
                 {

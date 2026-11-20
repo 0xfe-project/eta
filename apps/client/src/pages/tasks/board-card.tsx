@@ -1,4 +1,5 @@
 import type { BoardTaskStatus, BoardTaskView } from "@eta/client-contracts";
+import type { Layout } from "../../components";
 import type { taskDropZones } from "./drag";
 import { View } from "nsh";
 import { colors, Icon, Label, row } from "../../components";
@@ -16,6 +17,7 @@ import { progressColor, SubtreeGlyph, TaskGlyph, tones } from "./status";
 
 export function BoardCard(props: {
   task: BoardTaskView;
+  layout: Layout;
   onOpen: () => void;
   drag: ReturnType<typeof taskDropZones<BoardTaskStatus>>;
   draggable: boolean;
@@ -30,7 +32,10 @@ export function BoardCard(props: {
       .tasks()
       .filter((task) => task.parentId === props.task.id)
       .sort((a, b) => a.number - b.number);
+  const tablet = () => props.layout === "tablet";
   const isParent = () => !!props.task.subtasks?.total;
+  /** The stacked look of a parent card, on desktop only. */
+  const stacked = () => isParent() && !tablet();
   const cancelled = () =>
     props.task.status === "blocked"
       ? props.task.waitingOn?.find(
@@ -57,8 +62,8 @@ export function BoardCard(props: {
       ["taskCountDone", counts("done")],
       ["taskCountInReview", counts("in_review")],
       ["taskCountRunning", counts("in_progress")],
-      ["taskCountWaiting", counts("todo")],
-      ["taskCountBlocked", counts("blocked")],
+      ["taskCountWaiting", tablet() ? 0 : counts("todo")],
+      ["taskCountBlocked", tablet() ? 0 : counts("blocked")],
     ] as const;
   };
   const nowThen = () => {
@@ -66,7 +71,7 @@ export function BoardCard(props: {
     const next = children().find((task) => task.status === "todo");
     return [
       now && uiText("taskNow", { title: now.title }),
-      next && uiText("taskThen", { title: next.title }),
+      next && !tablet() && uiText("taskThen", { title: next.title }),
     ]
       .filter(Boolean)
       .join(" · ");
@@ -86,11 +91,11 @@ export function BoardCard(props: {
   return (
     <View
       style={{
-        paddingRight: isParent() ? 3 : 0,
-        paddingBottom: isParent() ? 3 : 0,
+        paddingRight: stacked() ? 3 : 0,
+        paddingBottom: stacked() ? 3 : 0,
       }}
     >
-      <If when={isParent()}>
+      <If when={stacked()}>
         <View
           style={{
             position: "absolute",
@@ -113,16 +118,16 @@ export function BoardCard(props: {
         onPress={() => props.onOpen()}
         hoverStyle={{ backgroundColor: c().selected }}
         style={{
-          paddingVertical: 7.2,
-          paddingHorizontal: 9,
-          gap: 3.6,
+          paddingVertical: tablet() ? 8 : 7.2,
+          paddingHorizontal: tablet() ? 8 : 9,
+          gap: tablet() ? (isParent() || cancelled() ? 4 : 3) : 3.6,
           borderWidth: 1,
           borderLeftWidth: props.task.status === "blocked" ? 2 : 1,
-          borderColor: isParent() ? c().strong : c().border,
+          borderColor: stacked() ? c().strong : c().border,
           borderLeftColor:
             props.task.status === "blocked"
               ? c().red
-              : isParent()
+              : stacked()
                 ? c().strong
                 : c().border,
           backgroundColor: c().canvas,
@@ -156,22 +161,35 @@ export function BoardCard(props: {
               </Label>
             }
           >
-            <View style={{ ...row, gap: 6 }}>
-              <SubtreeGlyph size={10} />
-              <Label size={12} line={16} tone="mutedInk">
-                {`#${props.task.number}`}
-              </Label>
-              <Label size={12} line={16} tone="mutedInk">
-                ·
-              </Label>
-              <Label size={12} line={16} tone="mutedInk">
-                {uiText("taskSubtaskCount", {
-                  count: props.task.subtasks?.total ?? 0,
-                })}
-              </Label>
-            </View>
+            <If
+              when={!tablet()}
+              else={
+                <Label size={12} line={16} tone="muted" style={{ flex: 1 }}>
+                  {`#${props.task.number} · ${uiText("taskSubtaskCount", {
+                    count: props.task.subtasks?.total ?? 0,
+                  })}`}
+                </Label>
+              }
+            >
+              <View style={{ ...row, gap: 6 }}>
+                <SubtreeGlyph size={10} />
+                <Label size={12} line={16} tone="mutedInk">
+                  {`#${props.task.number}`}
+                </Label>
+                <Label size={12} line={16} tone="mutedInk">
+                  ·
+                </Label>
+                <Label size={12} line={16} tone="mutedInk">
+                  {uiText("taskSubtaskCount", {
+                    count: props.task.subtasks?.total ?? 0,
+                  })}
+                </Label>
+              </View>
+            </If>
             <View style={{ ...row, gap: 4 }}>
-              <TaskGlyph status={props.task.status} size={10} />
+              <If when={!tablet()}>
+                <TaskGlyph status={props.task.status} size={10} />
+              </If>
               <Label size={12} line={16} tone={tones[props.task.status]}>
                 {uiText("taskAuto")}
               </Label>
@@ -179,31 +197,58 @@ export function BoardCard(props: {
           </If>
           <If when={!isParent()}>
             <If when={props.task.status === "in_review"}>
-              <Label
-                size={12}
-                line={16}
-                tone="amber"
-                style={{ backgroundColor: c().amberFill, paddingHorizontal: 5 }}
+              <If
+                when={!tablet()}
+                else={
+                  <Label size={12} line={16} tone="amber" lines={1}>
+                    {uiText("forYouToCheck2")}
+                  </Label>
+                }
               >
-                {uiText("forYouToCheck")}
-              </Label>
+                <Label
+                  size={12}
+                  line={16}
+                  tone="amber"
+                  style={{
+                    backgroundColor: c().amberFill,
+                    paddingHorizontal: 5,
+                  }}
+                >
+                  {uiText("forYouToCheck")}
+                </Label>
+              </If>
             </If>
             <If when={props.task.status === "in_progress"}>
-              <View style={{ ...row, gap: 4 }}>
-                <View
-                  style={{ width: 6, height: 6, backgroundColor: c().blue }}
-                />
-                <Label size={12} line={16} tone="blue">
-                  {runningFor(props.task)}
-                </Label>
-              </View>
+              <If
+                when={!tablet()}
+                else={
+                  <Label size={12} line={16} tone="blue">
+                    {`■ ${runningFor(props.task)}`}
+                  </Label>
+                }
+              >
+                <View style={{ ...row, gap: 4 }}>
+                  <View
+                    style={{ width: 6, height: 6, backgroundColor: c().blue }}
+                  />
+                  <Label size={12} line={16} tone="blue">
+                    {runningFor(props.task)}
+                  </Label>
+                </View>
+              </If>
             </If>
             <If when={isWaiting(props.task)}>
-              <Icon name="lock" size={11} tone="mutedInk" />
+              <Icon
+                name="lock"
+                size={tablet() ? 10 : 11}
+                tone={tablet() ? "ink" : "mutedInk"}
+              />
             </If>
             <If
               when={
-                props.task.status === "done" || props.task.status === "blocked"
+                !tablet() &&
+                (props.task.status === "done" ||
+                  props.task.status === "blocked")
               }
             >
               <TaskGlyph status={props.task.status} size={11} />
@@ -214,13 +259,13 @@ export function BoardCard(props: {
           {props.task.title}
         </Label>
         <If when={isParent()}>
-          <View style={{ ...row, gap: 2, height: 4 }}>
+          <View style={{ ...row, gap: 2, height: tablet() ? 3 : 4 }}>
             <Each of={children()} key={(task) => task.id}>
               {(task) => (
                 <View
                   style={{
                     flex: 1,
-                    height: 4,
+                    height: tablet() ? 3 : 4,
                     backgroundColor: progressColor(task().status, c()),
                   }}
                 />
@@ -229,18 +274,20 @@ export function BoardCard(props: {
           </View>
           <If when={nowThen()}>
             <View style={{ ...row, gap: 5, alignItems: "flex-start" }}>
-              <View
-                style={{
-                  width: 5,
-                  height: 5,
-                  marginTop: 5,
-                  backgroundColor: c().blue,
-                }}
-              />
+              <If when={!tablet()}>
+                <View
+                  style={{
+                    width: 5,
+                    height: 5,
+                    marginTop: 5,
+                    backgroundColor: c().blue,
+                  }}
+                />
+              </If>
               <Label
                 size={12}
                 line={16}
-                tone="mutedInk"
+                tone={tablet() ? "muted" : "mutedInk"}
                 lines={2}
                 style={{ flex: 1 }}
               >
@@ -261,9 +308,11 @@ export function BoardCard(props: {
                 .map(([key, count]) => uiText(key, { count }))
                 .join(" · ")}
             </Label>
-            <Label size={12} line={16} tone="muted">
-              ›
-            </Label>
+            <If when={!tablet()}>
+              <Label size={12} line={16} tone="muted">
+                ›
+              </Label>
+            </If>
           </View>
         </If>
         <If
@@ -277,16 +326,22 @@ export function BoardCard(props: {
             <View
               style={{
                 ...row,
-                gap: 5,
-                marginTop: 2,
-                paddingVertical: 2,
-                paddingHorizontal: 6,
+                gap: tablet() ? 4 : 5,
+                marginTop: tablet() ? 0 : 2,
+                paddingVertical: tablet() ? 1 : 2,
+                paddingHorizontal: tablet() ? 4 : 6,
                 borderWidth: 1,
                 borderColor: c().strong,
               }}
             >
-              <Icon name="lock" size={10} />
-              <Label size={12} line={16} lines={1} style={{ flex: 1 }}>
+              <Icon name="lock" size={tablet() ? 9 : 10} />
+              <Label
+                size={12}
+                line={16}
+                lines={1}
+                tone={tablet() ? "mutedInk" : "ink"}
+                style={{ flex: 1 }}
+              >
                 {uiText("waitsFor", { title: dependency().title })}
               </Label>
             </View>
@@ -300,10 +355,12 @@ export function BoardCard(props: {
               </Label>
               <BlockedAction
                 label={uiText("stopWaitingStartNow")}
+                stretch={tablet()}
                 onPress={() => void startNow()}
               />
               <BlockedAction
                 label={uiText("waitForAnother")}
+                stretch={tablet()}
                 onPress={props.onOpen}
               />
             </>
@@ -333,7 +390,11 @@ export function BoardCard(props: {
   );
 }
 
-function BlockedAction(props: { label: string; onPress: () => void }) {
+function BlockedAction(props: {
+  label: string;
+  stretch?: boolean;
+  onPress: () => void;
+}) {
   const c = colors();
   return (
     <View
@@ -342,9 +403,9 @@ function BlockedAction(props: { label: string; onPress: () => void }) {
       onPress={props.onPress}
       hoverStyle={{ backgroundColor: c().selected }}
       style={{
-        alignSelf: "flex-start",
-        paddingVertical: 3,
-        paddingHorizontal: 6,
+        alignSelf: props.stretch ? "stretch" : "flex-start",
+        paddingVertical: props.stretch ? 2 : 3,
+        paddingHorizontal: props.stretch ? 5 : 6,
         borderWidth: 1,
         borderColor: c().strong,
         cursor: "pointer",

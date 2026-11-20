@@ -1,5 +1,6 @@
 import type { BoardTaskStatus, BoardTaskView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
+import type { IconName } from "../../components/icons";
 import { signal, View } from "nsh";
 import {
   ActionItem,
@@ -11,12 +12,13 @@ import {
   grow,
   Header,
   Icon,
+  Label,
   row,
 } from "../../components";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { taskDropZones } from "./drag";
-import { PhoneTaskList } from "./list";
+import { PhoneTaskList, TabletTaskList } from "./list";
 import { Segmented } from "./segmented";
 import { TaskWorkspaceBoard } from "./workspace-board";
 import { TaskWorkspaceList } from "./workspace-list";
@@ -30,6 +32,8 @@ const taskViews = {
 export function Tasks(props: {
   layout: Layout;
   condensed?: boolean;
+  /** The task open beside the list, highlighted in it. */
+  selected?: string;
   onOpen: (id: string) => void;
   onCreate: () => void;
 }) {
@@ -55,6 +59,7 @@ export function Tasks(props: {
   const part = signal("");
   const partOpen = signal(false);
   const phone = () => props.layout === "phone";
+  const tablet = () => props.layout === "tablet";
   const shown = () =>
     archive() ? host.list<BoardTaskView>("tasks", "archived") : host.tasks();
   const parents = () => shown().filter((entry) => entry.subtasks?.total);
@@ -80,131 +85,156 @@ export function Tasks(props: {
     );
   return (
     <View style={{ ...grow, backgroundColor: c().canvas }}>
-      <Header
-        title={uiText("tasks2")}
-        count={shown().length}
-        layout={props.layout}
-      >
-        <If when={!phone()}>
-          <View
-            style={{
-              ...row,
-              width: 150,
-              height: 25,
-              paddingHorizontal: 8,
-              gap: 7,
-              marginRight: 7,
-              flexShrink: 0,
-            }}
+      <If
+        when={!props.condensed}
+        else={
+          <Header
+            title={uiText("tasks2")}
+            count={shown().length}
+            layout={props.layout}
+            inset={14}
           >
-            <Icon name="search" size={12.6} tone="muted" />
-            <Field
-              label={uiText("searchTasks")}
-              placeholder={uiText("search")}
-              value={query()}
-              onChange={query.set}
-              style={{
-                flex: 1,
-                minWidth: 0,
-                height: 25,
-                paddingHorizontal: 0,
-                paddingVertical: 0,
-                borderWidth: 0,
-                backgroundColor: "transparent",
-                fontSize: 12,
-                lineHeight: 16,
-              }}
-            />
-            <If when={query()}>
-              <View
-                role="button"
-                accessibilityLabel={uiText("clearSearch")}
-                onPress={() => query.set("")}
-                hoverStyle={{ backgroundColor: c().selected }}
-                style={{
-                  width: 20,
-                  height: 20,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: "pointer",
-                }}
-              >
-                <Icon name="close" size={10} />
-              </View>
-            </If>
-          </View>
-          <If when={!props.condensed}>
+            <View style={{ flex: 1 }} />
             <Button
-              label={host.agent(executor())?.name ?? uiText("executor")}
-              end="down"
-              tone="ghost"
-              onPress={() => filterOpen.set(!filterOpen())}
+              label={uiText("new")}
+              icon="plus"
+              iconOnly
+              onPress={props.onCreate}
             />
-            <Button
-              label={uiText("partOf", {
-                value1:
-                  parents().find((entry) => entry.id === part())?.title ??
-                  uiText("allItems"),
-              })}
-              end="down"
-              tone="ghost"
-              onPress={() => partOpen.set(!partOpen())}
-            />
-            <Button
-              label={uiText("archived", {
-                length: host.list<BoardTaskView>("tasks", "archived").length,
-              })}
-              icon="archive"
-              tone="ghost"
-              selected={archive()}
-              onPress={() => archive.set(!archive())}
-            />
-            <If
-              when={
-                props.layout === "desktop" && view() === "List" && !archive()
+          </Header>
+        }
+      >
+        <Header
+          title={uiText("tasks2")}
+          count={shown().length}
+          layout={props.layout}
+          inset={tablet() ? 14 : undefined}
+        >
+          <If when={!phone()}>
+            <View
+              style={
+                tablet()
+                  ? { ...row, flex: 1, minWidth: 0, gap: 6, marginLeft: 4 }
+                  : {
+                      ...row,
+                      width: 150,
+                      height: 25,
+                      paddingHorizontal: 8,
+                      gap: 7,
+                      marginRight: 7,
+                      flexShrink: 0,
+                    }
               }
             >
-              <ActionMenu
-                label={uiText("groupTasksBy")}
-                triggerStyle={{ borderWidth: 0, height: 25 }}
-                value={uiText("taskGrouping", {
-                  name: uiText(
-                    listGrouping() === "Part of" ? "groupByPartOf" : "status",
-                  ),
+              <Icon name="search" size={tablet() ? 12 : 12.6} tone="muted" />
+              <Field
+                label={uiText("searchTasks")}
+                placeholder={uiText("search")}
+                value={query()}
+                onChange={query.set}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  height: 25,
+                  paddingHorizontal: 0,
+                  paddingVertical: 0,
+                  borderWidth: 0,
+                  backgroundColor: "transparent",
+                  fontSize: 12,
+                  lineHeight: 16,
+                }}
+              />
+              <If when={query()}>
+                <View
+                  role="button"
+                  accessibilityLabel={uiText("clearSearch")}
+                  onPress={() => query.set("")}
+                  hoverStyle={{ backgroundColor: c().selected }}
+                  style={{
+                    width: 20,
+                    height: 20,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                  }}
+                >
+                  <Icon name="close" size={10} />
+                </View>
+              </If>
+            </View>
+            <View style={{ ...row, gap: tablet() ? 12 : 8 }}>
+              <HeaderFilter
+                tablet={tablet()}
+                label={host.agent(executor())?.name ?? uiText("executor")}
+                end="down"
+                onPress={() => filterOpen.set(!filterOpen())}
+              />
+              <HeaderFilter
+                tablet={tablet()}
+                label={uiText("partOf", {
+                  value1:
+                    parents().find((entry) => entry.id === part())?.title ??
+                    uiText("allItems"),
                 })}
+                end="down"
+                onPress={() => partOpen.set(!partOpen())}
+              />
+              <HeaderFilter
+                tablet={tablet()}
+                label={uiText("archived", {
+                  length: host.list<BoardTaskView>("tasks", "archived").length,
+                })}
+                icon="archive"
+                selected={archive()}
+                onPress={() => archive.set(!archive())}
+              />
+              <If
+                when={
+                  props.layout === "desktop" && view() === "List" && !archive()
+                }
               >
-                <Each of={["Part of", "Status"] as const}>
-                  {(mode) => (
-                    <ActionItem
-                      label={uiText(
-                        mode() === "Part of" ? "groupByPartOf" : "status",
-                      )}
-                      checked={listGrouping() === mode()}
-                      onSelect={() => listGrouping.set(mode())}
-                    />
-                  )}
-                </Each>
-              </ActionMenu>
-            </If>
-            <Segmented
-              options={(["Board", "List", "Plan"] as const).map((mode) => ({
-                value: mode,
-                label: uiText(taskViews[mode]),
-              }))}
-              value={view()}
-              onChange={view.set}
-            />
+                <ActionMenu
+                  label={uiText("groupTasksBy")}
+                  triggerStyle={{ borderWidth: 0, height: 25 }}
+                  value={uiText("taskGrouping", {
+                    name: uiText(
+                      listGrouping() === "Part of" ? "groupByPartOf" : "status",
+                    ),
+                  })}
+                >
+                  <Each of={["Part of", "Status"] as const}>
+                    {(mode) => (
+                      <ActionItem
+                        label={uiText(
+                          mode() === "Part of" ? "groupByPartOf" : "status",
+                        )}
+                        checked={listGrouping() === mode()}
+                        onSelect={() => listGrouping.set(mode())}
+                      />
+                    )}
+                  </Each>
+                </ActionMenu>
+              </If>
+              <Segmented
+                options={(["Board", "List", "Plan"] as const).map((mode) => ({
+                  value: mode,
+                  label: uiText(taskViews[mode]),
+                }))}
+                value={view()}
+                strong={tablet()}
+                paddingHorizontal={tablet() ? 8 : undefined}
+                onChange={view.set}
+              />
+              <Button
+                label={uiText("new")}
+                tone="primary"
+                icon="plus"
+                onPress={props.onCreate}
+              />
+            </View>
           </If>
-        </If>
-        <If when={!phone() && !props.condensed}>
-          <Button
-            label={uiText("new")}
-            tone="primary"
-            icon="plus"
-            onPress={props.onCreate}
-          />
-        </If>
-      </Header>
+        </Header>
+      </If>
       <If when={partOpen()}>
         <View style={{ ...row, padding: 8, gap: 6 }}>
           <Button
@@ -264,7 +294,7 @@ export function Tasks(props: {
                     flex: 1,
                     justifyContent: "flex-start",
                     paddingTop: 64,
-                    gap: 10,
+                    gap: tablet() ? 8 : 10,
                   }
             }
             title={
@@ -297,7 +327,18 @@ export function Tasks(props: {
       >
         <If
           when={!phone() && !props.condensed}
-          else={<PhoneTaskList tasks={filtered()} onOpen={props.onOpen} />}
+          else={
+            <If
+              when={props.condensed}
+              else={<PhoneTaskList tasks={filtered()} onOpen={props.onOpen} />}
+            >
+              <TabletTaskList
+                tasks={filtered()}
+                selected={props.selected}
+                onOpen={props.onOpen}
+              />
+            </If>
+          }
         >
           <If
             when={view() === "Board" && !archive()}
@@ -326,5 +367,54 @@ export function Tasks(props: {
         </If>
       </If>
     </View>
+  );
+}
+
+/** A filter in the page header: a ghost button on desktop, plain muted text on tablet. */
+function HeaderFilter(props: {
+  label: string;
+  tablet: boolean;
+  icon?: IconName;
+  end?: IconName;
+  selected?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <If
+      when={props.tablet}
+      else={
+        <Button
+          label={props.label}
+          icon={props.icon}
+          end={props.end}
+          tone="ghost"
+          selected={props.selected}
+          onPress={props.onPress}
+        />
+      }
+    >
+      <View
+        role="button"
+        accessibilityLabel={props.label}
+        accessibilityState={{ selected: props.selected }}
+        onPress={props.onPress}
+        style={{ ...row, gap: 4, flexShrink: 0, cursor: "pointer" }}
+      >
+        <If when={props.icon}>
+          {(icon) => <Icon name={icon()} size={12} tone="muted" />}
+        </If>
+        <Label
+          size={12}
+          line={16}
+          weight={props.icon ? (props.selected ? 600 : 400) : 500}
+          tone={props.selected ? "ink" : "muted"}
+        >
+          {props.label}
+        </Label>
+        <If when={props.end}>
+          {(end) => <Icon name={end()} size={10} tone="muted" />}
+        </If>
+      </View>
+    </If>
   );
 }

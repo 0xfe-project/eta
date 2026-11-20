@@ -29,6 +29,7 @@ export function TaskWorkspace(props: {
         <Tasks
           layout={props.layout}
           condensed={!!props.taskId && props.layout === "tablet"}
+          selected={props.taskId}
           onOpen={props.onOpen}
           onCreate={props.onCreate}
         />

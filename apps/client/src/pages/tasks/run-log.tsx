@@ -57,7 +57,7 @@ export function TaskRunLog(props: {
       phonePage={phone()}
       hideHeader={!phone() && !!props.run.sessionId}
       modalFocus
-      blurBackdrop={props.layout === "desktop"}
+      blurBackdrop={!phone()}
       overPhoneNavigation
       onClose={props.onClose}
     >

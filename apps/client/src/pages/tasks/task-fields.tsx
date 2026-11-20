@@ -12,7 +12,11 @@ import { taskMoment } from "./facts";
 import { activeTaskRun } from "./run-log";
 import { statusName, TaskGlyph, TaskStatus, tones } from "./status";
 
-export function TaskCommentBox(props: { state: TaskDetailState }) {
+export function TaskCommentBox(props: {
+  state: TaskDetailState;
+  /** Tablet's box: 36 high, the send mark bare at its end. */
+  tablet?: boolean;
+}) {
   const c = colors();
   const { comment, phone, post, posting, updateComment } = props.state;
   return (
@@ -22,9 +26,9 @@ export function TaskCommentBox(props: { state: TaskDetailState }) {
         gap: 6,
         borderWidth: 1,
         borderColor: c().strong,
-        height: phone() ? undefined : 37,
-        paddingLeft: phone() ? 0 : 9,
-        paddingRight: phone() ? 6 : 4,
+        height: phone() ? undefined : props.tablet ? 36 : 37,
+        paddingLeft: phone() ? 0 : props.tablet ? 10 : 9,
+        paddingRight: phone() ? 6 : props.tablet ? 10 : 4,
       }}
     >
       <Field
@@ -39,7 +43,7 @@ export function TaskCommentBox(props: { state: TaskDetailState }) {
             : {
                 flex: 1,
                 borderWidth: 0,
-                height: 35,
+                height: props.tablet ? 34 : 35,
                 paddingHorizontal: 0,
                 paddingVertical: 0,
                 fontSize: 12,
@@ -47,15 +51,32 @@ export function TaskCommentBox(props: { state: TaskDetailState }) {
               }
         }
       />
-      <Button
-        label={phone() ? uiText("send") : uiText("sendComment")}
-        icon="arrowUp"
-        iconOnly={!phone()}
-        tone={phone() ? "primary" : "ghost"}
-        size={28}
-        disabled={posting() || !comment().trim()}
-        onPress={() => void post()}
-      />
+      <If
+        when={!props.tablet}
+        else={
+          <View
+            role="button"
+            accessibilityLabel={uiText("sendComment")}
+            accessibilityState={{ disabled: posting() || !comment().trim() }}
+            onPress={() => {
+              if (!posting() && comment().trim()) void post();
+            }}
+            style={{ cursor: "pointer" }}
+          >
+            <Icon name="arrowUp" size={14} />
+          </View>
+        }
+      >
+        <Button
+          label={phone() ? uiText("send") : uiText("sendComment")}
+          icon="arrowUp"
+          iconOnly={!phone()}
+          tone={phone() ? "primary" : "ghost"}
+          size={28}
+          disabled={posting() || !comment().trim()}
+          onPress={() => void post()}
+        />
+      </If>
     </View>
   );
 }
@@ -172,7 +193,26 @@ export function TaskFields(detail: {
   );
 }
 
-const statusFill = {
+/** Where the task's latest run stands, in a word or two. */
+export function taskRunText(item: BoardTaskDetail) {
+  const last = item.runs.at(-1);
+  if (!last) return uiText("taskNeverRun");
+  if (activeTaskRun(last)) return uiText("running");
+  if (last.status === "completed" && last.startedAt && last.finishedAt)
+    return uiText("taskRunCompleted", {
+      time: uiText("taskMinutes", {
+        count: Math.max(
+          1,
+          Math.round((last.finishedAt - last.startedAt) / 60_000),
+        ),
+      }),
+    });
+  return uiText(
+    last.status === "completed" ? "taskCompleted" : "taskRunStopped",
+  );
+}
+
+export const statusFill = {
   in_progress: "blueFill",
   in_review: "amberFill",
   done: "greenFill",
@@ -196,23 +236,7 @@ export function TaskRail(detail: {
     statusFill[item().status as keyof typeof statusFill] as
       | (typeof statusFill)[keyof typeof statusFill]
       | undefined;
-  const runText = () => {
-    const last = run();
-    if (!last) return uiText("taskNeverRun");
-    if (activeTaskRun(last)) return uiText("running");
-    if (last.status === "completed" && last.startedAt && last.finishedAt)
-      return uiText("taskRunCompleted", {
-        time: uiText("taskMinutes", {
-          count: Math.max(
-            1,
-            Math.round((last.finishedAt - last.startedAt) / 60_000),
-          ),
-        }),
-      });
-    return uiText(
-      last.status === "completed" ? "taskCompleted" : "taskRunStopped",
-    );
-  };
+  const runText = () => taskRunText(item());
   function mutate(work: () => Promise<unknown>) {
     void detail.state.mutate(async () => {
       await work();

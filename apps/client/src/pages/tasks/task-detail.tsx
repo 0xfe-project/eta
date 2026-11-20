@@ -30,6 +30,8 @@ export function TaskDetail(props: {
   const host = useHost();
   const c = colors();
   const state = createTaskDetailState(props);
+  /** Beside the task list on tablet: no way back, the list is there. */
+  const paned = () => props.layout === "tablet" && !props.docked;
   const {
     archive,
     canComment,
@@ -55,29 +57,33 @@ export function TaskDetail(props: {
             : (task()?.title ?? "Task")
         }
         layout={props.layout}
-        onBack={props.onClose}
-        inset={props.docked ? 8 : undefined}
+        onBack={paned() ? undefined : props.onClose}
+        inset={props.docked ? 8 : paned() ? 16 : undefined}
       >
         <View style={{ flex: 1 }} />
         <If when={task()}>
-          <If when={!phone() && task()?.children?.length}>
+          <If
+            when={!phone() && task()?.children?.length && (!paned() || plan())}
+          >
             <Segmented
               options={[
                 { value: "overview", label: uiText("overview") },
                 { value: "plan", label: uiText("plan") },
               ]}
               value={plan() ? "plan" : "overview"}
-              height={22}
-              labelSize={10}
+              height={paned() ? 20 : 22}
+              labelSize={paned() ? 11 : 10}
+              paddingHorizontal={paned() ? 8 : undefined}
+              strong={paned()}
               onChange={(value) => plan.set(value === "plan")}
             />
-            <View style={{ width: 8 }} />
+            <View style={{ width: paned() ? 0 : 8 }} />
           </If>
-          <If when={props.layout === "tablet" && !props.docked}>
+          <If when={paned()}>
             <Button
               label={uiText("panel")}
               icon="sidebar"
-              tone="ghost"
+              labelSize={11}
               onPress={() => panel.set(true)}
             />
           </If>
@@ -140,6 +146,7 @@ export function TaskDetail(props: {
                 task={item}
                 onOpen={props.onTask}
                 desktop={props.layout === "desktop"}
+                tablet={props.layout === "tablet" && !props.docked}
               />
             </If>
             <If

@@ -4,7 +4,14 @@ import { Scroll, signal, View } from "nsh";
 import { colors, grow, Icon, Label, row } from "../../components";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
-import { isWaiting, stepOf, taskHint, taskTime } from "./facts";
+import {
+  isWaiting,
+  runningFor,
+  stepOf,
+  taskDay,
+  taskHint,
+  taskTime,
+} from "./facts";
 import { statusName, TaskGlyph } from "./status";
 
 const phoneGroups = [
@@ -181,6 +188,97 @@ export function PhoneTaskList(props: {
   );
 }
 
+/** The narrow list beside an open task on tablet: one flat row per task. */
+export function TabletTaskList(props: {
+  tasks: BoardTaskView[];
+  selected?: string;
+  onOpen: (id: string) => void;
+}) {
+  const host = useHost();
+  const c = colors();
+  const meta = (task: BoardTaskView) => {
+    const owner = host.agent(
+      task.assigneeAgentId ?? task.createdBy.agentId,
+    )?.name;
+    if (task.subtasks?.total)
+      return [
+        `#${task.number}`,
+        uiText("parentTaskProgress", task.subtasks),
+      ].join(" · ");
+    const state = () => {
+      if (task.status === "in_review") return uiText("forYouToCheck2");
+      if (task.status === "blocked") return uiText("taskNeedsDecision");
+      if (task.status === "in_progress") return `■ ${runningFor(task)}`;
+      if (task.status === "done") {
+        const step = stepOf(task, host.tasks());
+        return step ? uiText("step", { value1: step }) : statusName("done");
+      }
+      const wait = task.waitingOn?.[0];
+      if (wait)
+        return uiText("waitsForTask", {
+          title: wait.title || `#${wait.number}`,
+        });
+      return statusName(task.status);
+    };
+    return [`#${task.number}`, owner, state()].filter(Boolean).join(" · ");
+  };
+  const tone = (task: BoardTaskView) =>
+    task.subtasks?.total
+      ? "muted"
+      : task.status === "in_review"
+        ? "amber"
+        : task.status === "in_progress"
+          ? "blue"
+          : task.status === "blocked"
+            ? "mutedInk"
+            : "muted";
+  const time = (task: BoardTaskView) =>
+    task.status === "done" ||
+    task.status === "cancelled" ||
+    Date.now() - task.updatedAt >= 86_400_000
+      ? taskDay(task.updatedAt)
+      : relativeTime(task.updatedAt);
+  return (
+    <Scroll style={grow} scrollbar={false}>
+      <Each of={props.tasks} key={(task) => task.id}>
+        {(task) => (
+          <View
+            role="button"
+            accessibilityLabel={task().title}
+            accessibilityState={{ selected: task().id === props.selected }}
+            onPress={() => props.onOpen(task().id)}
+            hoverStyle={{ backgroundColor: c().selected }}
+            style={{
+              ...row,
+              height: 52,
+              paddingHorizontal: 14,
+              gap: 10,
+              borderBottomWidth: 1,
+              borderColor: c().border,
+              backgroundColor:
+                task().id === props.selected ? c().selected : undefined,
+              cursor: "pointer",
+            }}
+          >
+            <TaskGlyph status={task().status} size={14} />
+            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+              <Label size={13} line={18} lines={1}>
+                {task().title}
+              </Label>
+              <Label size={10} line={14} lines={1} tone={tone(task())}>
+                {meta(task())}
+              </Label>
+            </View>
+            <Label size={10} line={12} tone="muted">
+              {time(task())}
+            </Label>
+          </View>
+        )}
+      </Each>
+    </Scroll>
+  );
+}
+
 export function TaskTableRow(props: {
   item: BoardTaskView;
   layout: Layout;
@@ -225,8 +323,8 @@ export function TaskTableRow(props: {
         cursor: "pointer",
       }}
     >
-      <View style={{ width: desktop() ? 24 : 14 }}>
-        <TaskGlyph status={props.item.status} size={14} />
+      <View style={{ width: desktop() ? 24 : phone() ? 14 : 12 }}>
+        <TaskGlyph status={props.item.status} size={phone() ? 14 : 12} />
       </View>
       <Label
         size={10}
@@ -241,7 +339,7 @@ export function TaskTableRow(props: {
         style={{
           ...row,
           gap: 4,
-          width: phone() ? 72 : desktop() ? 183 : 160,
+          width: phone() ? 72 : desktop() ? 183 : props.nested ? 160 : 180,
           flexShrink: 0,
           overflow: "hidden",
         }}
@@ -285,9 +383,7 @@ export function TaskTableRow(props: {
           lines={1}
           style={{ width: desktop() ? 116 : 80, textAlign: "right" }}
         >
-          {desktop()
-            ? taskTime(props.item)
-            : relativeTime(props.item.updatedAt)}
+          {phone() ? relativeTime(props.item.updatedAt) : taskTime(props.item)}
         </Label>
       </If>
     </View>

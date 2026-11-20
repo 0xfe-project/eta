@@ -1,11 +1,8 @@
 import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import type { TaskDetailState } from "./task-detail-state";
-import { TASK_STATUSES } from "@eta/client-contracts";
 import { Scroll, View } from "nsh";
 import {
-  ActionItem,
-  ActionMenu,
   Button,
   Caption,
   colors,
@@ -28,6 +25,7 @@ import {
 import { taskMoment } from "./facts";
 import { activeTaskRun, runCaption } from "./run-log";
 import { statusName, TaskGlyph, tones } from "./status";
+import { TabletOverview } from "./tablet-overview";
 import { TaskCommentBox, TaskFields, TaskRail } from "./task-fields";
 
 function RunSummary(props: { item: BoardTaskDetail; state: TaskDetailState }) {
@@ -90,8 +88,12 @@ function RunSummary(props: { item: BoardTaskDetail; state: TaskDetailState }) {
   );
 }
 
-/** The run's state in one line above the reply box, on desktop. */
-function RunLine(props: { item: BoardTaskDetail; state: TaskDetailState }) {
+/** The run's state in one line above the reply box, on desktop and tablet. */
+export function RunLine(props: {
+  item: BoardTaskDetail;
+  state: TaskDetailState;
+  tablet?: boolean;
+}) {
   const c = colors();
   const { executor, log, stop, submitting } = props.state;
   const run = () => props.item.runs.at(-1);
@@ -105,18 +107,25 @@ function RunLine(props: { item: BoardTaskDetail; state: TaskDetailState }) {
           style={{
             ...row,
             justifyContent: "space-between",
-            paddingBottom: 8,
+            gap: 8,
+            paddingBottom: props.tablet ? 0 : 8,
           }}
         >
-          <View style={{ ...row, gap: 6 }}>
-            <StatusDot color={c()[review() ? "amber" : "blue"]} />
-            <Label size={10} line={12} weight={600}>
+          <View style={{ ...row, gap: props.tablet ? 8 : 6, flex: 1 }}>
+            <If when={!props.tablet || !review()}>
+              <StatusDot color={c()[review() ? "amber" : "blue"]} />
+            </If>
+            <Label
+              size={props.tablet ? 11 : 10}
+              line={props.tablet ? 14 : 12}
+              weight={600}
+            >
               {uiText(review() ? "taskDeliveredTurn" : "taskIsWorking", {
                 name: executor()?.name ?? uiText("executor"),
               })}
             </Label>
           </View>
-          <View style={{ ...row, gap: 14 }}>
+          <View style={{ ...row, gap: props.tablet ? 8 : 14 }}>
             <View
               role="button"
               accessibilityLabel={uiText("executionLog")}
@@ -145,7 +154,11 @@ function RunLine(props: { item: BoardTaskDetail; state: TaskDetailState }) {
                     borderColor: c().ink,
                   }}
                 />
-                <Label size={10} line={12} weight={600}>
+                <Label
+                  size={props.tablet ? 11 : 10}
+                  line={props.tablet ? 14 : 12}
+                  weight={600}
+                >
                   {uiText("stop")}
                 </Label>
               </View>
@@ -334,7 +347,6 @@ export function TaskOverview(props: {
     activity,
     canComment,
     cancelling,
-    change,
     executor,
     log,
     phone,
@@ -348,214 +360,209 @@ export function TaskOverview(props: {
   const item = () => props.item;
   return (
     <If
-      when={!side()}
+      when={props.layout !== "tablet" || props.docked}
       else={
-        <DesktopOverview
+        <TabletOverview
           item={item()}
           onTask={props.onTask}
           state={props.state}
         />
       }
     >
-      <View style={{ ...row, ...grow, alignItems: "stretch" }}>
-        <Scroll style={grow} scrollbar={false}>
-          <View
-            style={{
-              paddingHorizontal: phone() ? 16 : 20,
-              paddingTop: 12,
-              paddingBottom: 20,
-              width: "100%",
-              maxWidth: 728,
-              alignSelf: "center",
-              gap: 12,
-            }}
-          >
-            <Label size={11} tone="muted">
-              {uiText("createdBy", {
-                number: item().number,
-                value2: item().subtasks?.total ? " · Parent" : "",
-                value3: host.agent(item().createdBy.agentId)?.name ?? "you",
-                relativeTime: relativeTime(item().createdAt),
-                value5: item().ancestors?.at(-1)
-                  ? ` · Part of #${item().ancestors!.at(-1)!.number}`
-                  : "",
-              })}
-            </Label>
-            <View style={{ ...row, gap: 10 }}>
-              <TaskGlyph status={item().status} size={16} />
-              <Label
-                size={phone() ? 18 : 20}
-                line={phone() ? 24 : 26}
-                weight={600}
-                style={{ flex: 1 }}
-              >
-                {item().title}
+      <If
+        when={!side()}
+        else={
+          <DesktopOverview
+            item={item()}
+            onTask={props.onTask}
+            state={props.state}
+          />
+        }
+      >
+        <View style={{ ...row, ...grow, alignItems: "stretch" }}>
+          <Scroll style={grow} scrollbar={false}>
+            <View
+              style={{
+                paddingHorizontal: phone() ? 16 : 20,
+                paddingTop: 12,
+                paddingBottom: 20,
+                width: "100%",
+                maxWidth: 728,
+                alignSelf: "center",
+                gap: 12,
+              }}
+            >
+              <Label size={11} tone="muted">
+                {uiText("createdBy", {
+                  number: item().number,
+                  value2: item().subtasks?.total ? " · Parent" : "",
+                  value3: host.agent(item().createdBy.agentId)?.name ?? "you",
+                  relativeTime: relativeTime(item().createdAt),
+                  value5: item().ancestors?.at(-1)
+                    ? ` · Part of #${item().ancestors!.at(-1)!.number}`
+                    : "",
+                })}
               </Label>
-              <If
-                when={
-                  props.layout === "tablet" &&
-                  !props.docked &&
-                  !item().children?.length
-                }
-              >
-                <ActionMenu
-                  label={uiText("changeStatus")}
-                  value={statusName(item().status)}
+              <View style={{ ...row, gap: 10 }}>
+                <TaskGlyph status={item().status} size={16} />
+                <Label
+                  size={phone() ? 18 : 20}
+                  line={phone() ? 24 : 26}
+                  weight={600}
+                  style={{ flex: 1 }}
                 >
-                  <Each of={TASK_STATUSES}>
-                    {(entry) => (
-                      <ActionItem
-                        label={statusName(entry())}
-                        checked={item().status === entry()}
-                        onSelect={() => change(entry())}
-                      />
-                    )}
-                  </Each>
-                </ActionMenu>
-              </If>
-            </View>
-            <If when={phone()}>
-              <View
-                style={{
-                  ...row,
-                  flexWrap: "wrap",
-                  gap: 5,
-                  marginTop: -7,
-                }}
-              >
-                <Label size={12} tone={tones[item().status]}>
-                  {item().status === "in_review" && !item().children?.length
-                    ? uiText("forYouToCheck2")
-                    : statusName(item().status)}
-                </Label>
-                <If when={executor()}>
-                  {(agent) => (
-                    <Label size={12} tone="muted">
-                      {uiText("executorWithCount", {
-                        name: agent().name,
-                      })}
-                    </Label>
-                  )}
-                </If>
-                <Label size={12} tone="muted">
-                  {item().workspace.mode === "worktree"
-                    ? uiText("ownGitWorktree")
-                    : uiText("projectDirectory")}
+                  {item().title}
                 </Label>
               </View>
-              <RunSummary item={item()} state={props.state} />
-            </If>
-            <Prerequisites
-              item={item()}
-              submitting={submitting()}
-              onResolve={() => resolveBlock()}
-              onReplace={() => {
-                search.set("");
-                replacing.set(true);
-              }}
-              onCancel={() => cancelling.set(true)}
-              onTask={props.onTask}
-            />
-            <If when={item().children?.length}>
-              <Subtasks item={item()} onTask={props.onTask} />
-            </If>
-            <If when={item().description}>
-              <Label weight={600} size={15}>
-                {item().children?.length
-                  ? uiText("description")
-                  : uiText("goal")}
-              </Label>
-              <Markdown
-                value={item().description}
-                line={22}
-                compactHeadings={phone()}
+              <If when={phone()}>
+                <View
+                  style={{
+                    ...row,
+                    flexWrap: "wrap",
+                    gap: 5,
+                    marginTop: -7,
+                  }}
+                >
+                  <Label size={12} tone={tones[item().status]}>
+                    {item().status === "in_review" && !item().children?.length
+                      ? uiText("forYouToCheck2")
+                      : statusName(item().status)}
+                  </Label>
+                  <If when={executor()}>
+                    {(agent) => (
+                      <Label size={12} tone="muted">
+                        {uiText("executorWithCount", {
+                          name: agent().name,
+                        })}
+                      </Label>
+                    )}
+                  </If>
+                  <Label size={12} tone="muted">
+                    {item().workspace.mode === "worktree"
+                      ? uiText("ownGitWorktree")
+                      : uiText("projectDirectory")}
+                  </Label>
+                </View>
+                <RunSummary item={item()} state={props.state} />
+              </If>
+              <Prerequisites
+                item={item()}
+                submitting={submitting()}
+                onResolve={() => resolveBlock()}
+                onReplace={() => {
+                  search.set("");
+                  replacing.set(true);
+                }}
+                onCancel={() => cancelling.set(true)}
+                onTask={props.onTask}
               />
-            </If>
-            <If
-              when={
-                item().waitingOn?.length ||
-                item().dependsOn?.length ||
-                item().dependents?.length
-              }
-            >
-              <Caption text={uiText("dependencies")} />
-              <Each of={item().dependsOn ?? []} key={(entry) => entry.taskId}>
-                {(entry) => (
-                  <TaskLink
-                    onTask={props.onTask}
-                    item={entry()}
-                    suffix={`Waits for it · ${entry().state === "resolved" ? "ready" : entry().state === "cancelled" ? "cancelled" : statusName(entry().status)}`}
-                  />
-                )}
-              </Each>
-              <Each of={item().dependents ?? []} key={(entry) => entry.taskId}>
-                {(entry) => (
-                  <TaskLink
-                    onTask={props.onTask}
-                    item={entry()}
-                    suffix="Waits for this task"
-                  />
-                )}
-              </Each>
-            </If>
-            <If
-              when={
-                item().runs.length && (!phone() || item().status !== "blocked")
-              }
-            >
-              <Caption text={uiText("runs", { length: item().runs.length })} />
-              <Each of={item().runs} key={(run) => run.id}>
-                {(run) => (
-                  <View
-                    style={{
-                      ...row,
-                      gap: 7,
-                      padding: 8,
-                      borderWidth: 1,
-                      borderColor: c().border,
-                    }}
-                  >
-                    <Label size={12} style={{ flex: 1 }}>
-                      {phone()
-                        ? runCaption(
-                            run(),
-                            item().runs.findIndex(
-                              (entry) => entry.id === run().id,
-                            ),
-                          )
-                        : run().status}
-                    </Label>
-                    <Button
-                      label={uiText("runLog")}
-                      end="right"
-                      onPress={() => log.set(run())}
+              <If when={item().children?.length}>
+                <Subtasks item={item()} onTask={props.onTask} />
+              </If>
+              <If when={item().description}>
+                <Label weight={600} size={15}>
+                  {item().children?.length
+                    ? uiText("description")
+                    : uiText("goal")}
+                </Label>
+                <Markdown
+                  value={item().description}
+                  line={22}
+                  compactHeadings={phone()}
+                />
+              </If>
+              <If
+                when={
+                  item().waitingOn?.length ||
+                  item().dependsOn?.length ||
+                  item().dependents?.length
+                }
+              >
+                <Caption text={uiText("dependencies")} />
+                <Each of={item().dependsOn ?? []} key={(entry) => entry.taskId}>
+                  {(entry) => (
+                    <TaskLink
+                      onTask={props.onTask}
+                      item={entry()}
+                      suffix={`Waits for it · ${entry().state === "resolved" ? "ready" : entry().state === "cancelled" ? "cancelled" : statusName(entry().status)}`}
                     />
-                    <If
-                      when={
-                        activeTaskRun(run()) &&
-                        (!phone() || run().id !== item().runs.at(-1)?.id)
-                      }
+                  )}
+                </Each>
+                <Each
+                  of={item().dependents ?? []}
+                  key={(entry) => entry.taskId}
+                >
+                  {(entry) => (
+                    <TaskLink
+                      onTask={props.onTask}
+                      item={entry()}
+                      suffix="Waits for this task"
+                    />
+                  )}
+                </Each>
+              </If>
+              <If
+                when={
+                  item().runs.length &&
+                  (!phone() || item().status !== "blocked")
+                }
+              >
+                <Caption
+                  text={uiText("runs", { length: item().runs.length })}
+                />
+                <Each of={item().runs} key={(run) => run.id}>
+                  {(run) => (
+                    <View
+                      style={{
+                        ...row,
+                        gap: 7,
+                        padding: 8,
+                        borderWidth: 1,
+                        borderColor: c().border,
+                      }}
                     >
+                      <Label size={12} style={{ flex: 1 }}>
+                        {phone()
+                          ? runCaption(
+                              run(),
+                              item().runs.findIndex(
+                                (entry) => entry.id === run().id,
+                              ),
+                            )
+                          : run().status}
+                      </Label>
                       <Button
-                        label={uiText("stop")}
-                        disabled={submitting()}
-                        onPress={() => stop(run())}
+                        label={uiText("runLog")}
+                        end="right"
+                        onPress={() => log.set(run())}
                       />
-                    </If>
-                  </View>
-                )}
-              </Each>
-            </If>
-            <TaskActivity phone={phone()} entries={activity()} />
-            <If when={!phone() && canComment(item())}>
-              <TaskCommentBox state={props.state} />
-            </If>
-            <If when={!phone() && !side() && props.docked}>
-              <TaskFields item={item()} state={props.state} />
-            </If>
-          </View>
-        </Scroll>
-      </View>
+                      <If
+                        when={
+                          activeTaskRun(run()) &&
+                          (!phone() || run().id !== item().runs.at(-1)?.id)
+                        }
+                      >
+                        <Button
+                          label={uiText("stop")}
+                          disabled={submitting()}
+                          onPress={() => stop(run())}
+                        />
+                      </If>
+                    </View>
+                  )}
+                </Each>
+              </If>
+              <TaskActivity phone={phone()} entries={activity()} />
+              <If when={!phone() && canComment(item())}>
+                <TaskCommentBox state={props.state} />
+              </If>
+              <If when={!phone() && !side() && props.docked}>
+                <TaskFields item={item()} state={props.state} />
+              </If>
+            </View>
+          </Scroll>
+        </View>
+      </If>
     </If>
   );
 }

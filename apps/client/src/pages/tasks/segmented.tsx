@@ -9,6 +9,8 @@ export function Segmented<T extends string>(props: {
   labelSize?: number;
   paddingHorizontal?: number;
   bordered?: boolean;
+  /** The darker outline the tablet header draws. */
+  strong?: boolean;
   onChange: (value: T) => void;
 }) {
   const c = colors();
@@ -20,7 +22,7 @@ export function Segmented<T extends string>(props: {
         alignItems: "stretch",
         height: props.height ?? 24,
         borderWidth: props.bordered === false ? 0 : 1,
-        borderColor: c().border,
+        borderColor: props.strong ? c().strong : c().border,
         backgroundColor: props.bordered === false ? undefined : c().canvas,
         flexShrink: 0,
       }}

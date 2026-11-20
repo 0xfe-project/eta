@@ -1,14 +1,24 @@
+import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import type { TaskDetailState } from "./task-detail-state";
 import { TASK_STATUSES } from "@eta/client-contracts";
 import { Scroll, View } from "nsh";
-import { Button, Field, grow, Label, Modal, row } from "../../components";
+import {
+  Button,
+  colors,
+  Field,
+  grow,
+  Icon,
+  Label,
+  Modal,
+  row,
+} from "../../components";
+import { CloseButton } from "../../components/navigation-buttons";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskReviewDialog } from "./review-dialog";
 import { TaskRunLog } from "./run-log";
 import { statusName } from "./status";
-import { TaskFields } from "./task-fields";
 
 export function TaskDetailDialogs(props: {
   id: string;
@@ -153,13 +163,13 @@ export function TaskDetailDialogs(props: {
           side
           width={360}
           height="100%"
+          hideHeader
           blurBackdrop={false}
           overPhoneNavigation
+          panelStyle={{ borderWidth: 0, borderLeftWidth: 1 }}
           onClose={() => panel.set(false)}
         >
-          <View style={{ padding: 16 }}>
-            <TaskFields item={task()!} state={props.state} />
-          </View>
+          <TaskContextPanel item={task()!} onClose={() => panel.set(false)} />
         </Modal>
       </If>
       <If when={editing()}>
@@ -297,5 +307,114 @@ export function TaskDetailDialogs(props: {
         )}
       </If>
     </>
+  );
+}
+
+/** The tablet task page's drawer: who works on the task and the group it came from. */
+function TaskContextPanel(props: {
+  item: BoardTaskDetail;
+  onClose: () => void;
+}) {
+  const c = colors();
+  const host = useHost();
+  const executor = () =>
+    props.item.assigneeAgentId ?? props.item.createdBy.agentId;
+  const name = (id: string | null | undefined) =>
+    (id ? host.agent(id)?.name : undefined) ?? uiText("taskMe");
+  const members = () => [
+    [name(executor()), uiText("executor")],
+    ...(props.item.createdBy.agentId === executor()
+      ? []
+      : [[name(props.item.createdBy.agentId), uiText("taskCreatedTheTask")]]),
+  ];
+  const group = () =>
+    host
+      .conversations()
+      .find(
+        (conversation) => conversation.id === props.item.originConversationId,
+      )?.name;
+  const caption = {
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  } as const;
+  return (
+    <View style={grow}>
+      <View
+        style={{
+          ...row,
+          justifyContent: "space-between",
+          height: 40,
+          paddingLeft: 10,
+          paddingRight: 8,
+          borderBottomWidth: 1,
+          borderColor: c().border,
+          backgroundColor: c().surface,
+        }}
+      >
+        <View
+          role="tablist"
+          style={{ ...row, gap: 2, padding: 2, backgroundColor: c().selected }}
+        >
+          <View
+            role="tab"
+            accessibilityLabel={uiText("taskContext")}
+            accessibilityState={{ selected: true }}
+            style={{
+              ...row,
+              height: 24,
+              paddingHorizontal: 10,
+              gap: 6,
+              backgroundColor: c().canvas,
+            }}
+          >
+            <Icon name="context" size={12} />
+            <Label size={11} line={16}>
+              {uiText("taskContext")}
+            </Label>
+          </View>
+        </View>
+        <CloseButton onPress={props.onClose} />
+      </View>
+      <View style={{ padding: 12, gap: 12 }}>
+        <Label size={10} line={12} tone="muted" style={caption}>
+          {uiText("members")}
+        </Label>
+        <View style={{ borderTopWidth: 1, borderColor: c().border }}>
+          <Each of={members()} key={(member) => member.join()}>
+            {(member) => (
+              <View
+                style={{
+                  ...row,
+                  justifyContent: "space-between",
+                  paddingVertical: 10,
+                  borderBottomWidth: 1,
+                  borderColor: c().border,
+                }}
+              >
+                <Label size={12} line={16}>
+                  {member()[0]}
+                </Label>
+                <Label size={12} line={16} tone="muted">
+                  {member()[1]}
+                </Label>
+              </View>
+            )}
+          </Each>
+        </View>
+        <If when={group()}>
+          <Label
+            size={10}
+            line={12}
+            tone="muted"
+            style={{ ...caption, paddingTop: 8 }}
+          >
+            {uiText("taskGroup")}
+          </Label>
+          <Label size={12} line={16}>
+            {group()}
+          </Label>
+        </If>
+      </View>
+    </View>
   );
 }

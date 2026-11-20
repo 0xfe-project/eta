@@ -29,6 +29,7 @@ export function TaskWorkspaceBoard(props: {
   onOpen: (id: string) => void;
 }) {
   const c = colors();
+  const tablet = () => props.layout === "tablet";
   const boardDrag = props.drag;
   const column = (status: BoardTaskStatus) =>
     props.items.filter((task) => task.status === status);
@@ -37,9 +38,10 @@ export function TaskWorkspaceBoard(props: {
       style={{
         ...row,
         ...grow,
-        paddingHorizontal: 22,
+        paddingHorizontal: tablet() ? 14 : 22,
         paddingTop: 12,
-        gap: 9,
+        paddingBottom: tablet() ? 12 : 0,
+        gap: tablet() ? 8 : 9,
         alignItems: "stretch",
       }}
     >
@@ -53,9 +55,14 @@ export function TaskWorkspaceBoard(props: {
               ref={(view) => boardDrag.register(status(), view)}
               style={{
                 flex: folded() ? undefined : 1,
-                width: folded() ? 32 : undefined,
+                width: folded() ? (tablet() ? 28 : 32) : undefined,
+                maxWidth: tablet() && !folded() ? 160 : undefined,
                 minWidth: 0,
-                backgroundColor: folded() ? c().surface : c().canvas,
+                backgroundColor: folded()
+                  ? tablet()
+                    ? c().selected
+                    : c().surface
+                  : c().canvas,
               }}
             >
               <View
@@ -66,50 +73,38 @@ export function TaskWorkspaceBoard(props: {
                   folded()
                     ? {
                         alignItems: "center",
-                        paddingTop: 9,
-                        gap: 7,
+                        paddingTop: tablet() ? 6 : 9,
+                        gap: tablet() ? 8 : 7,
                         cursor: "pointer",
                       }
                     : {
                         ...row,
-                        gap: 7,
-                        height: 25,
-                        paddingTop: 7,
-                        paddingLeft: 2,
+                        gap: tablet() ? 6 : 7,
+                        height: tablet() ? 24 : 25,
+                        paddingTop: tablet() ? 6 : 7,
+                        paddingLeft: tablet() ? 0 : 2,
                         cursor: "pointer",
                       }
                 }
               >
-                <TaskGlyph status={status()} size={12.6} />
+                <TaskGlyph status={status()} size={tablet() ? 12 : 12.6} />
                 <If
                   when={!folded()}
                   else={
                     <>
-                      <View
-                        style={{
-                          width: 16,
-                          height: railLength(statusName(status())),
-                        }}
-                      >
-                        <Label
-                          size={12}
-                          line={16}
-                          tone="muted"
-                          lines={1}
-                          style={{
-                            position: "absolute",
-                            top: railLength(statusName(status())) / 2 - 8,
-                            left: 8 - railLength(statusName(status())) / 2,
-                            width: railLength(statusName(status())),
-                            transform: "rotate(90deg)",
-                          }}
-                        >
-                          {statusName(status())}
+                      <SideLabel
+                        text={
+                          tablet()
+                            ? `${statusName(status())} ${column(status()).length}`
+                            : statusName(status())
+                        }
+                        tone={tablet() ? "mutedInk" : "muted"}
+                      />
+                      <If when={!tablet()}>
+                        <Label size={12} line={16} tone="muted">
+                          {column(status()).length}
                         </Label>
-                      </View>
-                      <Label size={12} line={16} tone="muted">
-                        {column(status()).length}
-                      </Label>
+                      </If>
                     </>
                   }
                 >
@@ -122,12 +117,16 @@ export function TaskWorkspaceBoard(props: {
                 </If>
               </View>
               <If when={!folded()}>
-                <Scroll style={{ ...grow, marginTop: 7 }} scrollbar={false}>
-                  <View style={{ gap: 7 }}>
+                <Scroll
+                  style={{ ...grow, marginTop: tablet() ? 8 : 7 }}
+                  scrollbar={false}
+                >
+                  <View style={{ gap: tablet() ? 8 : 7 }}>
                     <Each of={column(status())} key={(task) => task.id}>
                       {(task) => (
                         <BoardCard
                           task={task()}
+                          layout={props.layout}
                           drag={boardDrag}
                           draggable={
                             props.layout === "desktop" && !task().subtasks
@@ -143,6 +142,30 @@ export function TaskWorkspaceBoard(props: {
           );
         }}
       </Each>
+    </View>
+  );
+}
+
+/** A folded column's name, turned on its side. */
+function SideLabel(props: { text: string; tone: "muted" | "mutedInk" }) {
+  const length = () => railLength(props.text);
+  return (
+    <View style={{ width: 16, height: length() }}>
+      <Label
+        size={12}
+        line={16}
+        tone={props.tone}
+        lines={1}
+        style={{
+          position: "absolute",
+          top: length() / 2 - 8,
+          left: 8 - length() / 2,
+          width: length(),
+          transform: "rotate(90deg)",
+        }}
+      >
+        {props.text}
+      </Label>
     </View>
   );
 }
