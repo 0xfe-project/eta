@@ -8,11 +8,17 @@ import { pluginText as text } from "./labels";
 export interface PluginWarning {
   text: string;
   blocking: boolean;
+  /** The line about agents that enabled the plugin, quieter than the problem it follows. */
+  agents?: boolean;
 }
 
 // Blocking lines keep the plugin from being used; the rest are advisory.
 export function pluginWarnings(item: PluginView): PluginWarning[] {
   const agents = item.agents.map((agent) => agent.name).join(", ");
+  const skipped =
+    item.state === "needs_config" && agents
+      ? uiText("pluginSkipped", { agents })
+      : "";
   const blocking = [
     ...(item.problem ? [item.problem] : []),
     ...item.fields.flatMap((field) =>
@@ -21,9 +27,7 @@ export function pluginWarnings(item: PluginView): PluginWarning[] {
         ? []
         : [uiText("pluginRequiredMissing", { title: field.title })],
     ),
-    ...(item.state === "needs_config" && agents
-      ? [uiText("pluginSkipped", { agents })]
-      : []),
+    ...(skipped ? [skipped] : []),
   ];
   const advisory = [
     ...item.machines.flatMap((machine) =>
@@ -43,12 +47,23 @@ export function pluginWarnings(item: PluginView): PluginWarning[] {
   ];
   const seen = new Set<string>();
   return [
-    ...blocking.map((text) => ({ text, blocking: true })),
+    ...blocking.map((text) => ({
+      text,
+      blocking: true,
+      agents: text === skipped,
+    })),
     ...advisory.map((text) => ({ text, blocking: false })),
   ].filter((warning) => !seen.has(warning.text) && seen.add(warning.text));
 }
 
-function WarningsText(props: { item: PluginView }) {
+// The dialog has two tones; the inline block on a plugin's page sets each kind apart.
+function warningTone(warning: PluginWarning, inline = false) {
+  if (!inline) return warning.blocking ? "ink" : "muted";
+  if (warning.agents) return "muted";
+  return warning.blocking ? "ink" : "mutedInk";
+}
+
+function WarningsText(props: { item: PluginView; inline?: boolean }) {
   const warnings = () => pluginWarnings(props.item);
   return (
     <If
@@ -60,7 +75,7 @@ function WarningsText(props: { item: PluginView }) {
           <Label
             size={12}
             line={16}
-            tone={warning().blocking ? "ink" : "muted"}
+            tone={warningTone(warning(), props.inline)}
           >
             {warning().text}
           </Label>
@@ -140,25 +155,26 @@ export function PluginWarnings(props: {
       <View
         style={{
           ...row,
-          gap: 7,
-          minHeight: 31,
+          gap: 8,
+          height: 32,
           paddingHorizontal: 10,
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
       >
-        <Icon name="info" size={13} />
-        <Label weight={600} size={12}>
+        <Icon name="info" size={14} />
+        <Label weight={600} size={12} line={16}>
           {uiText("warningsFor", { name: props.item.name })}
         </Label>
       </View>
-      <View style={{ padding: 10, gap: 6 }}>
-        <WarningsText item={props.item} />
+      <View style={{ padding: 10, gap: 8 }}>
+        <WarningsText item={props.item} inline />
         <Button
           label={checking() ? uiText("checking") : uiText("checkAgain")}
           disabled={checking()}
           icon="refresh"
-          style={{ alignSelf: "flex-start" }}
+          labelSize={11}
+          style={{ alignSelf: "flex-start", marginTop: 2 }}
           onPress={() => {
             if (checking()) return;
             checking.set(true);

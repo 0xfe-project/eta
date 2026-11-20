@@ -204,7 +204,7 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
         flexWrap: tablet() || phone() ? "nowrap" : "wrap",
         gap: tablet() || phone() ? 8 : 12,
         paddingHorizontal: tablet() ? 14 : phone() ? 16 : 24,
-        paddingTop: tablet() ? 9 : 8,
+        paddingTop: tablet() ? 10 : 8,
         paddingBottom: tablet() ? 10 : 16,
         borderBottomWidth: tablet() ? 1 : 0,
         borderColor: c().border,
@@ -386,24 +386,24 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
                         justifyContent: "center",
                         borderWidth: 1,
                         borderColor: c().border,
-                        backgroundColor: c().surface,
+                        backgroundColor: c().selected,
                       }}
                     >
-                      <Icon name="artifact" size={14} tone="muted" />
+                      <Icon name="artifact" size={16} tone="mutedInk" />
                     </View>
                   </If>
-                  <View style={{ flex: 1, minWidth: 0, gap: tablet() ? 0 : 4 }}>
+                  <View style={{ flex: 1, minWidth: 0, gap: tablet() ? 2 : 4 }}>
                     <Label
                       size={tablet() ? 13 : 14}
-                      line={tablet() ? 19 : 20}
-                      weight={500}
+                      line={tablet() ? 18 : 20}
+                      weight={tablet() ? 400 : 500}
                       lines={1}
                     >
                       {entry().name}
                     </Label>
                     <Label
-                      size={tablet() ? 11 : 12}
-                      line={16}
+                      size={tablet() ? 10 : 12}
+                      line={tablet() ? 14 : 16}
                       tone="muted"
                       lines={tablet() ? 1 : 2}
                       style={{ height: tablet() ? undefined : 32 }}

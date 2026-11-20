@@ -41,6 +41,10 @@ export const pluginsMessages = {
     "Plugins give agents skills and MCP servers, from directories under ~/.eta/plugins/ or from git. One must be configured before it can be enabled. Its configuration is global; each agent chooses which plugins to use.",
     "插件给智能体带来 skill 和 MCP 服务器，来自 ~/.eta/plugins/ 下的目录或 git 仓库。配置好才能启用，配置全局一份，每个智能体选择启用哪些。",
   ],
+  pluginsIntroShort: [
+    "Plugins give agents skills and MCP servers, from ~/.eta/plugins/ or from git. Configuration is global; each agent chooses which plugins to use.",
+    "插件给智能体带来 skill 和 MCP 服务器，来自 ~/.eta/plugins/ 或 git 仓库。配置全局一份，每个智能体选择启用哪些。",
+  ],
   refreshPlugins: ["Refresh plugins", "刷新插件"],
   removeFromThisHost: [
     "Remove {{remove}} from this host?",

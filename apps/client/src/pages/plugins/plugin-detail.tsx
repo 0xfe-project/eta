@@ -50,6 +50,9 @@ interface DetailProps {
   onRefresh: () => Promise<void>;
 }
 
+// A ghost button keeps a transparent frame so it is as wide as a bordered one.
+const ghostFrame = { borderWidth: 1, borderColor: "transparent" };
+
 export function PluginDetail(props: DetailProps) {
   const host = useHost();
   const c = colors();
@@ -86,7 +89,7 @@ export function PluginDetail(props: DetailProps) {
               ...row,
               height: 40,
               flexShrink: 0,
-              gap: 10,
+              gap: 8,
               paddingHorizontal: 14,
               borderBottomWidth: 1,
               borderColor: c().border,
@@ -97,7 +100,7 @@ export function PluginDetail(props: DetailProps) {
               <Label size={14} weight={600} lines={1} style={{ flexShrink: 1 }}>
                 {props.item.name}
               </Label>
-              <Label size={11} tone="muted" lines={1}>
+              <Label size={12} line={16} tone="muted" lines={1}>
                 {props.item.version ?? ""}
               </Label>
               <Status item={props.item} />
@@ -108,12 +111,14 @@ export function PluginDetail(props: DetailProps) {
                 disabled={updating()}
                 tone="ghost"
                 labelSize={11}
+                style={ghostFrame}
                 onPress={update}
               />
               <Button
                 label={uiText("remove2")}
                 tone="ghost"
                 labelSize={11}
+                style={ghostFrame}
                 onPress={props.onRemove}
               />
             </If>
@@ -148,7 +153,7 @@ export function PluginDetail(props: DetailProps) {
       </If>
       <Scroll style={grow} scrollbar={false}>
         <View
-          style={{ padding: props.phone ? 16 : 20, gap: props.phone ? 14 : 16 }}
+          style={{ padding: props.phone ? 16 : 20, gap: props.phone ? 14 : 20 }}
         >
           <If when={props.phone}>
             <View style={{ ...row, gap: 12 }}>
@@ -171,49 +176,56 @@ export function PluginDetail(props: DetailProps) {
               </View>
             </View>
           </If>
-          <If when={props.item.description}>
-            <Label size={13} line={18} tone="mutedInk">
-              {props.item.description}
-            </Label>
+          <If
+            when={
+              props.item.description ||
+              (props.phone && configure()) ||
+              pluginWarnings(props.item).length
+            }
+          >
+            <View style={{ gap: 14 }}>
+              <If when={props.item.description}>
+                <Label size={props.phone ? 13 : 12} line={18} tone="mutedInk">
+                  {props.item.description}
+                </Label>
+              </If>
+              <If when={props.phone && configure()}>
+                <Button
+                  label={uiText("configure")}
+                  tone={needsConfig() ? "primary" : "plain"}
+                  size={40}
+                  onPress={props.onConfigure}
+                />
+              </If>
+              <If when={pluginWarnings(props.item).length}>
+                <PluginWarnings item={props.item} onRefresh={props.onRefresh} />
+              </If>
+            </View>
           </If>
-          <If when={props.phone && configure()}>
-            <Button
-              label={uiText("configure")}
-              tone={needsConfig() ? "primary" : "plain"}
-              size={40}
-              onPress={props.onConfigure}
-            />
-          </If>
-          <If when={pluginWarnings(props.item).length}>
-            <PluginWarnings item={props.item} onRefresh={props.onRefresh} />
-          </If>
-          <View style={{ gap: 4 }}>
+          <View style={{ gap: 6 }}>
             <Caption text={text("source")} />
             <View
               style={{
                 ...row,
                 gap: 8,
-                minHeight: 34,
+                minHeight: props.phone ? 36 : undefined,
                 paddingHorizontal: 10,
-                paddingVertical: 4,
+                paddingVertical: props.phone ? 6 : 8,
                 borderWidth: 1,
                 borderColor: c().border,
               }}
             >
-              <Icon name={git() ? "clip" : "folder"} size={13} tone="muted" />
+              <Icon name={git() ? "clip" : "folder"} size={14} tone="muted" />
               <Label size={12} line={16} style={{ flex: 1, minWidth: 0 }}>
                 {source().label}
               </Label>
-              <Button
-                label={
+              <View
+                role="button"
+                accessibilityLabel={
                   copied() === source().clipboard
                     ? text("sourceCopied")
                     : text("copySource")
                 }
-                icon={copied() === source().clipboard ? "check" : "panel"}
-                iconOnly
-                size={24}
-                tone="ghost"
                 onPress={() => {
                   const value = source().clipboard;
                   void host.action(async () => {
@@ -221,35 +233,57 @@ export function PluginDetail(props: DetailProps) {
                     copied.set(value);
                   });
                 }}
-              />
+                focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+                style={{
+                  // The hit area stays 24px while the drawn glyph is 14px, like the design.
+                  width: 24,
+                  height: 24,
+                  margin: -5,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                }}
+              >
+                <Icon
+                  name={copied() === source().clipboard ? "check" : "panel"}
+                  size={14}
+                  tone="muted"
+                />
+              </View>
             </View>
           </View>
-          <View style={{ gap: 4 }}>
+          <View style={{ gap: 6 }}>
             <Caption text={text("runs")} />
             <View style={{ borderWidth: 1, borderColor: c().border }}>
               <Each of={props.item.servers} key={(server) => server.name}>
                 {(server) => (
                   <View
                     style={{
+                      justifyContent: "center",
                       paddingHorizontal: 10,
-                      paddingVertical: 7,
+                      paddingVertical: 4,
                       minHeight: 36,
                       borderBottomWidth: 1,
                       borderColor: c().border,
-                      gap: 3,
                     }}
                   >
-                    <View style={{ ...row, flexWrap: "wrap", gap: 8 }}>
-                      <Icon name="artifact" size={12} tone="muted" />
-                      <Label size={12} line={17}>
+                    <View
+                      style={{
+                        ...row,
+                        flexWrap: "wrap",
+                        gap: props.phone ? 8 : 10,
+                      }}
+                    >
+                      <Icon name="artifact" size={14} tone="muted" />
+                      <Label size={12} line={16}>
                         {server().name}
                       </Label>
                       <Label
                         size={10}
                         line={14}
-                        tone="muted"
+                        tone="mutedInk"
                         style={{
-                          paddingHorizontal: 4,
+                          paddingHorizontal: 5,
                           borderWidth: 1,
                           borderColor: c().strong,
                         }}
@@ -289,7 +323,7 @@ export function PluginDetail(props: DetailProps) {
             </View>
           </View>
           <If when={reads().length}>
-            <View style={{ gap: 4 }}>
+            <View style={{ gap: 6 }}>
               <Caption text={text("audit")} />
               <View style={{ borderWidth: 1, borderColor: c().border }}>
                 <Each of={reads()} key={(entry) => entry.id}>
@@ -297,7 +331,7 @@ export function PluginDetail(props: DetailProps) {
                     <View
                       style={{
                         ...row,
-                        gap: 8,
+                        gap: props.phone ? 8 : 10,
                         minHeight: 30,
                         paddingHorizontal: 10,
                         borderTopWidth: index() ? 1 : 0,
@@ -305,10 +339,10 @@ export function PluginDetail(props: DetailProps) {
                       }}
                     >
                       <AgentFace id={entry().agentId} size={14} />
-                      <Label size={12} lines={1} style={{ flex: 1 }}>
+                      <Label size={12} line={16} lines={1} style={{ flex: 1 }}>
                         {`${entry().agentName ?? text("deletedAgent")} · ${entry().field}`}
                       </Label>
-                      <Label size={10} tone="muted">
+                      <Label size={10} line={14} tone="muted">
                         {relativeTime(entry().at)}
                       </Label>
                     </View>

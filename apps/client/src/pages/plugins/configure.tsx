@@ -13,7 +13,6 @@ import {
   Field,
   fill,
   grow,
-  Header,
   Label,
   Modal,
   row,
@@ -151,25 +150,52 @@ export function ConfigurePlugin(props: {
     if (result.state === "ready") props.onClose();
   }
   const title = () => uiText("configureWithCount", { name: props.item.name });
+  const compactField = () => ({
+    height: 28,
+    fontSize: 12,
+    lineHeight: 16,
+    borderColor: c().strong,
+    placeholderColor: c().faint,
+  });
   const form = () => (
     <>
-      <Scroll style={grow}>
-        <View style={{ padding: 16, gap: 12 }}>
-          <Label size={12} line={18} tone="muted">
-            {pluginConfigText("fields")}
-          </Label>
+      <Scroll
+        // The tablet dialog fits its fields and scrolls only once it reaches its height cap.
+        style={props.tablet ? { flexShrink: 1, minHeight: 0 } : grow}
+      >
+        <View
+          style={
+            props.tablet
+              ? {
+                  paddingHorizontal: 16,
+                  paddingTop: 4,
+                  paddingBottom: 16,
+                  gap: 16,
+                }
+              : { padding: 16, gap: props.phone ? 12 : 16 }
+          }
+        >
+          <If when={!props.tablet}>
+            <Label size={12} line={18} tone="muted">
+              {pluginConfigText("fields")}
+            </Label>
+          </If>
           <Each of={props.item.fields} key={(field) => field.name}>
             {(field) => {
               const item = () => field();
               const value = () => valueOf(item());
               return (
-                <View style={{ gap: 5 }}>
+                <View style={{ gap: props.phone ? 5 : 6 }}>
                   <If when={item().type !== "boolean"}>
-                    <View style={{ ...row, gap: 5 }}>
-                      <Label size={13} weight={500}>
+                    <View style={{ ...row, gap: props.phone ? 5 : 6 }}>
+                      <Label
+                        size={props.phone ? 13 : 12}
+                        line={props.phone ? undefined : 16}
+                        weight={props.phone ? 500 : 400}
+                      >
                         {item().title}
                       </Label>
-                      <Label size={10} tone="muted">
+                      <Label size={10} line={14} tone="muted">
                         {pluginConfigText(
                           item().required ? "required" : "optional",
                         )}
@@ -189,6 +215,7 @@ export function ConfigurePlugin(props: {
                         else={
                           <Field
                             label={item().title}
+                            style={props.phone ? undefined : compactField()}
                             masked={item().secret}
                             placeholder={
                               item().secret &&
@@ -220,13 +247,27 @@ export function ConfigurePlugin(props: {
                           />
                         }
                       >
-                        <View style={{ ...row, gap: 8 }}>
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <Label size={13} weight={500}>
+                        <View style={{ ...row, gap: props.phone ? 8 : 10 }}>
+                          <View
+                            style={{
+                              flex: 1,
+                              minWidth: 0,
+                              gap: props.phone ? 0 : 2,
+                            }}
+                          >
+                            <Label
+                              size={props.phone ? 13 : 12}
+                              line={props.phone ? undefined : 16}
+                              weight={props.phone ? 500 : 400}
+                            >
                               {item().title}
                             </Label>
                             <If when={item().description}>
-                              <Label size={11} tone="muted">
+                              <Label
+                                size={props.phone ? 11 : 10}
+                                line={props.phone ? undefined : 14}
+                                tone="muted"
+                              >
                                 {item().description}
                               </Label>
                             </If>
@@ -324,8 +365,8 @@ export function ConfigurePlugin(props: {
                     </If>
                   </If>
                   <If when={item().secret}>
-                    <View style={{ ...row, gap: 7 }}>
-                      <Label size={11} tone="muted">
+                    <View style={{ ...row, gap: 8 }}>
+                      <Label size={11} line={16} tone="mutedInk">
                         {pluginConfigText("access")}
                       </Label>
                       <If
@@ -385,7 +426,7 @@ export function ConfigurePlugin(props: {
               );
             }}
           </Each>
-          <Label size={11} tone="muted">
+          <Label size={10} line={14} tone="muted">
             {pluginConfigText("encrypted")}
           </Label>
         </View>
@@ -394,20 +435,23 @@ export function ConfigurePlugin(props: {
         style={{
           ...row,
           justifyContent: "flex-end",
-          padding: 12,
-          gap: 8,
+          paddingVertical: 12,
+          paddingHorizontal: props.phone ? 12 : 16,
+          gap: props.phone ? 8 : 10,
           borderTopWidth: 1,
           borderColor: c().border,
         }}
       >
         <If when={props.item.state === "needs_config"}>
-          <Label size={11} line={15} tone="muted" style={{ flex: 1 }}>
+          <Label size={11} line={16} tone="muted" style={{ flex: 1 }}>
             {pluginConfigText("missing")}
           </Label>
         </If>
         <Button
           label={uiText("save")}
           tone="primary"
+          labelSize={props.phone ? undefined : 11}
+          style={props.phone ? undefined : { paddingHorizontal: 10 }}
           disabled={
             busy() ||
             accessBusy() ||
@@ -448,19 +492,34 @@ export function ConfigurePlugin(props: {
           role="dialog"
           accessibilityLabel={title()}
           style={{
-            width: 578,
+            width: 580,
             maxWidth: "90%",
-            height: 428,
             maxHeight: "92%",
             backgroundColor: c().canvas,
             borderWidth: 1,
-            borderColor: c().border,
+            borderColor: c().strong,
           }}
         >
-          <Header title={title()} dialog inset={16}>
-            <View style={{ flex: 1 }} />
+          <View
+            style={{
+              ...row,
+              alignItems: "flex-start",
+              gap: 12,
+              paddingHorizontal: 16,
+              paddingTop: 16,
+              paddingBottom: 12,
+            }}
+          >
+            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+              <Label size={14} line={20} weight={600}>
+                {title()}
+              </Label>
+              <Label size={12} line={16} tone="muted">
+                {pluginConfigText("fields")}
+              </Label>
+            </View>
             <CloseButton onPress={props.onClose} />
-          </Header>
+          </View>
           {form()}
         </View>
       </Dialog>

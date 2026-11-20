@@ -99,13 +99,12 @@ export function PluginTablet(props: {
           style={{
             borderTopWidth: 1,
             borderColor: c().border,
-            minHeight: 66,
             paddingHorizontal: 14,
-            paddingVertical: 11,
+            paddingVertical: 12,
           }}
         >
           <Label size={10} line={14} tone="muted">
-            {uiText("pluginsGiveAgentsSkillsAndMcp")}
+            {uiText("pluginsIntroShort")}
           </Label>
         </View>
       </View>

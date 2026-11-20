@@ -16,11 +16,11 @@ const pluginConfigCopy = {
   file: ["File", "文件"],
   value: ["Value", "值"],
   encrypted: [
-    "The configuration is stored encrypted on the Host, and secrets are not shown again.",
-    "配置在 Host 上加密保存，密钥不会再次显示。",
+    "The configuration is stored encrypted on the host, and secrets are not shown again.",
+    "配置在主机上加密保存，密钥不会再次显示。",
   ],
   missing: [
-    "Something required is missing; it will still need configuring.",
+    "Something required is missing: it will still need configuring.",
     "仍有必填项缺失，插件还需要配置。",
   ],
   blank: ["Select a value", "请选择"],
@@ -62,7 +62,7 @@ export function PluginSelect(props: {
         <View
           style={{
             ...row,
-            gap: 8,
+            gap: props.compact ? 6 : 8,
             minHeight: props.compact ? 24 : 28,
             paddingHorizontal: 8,
             borderWidth: 1,
@@ -75,7 +75,7 @@ export function PluginSelect(props: {
             {props.items.find((item) => item.value === props.value)?.title ??
               pluginConfigText("blank")}
           </Label>
-          <Icon name="down" size={9} tone="muted" />
+          <Icon name="down" size={12} tone="muted" />
         </View>
       }
       onChange={({ value }) => {

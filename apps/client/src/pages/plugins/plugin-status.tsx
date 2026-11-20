@@ -33,12 +33,13 @@ export function Status(props: { item: PluginView; phone?: boolean }) {
   return (
     <Label
       size={10}
-      line={16}
+      line={14}
       lines={1}
       tone={missing() ? "amber" : "muted"}
       style={{
         alignSelf: props.phone ? "flex-start" : "center",
         paddingHorizontal: missing() ? 6 : 0,
+        paddingVertical: 1,
         borderWidth: missing() ? 1 : 0,
         borderColor: c().amber,
       }}

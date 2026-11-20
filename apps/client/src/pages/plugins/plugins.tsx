@@ -61,66 +61,52 @@ export function Plugins(props: { layout: Layout }) {
         style={{
           ...row,
           paddingHorizontal: tablet ? 14 : phone() ? 16 : 24,
-          paddingTop: tablet ? 6 : 16,
-          paddingBottom: tablet ? 5 : 8,
+          height: tablet ? 40 : undefined,
+          paddingTop: tablet ? 0 : 16,
+          paddingBottom: tablet ? 0 : 8,
           flexShrink: 0,
           borderBottomWidth: tablet ? 1 : 0,
           borderColor: c().border,
         }}
       >
-        <If
-          when={tablet}
-          else={
-            <View
-              style={{
-                ...row,
-                alignItems: "stretch",
-                height: 28,
-                borderWidth: 1,
-                borderColor: c().strong,
-                backgroundColor: c().canvas,
-              }}
-            >
-              <Each of={items}>
-                {(item) => (
-                  <View
-                    role="button"
-                    accessibilityLabel={label(item())}
-                    accessibilityState={{ selected: tab() === item() }}
-                    onPress={() => tab.set(item())}
-                    style={{
-                      justifyContent: "center",
-                      paddingHorizontal: 12,
-                      backgroundColor:
-                        tab() === item() ? c().button : undefined,
-                      cursor: "pointer",
-                    }}
-                  >
-                    <Label
-                      size={12}
-                      line={16}
-                      tone={tab() === item() ? "buttonInk" : "muted"}
-                    >
-                      {label(item())}
-                    </Label>
-                  </View>
-                )}
-              </Each>
-            </View>
-          }
+        <View
+          style={{
+            ...row,
+            alignItems: "stretch",
+            flex: tablet ? 1 : undefined,
+            height: 28,
+            borderWidth: 1,
+            borderColor: c().strong,
+            backgroundColor: c().canvas,
+          }}
         >
           <Each of={items}>
             {(item) => (
-              <Button
-                label={label(item())}
-                size={28}
-                tone={tab() === item() ? "primary" : "plain"}
-                style={{ flex: 1 }}
+              <View
+                role="button"
+                accessibilityLabel={label(item())}
+                accessibilityState={{ selected: tab() === item() }}
                 onPress={() => tab.set(item())}
-              />
+                style={{
+                  flex: tablet ? 1 : undefined,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  paddingHorizontal: 12,
+                  backgroundColor: tab() === item() ? c().button : undefined,
+                  cursor: "pointer",
+                }}
+              >
+                <Label
+                  size={12}
+                  line={16}
+                  tone={tab() === item() ? "buttonInk" : "muted"}
+                >
+                  {label(item())}
+                </Label>
+              </View>
             )}
           </Each>
-        </If>
+        </View>
       </View>
     );
   }
