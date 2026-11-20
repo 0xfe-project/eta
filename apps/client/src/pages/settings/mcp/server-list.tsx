@@ -66,6 +66,9 @@ export function McpSettings(props: { layout: Layout; onBack: () => void }) {
             else={
               <Empty
                 title={uiText("noMcpServersConfigured")}
+                titleLine={20}
+                descriptionLine={16}
+                descriptionWidth={320}
                 style={emptyStyle}
               />
             }

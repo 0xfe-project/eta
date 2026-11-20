@@ -137,7 +137,15 @@ export function ArchiveSettings(props: { phone?: boolean }) {
       />
       <If
         when={conversations().length + tasks().length}
-        else={<Empty title={uiText("nothingArchived")} style={emptyStyle} />}
+        else={
+          <Empty
+            title={uiText("nothingArchived")}
+            titleLine={20}
+            descriptionLine={16}
+            descriptionWidth={320}
+            style={emptyStyle}
+          />
+        }
       >
         <Scroll style={grow} scrollbar={false}>
           <Each

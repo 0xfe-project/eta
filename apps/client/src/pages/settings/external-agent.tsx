@@ -85,7 +85,7 @@ export function ExternalAgentDetail(props: {
             borderColor: c().border,
           }}
         >
-          <BackButton size={40} onPress={props.onClose} />
+          <BackButton size={40} iconSize={16} onPress={props.onClose} />
           <View style={{ ...row, flex: 1, minWidth: 0, gap: 4 }}>
             <LetterBox name={props.agent.label} />
             <Label line={20} weight={600} lines={1} style={{ flex: 1 }}>

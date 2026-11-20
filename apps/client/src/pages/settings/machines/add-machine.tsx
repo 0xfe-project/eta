@@ -13,6 +13,7 @@ import {
 } from "../../../components";
 import { formatLocale, uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { PaneBack } from "../section";
 
 export function AddMachine(props: { phone: boolean; onClose: () => void }) {
   const host = useHost();
@@ -240,15 +241,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
             }}
           >
             <View style={{ ...row, gap: 10, height: 22 }}>
-              <Button
-                label={uiText("machineBack")}
-                icon="back"
-                tone="ghost"
-                iconOnly
-                size={16}
-                style={{ paddingHorizontal: 0 }}
-                onPress={props.onClose}
-              />
+              <PaneBack label={uiText("machineBack")} onPress={props.onClose} />
               <Label size={14} line={20} weight={600}>
                 {title()}
               </Label>

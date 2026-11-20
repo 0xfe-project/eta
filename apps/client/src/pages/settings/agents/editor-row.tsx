@@ -1,4 +1,4 @@
-import type { JSX } from "nsh";
+import type { JSX, ViewRef } from "nsh";
 import { View } from "nsh";
 import { colors, Label, row } from "../../../components";
 
@@ -14,7 +14,7 @@ export function EditorRow(props: {
   return (
     <View
       style={{
-        ...(props.stack ? { gap: props.phone ? 8 : 4 } : row),
+        ...(props.stack ? { gap: props.phone ? 8 : 6 } : row),
         minHeight: props.stack ? undefined : 40,
         paddingHorizontal: props.stack && !props.phone ? 0 : 16,
         paddingVertical: props.stack && !props.phone ? 0 : 8,
@@ -25,8 +25,8 @@ export function EditorRow(props: {
     >
       <View style={props.stack ? undefined : { flex: 1, minWidth: 0, gap: 2 }}>
         <Label
-          size={props.stack && !props.phone ? 11 : 14}
-          line={props.stack && !props.phone ? undefined : 20}
+          size={props.stack && !props.phone ? 10 : 14}
+          line={props.stack && !props.phone ? 12 : 20}
         >
           {props.label}
         </Label>
@@ -43,4 +43,9 @@ export function EditorRow(props: {
       <If when={props.stack}>{props.hint}</If>
     </View>
   );
+}
+
+/** The creator opens each step with its first field focused, as the design draws it. */
+export function focusOnOpen(node: ViewRef) {
+  setTimeout(() => node.focus(), 50);
 }

@@ -1,11 +1,12 @@
 import type { ThinkingLevel } from "@eta/client-contracts";
 import type { AgentForm } from "./form";
 import { View } from "nsh";
-import { ActionItem, ActionMenu, Field, Label } from "../../../components";
+import { ActionItem, ActionMenu, Field, Label, row } from "../../../components";
 import { ModelSelect } from "../../../components/model-select";
 import { localizedText, uiText } from "../../../i18n";
+import { WarningLine } from "../section";
 
-import { EditorRow } from "./editor-row";
+import { EditorRow, focusOnOpen } from "./editor-row";
 import { PersonaField } from "./instructions";
 import { MachineField } from "./machine-field";
 
@@ -43,42 +44,80 @@ export function AgentGeneral(props: {
     missingModel,
     noModels,
   } = props.form;
+  const goToModelServices = (
+    size: number,
+    line: number,
+    tone: "ink" | "mutedInk",
+  ) => (
+    <View
+      role="link"
+      accessibilityLabel={localizedText("Go to model services", "前往模型服务")}
+      onPress={props.onModelServices}
+      style={{ cursor: "pointer" }}
+    >
+      <Label
+        size={size}
+        line={line}
+        tone={tone}
+        style={
+          tone === "mutedInk" ? { textDecorationLine: "underline" } : undefined
+        }
+      >
+        {localizedText("Go to model services", "前往模型服务")}
+      </Label>
+    </View>
+  );
   function modelWarning() {
     return (
       <If when={missingModel() || noModels()}>
-        <View style={{ alignItems: "flex-start", gap: 2 }}>
-          <Label size={12} line={16} tone={missingModel() ? "amber" : "muted"}>
-            {missingModel()
-              ? localizedText(
+        <If
+          when={!creating}
+          else={
+            // The creator's hint is one 10px line: the muted reason, then the link in ink.
+            <View style={{ ...row, flexWrap: "wrap", columnGap: 6 }}>
+              <Label size={10} line={12} tone="muted">
+                {missingModel()
+                  ? localizedText(
+                      "This model is no longer available. Choose another one.",
+                      "该模型已不可用，请选择其他模型。",
+                    )
+                  : localizedText("No models available.", "暂无可用模型。")}
+              </Label>
+              {goToModelServices(10, 12, "ink")}
+            </View>
+          }
+        >
+          <View style={{ alignItems: "flex-start", gap: 2 }}>
+            <If
+              when={missingModel()}
+              else={
+                <Label size={12} line={16} tone="muted">
+                  {localizedText("No models available.", "暂无可用模型。")}
+                </Label>
+              }
+            >
+              <WarningLine
+                outline
+                text={localizedText(
                   "This model is no longer available. Choose another one.",
                   "该模型已不可用，请选择其他模型。",
-                )
-              : localizedText("No models available.", "暂无可用模型。")}
-          </Label>
-          <View
-            role="link"
-            accessibilityLabel={localizedText(
-              "Go to model services",
-              "前往模型服务",
-            )}
-            onPress={props.onModelServices}
-            style={{ cursor: "pointer" }}
-          >
-            <Label
-              size={12}
-              line={16}
-              tone="mutedInk"
-              style={{ textDecorationLine: "underline" }}
-            >
-              {localizedText("Go to model services", "前往模型服务")}
-            </Label>
+                )}
+              />
+            </If>
+            {goToModelServices(12, 16, "mutedInk")}
           </View>
-        </View>
+        </If>
       </If>
     );
   }
   return (
-    <View style={creating ? { padding: 14, gap: 12 } : undefined}>
+    <View
+      style={
+        creating
+          ? { paddingVertical: 16, paddingHorizontal: 14, gap: 16 }
+          : undefined
+      }
+    >
       <EditorRow
         label={uiText("name")}
         stack={stacked()}
@@ -95,6 +134,7 @@ export function AgentGeneral(props: {
               : undefined
           }
           maxLength={agentNameLimit}
+          inputRef={creating ? focusOnOpen : undefined}
           style={fieldStyle()}
         />
       </EditorRow>

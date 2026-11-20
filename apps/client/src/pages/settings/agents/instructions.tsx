@@ -12,7 +12,7 @@ import { formatLocale, localizedText, uiText } from "../../../i18n";
 
 import { useHost } from "../../../services/host";
 import { SectionHeader } from "../section";
-import { EditorRow } from "./editor-row";
+import { EditorRow, focusOnOpen } from "./editor-row";
 
 const agentInstructionsLimit = 10_000;
 export function PersonaField(props: { form: AgentForm }) {
@@ -168,12 +168,14 @@ export function AgentInstructions(props: { form: AgentForm }) {
         </If>
       }
     >
-      <View style={{ padding: 14, gap: 12 }}>
+      <View style={{ paddingVertical: 16, paddingHorizontal: 14, gap: 16 }}>
         <View style={{ gap: 6 }}>
           <View style={{ ...row, justifyContent: "space-between" }}>
-            <Label size={12}>{uiText("instructions")}</Label>
+            <Label size={10} line={12}>
+              {uiText("instructions")}
+            </Label>
             <If when={instructions().length}>
-              <Label size={10} tone="muted">
+              <Label size={10} line={12} tone="muted">
                 {count()}
               </Label>
             </If>
@@ -182,11 +184,12 @@ export function AgentInstructions(props: { form: AgentForm }) {
             label={uiText("instructions")}
             multiline
             maxLength={limit()}
-            style={{ height: 200, fontSize: 12, lineHeight: 19, padding: 10 }}
+            inputRef={focusOnOpen}
+            style={{ height: 192, fontSize: 10, lineHeight: 16, padding: 9 }}
             value={instructions()}
             onChange={instructions.set}
           />
-          <Label size={10} line={15} tone="muted">
+          <Label size={10} line={14} tone="muted">
             {instructionsHelp()}
           </Label>
         </View>

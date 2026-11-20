@@ -70,7 +70,15 @@ export function AgentPlugins(props: { form: AgentForm }) {
       </If>
       <If
         when={activePlugins().length}
-        else={<Empty title={uiText("noPluginsInstalled")} style={emptyStyle} />}
+        else={
+          <Empty
+            title={uiText("noPluginsInstalled")}
+            titleLine={20}
+            descriptionLine={16}
+            descriptionWidth={320}
+            style={emptyStyle}
+          />
+        }
       >
         <Each of={activePlugins()} key={(item) => item.name}>
           {(item) => {

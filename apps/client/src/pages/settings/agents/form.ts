@@ -47,6 +47,8 @@ export function createAgentForm(props: AgentEditorProps) {
     height: controlHeight(),
     ...(compact() ? { paddingLeft: 10, paddingRight: 8 } : {}),
     ...(phoneEditor() ? { paddingHorizontal: 12 } : {}),
+    // The creator's selects take the input token's border, like its fields.
+    ...(creating ? { borderColor: c().border } : {}),
   });
   const fieldStyle = () => ({
     height: controlHeight(),

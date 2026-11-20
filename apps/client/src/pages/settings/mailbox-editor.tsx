@@ -18,11 +18,10 @@ import {
   Label,
   row,
 } from "../../components";
-import { BackButton } from "../../components/navigation-buttons";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-import { SectionHeader } from "./section";
+import { PaneBack, SectionHeader } from "./section";
 
 const providers = {
   Gmail: ["imap.gmail.com", "smtp.gmail.com", 465],
@@ -234,13 +233,7 @@ export function MailboxEditor(props: {
           <SectionHeader
             title={account()?.name ?? uiText("connectMailbox")}
             description={uiText("mailCheckExplanation")}
-            leading={
-              <BackButton
-                disabled={busy()}
-                style={{ marginLeft: -6 }}
-                onPress={props.onClose}
-              />
-            }
+            leading={<PaneBack disabled={busy()} onPress={props.onClose} />}
           />
         }
       >
@@ -248,7 +241,7 @@ export function MailboxEditor(props: {
           title={account()?.name ?? uiText("connectMailbox")}
           layout={props.layout}
           onBack={busy() ? undefined : props.onClose}
-          inset={12}
+          backIconSize={16}
         />
       </If>
       <Scroll style={grow} scrollbar={false}>

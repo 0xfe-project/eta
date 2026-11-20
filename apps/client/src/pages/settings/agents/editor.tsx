@@ -5,7 +5,6 @@ import {
   BackButton,
   CloseButton,
 } from "../../../components/navigation-buttons";
-import { StatusDot } from "../../../components/status-dot";
 import { localizedText, uiText } from "../../../i18n";
 
 import { LetterBox } from "../section";
@@ -58,7 +57,7 @@ export function AgentEditor(props: AgentEditorProps) {
           </Label>
           <Button
             label={localizedText("Delete", "删除")}
-            icon="archive"
+            icon="trash"
             disabled={busy()}
             size={props.phone ? 28 : undefined}
             style={{ gap: 6, paddingHorizontal: 10 }}
@@ -83,13 +82,11 @@ export function AgentEditor(props: AgentEditorProps) {
             ? "100%"
             : "90%"
           : creating
-            ? props.tablet
-              ? 600
-              : 480
+            ? undefined
             : 520
       }
       modalFocus
-      blurBackdrop={creating}
+      blurBackdrop={creating && !props.tablet}
       hideHeader
       dismissible={!busy()}
       onClose={close}
@@ -97,15 +94,21 @@ export function AgentEditor(props: AgentEditorProps) {
       <View
         style={{
           ...row,
-          minHeight: phoneEditor() ? 48 : creating ? 44 : 40,
+          minHeight: phoneEditor() ? 48 : creating ? 46 : 40,
           gap: phoneEditor() ? 4 : 10,
-          paddingHorizontal: phoneEditor() ? 8 : 11,
+          paddingLeft: phoneEditor() ? 8 : creating ? 10 : 11,
+          paddingRight: phoneEditor() ? 8 : creating ? 9 : 11,
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
       >
         <If when={phoneEditor()}>
-          <BackButton disabled={busy()} size={40} onPress={close} />
+          <BackButton
+            disabled={busy()}
+            size={40}
+            iconSize={16}
+            onPress={close}
+          />
         </If>
         <View
           style={{ ...row, flex: 1, minWidth: 0, gap: phoneEditor() ? 8 : 10 }}
@@ -116,7 +119,12 @@ export function AgentEditor(props: AgentEditorProps) {
           <If
             when={phoneEditor()}
             else={
-              <Label size={16} line={22} style={{ flex: 1 }} weight={500}>
+              <Label
+                size={creating ? 14 : 16}
+                line={creating ? 18 : 22}
+                style={{ flex: 1 }}
+                weight={500}
+              >
                 {title()}
               </Label>
             }
@@ -130,7 +138,13 @@ export function AgentEditor(props: AgentEditorProps) {
           when={!phoneEditor()}
           else={<View style={{ width: 40, height: 40, flexShrink: 0 }} />}
         >
-          <CloseButton disabled={busy()} onPress={close} />
+          <CloseButton
+            disabled={busy()}
+            size={creating ? 24 : 16}
+            iconSize={creating ? 14 : 16}
+            style={creating ? undefined : { paddingHorizontal: 0 }}
+            onPress={close}
+          />
         </If>
       </View>
       <If
@@ -233,38 +247,60 @@ export function AgentEditor(props: AgentEditorProps) {
         <View
           style={{
             ...row,
-            minHeight: 40,
-            gap: 10,
+            height: 40,
+            flexShrink: 0,
+            gap: 12,
             paddingHorizontal: 14,
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
-          <Label size={10} tone="muted">{`${step()}/2`}</Label>
-          <Label size={12} weight={600} style={{ flex: 1 }}>
-            {step() === 1
-              ? localizedText("Name and model", "名称与模型")
-              : uiText("instructions")}
-          </Label>
-          <Label size={11} tone="muted">
+          <View style={{ ...row, gap: 8 }}>
+            <Label
+              size={10}
+              line={12}
+              tone="muted"
+              style={{ letterSpacing: 0.8 }}
+            >{`${step()}/2`}</Label>
+            <Label size={12} line={16} weight={600}>
+              {step() === 1
+                ? localizedText("Name and model", "名称与模型")
+                : uiText("instructions")}
+            </Label>
+          </View>
+          <Label
+            size={12}
+            line={16}
+            tone="muted"
+            style={{ flex: 1, textAlign: "right" }}
+          >
             {step() === 1
               ? localizedText("Next: Instructions", "下一步：指令")
               : uiText("lastStep")}
           </Label>
           <View style={{ ...row, gap: 4 }}>
-            <StatusDot color={step() === 1 ? c().ink : c().faint} size={7} />
             <View
               style={{
-                width: 7,
-                height: 7,
-                borderWidth: 1,
-                borderColor: c().border,
-                backgroundColor: step() === 2 ? c().ink : c().canvas,
+                width: 8,
+                height: 8,
+                backgroundColor: step() === 1 ? c().ink : c().faint,
+              }}
+            />
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                borderWidth: step() === 2 ? 0 : 1,
+                borderColor: c().strong,
+                backgroundColor: step() === 2 ? c().ink : undefined,
               }}
             />
           </View>
         </View>
-        <Scroll style={grow} scrollbar={false}>
+        <Scroll
+          style={props.phone ? grow : { flexShrink: 1 }}
+          scrollbar={false}
+        >
           <If when={step() === 1} else={<AgentInstructions form={form} />}>
             <AgentGeneral form={form} onModelServices={props.onModelServices} />
           </If>
@@ -275,9 +311,9 @@ export function AgentEditor(props: AgentEditorProps) {
           ...row,
           paddingHorizontal: phoneEditor() || !creating ? 16 : 14,
           paddingVertical: phoneEditor() ? 8 : creating ? undefined : 12,
-          minHeight: creating && !phoneEditor() ? 50 : undefined,
+          minHeight: creating && !phoneEditor() ? 52 : undefined,
           justifyContent: "flex-end",
-          gap: 8,
+          gap: creating && !phoneEditor() ? 16 : 8,
           borderTopWidth: 1,
           borderColor: c().border,
         }}

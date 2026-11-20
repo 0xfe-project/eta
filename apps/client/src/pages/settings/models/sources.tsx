@@ -11,10 +11,12 @@ import {
   colors,
   Field,
   grow,
+  Header,
   Label,
   Modal,
   row,
 } from "../../../components";
+import { CloseButton } from "../../../components/navigation-buttons";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { EntityRow, LetterBox, SectionHeader } from "../section";
@@ -122,15 +124,36 @@ export function ModelSources(props: {
     <Modal
       title={uiText("addModelSource")}
       width={576}
-      height={props.phone ? 712 : login() ? 360 : 600}
+      height={props.phone ? 712 : login() ? 360 : undefined}
       phone={props.phone}
       sheet={props.phone}
+      hideHeader={!props.phone}
       overPhoneNavigation
       blurBackdrop={false}
       dismissible={!busy()}
       onClose={close}
     >
-      <Scroll style={grow}>
+      <If when={!props.phone}>
+        {/* The design's dialog header: 16/500/24 title at 16, a bare 16px X ending 12 from the edge. */}
+        <Header
+          title={uiText("addModelSource")}
+          layout="desktop"
+          dialog
+          inset={16}
+          end={12}
+          titleLine={24}
+        >
+          <View style={grow} />
+          <CloseButton
+            size={16}
+            iconSize={16}
+            style={{ paddingHorizontal: 0 }}
+            disabled={busy()}
+            onPress={close}
+          />
+        </Header>
+      </If>
+      <Scroll style={props.phone || login() ? grow : { flexShrink: 1 }}>
         <View style={login() ? { padding: 16, gap: 8 } : undefined}>
           <If
             when={login()}

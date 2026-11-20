@@ -1,7 +1,8 @@
 import type { JSX, ViewStyle } from "nsh";
-import { View } from "nsh";
-import { ActionMenu, colors, Icon, Label, row } from "../../components";
+import { View, windowSize } from "nsh";
+import { ActionMenu, Button, colors, Icon, Label, row } from "../../components";
 import { StatusDot } from "../../components/status-dot";
+import { uiText } from "../../i18n";
 
 /** An empty pane says so right under its header, not in the middle of the pane. */
 export const emptyStyle: ViewStyle = {
@@ -125,11 +126,57 @@ export function StatusLine(props: { status: EntityStatus }) {
 }
 
 /** A 12px warning line under an entity's name. */
-export function WarningLine(props: { text: string }) {
+/**
+ * The back arrow before a pane's title: a bare 16px ArrowLeft in muted ink in the dialog, a 14px
+ * one in ink on the tablet page (the app's tablet range, as in components/modal.tsx).
+ */
+export function PaneBack(props: {
+  label?: string;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  const tablet = () => windowSize().width < 1200;
   return (
-    <Label size={12} line={16} tone="amber">
-      {props.text}
-    </Label>
+    <Button
+      label={props.label ?? uiText("back")}
+      icon="arrowLeft"
+      iconOnly
+      tone="ghost"
+      iconSize={tablet() ? 14 : 16}
+      labelTone={tablet() ? "ink" : "mutedInk"}
+      size={16}
+      disabled={props.disabled}
+      style={{ paddingHorizontal: 0 }}
+      onPress={props.onPress}
+    />
+  );
+}
+
+/**
+ * An amber line with the design's 12px Warning mark before it: solid in list rows, the outline
+ * where the design draws one (an external agent's sign-in, the editor's missing model).
+ */
+export function WarningLine(props: { text: string; outline?: boolean }) {
+  return (
+    <View
+      style={{ ...row, alignSelf: "stretch", gap: 6, alignItems: "flex-start" }}
+    >
+      <View style={{ height: 16, justifyContent: "center" }}>
+        <Icon
+          name={props.outline ? "warning" : "warningFill"}
+          size={12}
+          tone="warning"
+        />
+      </View>
+      <Label
+        size={12}
+        line={16}
+        tone="warningInk"
+        style={{ flex: 1, minWidth: 0 }}
+      >
+        {props.text}
+      </Label>
+    </View>
   );
 }
 

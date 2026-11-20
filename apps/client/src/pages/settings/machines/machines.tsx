@@ -215,6 +215,7 @@ export function Machines(props: {
             title={text("settings")}
             layout="phone"
             onBack={props.onBack}
+            backIconSize={16}
           />
         </If>
         <SectionHeader

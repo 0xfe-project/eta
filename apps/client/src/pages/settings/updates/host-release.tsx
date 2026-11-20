@@ -131,17 +131,16 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
         }}
       >
         <If when={!props.phone}>
-          <View style={{ width: 24, alignItems: "center", paddingTop: 5 }}>
-            <View
-              style={{
-                borderWidth: 1,
-                borderColor: c().muted,
-                borderRadius: 7,
-                padding: 1,
-              }}
-            >
-              <Icon name="arrowUp" tone="muted" size={8} />
-            </View>
+          <View
+            style={{
+              width: 24,
+              height: 24,
+              flexShrink: 0,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Icon name="arrowCircleUp" tone="muted" size={16} />
           </View>
         </If>
         <View style={{ flex: 1, minWidth: 0, gap: 1 }}>

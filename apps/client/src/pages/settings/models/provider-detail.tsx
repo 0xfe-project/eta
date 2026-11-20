@@ -16,12 +16,11 @@ import {
   Modal,
   row,
 } from "../../../components";
-import { BackButton } from "../../../components/navigation-buttons";
 import { StatusDot } from "../../../components/status-dot";
 import { ToggleSwitch } from "../../../components/toggle-switch";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
-import { SectionHeader, WarningLine } from "../section";
+import { PaneBack, SectionHeader, WarningLine } from "../section";
 import { ProviderEditor } from "./provider-editor";
 
 export function ProviderDetail(props: {
@@ -153,9 +152,7 @@ export function ProviderDetail(props: {
     <View style={grow}>
       <SectionHeader
         title={provider() ? providerLabel(provider()!) : props.id}
-        leading={
-          <BackButton style={{ marginLeft: -6 }} onPress={props.onClose} />
-        }
+        leading={<PaneBack onPress={props.onClose} />}
       >
         <If when={check()}>
           <View style={{ ...row, gap: 6 }}>

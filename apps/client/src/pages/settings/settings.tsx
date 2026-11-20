@@ -19,6 +19,7 @@ import {
   Modal,
   row,
 } from "../../components";
+import { CloseButton } from "../../components/navigation-buttons";
 import { uiText, useText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { AgentEditor } from "./agents/editor";
@@ -78,7 +79,15 @@ export function Settings(
         item.machineId === selected?.machineId && item.agent.id === selected.id,
     );
   };
-  const info = (text: string) => <Empty title={text} style={emptyStyle} />;
+  const info = (text: string) => (
+    <Empty
+      title={text}
+      titleLine={20}
+      descriptionLine={16}
+      descriptionWidth={320}
+      style={emptyStyle}
+    />
+  );
   const { count: sourceCount } = useModelSources();
   const acpLists = () =>
     host.section<Record<string, AcpMachineList>>("acp", "machines") ?? {};
@@ -106,10 +115,11 @@ export function Settings(
     name === "MCP servers" ||
     (name === "Email" && !!mailbox()) ||
     !!showingProvider();
-  /** The phone draws the section header's buttons 28px tall. */
-  const actionSize = () => (phone() ? 28 : undefined);
+  /** The phone and the tablet page draw the section header's row and buttons 28px tall. */
+  const tall = () => phone() || props.layout === "tablet";
+  const actionSize = () => (tall() ? 28 : undefined);
   const actionStyle = () =>
-    phone() ? { paddingHorizontal: 10, gap: 6 } : undefined;
+    tall() ? { paddingHorizontal: 10, gap: 6 } : undefined;
   const actions = (name: SettingsSection) => (
     <>
       <If when={name === "Agents"}>
@@ -163,7 +173,7 @@ export function Settings(
                   title={text("settings")}
                   layout={props.layout}
                   onBack={() => section.set(undefined)}
-                  inset={current() === "Update" ? 16 : 8}
+                  backIconSize={16}
                 />
               </If>
               <If
@@ -177,7 +187,7 @@ export function Settings(
                   title={sectionTitle(current())}
                   count={sectionCount(current())}
                   description={sectionHint(current())}
-                  phone={phone()}
+                  phone={tall()}
                 >
                   {actions(current())}
                 </SectionHeader>
@@ -211,6 +221,11 @@ export function Settings(
                         <Empty
                           title={uiText("noModelSources")}
                           description={uiText("noModelSourcesHint")}
+                          icon="powerPlug"
+                          iconSize={24}
+                          titleLine={20}
+                          descriptionLine={16}
+                          descriptionWidth={320}
                           style={emptyStyle}
                         >
                           <Button
@@ -260,6 +275,11 @@ export function Settings(
                     <Empty
                       title={uiText("settingsNoExternalAgents")}
                       description={uiText("settingsNoExternalAgentsHint")}
+                      icon="terminal"
+                      iconSize={24}
+                      titleLine={20}
+                      descriptionLine={16}
+                      descriptionWidth={320}
                       style={emptyStyle}
                     />
                   }
@@ -425,8 +445,21 @@ export function Settings(
           <Header
             title={text("settings")}
             layout="tablet"
-            onBack={props.onClose}
-            inset={12}
+            background="canvas"
+            inset={16}
+            titleLine={18}
+            leading={
+              <Button
+                label={text("back")}
+                icon="arrowLeft"
+                iconOnly
+                tone="ghost"
+                iconSize={14}
+                size={14}
+                style={{ paddingHorizontal: 0 }}
+                onPress={props.onClose}
+              />
+            }
           />
           {content()}
         </View>
@@ -436,12 +469,42 @@ export function Settings(
         title={text("settings")}
         phone={phone()}
         phonePage={phone()}
-        hideHeader={phone() && section() !== undefined}
+        hideHeader
         width={770}
         height={phone() ? "100%" : 578}
         modalFocus
         onClose={props.onClose}
       >
+        <If
+          when={!phone()}
+          else={
+            <If when={!section()}>
+              <Header
+                title={text("settings")}
+                layout="phone"
+                onBack={props.onClose}
+                backIconSize={16}
+              />
+            </If>
+          }
+        >
+          {/* The design's header: title at 11, a bare 16px X ending 11 from the edge. */}
+          <Header
+            title={text("settings")}
+            layout="desktop"
+            dialog
+            inset={11}
+            end={11}
+          >
+            <View style={grow} />
+            <CloseButton
+              size={16}
+              iconSize={16}
+              style={{ paddingHorizontal: 0 }}
+              onPress={props.onClose}
+            />
+          </Header>
+        </If>
         {content()}
       </Modal>
     </If>

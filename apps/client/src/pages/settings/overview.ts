@@ -14,15 +14,15 @@ import { formatLocale, uiText, useText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 
 export const sections = [
-  ["Agents", "context", "agents"],
-  ["Model services", "plugins", "modelServices"],
+  ["Agents", "robot", "agents"],
+  ["Model services", "plugsConnected", "modelServices"],
   ["Machines", "monitor", "machines"],
-  ["MCP servers", "plugins", "mcpServers"],
-  ["External agents", "context", "externalAgents"],
+  ["MCP servers", "plug", "mcpServers"],
+  ["External agents", "terminal", "externalAgents"],
   ["Email", "email", "email"],
   ["Archived", "archive", "archived"],
-  ["Appearance", "settings", "appearance"],
-  ["Update", "arrowUp", "update"],
+  ["Appearance", "palette", "appearance"],
+  ["Update", "arrowCircleUp", "update"],
 ] as const satisfies readonly (readonly [string, IconName, Message])[];
 
 export type SettingsSection = (typeof sections)[number][0];

@@ -104,6 +104,7 @@ export function ExternalAgentList(props: {
                     </Label>
                     <If when={agent().status === "unauthenticated"}>
                       <WarningLine
+                        outline
                         text={uiText("signInToOnThenChoose", {
                           label: agent().label,
                           machineName: group().name,
