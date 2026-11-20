@@ -66,6 +66,17 @@ export function Markdown(props: {
   compactHeadings?: boolean;
   /** 12/16 text with 16/22 headings, for a narrow panel. */
   dense?: boolean;
+  /** The body size, such as 12 (with `line` 16) in a task's description. */
+  size?: number;
+  /** Compact headings (with `compactHeadings` or `dense`): size, line,
+   * weight and the space above and below, such as 13/16/600 with 6 above. */
+  heading?: {
+    size?: number;
+    line?: number;
+    weight?: number;
+    space?: number;
+    after?: number;
+  };
 }) {
   const c = colors();
   const fonts = Fonts();
@@ -73,15 +84,16 @@ export function Markdown(props: {
     fonts().mono
       ? { fontFamily: fontFamily(fonts().mono, "monospace") }
       : undefined;
-  const heading = props.dense
-    ? {
-        fontSize: 16,
-        lineHeight: 22,
-        fontWeight: 600,
-        marginTop: 0,
-        marginBottom: 0,
-      }
-    : { fontSize: 15, lineHeight: 20, marginTop: 16, marginBottom: 6 };
+  const base = props.dense
+    ? { size: 16, line: 22, weight: 600, space: 0, after: 0 }
+    : { size: 15, line: 20, weight: undefined, space: 16, after: 6 };
+  const heading = () => ({
+    fontSize: props.heading?.size ?? base.size,
+    lineHeight: props.heading?.line ?? base.line,
+    fontWeight: props.heading?.weight ?? base.weight,
+    marginTop: props.heading?.space ?? base.space,
+    marginBottom: props.heading?.after ?? base.after,
+  });
   const headings = props.compactHeadings || props.dense;
   return (
     <TextView
@@ -92,16 +104,16 @@ export function Markdown(props: {
       styles={{
         root: {
           fontFamily: fontFamily(fonts().interface),
-          fontSize: props.dense ? 12 : 14,
+          fontSize: props.size ?? (props.dense ? 12 : 14),
           lineHeight: props.line ?? (props.dense ? 16 : 24),
           color: c().ink,
         },
         paragraph: { marginTop: 0, marginBottom: 0 },
         codeBlock: code(),
         code: code(),
-        heading1: headings ? heading : undefined,
-        heading2: headings ? heading : undefined,
-        heading3: headings ? heading : undefined,
+        heading1: headings ? heading() : undefined,
+        heading2: headings ? heading() : undefined,
+        heading3: headings ? heading() : undefined,
         link: { color: c().blue },
       }}
       codeBlockActions={[{ id: "copy" }]}

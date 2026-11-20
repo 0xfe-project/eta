@@ -20,11 +20,16 @@ export const light = {
   greenFill: "#e8f2eb",
   amber: "#a46700",
   amberFill: "#f7efdf",
+  /** The design's state-warning: a warning's border or mark. */
+  warning: "#c37000",
+  /** The design's state-warning-ink: text on or beside a warning. */
+  warningInk: "#955a00",
   red: "#c61623",
   redFill: "#fce9eb",
   shade: "#00000020",
   modalShade: "#0000001e",
-  /** A phone sheet's scrim: the foreground at 16%. */
+  /** The foreground at 16%: the scrim of phone sheets, tablet drawers and
+   * tablet dialogs. Desktop dialogs use `modalShade` (12%). */
   sheetShade: "#11111129",
 };
 
@@ -46,6 +51,8 @@ const dark: typeof light = {
   greenFill: "#16291e",
   amber: "#e0aa53",
   amberFill: "#302618",
+  warning: "#de9300",
+  warningInk: "#de9300",
   red: "#ff6874",
   redFill: "#3a1d21",
   shade: "#00000080",

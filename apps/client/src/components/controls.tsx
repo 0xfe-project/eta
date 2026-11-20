@@ -1,7 +1,7 @@
 import type { JSX, TextStyle, ViewRef, ViewStyle } from "nsh";
 import type { IconName } from "./icons";
 import type { light } from "./theme";
-import { View } from "nsh";
+import { platform, View } from "nsh";
 import { Input, Menu, MenuItem } from "nsh/base";
 import { pickerTarget } from "./element-picker";
 import { Icon, Label } from "./text";
@@ -19,6 +19,9 @@ export function Button(props: {
   size?: number;
   labelSize?: number;
   labelWeight?: number;
+  /** The colour of the label and icon of a plain or ghost button, such as
+   * "muted" for a filter trigger that reads as secondary. */
+  labelTone?: keyof typeof light;
   dimDisabled?: boolean;
   style?: ViewStyle;
   onPress: () => void;
@@ -31,7 +34,11 @@ export function Button(props: {
   const primary = () => props.tone === "primary";
   const ghost = () => props.tone === "ghost";
   const textTone = () =>
-    primary() ? "buttonInk" : props.tone === "danger" ? "red" : "ink";
+    primary()
+      ? "buttonInk"
+      : props.tone === "danger"
+        ? "red"
+        : (props.labelTone ?? "ink");
   return (
     <View
       {...picker}
@@ -55,7 +62,7 @@ export function Button(props: {
       style={{
         ...row,
         justifyContent: "center",
-        gap: 5,
+        gap: 4,
         flexShrink: 0,
         height: props.size ?? 24,
         minWidth: props.size ?? 24,
@@ -66,11 +73,14 @@ export function Button(props: {
           : primary()
             ? color().button
             : color().strong,
+        // A ghost button is bare text on whatever it sits on.
         backgroundColor: primary()
           ? color().button
           : props.selected
             ? color().selected
-            : color().canvas,
+            : ghost()
+              ? undefined
+              : color().canvas,
         opacity: props.disabled && props.dimDisabled !== false ? 0.45 : 1,
         cursor: props.disabled ? "default" : "pointer",
         ...props.style,
@@ -168,6 +178,10 @@ export function Field(props: {
   );
 }
 
+/** Touch screens get the menu as a sheet at the bottom (NSH's `Menu`), which
+ * takes the design's phone sheet: full width, a grabber and 52px rows. */
+const touchSheet = !platform.desktop;
+
 export function ActionMenu(props: {
   label: string;
   value?: string;
@@ -191,12 +205,23 @@ export function ActionMenu(props: {
       placement="bottom"
       align="end"
       offset={3}
-      popupStyle={{
-        width: 172,
-        borderWidth: 1,
-        borderColor: c().strong,
-        backgroundColor: c().canvas,
-      }}
+      popupStyle={
+        touchSheet
+          ? {
+              width: "100%",
+              paddingBottom: 8,
+              borderTopWidth: 1,
+              borderColor: c().strong,
+              backgroundColor: c().canvas,
+            }
+          : {
+              width: 172,
+              borderWidth: 1,
+              borderColor: c().strong,
+              backgroundColor: c().canvas,
+            }
+      }
+      backdropStyle={{ backgroundColor: c().sheetShade }}
       trigger={
         <View
           {...picker}
@@ -240,6 +265,11 @@ export function ActionMenu(props: {
         </View>
       }
     >
+      <If when={touchSheet}>
+        <View style={{ alignItems: "center", paddingTop: 8, paddingBottom: 4 }}>
+          <View style={{ width: 36, height: 4, backgroundColor: c().strong }} />
+        </View>
+      </If>
       {props.children}
     </Menu>
   );
@@ -259,12 +289,28 @@ export function ActionItem(props: {
       role={props.checked === undefined ? "menuitem" : "menuitemradio"}
       checked={props.checked}
       accessibilityLabel={props.label}
-      style={{ ...row, minHeight: 33, paddingHorizontal: 9, gap: 6 }}
+      style={
+        touchSheet
+          ? {
+              ...row,
+              minHeight: 52,
+              paddingHorizontal: 16,
+              gap: 12,
+              borderTopWidth: 1,
+              borderColor: c().border,
+            }
+          : { ...row, minHeight: 33, paddingHorizontal: 9, gap: 6 }
+      }
       hoverStyle={{ backgroundColor: c().selected }}
       indicatorStyle={{ width: 0 }}
       onSelect={props.onSelect}
     >
-      <Label size={12} tone={props.tone} style={{ flex: 1 }}>
+      <Label
+        size={touchSheet ? 14 : 12}
+        line={touchSheet ? 18 : undefined}
+        tone={props.tone}
+        style={{ flex: 1 }}
+      >
         {props.label}
       </Label>
       <If when={props.checked}>
