@@ -82,8 +82,15 @@ export default {
     },
     "apps/client": {
       entry: ["App.tsx"],
-      // scripts/nsh-client.ts stages these packages as bundled WebView assets.
-      ignoreDependencies: ["es-module-lexer", "html2canvas-pro", "jsqr"],
+      ignoreDependencies: [
+        // The Native Shell runtime provides them; nothing installs them.
+        "nsh",
+        "websocket",
+        // scripts/nsh-client.ts stages these packages as bundled WebView assets.
+        "es-module-lexer",
+        "html2canvas-pro",
+        "jsqr",
+      ],
     },
     "apps/mobile": {
       // `nsh` builds it: the entries are named in its commands.
