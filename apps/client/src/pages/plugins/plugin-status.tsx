@@ -35,13 +35,13 @@ export function Status(props: { item: PluginView; phone?: boolean }) {
       size={10}
       line={14}
       lines={1}
-      tone={missing() ? "amber" : "muted"}
+      tone={missing() ? "warningInk" : "muted"}
       style={{
         alignSelf: props.phone ? "flex-start" : "center",
         paddingHorizontal: missing() ? 6 : 0,
         paddingVertical: 1,
         borderWidth: missing() ? 1 : 0,
-        borderColor: c().amber,
+        borderColor: c().warning,
       }}
     >
       {missing() ? uiText("needsConfiguring") : uiText("canBeEnabled")}

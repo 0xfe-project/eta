@@ -153,6 +153,8 @@ export function PluginDetail(props: DetailProps) {
               label={uiText("pluginActions")}
               icon="more"
               iconOnly
+              size={40}
+              iconSize={20}
               tone="ghost"
               onPress={() => actions.set(true)}
             />
@@ -247,7 +249,7 @@ export function PluginDetail(props: DetailProps) {
             </View>
           </If>
           <View style={section(20)}>
-            <Caption text={text("source")} />
+            <Caption text={text("source")} phone={props.phone} />
             <View
               style={{
                 ...row,
@@ -259,7 +261,7 @@ export function PluginDetail(props: DetailProps) {
                 borderColor: c().border,
               }}
             >
-              <Icon name={git() ? "clip" : "folder"} size={14} tone="muted" />
+              <Icon name={git() ? "link" : "folder"} size={14} tone="muted" />
               <Label size={12} line={16} style={{ flex: 1, minWidth: 0 }}>
                 {source().label}
               </Label>
@@ -289,7 +291,7 @@ export function PluginDetail(props: DetailProps) {
                 }}
               >
                 <Icon
-                  name={copied() === source().clipboard ? "check" : "panel"}
+                  name={copied() === source().clipboard ? "check" : "copy"}
                   size={14}
                   tone="muted"
                 />
@@ -297,7 +299,7 @@ export function PluginDetail(props: DetailProps) {
             </View>
           </View>
           <View style={section(16)}>
-            <Caption text={text("runs")} />
+            <Caption text={text("runs")} phone={props.phone} />
             <View style={{ borderWidth: 1, borderColor: c().border }}>
               <Each of={props.item.servers} key={(server) => server.name}>
                 {(server) => (
@@ -318,7 +320,7 @@ export function PluginDetail(props: DetailProps) {
                         gap: props.phone ? 8 : 10,
                       }}
                     >
-                      <Icon name="artifact" size={14} tone="muted" />
+                      <Icon name="terminal" size={14} tone="muted" />
                       <Label size={12} line={16}>
                         {server().name}
                       </Label>
@@ -368,7 +370,7 @@ export function PluginDetail(props: DetailProps) {
           </View>
           <If when={reads().length}>
             <View style={section(16)}>
-              <Caption text={text("audit")} />
+              <Caption text={text("audit")} phone={props.phone} />
               <View style={{ borderWidth: 1, borderColor: c().border }}>
                 <Each of={reads()} key={(entry) => entry.id}>
                   {(entry, index) => (
@@ -402,22 +404,21 @@ export function PluginDetail(props: DetailProps) {
           title={props.item.name}
           phone
           sheet
-          blurBackdrop={false}
+          plainSheetHeader
           overPhoneNavigation
           onClose={() => actions.set(false)}
         >
           <ActionRow
             label={updating() ? uiText("updating") : uiText("update")}
             hint={text("updateDetail")}
-            icon="refresh"
+            icon="refreshAll"
             disabled={updating()}
             onPress={update}
           />
           <ActionRow
             label={uiText("remove2")}
             hint={text("removeDetail")}
-            icon="archive"
-            divider
+            icon="trash"
             disabled={updating()}
             onPress={() => {
               actions.set(false);
@@ -433,9 +434,7 @@ export function PluginDetail(props: DetailProps) {
 function ActionRow(props: {
   label: string;
   hint: string;
-  icon: "refresh" | "archive";
-  /** The sheet header already draws the line above the first row. */
-  divider?: boolean;
+  icon: "refreshAll" | "trash";
   disabled: boolean;
   onPress: () => void;
 }) {
@@ -451,7 +450,7 @@ function ActionRow(props: {
         ...row,
         gap: 12,
         minHeight: 52,
-        borderTopWidth: props.divider ? 1 : 0,
+        borderTopWidth: 1,
         borderColor: c().border,
         paddingHorizontal: 16,
         cursor: "pointer",

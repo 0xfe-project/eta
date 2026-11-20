@@ -199,6 +199,9 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                         label={uiText("refreshPlugins")}
                         icon="refresh"
                         iconOnly
+                        iconSize={16}
+                        size={16}
+                        style={{ paddingHorizontal: 0 }}
                         tone="ghost"
                         onPress={() => void refreshPlugins()}
                       />
@@ -421,13 +424,23 @@ function PluginCard(props: {
               value2: props.item.servers.length,
             })}
           </Label>
+          <If when={pluginWarnings(props.item).length}>
+            <Button
+              label={uiText("warningsFor", { name: props.item.name })}
+              icon="warning"
+              iconOnly
+              iconSize={14}
+              tone="ghost"
+              labelTone={
+                props.item.problem || props.item.state === "needs_config"
+                  ? "red"
+                  : undefined
+              }
+              onPress={props.onWarnings}
+            />
+          </If>
         </View>
       </View>
-      <If when={props.item.problem}>
-        <Label size={12} tone="red">
-          {props.item.problem}
-        </Label>
-      </If>
       <View
         style={{
           ...row,
@@ -439,13 +452,6 @@ function PluginCard(props: {
           justifyContent: "flex-end",
         }}
       >
-        <If when={pluginWarnings(props.item).length}>
-          <Button
-            label={uiText("warnings")}
-            tone="ghost"
-            onPress={props.onWarnings}
-          />
-        </If>
         <If when={props.item.source.kind === "git"}>
           <Button
             label={uiText("update")}
@@ -520,11 +526,13 @@ function PluginRows(props: {
           paddingHorizontal: 16,
           paddingTop: props.first ? 8 : 16,
           paddingBottom: 6,
+          borderBottomWidth: 1,
+          borderColor: c().border,
         }}
       >
-        <Caption text={props.caption} />
+        <Caption text={props.caption} phone />
       </View>
-      <View style={{ borderBottomWidth: 1, borderColor: c().border }}>
+      <View>
         <Each of={props.items} key={(item) => item.name}>
           {(item) => (
             <View
@@ -534,11 +542,11 @@ function PluginRows(props: {
               activeStyle={{ backgroundColor: c().selected }}
               style={{
                 ...row,
-                height: item().state === "needs_config" ? 64 : 60,
+                height: item().state === "needs_config" ? 63 : 60,
                 gap: 12,
                 paddingLeft: 16,
                 paddingRight: 12,
-                borderTopWidth: 1,
+                borderBottomWidth: 1,
                 borderColor: c().border,
                 backgroundColor: c().canvas,
               }}

@@ -368,7 +368,10 @@ export function Workspace(props: {
             />
           </If>
           <If when={page() === "plugins"}>
-            <Plugins layout={props.layout} />
+            <Plugins
+              layout={props.layout}
+              onBack={phone() ? () => navigate("more") : undefined}
+            />
           </If>
           <If when={page() === "pending"}>
             <Pending

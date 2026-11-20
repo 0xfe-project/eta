@@ -25,7 +25,9 @@ export function PluginTablet(props: {
           title={uiText("plugins")}
           count={props.items.length}
           layout="tablet"
+          background="canvas"
           inset={14}
+          end={10}
         >
           <View style={{ flex: 1 }} />
           <Button

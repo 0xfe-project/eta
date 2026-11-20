@@ -169,6 +169,7 @@ export function SkillDetail(props: {
       label={uiText("skillReloadReader")}
       icon="refresh"
       iconOnly
+      iconSize={14}
       tone={tablet() ? "plain" : "ghost"}
       style={tablet() ? undefined : { marginLeft: 6 }}
       onPress={refresh}
@@ -428,7 +429,6 @@ export function SkillDetail(props: {
         <View
           style={{
             paddingHorizontal: 24,
-            paddingTop: 8,
             paddingBottom: 8,
             gap: 8,
           }}

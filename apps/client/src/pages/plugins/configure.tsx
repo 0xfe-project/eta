@@ -511,7 +511,7 @@ export function ConfigurePlugin(props: {
         accessibilityLabel={title()}
         animation="none"
         style={{ ...fill, paddingTop: 56, alignItems: "center" }}
-        backdropStyle={{ backgroundColor: c().modalShade }}
+        backdropStyle={{ backgroundColor: c().sheetShade }}
         onOpenChange={({ open }) => {
           if (!open) props.onClose();
         }}
@@ -526,6 +526,7 @@ export function ConfigurePlugin(props: {
             backgroundColor: c().canvas,
             borderWidth: 1,
             borderColor: c().strong,
+            boxShadow: [{ x: 0, y: 8, blur: 24, color: "#0000001f" }],
           }}
         >
           <View
@@ -546,7 +547,7 @@ export function ConfigurePlugin(props: {
                 {pluginConfigText("fields")}
               </Label>
             </View>
-            <CloseButton onPress={props.onClose} />
+            <CloseButton onPress={props.onClose} iconSize={14} />
           </View>
           {form()}
         </View>

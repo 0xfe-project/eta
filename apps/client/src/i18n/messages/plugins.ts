@@ -67,6 +67,5 @@ export const pluginsMessages = {
     "{{length}} 个 skill · {{value2}} 个 MCP 服务器",
   ],
   valueSaved: ["Value saved", "已保存值"],
-  warnings: ["Warnings", "警告"],
   warningsFor: ["Warnings for {{name}}", "{{name}} 的警告"],
 } as const;

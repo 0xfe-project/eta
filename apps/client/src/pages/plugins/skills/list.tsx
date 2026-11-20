@@ -409,11 +409,13 @@ export function Skills(props: {
                         backgroundColor: c().selected,
                       }}
                     >
-                      <Icon
-                        name="artifact"
-                        size={phone() ? 18 : 16}
-                        tone="mutedInk"
-                      />
+                      <View style={{ opacity: 0.6 }}>
+                        <Icon
+                          name="scroll"
+                          size={phone() ? 18 : 16}
+                          tone="mutedInk"
+                        />
+                      </View>
                     </View>
                   </If>
                   <View
@@ -493,6 +495,9 @@ export function Skills(props: {
                     label={uiText("skillReload")}
                     icon="refresh"
                     iconOnly
+                    iconSize={16}
+                    size={16}
+                    style={{ paddingHorizontal: 0 }}
                     tone="ghost"
                     onPress={refresh}
                   />
@@ -520,7 +525,9 @@ export function Skills(props: {
             title={uiText("skillsTab")}
             count={entries().length}
             layout="tablet"
+            background="canvas"
             inset={14}
+            end={10}
           >
             <View style={{ flex: 1 }} />
             <Button

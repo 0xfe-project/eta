@@ -95,7 +95,7 @@ export function PluginWarningsDialog(props: {
     <Modal
       title={uiText("warningsFor", { name: props.item.name })}
       width={384}
-      blurBackdrop={false}
+      modalFocus
       overPhoneNavigation
       hideHeader
       panelStyle={{ gap: 12 }}
@@ -110,11 +110,18 @@ export function PluginWarningsDialog(props: {
           paddingTop: 16,
         }}
       >
-        <Label weight={500} lines={1} style={{ flexShrink: 1 }}>
+        <Label
+          size={14}
+          line={20}
+          weight={500}
+          lines={1}
+          style={{ flexShrink: 1 }}
+        >
           {uiText("warningsFor", { name: props.item.name })}
         </Label>
         <CloseButton
           onPress={props.onClose}
+          iconSize={14}
           style={{ marginVertical: -2, marginRight: -6 }}
         />
       </View>
@@ -137,6 +144,7 @@ export function PluginWarningsDialog(props: {
           label={text("ok")}
           tone="primary"
           size={28}
+          labelWeight={500}
           style={{ paddingHorizontal: 14 }}
           onPress={props.onClose}
         />
@@ -172,7 +180,7 @@ export function PluginWarnings(props: {
             : { gap: 8, height: 32, paddingHorizontal: 10 }),
         }}
       >
-        <Icon name="info" size={14} />
+        <Icon name="warning" size={14} />
         <Label
           weight={600}
           size={props.phone ? 13 : 12}
