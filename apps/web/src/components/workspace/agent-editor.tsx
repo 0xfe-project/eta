@@ -10,7 +10,6 @@ import { useEffect, useState } from "react";
 import { useForm, useFormState, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { WireError } from "@/lib/wire";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { WireError } from "@/lib/wire";
 import {
   useAgentRuntimeChoices,
   useDeleteAgent,
