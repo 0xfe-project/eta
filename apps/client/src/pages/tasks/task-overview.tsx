@@ -193,8 +193,11 @@ export function RunLine(props: {
           }}
         >
           <View style={{ ...row, gap: props.tablet ? 8 : 6, flex: 1 }}>
-            <If when={!props.tablet || !review()}>
-              <StatusDot color={c()[review() ? "amber" : "blue"]} />
+            <If when={!review()}>
+              <Icon name="spinner" size={props.tablet ? 14 : 12} tone="muted" />
+            </If>
+            <If when={!props.tablet && review()}>
+              <StatusDot color={c().amber} />
             </If>
             <Label
               size={props.tablet ? 11 : 10}
@@ -227,14 +230,7 @@ export function RunLine(props: {
                 }}
                 style={{ ...row, gap: 4, cursor: "pointer" }}
               >
-                <View
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderWidth: 1,
-                    borderColor: c().ink,
-                  }}
-                />
+                <Icon name="stop" size={props.tablet ? 12 : 10} />
                 <Label
                   size={props.tablet ? 11 : 10}
                   line={props.tablet ? 14 : 12}
@@ -355,7 +351,15 @@ function DesktopOverview(props: {
                   </If>
                   <Markdown
                     value={item().description}
+                    size={12}
                     line={16}
+                    heading={{
+                      size: 16,
+                      line: 20,
+                      weight: 700,
+                      space: 0,
+                      after: 0,
+                    }}
                     compactHeadings
                   />
                   <View
@@ -373,6 +377,7 @@ function DesktopOverview(props: {
                       cursor: "pointer",
                     }}
                   >
+                    <Icon name="pencil" size={10} tone="muted" />
                     <Label size={10} line={12} tone="muted">
                       {uiText("editDescription")}
                     </Label>
@@ -566,7 +571,13 @@ export function TaskOverview(props: {
                 <Subtasks item={item()} phone={phone()} onTask={props.onTask} />
               </If>
               <If when={item().description}>
-                <View style={{ gap: 6 }}>
+                <View
+                  style={{
+                    gap: 6,
+                    // The first heading's space above is the section gap's already.
+                    marginTop: phone() && opensWithHeading() ? -9 : 0,
+                  }}
+                >
                   <If when={!phone() || !opensWithHeading()}>
                     <Label
                       weight={600}
@@ -580,7 +591,19 @@ export function TaskOverview(props: {
                   </If>
                   <Markdown
                     value={item().description}
+                    size={phone() ? 13 : undefined}
                     line={phone() ? 20 : 22}
+                    heading={
+                      phone()
+                        ? {
+                            size: 14,
+                            line: 20,
+                            weight: 600,
+                            space: 9,
+                            after: -5,
+                          }
+                        : undefined
+                    }
                     compactHeadings={phone()}
                   />
                 </View>

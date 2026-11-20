@@ -71,9 +71,14 @@ export function NewTask(props: {
       title={uiText("newTask")}
       width={512}
       phone={props.phone}
+      compact={!props.phone}
       onClose={props.onClose}
     >
-      <View style={{ padding: 14, gap: 14 }}>
+      <View
+        style={
+          props.phone ? { padding: 14, gap: 14 } : { paddingTop: 14, gap: 14 }
+        }
+      >
         <View style={{ gap: 12 }}>
           <Field
             label={uiText("title")}
@@ -104,7 +109,7 @@ export function NewTask(props: {
             }}
           />
         </View>
-        <View style={{ gap: 14 }}>
+        <View style={{ gap: 10 }}>
           <NewTaskRow label={uiText("executor")}>
             <ActionMenu
               label={uiText("executor")}

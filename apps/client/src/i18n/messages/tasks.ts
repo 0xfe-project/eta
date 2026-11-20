@@ -388,6 +388,11 @@ export const tasksMessages = {
   taskRunStopped: ["Stopped", "已停止"],
   taskRunRunning: ["Running", "运行中"],
   taskRunQueued: ["Queued", "排队中"],
+  taskRunTook: [
+    "Run {{number}} · took {{elapsed}}",
+    "第 {{number}} 次运行 · 用时 {{elapsed}}",
+  ],
+  taskRunMachine: ["Machine {{name}}", "机器 {{name}}"],
   taskNow: ["Now: {{title}}", "当前：{{title}}"],
   taskSectionGoing: ["Going", "进行中"],
   taskSectionWaiting: ["Waiting", "等待中"],

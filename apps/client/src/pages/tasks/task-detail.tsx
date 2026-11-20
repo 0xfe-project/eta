@@ -5,7 +5,6 @@ import {
   ActionMenu,
   Button,
   colors,
-  Empty,
   grow,
   Header,
   Label,
@@ -15,6 +14,7 @@ import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskPlan } from "./plan";
 import { Segmented } from "./segmented";
+import { TaskDetailSkeleton } from "./skeleton";
 import { TaskDetailDialogs } from "./task-detail-dialogs";
 import { createTaskDetailState } from "./task-detail-state";
 import { TaskCommentBox, TaskReviewActions } from "./task-fields";
@@ -59,6 +59,14 @@ export function TaskDetail(props: {
         layout={props.layout}
         onBack={paned() ? undefined : props.onClose}
         inset={props.docked ? 8 : paned() ? 16 : undefined}
+        end={paned() ? 10 : undefined}
+        titleSize={props.layout === "desktop" && !props.docked ? 12 : undefined}
+        backIcon={
+          props.layout === "desktop" && !props.docked ? "arrowLeft" : undefined
+        }
+        backIconSize={
+          props.layout === "desktop" && !props.docked ? 14 : undefined
+        }
       >
         <View style={{ flex: 1 }} />
         <If when={task()}>
@@ -83,6 +91,7 @@ export function TaskDetail(props: {
             <Button
               label={uiText("panel")}
               icon="sidebar"
+              iconSize={14}
               labelSize={11}
               onPress={() => panel.set(true)}
             />
@@ -127,7 +136,10 @@ export function TaskDetail(props: {
           </ActionMenu>
         </If>
       </Header>
-      <If when={task()} else={<Empty title={uiText("loadingTask")} />}>
+      <If
+        when={task()}
+        else={<TaskDetailSkeleton label={uiText("loadingTask")} />}
+      >
         {(item) => (
           <>
             <If

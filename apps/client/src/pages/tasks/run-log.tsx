@@ -1,8 +1,9 @@
-import type { TaskRunView } from "@eta/client-contracts";
+import type { MachineView, TaskRunView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import { View, windowSize } from "nsh";
 import { Button, colors, grow, Label, Modal, row } from "../../components";
 import { uiText } from "../../i18n";
+import { follow, useHost } from "../../services/host";
 import { MemberRun } from "../chat/run/member-run";
 
 export function isActiveRunStatus(status: TaskRunView["status"]): boolean {
@@ -29,6 +30,20 @@ export function runCaption(run: TaskRunView, index: number): string {
   return `Run ${index + 1} · ${runElapsed(run)}`;
 }
 
+function runState(run: TaskRunView): string {
+  switch (run.status) {
+    case "completed":
+      return uiText("taskRunDone");
+    case "failed":
+    case "interrupted":
+      return uiText("taskRunStopped");
+    case "queued":
+      return uiText("taskRunQueued");
+    default:
+      return uiText("taskRunRunning");
+  }
+}
+
 export function TaskRunLog(props: {
   run: TaskRunView;
   index: number;
@@ -42,6 +57,24 @@ export function TaskRunLog(props: {
 }) {
   const c = colors();
   const phone = () => props.layout === "phone";
+  const host = useHost();
+  follow(() => "machines");
+  const machine = () =>
+    host
+      .list<MachineView>("machines")
+      .find((entry) => entry.id === props.run.machineId)?.name;
+  /** "Run 1 · took 4m 12s · Running · Machine This machine". */
+  const meta = () =>
+    [
+      uiText("taskRunTook", {
+        number: props.index + 1,
+        elapsed: runElapsed(props.run),
+      }),
+      runState(props.run),
+      machine() && uiText("taskRunMachine", { name: machine()! }),
+    ]
+      .filter(Boolean)
+      .join(" · ");
   return (
     <Modal
       title={
@@ -67,7 +100,6 @@ export function TaskRunLog(props: {
       phonePage={phone()}
       hideHeader={!phone() && !!props.run.sessionId}
       modalFocus
-      blurBackdrop={!phone()}
       overPhoneNavigation
       onClose={props.onClose}
     >
@@ -90,6 +122,7 @@ export function TaskRunLog(props: {
             agentId={props.agentId}
             executorName={props.executor}
             taskRun={props.run}
+            meta={phone() ? undefined : meta()}
             nextRunAt={props.nextRunAt}
             phone={phone()}
             onClose={props.onClose}

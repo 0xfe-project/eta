@@ -231,7 +231,7 @@ export function Prerequisites(props: {
             }}
           >
             <View style={{ ...row, gap: props.tablet ? 6 : 8 }}>
-              <Icon name="info" size={props.tablet ? 14 : 16} />
+              <Icon name="warning" size={props.tablet ? 14 : 16} />
               <Label size={12} line={16} weight={600}>
                 {uiText("thisTaskIsStuckAndNeeds")}
               </Label>
@@ -431,7 +431,7 @@ export function NeighbourStrip(props: {
               </Each>
             </View>
             <View style={{ marginTop: 22 }}>
-              <Icon name="right" size={12} />
+              <Icon name="arrowRight" size={12} />
             </View>
           </If>
           <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
@@ -463,7 +463,7 @@ export function NeighbourStrip(props: {
           </View>
           <If when={after().length}>
             <View style={{ marginTop: 22 }}>
-              <Icon name="right" size={12} />
+              <Icon name="arrowRight" size={12} />
             </View>
             <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
               <Label size={10} line={12} tone="muted">
@@ -508,7 +508,7 @@ export function NeighbourStrip(props: {
               </Each>
             </View>
             <View style={{ marginTop: 32 }}>
-              <Icon name="right" size={14} tone="muted" />
+              <Icon name="arrowRight" size={14} tone="muted" />
             </View>
           </If>
           <View style={{ width: 206, gap: 6, flexShrink: 0 }}>
@@ -539,7 +539,7 @@ export function NeighbourStrip(props: {
           </View>
           <If when={after().length}>
             <View style={{ marginTop: 32 }}>
-              <Icon name="right" size={14} tone="muted" />
+              <Icon name="arrowRight" size={14} tone="muted" />
             </View>
             <View style={{ width: 180, gap: 6, flexShrink: 0 }}>
               <Label size={10} line={12} tone="muted">

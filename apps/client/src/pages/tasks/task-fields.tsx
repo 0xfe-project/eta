@@ -60,14 +60,16 @@ export function TaskCommentBox(props: {
               }}
               style={{ cursor: "pointer" }}
             >
-              <Icon name="arrowUp" size={14} />
+              <Icon name="send" size={14} tone="muted" />
             </View>
           }
         >
           <Button
             label={uiText("sendComment")}
-            icon="arrowUp"
+            icon="send"
             iconOnly
+            iconSize={14}
+            labelTone="muted"
             tone="ghost"
             size={28}
             disabled={posting() || !comment().trim()}
@@ -384,15 +386,18 @@ export function TaskRail(detail: {
         <View style={{ ...row, gap: 6 }}>
           <If when={run()}>
             {(last) => (
-              <StatusDot
-                color={
-                  activeTaskRun(last())
-                    ? c().blue
-                    : last().status === "completed"
-                      ? c().green
-                      : c().muted
+              <If
+                when={activeTaskRun(last())}
+                else={
+                  <StatusDot
+                    color={
+                      last().status === "completed" ? c().green : c().muted
+                    }
+                  />
                 }
-              />
+              >
+                <Icon name="spinner" size={10} tone="muted" />
+              </If>
             )}
           </If>
           <Label size={10} line={12} weight={600}>

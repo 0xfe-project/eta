@@ -121,7 +121,19 @@ export function TabletOverview(props: {
                   {parent() ? uiText("description") : uiText("goal")}
                 </Label>
               </If>
-              <Markdown value={item().description} line={16} compactHeadings />
+              <Markdown
+                value={item().description}
+                size={12}
+                line={16}
+                heading={{
+                  size: 13,
+                  line: 16,
+                  weight: 600,
+                  space: 0,
+                  after: -8,
+                }}
+                compactHeadings
+              />
             </View>
           </If>
           <TaskActivity phone={false} tablet entries={activity()} />

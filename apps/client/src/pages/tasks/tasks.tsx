@@ -20,6 +20,7 @@ import { follow, useHost } from "../../services/host";
 import { taskDropZones } from "./drag";
 import { PhoneTaskList, TabletTaskList } from "./list";
 import { Segmented } from "./segmented";
+import { TaskListSkeleton } from "./skeleton";
 import { TaskWorkspaceBoard } from "./workspace-board";
 import { TaskWorkspaceList } from "./workspace-list";
 
@@ -83,6 +84,9 @@ export function Tasks(props: {
         ? items.filter((entry) => entry !== status)
         : [...items, status],
     );
+  /** The no-tasks and no-match states, drawn larger and bolder on desktop and tablet. */
+  const designed = () =>
+    !phone() && !host.state().missing.tasks && !!host.state().targets.tasks;
   return (
     <View style={{ ...grow, backgroundColor: c().canvas }}>
       <If
@@ -93,8 +97,19 @@ export function Tasks(props: {
             count={shown().length}
             layout={props.layout}
             inset={14}
+            end={10}
+            countSize={14}
           >
             <View style={{ flex: 1 }} />
+            <Button
+              label={uiText("executor")}
+              icon="funnel"
+              iconOnly
+              iconSize={14}
+              tone="ghost"
+              selected={filterOpen()}
+              onPress={() => filterOpen.set(!filterOpen())}
+            />
             <Button
               label={uiText("new")}
               icon="plus"
@@ -286,45 +301,66 @@ export function Tasks(props: {
       <If
         when={filtered().length}
         else={
-          <Empty
-            style={
-              host.state().missing.tasks || !host.state().targets.tasks
-                ? undefined
-                : phone()
-                  ? { gap: 10, paddingHorizontal: 40 }
-                  : {
-                      flex: 1,
-                      justifyContent: "flex-start",
-                      paddingTop: 64,
-                      gap: tablet() ? 8 : 10,
-                    }
-            }
-            title={
-              host.state().missing.tasks
-                ? uiText("unableToLoadTasks")
-                : !host.state().targets.tasks
-                  ? uiText("loadingTasks")
-                  : shown().length
-                    ? uiText("noTasksMatchTheFilters")
-                    : uiText("noTasksYet")
-            }
-            icon={host.state().missing.tasks ? "info" : "tasks"}
-            description={
-              host.state().missing.tasks
-                ? uiText("theHostDidNotRespondIn")
-                : host.state().targets.tasks && !shown().length
-                  ? uiText("noTasksYetDescription")
-                  : undefined
-            }
+          <If
+            when={host.state().missing.tasks || host.state().targets.tasks}
+            else={<TaskListSkeleton label={uiText("loadingTasks")} />}
           >
-            <If when={host.state().missing.tasks}>
-              <Button
-                label={uiText("retry")}
-                icon="refresh"
-                onPress={host.retry}
-              />
-            </If>
-          </Empty>
+            <Empty
+              style={
+                host.state().missing.tasks || !host.state().targets.tasks
+                  ? undefined
+                  : phone()
+                    ? { gap: 10, paddingHorizontal: 40 }
+                    : {
+                        flex: 1,
+                        justifyContent: "flex-start",
+                        paddingTop: 64,
+                        gap: tablet() ? 8 : 10,
+                      }
+              }
+              title={
+                host.state().missing.tasks
+                  ? uiText("unableToLoadTasks")
+                  : !host.state().targets.tasks
+                    ? uiText("loadingTasks")
+                    : shown().length
+                      ? uiText("noTasksMatchTheFilters")
+                      : uiText("noTasksYet")
+              }
+              icon={host.state().missing.tasks ? "warning" : "tasks"}
+              iconSize={
+                host.state().missing.tasks ? 32 : designed() ? 28 : undefined
+              }
+              iconTone={
+                host.state().missing.tasks
+                  ? "red"
+                  : designed() && tablet()
+                    ? "ink"
+                    : undefined
+              }
+              titleSize={designed() && tablet() ? 13 : undefined}
+              titleLine={designed() && tablet() ? 16 : undefined}
+              titleWeight={designed() ? 600 : undefined}
+              titleTone={designed() ? "ink" : undefined}
+              description={
+                host.state().missing.tasks
+                  ? uiText("theHostDidNotRespondIn")
+                  : host.state().targets.tasks && !shown().length
+                    ? uiText("noTasksYetDescription")
+                    : undefined
+              }
+            >
+              <If when={host.state().missing.tasks}>
+                <Button
+                  label={uiText("retry")}
+                  icon="refresh"
+                  size={28}
+                  style={{ marginTop: 4 }}
+                  onPress={host.retry}
+                />
+              </If>
+            </Empty>
+          </If>
         }
       >
         <If
@@ -390,6 +426,7 @@ function HeaderFilter(props: {
           icon={props.icon}
           end={props.end}
           tone="ghost"
+          labelTone="muted"
           selected={props.selected}
           onPress={props.onPress}
         />

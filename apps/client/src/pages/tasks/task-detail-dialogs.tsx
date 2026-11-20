@@ -164,9 +164,7 @@ export function TaskDetailDialogs(props: {
           width={360}
           height="100%"
           hideHeader
-          blurBackdrop={false}
           overPhoneNavigation
-          panelStyle={{ borderWidth: 0, borderLeftWidth: 1 }}
           onClose={() => panel.set(false)}
         >
           <TaskContextPanel item={task()!} onClose={() => panel.set(false)} />
@@ -228,11 +226,22 @@ export function TaskDetailDialogs(props: {
                 : uiText("archiveTask")
           }
           phone={phone()}
+          compact={!phone()}
+          titleWeight={500}
+          panelStyle={
+            props.layout === "desktop"
+              ? { position: "absolute", top: 340 }
+              : undefined
+          }
           overPhoneNavigation
           onClose={() => archive.set(false)}
         >
           <View
-            style={{ paddingHorizontal: 14, paddingTop: 6, paddingBottom: 14 }}
+            style={
+              phone()
+                ? { paddingHorizontal: 14, paddingTop: 6, paddingBottom: 14 }
+                : { paddingTop: 6 }
+            }
           >
             <Label size={12} line={18} tone="muted">
               {activeArchiveTargets().length === 1
