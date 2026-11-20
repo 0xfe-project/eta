@@ -1,49 +1,51 @@
 import type { PluginView } from "@eta/client-contracts";
 import { Scroll, signal, View } from "nsh";
 import { Button, colors, Icon, Label, Modal, row } from "../../components";
-import { formatLocale, uiText } from "../../i18n";
+import { CloseButton } from "../../components/navigation-buttons";
+import { uiText } from "../../i18n";
 
 import { pluginText as text } from "./labels";
-export function pluginWarnings(item: PluginView) {
-  const zh = formatLocale().startsWith("zh");
-  const names = item.agents.map((agent) => agent.name).join(", ");
-  return [
-    ...new Set([
-      ...(item.problem ? [item.problem] : []),
-      ...item.fields.flatMap((field) => {
-        if (
-          field.issue?.code !== "required" &&
-          (!field.required || field.set || field.default !== undefined)
-        )
-          return [];
-        return [
-          zh
-            ? `缺少必填项“${field.title}”。`
-            : `Required field "${field.title}" is missing.`,
-        ];
-      }),
-      ...(item.state === "needs_config" && names
-        ? [
-            zh
-              ? `${names} 已启用这个插件。修好配置后才会继续使用。`
-              : `${names} enabled this plugin. It is skipped until its configuration is fixed.`,
-          ]
-        : []),
-      ...item.machines.flatMap((machine) =>
-        machine.checked && machine.missing.length
-          ? [
-              zh
-                ? `${machine.name} 缺少 ${machine.missing.join(", ")}。`
-                : `${machine.name} is missing ${machine.missing.join(", ")}.`,
-            ]
-          : [],
-      ),
-      ...item.reports,
-      ...item.servers.flatMap((server) =>
-        server.problem ? [server.problem] : [],
-      ),
-    ]),
+export interface PluginWarning {
+  text: string;
+  blocking: boolean;
+}
+
+// Blocking lines keep the plugin from being used; the rest are advisory.
+export function pluginWarnings(item: PluginView): PluginWarning[] {
+  const agents = item.agents.map((agent) => agent.name).join(", ");
+  const blocking = [
+    ...(item.problem ? [item.problem] : []),
+    ...item.fields.flatMap((field) =>
+      field.issue?.code !== "required" &&
+      (!field.required || field.set || field.default !== undefined)
+        ? []
+        : [uiText("pluginRequiredMissing", { title: field.title })],
+    ),
+    ...(item.state === "needs_config" && agents
+      ? [uiText("pluginSkipped", { agents })]
+      : []),
   ];
+  const advisory = [
+    ...item.machines.flatMap((machine) =>
+      machine.checked && machine.missing.length
+        ? [
+            uiText("pluginMachineMissing", {
+              machine: machine.name,
+              commands: machine.missing.join(", "),
+            }),
+          ]
+        : [],
+    ),
+    ...item.reports,
+    ...item.servers.flatMap((server) =>
+      server.problem ? [server.problem] : [],
+    ),
+  ];
+  const seen = new Set<string>();
+  return [
+    ...blocking.map((text) => ({ text, blocking: true })),
+    ...advisory.map((text) => ({ text, blocking: false })),
+  ].filter((warning) => !seen.has(warning.text) && seen.add(warning.text));
 }
 
 function WarningsText(props: { item: PluginView }) {
@@ -53,10 +55,14 @@ function WarningsText(props: { item: PluginView }) {
       when={warnings().length}
       else={<Label tone="muted">{uiText("noWarnings")}</Label>}
     >
-      <Each of={warnings()} key={(warning) => warning}>
-        {(warning, index) => (
-          <Label size={12} line={18} tone={index() === 0 ? "ink" : "mutedInk"}>
-            {warning()}
+      <Each of={warnings()} key={(warning) => warning.text}>
+        {(warning) => (
+          <Label
+            size={12}
+            line={16}
+            tone={warning().blocking ? "ink" : "muted"}
+          >
+            {warning().text}
           </Label>
         )}
       </Each>
@@ -75,10 +81,29 @@ export function PluginWarningsDialog(props: {
       width={384}
       blurBackdrop={false}
       overPhoneNavigation
+      hideHeader
+      panelStyle={{ gap: 12 }}
       onClose={props.onClose}
     >
+      <View
+        style={{
+          ...row,
+          justifyContent: "space-between",
+          gap: 8,
+          paddingHorizontal: 16,
+          paddingTop: 16,
+        }}
+      >
+        <Label weight={500} lines={1} style={{ flexShrink: 1 }}>
+          {uiText("warningsFor", { name: props.item.name })}
+        </Label>
+        <CloseButton
+          onPress={props.onClose}
+          style={{ marginVertical: -2, marginRight: -6 }}
+        />
+      </View>
       <Scroll style={{ maxHeight: 300 }} scrollbar={false}>
-        <View style={{ padding: 14, gap: 5 }}>
+        <View style={{ paddingHorizontal: 16, gap: 6 }}>
           <WarningsText item={props.item} />
         </View>
       </Scroll>
@@ -86,8 +111,8 @@ export function PluginWarningsDialog(props: {
         style={{
           ...row,
           justifyContent: "flex-end",
-          paddingHorizontal: 14,
-          paddingVertical: 10,
+          paddingHorizontal: 16,
+          paddingVertical: 12,
           borderTopWidth: 1,
           borderColor: c().border,
         }}
@@ -96,6 +121,7 @@ export function PluginWarningsDialog(props: {
           label={text("ok")}
           tone="primary"
           size={28}
+          style={{ paddingHorizontal: 14 }}
           onPress={props.onClose}
         />
       </View>

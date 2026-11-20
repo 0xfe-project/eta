@@ -347,28 +347,16 @@ export function SkillFile(props: {
                 root: {
                   fontFamily: fontFamily(fonts().interface),
                   fontSize: 14,
-                  lineHeight: 21,
-                  color: c().ink,
-                },
-                heading1: {
-                  fontSize: 20,
-                  lineHeight: 25,
-                  marginTop: 8,
-                  marginBottom: 6,
-                },
-                heading2: {
-                  fontSize: 16,
-                  lineHeight: 22,
-                  marginTop: 12,
-                  marginBottom: 6,
-                },
-                heading3: {
-                  fontSize: 14,
                   lineHeight: 20,
-                  marginTop: 12,
-                  marginBottom: 4,
+                  color: c().ink,
+                  gap: 12,
                 },
+                heading: { marginTop: 0, marginBottom: 0 },
+                heading1: { fontSize: 20, lineHeight: 28 },
+                heading2: { fontSize: 16, lineHeight: 24 },
+                heading3: { fontSize: 14, lineHeight: 20 },
                 paragraph: { marginTop: 0, marginBottom: 0 },
+                list: { gap: 6 },
                 link: { color: c().blue },
               }}
               codeBlockActions={[{ id: "copy" }]}

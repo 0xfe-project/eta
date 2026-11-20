@@ -170,6 +170,7 @@ export function SkillDetail(props: {
       icon="refresh"
       iconOnly
       tone={tablet() ? "plain" : "ghost"}
+      style={tablet() ? undefined : { marginLeft: 6 }}
       onPress={refresh}
     />
   );
@@ -285,10 +286,7 @@ export function SkillDetail(props: {
         if (file()) scrollY = offset.y;
       }}
     >
-      <View
-        ref={contentStart.set}
-        style={{ paddingHorizontal: 12, paddingBottom: 12, gap: 8 }}
-      >
+      <View ref={contentStart.set} style={{ padding: 12, gap: 12 }}>
         <If when={failure()}>
           <Label size={12} tone="red">
             {failure()}
@@ -300,24 +298,41 @@ export function SkillDetail(props: {
           />
         </If>
         <If when={preview()?.metadata}>
-          <View style={{ borderBottomWidth: 1, borderColor: c().border }}>
-            <Button
-              label={uiText("metadata")}
-              icon={metadata() ? "down" : "right"}
-              tone="ghost"
-              size={36}
-              style={{ justifyContent: "flex-start", paddingHorizontal: 0 }}
+          <View
+            style={{
+              gap: 6,
+              paddingBottom: 8,
+              borderBottomWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <View
+              role="button"
+              accessibilityLabel={uiText("metadata")}
+              accessibilityState={{ expanded: metadata() }}
               onPress={() => metadata.set(!metadata())}
-            />
-            <If when={metadata()}>
-              <Label
-                size={12}
-                line={16}
-                tone="muted"
-                style={{ paddingLeft: 16, paddingBottom: 8 }}
-              >
-                {preview()!.metadata}
+              style={{
+                ...row,
+                gap: 6,
+                alignSelf: "flex-start",
+                cursor: "pointer",
+              }}
+            >
+              <Icon name={metadata() ? "down" : "right"} size={10} />
+              <Label size={12} line={16}>
+                {uiText("metadata")}
               </Label>
+            </View>
+            <If when={metadata()}>
+              <View style={{ paddingLeft: 16, gap: 2 }}>
+                <Each of={preview()!.metadata!.split("\n")}>
+                  {(line) => (
+                    <Label size={11} line={14} tone="muted">
+                      {line()}
+                    </Label>
+                  )}
+                </Each>
+              </View>
             </If>
           </View>
         </If>
@@ -414,7 +429,14 @@ export function SkillDetail(props: {
         </Header>
       </If>
       <If when={!tablet() && !phone()}>
-        <View style={{ paddingHorizontal: 24, paddingBottom: 8, gap: 6 }}>
+        <View
+          style={{
+            paddingHorizontal: 24,
+            paddingTop: 8,
+            paddingBottom: 8,
+            gap: 8,
+          }}
+        >
           <View style={{ ...row, gap: 8 }}>
             <Button
               label={uiText("skillBackToList")}
@@ -423,9 +445,9 @@ export function SkillDetail(props: {
             />
             {previousButton()}
           </View>
-          <View style={{ ...row, gap: 6 }}>
-            <Label size={12} tone="muted">{`${crumbs()} /`}</Label>
-            <Label size={12} weight={600}>
+          <View style={{ ...row, gap: 4, minHeight: 24 }}>
+            <Label size={12} line={16} tone="muted">{`${crumbs()} /`}</Label>
+            <Label size={12} line={16} weight={600}>
               {props.skill.name}
             </Label>
             {reload()}

@@ -14,7 +14,9 @@ import {
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { AddPlugin, ConfigurePlugin } from "./configure";
+import { pluginText } from "./labels";
 import { PluginDetail } from "./plugin-detail";
+import { Status } from "./plugin-status";
 import { Skills } from "./skills/list";
 import { PluginTablet } from "./tablet-list";
 import { pluginWarnings, PluginWarningsDialog } from "./warnings";
@@ -27,6 +29,7 @@ export function Plugins(props: { layout: Layout }) {
   const config = signal("");
   const selected = signal("");
   const warnings = signal("");
+  const source = signal("");
   const remove = signal("");
   const list = () => host.list<PluginView>("plugins");
   const plugin = () => list().find((item) => item.name === config());
@@ -36,6 +39,7 @@ export function Plugins(props: { layout: Layout }) {
     list().find((item) => item.name === selected()) ??
     (tabletPlugins() ? list()[0] : undefined);
   const warningPlugin = () => list().find((item) => item.name === warnings());
+  const sourcePlugin = () => list().find((item) => item.name === source());
   async function refreshPlugins() {
     await host.action(() => host.call("plugins", "recheck", {}));
   }
@@ -49,6 +53,9 @@ export function Plugins(props: { layout: Layout }) {
   follow(() => "plugins");
 
   function tabs(tablet = false) {
+    const items = ["Plugins", "Skills"];
+    const label = (item: string) =>
+      uiText(item === "Plugins" ? "plugins" : "skillsTab");
     return (
       <View
         style={{
@@ -61,17 +68,59 @@ export function Plugins(props: { layout: Layout }) {
           borderColor: c().border,
         }}
       >
-        <Each of={["Plugins", "Skills"]}>
-          {(item) => (
-            <Button
-              label={uiText(item() === "Plugins" ? "plugins" : "skillsTab")}
-              size={28}
-              tone={tab() === item() ? "primary" : "plain"}
-              style={{ flex: tablet ? 1 : undefined }}
-              onPress={() => tab.set(item())}
-            />
-          )}
-        </Each>
+        <If
+          when={tablet}
+          else={
+            <View
+              style={{
+                ...row,
+                alignItems: "stretch",
+                height: 28,
+                borderWidth: 1,
+                borderColor: c().strong,
+                backgroundColor: c().canvas,
+              }}
+            >
+              <Each of={items}>
+                {(item) => (
+                  <View
+                    role="button"
+                    accessibilityLabel={label(item())}
+                    accessibilityState={{ selected: tab() === item() }}
+                    onPress={() => tab.set(item())}
+                    style={{
+                      justifyContent: "center",
+                      paddingHorizontal: 12,
+                      backgroundColor:
+                        tab() === item() ? c().button : undefined,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <Label
+                      size={12}
+                      line={16}
+                      tone={tab() === item() ? "buttonInk" : "muted"}
+                    >
+                      {label(item())}
+                    </Label>
+                  </View>
+                )}
+              </Each>
+            </View>
+          }
+        >
+          <Each of={items}>
+            {(item) => (
+              <Button
+                label={label(item())}
+                size={28}
+                tone={tab() === item() ? "primary" : "plain"}
+                style={{ flex: 1 }}
+                onPress={() => tab.set(item())}
+              />
+            )}
+          </Each>
+        </If>
       </View>
     );
   }
@@ -107,18 +156,20 @@ export function Plugins(props: { layout: Layout }) {
                     inset={10}
                   >
                     <View style={{ flex: 1 }} />
-                    <Button
-                      label={uiText("refreshPlugins")}
-                      icon="refresh"
-                      iconOnly
-                      tone="ghost"
-                      onPress={() => void refreshPlugins()}
-                    />
-                    <Button
-                      label={uiText("addFromGit")}
-                      icon="plus"
-                      onPress={() => add.set(true)}
-                    />
+                    <View style={{ ...row, gap: 12 }}>
+                      <Button
+                        label={uiText("refreshPlugins")}
+                        icon="refresh"
+                        iconOnly
+                        tone="ghost"
+                        onPress={() => void refreshPlugins()}
+                      />
+                      <Button
+                        label={uiText("addFromGit")}
+                        icon="plus"
+                        onPress={() => add.set(true)}
+                      />
+                    </View>
                   </Header>
                   {tabs()}
                 </If>
@@ -135,11 +186,17 @@ export function Plugins(props: { layout: Layout }) {
                     <View
                       style={{
                         paddingHorizontal: phone() ? 16 : 24,
+                        paddingTop: 8,
                         paddingBottom: 16,
                         gap: 16,
                       }}
                     >
-                      <Label size={12} line={19} tone="muted">
+                      <Label
+                        size={12}
+                        line={20}
+                        tone="muted"
+                        style={{ maxWidth: 1000 }}
+                      >
                         {uiText("pluginsGiveAgentsSkillsAndMcp")}
                       </Label>
                       <If when={!list().length}>
@@ -151,133 +208,22 @@ export function Plugins(props: { layout: Layout }) {
                         style={{
                           ...row,
                           flexWrap: "wrap",
-                          alignItems: "stretch",
+                          alignItems: "flex-start",
                           gap: 12,
                         }}
                       >
                         <Each of={list()} key={(item) => item.name}>
                           {(item) => (
-                            <View
-                              role={phone() ? "button" : undefined}
-                              accessibilityLabel={
-                                phone() ? item().name : undefined
-                              }
-                              onPress={
-                                phone()
-                                  ? () => selected.set(item().name)
-                                  : undefined
-                              }
-                              activeStyle={{ backgroundColor: c().selected }}
-                              style={{
-                                width: phone()
-                                  ? "100%"
-                                  : props.layout === "tablet"
-                                    ? "31.9%"
-                                    : "24.1%",
-                                minHeight: phone() ? 108 : 220,
-                                padding: 12,
-                                backgroundColor: c().canvas,
-                                borderWidth: 1,
-                                borderColor: c().border,
-                                gap: 9,
-                              }}
-                            >
-                              <View style={{ ...row, gap: 12 }}>
-                                <View
-                                  style={{
-                                    width: 36,
-                                    height: 36,
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    backgroundColor: c().selected,
-                                  }}
-                                >
-                                  <Icon name="plugins" size={19} tone="muted" />
-                                </View>
-                                <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-                                  <Label weight={600} lines={1}>
-                                    {item().name}
-                                  </Label>
-                                  <View
-                                    style={{ ...row, flexWrap: "wrap", gap: 8 }}
-                                  >
-                                    <Label size={12} tone="muted">
-                                      {item().version ?? ""}
-                                    </Label>
-                                    <Label
-                                      size={10}
-                                      tone={
-                                        item().state === "ready"
-                                          ? "muted"
-                                          : "amber"
-                                      }
-                                    >
-                                      {item().state === "ready"
-                                        ? uiText("canBeEnabled")
-                                        : uiText("needsConfiguring")}
-                                    </Label>
-                                  </View>
-                                </View>
-                              </View>
-                              <Label size={12} tone="muted" line={18}>
-                                {item().description}
-                              </Label>
-                              <Label size={12} tone="muted" lines={1}>
-                                {"repo" in item().source
-                                  ? (item().source as { repo: string }).repo
-                                  : uiText("localDirectory")}
-                              </Label>
-                              <Label size={12} tone="muted">
-                                {uiText("skillsMcpServers", {
-                                  length: item().skills.length,
-                                  value2: item().servers.length,
-                                })}
-                              </Label>
-                              <If when={item().problem}>
-                                <Label size={12} tone="red">
-                                  {item().problem}
-                                </Label>
-                              </If>
-                              <If when={!phone()}>
-                                <View style={{ flex: 1 }} />
-                                <View
-                                  style={{
-                                    ...row,
-                                    borderTopWidth: 1,
-                                    borderColor: c().border,
-                                    paddingTop: 10,
-                                    gap: 5,
-                                    justifyContent: "flex-end",
-                                  }}
-                                >
-                                  <If when={pluginWarnings(item()).length}>
-                                    <Button
-                                      label={uiText("warnings")}
-                                      tone="ghost"
-                                      onPress={() => warnings.set(item().name)}
-                                    />
-                                  </If>
-                                  <If when={item().source.kind === "git"}>
-                                    <Button
-                                      label={uiText("update")}
-                                      tone="ghost"
-                                      onPress={() => void update(item().name)}
-                                    />
-                                    <Button
-                                      label={uiText("remove2")}
-                                      tone="ghost"
-                                      onPress={() => remove.set(item().name)}
-                                    />
-                                  </If>
-                                  <If when={item().fields.length}>
-                                    <Button
-                                      label={uiText("configure")}
-                                      onPress={() => config.set(item().name)}
-                                    />
-                                  </If>
-                                </View>
-                              </If>
-                            </View>
+                            <PluginCard
+                              item={item()}
+                              layout={props.layout}
+                              onSelect={() => selected.set(item().name)}
+                              onWarnings={() => warnings.set(item().name)}
+                              onSource={() => source.set(item().name)}
+                              onUpdate={() => void update(item().name)}
+                              onRemove={() => remove.set(item().name)}
+                              onConfigure={() => config.set(item().name)}
+                            />
                           )}
                         </Each>
                       </View>
@@ -307,6 +253,11 @@ export function Plugins(props: { layout: Layout }) {
             item={item()}
             onClose={() => warnings.set("")}
           />
+        )}
+      </If>
+      <If when={sourcePlugin()}>
+        {(item) => (
+          <PluginSourceDialog item={item()} onClose={() => source.set("")} />
         )}
       </If>
       <If when={add()}>
@@ -350,5 +301,198 @@ export function Plugins(props: { layout: Layout }) {
         </Modal>
       </If>
     </View>
+  );
+}
+
+function PluginCard(props: {
+  item: PluginView;
+  layout: Layout;
+  onSelect: () => void;
+  onWarnings: () => void;
+  onSource: () => void;
+  onUpdate: () => void;
+  onRemove: () => void;
+  onConfigure: () => void;
+}) {
+  const c = colors();
+  const phone = () => props.layout === "phone";
+  const git = () =>
+    props.item.source.kind === "git" ? props.item.source : undefined;
+  return (
+    <View
+      role={phone() ? "button" : undefined}
+      accessibilityLabel={phone() ? props.item.name : undefined}
+      onPress={phone() ? props.onSelect : undefined}
+      activeStyle={{ backgroundColor: c().selected }}
+      style={{
+        width: phone() ? "100%" : 267,
+        minHeight: phone() ? 108 : undefined,
+        padding: 12,
+        backgroundColor: c().canvas,
+        borderWidth: 1,
+        borderColor: c().border,
+        gap: 8,
+      }}
+    >
+      <View style={{ ...row, alignItems: "flex-start", gap: 12 }}>
+        <View
+          style={{
+            width: 36,
+            height: 36,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: c().selected,
+          }}
+        >
+          <Icon name="plugins" size={20} tone="muted" />
+        </View>
+        <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+          <Label weight={500} line={18} lines={1}>
+            {props.item.name}
+          </Label>
+          <View style={{ ...row, height: 20, gap: 8 }}>
+            <If when={props.item.version}>
+              <Label size={12} line={16} tone="muted">
+                {props.item.version ?? ""}
+              </Label>
+            </If>
+            <Status item={props.item} />
+          </View>
+        </View>
+      </View>
+      <Label
+        size={12}
+        line={18}
+        tone="muted"
+        lines={2}
+        style={{ height: phone() ? undefined : 36 }}
+      >
+        {props.item.description}
+      </Label>
+      <View style={{ gap: 4 }}>
+        <View style={{ ...row, height: 28, gap: 4 }}>
+          <If
+            when={git()}
+            else={
+              <Label size={12} line={16} tone="muted">
+                {uiText("localDirectory")}
+              </Label>
+            }
+          >
+            {(source) => (
+              <>
+                <Label
+                  size={12}
+                  line={16}
+                  tone="muted"
+                  lines={1}
+                  style={{ flex: 1, minWidth: 0 }}
+                >
+                  {`${source().repo} @ ${source().sha.slice(0, 12)}`}
+                </Label>
+                <If when={!phone()}>
+                  <Button
+                    label={uiText("sourceFor", { name: props.item.name })}
+                    icon="more"
+                    iconOnly
+                    tone="ghost"
+                    onPress={props.onSource}
+                  />
+                </If>
+              </>
+            )}
+          </If>
+        </View>
+        <View style={{ ...row, height: 24, gap: 4 }}>
+          <Label size={12} line={16} tone="muted">
+            {uiText("skillsMcpServers", {
+              length: props.item.skills.length,
+              value2: props.item.servers.length,
+            })}
+          </Label>
+        </View>
+      </View>
+      <If when={props.item.problem}>
+        <Label size={12} tone="red">
+          {props.item.problem}
+        </Label>
+      </If>
+      <If when={!phone()}>
+        <View
+          style={{
+            ...row,
+            height: 36,
+            borderTopWidth: 1,
+            borderColor: c().border,
+            paddingTop: 8,
+            gap: 4,
+            justifyContent: "flex-end",
+          }}
+        >
+          <If when={pluginWarnings(props.item).length}>
+            <Button
+              label={uiText("warnings")}
+              tone="ghost"
+              onPress={props.onWarnings}
+            />
+          </If>
+          <If when={props.item.source.kind === "git"}>
+            <Button
+              label={uiText("update")}
+              tone="ghost"
+              onPress={props.onUpdate}
+            />
+            <Button
+              label={uiText("remove2")}
+              tone="ghost"
+              onPress={props.onRemove}
+            />
+          </If>
+          <If when={props.item.fields.length}>
+            <Button label={uiText("configure")} onPress={props.onConfigure} />
+          </If>
+        </View>
+      </If>
+    </View>
+  );
+}
+
+function PluginSourceDialog(props: { item: PluginView; onClose: () => void }) {
+  const c = colors();
+  const source = () =>
+    props.item.source.kind === "git"
+      ? `${props.item.source.repo} @ ${props.item.source.sha}`
+      : props.item.source.path;
+  return (
+    <Modal
+      title={uiText("sourceFor", { name: props.item.name })}
+      width={384}
+      blurBackdrop={false}
+      onClose={props.onClose}
+    >
+      <View style={{ padding: 16 }}>
+        <Label size={12} line={16} tone="muted" style={{ userSelect: "text" }}>
+          {source()}
+        </Label>
+      </View>
+      <View
+        style={{
+          ...row,
+          justifyContent: "flex-end",
+          paddingHorizontal: 16,
+          paddingVertical: 12,
+          borderTopWidth: 1,
+          borderColor: c().border,
+        }}
+      >
+        <Button
+          label={pluginText("ok")}
+          tone="primary"
+          size={28}
+          style={{ paddingHorizontal: 14 }}
+          onPress={props.onClose}
+        />
+      </View>
+    </Modal>
   );
 }

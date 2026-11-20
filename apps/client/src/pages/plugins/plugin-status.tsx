@@ -38,7 +38,7 @@ export function Status(props: { item: PluginView; phone?: boolean }) {
       tone={missing() ? "amber" : "muted"}
       style={{
         alignSelf: props.phone ? "flex-start" : "center",
-        paddingHorizontal: missing() ? 5 : 0,
+        paddingHorizontal: missing() ? 6 : 0,
         borderWidth: missing() ? 1 : 0,
         borderColor: c().amber,
       }}

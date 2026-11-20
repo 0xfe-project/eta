@@ -202,7 +202,7 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
         ...(tablet() || phone() ? {} : { ...row }),
         alignItems: tablet() || phone() ? "stretch" : "center",
         flexWrap: tablet() || phone() ? "nowrap" : "wrap",
-        gap: 8,
+        gap: tablet() || phone() ? 8 : 12,
         paddingHorizontal: tablet() ? 14 : phone() ? 16 : 24,
         paddingTop: tablet() ? 9 : 8,
         paddingBottom: tablet() ? 10 : 16,
@@ -216,21 +216,37 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
           ...row,
           alignSelf: "flex-start",
           backgroundColor: c().selected,
-          padding: 1,
+          padding: 2,
         }}
       >
-        <Button
-          label={uiText("personal")}
-          tone={scope() === "personal" ? "plain" : "ghost"}
-          size={26}
-          onPress={() => changeScope("personal")}
-        />
-        <Button
-          label={uiText("project2")}
-          tone={scope() === "project" ? "plain" : "ghost"}
-          size={26}
-          onPress={() => changeScope("project")}
-        />
+        <Each of={["personal", "project"] as const}>
+          {(item) => (
+            <View
+              role="button"
+              accessibilityLabel={uiText(
+                item() === "personal" ? "personal" : "project2",
+              )}
+              accessibilityState={{ selected: scope() === item() }}
+              onPress={() => changeScope(item())}
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 5,
+                borderWidth: 1,
+                borderColor: scope() === item() ? c().strong : "transparent",
+                backgroundColor: scope() === item() ? c().canvas : undefined,
+                cursor: "pointer",
+              }}
+            >
+              <Label
+                size={11}
+                line={14}
+                tone={scope() === item() ? "ink" : "muted"}
+              >
+                {uiText(item() === "personal" ? "personal" : "project2")}
+              </Label>
+            </View>
+          )}
+        </Each>
       </View>
       <If when={scope() === "project"}>
         <ActionMenu
@@ -280,7 +296,7 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
             pointerEvents: "none",
           }}
         >
-          <Icon name="search" tone="muted" size={12} />
+          <Icon name="search" size={12} />
         </View>
       </View>
     </View>
@@ -350,10 +366,8 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
                         }
                       : {
                           width: phone() ? "100%" : 267,
-                          minHeight: 82,
                           padding: 12,
                           borderWidth: 1,
-                          gap: 3,
                         }),
                     borderColor: c().border,
                     backgroundColor:
@@ -378,10 +392,10 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
                       <Icon name="artifact" size={14} tone="muted" />
                     </View>
                   </If>
-                  <View style={{ flex: 1, minWidth: 0 }}>
+                  <View style={{ flex: 1, minWidth: 0, gap: tablet() ? 0 : 4 }}>
                     <Label
                       size={tablet() ? 13 : 14}
-                      line={19}
+                      line={tablet() ? 19 : 20}
                       weight={500}
                       lines={1}
                     >
@@ -392,6 +406,7 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
                       line={16}
                       tone="muted"
                       lines={tablet() ? 1 : 2}
+                      style={{ height: tablet() ? undefined : 32 }}
                     >
                       {entry().description}
                     </Label>
@@ -431,14 +446,16 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
             <Header title={uiText("plugins")} layout={props.layout} inset={10}>
               <View style={{ flex: 1 }} />
               <If when={!showing()}>
-                {deviceMenu(160)}
-                <Button
-                  label={uiText("skillReload")}
-                  icon="refresh"
-                  iconOnly
-                  tone="ghost"
-                  onPress={refresh}
-                />
+                <View style={{ ...row, gap: 12 }}>
+                  {deviceMenu(160)}
+                  <Button
+                    label={uiText("skillReload")}
+                    icon="refresh"
+                    iconOnly
+                    tone="ghost"
+                    onPress={refresh}
+                  />
+                </View>
               </If>
             </Header>
             {props.tabs()}

@@ -24,7 +24,19 @@ export const pluginsMessages = {
   noPluginsInstalled: ["No plugins installed.", "尚未安装插件。"],
   noWarnings: ["No warnings", "暂无警告"],
   pluginActions: ["Plugin actions", "插件操作"],
+  pluginMachineMissing: [
+    "{{machine}} is missing {{commands}}",
+    "{{machine}} 上缺少 {{commands}}",
+  ],
   pluginPath: ["Plugin path", "插件路径"],
+  pluginRequiredMissing: [
+    'Required field "{{title}}" is missing.',
+    "缺少必填项“{{title}}”。",
+  ],
+  pluginSkipped: [
+    "{{agents}} enabled this, but its configuration no longer fits. It is skipped until that is fixed.",
+    "{{agents}} 启用了它，但配置不再合法，正在跳过，改好后恢复。",
+  ],
   pluginsGiveAgentsSkillsAndMcp: [
     "Plugins give agents skills and MCP servers, from directories under ~/.eta/plugins/ or from git. One must be configured before it can be enabled. Its configuration is global; each agent chooses which plugins to use.",
     "插件给智能体带来 skill 和 MCP 服务器，来自 ~/.eta/plugins/ 下的目录或 git 仓库。配置好才能启用，配置全局一份，每个智能体选择启用哪些。",
@@ -38,6 +50,7 @@ export const pluginsMessages = {
   repository: ["Repository", "仓库地址"],
   revision: ["Revision", "版本"],
   select: ["Select {{name}}", "选择 {{name}}"],
+  sourceFor: ["Source for {{name}}", "{{name}} 的来源"],
   skillsMcpServers: [
     "{{length}} skills · {{value2}} MCP servers",
     "{{length}} 个 skill · {{value2}} 个 MCP 服务器",
