@@ -67,7 +67,7 @@ function MachineRow(props: {
       <StatusDot
         color={
           props.item.status === "offline"
-            ? c().muted
+            ? c().strong
             : props.item.status === "pending" ||
                 props.item.build === "outdated" ||
                 props.item.build === "updating"
@@ -75,7 +75,7 @@ function MachineRow(props: {
               : c().green
         }
       />
-      <Label size={12} line={16} tone="muted">
+      <Label size={12} line={16} tone="mutedInk">
         {machineStatus(props.item)}
       </Label>
     </View>
@@ -130,7 +130,12 @@ function MachineRow(props: {
             <Icon name="monitor" size={16} tone="muted" />
           </View>
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-            <Label size={14} line={20} weight={500}>
+            <Label
+              size={14}
+              line={20}
+              weight={500}
+              tone={props.item.status === "offline" ? "muted" : "ink"}
+            >
               {props.item.name}
             </Label>
             <If when={props.phone}>{status()}</If>

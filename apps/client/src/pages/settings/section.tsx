@@ -118,6 +118,8 @@ export function WarningLine(props: { text: string }) {
 export function EntityRow(props: {
   title: string;
   leading?: JSX.Element;
+  /** The leading slot's side: 24, or 28 for the tablet's agent avatars. */
+  leadingSize?: number;
   meta?: JSX.Element | string;
   titleTone?: "ink" | "muted";
   strike?: boolean;
@@ -159,8 +161,8 @@ export function EntityRow(props: {
         <If when={props.leading}>
           <View
             style={{
-              width: 24,
-              height: 24,
+              width: props.leadingSize ?? 24,
+              height: props.leadingSize ?? 24,
               flexShrink: 0,
               alignItems: "center",
               justifyContent: "center",
@@ -228,13 +230,13 @@ export function EntityRow(props: {
 }
 
 /** The 24px box with an entity's first letter, standing in for a logo or avatar. */
-export function LetterBox(props: { name: string }) {
+export function LetterBox(props: { name: string; size?: number }) {
   const c = colors();
   return (
     <View
       style={{
-        width: 24,
-        height: 24,
+        width: props.size ?? 24,
+        height: props.size ?? 24,
         alignItems: "center",
         justifyContent: "center",
         borderWidth: 1,

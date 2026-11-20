@@ -207,6 +207,7 @@ export function Settings(
                       {(item) => (
                         <AgentSetting
                           agent={item()}
+                          avatar={props.layout === "tablet" ? 28 : undefined}
                           onPress={() => agent.set(item().id)}
                         />
                       )}

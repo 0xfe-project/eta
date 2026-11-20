@@ -114,7 +114,7 @@ export const settingsMessages = {
     "Eta 自有网关：一个密钥即可使用多个模型",
   ],
   finishSignIn: ["Finish sign-in", "完成登录"],
-  followProject: ["Follow project", "跟随项目"],
+  followProject: ["Follow the project", "跟随项目"],
   localModels: ["Local models", "本机模型"],
   modelDefault: ["Model default", "跟随模型默认"],
   modelIdsSeparatedByCommas: [

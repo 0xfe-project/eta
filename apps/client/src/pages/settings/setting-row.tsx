@@ -53,7 +53,12 @@ export function SettingRow(props: {
   );
 }
 
-export function AgentSetting(props: { agent: AgentView; onPress: () => void }) {
+export function AgentSetting(props: {
+  agent: AgentView;
+  /** The avatar's side: the tablet draws it at 28, the dialog at 24. */
+  avatar?: number;
+  onPress: () => void;
+}) {
   const host = useHost();
   const c = colors();
   const models = useModels();
@@ -75,7 +80,8 @@ export function AgentSetting(props: { agent: AgentView; onPress: () => void }) {
   return (
     <EntityRow
       title={props.agent.name}
-      leading={<LetterBox name={props.agent.name} />}
+      leading={<LetterBox name={props.agent.name} size={props.avatar} />}
+      leadingSize={props.avatar}
       meta={
         <If
           when={missing()}

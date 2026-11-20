@@ -103,10 +103,10 @@ export function MachineField(props: { form: AgentForm }) {
       stack={stacked()}
       hint={
         !creating ? (
-          <Label size={10} line={14} tone="muted">
+          <Label size={12} line={16} tone="muted">
             {localizedText(
-              "Uses the machine for the project when no machine is chosen here.",
-              "未设置时，使用项目所在的机器。",
+              "Runs on the machine the project is on. Runtimes are listed from the primary for now, and may differ if the project is on another machine.",
+              "运行在项目所在的机器上。运行时目前按主机器列出，项目在其他机器上时可能不同。",
             )}
           </Label>
         ) : undefined
