@@ -177,16 +177,16 @@ export function Routines(props: {
           marginHorizontal: phone() ? 16 : props.layout === "tablet" ? 12 : 21,
           marginTop: props.layout === "desktop" ? 11 : 12,
           marginBottom: phone() ? 4 : props.layout === "tablet" ? 12 : 0,
-          gap: 4,
+          gap: props.layout === "desktop" ? 0 : 4,
           borderWidth: 1,
           borderColor: `${c().amber}66`,
           backgroundColor: c().amberFill,
         }}
       >
-        <Label size={props.layout === "tablet" ? 13 : 14} weight={600}>
+        <Label size={props.layout === "tablet" ? 13 : 14} weight={500}>
           {uiText("captainIsOffSoRoutinesAre")}
         </Label>
-        <Label size={12} line={16} tone="mutedInk">
+        <Label size={12} line={16} tone="muted">
           {status()?.reason === "no_model"
             ? uiText("captainHasNoModelChooseOne")
             : uiText("turnOnCaptainToResumeRoutines")}
@@ -284,7 +284,13 @@ export function Routines(props: {
               }
             >
               <Scroll style={grow} scrollbar={false}>
-                <View style={{ paddingTop: phone() ? 0 : 8 }}>
+                <View
+                  style={
+                    phone()
+                      ? undefined
+                      : { paddingVertical: 11, paddingHorizontal: 14 }
+                  }
+                >
                   <Each of={list()} key={(item) => item.id}>
                     {(item) => (
                       <If
@@ -332,6 +338,15 @@ export function Routines(props: {
                       selected() ? undefined : uiText("selectOneOnTheLeftTo")
                     }
                     icon="routines"
+                    style={
+                      selected()
+                        ? undefined
+                        : {
+                            justifyContent: "flex-start",
+                            paddingTop: 60,
+                            gap: 8,
+                          }
+                    }
                   />
                 }
               >
@@ -343,6 +358,7 @@ export function Routines(props: {
                         layout={props.layout}
                         routine={item()}
                         brief={briefs()[0]}
+                        firstBrief={briefs().at(-1)}
                         runs={runs()}
                         canRun={canRun()}
                         onRun={() => void retry(item().id)}

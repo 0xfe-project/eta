@@ -1,4 +1,30 @@
 export const routinesMessages = {
+  routineScheduleOrigin: [
+    " ({{setting}} {{zone}})",
+    "（{{zone}} {{setting}}）",
+  ],
+  routineScheduleOriginZone: [" ({{zone}})", "（按{{zone}}）"],
+  nextReportOn: [
+    "Next report {{day}} · {{clockDistance}}",
+    "下次报告 {{day}} · {{clockDistance}}",
+  ],
+  routineCreatedMarker: [
+    "Routine created · brief v{{version}} · {{date}}",
+    "定时任务已创建 · 要求 v{{version}} · {{date}}",
+  ],
+  routineNamePlaceholder: ["e.g. Daily tech news", "例如：科技日报"],
+  routineBriefLabel: ["Brief", "要求"],
+  routineBriefPlaceholder: [
+    "For example: Every Monday morning, look at last week's tasks and what each group did. Report what finished, what is stuck and why. If something needs doing, assign it in the right group. Post the summary in the Team group too.",
+    "例如：每周一早上看一下上周的任务和各个群做了什么。汇报完成了什么、卡在哪里、为什么。需要有人跟进的，到对应的群里派工。总结也发到「团队」群里。",
+  ],
+  routineRunByCaptain: [
+    "Captain runs it, in a new session each time, with its own tools and model. To have results sent somewhere (a group, say), write that in the brief.",
+    "由 Captain 执行，每次开一个新会话，用它自己的工具和模型。要把结果发到某个地方（比如某个群），写在要求里就行。",
+  ],
+  routineCreate: ["Create", "创建"],
+  reportsTrail: ["/ Reports", "/ 报告"],
+  reportPosition: ["{{index}} of {{count}}", "{{index}} / {{count}}"],
   emptyRoutineHelp: [
     "Have Captain do something on a schedule, such as summarizing what moved this week. Each run leaves a report here.",
     "让 Captain 按计划执行任务，例如总结本周的进展。每次运行的报告都会出现在这里。",
@@ -23,7 +49,6 @@ export const routinesMessages = {
     "Captain is off, so routines are not running",
     "Captain 已关闭，定时任务不会运行",
   ],
-  createRoutine: ["Create routine", "创建定时任务"],
   cronExpression: ["Cron expression", "cron 表达式"],
   earlierReports: ["Earlier reports", "更早的报告"],
   editRoutine: ["Edit routine", "编辑定时任务"],
@@ -41,16 +66,11 @@ export const routinesMessages = {
   ],
   newer: ["Newer", "较新的"],
   newRoutine: ["New routine", "新建定时任务"],
-  nextReport: [
-    "Next report {{routineTime}} · {{clockDistance}}",
-    "下次报告 {{routineTime}} · {{clockDistance}}",
-  ],
   nextWithCount: ["Next · {{clockDistance}}", "下次 · {{clockDistance}}"],
   noReport: ["No report", "暂无报告"],
   noReportsYet: ["No reports yet", "暂无报告"],
   noRoutinesYet: ["No routines yet", "还没有定时任务"],
   noUpcomingRun: ["No upcoming run", "暂无下次运行"],
-  of: ["of", "/"],
   older: ["Older", "较早的"],
   openReport: ["Open report", "打开报告"],
   pause: ["Pause", "暂停"],
@@ -60,11 +80,9 @@ export const routinesMessages = {
   repeatEvery: ["Repeat every", "重复间隔"],
   report: ["Report", "报告"],
   reports: ["Reports · ", "报告 · "],
-  reports2: ["/ Reports · ", "/ 报告 · "],
   resume: ["Resume", "恢复"],
   routineActions: ["Routine actions", "定时任务操作"],
   routineBrief: ["Routine brief", "定时任务说明"],
-  runDetails: ["Run details", "运行详情"],
   runNow: ["Run now", "立即运行"],
   runReport: ["Run report", "运行报告"],
   schedule: ["Schedule", "计划"],
@@ -89,9 +107,5 @@ export const routinesMessages = {
   ],
   updatingTheBrief: ["Updating the brief…", "正在更新任务说明…"],
   viewRun: ["View run", "查看运行"],
-  whatShouldCaptainDoEachTime: [
-    "What should Captain do each time?",
-    "Captain 每次应当做什么？",
-  ],
   olderReports: ["Older reports", "较早的报告"],
 } as const;

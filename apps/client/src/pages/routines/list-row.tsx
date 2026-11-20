@@ -20,23 +20,22 @@ export function RoutineRow(props: {
       hoverStyle={{ backgroundColor: c().selected }}
       style={{
         ...row,
-        paddingHorizontal: 20,
-        minHeight: 52,
-        borderColor: c().border,
-        justifyContent: "space-between",
-        gap: 6,
+        padding: 7,
+        gap: 16,
         cursor: "pointer",
         backgroundColor: props.selected ? c().selected : c().canvas,
       }}
     >
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Label lines={1}>{props.item.name}</Label>
-        <Label size={12} tone="muted">
+      <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+        <Label lines={1} line={18}>
+          {props.item.name}
+        </Label>
+        <Label size={12} line={16} tone="muted">
           {scheduleLabel(props.item.schedule)}
         </Label>
       </View>
-      <View style={{ alignItems: "flex-end", gap: 3 }}>
-        <View style={{ ...row, gap: 3 }}>
+      <View style={{ alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
+        <View style={{ ...row, gap: 1 }}>
           <Each of={runHistory(props.item.runs)}>
             {(entry) => (
               <StatusDot
@@ -47,14 +46,14 @@ export function RoutineRow(props: {
                       ? c().blue
                       : entry() === "sent"
                         ? c().ink
-                        : c().border
+                        : c().selected
                 }
-                size={7}
+                size={8}
               />
             )}
           </Each>
         </View>
-        <Label size={12} tone="muted">
+        <Label size={12} line={16} tone="muted">
           {props.paused
             ? uiText("captainIsOff")
             : !props.item.enabled
