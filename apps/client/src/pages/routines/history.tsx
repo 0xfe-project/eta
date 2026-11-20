@@ -94,7 +94,7 @@ export function PhoneRoutineRow(props: {
           <Label
             size={11}
             line={14}
-            tone={props.paused ? "amber" : "muted"}
+            tone={props.paused ? "warningInk" : "muted"}
             lines={1}
           >
             {status()}
@@ -179,7 +179,7 @@ export function LatestReportCard(props: {
           <Label size={12} line={16} weight={600}>
             {uiText("readReport")}
           </Label>
-          <Icon name="right" size={12} />
+          <Icon name="arrowRight" size={12} />
         </View>
       </View>
     </View>

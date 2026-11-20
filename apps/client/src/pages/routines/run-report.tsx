@@ -14,6 +14,7 @@ import {
   Modal,
   row,
 } from "../../components";
+import { UserFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
 import { formatLocale, localizedText, uiText } from "../../i18n";
 import { reportBody, RoutineHistory } from "./history";
@@ -335,7 +336,7 @@ export function RoutineReport(props: RoutineReportProps) {
               focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
               style={{ ...row, gap: 8, minWidth: 0, cursor: "pointer" }}
             >
-              <Icon name="back" size={12} />
+              <Icon name="arrowLeft" size={12} />
               <Label size={12} line={16} lines={1}>
                 {props.routine.name}
               </Label>
@@ -448,29 +449,32 @@ export function RoutineReport(props: RoutineReportProps) {
             <View style={{ ...column, gap: 12 }}>
               <Each of={props.run.feedback} key={(entry) => entry.id}>
                 {(entry) => (
-                  <View style={{ gap: 6 }}>
-                    <View style={{ ...row, alignItems: "baseline", gap: 8 }}>
-                      <Label size={12} line={16} weight={600}>
-                        {uiText("me")}
-                      </Label>
-                      <Label size={12} line={16} tone="muted">
-                        {`${runDay(entry().createdAt)} ${clockTime(entry().createdAt)}`}
+                  <View style={{ ...row, alignItems: "flex-start", gap: 10 }}>
+                    <UserFace size={20} />
+                    <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
+                      <View style={{ ...row, alignItems: "baseline", gap: 8 }}>
+                        <Label size={12} line={16} weight={600}>
+                          {uiText("me")}
+                        </Label>
+                        <Label size={12} line={16} tone="muted">
+                          {`${runDay(entry().createdAt)} ${clockTime(entry().createdAt)}`}
+                        </Label>
+                      </View>
+                      <Label line={20}>{entry().text}</Label>
+                      <Label
+                        size={12}
+                        line={16}
+                        tone={entry().revisionFailed ? "red" : "muted"}
+                      >
+                        {entry().revisionFailed
+                          ? uiText("theBriefCouldntBeUpdated")
+                          : entry().briefVersion
+                            ? uiText("briefUpdatedToV", {
+                                briefVersion: entry().briefVersion,
+                              })
+                            : uiText("updatingTheBrief")}
                       </Label>
                     </View>
-                    <Label line={20}>{entry().text}</Label>
-                    <Label
-                      size={12}
-                      line={16}
-                      tone={entry().revisionFailed ? "red" : "muted"}
-                    >
-                      {entry().revisionFailed
-                        ? uiText("theBriefCouldntBeUpdated")
-                        : entry().briefVersion
-                          ? uiText("briefUpdatedToV", {
-                              briefVersion: entry().briefVersion,
-                            })
-                          : uiText("updatingTheBrief")}
-                    </Label>
                   </View>
                 )}
               </Each>
@@ -503,9 +507,13 @@ export function RoutineReport(props: RoutineReportProps) {
                 />
                 <Button
                   label={uiText("sendFeedback")}
-                  icon="arrowUp"
+                  icon="send"
+                  iconSize={14}
+                  labelTone="muted"
                   iconOnly
                   tone="ghost"
+                  // The glyph sits on the box's 10px inset.
+                  style={{ marginRight: -5 }}
                   disabled={!sendable()}
                   onPress={props.onSend}
                 />

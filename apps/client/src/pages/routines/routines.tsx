@@ -123,7 +123,6 @@ export function Routines(props: {
               : uiText("routines2")
       }
       layout={props.layout}
-      end={phone() && info() && !current() ? 4 : undefined}
       inset={tablet() ? 10 : undefined}
       onBack={
         phone() && current()
@@ -200,6 +199,7 @@ export function Routines(props: {
           <Button
             label={uiText("panel")}
             icon="sidebar"
+            iconSize={14}
             labelSize={11}
             style={{ gap: 6 }}
             onPress={() => drawer.set(true)}
@@ -233,8 +233,9 @@ export function Routines(props: {
           marginBottom: phone() ? 4 : props.layout === "tablet" ? 12 : 0,
           gap: props.layout === "desktop" ? 0 : phone() ? 6 : 4,
           borderWidth: 1,
-          borderColor: `${c().amber}66`,
-          backgroundColor: c().amberFill,
+          // state-warning at 40% and 12%.
+          borderColor: `${c().warning}66`,
+          backgroundColor: `${c().warning}1f`,
         }}
       >
         <Label
@@ -301,14 +302,16 @@ export function Routines(props: {
                 title={uiText("routines2")}
                 count={list().length}
                 layout="tablet"
+                background="none"
                 inset={14}
+                end={10}
               >
                 <View style={{ flex: 1 }} />
                 <Button
                   icon="plus"
                   label={uiText("newRoutine")}
                   iconOnly
-                  style={{ backgroundColor: "transparent", marginRight: -4 }}
+                  style={{ backgroundColor: "transparent" }}
                   onPress={() => editing.set("new")}
                 />
               </Header>
@@ -397,6 +400,15 @@ export function Routines(props: {
                       selected() ? undefined : uiText("selectOneOnTheLeftTo")
                     }
                     icon="routines"
+                    iconSize={selected() ? undefined : 24}
+                    iconTone={selected() ? undefined : "ink"}
+                    titleSize={tablet() ? 13 : undefined}
+                    titleLine={tablet() ? undefined : 20}
+                    titleWeight={tablet() ? 400 : undefined}
+                    descriptionSize={tablet() ? 11 : undefined}
+                    descriptionLine={16}
+                    // Two lines on the desktop; tablet runs it across the pane.
+                    descriptionWidth={tablet() ? 560 : 230}
                     style={
                       selected()
                         ? undefined
@@ -404,7 +416,6 @@ export function Routines(props: {
                             justifyContent: "flex-start",
                             paddingTop: tablet() ? 110 : 60,
                             paddingHorizontal: tablet() ? 40 : undefined,
-                            gap: 8,
                           }
                     }
                   />

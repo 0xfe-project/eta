@@ -209,7 +209,7 @@ export function RoutineEditor(props: {
               cursor: "pointer",
             }}
           >
-            <Icon name="back" size={12} />
+            <Icon name="arrowLeft" size={12} />
             <Label
               size={props.tablet ? 11 : 12}
               line={props.tablet ? 14 : 16}

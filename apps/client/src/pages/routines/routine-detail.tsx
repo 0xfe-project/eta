@@ -74,7 +74,8 @@ export function RoutineDetail(props: {
               />
               <Button
                 label={uiText("runNow")}
-                icon="right"
+                icon="play"
+                iconSize={14}
                 iconOnly
                 tone="ghost"
                 disabled={!props.canRun}
@@ -82,6 +83,7 @@ export function RoutineDetail(props: {
               />
               <ActionMenu
                 label={uiText("routineActions")}
+                iconSize={14}
                 triggerStyle={{
                   minWidth: 24,
                   width: 24,
@@ -173,7 +175,7 @@ export function RoutineDetail(props: {
           </Label>
           <Button
             label={uiText("runNow")}
-            icon="right"
+            icon="play"
             tone="ghost"
             disabled={!props.canRun}
             style={{ gap: 6, paddingHorizontal: 0 }}
