@@ -4,11 +4,11 @@ import type { AgentStore } from "../agents/store";
 import type { ConversationStore } from "../conversations/store";
 import type { MemoryClient } from "../memory/client";
 import type { ProjectStore } from "../projects/store";
+import type { MemorySection } from "./memory-file";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import process from "node:process";
 import { agentHome } from "../agents/store";
-import type { MemorySection } from "./memory-file";
 import { parseMemoryFile, renderMemoryFile } from "./memory-file";
 
 export interface CaptainMemoryItem {
