@@ -117,7 +117,7 @@ async function compressDaemons(
 /** Write the two modules to `out`; returns the entry to compile. */
 export async function writeEmbedded(options: {
   out: string;
-  /** The built page, `apps/web/dist`. */
+  /** The directory of the built frontend. */
   web: string;
   /** The daemon builds and their manifest, `apps/daemon/out/dist`. */
   daemons: string;
@@ -138,7 +138,7 @@ export async function writeEmbedded(options: {
     ...filesIn(join(eta, "src", "migrations"), "migrations"),
     {
       name: "Eta-Logo.png",
-      path: resolve(eta, "..", "web", "public", "Eta-Logo.png"),
+      path: join(eta, "src", "assets", "Eta-Logo.png"),
     },
     ...filesIn(options.web, "web"),
     ...cpa,

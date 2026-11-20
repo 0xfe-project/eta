@@ -10,10 +10,10 @@ import { connect } from "../test/support/client";
 import { call, say, scriptedModels } from "../test/support/models";
 
 const root = resolve(import.meta.dir, "../../..");
-const webDir = resolve(root, "apps/web/dist");
+const webDir = resolve(root, "apps/client/dist/Eta");
 if (!existsSync(join(webDir, "index.html"))) {
   throw new Error(
-    "The web build is missing. Run `bun run --cwd apps/web build` first.",
+    "The web build is missing. Run `bun run --cwd apps/client package:web` first.",
   );
 }
 
@@ -129,6 +129,7 @@ async function setup(
   if (!agent) {
     ({ agent } = (await client.call("agents", "create", {
       name: agentName,
+      model: "fake:fake-model",
     })) as { agent: AgentView });
   }
   const accounts =

@@ -1,5 +1,5 @@
+import type { DownloadProgress } from "@eta/releases/install";
 import type { Connection } from "../src/bun/connection";
-import type { DownloadProgress } from "../src/bun/download";
 import type { Failure, HostLaunch, View } from "../src/bun/shell";
 import { describe, expect, it, vi } from "vitest";
 import { createShell, describe as describeView } from "../src/bun/shell";

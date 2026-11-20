@@ -11,7 +11,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, join, sep } from "node:path";
 
 /** What goes into a compiled host. The phone app is built apart, and devDependencies are not in it. */
-const SHIPPED = ["apps/eta", "apps/daemon", "apps/web", "apps/desktop"];
+const SHIPPED = ["apps/eta", "apps/daemon", "apps/client"];
 
 /** A package's own legal files. `THIRD-PARTY-NOTICES.md` is where a prebuilt binary names its source. */
 const LEGAL_FILE = /^(?:licen[cs]e|copying|notice|third-party-notices)/i;
@@ -136,12 +136,15 @@ function section(notice: Notice): string {
 }
 
 /** The whole file: the written notices, then the packages of this build. */
-export function thirdPartyNotices(root: string): string {
+export function thirdPartyNotices(
+  root: string,
+  workspaces?: readonly string[],
+): string {
   const written = readFileSync(
     join(root, "THIRD_PARTY_NOTICES.md"),
     "utf8",
   ).trim();
-  const packages = thirdPartyPackages(root);
+  const packages = thirdPartyPackages(root, workspaces);
   const list = packages.map(section).join("\n\n");
   return `${written}\n\n## npm packages in this build\n\n${packages.length} packages.\n\n${list}\n`;
 }

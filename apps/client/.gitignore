@@ -1,0 +1,5 @@
+.nsh/
+dist/
+assets/qr-decoder.txt
+assets/artifact-pdf-renderer.txt
+assets/artifact-pdf-module-lexer.txt

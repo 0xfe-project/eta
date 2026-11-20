@@ -853,28 +853,35 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
       locale: "zh-CN",
       colorScheme: "light",
     });
-    await context.addInitScript(() => {
-      localStorage.setItem("eta.onboarded.v1", "1");
-    });
     const page = await context.newPage();
     const shot = (file: string) =>
       page.screenshot({ path: join(SHOTS, `${process.platform}-${file}.png`) });
     const settings = async (): Promise<void> => {
       await page.goto(`http://127.0.0.1:${PORT}/?settings=update`);
-      await page.locator("[data-version]").first().waitFor({ timeout: 30_000 });
-      await sleep(800);
+      await page
+        .getByRole("dialog", { name: "Settings" })
+        .waitFor({ timeout: 30_000 });
+      await page.getByTestId("host-version").waitFor({ timeout: 30_000 });
     };
-    const shown = (): Promise<string | null> =>
-      page.locator("[data-version]").first().textContent();
+    const shown = async (): Promise<string> => {
+      const version =
+        (await page.getByTestId("host-version").textContent()) ?? "";
+      return version.replace("Current version", "").trim();
+    };
 
     await settings();
     want("the page says the old build", await shown(), "0.9.0");
     await shot("1-update-available");
-    await page.getByRole("button", { name: /^更新到 / }).click();
-    await page.getByRole("alertdialog").waitFor();
+    await page.getByRole("button", { name: /^Update to / }).click();
+    await page.getByRole("dialog", { name: "Update host?" }).waitFor();
     await shot("2-confirm");
-    await page.getByRole("button", { name: "更新", exact: true }).click();
-    const screen = page.locator(".fixed.inset-0[role=status]");
+    await page
+      .getByRole("dialog", { name: "Update host?" })
+      .getByRole("button", { name: "Update", exact: true })
+      .click();
+    const screen = page.getByRole("status", {
+      name: "Host update in progress",
+    });
     await screen.waitFor({ timeout: 60_000 });
     await shot("3-restarting");
     await waitFor(
@@ -890,11 +897,16 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
 
     pinLatest("0.9.3");
     await settings();
-    await page.getByRole("button", { name: /^更新到 / }).click();
-    await page.getByRole("alertdialog").waitFor();
-    await page.getByRole("button", { name: "更新", exact: true }).click();
+    await page.getByRole("button", { name: /^Update to / }).click();
+    await page.getByRole("dialog", { name: "Update host?" }).waitFor();
+    await page
+      .getByRole("dialog", { name: "Update host?" })
+      .getByRole("button", { name: "Update", exact: true })
+      .click();
     try {
-      await page.getByText("没有成功").first().waitFor({ timeout: 180_000 });
+      await page
+        .getByText("The update didn't succeed", { exact: true })
+        .waitFor({ timeout: 180_000 });
       await shot("5-rolled-back");
       want("it went back", await fileVersion(), "0.9.1");
     } catch (error) {

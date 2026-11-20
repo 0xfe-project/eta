@@ -2,7 +2,7 @@
  * The host, the first time the app runs one here: the app no longer carries it.
  *
  * Choosing "this computer" is what downloads it, and only that: a remote connection never gets
- * here (`shell.ts`). The release is the newest whose page works in this app (`minDesktop`, in each
+ * here. The release is the newest whose page works in this app (`minDesktop`, in each
  * release's `eta-host.json`), from the repository the app was built to follow (`ETA_HOST_UPSTREAM`,
  * the same define the host has) or `ETA_RELEASES_URL`. A private repository is read with the token
  * the host's own upgrade would use: `GH_TOKEN`, `GITHUB_TOKEN`, then `gh auth token`.
@@ -13,19 +13,13 @@
  * is whole, checked and has said its version. A download that stops, a wrong sum or a build that
  * does not run leaves nothing behind, so the next try starts clean and no half a host is ever run.
  */
-import type { ReleaseFailure } from "@eta/releases";
+import type { ReleaseFailure } from "./releases";
 import { chmod, mkdir, rename, rm } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import process from "node:process";
-import {
-  chooseUpstream,
-  downloadChecked,
-  hostForDesktop,
-  parseUpstream,
-  ReleaseError,
-  Releases,
-  releaseToken,
-} from "@eta/releases";
+import { downloadChecked, hostForDesktop } from "./host";
+import { ReleaseError, Releases, releaseToken } from "./releases";
+import { chooseUpstream, parseUpstream } from "./upstream";
 
 /** How far a download has got, for the shell's page. */
 export interface DownloadProgress {

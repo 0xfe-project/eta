@@ -1,0 +1,22 @@
+{
+  "name": "@eta/client",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun ../../scripts/nsh-client.ts run App.tsx --target web",
+    "dev:native": "bun ../../scripts/nsh-client.ts run App.tsx",
+    "package:web": "bun ../../scripts/nsh-client.ts package App.tsx --target web --out dist",
+    "client:check": "bun ../../scripts/nsh-client.ts check",
+    "package": "bun ../../scripts/nsh-client.ts package App.tsx",
+    "publish:ios": "bun ../../scripts/nsh-client.ts publish ios",
+    "publish:android": "bun ../../scripts/nsh-client.ts publish android"
+  },
+  "dependencies": {
+    "@eta/client-contracts": "*",
+    "blobatar": "2.7.0",
+    "es-module-lexer": "2.3.2",
+    "html2canvas-pro": "2.6.4",
+    "jsqr": "^1.4.0",
+    "qrcode-generator": "^2.0.4"
+  }
+}

@@ -1,3 +1,4 @@
+import type { HostAddress } from "@eta/client-contracts/connect-link";
 /**
  * What the window shows, and the order things happen when that changes.
  *
@@ -15,9 +16,8 @@
  *   serves the same data (`installed.ts`); it is watched like a remote host, and when it goes the
  *   next try starts over, which may start the app's own.
  */
-import type { HostAddress } from "@eta/client-contracts/connect-link";
+import type { DownloadFailure, DownloadProgress } from "@eta/releases/install";
 import type { Connection } from "./connection";
-import type { DownloadFailure, DownloadProgress } from "./download";
 import type { Probe, RemoteFailure, RemoteTarget } from "./remote";
 import { parseConnectLink } from "@eta/client-contracts/connect-link";
 import { hostOrigin } from "./connection";

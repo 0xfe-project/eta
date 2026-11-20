@@ -6,7 +6,7 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { downloadHost } from "../src/bun/download";
+import { downloadHost } from "../src/install";
 
 const BODY = "#!/bin/sh\necho eta-host 0.3.0\n";
 const ASSET = "eta-host-windows-x64.exe";
@@ -46,8 +46,8 @@ afterEach(async () => {
 });
 
 // The Windows names, wherever this runs: the asset is chosen by the release, not by this computer.
-vi.mock("@eta/releases", async (original) => {
-  const actual = await original<typeof import("@eta/releases")>();
+vi.mock("../src/host", async (original) => {
+  const actual = await original<typeof import("../src/host")>();
   return {
     ...actual,
     hostForDesktop: (releases: never, appVersion: string) =>

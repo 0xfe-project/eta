@@ -9,7 +9,7 @@
  *
  *   migrations/     apps/eta/src/migrations
  *   Eta-Logo.png    the logo the mail template embeds
- *   web/            apps/web/dist, the page (built first: `bun run --cwd apps/web build`), and
+ *   web/            apps/client/dist/Eta, the page (built first: `bun run --cwd apps/client package:web`), and
  *                   THIRD_PARTY_NOTICES.md, written here next to it
  *   cpa/            CLIProxyAPI for this platform, and `cpa-launcher` next to it
  *   daemon/         eta-daemon for every platform, compressed, with its manifest
@@ -41,10 +41,15 @@ const root = resolve(import.meta.dir, "../../..");
 const app = join(root, "apps", "eta");
 const out = resolve(process.argv[2] ?? join(app, "out", "host"));
 
-const web = join(root, "apps", "web", "dist");
+const selectedWeb = process.env.ETA_WEB_DIR?.trim();
+const web = selectedWeb
+  ? resolve(root, selectedWeb)
+  : join(root, "apps", "client", "dist", "Eta");
 if (!existsSync(join(web, "index.html"))) {
   console.error(
-    `no built page at ${web}: run \`bun run --cwd apps/web build\` first`,
+    selectedWeb
+      ? `no built frontend at ${web}: build ETA_WEB_DIR first`
+      : `no built page at ${web}: run \`bun run --cwd apps/client package:web\` first`,
   );
   process.exit(1);
 }

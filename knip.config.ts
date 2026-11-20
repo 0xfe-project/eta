@@ -28,7 +28,7 @@ export default {
   workspaces: {
     // Run by the upgrade workflows, and `drive.ts` starts the servers as files.
     ".": {
-      entry: ["scripts/upgrade-e2e/*.ts"],
+      entry: ["scripts/upgrade-e2e/*.ts", "scripts/nsh-host-bootstrap.ts"],
       // Installed by that workflow for its run, to press the real button.
       ignoreDependencies: ["playwright-core"],
     },
@@ -79,6 +79,11 @@ export default {
       // tsconfig.json's paths load it in place of highlight.js's own
       // declarations; no module imports it by its path.
       ignore: ["types/highlight.js.d.ts"],
+    },
+    "apps/client": {
+      entry: ["App.tsx"],
+      // scripts/nsh-client.ts stages these packages as bundled WebView assets.
+      ignoreDependencies: ["es-module-lexer", "html2canvas-pro", "jsqr"],
     },
     "apps/mobile": {
       // `nsh` builds it: the entries are named in its commands.

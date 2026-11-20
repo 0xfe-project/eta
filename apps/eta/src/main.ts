@@ -29,6 +29,7 @@
  * on being read from the real home while the config came from somewhere else, so a process pointed
  * at another directory looked like a config that had gone missing. One root, `$HOME` decides it.
  */
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
@@ -55,7 +56,15 @@ const dataDir = join(homedir(), ".eta");
 const [command, ...rest] = process.argv.slice(2);
 if (command === "upgrade") process.exit(await upgradeCommand(rest));
 if (command === "running") {
-  console.log(JSON.stringify((await findRunningHost({ dataDir })) ?? null));
+  const running = await findRunningHost({ dataDir });
+  if (running && rest[0] === "--connection") {
+    const token = running.tokenFile
+      ? readFileSync(running.tokenFile, "utf8").trim()
+      : undefined;
+    console.log(JSON.stringify({ address: running.address, token }));
+  } else {
+    console.log(JSON.stringify(running ?? null));
+  }
   process.exit(0);
 }
 const serviceCommand =
