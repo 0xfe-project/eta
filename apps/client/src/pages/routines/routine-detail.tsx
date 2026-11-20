@@ -52,7 +52,7 @@ export function RoutineDetail(props: {
         <View
           style={{
             paddingVertical: 12,
-            paddingHorizontal: 32,
+            paddingHorizontal: props.layout === "desktop" ? 32 : 24,
             gap: 4,
             borderBottomWidth: 1,
             borderColor: c().border,
@@ -207,7 +207,7 @@ export function RoutineDetail(props: {
             <Label size={12} line={16} tone="muted">
               {uiText("earlierReports")}
             </Label>
-            <View style={{ gap: 12 }}>
+            <View style={{ gap: props.layout === "desktop" ? 12 : 8 }}>
               <Each of={earlierRows()} key={(cards) => cards[0]!.id}>
                 {(cards) => (
                   <View style={{ ...row, alignItems: "stretch", gap: 12 }}>
@@ -218,6 +218,7 @@ export function RoutineDetail(props: {
                           onOpen={() => props.onReport(run().id)}
                           onRetry={props.onRun}
                           canRetry={props.canRun}
+                          compact={props.layout !== "desktop"}
                         />
                       )}
                     </Each>

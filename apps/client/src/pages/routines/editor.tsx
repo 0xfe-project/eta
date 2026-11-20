@@ -29,6 +29,7 @@ import { upcomingTimes, weekday } from "./schedule";
 export function RoutineEditor(props: {
   phone: boolean;
   inline?: boolean;
+  tablet?: boolean;
   item?: RoutineInfo;
   brief?: string;
   onClose: () => void;
@@ -120,7 +121,21 @@ export function RoutineEditor(props: {
     const all = Intl.supportedValuesOf("timeZone");
     return all.includes(timezone()) ? all : [timezone(), ...all];
   };
-  const input = { height: 28, fontSize: 12, lineHeight: 16 };
+  // The tablet form uses 32px controls with a 10px inset; the desktop one 28px and 8px.
+  const control = () => (props.tablet ? 32 : 28);
+  const controlInset = () => (props.tablet ? 10 : 8);
+  const input = () => ({
+    height: control(),
+    paddingHorizontal: controlInset(),
+    fontSize: 12,
+    lineHeight: 16,
+  });
+  const select = () => ({
+    height: control(),
+    paddingHorizontal: controlInset(),
+    gap: 8,
+    borderColor: c().border,
+  });
   const field = (label: string, content: JSX.Element, width?: number) => (
     <View style={{ gap: 6, width: width ?? "100%", maxWidth: "100%" }}>
       <Label size={12} line={16}>
@@ -129,18 +144,58 @@ export function RoutineEditor(props: {
       {content}
     </View>
   );
+  const time = () => (
+    <If when={kind() === "weekly" || kind() === "daily"}>
+      <View
+        style={{
+          ...row,
+          width: props.tablet ? 110 : 114,
+          height: control(),
+          gap: 8,
+          paddingHorizontal: controlInset(),
+          justifyContent: "space-between",
+          borderWidth: 1,
+          borderColor: c().border,
+        }}
+      >
+        <TimeField
+          accessibilityLabel={uiText("time")}
+          value={at()}
+          hourCycle={formatLocale() === "zh-CN" ? "h23" : "h12"}
+          onChange={({ value }) => at.set(value)}
+          style={{ ...row }}
+          renderSegment={(entry) => (
+            <Label
+              size={12}
+              line={16}
+              style={{ marginLeft: entry.segment === "period" ? 4 : 0 }}
+            >
+              {entry.label}
+            </Label>
+          )}
+          separatorStyle={{
+            fontFamily: fontFamily(fonts().interface),
+            fontSize: 12,
+            lineHeight: 16,
+            color: c().ink,
+          }}
+        />
+        <Icon name="routines" size={12} />
+      </View>
+    </If>
+  );
   const form = () => (
     <View
       style={{
-        paddingVertical: props.inline ? 20 : 16,
-        paddingHorizontal: props.inline ? 28 : 16,
-        gap: 16,
+        paddingVertical: props.inline && !props.tablet ? 20 : 16,
+        paddingHorizontal: props.tablet ? 24 : props.inline ? 28 : 16,
+        gap: props.tablet ? 14 : 16,
         width: "100%",
         maxWidth: props.inline ? 800 : undefined,
       }}
     >
       <If when={props.inline}>
-        <View style={{ gap: 4 }}>
+        <View style={{ gap: props.tablet ? 14 : 4 }}>
           <View
             role="button"
             accessibilityLabel={uiText("routines2")}
@@ -148,18 +203,26 @@ export function RoutineEditor(props: {
             focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
             style={{
               ...row,
-              height: 28,
+              height: props.tablet ? undefined : 28,
               gap: 6,
               alignSelf: "flex-start",
               cursor: "pointer",
             }}
           >
             <Icon name="back" size={12} />
-            <Label size={12} line={16} tone="muted">
+            <Label
+              size={props.tablet ? 11 : 12}
+              line={props.tablet ? 14 : 16}
+              tone={props.tablet ? "mutedInk" : "muted"}
+            >
               {uiText("routines2")}
             </Label>
           </View>
-          <Label size={14} line={18} weight={600}>
+          <Label
+            size={props.tablet ? 16 : 14}
+            line={props.tablet ? 22 : 18}
+            weight={600}
+          >
             {props.item ? uiText("editRoutine") : uiText("newRoutine")}
           </Label>
         </View>
@@ -171,23 +234,37 @@ export function RoutineEditor(props: {
           placeholder={uiText("routineNamePlaceholder")}
           value={name()}
           onChange={name.set}
-          style={input}
+          style={input()}
         />,
       )}
       {field(
         uiText("routineBriefLabel"),
-        <Field
-          label={uiText("routineBriefLabel")}
-          placeholder={uiText("routineBriefPlaceholder")}
-          value={brief()}
-          onChange={brief.set}
-          multiline
-          style={{ height: 112, padding: 10, fontSize: 12, lineHeight: 18 }}
-        />,
+        <>
+          <Field
+            label={uiText("routineBriefLabel")}
+            placeholder={uiText("routineBriefPlaceholder")}
+            value={brief()}
+            onChange={brief.set}
+            multiline
+            style={{
+              height: props.tablet ? 110 : 112,
+              padding: 10,
+              fontSize: 12,
+              lineHeight: 18,
+            }}
+          />
+          <If when={props.tablet}>
+            <Label size={11} line={16} tone="muted">
+              {uiText("routineRunByCaptain")}
+            </Label>
+          </If>
+        </>,
       )}
-      <Label size={12} line={18} tone="muted">
-        {uiText("routineRunByCaptain")}
-      </Label>
+      <If when={!props.tablet}>
+        <Label size={12} line={18} tone="muted">
+          {uiText("routineRunByCaptain")}
+        </Label>
+      </If>
       {field(
         uiText("schedule"),
         <>
@@ -196,10 +273,8 @@ export function RoutineEditor(props: {
               label={uiText("scheduleFrequency")}
               value={uiText(kinds[kind()])}
               triggerStyle={{
-                height: 28,
-                paddingHorizontal: 8,
-                gap: 8,
-                borderColor: c().border,
+                ...select(),
+                width: props.tablet ? 110 : undefined,
               }}
             >
               <Each of={Object.keys(kinds) as RoutineSchedule["kind"][]}>
@@ -216,9 +291,9 @@ export function RoutineEditor(props: {
               <View
                 style={{
                   ...row,
-                  height: 28,
+                  height: control(),
                   borderWidth: 1,
-                  borderColor: c().strong,
+                  borderColor: props.tablet ? c().border : c().strong,
                 }}
               >
                 <Each of={[1, 2, 3, 4, 5, 6, 0]}>
@@ -241,7 +316,9 @@ export function RoutineEditor(props: {
                         outlineColor: c().blue,
                       }}
                       style={{
-                        width: 28,
+                        ...(props.tablet
+                          ? { paddingHorizontal: 7 }
+                          : { width: 28 }),
                         alignSelf: "stretch",
                         alignItems: "center",
                         justifyContent: "center",
@@ -252,9 +329,15 @@ export function RoutineEditor(props: {
                       }}
                     >
                       <Label
-                        size={12}
-                        line={16}
-                        tone={days().includes(day()) ? "buttonInk" : "muted"}
+                        size={props.tablet ? 11 : 12}
+                        line={props.tablet ? 14 : 16}
+                        tone={
+                          days().includes(day())
+                            ? "buttonInk"
+                            : props.tablet
+                              ? "mutedInk"
+                              : "muted"
+                        }
                       >
                         {weekday(day())}
                       </Label>
@@ -263,44 +346,7 @@ export function RoutineEditor(props: {
                 </Each>
               </View>
             </If>
-            <If when={kind() === "weekly" || kind() === "daily"}>
-              <View
-                style={{
-                  ...row,
-                  width: 114,
-                  height: 28,
-                  gap: 8,
-                  paddingHorizontal: 8,
-                  justifyContent: "space-between",
-                  borderWidth: 1,
-                  borderColor: c().border,
-                }}
-              >
-                <TimeField
-                  accessibilityLabel={uiText("time")}
-                  value={at()}
-                  hourCycle={formatLocale() === "zh-CN" ? "h23" : "h12"}
-                  onChange={({ value }) => at.set(value)}
-                  style={{ ...row }}
-                  renderSegment={(entry) => (
-                    <Label
-                      size={12}
-                      line={16}
-                      style={{ marginLeft: entry.segment === "period" ? 4 : 0 }}
-                    >
-                      {entry.label}
-                    </Label>
-                  )}
-                  separatorStyle={{
-                    fontFamily: fontFamily(fonts().interface),
-                    fontSize: 12,
-                    lineHeight: 16,
-                    color: c().ink,
-                  }}
-                />
-                <Icon name="routines" size={12} />
-              </View>
-            </If>
+            <If when={!props.tablet}>{time()}</If>
             <If when={kind() === "hourly"}>
               <ActionMenu
                 label={uiText("repeatEvery")}
@@ -309,12 +355,7 @@ export function RoutineEditor(props: {
                     ? uiText("everyHour")
                     : uiText("everyHours", { hours: every() })
                 }
-                triggerStyle={{
-                  height: 28,
-                  paddingHorizontal: 8,
-                  gap: 8,
-                  borderColor: c().border,
-                }}
+                triggerStyle={select()}
               >
                 <Each of={HOURLY_STEPS}>
                   {(hours) => (
@@ -338,16 +379,30 @@ export function RoutineEditor(props: {
               placeholder="0 8 * * 1–5"
               value={cron()}
               onChange={cron.set}
-              style={input}
+              style={input()}
             />
             <Label size={12} line={16} tone="muted">
               {uiText("minuteHourDayOfMonthMonth")}
             </Label>
           </If>
-          <If when={preview()}>
-            <Label size={12} line={16} tone="muted">
-              {preview()}
-            </Label>
+          <If
+            when={props.tablet}
+            else={
+              <If when={preview()}>
+                <Label size={12} line={16} tone="muted">
+                  {preview()}
+                </Label>
+              </If>
+            }
+          >
+            <View style={{ ...row, gap: 8, flexWrap: "wrap" }}>
+              {time()}
+              <If when={preview()}>
+                <Label size={11} line={14} tone="muted" style={{ flex: 1 }}>
+                  {preview()}
+                </Label>
+              </If>
+            </View>
           </If>
         </>,
       )}
@@ -357,12 +412,7 @@ export function RoutineEditor(props: {
           label={uiText("timeZone")}
           value={timezone()}
           truncateValue
-          triggerStyle={{
-            height: 28,
-            paddingHorizontal: 8,
-            gap: 8,
-            borderColor: c().border,
-          }}
+          triggerStyle={select()}
         >
           <Each of={zones()}>
             {(zone) => (
@@ -374,7 +424,7 @@ export function RoutineEditor(props: {
             )}
           </Each>
         </ActionMenu>,
-        366,
+        props.tablet ? 240 : 366,
       )}
       <View
         style={{
@@ -398,7 +448,7 @@ export function RoutineEditor(props: {
           disabled={!valid() || busy()}
           style={{
             paddingHorizontal: 14,
-            opacity: !valid() || busy() ? 0.5 : 1,
+            opacity: !valid() || busy() ? (props.tablet ? 0.55 : 0.5) : 1,
           }}
           onPress={() => void save()}
         />

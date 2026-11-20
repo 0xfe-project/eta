@@ -178,10 +178,33 @@ export function LatestReportCard(props: { run: RunView; onOpen: () => void }) {
 export function EarlierReportCard(props: {
   run: RunView;
   canRetry: boolean;
+  /** One full-width card a row: a missed run on one line, the summary unclipped. */
+  compact?: boolean;
   onOpen: () => void;
   onRetry: () => void;
 }) {
   const c = colors();
+  const retry = () => (
+    <If when={props.run.status === "failed"}>
+      <View
+        role="button"
+        accessibilityLabel={uiText("retry")}
+        accessibilityState={{ disabled: !props.canRetry }}
+        onPress={() => {
+          if (props.canRetry) props.onRetry();
+        }}
+        style={{
+          alignSelf: props.compact ? undefined : "flex-start",
+          flexShrink: 0,
+          cursor: props.canRetry ? "pointer" : "default",
+        }}
+      >
+        <Label size={12} line={16} tone={props.canRetry ? "mutedInk" : "faint"}>
+          {uiText("retry")}
+        </Label>
+      </View>
+    </If>
+  );
   const missed = () =>
     props.run.status === "failed" || props.run.status === "skipped";
   const summary = () =>
@@ -199,13 +222,13 @@ export function EarlierReportCard(props: {
       style={{
         flex: 1,
         minWidth: 0,
-        gap: 4,
+        gap: props.compact && missed() ? 2 : 4,
         paddingVertical: 10,
         paddingHorizontal: 12,
         borderWidth: 1,
         borderColor: c().border,
         cursor: "pointer",
-        height: missed() ? 110 : undefined,
+        height: missed() && !props.compact ? 110 : undefined,
       }}
     >
       <Label size={12} line={16} tone="muted">
@@ -218,42 +241,46 @@ export function EarlierReportCard(props: {
             <Label size={14} line={20} weight={600} lines={1}>
               {runTitle(props.run)}
             </Label>
-            <Label size={14} line={22} lines={2} style={{ height: 44 }}>
+            <Label
+              size={14}
+              line={22}
+              lines={props.compact ? undefined : 2}
+              style={props.compact ? undefined : { height: 44 }}
+            >
               {summary()}
             </Label>
           </>
         }
       >
-        <View style={{ ...row, gap: 8 }}>
-          <StatusDot color={c().red} />
-          <Label size={14} line={20} weight={600} tone="muted">
-            {uiText("noReport")}
-          </Label>
-        </View>
-        <Label size={14} line={22} tone="muted" lines={1} style={{ flex: 1 }}>
-          {props.run.error ?? ""}
-        </Label>
-        <If when={props.run.status === "failed"}>
-          <View
-            role="button"
-            accessibilityLabel={uiText("retry")}
-            accessibilityState={{ disabled: !props.canRetry }}
-            onPress={() => {
-              if (props.canRetry) props.onRetry();
-            }}
-            style={{
-              alignSelf: "flex-start",
-              cursor: props.canRetry ? "pointer" : "default",
-            }}
-          >
+        <If when={props.compact}>
+          <View style={{ ...row, gap: 8 }}>
+            <StatusDot color={c().red} />
+            <Label size={14} line={20} weight={600} tone="muted">
+              {uiText("noReport")}
+            </Label>
             <Label
-              size={12}
-              line={16}
-              tone={props.canRetry ? "mutedInk" : "faint"}
+              size={14}
+              line={20}
+              tone="muted"
+              lines={1}
+              style={{ flex: 1, minWidth: 0 }}
             >
-              {uiText("retry")}
+              {props.run.error ?? ""}
+            </Label>
+            {retry()}
+          </View>
+        </If>
+        <If when={!props.compact}>
+          <View style={{ ...row, gap: 8 }}>
+            <StatusDot color={c().red} />
+            <Label size={14} line={20} weight={600} tone="muted">
+              {uiText("noReport")}
             </Label>
           </View>
+          <Label size={14} line={22} tone="muted" lines={1} style={{ flex: 1 }}>
+            {props.run.error ?? ""}
+          </Label>
+          {retry()}
         </If>
       </If>
     </View>

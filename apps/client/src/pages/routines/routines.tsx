@@ -6,7 +6,7 @@ import type {
   RunView,
 } from "@eta/client-contracts";
 import type { Layout } from "../../components";
-import { Scroll, signal, View, windowSize } from "nsh";
+import { Scroll, signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -15,10 +15,12 @@ import {
   Empty,
   grow,
   Header,
+  Icon,
   Label,
   Markdown,
   Modal,
   row,
+  sizes,
 } from "../../components";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
@@ -54,6 +56,9 @@ export function Routines(props: {
   const current = () => runs()[reportIndex()];
   const paused = () => status() && !status()?.captainOn;
   const phone = () => props.layout === "phone";
+  const tablet = () => props.layout === "tablet";
+  const attention = () =>
+    list().some((item) => item.unseenReports || item.unseenFailures);
   const feedback = signal("");
   const starting = signal(false);
   const canRun = () =>
@@ -95,6 +100,7 @@ export function Routines(props: {
       <RoutineEditor
         phone={phone()}
         inline={!phone()}
+        tablet={tablet()}
         item={editing() === "edit" ? info() : undefined}
         brief={editing() === "edit" ? briefs()[0]?.text : undefined}
         onClose={() => editing.set(null)}
@@ -108,12 +114,17 @@ export function Routines(props: {
       title={
         phone() && current()
           ? uiText("runReport")
-          : props.layout !== "desktop" && info()
-            ? info()!.name
-            : uiText("routines2")
+          : tablet() && editing()
+            ? editing() === "new"
+              ? uiText("newRoutine")
+              : uiText("editRoutine")
+            : props.layout !== "desktop" && info()
+              ? info()!.name
+              : uiText("routines2")
       }
       layout={props.layout}
       end={phone() && info() && !current() ? 4 : undefined}
+      inset={tablet() ? 10 : undefined}
       onBack={
         phone() && current()
           ? () => openReport("")
@@ -153,18 +164,52 @@ export function Routines(props: {
           />
         </ActionMenu>
       </If>
-      <If when={props.layout === "tablet" && !editing()}>
-        <Button
-          label="Captain"
-          tone="ghost"
-          size={26}
+      <If when={tablet()}>
+        <View
+          role="button"
+          accessibilityLabel="Captain"
           onPress={props.onCaptain}
-        />
-        <Button
-          label={uiText("panel")}
-          icon="sidebar"
-          onPress={() => drawer.set(true)}
-        />
+          hoverStyle={{ backgroundColor: c().selected }}
+          focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+          style={{
+            ...row,
+            flexShrink: 0,
+            maxWidth: 160,
+            gap: 4,
+            paddingVertical: 2,
+            paddingHorizontal: 6,
+            borderWidth: 1,
+            borderColor: c().border,
+            cursor: "pointer",
+          }}
+        >
+          <Icon name="folder" size={12} tone="muted" />
+          <Label size={12} line={16} tone="muted" lines={1}>
+            Captain
+          </Label>
+        </View>
+        <View style={{ flex: 1 }} />
+        <View style={{ flexShrink: 0 }}>
+          <Button
+            label={uiText("panel")}
+            icon="sidebar"
+            labelSize={11}
+            style={{ gap: 6 }}
+            onPress={() => drawer.set(true)}
+          />
+          <If when={attention()}>
+            <View
+              style={{
+                position: "absolute",
+                top: -3,
+                right: -3,
+                width: 6,
+                height: 6,
+                backgroundColor: c().blue,
+              }}
+            />
+          </If>
+        </View>
       </If>
     </Header>
   );
@@ -183,10 +228,18 @@ export function Routines(props: {
           backgroundColor: c().amberFill,
         }}
       >
-        <Label size={props.layout === "tablet" ? 13 : 14} weight={500}>
+        <Label
+          size={tablet() ? 13 : 14}
+          line={tablet() ? 18 : undefined}
+          weight={tablet() ? 600 : 500}
+        >
           {uiText("captainIsOffSoRoutinesAre")}
         </Label>
-        <Label size={12} line={16} tone="muted">
+        <Label
+          size={tablet() ? 11 : 12}
+          line={16}
+          tone={tablet() ? "mutedInk" : "muted"}
+        >
           {status()?.reason === "no_model"
             ? uiText("captainHasNoModelChooseOne")
             : uiText("turnOnCaptainToResumeRoutines")}
@@ -227,12 +280,7 @@ export function Routines(props: {
               ...(phone()
                 ? grow
                 : {
-                    width:
-                      props.layout === "desktop"
-                        ? 352
-                        : windowSize().width < 960
-                          ? 280
-                          : 320,
+                    width: props.layout === "desktop" ? 352 : sizes.tabletList,
                     flexShrink: 0,
                   }),
               borderRightWidth: phone() ? 0 : 1,
@@ -251,8 +299,7 @@ export function Routines(props: {
                   icon="plus"
                   label={uiText("newRoutine")}
                   iconOnly
-                  size={28}
-                  tone="ghost"
+                  style={{ backgroundColor: "transparent", marginRight: -4 }}
                   onPress={() => editing.set("new")}
                 />
               </Header>
@@ -286,9 +333,9 @@ export function Routines(props: {
               <Scroll style={grow} scrollbar={false}>
                 <View
                   style={
-                    phone()
-                      ? undefined
-                      : { paddingVertical: 11, paddingHorizontal: 14 }
+                    props.layout === "desktop"
+                      ? { paddingVertical: 11, paddingHorizontal: 14 }
+                      : undefined
                   }
                 >
                   <Each of={list()} key={(item) => item.id}>
@@ -300,6 +347,7 @@ export function Routines(props: {
                             item={item()}
                             selected={selected() === item().id}
                             paused={!!paused()}
+                            tablet={tablet()}
                             onOpen={() => select(item().id)}
                           />
                         }
@@ -343,7 +391,8 @@ export function Routines(props: {
                         ? undefined
                         : {
                             justifyContent: "flex-start",
-                            paddingTop: 60,
+                            paddingTop: tablet() ? 110 : 60,
+                            paddingHorizontal: tablet() ? 40 : undefined,
                             gap: 8,
                           }
                     }
