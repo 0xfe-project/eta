@@ -227,7 +227,11 @@ export async function startHost(options: HostOptions): Promise<Host> {
       ...(options.places === undefined ? {} : { places: options.places }),
       ...(runtimes === undefined
         ? {}
-        : { runtimes: async (fresh) => await runtimes.catalog.list(fresh) }),
+        : {
+            runtimes: async (fresh) => await runtimes.catalog.list(fresh),
+            runtimeAccount: async (runtime) =>
+              await runtimes.catalog.account?.(runtime),
+          }),
       ...(acp === undefined ? {} : { acp }),
       ...(options.tailscale === undefined || options.tailscale === false
         ? {}

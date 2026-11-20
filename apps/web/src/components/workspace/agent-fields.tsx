@@ -2,6 +2,7 @@ import type { AgentRuntimeInfo } from "@eta/client-contracts";
 import type { UseFormReturn } from "react-hook-form";
 import type { AgentForm } from "./agent-form";
 import type { Model } from "@/queries/providers";
+import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useFormState, useWatch } from "react-hook-form";
 import { Trans, useTranslation } from "react-i18next";
@@ -15,6 +16,7 @@ import { usePersonas } from "@/queries/personas";
 import { wireErrorMessage } from "@/queries/wire";
 import { DESCRIPTION_MAX } from "./agent-form";
 import { ModelSelect } from "./model-select";
+import { LOGIN_COMMANDS, runtimeReason } from "./runtime-status";
 import { Select, SelectOption } from "./select-field";
 
 type Form = UseFormReturn<AgentForm>;
@@ -60,24 +62,6 @@ export function NameField({
 }
 
 /**
- * Why a runtime cannot be picked, in a few words. The probe's own words (a stack of oar's, often)
- * are the details under the field, not the option.
- */
-function runtimeReason(
-  runtime: AgentRuntimeInfo,
-): "unauthenticated" | "missing" | "timeout" | "failed" | undefined {
-  if (runtime.status === "available") return undefined;
-  if (runtime.status !== "error") return runtime.status;
-  return /timed? ?out/i.test(runtime.detail ?? "") ? "timeout" : "failed";
-}
-
-/** What signs a runtime in, run in a terminal on its machine; eta never signs one in itself. */
-const LOGIN_COMMANDS: Partial<Record<AgentRuntimeInfo["id"], string>> = {
-  claude: "claude",
-  codex: "codex login",
-};
-
-/**
  * What answers for the agent: eta's own loop, or an agent runtime on the machine (Claude Code,
  * Codex, ...). Another runtime has other models, so a change clears the model.
  *
@@ -91,6 +75,7 @@ export function RuntimeField({
   note,
   onChange,
   refresh,
+  onOpenRuntimes,
 }: {
   form: Form;
   /** Undefined while the host looks; null when the machine could not be asked. */
@@ -100,6 +85,8 @@ export function RuntimeField({
   onChange?: (() => void) | undefined;
   /** Ask the machine's runtimes again, past the host's cache. */
   refresh?: { run: () => void; pending: boolean; error: Error | null };
+  /** Leave for the runtimes page, where a runtime's sign-in is shown; the link is not shown without it. */
+  onOpenRuntimes?: (() => void) | undefined;
 }) {
   const { t: translateText } = useTranslation(["agents", "common"] as const);
   const value = useWatch({ control: form.control, name: "runtime" });
@@ -185,6 +172,28 @@ export function RuntimeField({
             values={{ runtime: chosen!.label, command: signIn }}
             components={{ code: <code className="font-mono" /> }}
           />
+          {onOpenRuntimes === undefined ? null : (
+            <>
+              {" "}
+              <Link
+                to="/runtimes"
+                className="underline underline-offset-2"
+                onClick={(event) => {
+                  if (
+                    !event.defaultPrevented &&
+                    !event.metaKey &&
+                    !event.ctrlKey &&
+                    !event.shiftKey &&
+                    !event.altKey &&
+                    event.button === 0
+                  )
+                    onOpenRuntimes();
+                }}
+              >
+                {translateText("agents:runtime.openRuntimes")}
+              </Link>
+            </>
+          )}
         </p>
       )}
       {explained.length === 0 && runtimes !== null ? null : (

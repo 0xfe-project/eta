@@ -26,6 +26,23 @@ const providers = {
 };
 
 vi.mock("./agent-identity", () => ({ AgentAvatar: () => <span /> }));
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({
+    to,
+    children,
+    className,
+    onClick,
+  }: {
+    to: string;
+    children?: React.ReactNode;
+    className?: string;
+    onClick?: React.MouseEventHandler<HTMLAnchorElement>;
+  }) => (
+    <a data-to={to} className={className} onClick={onClick}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock("sonner", () => ({
   toast: { success: () => {}, error: () => {} },
 }));
@@ -513,8 +530,13 @@ describe("an agent's machine and its runtimes", () => {
     await settle();
     // The agent is on Claude Code, which is not signed in: what to run, where it is chosen.
     expect(document.getElementById("agent-runtime-sign-in")?.textContent).toBe(
-      "Claude Code 还没登录：在终端运行 claude 登录，再点重试。",
+      "Claude Code 还没登录：在终端运行 claude 登录，再点重试。 在运行时页查看",
     );
+    expect(
+      document
+        .querySelector("#agent-runtime-sign-in a")
+        ?.getAttribute("data-to"),
+    ).toBe("/runtimes");
     const details = document.querySelector("#agent-runtime ~ div details")!;
     expect(details.textContent).toContain(timeout);
     expect(details.textContent).toContain("spawn pi ENOENT");

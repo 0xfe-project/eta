@@ -117,7 +117,8 @@
     },
     "details": "详情",
     "retrying": "正在重新探测…",
-    "signIn": "{{runtime}} 还没登录：在终端运行 <code>{{command}}</code> 登录，再点重试。"
+    "signIn": "{{runtime}} 还没登录：在终端运行 <code>{{command}}</code> 登录，再点重试。",
+    "openRuntimes": "在运行时页查看"
   },
   "plugins": {
     "empty": "还没有插件。",

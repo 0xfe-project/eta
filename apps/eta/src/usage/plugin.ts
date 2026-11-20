@@ -18,6 +18,7 @@ export function usagePlugin(usage: UsageStore, applied: () => void) {
         routines: () => usage.routines(),
         models: () => usage.models(),
         days: () => usage.days(),
+        providers: () => usage.providers(),
       }),
     applied,
   );
