@@ -15,10 +15,6 @@ export const emailMessages = {
     "包含发送方 Agent、session 和邮件线程标识；把邮件交给 Agent 时会一并使用。",
   ],
   chooseAnEmailToRead: ["Choose an email to read", "选择一封邮件查看内容"],
-  connectAMailboxToReadAnd: [
-    "Connect a mailbox to read and manage email here.",
-    "连接邮箱后，即可在此阅读和管理邮件。",
-  ],
   countSelected: ["{{count}} selected", "已选 {{count}} 封"],
   currentWork: ["Current work", "当前工作"],
   dataPoints: ["Data points", "数据点"],

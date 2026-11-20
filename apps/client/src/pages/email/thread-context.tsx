@@ -52,6 +52,8 @@ export function EmailInfo(props: {
         </If>
         <Label
           size={props.phoneRow && !props.compact ? 14 : 12}
+          line={props.phoneRow && props.compact ? 16 : undefined}
+          tone={props.phoneRow && props.compact ? "mutedInk" : "ink"}
           weight={props.phoneRow && props.agentId ? 600 : undefined}
           style={{ flex: 1, minWidth: 0 }}
         >

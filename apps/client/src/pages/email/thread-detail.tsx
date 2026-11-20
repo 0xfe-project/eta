@@ -50,7 +50,7 @@ export function ThreadDetail(props: {
         <View
           style={
             props.phone
-              ? { padding: 16, gap: 12 }
+              ? undefined
               : props.desktop
                 ? {
                     width: "100%",
@@ -64,16 +64,23 @@ export function ThreadDetail(props: {
           <If
             when={!props.phone}
             else={
-              <View style={{ gap: 3 }}>
+              <View
+                style={{
+                  gap: 6,
+                  padding: 16,
+                  borderBottomWidth: 1,
+                  borderColor: c().border,
+                }}
+              >
                 <If when={agentMail()}>
                   <View style={{ ...row }}>
-                    <EmailBadge />
+                    <EmailBadge tall />
                   </View>
                 </If>
-                <Label weight={600} size={18}>
+                <Label weight={600} size={18} line={24}>
                   {mailSubject(props.thread.subject)}
                 </Label>
-                <Label size={12} tone="muted" lines={1}>
+                <Label size={12} line={16} tone="muted" lines={1}>
                   {`${props.thread.peer} · ${props.thread.messageCount}${
                     props.thread.messageCount === 1 ? " message" : " messages"
                   }`}
@@ -142,36 +149,37 @@ export function ThreadDetail(props: {
                     hoverStyle={{ backgroundColor: c().selected }}
                     style={{
                       ...row,
-                      gap: 10,
-                      paddingVertical: 10,
-                      paddingHorizontal: 16,
-                      marginHorizontal: -16,
-                      minHeight: 76,
-                      borderWidth: 1,
-                      borderLeftWidth: 0,
-                      borderRightWidth: 0,
+                      gap: 12,
+                      paddingVertical: 12,
+                      paddingLeft: 16,
+                      paddingRight: 12,
+                      borderBottomWidth: 1,
                       borderColor: c().border,
                       cursor: "pointer",
                     }}
                   >
-                    <AgentFace id={assignment().agentId} size={20} />
-                    <View style={{ flex: 1, gap: 2 }}>
-                      <Label size={10} tone="muted">
+                    <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                      <Label size={10} line={12} tone="muted">
                         {uiText("processingAgent2")}
                       </Label>
-                      <Label size={12} weight={600}>
-                        {agentName(assignment().agentId)}
-                      </Label>
-                      <Label size={11} tone="muted">
+                      <View style={{ ...row, gap: 8 }}>
+                        <AgentFace id={assignment().agentId} size={16} />
+                        <Label size={14} line={20} weight={600} lines={1}>
+                          {agentName(assignment().agentId)}
+                        </Label>
+                      </View>
+                      <Label size={12} line={16} tone="muted" lines={1}>
                         {uiText("project", {
                           value1: projectName(assignment().projectId),
                         })}
                       </Label>
                     </View>
-                    <Label size={11} tone="muted">
-                      {uiText("view")}
-                    </Label>
-                    <Icon name="right" size={10} tone="muted" />
+                    <View style={{ ...row, gap: 4, flexShrink: 0 }}>
+                      <Label size={12} line={16} tone="mutedInk">
+                        {uiText("view")}
+                      </Label>
+                      <Icon name="right" size={14} />
+                    </View>
                   </View>
                 }
               >
@@ -224,7 +232,13 @@ export function ThreadDetail(props: {
           </Each>
           <Each of={props.proposals} key={(item) => item.id}>
             {(item) => (
-              <View style={{ paddingTop: props.phone ? 0 : 12 }}>
+              <View
+                style={
+                  props.phone
+                    ? { paddingHorizontal: 16, paddingBottom: 16 }
+                    : { paddingTop: 12 }
+                }
+              >
                 <EmailProposal item={item()} />
               </View>
             )}
@@ -244,7 +258,9 @@ export function ThreadDetail(props: {
             label={uiText("handToAnAgent")}
             icon="return"
             size={40}
+            labelSize={13}
             tone="primary"
+            style={{ gap: 8 }}
             onPress={props.onAssign}
           />
         </View>

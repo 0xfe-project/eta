@@ -12,7 +12,6 @@ import {
   row,
 } from "../../components";
 import { formatLocale, uiText } from "../../i18n";
-import { relativeTime } from "../../services/host";
 import { EmailInfo, EmailMetaCard } from "./thread-context";
 
 export function isAgentMail(subject: string): boolean {
@@ -23,16 +22,17 @@ export function mailSubject(subject: string): string {
   return subject.replace(/^\[eta-mp\]\s*/i, "").trim() || "(No subject)";
 }
 
-export function EmailBadge() {
+/** The agent-mail mark; `tall` is the phone thread header's 16px chip. */
+export function EmailBadge(props: { tall?: boolean }) {
   const c = colors();
   return (
     <Label
       size={10}
-      line={10}
+      line={props.tall ? 14 : 10}
       tone="canvas"
       style={{
         backgroundColor: c().ink,
-        paddingVertical: 3,
+        paddingVertical: props.tall ? 1 : 3,
         paddingHorizontal: 6,
       }}
     >
@@ -96,18 +96,53 @@ function MailBody(props: {
   message: EmailMessageView;
   agentMail: boolean;
   html: boolean;
+  /** Phone: 13/20 copy and an 18/24 heading. */
+  compact?: boolean;
 }) {
   const c = colors();
   const fonts = Fonts();
+  const size = () => (props.compact ? 13 : 14);
+  const line = () => (props.compact ? 20 : props.agentMail ? 21 : 22);
+  // The text view already spaces its blocks by about 12px.
+  const blockMargin = () => (props.compact ? 0 : 10);
   return (
     <If
       when={props.html}
       else={
         <If
           when={props.agentMail}
-          else={<Label line={22}>{props.message.text}</Label>}
+          else={
+            <Label size={size()} line={props.compact ? 20 : 22}>
+              {props.message.text}
+            </Label>
+          }
         >
-          <Markdown value={props.message.text || "No message body"} line={22} />
+          <If
+            when={props.compact}
+            else={
+              <Markdown
+                value={props.message.text || "No message body"}
+                line={22}
+              />
+            }
+          >
+            <TextView
+              markdown={props.message.text || "No message body"}
+              options={{ html: false }}
+              selectable
+              links="open"
+              styles={{
+                root: {
+                  fontFamily: fontFamily(fonts().interface),
+                  fontSize: 13,
+                  lineHeight: 20,
+                  color: c().ink,
+                },
+                paragraph: { marginTop: 0, marginBottom: 0 },
+                link: { color: c().blue },
+              }}
+            />
+          </If>
         </If>
       }
     >
@@ -117,23 +152,23 @@ function MailBody(props: {
         styles={{
           root: {
             fontFamily: fontFamily(fonts().interface),
-            fontSize: 14,
-            lineHeight: props.agentMail ? 21 : 22,
+            fontSize: size(),
+            lineHeight: line(),
             color: props.agentMail ? c().mutedInk : c().ink,
           },
           heading1: {
-            fontSize: 20,
-            lineHeight: 26,
-            fontWeight: 700,
+            fontSize: props.compact ? 18 : 20,
+            lineHeight: props.compact ? 24 : 26,
+            fontWeight: props.compact ? 600 : 700,
             color: c().ink,
             marginTop: 0,
-            marginBottom: 10,
+            marginBottom: blockMargin(),
           },
           paragraph: {
-            fontSize: 14,
-            lineHeight: props.agentMail ? 21 : 22,
+            fontSize: size(),
+            lineHeight: line(),
             marginTop: 0,
-            marginBottom: 10,
+            marginBottom: blockMargin(),
           },
           link: { color: c().blue },
         }}
@@ -240,8 +275,19 @@ export function MailMessage(props: {
       ? props.message.meta
       : undefined;
   return (
-    <View style={props.phone ? { gap: 7 } : { gap: 10, paddingTop: 14 }}>
-      <View style={{ ...row, gap: 8, alignItems: "flex-start" }}>
+    <View
+      style={props.phone ? { paddingBottom: 16 } : { gap: 10, paddingTop: 14 }}
+    >
+      <View
+        style={{
+          ...row,
+          gap: 8,
+          alignItems: "flex-start",
+          ...(props.phone
+            ? { paddingTop: 16, paddingBottom: 12, paddingHorizontal: 16 }
+            : undefined),
+        }}
+      >
         <If
           when={props.phone}
           else={
@@ -262,9 +308,13 @@ export function MailMessage(props: {
         >
           <Label
             size={10}
-            line={15}
-            tone="muted"
-            style={{ backgroundColor: c().selected, paddingHorizontal: 4 }}
+            line={14}
+            tone="mutedInk"
+            style={{
+              backgroundColor: c().selected,
+              paddingVertical: 1,
+              paddingHorizontal: 6,
+            }}
           >
             {props.message.direction === "incoming"
               ? uiText("in")
@@ -272,12 +322,7 @@ export function MailMessage(props: {
           </Label>
         </If>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Label
-            size={props.phone ? 12 : 14}
-            line={props.phone ? undefined : 18}
-            weight={600}
-            lines={1}
-          >
+          <Label size={props.phone ? 13 : 14} line={18} weight={600} lines={1}>
             {mailSubject(subject())}
           </Label>
           <Label size={12} line={16} tone="muted" lines={2}>
@@ -287,21 +332,31 @@ export function MailMessage(props: {
             })}
           </Label>
         </View>
-        <Label size={props.phone ? 11 : 10} line={16} tone="muted">
-          {props.phone
-            ? relativeTime(props.message.createdAt)
-            : mailTime(props.message.createdAt)}
+        <Label
+          size={props.phone ? 11 : 10}
+          line={props.phone ? 18 : 16}
+          tone="muted"
+        >
+          {mailTime(props.message.createdAt)}
         </Label>
       </View>
       <If
         when={props.phone}
         else={<BodyPreview message={props.message} agentMail={agentMail()} />}
       >
-        <View style={{ padding: 12, borderWidth: 1, borderColor: c().border }}>
+        <View
+          style={{
+            marginHorizontal: 16,
+            padding: 16,
+            borderWidth: 1,
+            borderColor: c().border,
+          }}
+        >
           <MailBody
             message={props.message}
             agentMail={agentMail()}
-            html={!agentMail() && !!props.message.html}
+            html={!!props.message.html}
+            compact
           />
         </View>
       </If>
@@ -317,8 +372,11 @@ export function MailMessage(props: {
             gap: 8,
             borderWidth: 1,
             borderColor: c().border,
-            paddingVertical: 8,
+            paddingVertical: props.phone ? 10 : 8,
             paddingHorizontal: 12,
+            ...(props.phone
+              ? { marginTop: 12, marginHorizontal: 16 }
+              : undefined),
             cursor: "pointer",
           }}
         >
@@ -327,18 +385,34 @@ export function MailMessage(props: {
               transform: headers() ? [{ rotate: "180deg" }] : undefined,
             }}
           >
-            <Icon name="down" size={14} tone="muted" />
+            <Icon
+              name="down"
+              size={props.phone ? 12 : 14}
+              tone={props.phone ? "ink" : "muted"}
+            />
           </View>
-          <Label size={11} line={16} weight={600}>
+          <Label size={11} line={props.phone ? 14 : 16} weight={600}>
             {uiText("rfc5322Headers")}
           </Label>
-          <Label size={10} line={16} tone="muted" lines={1} style={{ flex: 1 }}>
+          <Label
+            size={props.phone ? 11 : 10}
+            line={props.phone ? 14 : 16}
+            tone="muted"
+            lines={1}
+            style={{ flex: 1 }}
+          >
             {props.message.rfcMessageId}
           </Label>
         </View>
       </If>
       <If when={headers()}>
-        <View style={{ borderTopWidth: 1, borderColor: c().border }}>
+        <View
+          style={{
+            borderTopWidth: 1,
+            borderColor: c().border,
+            ...(props.phone ? { marginHorizontal: 16 } : undefined),
+          }}
+        >
           <RfcHeaders message={props.message} />
         </View>
       </If>
@@ -351,7 +425,11 @@ export function MailMessage(props: {
                 <Button
                   label={uiText("threadContext")}
                   icon="context"
-                  style={{ alignSelf: "flex-start" }}
+                  style={{
+                    alignSelf: "flex-start",
+                    marginTop: 12,
+                    marginHorizontal: 16,
+                  }}
                   onPress={props.onContext}
                 />
               </If>

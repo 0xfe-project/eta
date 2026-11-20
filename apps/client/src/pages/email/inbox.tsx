@@ -135,6 +135,7 @@ export function Email(props: {
               icon="refresh"
               iconOnly={phone()}
               tone={phone() ? "ghost" : undefined}
+              size={phone() ? 40 : undefined}
               disabled={refreshing()}
               onPress={() => void refresh()}
             />
@@ -154,271 +155,240 @@ export function Email(props: {
           </If>
         </Header>
       </If>
-      <If
-        when={accounts().length || !phone()}
-        else={
-          <Empty
-            title={uiText("noMailboxConnected")}
-            description={uiText("connectAMailboxToReadAnd")}
-            icon="email"
+      <View style={{ ...row, ...grow, alignItems: "stretch" }}>
+        <If when={!phone() || !selected()}>
+          <View
+            style={{
+              ...(phone()
+                ? grow
+                : {
+                    width: props.layout === "desktop" ? 352 : sizes.tabletList,
+                    flexShrink: 0,
+                  }),
+              borderRightWidth: phone() ? 0 : 1,
+              borderColor: c().border,
+            }}
           >
-            <Button
-              label={uiText("connectMailbox")}
-              tone="primary"
-              onPress={props.onSettings}
-            />
-          </Empty>
-        }
-      >
-        <View style={{ ...row, ...grow, alignItems: "stretch" }}>
-          <If when={!phone() || !selected()}>
+            <If when={tablet()}>
+              <PaneHeader title={uiText("email")} list>
+                <Button
+                  label={
+                    refreshing() ? uiText("refreshing") : uiText("refreshMail")
+                  }
+                  icon="refresh"
+                  iconOnly
+                  disabled={refreshing()}
+                  style={{ borderColor: c().border }}
+                  onPress={() => void refresh()}
+                />
+              </PaneHeader>
+            </If>
             <View
               style={{
+                ...row,
+                minHeight: 44,
                 ...(phone()
-                  ? grow
+                  ? { gap: 8, paddingHorizontal: 16 }
                   : {
-                      width:
-                        props.layout === "desktop" ? 352 : sizes.tabletList,
-                      flexShrink: 0,
+                      paddingHorizontal: 12,
+                      flexWrap: "wrap",
+                      paddingVertical: 8,
+                      columnGap: 10,
+                      rowGap: 8,
                     }),
-                borderRightWidth: phone() ? 0 : 1,
+                borderBottomWidth: 1,
                 borderColor: c().border,
               }}
             >
-              <If when={tablet()}>
-                <PaneHeader title={uiText("email")} list>
-                  <Button
-                    label={
-                      refreshing()
-                        ? uiText("refreshing")
-                        : uiText("refreshMail")
-                    }
-                    icon="refresh"
-                    iconOnly
-                    disabled={refreshing()}
-                    style={{ borderColor: c().border }}
-                    onPress={() => void refresh()}
-                  />
-                </PaneHeader>
+              <If when={!phone()}>
+                <Icon name="email" size={16} />
               </If>
               <View
                 style={{
                   ...row,
-                  minHeight: 44,
-                  paddingHorizontal: 12,
-                  ...(phone()
-                    ? { gap: 6 }
-                    : {
-                        flexWrap: "wrap",
-                        paddingVertical: 8,
-                        columnGap: 10,
-                        rowGap: 8,
-                      }),
-                  borderBottomWidth: 1,
-                  borderColor: c().border,
+                  gap: phone() ? 0 : 2,
+                  padding: 2,
+                  backgroundColor: c().selected,
                 }}
               >
-                <If
-                  when={!phone()}
-                  else={
-                    <Each of={["Inbox", "Sent"] as const}>
-                      {(tab) => (
-                        <Button
-                          label={uiText(
-                            tab() === "Inbox" ? "inboxFolder" : "sentFolder",
-                          )}
-                          selected={folder() === tab()}
-                          tone="ghost"
-                          onPress={() => openFolder(tab())}
-                        />
+                <Each of={["Inbox", "Sent"] as const}>
+                  {(tab) => (
+                    <View
+                      role="tab"
+                      accessibilityLabel={uiText(
+                        tab() === "Inbox" ? "inboxFolder" : "sentFolder",
                       )}
-                    </Each>
-                  }
-                >
-                  <Icon name="email" size={16} />
-                  <View
-                    style={{
-                      ...row,
-                      gap: 2,
-                      padding: 2,
-                      backgroundColor: c().selected,
-                    }}
-                  >
-                    <Each of={["Inbox", "Sent"] as const}>
-                      {(tab) => (
-                        <View
-                          role="tab"
-                          accessibilityLabel={uiText(
-                            tab() === "Inbox" ? "inboxFolder" : "sentFolder",
-                          )}
-                          accessibilityState={{ selected: folder() === tab() }}
-                          onPress={() => openFolder(tab())}
-                          style={{
-                            paddingVertical: 3,
-                            paddingHorizontal: 8,
-                            backgroundColor:
-                              folder() === tab() ? c().canvas : "transparent",
-                            cursor: "pointer",
-                          }}
-                        >
-                          <Label
-                            size={12}
-                            line={16}
-                            weight={folder() === tab() ? 600 : 400}
-                            tone={folder() === tab() ? "ink" : "muted"}
-                          >
-                            {uiText(
-                              tab() === "Inbox" ? "inboxFolder" : "sentFolder",
-                            )}
-                          </Label>
-                        </View>
-                      )}
-                    </Each>
-                  </View>
-                </If>
-                <View style={{ flex: 1 }} />
-                <If
-                  when={phone()}
-                  else={
-                    <If
-                      when={checked().length}
-                      else={
-                        <Label size={12} tone="muted">
-                          {threads().length}
-                        </Label>
-                      }
-                    >
-                      <Label size={12} tone="muted">
-                        {uiText("countSelected", { count: checked().length })}
-                      </Label>
-                      <Button
-                        label={uiText("deleteMail")}
-                        style={{
-                          borderColor: c().border,
-                          paddingHorizontal: 10,
-                          gap: 6,
-                        }}
-                        onPress={() => deleting.set(true)}
-                      />
-                      <Button
-                        label={uiText("handCountToAnAgent", {
-                          count: checked().length,
-                        })}
-                        tone="primary"
-                        style={{ paddingHorizontal: 10 }}
-                        onPress={() => assigning.set(true)}
-                      />
-                    </If>
-                  }
-                >
-                  <If when={threads().length}>
-                    <Button
-                      label={selecting() ? uiText("done") : uiText("select2")}
-                      tone="ghost"
-                      size={28}
-                      onPress={() => {
-                        selecting.set(!selecting());
-                        checked.set([]);
+                      accessibilityState={{ selected: folder() === tab() }}
+                      onPress={() => openFolder(tab())}
+                      style={{
+                        paddingVertical: phone() ? 4 : 3,
+                        paddingHorizontal: phone() ? 12 : 8,
+                        backgroundColor:
+                          folder() === tab() ? c().canvas : "transparent",
+                        cursor: "pointer",
                       }}
-                    />
-                  </If>
-                </If>
+                    >
+                      <Label
+                        size={12}
+                        line={16}
+                        weight={folder() === tab() ? 600 : 400}
+                        tone={folder() === tab() ? "ink" : "muted"}
+                      >
+                        {uiText(
+                          tab() === "Inbox" ? "inboxFolder" : "sentFolder",
+                        )}
+                      </Label>
+                    </View>
+                  )}
+                </Each>
               </View>
-              <If when={phone() && checked().length}>
-                <View style={{ ...row, padding: 6, gap: 6 }}>
-                  <Button
-                    label={uiText("assign", { length: checked().length })}
-                    onPress={() => assigning.set(true)}
-                  />
-                  <Button
-                    label={uiText("delete")}
-                    tone="danger"
-                    onPress={() => deleting.set(true)}
-                  />
-                </View>
-              </If>
+              <View style={{ flex: 1 }} />
               <If
-                when={threads().length}
+                when={phone()}
                 else={
                   <If
-                    when={accounts().length}
-                    else={<NoMailbox onSettings={props.onSettings} />}
+                    when={checked().length}
+                    else={
+                      <Label size={12} tone="muted">
+                        {threads().length}
+                      </Label>
+                    }
                   >
-                    <Empty
-                      title={
-                        folder() === "Inbox"
-                          ? uiText("inboxIsEmpty")
-                          : uiText("noSentMail")
-                      }
+                    <Label size={12} tone="muted">
+                      {uiText("countSelected", { count: checked().length })}
+                    </Label>
+                    <Button
+                      label={uiText("deleteMail")}
+                      style={{
+                        borderColor: c().border,
+                        paddingHorizontal: 10,
+                        gap: 6,
+                      }}
+                      onPress={() => deleting.set(true)}
+                    />
+                    <Button
+                      label={uiText("handCountToAnAgent", {
+                        count: checked().length,
+                      })}
+                      tone="primary"
+                      style={{ paddingHorizontal: 10 }}
+                      onPress={() => assigning.set(true)}
                     />
                   </If>
                 }
               >
-                <Scroll style={grow} scrollbar={false}>
-                  <Each of={threads()} key={(item) => item.id}>
-                    {(item) => (
-                      <ThreadRow
-                        thread={item()}
-                        selected={selected() === item().id}
-                        checked={checked().includes(item().id)}
-                        selecting={selecting()}
-                        phone={phone()}
-                        onOpen={() => choose(item())}
-                        onCheck={(selected) =>
-                          checked.update((ids) =>
-                            selected
-                              ? [...ids, item().id]
-                              : ids.filter((id) => id !== item().id),
-                          )
-                        }
-                      />
-                    )}
-                  </Each>
-                </Scroll>
-              </If>
-            </View>
-          </If>
-          <If when={!phone() || selected()}>
-            <View style={grow}>
-              <If when={tablet()}>
-                <PaneHeader title={thread() ? uiText("email") : ""}>
-                  <If when={thread() && contextMessage()}>
-                    {(message) => (
-                      <Button
-                        label={uiText("context")}
-                        icon="sidebar"
-                        labelSize={11}
-                        style={{ gap: 6 }}
-                        onPress={() => threadContext.set(message())}
-                      />
-                    )}
-                  </If>
-                </PaneHeader>
-              </If>
-              <If
-                when={thread()}
-                else={<Empty title={uiText("chooseAnEmailToRead")} />}
-              >
-                {(entry) => (
-                  <ThreadDetail
-                    thread={entry()}
-                    messages={messages()}
-                    assignments={assignments()}
-                    proposals={proposals()}
-                    phone={phone()}
-                    desktop={props.layout === "desktop"}
-                    onAssign={() => assigning.set(true)}
-                    onDelete={() => deleting.set(true)}
-                    onMarkUnread={() => void markUnread(entry().id)}
-                    onAssignment={(assignment) => handledBy.set(assignment)}
-                    onContext={(message) => threadContext.set(message)}
+                <Label size={11} line={14} tone="muted">
+                  {threads().length}
+                </Label>
+                <If when={threads().length}>
+                  <Button
+                    label={selecting() ? uiText("done") : uiText("select2")}
+                    tone="ghost"
+                    size={28}
+                    onPress={() => {
+                      selecting.set(!selecting());
+                      checked.set([]);
+                    }}
                   />
-                )}
+                </If>
               </If>
             </View>
-          </If>
-        </View>
-      </If>
+            <If when={phone() && checked().length}>
+              <View style={{ ...row, padding: 6, gap: 6 }}>
+                <Button
+                  label={uiText("assign", { length: checked().length })}
+                  onPress={() => assigning.set(true)}
+                />
+                <Button
+                  label={uiText("delete")}
+                  tone="danger"
+                  onPress={() => deleting.set(true)}
+                />
+              </View>
+            </If>
+            <If
+              when={threads().length}
+              else={
+                <If
+                  when={accounts().length}
+                  else={
+                    <NoMailbox phone={phone()} onSettings={props.onSettings} />
+                  }
+                >
+                  <Empty
+                    title={
+                      folder() === "Inbox"
+                        ? uiText("inboxIsEmpty")
+                        : uiText("noSentMail")
+                    }
+                  />
+                </If>
+              }
+            >
+              <Scroll style={grow} scrollbar={false}>
+                <Each of={threads()} key={(item) => item.id}>
+                  {(item) => (
+                    <ThreadRow
+                      thread={item()}
+                      selected={selected() === item().id}
+                      checked={checked().includes(item().id)}
+                      selecting={selecting()}
+                      phone={phone()}
+                      onOpen={() => choose(item())}
+                      onCheck={(selected) =>
+                        checked.update((ids) =>
+                          selected
+                            ? [...ids, item().id]
+                            : ids.filter((id) => id !== item().id),
+                        )
+                      }
+                    />
+                  )}
+                </Each>
+              </Scroll>
+            </If>
+          </View>
+        </If>
+        <If when={!phone() || selected()}>
+          <View style={grow}>
+            <If when={tablet()}>
+              <PaneHeader title={thread() ? uiText("email") : ""}>
+                <If when={thread() && contextMessage()}>
+                  {(message) => (
+                    <Button
+                      label={uiText("context")}
+                      icon="sidebar"
+                      labelSize={11}
+                      style={{ gap: 6 }}
+                      onPress={() => threadContext.set(message())}
+                    />
+                  )}
+                </If>
+              </PaneHeader>
+            </If>
+            <If
+              when={thread()}
+              else={<Empty title={uiText("chooseAnEmailToRead")} />}
+            >
+              {(entry) => (
+                <ThreadDetail
+                  thread={entry()}
+                  messages={messages()}
+                  assignments={assignments()}
+                  proposals={proposals()}
+                  phone={phone()}
+                  desktop={props.layout === "desktop"}
+                  onAssign={() => assigning.set(true)}
+                  onDelete={() => deleting.set(true)}
+                  onMarkUnread={() => void markUnread(entry().id)}
+                  onAssignment={(assignment) => handledBy.set(assignment)}
+                  onContext={(message) => threadContext.set(message)}
+                />
+              )}
+            </If>
+          </View>
+        </If>
+      </View>
       <If when={threadContext()}>
         {(message) => (
           <EmailContext
@@ -502,23 +472,34 @@ export function Email(props: {
 }
 
 /** The list column with no mailbox: a short block at its top, not centred. */
-function NoMailbox(props: { onSettings: () => void }) {
+function NoMailbox(props: { phone: boolean; onSettings: () => void }) {
   return (
     <View
       style={{
         alignItems: "center",
         gap: 8,
-        paddingVertical: 40,
-        paddingHorizontal: 24,
+        ...(props.phone
+          ? { paddingTop: 96, paddingHorizontal: 32 }
+          : { paddingVertical: 40, paddingHorizontal: 24 }),
       }}
     >
-      <Icon name="email" size={24} tone="muted" />
-      <Label weight={500} style={{ textAlign: "center" }}>
+      <Icon name="email" size={24} tone={props.phone ? "ink" : "muted"} />
+      <Label
+        weight={props.phone ? 400 : 500}
+        line={20}
+        style={{ textAlign: "center" }}
+      >
         {uiText("noMailboxConnected")}
       </Label>
       <Button
         label={uiText("connectMailbox")}
-        style={{ marginTop: 4 }}
+        size={props.phone ? 34 : undefined}
+        labelSize={props.phone ? 13 : undefined}
+        style={
+          props.phone
+            ? { marginTop: 8, paddingHorizontal: 16 }
+            : { marginTop: 4 }
+        }
         onPress={props.onSettings}
       />
     </View>
