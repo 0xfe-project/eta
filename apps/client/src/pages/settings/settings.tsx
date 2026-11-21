@@ -6,7 +6,6 @@ import type {
 import type { ViewRef } from "nsh";
 import type { Layout } from "../../components";
 import type { AppearanceProps } from "./appearance";
-import type { SourceChoice } from "./models/sources";
 import type { SettingsSection } from "./overview";
 import { Scroll, signal, View } from "nsh";
 import {
@@ -31,10 +30,9 @@ import { ExternalAgentList } from "./external-agent-list";
 import { Machines } from "./machines/machines";
 import { MailboxEditor, mailboxProvider } from "./mailbox-editor";
 import { McpSettings } from "./mcp/server-list";
+import { AddSource } from "./models/add-source";
 import { ProviderDetail } from "./models/provider-detail";
-import { ProviderEditor } from "./models/provider-editor";
 import { ModelSourceList, useModelSources } from "./models/source-list";
-import { ModelSources } from "./models/sources";
 import { SubscriptionDetail } from "./models/subscription-detail";
 import { SettingsNavigation } from "./navigation";
 import { sections, useSettingsOverview } from "./overview";
@@ -62,9 +60,9 @@ export function Settings(
       : props.initial,
   );
   const agent = signal<string | undefined>(undefined);
-  const sourceChoice = signal<SourceChoice | undefined>(undefined);
-  const provider = signal<ProviderSummary | "new" | undefined>(undefined);
-  const sources = signal(false);
+  const provider = signal<ProviderSummary | undefined>(undefined);
+  /** The add-source dialog: open on its first step (`true`) or on a preset's connect step. */
+  const sources = signal<boolean | string>(false);
   const connector = signal<string>();
   let returnTo: string | undefined;
   function sourceRef(id: string, node: ViewRef) {
@@ -78,10 +76,10 @@ export function Settings(
   const mailbox = signal<EmailAccountView | "new" | undefined>(undefined);
   const phone = () => props.layout === "phone";
   const showingProvider = () =>
-    section() === "Model services" &&
-    (connector() || (provider() && provider() !== "new"));
-  const { providers, machines, email, externalAgents, summary } =
-    useSettingsOverview(() => props.theme);
+    section() === "Model services" && (connector() || provider());
+  const { machines, email, externalAgents, summary } = useSettingsOverview(
+    () => props.theme,
+  );
   const selectedAcp = () => {
     const selected = acpAgent();
     return externalAgents().find(
@@ -241,10 +239,7 @@ export function Settings(
                           <Button
                             label={uiText("addEtaTokenPlan")}
                             style={{ marginTop: 8, paddingHorizontal: 10 }}
-                            onPress={() => {
-                              sourceChoice.set({ kind: "eta" });
-                              provider.set("new");
-                            }}
+                            onPress={() => sources.set("eta")}
                           />
                         </Empty>
                       }
@@ -449,22 +444,13 @@ export function Settings(
         )}
       </If>
       <If when={sources()}>
-        <ModelSources
-          phone={phone()}
-          onCustom={(source) => {
-            sourceChoice.set(source);
-            provider.set("new");
-          }}
-          onClose={() => sources.set(false)}
-        />
-      </If>
-      <If when={provider() === "new"}>
-        <ProviderEditor
-          source={sourceChoice()}
-          revision={providers()?.revision ?? ""}
-          phone={phone()}
-          onClose={() => provider.set(undefined)}
-        />
+        {(adding) => (
+          <AddSource
+            phone={phone()}
+            initialPreset={adding() === true ? undefined : String(adding())}
+            onClose={() => sources.set(false)}
+          />
+        )}
       </If>
       <If when={selectedAcp()}>
         {(item) => (

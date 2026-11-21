@@ -1,5 +1,4 @@
 import type { ProvidersView } from "@eta/client-contracts";
-import type { SourceChoice } from "../settings/models/sources";
 import type { Persona } from "./persona-step";
 import { Scroll, signal, View } from "nsh";
 import {
@@ -16,9 +15,8 @@ import { useModels } from "../../components/model-select";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { AddSource } from "../settings/models/add-source";
 import { ProviderDetail } from "../settings/models/provider-detail";
-import { ProviderEditor } from "../settings/models/provider-editor";
-import { ModelSources } from "../settings/models/sources";
 import { PersonaStep } from "./persona-step";
 import { WelcomeStep } from "./welcome";
 
@@ -46,7 +44,6 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
   const c = colors();
   const step = signal(0);
   const adding = signal(false);
-  const custom = signal<SourceChoice | undefined>(undefined);
   const detail = signal("");
   const unchecked = signal<string[]>([]);
   const installedHere = signal<string[]>([]);
@@ -519,19 +516,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
         </Modal>
       </If>
       <If when={adding()}>
-        <ModelSources
-          phone={props.phone}
-          onClose={() => adding.set(false)}
-          onCustom={custom.set}
-        />
-      </If>
-      <If when={custom()}>
-        <ProviderEditor
-          phone={props.phone}
-          source={custom()}
-          revision={providers()?.revision ?? ""}
-          onClose={() => custom.set(undefined)}
-        />
+        <AddSource phone={props.phone} onClose={() => adding.set(false)} />
       </If>
     </>
   );

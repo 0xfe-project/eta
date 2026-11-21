@@ -219,9 +219,10 @@ export function createHost() {
     target: string,
     action: string,
     args?: unknown,
+    options?: { timeoutMs?: number },
   ): Promise<T> {
     if (!wire) throw new Error("Connect to an Eta host first.");
-    return wire.call<T>(target, action, args);
+    return wire.call<T>(target, action, args, options);
   }
 
   async function action<T>(work: () => Promise<T>): Promise<T | undefined> {

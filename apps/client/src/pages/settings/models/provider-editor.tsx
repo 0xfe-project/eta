@@ -1,5 +1,4 @@
 import type { ProviderSummary } from "@eta/client-contracts";
-import type { SourceChoice } from "./sources";
 import { modelSource } from "@eta/client-contracts";
 import { signal, View } from "nsh";
 import { Button, Caption, Field, Modal, row } from "../../../components";
@@ -8,25 +7,16 @@ import { useHost } from "../../../services/host";
 
 export function ProviderEditor(props: {
   item?: ProviderSummary;
-  source?: SourceChoice;
   revision: string;
   phone: boolean;
   onClose: () => void;
 }) {
   const host = useHost();
   const item = props.item;
-  const kind = () => item?.kind ?? props.source?.kind ?? "openai-compatible";
+  const kind = () => item?.kind ?? "openai-compatible";
   const preset = () => modelSource(kind());
-  const name = signal(
-    item?.name ??
-      item?.id ??
-      (props.source?.local ? "Local models" : (preset()?.name ?? "")),
-  );
-  const url = signal(
-    item?.baseUrl ??
-      preset()?.baseUrl ??
-      (props.source?.local ? "http://127.0.0.1:11434/v1" : ""),
-  );
+  const name = signal(item?.name ?? item?.id ?? preset()?.name ?? "");
+  const url = signal(item?.baseUrl ?? preset()?.baseUrl ?? "");
   const key = signal("");
   const models = signal(item?.models.map((model) => model.id).join(", ") ?? "");
   const discovered = signal<ProviderSummary["models"]>(item?.models ?? []);

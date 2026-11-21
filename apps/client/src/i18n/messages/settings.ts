@@ -163,9 +163,7 @@ export const settingsMessages = {
   autoArchive: ["Auto-archive", "自动归档"],
   autoArchiveQuietPeriod: ["Auto-archive quiet period", "自动归档前的静默期"],
   callbackUrl: ["Callback URL", "回调 URL"],
-  chooseASource: ["Choose a source", "选择模型来源"],
   confirmRemove: ["Confirm remove", "确认移除"],
-  copyCode: ["Copy code", "复制验证码"],
   disable: ["Disable", "停用"],
   discoverModels: ["Discover models", "查找模型"],
   enable: ["Enable", "启用"],
@@ -228,11 +226,6 @@ export const settingsMessages = {
   test: ["Test", "测试"],
   testing: ["Testing…", "测试中…"],
   thinkingLevel: ["Thinking level", "思考档"],
-  thisSignInExpired: ["This sign-in expired.", "登录已过期。"],
-  waitingForTheProviderToFinish: [
-    "Waiting for the provider to finish sign-in…",
-    "正在等待提供方完成登录…",
-  ],
   settingsEmailHint: [
     "A standalone mailbox. Emails never reach an agent automatically; every send and reply needs your confirmation.",
     "独立的邮箱。邮件不会自动交给智能体，每次发送和回复都需要你确认。",
