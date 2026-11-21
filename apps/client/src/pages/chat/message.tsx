@@ -15,7 +15,7 @@ import {
   runFromOf,
   savedSteps,
 } from "@eta/client-contracts";
-import { effect, List, signal, View } from "nsh";
+import { effect, signal, View } from "nsh";
 import { Popover } from "nsh/base";
 import {
   Button,
@@ -37,7 +37,7 @@ import { CaptainReview, reviewItemsOf } from "./captain-review";
 import { cardOpen, setCardOpen } from "./card-folds";
 import { activeReply } from "./member-status";
 import { messageTime } from "./message-time";
-import { ProcessStep } from "./process-step";
+import { ProcessStep, ProcessWindow } from "./process-step";
 import { draftTitle } from "./task-draft-detail";
 import { Widget, widgetFrom } from "./widgets/widget";
 
@@ -556,18 +556,11 @@ export function Message(props: {
                 }
               />
             </View>
-            <List
-              style={{ height: processWindowHeight, flexShrink: 0 }}
-              each={steps()}
-              keyExtractor={(step) => step.id}
-              initialScrollAtEnd
-              estimatedItemSize={33}
-              maintainVisibleContentPosition={{
-                autoscrollToBottomThreshold: 16,
-              }}
-            >
-              {(step) => <ProcessStep value={step()} />}
-            </List>
+            <ProcessWindow height={processWindowHeight}>
+              <Each of={steps()} key={(step) => step.id}>
+                {(step) => <ProcessStep value={step()} />}
+              </Each>
+            </ProcessWindow>
           </View>
         </If>
         <If when={item().status === "failed" && !review()}>
