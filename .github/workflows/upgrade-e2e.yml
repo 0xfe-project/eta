@@ -40,6 +40,13 @@ on:
       - scripts/upgrade-e2e/**
   workflow_dispatch:
 
+# A newer push to the same pull request makes the older run's answer moot, and its macOS and
+# Windows legs take over ten minutes. A run started by hand gets a group of its own, so it neither
+# waits for nor cancels another.
+concurrency:
+  group: upgrade-e2e-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
