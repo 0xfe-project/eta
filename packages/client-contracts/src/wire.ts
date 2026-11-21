@@ -17,6 +17,7 @@
 // A connection can also die without closing (the network went away quietly, the computer slept):
 // to a host that says `heartbeat` in its hello the wire sends a `ping` now and then, and one that
 // stays unanswered counts as a drop. An older host is never pinged, so its silence means nothing.
+// An attempt that never gets its hello (the handshake went into a void) is given up on too.
 // `wake` is for the moments a client knows the network may be back (the app returned to the
 // foreground, the system reported it online): retry now, or check the connection that looks open.
 
@@ -149,7 +150,10 @@ export interface WireOptions<Store extends WireStore = WireStore> {
   maxRetryMs?: number;
   /** How often a host that answers pings is pinged. */
   heartbeatMs?: number;
-  /** How long a ping may go unanswered (nothing at all arriving) before the connection counts as dropped. */
+  /**
+   * How long a ping may go unanswered (nothing at all arriving) before the connection counts as
+   * dropped; also how long a new socket may take to say hello before the attempt counts as failed.
+   */
   heartbeatTimeoutMs?: number;
   observer?: WireObserver;
 }
@@ -328,6 +332,7 @@ export class Wire<Store extends WireStore = WireStore> {
       },
     });
     this.socket = socket;
+    this.expect(socket);
   }
 
   /** Try again now instead of waiting out the pause. */
@@ -595,6 +600,18 @@ export class Wire<Store extends WireStore = WireStore> {
     if (socket === undefined || !this.heartbeat) return;
     this.scheduleBeat();
     if (this.deadline !== undefined) return;
+    this.expect(socket);
+    try {
+      const frame: ClientFrame = { op: "ping" };
+      socket.send(JSON.stringify(frame));
+    } catch {
+      // A socket that cannot send is no better than one nobody answers: the deadline decides.
+    }
+  }
+
+  /** Unless something arrives on `socket` in time, count it as gone. */
+  private expect(socket: WireSocket): void {
+    clearTimeout(this.deadline);
     this.deadline = setTimeout(() => {
       this.deadline = undefined;
       if (this.socket !== socket) return;
@@ -602,12 +619,6 @@ export class Wire<Store extends WireStore = WireStore> {
       this.lost();
       socket.close();
     }, this.heartbeatTimeoutMs);
-    try {
-      const frame: ClientFrame = { op: "ping" };
-      socket.send(JSON.stringify(frame));
-    } catch {
-      // A socket that cannot send is no better than one nobody answers: the deadline decides.
-    }
   }
 
   private stopHeartbeat(): void {
