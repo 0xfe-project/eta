@@ -2,12 +2,14 @@
 
 The host and the desktop app are released separately, each with its own version number:
 
-| tag          | Workflow                                | What ships                                          |
-| ------------ | --------------------------------------- | --------------------------------------------------- |
-| `v*`         | `.github/workflows/release.yml`         | `eta-host`, one file each for Linux, macOS, Windows |
-| `desktop-v*` | `.github/workflows/release-desktop.yml` | Desktop app installers, see "Desktop app" below     |
+| tag          | Workflow                                | What ships                                                                    |
+| ------------ | --------------------------------------- | ----------------------------------------------------------------------------- |
+| `v*`         | `.github/workflows/release.yml`         | `eta-host`, one file each for Linux, macOS, Windows                           |
+| `desktop-v*` | `.github/workflows/release-desktop.yml` | Client app: desktop installers, Android APK, iOS IPA, see "Desktop app" below |
 
 GitHub's Latest is always the host: desktop releases are published with `--latest=false`. `eta-host upgrade` and the settings page button also don't look at who Latest is, they only take `v*` tags (`packages/releases/src/releases.ts`), so even if a desktop Release is manually marked Latest, the host still picks up the newest host.
+
+Each kind's generated release notes only cover the changes since the previous release of the same kind: the workflow passes `--notes-start-tag` with the newest published `v*` (host) or `desktop-v*` (client) release before it. Drafts don't count, so a tag whose run failed is skipped. Without an earlier release of that kind, GitHub's default comparison is used and the run logs a warning.
 
 ## Tagging
 
@@ -81,14 +83,34 @@ git push origin desktop-v0.2.0
 
 The `desktop-v*` workflow packages `apps/client` with Native Shell v0.6.0. It strips `desktop-v` from the tag and passes the result as the app version. A suffix marks a prerelease. The host release keeps GitHub's Latest label.
 
-The workflow opens a draft, runs CI and builds on each target's own runner. It checks that every package includes the local host launcher, then publishes the draft with `SHA256SUMS`.
+The workflow opens a draft, runs CI and builds on each target's own runner. It checks that every desktop package includes the local host launcher, then publishes the draft with `SHA256SUMS`.
 
-| File                           | Platform    | Contents                        |
-| ------------------------------ | ----------- | ------------------------------- |
-| `eta-desktop-linux-x64.tar.gz` | Linux x64   | App directory and desktop entry |
-| `eta-desktop-darwin-arm64.dmg` | macOS arm64 | App bundle                      |
-| `eta-desktop-windows-x64.zip`  | Windows x64 | App directory with `Eta.exe`    |
-| `SHA256SUMS`                   |             | Checksums for these files       |
+| File                           | Platform                    | Contents                        |
+| ------------------------------ | --------------------------- | ------------------------------- |
+| `eta-desktop-linux-x64.tar.gz` | Linux x64                   | App directory and desktop entry |
+| `eta-desktop-darwin-arm64.dmg` | macOS arm64                 | App bundle                      |
+| `eta-desktop-windows-x64.zip`  | Windows x64                 | App directory with `Eta.exe`    |
+| `eta-android.apk`              | Android 8+, arm64 and armv7 | APK for sideloading             |
+| `eta-ios.ipa`                  | iOS 15+ devices             | IPA, signed or not, see below   |
+| `SHA256SUMS`                   |                             | Checksums for these files       |
+
+### Phone packages
+
+The phone apps get the same version as the desktop app; their build number (Android's version code) is the workflow's run number, which only grows, so a newer APK installs over an older one signed with the same key.
+
+The packages are signed with what the repository's Actions secrets provide. Missing secrets don't fail the release; the package is built anyway and a note at the top of the release notes says how it was signed:
+
+| Secret                          | What                                                        | Without it                                                                                                                                                                              |
+| ------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ETA_ANDROID_KEYSTORE`          | Release keystore (`.jks`), base64                           | Signed with a debug key made on the runner for this build. The next release's APK has another key, so Android only installs it after the old app is uninstalled, which deletes its data |
+| `ETA_ANDROID_KEY_ALIAS`         | Key alias in the keystore                                   |                                                                                                                                                                                         |
+| `ETA_ANDROID_KEYSTORE_PASSWORD` | Keystore password                                           |                                                                                                                                                                                         |
+| `ETA_IOS_CERTIFICATE`           | Signing certificate with its private key (`.p12`), base64   | An unsigned IPA (`Payload/Eta.app`). It installs only once re-signed for a device, e.g. with AltStore or Sideloadly                                                                     |
+| `ETA_IOS_CERTIFICATE_PASSWORD`  | The `.p12`'s password                                       |                                                                                                                                                                                         |
+| `ETA_IOS_PROFILE`               | Provisioning profile (`.mobileprovision`), base64           |                                                                                                                                                                                         |
+| `ETA_IOS_SIGN_IDENTITY`         | Its identity, e.g. `Apple Distribution: Your Team (TEAMID)` |                                                                                                                                                                                         |
+
+A signed IPA installs only on the devices its profile allows (development or ad hoc). Anything beyond that goes through TestFlight or the App Store, see "Local packages and store uploads" below; the same goes for Google Play.
 
 ### Local packages and store uploads
 
@@ -275,7 +297,7 @@ eta-host upgrade --cancel     # cancel the in-progress upgrade; cannot cancel if
 
 The “Updates” section in settings does the same thing, but never to a version you name: it upgrades to the latest stable release, or with "Pre-releases" switched on, to the highest published `v*` including pre-releases (`-alpha`, `-beta`, `-rc`, …). A full release is higher than its own pre-releases, so `0.3.0` replaces `0.3.0-rc.1`. The switch is the host's setting `upgrade.prerelease`, next to `upgrade.upstream` and `upgrade.token`; from a window connected to a remote host it is that host's. `eta-host upgrade` without a version and the worker the button starts read the same setting from `~/.eta` (`savedPrerelease`), so the button upgrades to what the page showed.
 
-Pre-releases are looked for among the newest 100 releases of the repository (one page of the API); a `v*` further back is not seen.
+The release list is read one page of 100 at a time, newest first, following the API's `Link` header, until a page holds a release the channel takes, up to 10 pages (1,000 releases). `desktop-v*` releases share the list with the host's, so many client releases in a row can push every `v*` off the first page; they are paged past rather than hiding the host. The desktop launcher's search for a host it can run (`hosts()`) reads the list the same way. A release server that sends no `Link` header is read once.
 
 Switching pre-releases off never goes back: on a pre-release build with nothing newer among the full releases, the page and `eta-host upgrade` say so and offer nothing until a newer full release is out.
 

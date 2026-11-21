@@ -59,7 +59,14 @@ jobs:
             exit 1
           fi
           if [[ $draft == none ]]; then
-            gh release create "$TAG" --draft --verify-tag --title "$TAG" --generate-notes \
+            # The notes start from the previous host release, not from a desktop-v* one that
+            # came in between. Newest first; drafts are left out, so a failed tag does not count.
+            previous=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" \
+              --jq '.[] | select(.draft | not) | .tag_name' |
+              grep -E '^v[0-9]' | grep -vxF "$TAG" | head -n 1 || true)
+            notes=()
+            if [[ -n $previous ]]; then notes+=(--notes-start-tag "$previous"); fi
+            gh release create "$TAG" --draft --verify-tag --title "$TAG" --generate-notes "${notes[@]}" \
               --prerelease="$([[ $TAG == *-* ]] && echo true || echo false)"
           fi
 
