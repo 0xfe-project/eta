@@ -504,6 +504,8 @@ export interface TaskDraftData {
   dependsOn?: { taskId: string; requireDone: boolean }[] | undefined;
   /** The task it will be a subtask of, checked like `dependsOn`. Absent is none. */
   parentId?: string | undefined;
+  /** The user discarded it: it waits for nothing and makes no task. Absent is still waiting. */
+  discarded?: boolean | undefined;
   /** The Captain instruction that authorized this draft, when it came from one. */
   captainAssignmentId?: string | undefined;
   captainMessageId?: string | undefined;
@@ -642,6 +644,7 @@ export const TASK_ACTIONS = [
   "delete",
   "link",
   "confirmDraft",
+  "discardDraft",
   "interrupt",
   "rerun",
   "addDependency",
@@ -740,6 +743,11 @@ export interface TaskArgs {
     messageId: string;
     edits?: TaskFields;
   };
+  /**
+   * Discard a `task_draft` row of the conversation: no task is made and the row stays, marked
+   * `discarded`. Refused for a draft already confirmed or discarded.
+   */
+  discardDraft: { conversationId: string; messageId: string };
   /** Stop a run: a queued one never starts, a going one is told to stop and ends `interrupted`. */
   interrupt: { taskId: string; runId: string };
   /**
@@ -789,6 +797,7 @@ export interface TaskResults {
   delete: { taskId: string };
   link: { task: BoardTaskDetail };
   confirmDraft: { task: BoardTaskDetail; message: MessageView };
+  discardDraft: { message: MessageView };
   interrupt: { task: BoardTaskDetail };
   rerun: { task: BoardTaskDetail; run: TaskRunView };
   addDependency: { task: BoardTaskDetail };
