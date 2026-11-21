@@ -464,7 +464,9 @@ function ComposerBody(
                 props.phone ? undefined : { paddingHorizontal: 10, gap: 8 }
               }
               tone="primary"
-              dimDisabled={state().uploading > 0 || !!props.blocked}
+              dimDisabled={
+                state().uploading > 0 || state().failed > 0 || !!props.blocked
+              }
               disabled={!sendable()}
               onPress={send}
             />

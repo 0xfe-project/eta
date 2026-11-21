@@ -1,6 +1,7 @@
 import type { JSX } from "nsh";
 import { Image, Text, View } from "nsh";
 import { colors, fontFamily, Fonts, row, textFaces } from "../theme";
+import { LineRoom } from "./room";
 
 /**
  * An inline block in the editor's text: a folded paste, a file, its state. One line high, so it
@@ -28,6 +29,7 @@ export function Chip(props: {
   const c = colors();
   const fonts = Fonts();
   const type = textFaces();
+  const room = LineRoom();
   const text = (color: string, value: string, weight = 400, shrink = 0) => (
     <Text
       style={{
@@ -48,7 +50,7 @@ export function Chip(props: {
       style={{
         ...row,
         gap: 5,
-        maxWidth: 280,
+        maxWidth: room() ? Math.min(280, room() - 16) : 280,
         overflow: "hidden",
         height: type("small").line + 4,
         paddingLeft: props.thumbnail ? 2 : 6,

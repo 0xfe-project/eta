@@ -24,6 +24,7 @@ import {
 import { uiText } from "../../i18n";
 import { colors, fontFamily, Fonts, textFaces, textStyle } from "../theme";
 import { refusedFile } from "./plugins/attachment";
+import { LineRoom } from "./room";
 
 // The composer's editor: nsh's RichEditor (a ProseMirror state in Rust, edited natively — typing,
 // selection, input methods, undo) with the app's plugins on it. Each place that writes something
@@ -241,9 +242,13 @@ export function EtaEditor(props: {
   const face = () => type(props.variant ?? "body");
   const pad = () => props.padding ?? { top: 8, bottom: 8, left: 8, right: 8 };
   const editor = props.editor;
+  const room = signal(0);
   return (
     <View
-      onLayout={({ bounds }) => editor.view.width(bounds.size.width)}
+      onLayout={({ bounds }) => {
+        editor.view.width(bounds.size.width);
+        room.set(bounds.size.width - pad().left - pad().right);
+      }}
       style={{ position: "relative", ...props.style }}
     >
       <Each of={editor.plugins.filter((plugin) => plugin.overlay)}>
@@ -252,42 +257,44 @@ export function EtaEditor(props: {
       <Each of={editor.plugins.filter((plugin) => plugin.header)}>
         {(plugin) => plugin().header!()}
       </Each>
-      <RichEditor
-        editor={editor.session}
-        testID="eta-editor"
-        accessibilityLabel={props.label}
-        placeholder={props.placeholder}
-        editable={props.editable ?? true}
-        autoFocus={props.autoFocus}
-        onFocus={() => editor.view.focused(true)}
-        onBlur={() => editor.view.focused(false)}
-        onCompositionChange={({ composing }) =>
-          editor.view.composing(composing)
-        }
-        onPasteFiles={({ paste }) =>
-          editor.view.pasteFiles(paste.files, paste.uris)
-        }
-        onFileDrop={({ uris }) => editor.view.dropFiles(uris)}
-        styles={{
-          root: {
-            maxHeight: props.maxHeight,
-            minHeight: props.minHeight,
-          },
-          content: {
-            paddingTop: pad().top,
-            paddingBottom: pad().bottom,
-            paddingLeft: pad().left,
-            paddingRight: pad().right,
-            color: c().ink,
-            fontFamily: fontFamily(fonts().interface),
-            ...textStyle(face(), "prose"),
-          },
-          placeholder: { color: c().muted },
-          caret: { backgroundColor: c().ink },
-          selection: { backgroundColor: c().selected },
-          composition: { textDecorationLine: "underline" },
-        }}
-      />
+      <LineRoom.Provider value={room}>
+        <RichEditor
+          editor={editor.session}
+          testID="eta-editor"
+          accessibilityLabel={props.label}
+          placeholder={props.placeholder}
+          editable={props.editable ?? true}
+          autoFocus={props.autoFocus}
+          onFocus={() => editor.view.focused(true)}
+          onBlur={() => editor.view.focused(false)}
+          onCompositionChange={({ composing }) =>
+            editor.view.composing(composing)
+          }
+          onPasteFiles={({ paste }) =>
+            editor.view.pasteFiles(paste.files, paste.uris)
+          }
+          onFileDrop={({ uris }) => editor.view.dropFiles(uris)}
+          styles={{
+            root: {
+              maxHeight: props.maxHeight,
+              minHeight: props.minHeight,
+            },
+            content: {
+              paddingTop: pad().top,
+              paddingBottom: pad().bottom,
+              paddingLeft: pad().left,
+              paddingRight: pad().right,
+              color: c().ink,
+              fontFamily: fontFamily(fonts().interface),
+              ...textStyle(face(), "prose"),
+            },
+            placeholder: { color: c().muted },
+            caret: { backgroundColor: c().ink },
+            selection: { backgroundColor: c().selected },
+            composition: { textDecorationLine: "underline" },
+          }}
+        />
+      </LineRoom.Provider>
     </View>
   );
 }
