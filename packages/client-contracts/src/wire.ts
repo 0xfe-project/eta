@@ -13,6 +13,12 @@
 // pause, and the new socket starts from nothing, so every target that still has users is
 // subscribed again (the host answers with a full snapshot) and every call whose reply can no
 // longer arrive is rejected, never sent again.
+//
+// A connection can also die without closing (the network went away quietly, the computer slept):
+// to a host that says `heartbeat` in its hello the wire sends a `ping` now and then, and one that
+// stays unanswered counts as a drop. An older host is never pinged, so its silence means nothing.
+// `wake` is for the moments a client knows the network may be back (the app returned to the
+// foreground, the system reported it online): retry now, or check the connection that looks open.
 
 import type {
   CallFrame,
@@ -141,8 +147,16 @@ export interface WireOptions<Store extends WireStore = WireStore> {
   /** The pause before the first retry, doubling up to `maxRetryMs`. */
   initialRetryMs?: number;
   maxRetryMs?: number;
+  /** How often a host that answers pings is pinged. */
+  heartbeatMs?: number;
+  /** How long a ping may go unanswered (nothing at all arriving) before the connection counts as dropped. */
+  heartbeatTimeoutMs?: number;
   observer?: WireObserver;
 }
+
+/** How often a connection is checked, and how long an answer may take. */
+export const HEARTBEAT_MS = 15_000;
+export const HEARTBEAT_TIMEOUT_MS = 10_000;
 
 /** The part of a WebSocket (the browser's or Bun's) the wire uses; tests supply their own. */
 export interface WebSocketLike {
@@ -167,6 +181,35 @@ export function fromWebSocket(
   // A close always follows; closing again makes sure it does.
   socket.addEventListener("error", () => socket.close());
   return socket;
+}
+
+/** The part of a page (`window`, `document`) `wakeOnPageEvents` listens to. */
+export interface PageEventSource {
+  addEventListener: (type: string, listener: () => void) => void;
+  removeEventListener: (type: string, listener: () => void) => void;
+}
+
+/**
+ * Wake a wire when a browser page says the network may be back: it became visible again, or the
+ * browser went online. Returns what stops listening.
+ */
+export function wakeOnPageEvents(
+  wire: Pick<Wire, "wake">,
+  page: {
+    window: PageEventSource;
+    document: PageEventSource & { visibilityState: string };
+  },
+): () => void {
+  const visible = () => {
+    if (page.document.visibilityState === "visible") wire.wake();
+  };
+  const online = () => wire.wake();
+  page.document.addEventListener("visibilitychange", visible);
+  page.window.addEventListener("online", online);
+  return () => {
+    page.document.removeEventListener("visibilitychange", visible);
+    page.window.removeEventListener("online", online);
+  };
 }
 
 /** The pause after `current`: doubled, up to `max`. */
@@ -236,6 +279,14 @@ export class Wire<Store extends WireStore = WireStore> {
   private greeted = false;
   private retryMs: number;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly heartbeatMs: number;
+  private readonly heartbeatTimeoutMs: number;
+  /** Whether the current socket's host answers pings (its hello said so). */
+  private heartbeat = false;
+  /** The next ping. */
+  private beatTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Set while a ping waits for something, anything, to arrive. */
+  private deadline: ReturnType<typeof setTimeout> | undefined;
   private closed = false;
   private requests = 0;
   private readonly pending = new Map<string, Pending>();
@@ -254,6 +305,9 @@ export class Wire<Store extends WireStore = WireStore> {
     this.callTimeoutMs = options.callTimeoutMs ?? 30_000;
     this.initialRetryMs = options.initialRetryMs ?? 500;
     this.maxRetryMs = options.maxRetryMs ?? 10_000;
+    this.heartbeatMs = options.heartbeatMs ?? HEARTBEAT_MS;
+    this.heartbeatTimeoutMs =
+      options.heartbeatTimeoutMs ?? HEARTBEAT_TIMEOUT_MS;
     this.observer = options.observer ?? {};
     this.retryMs = this.initialRetryMs;
   }
@@ -285,11 +339,26 @@ export class Wire<Store extends WireStore = WireStore> {
     this.connect();
   }
 
+  /**
+   * The network may be back: the app came to the foreground, or the system said it is online.
+   * Without a connection, retry now instead of waiting out the pause; with one that looks open,
+   * ping it at once, so one that died meanwhile is found out and replaced.
+   */
+  wake(): void {
+    if (this.closed) return;
+    if (this.socket === undefined) {
+      this.retryNow();
+      return;
+    }
+    if (this.greeted) this.beat();
+  }
+
   /** Stop for good: no more retries, and every waiting call is rejected. */
   close(): void {
     this.closed = true;
     clearTimeout(this.retryTimer);
     this.retryTimer = undefined;
+    this.stopHeartbeat();
     const socket = this.socket;
     this.socket = undefined;
     this.live = false;
@@ -411,6 +480,9 @@ export class Wire<Store extends WireStore = WireStore> {
   }
 
   private receive(text: string): void {
+    // Anything at all is an answer: the connection is alive.
+    clearTimeout(this.deadline);
+    this.deadline = undefined;
     let frame: unknown;
     try {
       frame = JSON.parse(text);
@@ -440,6 +512,7 @@ export class Wire<Store extends WireStore = WireStore> {
         return;
       case "error":
         this.store.setState({ error: frame.message });
+      // A pong says nothing beyond its arrival, which is all it is for.
     }
   }
 
@@ -470,6 +543,8 @@ export class Wire<Store extends WireStore = WireStore> {
       error: undefined,
     });
     if (!this.live) this.opened();
+    this.heartbeat = frame.heartbeat === true;
+    this.scheduleBeat();
     this.observer.hello?.();
   }
 
@@ -504,8 +579,48 @@ export class Wire<Store extends WireStore = WireStore> {
     }
   }
 
+  private scheduleBeat(): void {
+    clearTimeout(this.beatTimer);
+    this.beatTimer = undefined;
+    if (!this.heartbeat) return;
+    this.beatTimer = setTimeout(() => {
+      this.beatTimer = undefined;
+      this.beat();
+    }, this.heartbeatMs);
+  }
+
+  /** Ping, and count the connection as dropped if nothing arrives in time. */
+  private beat(): void {
+    const socket = this.socket;
+    if (socket === undefined || !this.heartbeat) return;
+    this.scheduleBeat();
+    if (this.deadline !== undefined) return;
+    this.deadline = setTimeout(() => {
+      this.deadline = undefined;
+      if (this.socket !== socket) return;
+      // Stop listening to it first: a socket whose peer is gone may take long to report its close.
+      this.lost();
+      socket.close();
+    }, this.heartbeatTimeoutMs);
+    try {
+      const frame: ClientFrame = { op: "ping" };
+      socket.send(JSON.stringify(frame));
+    } catch {
+      // A socket that cannot send is no better than one nobody answers: the deadline decides.
+    }
+  }
+
+  private stopHeartbeat(): void {
+    this.heartbeat = false;
+    clearTimeout(this.beatTimer);
+    this.beatTimer = undefined;
+    clearTimeout(this.deadline);
+    this.deadline = undefined;
+  }
+
   private lost(): void {
     const greeted = this.greeted;
+    this.stopHeartbeat();
     this.socket = undefined;
     this.live = false;
     this.greeted = false;
