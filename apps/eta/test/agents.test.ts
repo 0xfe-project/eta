@@ -12,7 +12,7 @@ import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { until } from "./support/client";
-import { HANG, say, scriptedModels } from "./support/models";
+import { gate, HANG, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";
 
 const exists = (path: string): Promise<boolean> =>
@@ -136,6 +136,90 @@ describe("creating an agent", () => {
       w.client.call("agents", "update", { agentId: "nobody", name: "x" }),
     ).rejects.toThrow(/no such agent/);
   });
+});
+
+describe("editing the model while a session is running", () => {
+  it.each(["next wake", "host restart"])(
+    "uses the saved model after %s",
+    async (when) => {
+      const active = gate();
+      const used: string[] = [];
+      const { models, requests } = scriptedModels(async ({ index }) => {
+        if (index === 0) await active.opened;
+        return say("done");
+      });
+      const options = {
+        models: {
+          ...models,
+          getModel(provider, id) {
+            const model = models.getModel(provider, id);
+            return model === undefined ? undefined : { ...model, id };
+          },
+          streamSimple(model, context, options) {
+            used.push(model.id);
+            return models.streamSimple(model, context, options);
+          },
+        } satisfies typeof models,
+      };
+      const first = await world(options);
+      const agent = await first.agent("Ada", { model: "fake:old" });
+      const project = await first.project();
+      const group = await first.group(project.id, [agent.id]);
+      await first.watch(group.id);
+      const initial = await first.send(group.id, "first");
+      try {
+        await until(() => requests.length === 1);
+        await first.client.call("agents", "update", {
+          agentId: agent.id,
+          model: "fake:intermediate",
+          thinkingLevel: "high",
+        });
+        await first.client.call("agents", "update", {
+          agentId: agent.id,
+          model: "fake:new",
+        });
+      } finally {
+        active.open();
+      }
+      expect(
+        (await first.settled(group.id, initial.replies[0]!.id)).status,
+      ).toBe("done");
+      const sessionOf = (w: typeof first) =>
+        w.client.section<{ sessionId: string | null }[]>(
+          `conversations.${group.id}`,
+          "members",
+        )?.[0]?.sessionId;
+      await until(() => Boolean(sessionOf(first)));
+      const session = sessionOf(first)!;
+
+      let w = first;
+      if (when === "host restart") {
+        await first.host.close();
+        w = await world({ ...options, dataDir: first.host.dataDir });
+        await w.watch(group.id);
+      }
+      const next = await w.send(group.id, "second");
+      expect((await w.settled(group.id, next.replies[0]!.id)).status).toBe(
+        "done",
+      );
+      expect(used).toEqual(["old", "new"]);
+      expect(sessionOf(w)).toBe(session);
+      const live = w.host.server.sessions
+        .openSessions()
+        .find((entry) => entry.meta.id === session);
+      expect(live?.session.kernel.config.read("thinkingAsked")).toBe("high");
+
+      await w.client.call("sessions", "modelSet", {
+        session,
+        model: "fake:chosen",
+      });
+      const last = await w.send(group.id, "third");
+      expect((await w.settled(group.id, last.replies[0]!.id)).status).toBe(
+        "done",
+      );
+      expect(used).toEqual(["old", "new", "chosen"]);
+    },
+  );
 });
 
 describe("the private chat", () => {

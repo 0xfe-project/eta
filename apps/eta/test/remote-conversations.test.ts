@@ -492,12 +492,12 @@ describe("watching and driving a remote session from the browser", () => {
 });
 
 describe("restarts", () => {
-  it("a daemon that restarts finds its sessions again from their journals", async () => {
+  it("a daemon that restarts finds its sessions and applies an agent edit made while it was offline", async () => {
     const { models, requests } = scriptedModels((request) =>
       say(`answer ${request.index}`),
     );
     const r = await remoteWorld({ models });
-    const { group } = await r.agents("Ada");
+    const { agents, group } = await r.agents("Ada");
     const first = await r.send(group.id, "remember the number 7");
     await r.settled(group.id, first.replies[0]!.id);
     const session = sessionOf(r, group.id)!;
@@ -507,6 +507,10 @@ describe("restarts", () => {
     await until(
       () => machineView(r.client, r.daemon.machineId)?.status === "offline",
     );
+    await r.client.call("agents", "update", {
+      agentId: agents[0]!.id,
+      model: "fake:after-restart",
+    });
     const node = new DaemonNode({
       dataDir: r.daemon.dataDir,
       version: "test",
@@ -524,12 +528,18 @@ describe("restarts", () => {
         () => machineView(r.client, r.daemon.machineId)?.status === "online",
       );
       const second = await r.send(group.id, "what number?");
-      await r.settled(group.id, second.replies[0]!.id);
+      expect((await r.settled(group.id, second.replies[0]!.id)).status).toBe(
+        "done",
+      );
       // The same session, with its history: it was read back from the daemon's own journal.
       expect(sessionOf(r, group.id)).toBe(session);
       expect(requests[1]!.transcript.join("\n")).toContain(
         "remember the number 7",
       );
+      const config = await r.host.product.hub
+        .link(r.daemon.machineId)!
+        .machine("config", { session });
+      expect(config.model).toBe("fake:after-restart");
     } finally {
       await link.stop();
       await node.close();

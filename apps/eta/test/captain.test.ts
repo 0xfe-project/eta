@@ -14,7 +14,7 @@ import type {
 import { describe, expect, it, vi } from "vitest";
 import { taskKey } from "../src/session-owner";
 import { until } from "./support/client";
-import { call, HANG, say, scriptedModels } from "./support/models";
+import { call, gate, HANG, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";
 
 const options = { captain: true, tasks: { runs: false } } as const;
@@ -519,6 +519,40 @@ describe("captain controls", () => {
         .openSessions()
         .some((entry) => entry.meta.id === sessionId),
     ).toBe(true);
+  });
+
+  it("applies a model saved during Captain's reply on the next wake", async () => {
+    const active = gate();
+    const { models, requests } = scriptedModels(async ({ index }) => {
+      if (index === 0) await active.opened;
+      return say("Captain ready.");
+    });
+    const w = await world({ ...options, models });
+    const { conversationId } = await w.host.product.captain.direct();
+    await w.watch(conversationId);
+    const initial = await w.send(conversationId, "first");
+    try {
+      await until(() => requests.length === 1);
+      const saved = (await w.client.call("captain", "setModel", {
+        model: "fake:chosen",
+      })) as { identity: CaptainIdentityView };
+      expect(saved.identity.model).toBe("fake:chosen");
+    } finally {
+      active.open();
+    }
+    await w.settled(conversationId, initial.replies[0]!.id);
+
+    const next = await w.send(conversationId, "second");
+    expect((await w.settled(conversationId, next.replies[0]!.id)).status).toBe(
+      "done",
+    );
+    const session = w.host.server.sessions
+      .openSessions()
+      .find((entry) => entry.meta.conversationId === conversationId);
+    expect(session?.session.kernel.config.read("model")).toEqual({
+      provider: "fake",
+      modelId: "chosen",
+    });
   });
 
   it("pauses memory for conversations and task runs", async () => {

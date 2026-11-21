@@ -29,11 +29,11 @@ import type { SshTransport } from "@eta/ssh";
  * steer it) and the chains. Everything else is a read of the database.
  */
 import type { Database } from "bun:sqlite";
-import type { AgentRecord, AgentStore } from "../agents/store";
+import type { AgentInput, AgentRecord, AgentStore } from "../agents/store";
 import type { MachineRecord, MachineStore } from "../machines/store";
 import type { ProjectStore } from "../projects/store";
 import type { AttachmentRecord, AttachmentStore } from "./attachments";
-import type { SessionHandle, SessionPlace, SessionSettings } from "./places";
+import type { SessionHandle, SessionPlace } from "./places";
 import type { ConversationRecord, ConversationStore } from "./store";
 import type { Timeline } from "./timeline";
 import { homedir } from "node:os";
@@ -191,6 +191,8 @@ export class Engine {
   #closing = false;
   /** Replies waiting their turn on a participant's session, by `conversation:agent`. */
   readonly #chains = new Map<string, Promise<unknown>>();
+  /** Agent edits and wakes share one settings update at a time on each session. */
+  readonly #configuring = new Map<string, Promise<void>>();
   /** The reply each participant's session is running right now. */
   readonly #running = new Map<string, Running>();
   /**
@@ -1040,31 +1042,90 @@ export class Engine {
     if (touched.size > 0) this.#changed([...touched]);
   }
 
-  /**
-   * An agent's model or thinking level was edited: its sessions take the new ones, wherever they
-   * run, replacing whatever those sessions had been running on. A session that
-   * cannot be reached (its machine is offline) or is in the middle of a run is a warning: it
-   * keeps what it has.
-   */
-  async applySettings(
-    agentId: string,
-    settings: SessionSettings,
-  ): Promise<void> {
-    if (settings.model === undefined && settings.thinkingLevel === undefined)
-      return;
-    for (const sessionId of this.#conversations.sessionsOfAgent(agentId)) {
+  /** Save an agent edit and its pending session settings in one transaction. */
+  saveAgent(
+    before: AgentRecord,
+    patch: Partial<AgentInput>,
+    options: { reapplyModel?: boolean } = {},
+  ): { agent: AgentRecord; sessions: string[] } {
+    return this.#db.transaction(() => {
+      const agent = this.#agents.update(before.id, patch)!;
+      if (agent.runtime !== before.runtime) {
+        // The next wake opens sessions on the new runtime with its own settings.
+        this.#conversations.queueSessionSettings(agent.id, null);
+        return { agent, sessions: [] };
+      }
+      const modelChanged =
+        agent.model !== before.model || options.reapplyModel === true;
+      const levelChanged = agent.thinkingLevel !== before.thinkingLevel;
+      if (!modelChanged && !levelChanged) return { agent, sessions: [] };
+      this.#conversations.queueSessionSettings(agent.id, {
+        ...(modelChanged ? { model: agent.model } : {}),
+        ...(levelChanged ? { thinkingLevel: agent.thinkingLevel } : {}),
+      });
+      return { agent, sessions: this.#conversations.sessionsOfAgent(agent.id) };
+    })();
+  }
+
+  /** Idle sessions take an agent edit immediately. A wake retries what is still pending. */
+  async applySettings(sessions: readonly string[]): Promise<void> {
+    for (const sessionId of sessions) {
       const held = this.#conversations.ofSession(sessionId);
       const machine =
         held === undefined ? undefined : this.#machines.get(held.machineId);
       const place = machine === undefined ? undefined : this.#placeOf(machine);
-      if (machine === undefined || place === undefined) continue;
+      if (machine !== undefined && place !== undefined)
+        await this.#applyPendingSettings(sessionId, machine, place);
+    }
+  }
+
+  #applyPendingSettings(
+    sessionId: string,
+    machine: MachineRecord,
+    place: SessionPlace,
+  ): Promise<void> {
+    const previous = this.#configuring.get(sessionId) ?? Promise.resolve();
+    const configure = () => this.#configurePending(sessionId, machine, place);
+    const next = previous.then(configure, configure);
+    this.#configuring.set(sessionId, next);
+    return next.finally(() => {
+      if (this.#configuring.get(sessionId) === next)
+        this.#configuring.delete(sessionId);
+    });
+  }
+
+  async #configurePending(
+    sessionId: string,
+    machine: MachineRecord,
+    place: SessionPlace,
+  ): Promise<void> {
+    let pending = this.#conversations.pendingSessionSettings(sessionId);
+    while (pending !== undefined) {
+      const {
+        saved,
+        settings: { model, ...remaining },
+      } = pending;
       try {
-        await place.configure(sessionId, machine, settings);
+        if (model !== undefined) {
+          if (model !== null)
+            await place.configure(sessionId, machine, { model });
+        } else {
+          await place.configure(sessionId, machine, remaining);
+        }
+        // A failed thinking-level change should not replay a model switch that already worked.
+        this.#conversations.finishSessionSettings(
+          sessionId,
+          saved,
+          model === undefined ? {} : remaining,
+        );
       } catch (error) {
         this.#warn(
           `[eta] could not update session ${sessionId} to the edited agent: ${messageOf(error)}`,
         );
       }
+      pending = this.#conversations.pendingSessionSettings(sessionId);
+      // A busy session or an unreachable machine gets another chance on its next wake.
+      if (pending?.saved === saved) return;
     }
   }
 
@@ -1315,6 +1376,8 @@ export class Engine {
       if (this.#timeline.get(replyId)?.status !== "queued") return;
     }
 
+    await this.#applyPendingSettings(handle.id, machine, place);
+    if (this.#timeline.get(replyId)?.status !== "queued") return;
     // What it is told is settled before the row says it is working, so one push carries both.
     const told = await this.#briefingFor(
       conversation,

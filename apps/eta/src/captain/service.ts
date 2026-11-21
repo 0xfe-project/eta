@@ -267,8 +267,12 @@ export class CaptainService {
     const chosen = model.trim();
     checkModel(captain.runtime, chosen === "" ? null : chosen);
     if (chosen === "") throw new Error("Captain needs a model");
-    const updated = this.#deps.agents.update(captain.id, { model: chosen })!;
-    await this.#deps.engine.applySettings(captain.id, { model: chosen });
+    const { agent: updated, sessions } = this.#deps.engine.saveAgent(
+      captain,
+      { model: chosen },
+      { reapplyModel: true },
+    );
+    await this.#deps.engine.applySettings(sessions);
     this.#deps.changed();
     return this.#viewOf(updated);
   }
