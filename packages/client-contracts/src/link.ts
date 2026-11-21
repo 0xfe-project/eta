@@ -347,6 +347,34 @@ export interface RunOutcome {
   activity?: ToolActivity[];
   /** Its thoughts, words and calls in order; absent from a daemon too old to say. */
   process?: ProcessStep[];
+  /**
+   * What each assistant message of the run used, as its transcript tells it: only for a session on
+   * an external runtime (Claude Code, Codex, an ACP agent), whose requests never pass through the
+   * host's model layer. A session on eta's own loop is counted there instead, so it leaves this
+   * out, and so does a daemon too old to say.
+   */
+  usage?: RunMessageUsage[];
+}
+
+/** One assistant message's tokens, as its runtime reported them. */
+export interface RunMessageUsage {
+  /** When the message was written. */
+  at: number;
+  provider: string;
+  /** The model that answered, as the runtime reported it (not the one asked for). */
+  model: string;
+  /** Null when the runtime reported no tokens for it: not a count of zero. */
+  tokens: TokenCounts | null;
+}
+
+/** Tokens, split the way eta counts them: cache reads and writes beside `input`, not in it. */
+export interface TokenCounts {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  /** A subset of `output`; absent when the runtime gives no reasoning breakdown. */
+  reasoning?: number;
 }
 
 export interface RunFailureView {

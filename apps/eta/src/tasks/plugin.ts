@@ -23,6 +23,7 @@ import type {
 } from "./board";
 import type { TaskRunner } from "./runner";
 import type { WorkspaceChoice } from "./tools";
+import type { TaskUsageStore } from "./usage";
 import { TASK_ARCHIVED_FILTERS } from "@eta/client-contracts";
 import { Args, productPlugin, publish } from "../wire";
 import { boardSettings, saveBoardSettings } from "./archiver";
@@ -30,6 +31,8 @@ import { boardSettings, saveBoardSettings } from "./archiver";
 export interface TasksDeps {
   board: TaskBoard;
   runner: TaskRunner;
+  /** What the tasks' runs used, in tokens (`tasks.usage`, and each task's `usage` section). */
+  usage?: Pick<TaskUsageStore, "ofTask" | "onChange" | "ancestorsOf">;
   /** The workspace a task made in a conversation gets, when its parent does not say. */
   workspaceFor?: WorkspaceChoice;
   /** Where the board's settings (how soon quiet tasks are archived) are kept. */
@@ -124,7 +127,7 @@ function newTasksOf(call: CallFrame): NewTaskInput[] {
 }
 
 export function tasksPlugin(deps: TasksDeps, applied: () => void) {
-  const { board, runner, workspaceFor, settings } = deps;
+  const { board, runner, workspaceFor, settings, usage } = deps;
 
   return productPlugin(
     "tasks",
@@ -138,6 +141,9 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
           publish(wire, `tasks.${id}`, {
             task: () => board.detail(id)!,
             activity: () => board.activity(id),
+            ...(usage === undefined
+              ? {}
+              : { usage: () => usage.ofTask(id, true) }),
           }),
         );
       };
@@ -155,6 +161,30 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
           },
           { eager: true },
         ),
+
+        // A run's tokens were counted: its task's page moved, and so did every task above it,
+        // whose section adds its subtasks in. Paced: a busy run is counted on every request.
+        usage?.onChange((taskId) => {
+          for (const id of [taskId, ...usage.ancestorsOf(taskId)])
+            if (targets.has(id)) wire.push(`tasks.${id}`);
+        }) ?? (() => undefined),
+
+        wire.handle("tasks", "usage", (call) => {
+          if (usage === undefined)
+            throw new Error("tasks.usage: this host does not count usage");
+          const args = new Args(call);
+          const taskId = args.string("taskId");
+          if (board.detail(taskId) === undefined)
+            throw new Error(`tasks.usage: no task ${taskId}`);
+          return {
+            result: {
+              usage: usage.ofTask(
+                taskId,
+                args.optionalBoolean("includeSubtasks") ?? false,
+              ),
+            },
+          };
+        }),
 
         wire.handle("tasks", "list", (call) => {
           const archived = archivedFilterOf(

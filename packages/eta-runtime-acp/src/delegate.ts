@@ -39,6 +39,7 @@ import type {
   SessionNotification,
   SystemPrompt,
 } from "@agentclientprotocol/sdk";
+import type { PromptResponse as UnstablePromptResponse } from "@agentclientprotocol/sdk/unstable";
 import type { AcpAgentConfig, SessionMcpServer } from "@eta/client-contracts";
 import type {
   AgentMessage,
@@ -626,12 +627,13 @@ export class AcpDelegate implements RunDelegate {
       );
       if (signal.aborted) onAbort();
       else signal.addEventListener("abort", onAbort, { once: true });
-      const answer = await prompt;
+      // An agent may answer with the turn's tokens: unstable in ACP, so absent from the stable type.
+      const answer: UnstablePromptResponse = await prompt;
       if (answer.stopReason === "cancelled" || signal.aborted) {
-        translator.finish("aborted");
+        translator.finish("aborted", undefined, answer.usage);
         return { kind: "aborted" };
       }
-      translator.finish("completed");
+      translator.finish("completed", undefined, answer.usage);
       if (answer.stopReason !== "end_turn")
         this.#options.warn(
           `[eta-runtime-acp] ${this.#options.runtime} ended its turn with ${answer.stopReason}`,

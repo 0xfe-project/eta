@@ -55,6 +55,7 @@ daemon data lives in the same root: `~/.eta/daemon/` (see [machines and daemon](
 | 0047 captain-reviews | Captain review queue: failed, stuck, Inbox, and assignment events awaiting review, recording the dedupe key, checkpoint, delivered message, and Captain reply |
 | 0048 run-activity | run's `last_event_at/error_code/retryable`; Captain review's `attempts/next_attempt_at` backoff fields |
 | 0049 captain-inbox | Captain inbox relay |
+| 0057 task-usage | `task_usage` (tokens per model request or assistant message of a task run, NULL when not reported, never pruned); `task_run.usage_counted` (`live` or `backfill`), see [Tasks](tasks.md) |
 | 0043 | `plugin_source` (git source), `plugin_config` (config, sealed), `plugin_agent_level` (levels the user lowered), `agent_plugin` (which plugins an agent has enabled, deleted with the agent), `plugin_audit` (records of agents reading secrets, without values), see [Plugins](plugins.md) |
 | 0032 | `bundle_config` (environment bundle config, encrypted), `bundle_source` (bundles from git: repository, rev, path, resolved commit), `agent.bundles` (bundles an agent loads, as a JSON list) |
 | 0039 | `task.assignee_agent` (optional executing agent; null falls back to the creator), `task.base_branch`, see [Tasks](tasks.md) |

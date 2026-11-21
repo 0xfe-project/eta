@@ -159,4 +159,6 @@ export {
   emptyUsage,
   sessionTokenTotal,
   subtractUsage,
+  tokensReported,
+  unreportedUsage,
 } from "./types/usage";

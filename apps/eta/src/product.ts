@@ -118,6 +118,7 @@ import { TaskRunner } from "./tasks/runner";
 import { TaskRunStore } from "./tasks/runs";
 import { executorOf, TaskStore } from "./tasks/store";
 import { taskSessionTools } from "./tasks/tools";
+import { TaskUsageStore } from "./tasks/usage";
 import { workspaceChooser } from "./tasks/workspace";
 import { busyAgents } from "./upgrade/database";
 import { upgradePlugin, upgradeRoutes } from "./upgrade/plugin";
@@ -388,6 +389,16 @@ export function createProduct(options: {
   const taskRows = new TaskStore(db);
   const runRows = new TaskRunStore(db);
   const taskOfRun = (runId: string) => runRows.get(runId)?.taskId;
+  // What each task's runs used, in tokens: counted from the model layer (eta's own loop) or from a
+  // run's transcript (an external runtime), and filled in once for the runs from before.
+  const taskUsage = new TaskUsageStore(db, {
+    dataDir,
+    executorOf: (taskId) => {
+      const task = taskRows.get(taskId);
+      return task === undefined ? null : executorOf(task);
+    },
+    warn,
+  });
   const originOf = (meta: SessionMeta): SessionMeta => ({
     ...meta,
     conversationId: conversationOf(
@@ -405,6 +416,11 @@ export function createProduct(options: {
       wire?.push("usage");
     } catch (error) {
       warn(`[eta] could not record a generation: ${String(error)}`);
+    }
+    try {
+      taskUsage.fromModel(runRows.bySession(meta.id), message);
+    } catch (error) {
+      warn(`[eta] could not count a generation for its task: ${String(error)}`);
     }
   };
   const scheduler: Scheduler = new Scheduler({
@@ -662,9 +678,17 @@ export function createProduct(options: {
     dataDir,
     hooks: runHooks,
     changed: (touched) => changed(touched),
+    usage: taskUsage,
     warn,
   });
   later.taskRunner = taskRunner;
+  void taskUsage
+    .backfill()
+    .catch((error: unknown) =>
+      warn(
+        `[eta] could not fill in the usage of earlier task runs: ${String(error)}`,
+      ),
+    );
   const captain = new CaptainService({
     dataDir,
     db,
@@ -1108,6 +1132,7 @@ export function createProduct(options: {
           {
             board,
             runner: taskRunner,
+            usage: taskUsage,
             workspaceFor: taskWorkspaceFor,
             settings: taskSettings,
             settingsChanged: () => void archiver.sweep(),

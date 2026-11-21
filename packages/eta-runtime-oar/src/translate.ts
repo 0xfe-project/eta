@@ -32,6 +32,7 @@ import type {
   Usage,
 } from "@eta/core";
 import type { HostCalls } from "./host-calls";
+import { unreportedUsage } from "@eta/core";
 
 type Block = AssistantMessage["content"][number];
 
@@ -133,12 +134,15 @@ export function emptyUsage(): Usage {
   };
 }
 
-/** What the running total grew by: the usage of whatever happened in between. */
+/**
+ * What the running total grew by: the usage of whatever happened in between. A runtime that has not
+ * reported a total yet has said nothing, and that is told apart from zero (`unreportedUsage`).
+ */
 export function usageBetween(
   before: TokenTotals | undefined,
   after: TokenTotals | undefined,
 ): Usage {
-  if (after === undefined) return emptyUsage();
+  if (after === undefined) return unreportedUsage();
   const grew = (key: keyof TokenTotals): number =>
     Math.max(0, (after[key] ?? 0) - (before?.[key] ?? 0));
   const cacheRead = grew("cacheRead");

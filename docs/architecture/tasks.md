@@ -67,6 +67,16 @@ A run is one attempt by the executor at a task (`task_run`, status `queued | sta
 
 When the project is on another machine, the run's session lives on that machine: journal, kernel and tools are all in the daemon, while model calls and product tools (tasks, artifacts, memory) come back to the primary over the link (see [Machines and daemons](machines.md)). The primary trusts its own `task_run` row for which run a session belongs to (when a session is shared by several runs, the running one counts), and requires that the machine owning the link is the machine recorded for the run. While a machine is offline, runs queue (`machine_offline`) and start once it connects.
 
+## Usage
+
+What a task's runs used, in tokens and by model (no money: the cost fields of the `usage` table are not read). One row per model request or assistant message in `task_usage` (`0057`), each naming its run, so a task's usage is a read of its runs' rows (`tasks/usage.ts`):
+
+- **eta's own loop** reports every request through the host's model layer (`generated`; a daemon's session reaches it through `model.stream`): turns, retries, compaction summaries, side requests. Each is counted for the run working in that session now (`runs.bySession`), so two runs of one session are told apart.
+- **An external runtime** (Claude Code and Codex through oar, an ACP agent) talks to its model itself and only says what it used on its assistant messages. `listen` in `@eta/daemon` collects them during the run and returns them as `RunOutcome.usage`; the runner records them before the run ends. oar's running totals are already split into per-message shares (`usageBetween`), so the sum counts each token once. An ACP agent's tokens come from its prompt answer (`PromptResponse.usage`, unstable in ACP); `usage_update` only carries context size and cost.
+- **"No data" is not 0.** A message whose runtime reported nothing (`unreportedUsage`), or a request a provider answered with zero tokens counted, is a row with NULL tokens. A run with no reported row is counted in `runsWithoutData`. A daemon too old to send `RunOutcome.usage` leaves its external-runtime runs without data.
+- **Runs from before 0057** are filled in once at startup (`usage_counted = 'backfill'`): from the 30-day `usage` table for a session on eta's own loop, else from the session's journal on this machine, split between a session's runs by time. A run whose old messages are all zeros, or whose journal is on a daemon, has no data.
+- **Reading it.** `tasks.usage { taskId, includeSubtasks? }` returns totals, per model (with how many runs used it) and per run (agent, times, tokens, models). With `includeSubtasks`, every task under it at any depth is included; each run belongs to exactly one task, so nothing is counted twice. `tasks.<id>` carries the same as a `usage` section (subtasks included), pushed when a request is counted or a run's transcript is recorded, to the task and every task above it.
+
 ## Actions on the wire
 
 | action                | Meaning                                                                  |
@@ -76,8 +86,9 @@ When the project is on another machine, the run's session lives on that machine:
 | `comment`             | Comment; deliver into the running run, or wake a continuation run        |
 | `interrupt` / `rerun` | Stop a run / start a new run                                             |
 | `link` / `delete`     | Link a conversation / delete a task (can't delete while a run is active) |
+| `usage`               | Tokens by model and by run, optionally with the subtasks                 |
 
-`tasks` is one eager list (each row carries `runStatus`); each task is `tasks.<id>`: `task` (details, including the workspace and `runs`) and `activity` (the timeline, containing `run_queued/started/completed/failed/interrupted/nudged`).
+`tasks` is one eager list (each row carries `runStatus`); each task is `tasks.<id>`: `task` (details, including the workspace and `runs`), `activity` (the timeline, containing `run_queued/started/completed/failed/interrupted/nudged`) and `usage` (see Usage).
 
 ## Agent tools
 

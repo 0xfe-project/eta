@@ -105,8 +105,9 @@ export class TaskRunStore {
     this.#db
       .query(
         `INSERT INTO task_run
-           (id, task_id, machine_id, continues_run_id, agent_id, created_at, last_event_at, waits_for_deps)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, task_id, machine_id, continues_run_id, agent_id, created_at, last_event_at, waits_for_deps,
+            usage_counted)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'live')`,
       )
       .run(
         id,
@@ -234,12 +235,16 @@ export class TaskRunStore {
     );
   }
 
-  /** queued -> starting. False when the run was stopped while it waited. */
+  /**
+   * queued -> starting. False when the run was stopped while it waited. A run queued by an older
+   * version starts under this one, so its usage is counted as it goes from here, like a new run's.
+   */
   start(id: string): boolean {
     return (
       this.#db
         .query(
-          `UPDATE task_run SET status = 'starting', queue_reason = NULL, started_at = ?, last_event_at = ?
+          `UPDATE task_run SET status = 'starting', queue_reason = NULL, started_at = ?, last_event_at = ?,
+              usage_counted = 'live'
             WHERE id = ? AND status = 'queued'`,
         )
         .run(Date.now(), Date.now(), id).changes > 0

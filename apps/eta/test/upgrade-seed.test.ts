@@ -130,7 +130,11 @@ describe("the seeds a release upgrades", () => {
   it("is already past it at 0.4.0-rc.3, which is what an rc upgrade has to do: only what came after", async () => {
     const { before, applied } = await upgraded("0.4.0-rc.3");
     expect(before.at(-1)).toBe("0054-task-archive");
-    expect(applied).toEqual(["0055-steward-only-in-groups", "0056-places"]);
+    expect(applied).toEqual([
+      "0055-steward-only-in-groups",
+      "0056-places",
+      "0057-task-usage",
+    ]);
   });
 
   /*

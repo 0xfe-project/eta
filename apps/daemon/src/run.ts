@@ -10,13 +10,35 @@
 import type {
   ProcessStep,
   PromptImage,
+  RunMessageUsage,
   RunOutcome,
   ToolActivity,
 } from "@eta/client-contracts";
-import type { AgentMessage } from "@eta/core";
+import type { AgentMessage, AssistantMessage } from "@eta/core";
 import type { ManagedSession } from "@eta/server";
-import { kernelOn } from "@eta/core";
+import { kernelOn, tokensReported } from "@eta/core";
 import { ActivityRecorder } from "./activity";
+
+/** One assistant message's tokens as its runtime reported them; null tokens when it did not. */
+function messageUsageOf(message: AssistantMessage): RunMessageUsage {
+  const { usage } = message;
+  return {
+    at: message.timestamp,
+    provider: message.provider,
+    model: message.model,
+    tokens: tokensReported(usage)
+      ? {
+          input: usage.input,
+          output: usage.output,
+          cacheRead: usage.cacheRead,
+          cacheWrite: usage.cacheWrite,
+          ...(usage.reasoning === undefined
+            ? {}
+            : { reasoning: usage.reasoning }),
+        }
+      : null,
+  };
+}
 
 /** What a session says during a run; `stop` lets go of the listener. */
 export function listen(managed: ManagedSession): {
@@ -26,9 +48,14 @@ export function listen(managed: ManagedSession): {
     activity: ToolActivity[];
     process: ProcessStep[];
     failure: RunOutcome["failure"];
+    usage: RunMessageUsage[] | undefined;
   };
   stop: () => void;
 } {
+  // A session on eta's own loop is counted where its requests go out (the host's model layer); one
+  // on an external runtime only tells its tokens in its transcript, so they are collected here.
+  const usage: RunMessageUsage[] | undefined =
+    managed.meta.runtime === undefined ? undefined : [];
   let text = "";
   let thinking = "";
   let failure: RunOutcome["failure"];
@@ -38,6 +65,7 @@ export function listen(managed: ManagedSession): {
     ({ message }: { message: AgentMessage }) => {
       activity.see(message);
       if (message.role !== "assistant") return;
+      usage?.push(messageUsageOf(message));
       const blocks = Array.isArray(message.content) ? message.content : [];
       const spoken = blocks
         .filter((block) => block.type === "text")
@@ -65,6 +93,7 @@ export function listen(managed: ManagedSession): {
       activity: activity.list(),
       process: activity.steps(),
       failure,
+      usage,
     }),
     stop: () => {
       off();
@@ -128,6 +157,7 @@ export async function runAndWait(
       thinking: said.thinking,
       ...(said.activity.length === 0 ? {} : { activity: said.activity }),
       ...(said.process.length === 0 ? {} : { process: said.process }),
+      ...(said.usage === undefined ? {} : { usage: said.usage }),
     };
   } finally {
     heard.stop();
