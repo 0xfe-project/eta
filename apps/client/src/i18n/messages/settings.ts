@@ -345,7 +345,21 @@ export const settingsMessages = {
     "Done or cancelled tasks whose timeline has had nothing new for this long go to Archived. Anything new brings them back.",
     "已完成或已取消的任务，时间线在这段时间内没有新内容，就会移到「已归档」。有新内容时会自动回来。",
   ],
+  taskFollowUp: ["Task follow-up", "任务跟进"],
+  reactToResults: ["Review finished tasks", "任务完成后让负责人验收"],
+  reactToResultsHint: [
+    "When on, a finished task wakes the agent that made it to review the result and follow up.",
+    "开启后，任务完成时会叫醒创建任务的负责人去验收并跟进。",
+  ],
   autoArchiveDefault: ["{{label}} (default)", "{{label}}（默认）"],
+  taskAsksMakerFirst: [
+    "Let the task's maker answer first",
+    "先由创建任务的负责人回答",
+  ],
+  taskAsksHint: [
+    "When on, an agent's question in a task goes first to the agent that made the task. It answers if it can, and sends the rest to you. Each answer it gives is written on the task's timeline.",
+    "开启后，任务里 agent 的提问先由创建任务的负责人回答，答不了再转给你，自答会记在任务时间线。",
+  ],
   pluginsHint: [
     "Tick the plugins this agent may use.",
     "勾选这个智能体可以使用的插件。",

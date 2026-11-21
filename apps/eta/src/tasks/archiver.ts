@@ -14,6 +14,11 @@ import {
 /** The setting's key: a number of days from `TASK_ARCHIVE_DAYS`, or null for never. */
 const ARCHIVE_AFTER_SETTING = "tasks.archiveAfterDays";
 
+/** The setting's key: whether `finish_task` wakes the task's maker (a boolean; off when never set). */
+const REACT_TO_RESULTS_SETTING = "tasks.reactToResults";
+/** The setting's key: true lets a task's maker answer its executor's questions first; off by default. */
+const AUTO_ANSWER_ASKS_SETTING = "tasks.autoAnswerAsks";
+
 const HOUR = 60 * 60 * 1000;
 
 /** The board's settings as stored; anything unreadable is the default. */
@@ -21,19 +26,42 @@ export function boardSettings(
   settings: Pick<SettingStore, "get">,
 ): TaskBoardSettings {
   const stored = settings.get(ARCHIVE_AFTER_SETTING);
-  if (stored === null) return { archiveAfterDays: null };
+  const reactToResults = settings.get(REACT_TO_RESULTS_SETTING) === true;
+  const autoAnswerAsks = settings.get(AUTO_ANSWER_ASKS_SETTING) === true;
+  if (stored === null)
+    return { archiveAfterDays: null, reactToResults, autoAnswerAsks };
   return {
     archiveAfterDays: (TASK_ARCHIVE_DAYS as readonly unknown[]).includes(stored)
       ? (stored as TaskArchiveDays)
       : DEFAULT_TASK_ARCHIVE_DAYS,
+    reactToResults,
+    autoAnswerAsks,
   };
 }
 
 /** Check and keep what a caller asked for; a value the setting does not offer is refused. */
 export function saveBoardSettings(
   settings: Pick<SettingStore, "get" | "set">,
-  input: { archiveAfterDays?: unknown },
+  input: {
+    archiveAfterDays?: unknown;
+    reactToResults?: unknown;
+    autoAnswerAsks?: unknown;
+  },
 ): TaskBoardSettings {
+  if (
+    input.reactToResults !== undefined &&
+    typeof input.reactToResults !== "boolean"
+  )
+    throw new Error(
+      `reactToResults is true or false, not ${JSON.stringify(input.reactToResults)}`,
+    );
+  if (
+    input.autoAnswerAsks !== undefined &&
+    typeof input.autoAnswerAsks !== "boolean"
+  )
+    throw new Error(
+      `autoAnswerAsks is true or false, not ${JSON.stringify(input.autoAnswerAsks)}`,
+    );
   if (input.archiveAfterDays !== undefined) {
     const days = input.archiveAfterDays;
     if (
@@ -45,6 +73,10 @@ export function saveBoardSettings(
       );
     settings.set(ARCHIVE_AFTER_SETTING, days);
   }
+  if (input.reactToResults !== undefined)
+    settings.set(REACT_TO_RESULTS_SETTING, input.reactToResults);
+  if (input.autoAnswerAsks !== undefined)
+    settings.set(AUTO_ANSWER_ASKS_SETTING, input.autoAnswerAsks);
   return boardSettings(settings);
 }
 

@@ -27,6 +27,7 @@ import type { ToolResult } from "@eta/harness";
  */
 import type { AgentStore } from "../agents/store";
 import type { SessionHooks } from "../session-hooks";
+import type { TaskAsks } from "./asks";
 import type { TaskBoard } from "./board";
 import type { TaskRunner } from "./runner";
 import type { RunRecord } from "./runs";
@@ -67,6 +68,8 @@ export interface TaskToolDeps {
   board: TaskBoard;
   agents: AgentStore;
   runner: TaskRunner;
+  /** Where the executor's questions go to the agent that made the task first. */
+  asks?: Pick<TaskAsks, "answer" | "escalate">;
   workspaceFor: WorkspaceChoice;
   captain?: {
     assignmentFor: (
@@ -108,7 +111,11 @@ export function taskSessionTools(
     const executor = task === undefined ? undefined : executorOf(task);
     return executor === meta.agentId
       ? runTools(deps, { agentId: meta.agentId, taskId })
-      : mentionedTools(deps, { agentId: meta.agentId, taskId });
+      : mentionedTools(deps, {
+          agentId: meta.agentId,
+          taskId,
+          maker: task?.createdBy.agentId === meta.agentId,
+        });
   };
 }
 
@@ -683,9 +690,9 @@ function conversationTools(
 /** A mentioned agent's tools: read the board, and answer in the task's thread. */
 function mentionedTools(
   deps: TaskToolDeps,
-  who: { agentId: string; taskId: string },
+  who: { agentId: string; taskId: string; maker: boolean },
 ): KernelTool[] {
-  const { runner } = deps;
+  const { runner, asks } = deps;
   const { list, get } = reading(deps);
 
   const answer = defineTool({
@@ -709,11 +716,72 @@ function mentionedTools(
     },
   });
 
+  const answerQuestion = defineTool({
+    name: "answer_task_question",
+    label: "answer_task_question",
+    description:
+      "Answer, for the user, a question the executor of a task you made asked. Only when the task's " +
+      "description, the project's memory or an earlier decision settles it; the question, your " +
+      "answer and your basis are written on the task's timeline for the user to check.",
+    parameters: Type.Object({
+      interactionId: Type.String({ description: "The question's id" }),
+      text: Type.Optional(
+        Type.String({ description: "Your answer, in words" }),
+      ),
+      selections: Type.Optional(
+        Type.Array(Type.String(), {
+          description: "Your answer, as options of the question",
+        }),
+      ),
+      basis: Type.String({
+        description:
+          "One sentence: what in the task, the memory or a decision settles it",
+      }),
+    }),
+    async execute(args) {
+      try {
+        return text(await asks!.answer(who.agentId, args));
+      } catch (error) {
+        return failure(error);
+      }
+    },
+  });
+
+  const escalateQuestion = defineTool({
+    name: "escalate_task_question",
+    label: "escalate_task_question",
+    description:
+      "Send a question of the executor of a task you made to the user, and stop. For anything that " +
+      "cannot be undone, spends money, sends something outside, deletes, grants access, is the " +
+      "user's own preference, or that you are not sure of.",
+    parameters: Type.Object({
+      interactionId: Type.String({ description: "The question's id" }),
+      reason: Type.String({
+        description: "Why it needs the user, in a few words",
+      }),
+    }),
+    execute(args) {
+      try {
+        return text(
+          asks!.escalate(who.agentId, args.interactionId, args.reason),
+        );
+      } catch (error) {
+        return failure(error);
+      }
+    },
+  });
+
   const none = (): undefined => undefined;
   return [
     toKernelTool(list, none),
     toKernelTool(get, none),
     toKernelTool(answer, none),
+    ...(who.maker && asks !== undefined
+      ? [
+          toKernelTool(answerQuestion, none),
+          toKernelTool(escalateQuestion, none),
+        ]
+      : []),
   ] as KernelTool[];
 }
 

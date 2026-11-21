@@ -569,6 +569,11 @@
   "detail": {
     "parent": "父任务"
   },
+  "asks": {
+    "settingTitle": "任务中的提问",
+    "settingLabel": "先由创建任务的负责人回答",
+    "settingHint": "开启后，任务里 agent 的提问先由创建任务的负责人回答，答不了再转给你，自答会记在任务时间线。"
+  },
   "archive": {
     "archive": "归档",
     "unarchive": "恢复",
