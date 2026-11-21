@@ -15,6 +15,7 @@ import { localTime, percentText } from "../models/quota";
 import { EntityRow, LetterBox, SectionHeader, WarningLine } from "../section";
 import { tokens } from "../setting-row";
 import { reachable } from "./listing";
+import { runtimeLogo } from "./logos";
 import { RuntimeWords } from "./runtime-hints";
 import {
   LOGIN_COMMANDS,
@@ -308,7 +309,12 @@ function RuntimeRow(props: {
         accessibilityLabel={`${props.runtime.label}, ${uiText(
           reason() ? reasonText[reason()!] : "runtimeAvailable",
         )}`}
-        leading={<LetterBox name={props.runtime.label} />}
+        leading={
+          <LetterBox
+            name={props.runtime.label}
+            logo={runtimeLogo(props.runtime.id, props.runtime.label)}
+          />
+        }
         leadingSize={props.phone ? 28 : undefined}
         meta={meta()}
         stacked={props.phone}
