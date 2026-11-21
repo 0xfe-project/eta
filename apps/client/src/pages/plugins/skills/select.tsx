@@ -1,7 +1,8 @@
 import type { ViewStyle } from "nsh";
 import { View } from "nsh";
-import { Select } from "nsh/base";
 import { colors, Icon, Label, row } from "../../../components";
+import { canHover } from "../../../components/menu";
+import { LayoutSelect } from "../../../components/select";
 
 /**
  * The skills page's device and project pickers: the design's select menu, as
@@ -19,7 +20,7 @@ export function SkillSelect(props: {
   const c = colors();
   const current = () => props.items.find((item) => item.value === props.value);
   return (
-    <Select
+    <LayoutSelect
       accessibilityLabel={props.label}
       items={props.items.map((item) => ({
         value: item.value,
@@ -42,7 +43,9 @@ export function SkillSelect(props: {
         const chosen = () => entry.value === props.value;
         return (
           <View
-            hoverStyle={{ backgroundColor: c().selected }}
+            hoverStyle={
+              canHover ? { backgroundColor: c().selected } : undefined
+            }
             style={{
               ...row,
               flex: 1,
@@ -72,7 +75,7 @@ export function SkillSelect(props: {
       }}
       trigger={
         <View
-          hoverStyle={{ backgroundColor: c().selected }}
+          hoverStyle={canHover ? { backgroundColor: c().selected } : undefined}
           style={{
             ...row,
             justifyContent: "space-between",

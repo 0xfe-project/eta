@@ -1,6 +1,6 @@
 import { View } from "nsh";
-import { Select } from "nsh/base";
 import { colors, Icon, Label, row, textFaces } from "../../components";
+import { LayoutSelect } from "../../components/select";
 import { formatLocale } from "../../i18n";
 
 const pluginConfigCopy = {
@@ -44,7 +44,7 @@ export function PluginSelect(props: {
   const c = colors();
   const type = textFaces();
   return (
-    <Select
+    <LayoutSelect
       accessibilityLabel={props.label}
       items={props.items}
       value={props.value}

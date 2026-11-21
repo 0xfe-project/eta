@@ -1,18 +1,24 @@
 import type { BoardTaskStatus } from "@eta/client-contracts";
 import type { JSX, ViewStyle } from "nsh";
 import { TASK_STATUSES } from "@eta/client-contracts";
-import { platform, View } from "nsh";
-import { Menu, MenuItem, MenuSeparator } from "nsh/base";
+import { View } from "nsh";
 import { Caption, colors, Icon, Label, row } from "../../components";
+import {
+  canHover,
+  inSheet,
+  MenuFrame,
+  MenuRow,
+  MenuRule,
+  touchRow,
+  touchScreen,
+} from "../../components/menu";
 import { statusHint, statusName, TaskGlyph } from "./status";
-
-/** Touch screens get the menu as a sheet at the bottom, as the shared `ActionMenu` does. */
-const touchSheet = !platform.desktop;
 
 /**
  * The Tasks page's popover menu, the design's "Cards & Menus" popover: a
  * strong border, 4px above and below the rows, an optional 10px uppercase
- * caption. On touch screens it is a sheet at the bottom.
+ * caption. In the phone layout it is a sheet at the bottom, as the shared
+ * `ActionMenu` is (`menuPresentation`).
  */
 export function TaskMenu(props: {
   trigger: JSX.Element;
@@ -25,45 +31,27 @@ export function TaskMenu(props: {
 }) {
   const c = colors();
   return (
-    <Menu
-      placement="bottom"
+    <MenuFrame
       align={props.align ?? "start"}
-      offset={3}
       margin={8}
       open={props.open}
-      onOpenChange={(event) => props.onOpenChange?.(event.open)}
-      popupStyle={
-        touchSheet
-          ? {
-              width: "100%",
-              paddingBottom: 8,
-              borderTopWidth: 1,
-              borderColor: c().strong,
-              backgroundColor: c().canvas,
-            }
-          : {
-              width: props.width,
-              paddingVertical: 4,
-              borderWidth: 1,
-              borderColor: c().strong,
-              backgroundColor: c().canvas,
-            }
-      }
-      backdropStyle={{ backgroundColor: c().sheetShade }}
+      onOpenChange={(open) => props.onOpenChange?.(open)}
+      popupStyle={{
+        width: props.width,
+        paddingVertical: 4,
+        borderWidth: 1,
+        borderColor: c().strong,
+        backgroundColor: c().canvas,
+      }}
       trigger={props.trigger}
     >
-      <If when={touchSheet}>
-        <View style={{ alignItems: "center", paddingTop: 8, paddingBottom: 4 }}>
-          <View style={{ width: 36, height: 4, backgroundColor: c().strong }} />
-        </View>
-      </If>
       <If when={props.caption}>
         {(caption) => (
           <View
             style={{
               paddingTop: 6,
               paddingBottom: 4,
-              paddingHorizontal: touchSheet ? 16 : 10,
+              paddingHorizontal: inSheet() ? 16 : 10,
             }}
           >
             <Caption text={caption()} />
@@ -71,7 +59,7 @@ export function TaskMenu(props: {
         )}
       </If>
       {props.children}
-    </Menu>
+    </MenuFrame>
   );
 }
 
@@ -79,7 +67,7 @@ export function TaskMenu(props: {
 export function TaskMenuRule(props: { space?: number }) {
   const c = colors();
   return (
-    <MenuSeparator
+    <MenuRule
       style={{
         height: 1,
         marginVertical: props.space ?? 0,
@@ -109,27 +97,27 @@ export function TaskMenuItem(props: {
   const c = colors();
   const radio = () => props.checked !== undefined;
   return (
-    <MenuItem
+    <MenuRow
       role={radio() ? "menuitemradio" : "menuitem"}
       checked={props.checked}
-      accessibilityLabel={props.label}
-      accessibilityDescription={props.hint}
+      label={props.label}
+      description={props.hint}
       style={{
         ...row,
         alignItems: props.hint ? "flex-start" : "center",
-        minHeight: touchSheet
+        minHeight: inSheet()
           ? 52
-          : props.hint
-            ? undefined
-            : (props.height ?? 28),
+          : touchScreen
+            ? touchRow
+            : props.hint
+              ? undefined
+              : (props.height ?? 28),
         paddingVertical: props.hint ? 6 : 0,
-        paddingHorizontal: touchSheet ? 16 : 10,
+        paddingHorizontal: inSheet() ? 16 : 10,
         gap: 8,
         backgroundColor: props.checked ? c().selected : undefined,
         ...props.style,
       }}
-      hoverStyle={{ backgroundColor: c().selected }}
-      indicatorStyle={{ width: 0 }}
       onSelect={props.onSelect}
     >
       <If when={props.leading}>
@@ -176,7 +164,7 @@ export function TaskMenuItem(props: {
           </If>
         </View>
       </If>
-    </MenuItem>
+    </MenuRow>
   );
 }
 
@@ -193,7 +181,7 @@ export function FilterTrigger(props: {
   return (
     <View
       accessibilityLabel={props.label}
-      hoverStyle={{ backgroundColor: c().selected }}
+      hoverStyle={canHover ? { backgroundColor: c().selected } : undefined}
       expandedStyle={{ backgroundColor: c().selected }}
       style={{
         ...row,
