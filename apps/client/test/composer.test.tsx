@@ -1,51 +1,55 @@
 import { expect, open, test } from "nsh/test";
 
-const input = "role:combobox";
-const fixture = (width = 720) =>
+const input = "id:eta-editor";
+const fixture = (width = 720, options: { clipboard?: string } = {}) =>
   open("./composer-fixture.tsx", {
     platform: "macos",
     width,
     height: 600,
     clock: { time: 1000 },
+    ...options,
   });
+type App = Awaited<ReturnType<typeof fixture>>;
+/** The words on screen, the editor's included. */
+const screen = (app: App) => app.texts().join("\n");
+const sent = (args: unknown[]) => `text:sent ${JSON.stringify(args)}`;
 
 test("a draft returns to its own chat and a failed delivery can be retried with the same id", async () => {
   const app = await fixture();
   await app.type(input, "retry");
   await app.press("label:Switch");
-  expect(app.value(input)).toBe("");
+  expect(screen(app)).not.toContain("retry");
   await app.type(input, "elsewhere");
   await app.press("label:Switch");
-  expect(app.value(input)).toBe("retry");
-  await app.submit(input);
+  expect(screen(app)).toContain("retry");
+  await app.keyboard.press("enter");
   await app.waitFor("label:Retry");
-  expect(app.value(input)).toBe("");
   await app.press("label:Switch");
-  expect(app.value(input)).toBe("elsewhere");
+  expect(screen(app)).toContain("elsewhere");
   await app.press("label:Switch");
   await app.press("label:Retry");
-  await app.waitFor('text:sent ["alpha","retry","queue",[]]');
-  expect(app.value(input)).toBe("");
+  await app.waitFor(sent(["alpha", "retry", "queue", []]));
 });
 
-test("IME confirmation cannot send or accept a completion; Tab accepts the highlighted row", async () => {
+test("Enter while an input method composes neither sends nor picks; Tab picks the highlighted row", async () => {
   const app = await fixture();
   await app.type(input, "询问，@");
+  await app.waitFor("role:listbox");
   await app.compose(input, "a");
-  await app.submit(input);
-  expect(app.value(input)).toBe("询问，@");
+  await app.keyboard.press("enter");
+  expect(screen(app)).not.toContain("sent [");
   await app.compose(input, "");
-  await app.submit(input);
-  expect(app.value(input)).toBe("询问，@");
-  await app.wait(150);
   await app.keyboard.press("down");
   await app.keyboard.press("tab");
-  expect(app.value(input)).toBe("询问，@README.md ");
+  expect(app.shows("role:listbox")).toBe(false);
+  await app.keyboard.press("enter");
+  await app.waitFor(sent(["alpha", "询问，@README.md", "queue", []]));
 });
 
-test("Escape dismisses completion first and only an empty draft can stop the running replies", async () => {
+test("Escape closes the list first and only an empty draft can stop the running replies", async () => {
   const app = await fixture();
   await app.type(input, "@");
+  await app.waitFor("role:listbox");
   await app.keyboard.press("escape");
   expect(app.shows("role:listbox")).toBe(false);
   await app.keyboard.press("escape");
@@ -55,62 +59,78 @@ test("Escape dismisses completion first and only an empty draft can stop the run
   await app.waitFor("text:stopped alpha");
 });
 
-test("pasted files stay attached to their chat and rich clipboard text wins over its preview image", async () => {
+test("a picked member goes in as a mention and out in the text", async () => {
   const app = await fixture();
+  await app.type(input, "看 @Ad");
+  await app.press("label:Mention Ada");
+  await app.type(input, "hi");
+  await app.keyboard.press("enter");
+  await app.waitFor(sent(["alpha", "看 @Ada hi", "queue", []]));
+});
+
+test("a pasted file is a block where the caret is, kept with its chat, sent as an attachment", async () => {
+  const app = await fixture();
+  await app.type(input, "see ");
   await app.paste(input, { files: ["test/composer-fixture.tsx"] });
-  await app.waitFor("label:composer-fixture.tsx");
+  await app.waitFor("label:File composer-fixture.tsx");
+  await app.type(input, " please");
   await app.press("label:Switch");
-  expect(app.shows("label:composer-fixture.tsx")).toBe(false);
+  expect(app.shows("label:File composer-fixture.tsx")).toBe(false);
   await app.press("label:Switch");
-  await app.waitFor("label:composer-fixture.tsx");
+  await app.waitFor("label:File composer-fixture.tsx");
+  await app.keyboard.press("enter");
+  await app.waitFor("text:attachments composer-fixture.tsx");
+  expect(screen(app)).toContain('sent ["alpha","see  please","queue",[');
+});
+
+test("the text of a spreadsheet or Word copy wins over the picture beside it", async () => {
+  const app = await fixture(720, { clipboard: "office text" });
   await app.paste(input, {
     text: "office text",
     html: "<b>office text</b>",
     files: ["assets/onboard.jpg"],
   });
-  expect(app.value(input)).toBe("office text");
-  expect(app.shows("text:upload interrupted")).toBe(false);
-  expect(app.shows("label:onboard.jpg")).toBe(false);
+  await app.waitFor("text:office text");
+  expect(app.shows("label:Image onboard.jpg")).toBe(false);
 });
 
-test("a failed send can be edited above a new draft or discarded on its own", async () => {
+test("a failed send comes back above the new draft, or is discarded on its own", async () => {
   const app = await fixture();
   await app.type(input, "retry");
-  await app.submit(input);
+  await app.keyboard.press("enter");
   await app.waitFor("label:Edit");
   await app.type(input, "later");
   await app.press("label:Edit");
-  expect(app.value(input)).toBe("retry\nlater");
+  await app.keyboard.press("enter");
+  await app.waitFor(sent(["alpha", "retry\nlater", "queue", []]));
   await app.press("label:Switch");
   await app.type(input, "retry");
-  await app.submit(input);
+  await app.keyboard.press("enter");
   await app.waitFor("label:Discard");
   await app.type(input, "keep this");
   await app.press("label:Discard");
-  expect(app.value(input)).toBe("keep this");
   expect(app.shows("label:Retry")).toBe(false);
+  expect(screen(app)).toContain("keep this");
 });
 
-test("a folded paste survives switching and sends its text and UTF-16 range", async () => {
+test("a long paste folds where the caret is, survives switching and sends its text and UTF-16 range", async () => {
   const app = await fixture();
   const log = "a\nb\nc\nd";
   await app.type(input, "😀");
   await app.paste(input, { text: log });
-  await app.waitFor("label:Pasted text · 7 B");
+  await app.waitFor("label:Unfold pasted text (4 lines)");
   await app.type(input, "!");
   await app.press("label:Switch");
   await app.press("label:Switch");
-  expect(app.shows("label:Pasted text · 7 B")).toBe(true);
-  expect(app.value(input)).toBe("!");
-  await app.submit(input);
-  await app.waitFor(
-    `text:sent ${JSON.stringify(["alpha", `😀${log}!`, "queue", []])}`,
-  );
+  await app.waitFor("label:Unfold pasted text (4 lines)");
+  await app.keyboard.press("enter");
+  await app.waitFor(sent(["alpha", `😀${log}!`, "queue", []]));
   expect(app.shows("text:[[2,9]]")).toBe(true);
 });
 
-test("an interrupted attachment can be retried in its original chat", async () => {
+test("a folded paste unfolds into its text, and undo folds it again", async () => {
   const app = await fixture();
+<<<<<<< HEAD
   await app.paste(input, { files: ["assets/onboard.jpg"] });
   await app.waitFor("label:Retry");
   await app.type(input, "photo");
@@ -154,6 +174,18 @@ test("a paste beyond the message limit is attached as a text file", async () => 
   await app.paste(input, { text: "x".repeat(100001) });
   await app.waitFor("label:Pasted text.txt");
   expect(app.value(input)).toBe("");
+=======
+  await app.type(input, "left ");
+  // Changes within half a second undo together, as typing does.
+  await app.wait(600);
+  await app.paste(input, { text: "1\n2\n3\n4" });
+  await app.wait(600);
+  await app.press("label:Unfold pasted text (4 lines)");
+  expect(app.shows("label:Unfold pasted text (4 lines)")).toBe(false);
+  expect(screen(app)).toContain("3");
+  await app.keyboard.press("mod+z");
+  await app.waitFor("label:Unfold pasted text (4 lines)");
+>>>>>>> df3038ab (feat(client): one RichEditor-based composer for chats, task comments and the insert popover)
 });
 
 test("removing a folded paste keeps the words on both sides", async () => {
@@ -162,7 +194,41 @@ test("removing a folded paste keeps the words on both sides", async () => {
   await app.paste(input, { text: "1\n2\n3\n4" });
   await app.type(input, "right");
   await app.press("label:Remove pasted text");
-  expect(app.value(input)).toBe("leftright");
+  await app.keyboard.press("enter");
+  await app.waitFor(sent(["alpha", "leftright", "queue", []]));
+});
+
+test("an interrupted upload shows on its block and can be retried in its chat", async () => {
+  const app = await fixture();
+  await app.paste(input, { files: ["assets/onboard.jpg"] });
+  await app.waitFor("label:Retry uploading onboard.jpg");
+  await app.type(input, "photo");
+  await app.keyboard.press("enter");
+  expect(screen(app)).not.toContain("sent [");
+  await app.press("label:Switch");
+  expect(app.shows("label:Retry uploading onboard.jpg")).toBe(false);
+  await app.press("label:Switch");
+  await app.press("label:Retry uploading onboard.jpg");
+  await app.waitFor("label:Image onboard.jpg");
+  await app.keyboard.press("enter");
+  await app.waitFor("text:attachments onboard.jpg");
+});
+
+test("phone: Enter picks a task and Shift+Enter starts a second line", async () => {
+  const app = await fixture(390);
+  await app.type(input, "看，#");
+  await app.waitFor("role:listbox");
+  await app.keyboard.press("enter");
+  await app.keyboard.press("shift+enter");
+  await app.type(input, "ok");
+  await app.keyboard.press("enter");
+  await app.waitFor(sent(["alpha", "看，#1 \nok", "queue", []]));
+});
+
+test("a paste beyond the message limit is attached as a text file", async () => {
+  const app = await fixture();
+  await app.paste(input, { text: "x".repeat(100001) });
+  await app.waitFor("label:File Pasted text.txt");
 });
 
 test("a tablet shows three members and expands the overflow chip", async () => {
@@ -173,7 +239,7 @@ test("a tablet shows three members and expands the overflow chip", async () => {
   expect(app.shows("label:Cyrus")).toBe(true);
 });
 
-test("reconnecting drains a saved message even when another chat is open", async () => {
+test("reconnecting drains a saved message even when another chat is open, and an old draft is read once", async () => {
   const app = await open("./composer-fixture.tsx", {
     platform: "macos",
     width: 720,
@@ -182,15 +248,15 @@ test("reconnecting drains a saved message even when another chat is open", async
       'eta.composer.v1.["http://example.invalid","beta"]': JSON.stringify({
         text: "draft in beta",
         attachments: [],
-        prefix: [],
+        prefix: [{ type: "paste", id: "p", text: "1\n2\n3\n4" }],
         outgoing: [{ id: "earlier-id", text: "saved send", attachments: [] }],
       }),
     },
   });
-  await app.waitFor('text:sent ["beta","saved send","queue",[]]');
-  expect(app.value(input)).toBe("");
+  await app.waitFor(sent(["beta", "saved send", "queue", []]));
   await app.press("label:Switch");
-  expect(app.value(input)).toBe("draft in beta");
+  await app.waitFor("label:Unfold pasted text (4 lines)");
+  expect(screen(app)).toContain("draft in beta");
 });
 
 test("a queued message waits above the box and pulls back above the draft", async () => {
@@ -201,7 +267,8 @@ test("a queued message waits above the box and pulls back above the draft", asyn
   expect(app.shows("text:Queued · waits for Ada to finish")).toBe(true);
   await app.press("label:Pull back into the box: earlier");
   expect(app.shows("label:Queued message: earlier")).toBe(false);
-  expect(app.value(input)).toBe("earlier\n\ncurrent");
+  await app.keyboard.press("enter");
+  await app.waitFor(sent(["alpha", "earlier\n\ncurrent", "queue", []]));
 });
 
 test("a queued message the host had already handed on stays out of the box", async () => {
@@ -211,7 +278,8 @@ test("a queued message the host had already handed on stays out of the box", asy
   await app.press("label:Hand it on");
   await app.press("label:Pull back into the box: earlier");
   await app.waitFor("text:Ada already read this one");
-  expect(app.value(input)).toBe("current");
+  await app.keyboard.press("enter");
+  await app.waitFor(sent(["alpha", "current", "queue", []]));
 });
 
 test("inserting a queued message that failed says why", async () => {
@@ -227,8 +295,8 @@ test("a second pasted file waits for the first upload in the same draft", async 
   await app.paste(input, { files: ["test/composer.test.tsx"] });
   await app.paste(input, { files: ["test/composer-fixture.tsx"] });
   await app.press("label:Finish upload");
-  await app.waitFor("label:composer-fixture.tsx");
-  expect(app.shows("label:composer.test.tsx")).toBe(true);
+  await app.waitFor("label:File composer-fixture.tsx");
+  expect(app.shows("label:File composer.test.tsx")).toBe(true);
 });
 
 test("a pasted BMP screenshot is attached as a PNG and other images keep their name", async () => {

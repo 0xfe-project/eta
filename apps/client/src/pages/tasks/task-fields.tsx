@@ -1,18 +1,22 @@
 import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { JSX, TextStyle } from "nsh";
 import type { TaskDetailState } from "./task-detail-state";
+import { mentionLabel } from "@eta/client-contracts/composer-target";
 import { View } from "nsh";
-import {
-  Button,
-  colors,
-  Field,
-  Icon,
-  Label,
-  row,
-  textFaces,
-  textStyle,
-} from "../../components";
+import { Button, colors, Icon, Label, row, textFaces } from "../../components";
 import { CheckControl } from "../../components/check-control";
+import {
+  createEtaEditor,
+  draft,
+  EtaEditor,
+  limit,
+  mention,
+  openDocDraft,
+  pasteBlock,
+  plainText,
+  serialize,
+  submitKeys,
+} from "../../components/eta-editor";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
@@ -22,59 +26,153 @@ import { activeTaskRun } from "./run-log";
 import { statusName, TaskGlyph } from "./status";
 import { StatusSelect } from "./status-select";
 
+/**
+ * The comment box: the same editor as the chat's (`EtaEditor`), with `@` for the task's agents,
+ * long pastes folded and a draft kept per task. No files: a task's comment carries text only.
+ */
+function useCommentEditor(state: TaskDetailState, origin: string | undefined) {
+  const host = useHost();
+  const { post, posting, task } = state;
+  const store = openDocDraft(
+    `eta.task-comment.v1.${JSON.stringify([origin, state.id])}`,
+  );
+  const limits = limit();
+  const out = serialize();
+  // The task's own agents first (its executor, who ran in it, who spoke on it), then the others.
+  const members = () => {
+    const item = task();
+    const own = new Set<string>();
+    if (item?.assigneeAgentId) own.add(item.assigneeAgentId);
+    for (const run of item?.runs ?? []) if (run.agentId) own.add(run.agentId);
+    for (const entry of state.activity())
+      if (entry.actor.agentId) own.add(entry.actor.agentId);
+    const agents = host.agents();
+    const ordered = [
+      ...agents.filter((agent) => own.has(agent.id)),
+      ...agents.filter((agent) => !own.has(agent.id)),
+    ].map((agent) => ({ id: agent.id, name: agent.name, busy: false }));
+    return ordered.map((member) => ({
+      ...member,
+      name: mentionLabel(member, ordered),
+    }));
+  };
+  const editor = createEtaEditor({
+    doc: store.doc(),
+    plugins: [
+      plainText(),
+      submitKeys({ onSubmit: () => void submit() }),
+      mention({ members, describe: () => uiText("askForAReply") }),
+      pasteBlock(),
+      draft({ save: store.save }),
+      limits,
+      out,
+    ],
+  });
+  async function submit() {
+    if (posting() || limits.tooLong() || out.state().blank) return;
+    const sent = out.read();
+    if (await post(sent.text, sent.mentions)) editor.clear();
+  }
+  const disabled = () => posting() || out.state().blank || limits.tooLong();
+  return { editor, submit, disabled, limits };
+}
+
 export function TaskCommentBox(props: {
   state: TaskDetailState;
   /** Tablet's box: 36 high, the send mark bare at its end. */
   tablet?: boolean;
+  /** The chat's task panel: a 38-high box `inset` in from its sides, the hint drawn by the panel. */
+  panelInset?: number;
 }) {
+  const host = useHost();
+  const origin = host.address()?.origin;
+  const store = openDocDraft(
+    `eta.task-comment.v1.${JSON.stringify([origin, props.state.id])}`,
+  );
+  return (
+    <If when={store.ready()}>
+      {() => (
+        <If
+          when={!props.state.phone()}
+          else={<PhoneCommentBox state={props.state} origin={origin} />}
+        >
+          <DesktopCommentBox
+            state={props.state}
+            origin={origin}
+            tablet={props.tablet}
+            panelInset={props.panelInset}
+          />
+        </If>
+      )}
+    </If>
+  );
+}
+
+function DesktopCommentBox(props: {
+  state: TaskDetailState;
+  origin: string | undefined;
+  tablet?: boolean;
+  panelInset?: number;
+}) {
+  const panel = () => props.panelInset !== undefined;
   const c = colors();
   const type = textFaces();
-  const { comment, phone, post, posting, updateComment } = props.state;
+  const { editor, submit, disabled, limits } = useCommentEditor(
+    props.state,
+    props.origin,
+  );
+  const line = () => type("small").prose;
+  const height = () => (panel() ? 36 : props.tablet ? 34 : 35);
+  const bare = () => props.tablet || panel();
   return (
     <>
-      <If when={!phone()}>
+      <If when={!panel()}>
         <TaskCommentHint state={props.state} />
       </If>
-      <If when={!phone()} else={<PhoneCommentBox state={props.state} />}>
-        <View
-          style={{
-            ...row,
-            gap: 6,
-            borderWidth: 1,
-            borderColor: c().strong,
-            height: props.tablet ? 36 : 37,
-            paddingLeft: props.tablet ? 10 : 9,
-            paddingRight: props.tablet ? 10 : 4,
+      <If when={limits.tooLong()}>
+        <Label tone="amber" variant="caption">
+          {uiText("composerTooLong")}
+        </Label>
+      </If>
+      <View
+        style={{
+          ...row,
+          alignItems: "flex-end",
+          gap: 6,
+          borderWidth: 1,
+          borderColor: panel() ? c().border : c().strong,
+          minHeight: height() + 2,
+          flexShrink: 0,
+          marginHorizontal: props.panelInset,
+          paddingLeft: panel() || props.tablet ? 10 : 9,
+          paddingRight: bare() ? 10 : 4,
+        }}
+      >
+        <EtaEditor
+          editor={editor}
+          label={uiText("comment")}
+          placeholder={uiText("replyARunningTaskReadsIt")}
+          variant="small"
+          minHeight={height()}
+          maxHeight={160}
+          padding={{
+            top: (height() - line()) / 2,
+            bottom: (height() - line()) / 2,
+            left: 0,
+            right: 0,
           }}
-        >
-          <Field
-            label={uiText("comment")}
-            placeholder={uiText("replyARunningTaskReadsIt")}
-            value={comment()}
-            onChange={updateComment}
-            onSubmit={() => void post()}
-            style={{
-              flex: 1,
-              borderWidth: 0,
-              height: props.tablet ? 34 : 35,
-              paddingHorizontal: 0,
-              paddingVertical: 0,
-              ...textStyle(type("small")),
-            }}
-          />
+          style={{ flex: 1 }}
+        />
+        <View style={{ height: height(), justifyContent: "center" }}>
           <If
-            when={!props.tablet}
+            when={!bare()}
             else={
               <View
                 role="button"
                 accessibilityLabel={uiText("sendComment")}
-                accessibilityState={{
-                  disabled: posting() || !comment().trim(),
-                }}
-                onPress={() => {
-                  if (!posting() && comment().trim()) void post();
-                }}
-                style={{ cursor: "pointer" }}
+                accessibilityState={{ disabled: disabled() }}
+                onPress={() => void submit()}
+                style={{ cursor: "pointer", opacity: disabled() ? 0.45 : 1 }}
               >
                 <Icon name="send" size={14} tone="muted" />
               </View>
@@ -88,12 +186,12 @@ export function TaskCommentBox(props: {
               labelTone="muted"
               tone="ghost"
               size={28}
-              disabled={posting() || !comment().trim()}
-              onPress={() => void post()}
+              disabled={disabled()}
+              onPress={() => void submit()}
             />
           </If>
         </View>
-      </If>
+      </View>
     </>
   );
 }
@@ -113,10 +211,16 @@ export function TaskCommentHint(props: {
   );
 }
 
-/** The phone's reply box under the task: a borderless field, then Send on its own row. */
-function PhoneCommentBox(props: { state: TaskDetailState }) {
+/** The phone's reply box under the task: a borderless editor, then Send on its own row. */
+function PhoneCommentBox(props: {
+  state: TaskDetailState;
+  origin: string | undefined;
+}) {
   const c = colors();
-  const { comment, post, posting, updateComment } = props.state;
+  const { editor, submit, disabled, limits } = useCommentEditor(
+    props.state,
+    props.origin,
+  );
   return (
     <View
       style={{
@@ -129,22 +233,23 @@ function PhoneCommentBox(props: { state: TaskDetailState }) {
         state={props.state}
         style={{ paddingTop: 10, paddingHorizontal: 16 }}
       />
-      <View style={{ ...row, height: 48, paddingHorizontal: 16 }}>
-        <Field
-          label={uiText("comment")}
-          placeholder={uiText("replyARunningTaskReadsIt")}
-          value={comment()}
-          onChange={updateComment}
-          onSubmit={() => void post()}
-          style={{
-            flex: 1,
-            borderWidth: 0,
-            paddingHorizontal: 0,
-            paddingVertical: 0,
-            backgroundColor: c().surface,
-          }}
-        />
-      </View>
+      <If when={limits.tooLong()}>
+        <Label
+          tone="amber"
+          variant="caption"
+          style={{ paddingTop: 10, paddingHorizontal: 16 }}
+        >
+          {uiText("composerTooLong")}
+        </Label>
+      </If>
+      <EtaEditor
+        editor={editor}
+        label={uiText("comment")}
+        placeholder={uiText("replyARunningTaskReadsIt")}
+        minHeight={48}
+        maxHeight={180}
+        padding={{ top: 13, bottom: 13, left: 16, right: 16 }}
+      />
       <View
         style={{
           ...row,
@@ -160,9 +265,9 @@ function PhoneCommentBox(props: { state: TaskDetailState }) {
           tone="primary"
           size={32}
           style={{ paddingHorizontal: 14 }}
-          disabled={posting() || !comment().trim()}
-          dimDisabled={posting()}
-          onPress={() => void post()}
+          disabled={disabled()}
+          dimDisabled={props.state.posting()}
+          onPress={() => void submit()}
         />
       </View>
     </View>
