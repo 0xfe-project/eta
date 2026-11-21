@@ -111,6 +111,7 @@ import { SettingStore } from "./settings/store";
 import { skillFilesPlugin } from "./skills/plugin";
 import { SkillFileService } from "./skills/service";
 import { TaskArchiver } from "./tasks/archiver";
+import { TaskAsks } from "./tasks/asks";
 import { TaskBoard } from "./tasks/board";
 import { TaskCards } from "./tasks/cards";
 import { tasksPlugin } from "./tasks/plugin";
@@ -149,6 +150,8 @@ export interface RepliesOptions {
 
 /** What a test sets to keep tasks from running; a real host leaves all of it alone. */
 export interface TasksOptions {
+  /** How long the agent that made a task has to answer its executor's question before the user is asked. */
+  askTimeoutMs?: number;
   /** False keeps the runner from taking runs: a task is made and confirmed, and nothing starts. */
   runs?: boolean;
 }
@@ -799,6 +802,24 @@ export function createProduct(options: {
       },
     );
 
+  const taskAsks = new TaskAsks({
+    tasks: taskRows,
+    runs: runRows,
+    agents,
+    board,
+    runner: taskRunner,
+    inbox,
+    answer: async (interactionId, response) =>
+      await answerCaptainInbox(interactionId, response),
+    captainOwns: (interaction, makerId) =>
+      captain.identity()?.agentId === makerId ||
+      captain.assignmentForInbox(interaction) !== undefined,
+    changed: () => wire?.pushNow("inbox"),
+    warn,
+    timeoutMs: options.tasks?.askTimeoutMs,
+  });
+  inbox.onOpened((interaction) => taskAsks.opened(interaction));
+
   // Each feature that adds tools, tool middleware or a question observer to sessions is one entry
   // here; the order is the order its tools and middleware are installed in.
   const productHooks: SessionHooks[] = [
@@ -859,6 +880,7 @@ export function createProduct(options: {
         board,
         agents,
         runner: taskRunner,
+        asks: taskAsks,
         workspaceFor: taskWorkspaceFor,
         captain: {
           isCaptain: (agentId) => captain.identity()?.agentId === agentId,
@@ -1151,7 +1173,8 @@ export function createProduct(options: {
             inbox,
             visible: (interaction) =>
               interaction.status !== "pending" ||
-              captain.assignmentForInbox(interaction) === undefined,
+              (captain.assignmentForInbox(interaction) === undefined &&
+                !taskAsks.holds(interaction)),
           },
           applied("inbox"),
         ),

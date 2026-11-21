@@ -458,6 +458,14 @@ export class TaskRunner implements TaskRuns {
     this.pump();
   }
 
+  /**
+   * Put a question to an agent in its lane of the task, as a mentioned agent is called in: it is
+   * woken in a session of its own on the task and reads `text`.
+   */
+  consult(taskId: string, agentId: string, text: string): void {
+    this.#hand({ taskId, agentId }, text, true);
+  }
+
   /** The lane's runs that have not ended. */
   #openIn(lane: Lane): RunRecord[] {
     return this.#deps.runs
