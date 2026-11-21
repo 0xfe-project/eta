@@ -10,7 +10,7 @@ import { mkdir, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { tempDir } from "./support/host";
-import { say, scriptedModels } from "./support/models";
+import { call, say, scriptedModels } from "./support/models";
 import { remoteWorld } from "./support/remote";
 import { world } from "./support/world";
 
@@ -294,6 +294,51 @@ describe("images", () => {
     await w.settled(group.id, sent.replies[0]!.id);
     expect(requests[0]!.images).toBe(0);
     expect(requests[0]!.transcript.join("\n")).toContain("pixel.png");
+    // Said, not dropped: the agent is told the picture was not shown, and why.
+    expect(requests[0]!.transcript.join("\n")).toContain(
+      "not shown: the model you run on does not support images",
+    );
+  });
+
+  it("can be looked at with read_image, by id or by the path the agent was told", async () => {
+    let fileId = "";
+    const { models, requests } = scriptedModels(
+      (request) =>
+        request.lastRole === "toolResult"
+          ? say("a pixel")
+          : call("read_image", { file: `C:\\somewhere\\${fileId}-pixel.png` }),
+      { vision: true },
+    );
+    const w = await world({ models });
+    const { group } = await ada(w);
+    const file = await upload(w, group.id, PNG, "pixel.png", "image/png");
+    fileId = file.id;
+    const sent = await w.send(group.id, "look again", {
+      attachments: [file.id],
+    });
+    await w.settled(group.id, sent.replies[0]!.id);
+    expect(requests[0]!.tools).toContain("read_image");
+    // One image came with the message, one came back from the tool.
+    expect(requests.at(-1)!.images).toBe(2);
+  });
+
+  it("are refused by read_image, with a reason, when the model does not take them", async () => {
+    let fileId = "";
+    const { models, requests } = scriptedModels((request) =>
+      request.lastRole === "toolResult"
+        ? say("cannot see")
+        : call("read_image", { file: fileId }),
+    );
+    const w = await world({ models });
+    const { group } = await ada(w);
+    const file = await upload(w, group.id, PNG, "pixel.png", "image/png");
+    fileId = file.id;
+    const sent = await w.send(group.id, "look", { attachments: [file.id] });
+    await w.settled(group.id, sent.replies[0]!.id);
+    expect(requests.at(-1)!.images).toBe(0);
+    expect(requests.at(-1)!.transcript.at(-1)).toContain(
+      "does not support images",
+    );
   });
 });
 

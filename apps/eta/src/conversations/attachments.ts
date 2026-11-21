@@ -315,6 +315,22 @@ export class AttachmentStore {
     return images;
   }
 
+  /** One image as a model can be given it; throws why it cannot be, for a tool to say. */
+  async image(
+    record: AttachmentRecord,
+  ): Promise<{ mime: string; dataBase64: string }> {
+    if (!IMAGE_TYPES.has(record.contentType))
+      throw new Error(
+        `${record.name} is ${record.contentType}, not an image a model takes (${[...IMAGE_TYPES].join(", ")})`,
+      );
+    if (record.size > MAX_IMAGE_BYTES)
+      throw new Error(
+        `${record.name} is over the ${MAX_IMAGE_BYTES / (1024 * 1024)} MB an image may be`,
+      );
+    const bytes = await readFile(this.pathOf(record));
+    return { mime: record.contentType, dataBase64: bytes.toString("base64") };
+  }
+
   /**
    * Make each file reachable by an agent whose session is on `transport`'s machine, and say where:
    * for this machine the stored file itself, for a daemon a copy under its home
