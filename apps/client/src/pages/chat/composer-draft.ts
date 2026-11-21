@@ -185,6 +185,7 @@ function createDraft(key: string, legacyKey: string) {
         setState(id, {
           state: "failed",
           error: error instanceof Error ? error.message : String(error),
+          retry: true,
         });
       }
     };

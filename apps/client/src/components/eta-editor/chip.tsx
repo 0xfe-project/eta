@@ -15,6 +15,8 @@ export function Chip(props: {
   /** A state after the label: "uploading…", "failed · retry". */
   status?: string;
   tone?: "ink" | "amber" | "red";
+  /** Shown on hover (desktop): the whole reason of a failure. */
+  tooltip?: string;
   selected?: boolean;
   dim?: boolean;
   accessibilityLabel: string;
@@ -26,9 +28,10 @@ export function Chip(props: {
   const c = colors();
   const fonts = Fonts();
   const type = textFaces();
-  const text = (color: string, value: string, weight = 400) => (
+  const text = (color: string, value: string, weight = 400, shrink = 0) => (
     <Text
       style={{
+        flexShrink: shrink,
         fontFamily: fontFamily(fonts().interface),
         fontSize: type("small").size,
         lineHeight: type("small").line,
@@ -46,6 +49,7 @@ export function Chip(props: {
         ...row,
         gap: 5,
         maxWidth: 280,
+        overflow: "hidden",
         height: type("small").line + 4,
         paddingLeft: props.thumbnail ? 2 : 6,
         paddingRight: props.onRemove ? 2 : 6,
@@ -64,6 +68,7 @@ export function Chip(props: {
     >
       <View
         role="button"
+        tooltip={props.tooltip}
         accessibilityLabel={props.accessibilityLabel}
         onPress={props.onPress}
         style={{
@@ -86,7 +91,7 @@ export function Chip(props: {
         </If>
         {text(c().muted, props.kind)}
         {text(c().faint, "·")}
-        {text(c().ink, props.label, 500)}
+        {text(c().ink, props.label, 500, 1)}
         <If when={props.status}>
           {text(
             props.tone === "red"

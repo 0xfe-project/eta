@@ -8,15 +8,18 @@ import {
 import { defineExtension, insertContent, insertContentAt } from "nsh/base";
 import { uiText } from "../../../i18n";
 import { Chip } from "../chip";
+import { oneStep } from "../step";
 
 /** Puts the folded paste back as its text, in its place: one undoable change. */
 function unfold(props: RichNodeViewProps) {
   const pos = props.getPos();
   if (pos == null) return;
   props.editor.run(
-    insertContentAt(
-      { from: pos, to: pos + 1 },
-      textToNodes(String(props.node.attrs.text)),
+    oneStep(
+      insertContentAt(
+        { from: pos, to: pos + 1 },
+        textToNodes(String(props.node.attrs.text)),
+      ),
     ),
   );
   props.editor.focus();
@@ -77,10 +80,12 @@ export function pasteBlock(): EtaPlugin {
     paste(action, editor) {
       if (action.kind !== "block") return false;
       editor.session.run(
-        insertContent({
-          type: DOC_NODES.paste,
-          attrs: { id: crypto.randomUUID(), text: action.text },
-        }),
+        oneStep(
+          insertContent({
+            type: DOC_NODES.paste,
+            attrs: { id: crypto.randomUUID(), text: action.text },
+          }),
+        ),
       );
       return true;
     },

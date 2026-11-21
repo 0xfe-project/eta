@@ -19,6 +19,7 @@ import {
   defineExtension,
   RichEditor,
   RichEditorPlugin,
+  setMeta,
 } from "nsh/base";
 import { uiText } from "../../i18n";
 import { colors, fontFamily, Fonts, textFaces, textStyle } from "../theme";
@@ -137,7 +138,10 @@ export function createEtaEditor(profile: EtaEditorProfile): EtaEditorHandle {
     for (const plugin of plugins)
       if (plugin.paste?.(action, self.handle!)) return true;
     // Nobody folds or attaches it: plain text, typed in as text (formatting never pastes).
-    if (action.kind !== "files") session.pasteText(action.text);
+    if (action.kind !== "files") {
+      session.run(setMeta("closeHistory$", true));
+      session.pasteText(action.text);
+    }
     return true;
   }
   const addFiles = (files: File[]) =>

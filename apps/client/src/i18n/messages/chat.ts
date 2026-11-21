@@ -123,6 +123,8 @@ export const chatMessages = {
   imageKindNamed: ["Image {{name}}", "图片 {{name}}"],
   fileKindNamed: ["File {{name}}", "文件 {{name}}"],
   uploading: ["uploading…", "上传中…"],
+  uploadFailedRetry: ["failed · retry", "上传失败 · 重试"],
+  uploadRefused: ["can't attach", "无法添加"],
   uploadLost: ["upload lost", "上传已丢失"],
   retryUpload: ["Retry uploading {{name}}", "重试上传 {{name}}"],
   removeAttachment: ["Remove {{name}}", "移除 {{name}}"],

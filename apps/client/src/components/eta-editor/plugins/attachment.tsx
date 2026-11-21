@@ -8,6 +8,7 @@ import { Picker } from "nsh";
 import { defineExtension, insertContent } from "nsh/base";
 import { uiText } from "../../../i18n";
 import { Chip } from "../chip";
+import { oneStep } from "../step";
 
 /** Where a place's attachments go: the upload queue and each file's state, by block id. */
 export interface Uploads {
@@ -30,12 +31,16 @@ function FileView(input: { view: RichNodeViewProps; uploads: Uploads }) {
   const name = () => String(props.node.attrs.name);
   const image = () => isImage(String(props.node.attrs.contentType));
   const state = () => uploads.state(id());
+  const failure = () => {
+    const current = state();
+    return current?.state === "failed" ? current : undefined;
+  };
   const status = () => {
     const current = state();
     if (!current) return uiText("uploadLost");
     if (current.state === "uploading") return uiText("uploading");
     if (current.state === "failed")
-      return `${current.error} · ${uiText("retry")}`;
+      return uiText(current.retry ? "uploadFailedRetry" : "uploadRefused");
     return fileSize(current.attachment.size);
   };
   return (
@@ -45,17 +50,18 @@ function FileView(input: { view: RichNodeViewProps; uploads: Uploads }) {
       thumbnail={image() ? uploads.thumbnail(id()) : undefined}
       status={status()}
       tone={state()?.state === "failed" || !state() ? "red" : "ink"}
+      tooltip={failure()?.error}
       dim={state()?.state === "uploading"}
       selected={props.selected}
       accessibilityLabel={
-        state()?.state === "failed"
+        failure()?.retry
           ? uiText("retryUpload", { name: name() })
           : uiText(image() ? "imageKindNamed" : "fileKindNamed", {
               name: name(),
             })
       }
       onPress={() => {
-        if (state()?.state === "failed") uploads.retry(id());
+        if (failure()?.retry) uploads.retry(id());
       }}
       removeLabel={uiText("removeAttachment", { name: name() })}
       onRemove={() => props.deleteNode()}
@@ -97,7 +103,7 @@ export function attachment(options: {
         },
       };
     });
-    if (nodes.length) editor.session.run(insertContent(nodes));
+    if (nodes.length) editor.session.run(oneStep(insertContent(nodes)));
     return true;
   }
   return {

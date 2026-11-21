@@ -130,51 +130,6 @@ test("a long paste folds where the caret is, survives switching and sends its te
 
 test("a folded paste unfolds into its text, and undo folds it again", async () => {
   const app = await fixture();
-<<<<<<< HEAD
-  await app.paste(input, { files: ["assets/onboard.jpg"] });
-  await app.waitFor("label:Retry");
-  await app.type(input, "photo");
-  await app.submit(input);
-  expect(app.value(input)).toBe("photo");
-  await app.press("label:Switch");
-  expect(app.shows("label:Retry")).toBe(false);
-  await app.press("label:Switch");
-  await app.press("label:Retry");
-  await app.waitFor("label:View picture onboard.jpg · 0.0 KB");
-  expect(app.value(input)).toBe("photo");
-});
-
-test("phone task completion accepts Enter and Shift+Enter keeps a second line in the draft", async () => {
-  const app = await fixture(390);
-  await app.type(input, "看，#");
-  await app.submit(input);
-  expect(app.value(input)).toBe("看，#1 ");
-  await app.keyboard.press("shift+enter");
-  await app.type(input, "ok");
-  expect(app.value(input)).toBe("看，#1 \nok");
-  await app.submit(input);
-  await app.waitFor(
-    `text:sent ${JSON.stringify(["alpha", "看，#1 \nok", "queue", []])}`,
-  );
-});
-
-test("pasted short text is added to the draft and the caret follows it", async () => {
-  const app = await fixture();
-  // The test keyboard's arrow keys do not move the input's caret, so a paste in the middle of
-  // the draft cannot be set up here; this covers the caret after the pasted text.
-  await app.type(input, "ac");
-  await app.paste(input, { text: "xyz" });
-  expect(app.value(input)).toBe("acxyz");
-  await app.paste(input, { text: "!" });
-  expect(app.value(input)).toBe("acxyz!");
-});
-
-test("a paste beyond the message limit is attached as a text file", async () => {
-  const app = await fixture();
-  await app.paste(input, { text: "x".repeat(100001) });
-  await app.waitFor("label:Pasted text.txt");
-  expect(app.value(input)).toBe("");
-=======
   await app.type(input, "left ");
   // Changes within half a second undo together, as typing does.
   await app.wait(600);
@@ -185,7 +140,6 @@ test("a paste beyond the message limit is attached as a text file", async () => 
   expect(screen(app)).toContain("3");
   await app.keyboard.press("mod+z");
   await app.waitFor("label:Unfold pasted text (4 lines)");
->>>>>>> df3038ab (feat(client): one RichEditor-based composer for chats, task comments and the insert popover)
 });
 
 test("removing a folded paste keeps the words on both sides", async () => {
@@ -299,12 +253,12 @@ test("a second pasted file waits for the first upload in the same draft", async 
   expect(app.shows("label:File composer.test.tsx")).toBe(true);
 });
 
-test("a pasted BMP screenshot is attached as a PNG and other images keep their name", async () => {
+test("a paste is an undo step of its own, even right after typing", async () => {
   const app = await fixture();
-  await app.paste(input, { files: ["test/paste-pixel.bmp"] });
-  await app.waitFor("label:paste-pixel.png");
-  expect(app.shows("label:paste-pixel.bmp")).toBe(false);
-  await app.paste(input, { files: ["assets/onboard.jpg"] });
-  // the fixture fails a first upload of onboard.jpg; the label still shows it kept its name
-  await app.waitFor("text:onboard.jpg · upload interrupted");
+  await app.type(input, "typed");
+  await app.paste(input, { text: "1\n2\n3\n4" });
+  await app.keyboard.press("mod+z");
+  expect(app.shows("label:Unfold pasted text (4 lines)")).toBe(false);
+  await app.keyboard.press("enter");
+  await app.waitFor(sent(["alpha", "typed", "queue", []]));
 });

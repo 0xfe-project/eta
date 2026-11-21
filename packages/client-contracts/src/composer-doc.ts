@@ -117,7 +117,8 @@ export function classifyClipboard(
 /** An attachment block's state, kept beside the document (the document holds only its id). */
 export type UploadState =
   | { state: "uploading" }
-  | { state: "failed"; error: string }
+  /** `retry`: the same bytes may be sent again (a dropped connection, not a refusal). */
+  | { state: "failed"; error: string; retry?: boolean }
   | { state: "done"; attachment: AttachmentView };
 
 /** What the composer sends, read from the document: the host's `conversations.send` fields. */
