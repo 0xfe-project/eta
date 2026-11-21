@@ -1,6 +1,7 @@
 import type { EmailProposalView, RunBlock } from "@eta/client-contracts";
+import type { JSX, ScrollRef } from "nsh";
 import { commandOf } from "@eta/client-contracts";
-import { signal, View } from "nsh";
+import { Scroll, signal, View } from "nsh";
 import { Caption, colors, Icon, Label, Markdown, row } from "../../components";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
@@ -206,5 +207,40 @@ function TextStep(props: {
         </View>
       </If>
     </View>
+  );
+}
+
+/**
+ * The steps of a reply at work, in a frame of a fixed height that scrolls
+ * inside itself: glued to its newest step as they come, unless the reader
+ * scrolled up, and glued again once they are back at the bottom.
+ */
+export function ProcessWindow(props: {
+  height: number;
+  children: JSX.Element;
+}) {
+  let scroll: ScrollRef | undefined;
+  let pinned = true;
+  return (
+    <Scroll
+      ref={(node) => {
+        scroll = node;
+      }}
+      style={{ height: props.height, flexShrink: 0 }}
+      scrollEventThrottle={16}
+      onScroll={(event) => {
+        pinned =
+          event.contentSize.height - event.offset.y - event.size.height < 16;
+      }}
+    >
+      <View
+        onLayout={(event) => {
+          if (pinned)
+            scroll?.scrollTo({ y: event.bounds.size.height, animated: false });
+        }}
+      >
+        {props.children}
+      </View>
+    </Scroll>
   );
 }
