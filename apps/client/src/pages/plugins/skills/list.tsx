@@ -27,13 +27,19 @@ import {
   Header,
   Icon,
   Label,
+  ListSkeleton,
   row,
 } from "../../../components";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
 import { SkillDetail } from "./detail";
+import { SkillSelect } from "./select";
 
-export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
+export function Skills(props: {
+  layout: Layout;
+  tabs: () => JSX.Element;
+  onBack?: () => void;
+}) {
   const host = useHost();
   const c = colors();
   const device = signal("");
@@ -46,6 +52,7 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
   const failure = signal("");
   const retry = signal(0);
   const resolved = signal<SkillTarget>();
+  const missing = signal(false);
   follow(() => "machines");
 
   const phone = () => props.layout === "phone";
@@ -121,6 +128,7 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
     selectedPath.set("");
     entries.set([]);
     resolved.set(undefined);
+    missing.set(false);
     loading.set(Boolean(locationKey));
     failure.set("");
     if (!locationKey) return;
@@ -142,6 +150,7 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
             });
           if (!active) return;
           loaded.push(...reply.result.entries);
+          if (!reply.result.exists) missing.set(true);
           resolvedTarget = reply.target;
           offset = reply.result.next;
         } while (offset !== null);
@@ -169,26 +178,56 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
 
   function deviceMenu(width: 160 | "100%") {
     return (
-      <ActionMenu
-        label={uiText("skillDevice")}
-        value={machine()?.name ?? uiText("skillHost")}
-        truncateValue
-        triggerStyle={{ width, height: 28, paddingHorizontal: 8 }}
+      <If
+        when={phone()}
+        else={
+          <SkillSelect
+            label={uiText("skillDevice")}
+            placeholder={uiText("skillChooseDevice")}
+            value={machine()?.id}
+            items={devices().map((item) => ({
+              value: item.id,
+              title: item.name,
+              suffix:
+                item.kind === "primary"
+                  ? uiText("skillPrimaryDevice")
+                  : undefined,
+            }))}
+            triggerStyle={{ width }}
+            onChange={(id) => {
+              selectedPath.set("");
+              projectId.set("");
+              device.set(id);
+            }}
+          />
+        }
       >
-        <Each of={devices()} key={(item) => item.id}>
-          {(item) => (
-            <ActionItem
-              label={item().name}
-              checked={machine()?.id === item().id}
-              onSelect={() => {
-                selectedPath.set("");
-                projectId.set("");
-                device.set(item().id);
-              }}
-            />
-          )}
-        </Each>
-      </ActionMenu>
+        <ActionMenu
+          label={uiText("skillDevice")}
+          value={machine()?.name ?? uiText("skillHost")}
+          truncateValue
+          triggerStyle={{
+            width,
+            height: 32,
+            paddingHorizontal: 8,
+            borderColor: c().border,
+          }}
+        >
+          <Each of={devices()} key={(item) => item.id}>
+            {(item) => (
+              <ActionItem
+                label={item().name}
+                checked={machine()?.id === item().id}
+                onSelect={() => {
+                  selectedPath.set("");
+                  projectId.set("");
+                  device.set(item().id);
+                }}
+              />
+            )}
+          </Each>
+        </ActionMenu>
+      </If>
     );
   }
 
@@ -202,64 +241,96 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
         ...(tablet() || phone() ? {} : { ...row }),
         alignItems: tablet() || phone() ? "stretch" : "center",
         flexWrap: tablet() || phone() ? "nowrap" : "wrap",
-        gap: 8,
+        gap: tablet() || phone() ? 8 : 12,
         paddingHorizontal: tablet() ? 14 : phone() ? 16 : 24,
-        paddingTop: tablet() ? 9 : 8,
-        paddingBottom: tablet() ? 10 : 16,
+        paddingTop: tablet() ? 10 : 8,
+        paddingBottom: tablet() ? 10 : phone() ? 12 : 16,
         borderBottomWidth: tablet() ? 1 : 0,
         borderColor: c().border,
       }}
     >
-      <If when={tablet()}>{deviceMenu("100%")}</If>
+      <If when={tablet() || phone()}>{deviceMenu("100%")}</If>
       <View
         style={{
           ...row,
           alignSelf: "flex-start",
           backgroundColor: c().selected,
-          padding: 1,
+          padding: 2,
         }}
       >
-        <Button
-          label={uiText("personal")}
-          tone={scope() === "personal" ? "plain" : "ghost"}
-          size={26}
-          onPress={() => changeScope("personal")}
-        />
-        <Button
-          label={uiText("project2")}
-          tone={scope() === "project" ? "plain" : "ghost"}
-          size={26}
-          onPress={() => changeScope("project")}
-        />
+        <Each of={["personal", "project"] as const}>
+          {(item) => (
+            <View
+              role="button"
+              accessibilityLabel={uiText(
+                item() === "personal" ? "personal" : "project2",
+              )}
+              accessibilityState={{ selected: scope() === item() }}
+              onPress={() => changeScope(item())}
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 5,
+                borderWidth: 1,
+                borderColor: scope() === item() ? c().strong : "transparent",
+                backgroundColor: scope() === item() ? c().canvas : undefined,
+                cursor: "pointer",
+              }}
+            >
+              <Label
+                size={11}
+                line={14}
+                tone={scope() === item() ? "ink" : "muted"}
+              >
+                {uiText(item() === "personal" ? "personal" : "project2")}
+              </Label>
+            </View>
+          )}
+        </Each>
       </View>
       <If when={scope() === "project"}>
-        <ActionMenu
-          label={uiText("skillProjectMenu")}
-          value={
-            project()
-              ? `${project()!.name} · ${project()!.display}`
-              : uiText("skillChooseProject")
+        <If
+          when={phone()}
+          else={
+            <SkillSelect
+              label={uiText("skillProjectMenu")}
+              placeholder={uiText("skillChooseProject")}
+              value={project()?.id}
+              items={projects().map((item) => ({
+                value: item.id,
+                title: `${item.name} · ${item.display}`,
+              }))}
+              triggerStyle={{ width: tablet() ? "100%" : 200 }}
+              onChange={(id) => {
+                selectedPath.set("");
+                projectId.set(id);
+              }}
+            />
           }
-          truncateValue
-          triggerStyle={{
-            width: tablet() || phone() ? "100%" : 200,
-            height: 28,
-            paddingHorizontal: 8,
-          }}
         >
-          <Each of={projects()} key={(item) => item.id}>
-            {(item) => (
-              <ActionItem
-                label={item().name}
-                checked={item().id === project()?.id}
-                onSelect={() => {
-                  selectedPath.set("");
-                  projectId.set(item().id);
-                }}
-              />
-            )}
-          </Each>
-        </ActionMenu>
+          <ActionMenu
+            label={uiText("skillProjectMenu")}
+            value={
+              project()
+                ? `${project()!.name} · ${project()!.display}`
+                : uiText("skillChooseProject")
+            }
+            truncateValue
+            triggerStyle={{ width: "100%", height: 28, paddingHorizontal: 8 }}
+          >
+            <Each of={projects()} key={(item) => item.id}>
+              {(item) => (
+                <ActionItem
+                  label={item().name}
+                  checked={item().id === project()?.id}
+                  onSelect={() => {
+                    selectedPath.set("");
+                    projectId.set(item().id);
+                  }}
+                />
+              )}
+            </Each>
+          </ActionMenu>
+        </If>
       </If>
       <If when={!tablet() && !phone()}>
         <View style={{ flex: 1 }} />
@@ -270,63 +341,120 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
           placeholder={uiText("searchLoadedSkills")}
           value={query()}
           onChange={query.set}
-          style={{ width: "100%", height: 28, fontSize: 12, paddingRight: 25 }}
+          style={{
+            width: "100%",
+            height: phone() ? 32 : 28,
+            fontSize: 12,
+            paddingRight: 25,
+          }}
         />
         <View
           style={{
             position: "absolute",
             right: 8,
-            top: 8,
+            top: phone() ? 10 : 8,
             pointerEvents: "none",
           }}
         >
-          <Icon name="search" tone="muted" size={12} />
+          <Icon name="search" size={12} />
         </View>
       </View>
     </View>
   );
 
+  // What the list slot shows with no skills to list: one state at a time,
+  // under the controls, as the design draws it.
+  const emptyCopy = (): { title: string; hint?: string } => {
+    if (!available()) return { title: uiText("thisHostDoesNotProvideSkill") };
+    if (!machine())
+      return {
+        title: uiText("skillChooseDevice"),
+        hint: uiText("skillChooseDeviceHint"),
+      };
+    if (scope() === "project" && !project())
+      return {
+        title: uiText("skillChooseProject"),
+        hint: uiText("skillChooseProjectHint"),
+      };
+    if (!location()) return { title: uiText("skillDirectoryUnavailable") };
+    if (missing())
+      return {
+        title: uiText("skillDirectoryMissing"),
+        hint: uiText("skillDirectoryMissingHint"),
+      };
+    if (query().trim() && entries().length)
+      return {
+        title: uiText("noMatchingSkills"),
+        hint: uiText("noMatchingSkillsHint"),
+      };
+    return {
+      title: uiText("noSkillsInThisDirectory"),
+      hint: uiText("noSkillsHint"),
+    };
+  };
+  const emptyStyle = {
+    flex: undefined,
+    justifyContent: "flex-start",
+    paddingVertical: 40,
+  } as const;
+  const emptyWidth = () => (tablet() ? 220 : phone() ? 240 : 260);
+  const emptyState = () => (
+    <If
+      when={!loading()}
+      else={
+        <ListSkeleton
+          label={uiText("loadingSkills")}
+          style={{ paddingHorizontal: tablet() ? 6 : phone() ? 8 : 16 }}
+        />
+      }
+    >
+      <If
+        when={failure()}
+        else={
+          <Empty
+            title={emptyCopy().title}
+            description={emptyCopy().hint}
+            icon="book"
+            iconSize={32}
+            titleWeight={500}
+            titleTone="ink"
+            descriptionWidth={emptyWidth()}
+            style={emptyStyle}
+          />
+        }
+      >
+        <Empty
+          title={uiText("unableToLoadSkills")}
+          description={failure()}
+          icon="warning"
+          iconSize={32}
+          iconTone="red"
+          descriptionWidth={emptyWidth()}
+          style={emptyStyle}
+        >
+          <Button label={uiText("retry")} size={28} onPress={refresh} />
+        </Empty>
+      </If>
+    </If>
+  );
   const list = () => (
     <>
       {controls()}
-      <If
-        when={visible().length}
-        else={
-          <Empty
-            title={
-              !available()
-                ? uiText("thisHostDoesNotProvideSkill")
-                : loading()
-                  ? uiText("loadingSkills")
-                  : failure()
-                    ? uiText("unableToLoadSkills")
-                    : !location()
-                      ? uiText("skillDirectoryUnavailable")
-                      : query().trim()
-                        ? uiText("noMatchingSkills")
-                        : uiText("noSkillsInThisDirectory")
-            }
-            description={failure() || undefined}
-            icon="folder"
-          >
-            <If when={failure()}>
-              <Button label={uiText("retry")} onPress={refresh} />
-            </If>
-          </Empty>
-        }
-      >
+      <If when={visible().length} else={emptyState()}>
         <Scroll style={grow} scrollbar={false}>
           <View
             style={
               tablet()
                 ? {}
-                : {
-                    ...row,
-                    flexWrap: "wrap",
-                    alignItems: "stretch",
-                    paddingHorizontal: phone() ? 16 : 24,
-                    gap: 12,
-                  }
+                : phone()
+                  ? { borderBottomWidth: 1, borderColor: c().border }
+                  : {
+                      ...row,
+                      flexWrap: "wrap",
+                      alignItems: "stretch",
+                      paddingHorizontal: 24,
+                      gap: 12,
+                    }
             }
           >
             <Each of={visible()} key={(entry) => entry.path}>
@@ -348,13 +476,15 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
                           borderBottomWidth: 1,
                           gap: 10,
                         }
-                      : {
-                          width: phone() ? "100%" : 267,
-                          minHeight: 82,
-                          padding: 12,
-                          borderWidth: 1,
-                          gap: 3,
-                        }),
+                      : phone()
+                        ? {
+                            ...row,
+                            paddingHorizontal: 16,
+                            height: 64,
+                            borderTopWidth: 1,
+                            gap: 12,
+                          }
+                        : { width: 267, padding: 12, borderWidth: 1 }),
                     borderColor: c().border,
                     backgroundColor:
                       selectedPath() === entry().path
@@ -363,39 +493,55 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
                     cursor: "pointer",
                   }}
                 >
-                  <If when={tablet()}>
+                  <If when={tablet() || phone()}>
                     <View
                       style={{
-                        width: 28,
-                        height: 28,
+                        width: phone() ? 32 : 28,
+                        height: phone() ? 32 : 28,
                         alignItems: "center",
                         justifyContent: "center",
                         borderWidth: 1,
                         borderColor: c().border,
-                        backgroundColor: c().surface,
+                        backgroundColor: c().selected,
                       }}
                     >
-                      <Icon name="artifact" size={14} tone="muted" />
+                      <View style={{ opacity: 0.6 }}>
+                        <Icon
+                          name="scroll"
+                          size={phone() ? 18 : 16}
+                          tone="mutedInk"
+                        />
+                      </View>
                     </View>
                   </If>
-                  <View style={{ flex: 1, minWidth: 0 }}>
+                  <View
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      gap: tablet() || phone() ? 2 : 4,
+                    }}
+                  >
                     <Label
                       size={tablet() ? 13 : 14}
-                      line={19}
-                      weight={500}
+                      line={tablet() ? 18 : 20}
+                      weight={tablet() || phone() ? 400 : 500}
                       lines={1}
                     >
                       {entry().name}
                     </Label>
                     <Label
-                      size={tablet() ? 11 : 12}
-                      line={16}
+                      size={tablet() ? 10 : phone() ? 11 : 12}
+                      line={tablet() || phone() ? 14 : 16}
                       tone="muted"
-                      lines={tablet() ? 1 : 2}
+                      lines={tablet() || phone() ? 1 : 2}
+                      style={{ height: tablet() || phone() ? undefined : 32 }}
                     >
                       {entry().description}
                     </Label>
                   </View>
+                  <If when={phone()}>
+                    <Icon name="right" size={16} />
+                  </If>
                 </View>
               )}
             </Each>
@@ -427,18 +573,40 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
       when={tablet()}
       else={
         <>
-          <If when={!phone() || !showing()}>
+          <If when={phone() && !showing()}>
+            <Header
+              title={uiText("plugins")}
+              layout="phone"
+              onBack={props.onBack}
+            >
+              <Button
+                label={uiText("skillReload")}
+                icon="refresh"
+                iconOnly
+                iconSize={14}
+                size={32}
+                onPress={refresh}
+              />
+            </Header>
+            {props.tabs()}
+          </If>
+          <If when={!phone()}>
             <Header title={uiText("plugins")} layout={props.layout} inset={10}>
               <View style={{ flex: 1 }} />
               <If when={!showing()}>
-                {deviceMenu(160)}
-                <Button
-                  label={uiText("skillReload")}
-                  icon="refresh"
-                  iconOnly
-                  tone="ghost"
-                  onPress={refresh}
-                />
+                <View style={{ ...row, gap: 12 }}>
+                  {deviceMenu(160)}
+                  <Button
+                    label={uiText("skillReload")}
+                    icon="refresh"
+                    iconOnly
+                    iconSize={16}
+                    size={16}
+                    style={{ paddingHorizontal: 0 }}
+                    tone="ghost"
+                    onPress={refresh}
+                  />
+                </View>
               </If>
             </Header>
             {props.tabs()}
@@ -462,7 +630,9 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
             title={uiText("skillsTab")}
             count={entries().length}
             layout="tablet"
+            background="canvas"
             inset={14}
+            end={10}
           >
             <View style={{ flex: 1 }} />
             <Button
@@ -478,7 +648,25 @@ export function Skills(props: { layout: Layout; tabs: () => JSX.Element }) {
         <View style={grow}>
           <If
             when={showing()}
-            else={<Empty title={uiText("skillSelect")} icon="folder" />}
+            else={
+              <If
+                when={visible().length}
+                else={
+                  // Nothing listed: the detail pane keeps only its blank header bar.
+                  <View
+                    style={{
+                      height: 40,
+                      flexShrink: 0,
+                      backgroundColor: c().surface,
+                      borderBottomWidth: 1,
+                      borderColor: c().border,
+                    }}
+                  />
+                }
+              >
+                <Empty title={uiText("skillSelect")} icon="folder" />
+              </If>
+            }
           >
             {reader()}
           </If>

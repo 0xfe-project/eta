@@ -5,8 +5,16 @@ export const pluginsMessages = {
   pluginAboveMaximum: ["Maximum {{value}}", "最大值为 {{value}}"],
   addFromGit: ["Add from git", "从 git 添加"],
   adding: ["Adding…", "正在添加…"],
-  addPlugin: ["Add plugin", "添加插件"],
-  branchTagOrCommit: ["Branch, tag, or commit", "分支、标签或提交"],
+  addPluginTitle: ["Add a plugin from git", "从 git 添加插件"],
+  addPluginDescription: [
+    "It is resolved to one commit and stays there until you update it.",
+    "它会固定到一个提交，直到你更新它。",
+  ],
+  addPluginSubmit: ["Add", "添加"],
+  branchTagOrCommit: [
+    "Branch, tag or commit (HEAD by default)",
+    "分支、标签或提交（默认 HEAD）",
+  ],
   checkThisValueAgainstThePlugins: [
     "Check this value against the plugin’s requirements.",
     "请核对这个值是否符合插件要求。",
@@ -16,33 +24,59 @@ export const pluginsMessages = {
   configure: ["Configure", "配置"],
   configureWithCount: ["Configure {{name}}", "配置 {{name}}"],
   directoryInTheRepositoryOptional: [
-    "Directory in the repository (optional)",
-    "仓库中的目录（选填）",
+    "Path inside the repository (root by default)",
+    "仓库内的路径（默认根目录）",
   ],
-  gitRepositoryUrl: ["Git repository URL", "Git 仓库 URL"],
   localDirectory: ["Local directory", "本地目录"],
-  noPluginsInstalled: ["No plugins installed.", "尚未安装插件。"],
+  noPluginsYet: ["No plugins yet", "还没有插件"],
+  noPluginsHint: [
+    "Put a plugin in ~/.eta/plugins/<name>/, or add one from a git repository.",
+    "把插件放到 ~/.eta/plugins/<name>/，或从 git 仓库添加。",
+  ],
   noWarnings: ["No warnings", "暂无警告"],
   pluginActions: ["Plugin actions", "插件操作"],
+  pluginMachineMissing: [
+    "{{machine}} is missing {{commands}}",
+    "{{machine}} 上缺少 {{commands}}",
+  ],
   pluginPath: ["Plugin path", "插件路径"],
+  pluginReadAgo: ["{{time}} ago", "{{time}}前"],
+  pluginRequiredMissing: [
+    'Required field "{{title}}" is missing.',
+    "缺少必填项“{{title}}”。",
+  ],
+  pluginSkipped: [
+    "{{agents}} enabled this, but its configuration no longer fits. It is skipped until that is fixed.",
+    "{{agents}} 启用了它，但配置不再合法，正在跳过，改好后恢复。",
+  ],
   pluginsGiveAgentsSkillsAndMcp: [
     "Plugins give agents skills and MCP servers, from directories under ~/.eta/plugins/ or from git. One must be configured before it can be enabled. Its configuration is global; each agent chooses which plugins to use.",
     "插件给智能体带来 skill 和 MCP 服务器，来自 ~/.eta/plugins/ 下的目录或 git 仓库。配置好才能启用，配置全局一份，每个智能体选择启用哪些。",
   ],
-  refreshPlugins: ["Refresh plugins", "刷新插件"],
-  removeFromThisHost: [
-    "Remove {{remove}} from this host?",
-    "从此主机移除 {{remove}}？",
+  pluginsIntroShort: [
+    "Plugins give agents skills and MCP servers, from ~/.eta/plugins/ or from git. Configuration is global; each agent chooses which plugins to use.",
+    "插件给智能体带来 skill 和 MCP 服务器，来自 ~/.eta/plugins/ 或 git 仓库。配置全局一份，每个智能体选择启用哪些。",
   ],
-  removePlugin: ["Remove plugin?", "移除插件？"],
+  pluginsIntroPhone: [
+    "Plugins give agents skills and MCP servers. A plugin that needs configuring is skipped until it is fixed.",
+    "插件给智能体带来 skill 和 MCP 服务器。需要配置的插件在修好之前会被跳过。",
+  ],
+  pluginsNeedAttention: ["Needs attention", "需要处理"],
+  pluginsInstalledCount: ["Installed · {{count}}", "已安装 · {{count}}"],
+  refreshPlugins: ["Refresh plugins", "刷新插件"],
+  removePluginTitle: ["Remove {{name}}?", "移除 {{name}}？"],
+  removePluginDescription: [
+    "Its fetched files are deleted. Its configuration and PLUGIN_DATA stay, for when it is added again.",
+    "已拉取的文件会被删除。它的配置和 PLUGIN_DATA 会保留，下次添加时继续使用。",
+  ],
   repository: ["Repository", "仓库地址"],
   revision: ["Revision", "版本"],
   select: ["Select {{name}}", "选择 {{name}}"],
+  sourceFor: ["Source for {{name}}", "{{name}} 的来源"],
   skillsMcpServers: [
     "{{length}} skills · {{value2}} MCP servers",
     "{{length}} 个 skill · {{value2}} 个 MCP 服务器",
   ],
   valueSaved: ["Value saved", "已保存值"],
-  warnings: ["Warnings", "警告"],
   warningsFor: ["Warnings for {{name}}", "{{name}} 的警告"],
 } as const;

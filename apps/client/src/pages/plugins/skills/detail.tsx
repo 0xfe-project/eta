@@ -11,6 +11,7 @@ import { cleanup, effect, openUrl, Scroll, signal, untracked, View } from "nsh";
 import {
   Button,
   colors,
+  Empty,
   grow,
   Header,
   Icon,
@@ -169,11 +170,13 @@ export function SkillDetail(props: {
       label={uiText("skillReloadReader")}
       icon="refresh"
       iconOnly
+      iconSize={14}
       tone={tablet() ? "plain" : "ghost"}
+      style={tablet() ? undefined : { marginLeft: 6 }}
       onPress={refresh}
     />
   );
-  const crumbs = () => [props.location, props.scope].join(" / ");
+  const crumbs = () => [props.location, props.scope].join("  /  ");
   async function resource(path: string) {
     return props.call<SkillFileContent>("read", { detail: handle(), path });
   }
@@ -285,39 +288,63 @@ export function SkillDetail(props: {
         if (file()) scrollY = offset.y;
       }}
     >
-      <View
-        ref={contentStart.set}
-        style={{ paddingHorizontal: 12, paddingBottom: 12, gap: 8 }}
-      >
+      <View ref={contentStart.set} style={{ padding: 12, gap: 12 }}>
         <If when={failure()}>
-          <Label size={12} tone="red">
-            {failure()}
-          </Label>
-          <Button
-            label={uiText("retry")}
-            onPress={refresh}
-            style={{ alignSelf: "flex-start" }}
-          />
+          <View style={{ alignItems: "flex-start", gap: 4 }}>
+            <Empty
+              title={uiText("skillUnableToLoadFile", {
+                name: fileName() || props.skill.name,
+              })}
+              description={failure()}
+              icon="warning"
+              iconSize={32}
+              iconTone="red"
+              descriptionWidth={320}
+              style={{
+                flex: undefined,
+                alignSelf: "stretch",
+                paddingVertical: 40,
+              }}
+            />
+            <Button label={uiText("retry")} size={28} onPress={refresh} />
+          </View>
         </If>
         <If when={preview()?.metadata}>
-          <View style={{ borderBottomWidth: 1, borderColor: c().border }}>
-            <Button
-              label={uiText("metadata")}
-              icon={metadata() ? "down" : "right"}
-              tone="ghost"
-              size={36}
-              style={{ justifyContent: "flex-start", paddingHorizontal: 0 }}
+          <View
+            style={{
+              gap: 6,
+              paddingBottom: 8,
+              borderBottomWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <View
+              role="button"
+              accessibilityLabel={uiText("metadata")}
+              accessibilityState={{ expanded: metadata() }}
               onPress={() => metadata.set(!metadata())}
-            />
-            <If when={metadata()}>
-              <Label
-                size={12}
-                line={16}
-                tone="muted"
-                style={{ paddingLeft: 16, paddingBottom: 8 }}
-              >
-                {preview()!.metadata}
+              style={{
+                ...row,
+                gap: 6,
+                alignSelf: "flex-start",
+                cursor: "pointer",
+              }}
+            >
+              <Icon name={metadata() ? "down" : "right"} size={10} />
+              <Label size={12} line={16}>
+                {uiText("metadata")}
               </Label>
+            </View>
+            <If when={metadata()}>
+              <View style={{ paddingLeft: 16, gap: 2 }}>
+                <Each of={preview()!.metadata!.split("\n")}>
+                  {(line) => (
+                    <Label size={11} line={14} tone="muted">
+                      {line()}
+                    </Label>
+                  )}
+                </Each>
+              </View>
             </If>
           </View>
         </If>
@@ -353,54 +380,75 @@ export function SkillDetail(props: {
     </Scroll>
   );
 
+  const diagnosticList = () => (
+    <If when={diagnostics().length}>
+      <View
+        accessibilityLabel={uiText("skillDiagnostics")}
+        style={{
+          paddingHorizontal: phone() ? 0 : tablet() ? 12 : 24,
+          paddingTop: tablet() ? 12 : 0,
+          paddingBottom: phone() || tablet() ? 0 : 8,
+          gap: 4,
+        }}
+      >
+        <Each of={diagnostics()} key={(message) => message}>
+          {(message) => (
+            // A small warning mark beside foreground text: red or amber
+            // stays a status mark, never the message.
+            <View style={{ ...row, alignItems: "flex-start", gap: 8 }}>
+              <View
+                style={{
+                  width: 6,
+                  height: 6,
+                  marginTop: 5,
+                  flexShrink: 0,
+                  backgroundColor: c().warning,
+                }}
+              />
+              <Label size={12} line={16} style={{ flex: 1, minWidth: 0 }}>
+                {message()}
+              </Label>
+            </View>
+          )}
+        </Each>
+      </View>
+    </If>
+  );
+  const fileBox = () => (
+    <View
+      style={{
+        ...grow,
+        ...row,
+        alignItems: "stretch",
+        marginHorizontal: phone() ? 0 : tablet() ? 12 : 24,
+        marginTop: tablet() ? 12 : 0,
+        marginBottom: phone() ? 0 : tablet() ? 12 : 16,
+        borderWidth: 1,
+        borderColor: c().border,
+      }}
+    >
+      <If when={!phone() || showFiles()}>
+        <SkillFileTree
+          layout={props.layout}
+          directory={directory()}
+          files={files()}
+          selected={fileName()}
+          onDirectory={directory.set}
+          onRead={(path) => {
+            history.set([]);
+            showFiles.set(false);
+            void read(path);
+          }}
+        />
+      </If>
+      <If when={!phone() || !showFiles()}>{filePreview()}</If>
+    </View>
+  );
+
   return (
     <View style={grow}>
       <If when={phone()}>
-        <Header
-          title={props.skill.name}
-          layout="phone"
-          onBack={previousFile}
-          inset={12}
-        />
-        <View
-          style={{
-            paddingHorizontal: 16,
-            paddingTop: 5,
-            paddingBottom: 8,
-            gap: 2,
-          }}
-        >
-          <View style={{ ...row, height: 29 }}>
-            <Label size={11} tone="muted" style={{ flex: 1 }}>
-              {crumbs()}
-            </Label>
-            {reload()}
-          </View>
-          <View
-            role="button"
-            accessibilityLabel={uiText("files")}
-            accessibilityState={{ expanded: showFiles() }}
-            onPress={toggleFiles}
-            style={{
-              ...row,
-              height: 28,
-              gap: 6,
-              alignSelf: "flex-start",
-              paddingHorizontal: 10,
-              borderWidth: 1,
-              borderColor: showFiles() ? c().ink : c().strong,
-              cursor: "pointer",
-            }}
-          >
-            <Icon name="folder" size={11} />
-            <Label size={12}>{uiText("files")}</Label>
-            <If when={!showFiles() && fileName()}>
-              <Label size={11} tone="muted">
-                {fileName()}
-              </Label>
-            </If>
-          </View>
-        </View>
+        <Header title={props.skill.name} layout="phone" onBack={previousFile} />
       </If>
       <If when={tablet()}>
         <Header title={props.skill.name} layout="tablet" inset={14}>
@@ -414,7 +462,13 @@ export function SkillDetail(props: {
         </Header>
       </If>
       <If when={!tablet() && !phone()}>
-        <View style={{ paddingHorizontal: 24, paddingBottom: 8, gap: 6 }}>
+        <View
+          style={{
+            paddingHorizontal: 24,
+            paddingBottom: 8,
+            gap: 8,
+          }}
+        >
           <View style={{ ...row, gap: 8 }}>
             <Button
               label={uiText("skillBackToList")}
@@ -423,60 +477,69 @@ export function SkillDetail(props: {
             />
             {previousButton()}
           </View>
-          <View style={{ ...row, gap: 6 }}>
-            <Label size={12} tone="muted">{`${crumbs()} /`}</Label>
-            <Label size={12} weight={600}>
+          <View style={{ ...row, gap: 4, minHeight: 24 }}>
+            <Label size={12} line={16} tone="muted">{`${crumbs()}  /`}</Label>
+            <Label size={12} line={16} weight={600}>
               {props.skill.name}
             </Label>
             {reload()}
           </View>
         </View>
       </If>
-      <If when={diagnostics().length}>
+      <If
+        when={phone()}
+        else={
+          <>
+            {diagnosticList()}
+            {fileBox()}
+          </>
+        }
+      >
+        {/* Phone: one column of the breadcrumb, the diagnostics, the Files
+            toggle and the file, 8pt apart. */}
         <View
-          accessibilityLabel={uiText("skillDiagnostics")}
           style={{
-            paddingHorizontal: phone() ? 16 : tablet() ? 12 : 24,
-            gap: 4,
+            ...grow,
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            gap: 8,
           }}
         >
-          <Each of={diagnostics()} key={(message) => message}>
-            {(message) => (
-              <Label size={11} tone="amber">
-                {message()}
+          <View style={{ ...row, height: 16 }}>
+            <Label size={11} line={16} tone="muted" style={{ flex: 1 }}>
+              {crumbs()}
+            </Label>
+            {reload()}
+          </View>
+          {diagnosticList()}
+          <View
+            role="button"
+            accessibilityLabel={uiText("files")}
+            accessibilityState={{ expanded: showFiles() }}
+            onPress={toggleFiles}
+            style={{
+              ...row,
+              height: 28,
+              gap: 6,
+              alignSelf: "flex-start",
+              paddingHorizontal: 10,
+              borderWidth: 1,
+              borderColor: showFiles() ? c().ink : c().strong,
+              backgroundColor: showFiles() ? c().selected : undefined,
+              cursor: "pointer",
+            }}
+          >
+            <Icon name="folder" size={11} />
+            <Label size={12}>{uiText("files")}</Label>
+            <If when={!showFiles() && fileName()}>
+              <Label size={11} tone="muted">
+                {fileName()}
               </Label>
-            )}
-          </Each>
+            </If>
+          </View>
+          {fileBox()}
         </View>
       </If>
-      <View
-        style={{
-          ...grow,
-          ...row,
-          alignItems: "stretch",
-          marginHorizontal: phone() ? 16 : tablet() ? 12 : 24,
-          marginTop: tablet() ? 12 : 0,
-          marginBottom: phone() || tablet() ? 12 : 16,
-          borderWidth: 1,
-          borderColor: c().border,
-        }}
-      >
-        <If when={!phone() || showFiles()}>
-          <SkillFileTree
-            layout={props.layout}
-            directory={directory()}
-            files={files()}
-            selected={fileName()}
-            onDirectory={directory.set}
-            onRead={(path) => {
-              history.set([]);
-              showFiles.set(false);
-              void read(path);
-            }}
-          />
-        </If>
-        <If when={!phone() || !showFiles()}>{filePreview()}</If>
-      </View>
     </View>
   );
 }

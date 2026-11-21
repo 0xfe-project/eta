@@ -3,9 +3,8 @@ import type { JSX } from "nsh";
 import { Scroll, View } from "nsh";
 import { Button, colors, grow, Header, Label, row } from "../../components";
 import { uiText } from "../../i18n";
+import { NoPlugins, PluginGlyph, Status } from "./plugin-status";
 
-import { pluginText as text } from "./labels";
-import { PluginGlyph, Status } from "./plugin-status";
 export function PluginTablet(props: {
   items: PluginView[];
   current?: PluginView;
@@ -25,7 +24,9 @@ export function PluginTablet(props: {
           title={uiText("plugins")}
           count={props.items.length}
           layout="tablet"
+          background="canvas"
           inset={14}
+          end={10}
         >
           <View style={{ flex: 1 }} />
           <Button
@@ -90,31 +91,37 @@ export function PluginTablet(props: {
             )}
           </Each>
           <If when={!props.items.length}>
-            <Label size={12} tone="muted" style={{ padding: 14 }}>
-              {uiText("noPluginsInstalled")}
-            </Label>
+            <NoPlugins width={240} />
           </If>
         </Scroll>
         <View
           style={{
             borderTopWidth: 1,
             borderColor: c().border,
-            minHeight: 66,
             paddingHorizontal: 14,
-            paddingVertical: 11,
+            paddingVertical: 12,
           }}
         >
           <Label size={10} line={14} tone="muted">
-            {uiText("pluginsGiveAgentsSkillsAndMcp")}
+            {uiText("pluginsIntroShort")}
           </Label>
         </View>
       </View>
       <If
         when={props.current}
         else={
-          <Label tone="muted" style={{ padding: 20 }}>
-            {text("select")}
-          </Label>
+          // No plugins: the detail pane keeps only its blank header bar.
+          <View style={grow}>
+            <View
+              style={{
+                height: 40,
+                flexShrink: 0,
+                backgroundColor: c().surface,
+                borderBottomWidth: 1,
+                borderColor: c().border,
+              }}
+            />
+          </View>
         }
       >
         {props.detail}

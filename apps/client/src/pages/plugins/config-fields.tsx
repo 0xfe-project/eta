@@ -10,17 +10,18 @@ const pluginConfigCopy = {
   ],
   required: ["Required", "必填"],
   optional: ["(optional)", "（选填）"],
+  optionalTag: ["optional", "选填"],
   access: ["Agent access", "智能体访问权限"],
   none: ["None (plugin process only)", "无（仅插件进程）"],
   read: ["Read", "读取"],
   file: ["File", "文件"],
   value: ["Value", "值"],
   encrypted: [
-    "The configuration is stored encrypted on the Host, and secrets are not shown again.",
-    "配置在 Host 上加密保存，密钥不会再次显示。",
+    "The configuration is stored encrypted on the host, and secrets are not shown again.",
+    "配置在主机上加密保存，密钥不会再次显示。",
   ],
   missing: [
-    "Something required is missing; it will still need configuring.",
+    "Something required is missing: it will still need configuring.",
     "仍有必填项缺失，插件还需要配置。",
   ],
   blank: ["Select a value", "请选择"],
@@ -36,6 +37,8 @@ export function PluginSelect(props: {
   value: string | null;
   disabled?: boolean;
   compact?: boolean;
+  /** Phone fields are taller, with larger text. */
+  phone?: boolean;
   onChange: (value: string) => void;
 }) {
   const c = colors();
@@ -62,20 +65,35 @@ export function PluginSelect(props: {
         <View
           style={{
             ...row,
-            gap: 8,
-            minHeight: props.compact ? 24 : 28,
-            paddingHorizontal: 8,
+            gap: props.compact ? 6 : 8,
+            minHeight: props.phone
+              ? props.compact
+                ? 28
+                : 40
+              : props.compact
+                ? 24
+                : 28,
+            paddingHorizontal: props.phone && !props.compact ? 10 : 8,
             borderWidth: 1,
             borderColor: c().strong,
             backgroundColor: c().canvas,
             cursor: "pointer",
           }}
         >
-          <Label size={props.compact ? 11 : 12} lines={1} style={{ flex: 1 }}>
+          <Label
+            size={props.compact ? 11 : props.phone ? 13 : 12}
+            line={props.phone ? (props.compact ? 14 : 18) : undefined}
+            lines={1}
+            style={props.compact && props.phone ? undefined : { flex: 1 }}
+          >
             {props.items.find((item) => item.value === props.value)?.title ??
               pluginConfigText("blank")}
           </Label>
-          <Icon name="down" size={9} tone="muted" />
+          <Icon
+            name="down"
+            size={props.phone && !props.compact ? 14 : 12}
+            tone={props.phone ? "ink" : "muted"}
+          />
         </View>
       }
       onChange={({ value }) => {

@@ -50,6 +50,17 @@ interface DetailProps {
   onRefresh: () => Promise<void>;
 }
 
+// A read shows how long ago it happened; "now" and dates read as they are.
+function readTime(at: number) {
+  const age = Date.now() - at;
+  return age >= 60_000 && age < 86_400_000
+    ? uiText("pluginReadAgo", { time: relativeTime(at) })
+    : relativeTime(at);
+}
+
+// A ghost button keeps a transparent frame so it is as wide as a bordered one.
+const ghostFrame = { borderWidth: 1, borderColor: "transparent" };
+
 export function PluginDetail(props: DetailProps) {
   const host = useHost();
   const c = colors();
@@ -65,6 +76,11 @@ export function PluginDetail(props: DetailProps) {
       .slice()
       .sort((a, b) => b.at - a.at);
   const configure = () => props.item.fields.length > 0;
+  // On a phone each block carries the design's own top spacing.
+  const section = (top: number) =>
+    props.phone
+      ? { gap: 6, paddingHorizontal: 16, paddingTop: top }
+      : { gap: 6 };
   const needsConfig = () => props.item.state === "needs_config";
   function update() {
     if (updating()) return;
@@ -86,7 +102,7 @@ export function PluginDetail(props: DetailProps) {
               ...row,
               height: 40,
               flexShrink: 0,
-              gap: 10,
+              gap: 8,
               paddingHorizontal: 14,
               borderBottomWidth: 1,
               borderColor: c().border,
@@ -97,7 +113,7 @@ export function PluginDetail(props: DetailProps) {
               <Label size={14} weight={600} lines={1} style={{ flexShrink: 1 }}>
                 {props.item.name}
               </Label>
-              <Label size={11} tone="muted" lines={1}>
+              <Label size={12} line={16} tone="muted" lines={1}>
                 {props.item.version ?? ""}
               </Label>
               <Status item={props.item} />
@@ -108,12 +124,14 @@ export function PluginDetail(props: DetailProps) {
                 disabled={updating()}
                 tone="ghost"
                 labelSize={11}
+                style={ghostFrame}
                 onPress={update}
               />
               <Button
                 label={uiText("remove2")}
                 tone="ghost"
                 labelSize={11}
+                style={ghostFrame}
                 onPress={props.onRemove}
               />
             </If>
@@ -128,18 +146,15 @@ export function PluginDetail(props: DetailProps) {
           </View>
         }
       >
-        <Header
-          title={props.item.name}
-          layout="phone"
-          onBack={props.onBack}
-          inset={16}
-        >
+        <Header title={props.item.name} layout="phone" onBack={props.onBack}>
           <View style={{ flex: 1 }} />
           <If when={git()}>
             <Button
               label={uiText("pluginActions")}
               icon="more"
               iconOnly
+              size={40}
+              iconSize={20}
               tone="ghost"
               onPress={() => actions.set(true)}
             />
@@ -148,22 +163,31 @@ export function PluginDetail(props: DetailProps) {
       </If>
       <Scroll style={grow} scrollbar={false}>
         <View
-          style={{ padding: props.phone ? 16 : 20, gap: props.phone ? 14 : 16 }}
+          style={props.phone ? { paddingBottom: 16 } : { padding: 20, gap: 20 }}
         >
           <If when={props.phone}>
-            <View style={{ ...row, gap: 12 }}>
+            <View
+              style={{
+                ...row,
+                gap: 12,
+                paddingHorizontal: 16,
+                paddingTop: 16,
+                paddingBottom: 4,
+              }}
+            >
               <PluginGlyph size={40} />
-              <View style={{ gap: 3, flex: 1 }}>
+              <View style={{ gap: 4, flex: 1 }}>
                 <View style={{ ...row, gap: 8 }}>
                   <Label
                     size={16}
+                    line={20}
                     weight={600}
                     lines={1}
                     style={{ flexShrink: 1 }}
                   >
                     {props.item.name}
                   </Label>
-                  <Label size={12} tone="muted" lines={1}>
+                  <Label size={12} line={16} tone="muted" lines={1}>
                     {props.item.version ?? ""}
                   </Label>
                 </View>
@@ -171,49 +195,83 @@ export function PluginDetail(props: DetailProps) {
               </View>
             </View>
           </If>
-          <If when={props.item.description}>
-            <Label size={13} line={18} tone="mutedInk">
-              {props.item.description}
-            </Label>
+          <If
+            when={
+              props.item.description ||
+              (props.phone && configure()) ||
+              pluginWarnings(props.item).length
+            }
+          >
+            <View style={props.phone ? undefined : { gap: 14 }}>
+              <If when={props.item.description}>
+                <Label
+                  size={props.phone ? 13 : 12}
+                  line={18}
+                  tone="mutedInk"
+                  style={
+                    props.phone
+                      ? {
+                          paddingHorizontal: 16,
+                          paddingTop: 8,
+                          paddingBottom: 12,
+                        }
+                      : undefined
+                  }
+                >
+                  {props.item.description}
+                </Label>
+              </If>
+              <If when={props.phone && configure()}>
+                <Button
+                  label={uiText("configure")}
+                  tone={needsConfig() ? "primary" : "plain"}
+                  size={40}
+                  labelSize={14}
+                  style={{ marginHorizontal: 16 }}
+                  onPress={props.onConfigure}
+                />
+              </If>
+              <If when={pluginWarnings(props.item).length}>
+                <PluginWarnings
+                  item={props.item}
+                  phone={props.phone}
+                  style={
+                    props.phone
+                      ? {
+                          marginHorizontal: 16,
+                          marginTop: configure() ? 16 : 0,
+                        }
+                      : undefined
+                  }
+                  onRefresh={props.onRefresh}
+                />
+              </If>
+            </View>
           </If>
-          <If when={props.phone && configure()}>
-            <Button
-              label={uiText("configure")}
-              tone={needsConfig() ? "primary" : "plain"}
-              size={40}
-              onPress={props.onConfigure}
-            />
-          </If>
-          <If when={pluginWarnings(props.item).length}>
-            <PluginWarnings item={props.item} onRefresh={props.onRefresh} />
-          </If>
-          <View style={{ gap: 4 }}>
-            <Caption text={text("source")} />
+          <View style={section(20)}>
+            <Caption text={text("source")} phone={props.phone} />
             <View
               style={{
                 ...row,
                 gap: 8,
-                minHeight: 34,
+                minHeight: props.phone ? 36 : undefined,
                 paddingHorizontal: 10,
-                paddingVertical: 4,
+                paddingVertical: props.phone ? 6 : 8,
                 borderWidth: 1,
                 borderColor: c().border,
               }}
             >
-              <Icon name={git() ? "clip" : "folder"} size={13} tone="muted" />
+              <Icon name={git() ? "link" : "folder"} size={14} tone="muted" />
               <Label size={12} line={16} style={{ flex: 1, minWidth: 0 }}>
                 {source().label}
               </Label>
-              <Button
-                label={
+              <View
+                role="button"
+                accessibilityLabel={
                   copied() === source().clipboard
                     ? text("sourceCopied")
                     : text("copySource")
                 }
-                icon={copied() === source().clipboard ? "check" : "panel"}
-                iconOnly
-                size={24}
-                tone="ghost"
                 onPress={() => {
                   const value = source().clipboard;
                   void host.action(async () => {
@@ -221,35 +279,57 @@ export function PluginDetail(props: DetailProps) {
                     copied.set(value);
                   });
                 }}
-              />
+                focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+                style={{
+                  // The hit area stays 24px while the drawn glyph is 14px, like the design.
+                  width: 24,
+                  height: 24,
+                  margin: -5,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                }}
+              >
+                <Icon
+                  name={copied() === source().clipboard ? "check" : "copy"}
+                  size={14}
+                  tone="muted"
+                />
+              </View>
             </View>
           </View>
-          <View style={{ gap: 4 }}>
-            <Caption text={text("runs")} />
+          <View style={section(16)}>
+            <Caption text={text("runs")} phone={props.phone} />
             <View style={{ borderWidth: 1, borderColor: c().border }}>
               <Each of={props.item.servers} key={(server) => server.name}>
                 {(server) => (
                   <View
                     style={{
+                      justifyContent: "center",
                       paddingHorizontal: 10,
-                      paddingVertical: 7,
+                      paddingVertical: 4,
                       minHeight: 36,
                       borderBottomWidth: 1,
                       borderColor: c().border,
-                      gap: 3,
                     }}
                   >
-                    <View style={{ ...row, flexWrap: "wrap", gap: 8 }}>
-                      <Icon name="artifact" size={12} tone="muted" />
-                      <Label size={12} line={17}>
+                    <View
+                      style={{
+                        ...row,
+                        flexWrap: "wrap",
+                        gap: props.phone ? 8 : 10,
+                      }}
+                    >
+                      <Icon name="terminal" size={14} tone="muted" />
+                      <Label size={12} line={16}>
                         {server().name}
                       </Label>
                       <Label
                         size={10}
                         line={14}
-                        tone="muted"
+                        tone={props.phone ? "ink" : "mutedInk"}
                         style={{
-                          paddingHorizontal: 4,
+                          paddingHorizontal: 5,
                           borderWidth: 1,
                           borderColor: c().strong,
                         }}
@@ -262,7 +342,7 @@ export function PluginDetail(props: DetailProps) {
                           size={10}
                           line={14}
                           tone="muted"
-                        >{`${text("env")}: ${server().env.join(", ")}`}</Label>
+                        >{`${text(props.phone ? "envShort" : "env")}: ${server().env.join(", ")}`}</Label>
                       </If>
                       <If when={server().headers.length}>
                         <Label
@@ -289,27 +369,27 @@ export function PluginDetail(props: DetailProps) {
             </View>
           </View>
           <If when={reads().length}>
-            <View style={{ gap: 4 }}>
-              <Caption text={text("audit")} />
+            <View style={section(16)}>
+              <Caption text={text("audit")} phone={props.phone} />
               <View style={{ borderWidth: 1, borderColor: c().border }}>
                 <Each of={reads()} key={(entry) => entry.id}>
                   {(entry, index) => (
                     <View
                       style={{
                         ...row,
-                        gap: 8,
-                        minHeight: 30,
+                        gap: props.phone ? 8 : 10,
+                        minHeight: props.phone ? 36 : 30,
                         paddingHorizontal: 10,
                         borderTopWidth: index() ? 1 : 0,
                         borderColor: c().border,
                       }}
                     >
                       <AgentFace id={entry().agentId} size={14} />
-                      <Label size={12} lines={1} style={{ flex: 1 }}>
+                      <Label size={12} line={16} lines={1} style={{ flex: 1 }}>
                         {`${entry().agentName ?? text("deletedAgent")} · ${entry().field}`}
                       </Label>
-                      <Label size={10} tone="muted">
-                        {relativeTime(entry().at)}
+                      <Label size={10} line={14} tone="muted">
+                        {readTime(entry().at)}
                       </Label>
                     </View>
                   )}
@@ -324,21 +404,21 @@ export function PluginDetail(props: DetailProps) {
           title={props.item.name}
           phone
           sheet
-          blurBackdrop={false}
+          plainSheetHeader
           overPhoneNavigation
           onClose={() => actions.set(false)}
         >
           <ActionRow
             label={updating() ? uiText("updating") : uiText("update")}
             hint={text("updateDetail")}
-            icon="refresh"
+            icon="refreshAll"
             disabled={updating()}
             onPress={update}
           />
           <ActionRow
             label={uiText("remove2")}
             hint={text("removeDetail")}
-            icon="archive"
+            icon="trash"
             disabled={updating()}
             onPress={() => {
               actions.set(false);
@@ -354,7 +434,7 @@ export function PluginDetail(props: DetailProps) {
 function ActionRow(props: {
   label: string;
   hint: string;
-  icon: "refresh" | "archive";
+  icon: "refreshAll" | "trash";
   disabled: boolean;
   onPress: () => void;
 }) {
@@ -369,16 +449,18 @@ function ActionRow(props: {
       style={{
         ...row,
         gap: 12,
-        minHeight: 48,
-        borderBottomWidth: 1,
+        minHeight: 52,
+        borderTopWidth: 1,
         borderColor: c().border,
         paddingHorizontal: 16,
         cursor: "pointer",
       }}
     >
-      <Icon name={props.icon} size={15} />
-      <View style={{ flex: 1 }}>
-        <Label size={14}>{props.label}</Label>
+      <Icon name={props.icon} size={18} />
+      <View style={{ flex: 1, gap: 2 }}>
+        <Label size={14} line={18}>
+          {props.label}
+        </Label>
         <Label size={11} line={14} tone="muted">
           {props.hint}
         </Label>

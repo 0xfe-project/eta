@@ -1,62 +1,84 @@
 import type { PluginView } from "@eta/client-contracts";
+import type { ViewStyle } from "nsh";
 import { Scroll, signal, View } from "nsh";
 import { Button, colors, Icon, Label, Modal, row } from "../../components";
-import { formatLocale, uiText } from "../../i18n";
+import { CloseButton } from "../../components/navigation-buttons";
+import { uiText } from "../../i18n";
 
 import { pluginText as text } from "./labels";
-export function pluginWarnings(item: PluginView) {
-  const zh = formatLocale().startsWith("zh");
-  const names = item.agents.map((agent) => agent.name).join(", ");
-  return [
-    ...new Set([
-      ...(item.problem ? [item.problem] : []),
-      ...item.fields.flatMap((field) => {
-        if (
-          field.issue?.code !== "required" &&
-          (!field.required || field.set || field.default !== undefined)
-        )
-          return [];
-        return [
-          zh
-            ? `缺少必填项“${field.title}”。`
-            : `Required field "${field.title}" is missing.`,
-        ];
-      }),
-      ...(item.state === "needs_config" && names
-        ? [
-            zh
-              ? `${names} 已启用这个插件。修好配置后才会继续使用。`
-              : `${names} enabled this plugin. It is skipped until its configuration is fixed.`,
-          ]
-        : []),
-      ...item.machines.flatMap((machine) =>
-        machine.checked && machine.missing.length
-          ? [
-              zh
-                ? `${machine.name} 缺少 ${machine.missing.join(", ")}。`
-                : `${machine.name} is missing ${machine.missing.join(", ")}.`,
-            ]
-          : [],
-      ),
-      ...item.reports,
-      ...item.servers.flatMap((server) =>
-        server.problem ? [server.problem] : [],
-      ),
-    ]),
-  ];
+export interface PluginWarning {
+  text: string;
+  blocking: boolean;
+  /** The line about agents that enabled the plugin, quieter than the problem it follows. */
+  agents?: boolean;
 }
 
-function WarningsText(props: { item: PluginView }) {
+// Blocking lines keep the plugin from being used; the rest are advisory.
+export function pluginWarnings(item: PluginView): PluginWarning[] {
+  const agents = item.agents.map((agent) => agent.name).join(", ");
+  const skipped =
+    item.state === "needs_config" && agents
+      ? uiText("pluginSkipped", { agents })
+      : "";
+  const blocking = [
+    ...(item.problem ? [item.problem] : []),
+    ...item.fields.flatMap((field) =>
+      field.issue?.code !== "required" &&
+      (!field.required || field.set || field.default !== undefined)
+        ? []
+        : [uiText("pluginRequiredMissing", { title: field.title })],
+    ),
+    ...(skipped ? [skipped] : []),
+  ];
+  const advisory = [
+    ...item.machines.flatMap((machine) =>
+      machine.checked && machine.missing.length
+        ? [
+            uiText("pluginMachineMissing", {
+              machine: machine.name,
+              commands: machine.missing.join(", "),
+            }),
+          ]
+        : [],
+    ),
+    ...item.reports,
+    ...item.servers.flatMap((server) =>
+      server.problem ? [server.problem] : [],
+    ),
+  ];
+  const seen = new Set<string>();
+  return [
+    ...blocking.map((text) => ({
+      text,
+      blocking: true,
+      agents: text === skipped,
+    })),
+    ...advisory.map((text) => ({ text, blocking: false })),
+  ].filter((warning) => !seen.has(warning.text) && seen.add(warning.text));
+}
+
+// The dialog has two tones; the inline block on a plugin's page sets each kind apart.
+function warningTone(warning: PluginWarning, inline = false) {
+  if (!inline) return warning.blocking ? "ink" : "muted";
+  if (warning.agents) return "muted";
+  return warning.blocking ? "ink" : "mutedInk";
+}
+
+function WarningsText(props: { item: PluginView; inline?: boolean }) {
   const warnings = () => pluginWarnings(props.item);
   return (
     <If
       when={warnings().length}
       else={<Label tone="muted">{uiText("noWarnings")}</Label>}
     >
-      <Each of={warnings()} key={(warning) => warning}>
-        {(warning, index) => (
-          <Label size={12} line={18} tone={index() === 0 ? "ink" : "mutedInk"}>
-            {warning()}
+      <Each of={warnings()} key={(warning) => warning.text}>
+        {(warning) => (
+          <Label
+            size={12}
+            line={16}
+            tone={warningTone(warning(), props.inline)}
+          >
+            {warning().text}
           </Label>
         )}
       </Each>
@@ -73,12 +95,38 @@ export function PluginWarningsDialog(props: {
     <Modal
       title={uiText("warningsFor", { name: props.item.name })}
       width={384}
-      blurBackdrop={false}
+      modalFocus
       overPhoneNavigation
+      hideHeader
+      panelStyle={{ gap: 12 }}
       onClose={props.onClose}
     >
+      <View
+        style={{
+          ...row,
+          justifyContent: "space-between",
+          gap: 8,
+          paddingHorizontal: 16,
+          paddingTop: 16,
+        }}
+      >
+        <Label
+          size={14}
+          line={20}
+          weight={500}
+          lines={1}
+          style={{ flexShrink: 1 }}
+        >
+          {uiText("warningsFor", { name: props.item.name })}
+        </Label>
+        <CloseButton
+          onPress={props.onClose}
+          iconSize={14}
+          style={{ marginVertical: -2, marginRight: -6 }}
+        />
+      </View>
       <Scroll style={{ maxHeight: 300 }} scrollbar={false}>
-        <View style={{ padding: 14, gap: 5 }}>
+        <View style={{ paddingHorizontal: 16, gap: 6 }}>
           <WarningsText item={props.item} />
         </View>
       </Scroll>
@@ -86,8 +134,8 @@ export function PluginWarningsDialog(props: {
         style={{
           ...row,
           justifyContent: "flex-end",
-          paddingHorizontal: 14,
-          paddingVertical: 10,
+          paddingHorizontal: 16,
+          paddingVertical: 12,
           borderTopWidth: 1,
           borderColor: c().border,
         }}
@@ -96,6 +144,8 @@ export function PluginWarningsDialog(props: {
           label={text("ok")}
           tone="primary"
           size={28}
+          labelWeight={500}
+          style={{ paddingHorizontal: 14 }}
           onPress={props.onClose}
         />
       </View>
@@ -105,34 +155,53 @@ export function PluginWarningsDialog(props: {
 
 export function PluginWarnings(props: {
   item: PluginView;
+  phone?: boolean;
+  style?: ViewStyle;
   onRefresh: () => Promise<void>;
 }) {
   const c = colors();
   const checking = signal(false);
   return (
-    <View style={{ borderWidth: 1, borderColor: c().border }}>
+    <View
+      style={{
+        borderWidth: 1,
+        borderColor: c().border,
+        ...(props.phone ? { paddingLeft: 12, paddingBottom: 4, gap: 8 } : {}),
+        ...props.style,
+      }}
+    >
       <View
         style={{
           ...row,
-          gap: 7,
-          minHeight: 31,
-          paddingHorizontal: 10,
           borderBottomWidth: 1,
           borderColor: c().border,
+          ...(props.phone
+            ? { gap: 6, paddingTop: 2, paddingBottom: 6 }
+            : { gap: 8, height: 32, paddingHorizontal: 10 }),
         }}
       >
-        <Icon name="info" size={13} />
-        <Label weight={600} size={12}>
+        <Icon name="warning" size={14} />
+        <Label
+          weight={600}
+          size={props.phone ? 13 : 12}
+          line={props.phone ? 18 : 16}
+        >
           {uiText("warningsFor", { name: props.item.name })}
         </Label>
       </View>
-      <View style={{ padding: 10, gap: 6 }}>
-        <WarningsText item={props.item} />
+      <View style={props.phone ? { gap: 8 } : { padding: 10, gap: 8 }}>
+        <WarningsText item={props.item} inline />
         <Button
           label={checking() ? uiText("checking") : uiText("checkAgain")}
           disabled={checking()}
           icon="refresh"
-          style={{ alignSelf: "flex-start" }}
+          size={props.phone ? 28 : undefined}
+          labelSize={props.phone ? 12 : 11}
+          style={
+            props.phone
+              ? { alignSelf: "flex-start", gap: 6, paddingHorizontal: 10 }
+              : { alignSelf: "flex-start", marginTop: 2 }
+          }
           onPress={() => {
             if (checking()) return;
             checking.set(true);
