@@ -81,7 +81,6 @@ export const chatMessages = {
     "Confirmation request  {{value1}}",
     "待确认请求  {{value1}}",
   ],
-  confirmTask: ["Confirm task", "确认任务"],
   conversationActions: ["Conversation actions", "对话操作"],
   conversationInfo: ["Conversation info", "对话信息"],
   decisions: ["Decisions", "已决定"],

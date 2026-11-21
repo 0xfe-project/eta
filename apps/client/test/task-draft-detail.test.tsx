@@ -1,63 +1,61 @@
 import { expect, open, test } from "nsh/test";
 
-for (const width of [1440, 390]) {
-  test(`reads and closes a legacy draft without confirming it at ${width}px`, async () => {
+for (const width of [1440, 834, 390]) {
+  test(`edit and confirm opens the draft without creating a task at ${width}px`, async () => {
     const app = await open("./fixtures/draft-conversation.tsx", {
       width,
       height: 844,
       locale: "en-US",
     });
     expect(app.texts()).toContain("Legacy title");
-    for (let i = 0; i < 2; i++) {
-      await app.press("View details");
+    // The card offers the form, never a confirmation of its own.
+    expect(app.shows("label:Confirm task")).toBe(false);
+    expect(app.shows("label:Confirm and start")).toBe(false);
+    // Every way out of the form leaves the draft as it was.
+    for (const leave of ["label:Cancel", width < 600 ? "Back" : "Close"]) {
+      await app.press("label:Edit and confirm");
+      expect(app.shows("label:Confirm and start")).toBe(true);
+      expect(app.value("label:Title")).toBe("Legacy title");
+      expect(app.value("label:Description")).toContain("Keep the order.");
       const text = app.texts().join(" ");
-      for (const part of [
-        "Legacy title",
-        "Keep the order.",
-        "Read the last item.",
-        "Ada (proposer)",
-        "starts when ready",
-      ])
+      for (const part of ["Ada (proposer)", "starts when ready"])
         expect(text).toContain(part);
       for (const field of ["Dependencies", "Base", "Parent task"])
         expect(app.texts()).not.toContain(field);
-      await app.press(width < 600 ? "Back" : "Close");
+      await app.press(leave);
+      expect(app.shows("label:Confirm and start")).toBe(false);
       expect(app.texts()).toContain("Calls: 0");
     }
-    await app.press("Confirm task");
-    expect(app.texts()).toContain("Calls: 1");
-    expect(app.texts()).toContain(
-      'tasks.confirmDraft {"conversationId":"group","messageId":"draft-1"}',
-    );
+    await app.press("label:Edit and confirm");
+    await app.keyboard.press("escape");
+    expect(app.texts()).toContain("Calls: 0");
   });
 }
 
-test("reads long Markdown and relationship references already in the draft", async () => {
+test("confirming takes the form's own button and sends what was edited", async () => {
   const app = await open("./fixtures/draft-conversation.tsx", {
-    urlScheme: "eta://fixture/rich",
+    locale: "en-US",
   });
-  await app.press("View details");
-  const text = app.texts().join(" ");
-  for (const part of [
-    "Exhibit labels",
-    "Paragraph 120",
-    "Lin",
-    "review/labels",
-    "first · Must be done",
-    "second · In review or done",
-    "parent",
-    "Goes to Backlog",
-  ])
-    expect(text).toContain(part);
+  await app.press("label:Edit and confirm");
+  await app.type("label:Title", " (edited)");
+  await app.press("label:Backlog");
+  expect(app.texts()).toContain("Goes to Backlog when confirmed");
+  expect(app.texts()).toContain("Calls: 0");
+  await app.press("label:Create");
+  await app.waitFor("text:Calls: 1");
+  expect(app.texts()).toContain(
+    'tasks.confirmDraft {"conversationId":"group","messageId":"draft-1","edits":{"title":"Legacy title (edited)","description":"## Scope\\n\\nKeep the order.\\n\\n## Acceptance criteria\\n\\nRead the last item.","status":"backlog"}}',
+  );
 });
 
-test("omits absent metadata and labels an empty legacy draft", async () => {
+test("an empty title cannot be confirmed", async () => {
   const app = await open("./fixtures/draft-conversation.tsx", {
     urlScheme: "eta://fixture/empty",
+    locale: "en-US",
   });
-  await app.press("View details");
-  expect(app.texts()).toContain("No title provided");
-  expect(app.texts()).toContain("No description provided");
+  await app.press("label:Edit and confirm");
+  expect(app.value("label:Title")).toBe("");
+  expect(app.enabled("label:Confirm and start")).toBe(false);
   for (const field of [
     "Execution details",
     "Workspace",
@@ -66,4 +64,25 @@ test("omits absent metadata and labels an empty legacy draft", async () => {
     "Parent task",
   ])
     expect(app.texts()).not.toContain(field);
+});
+
+test("shows the relationships already in the draft", async () => {
+  const app = await open("./fixtures/draft-conversation.tsx", {
+    urlScheme: "eta://fixture/rich",
+    locale: "en-US",
+  });
+  await app.press("label:Edit and confirm");
+  expect(app.value("label:Title")).toBe("Exhibit labels");
+  expect(app.value("label:Description")).toContain("Paragraph 120");
+  const text = app.texts().join(" ");
+  for (const part of [
+    "Lin",
+    "review/labels",
+    "first · Must be done",
+    "second · In review or done",
+    "parent",
+    "Goes to Backlog",
+  ])
+    expect(text).toContain(part);
+  expect(app.shows("label:Create")).toBe(true);
 });
