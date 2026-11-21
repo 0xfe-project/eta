@@ -13,6 +13,7 @@ import {
   signal,
   View,
 } from "nsh";
+import { onWindows } from "../../app/platform";
 import {
   Button,
   colors,
@@ -90,7 +91,8 @@ export function ConversationTimeline(props: {
   // Whether the reader is at the end of the transcript, from its scroll events.
   let pinned = true;
   let seen: string[] = [];
-  // The wheel scrolls the list itself, so mouse notches can glide.
+  // On Windows the wheel scrolls the list itself, so mouse notches can glide;
+  // elsewhere the system already scrolls smoothly and the list keeps it.
   // No scroll event yet: the end is not known, and the list clamps to it.
   let scrolled = { offset: 0, max: Number.POSITIVE_INFINITY };
   let wheel: { aim?: number; last: number } = { last: 0 };
@@ -109,13 +111,18 @@ export function ConversationTimeline(props: {
     wheel = { aim: glide ? target : undefined, last: now };
     transcriptList?.scrollToOffset({ offset: target, animated: glide });
   }
-  effect(() => {
-    const ids = props.rows.map((row) => row.id);
-    const previous = seen;
-    seen = ids;
-    if (followNewRows(previous, ids, pinned))
-      transcriptList?.scrollToEnd({ animated: animateFollow(reduceMotion()) });
-  });
+  // Elsewhere the list follows new rows on its own
+  // (`autoscrollToBottomThreshold`).
+  if (onWindows)
+    effect(() => {
+      const ids = props.rows.map((row) => row.id);
+      const previous = seen;
+      seen = ids;
+      if (followNewRows(previous, ids, pinned))
+        transcriptList?.scrollToEnd({
+          animated: animateFollow(reduceMotion()),
+        });
+    });
   let timelineFocus: ViewRef | undefined;
   let pendingFocus: string | undefined;
   let top: { id: string; offset: number } | undefined;
@@ -243,14 +250,18 @@ export function ConversationTimeline(props: {
             autoscrollToBottomThreshold: bottomThreshold,
           }}
           scrollbar={false}
-          scrollEventThrottle={16}
-          onScroll={(event) => {
-            pinned = atBottom(distanceFromEnd(event));
-            scrolled = {
-              offset: event.offset.y,
-              max: event.contentSize.height - event.size.height,
-            };
-          }}
+          scrollEventThrottle={onWindows ? 16 : undefined}
+          onScroll={
+            onWindows
+              ? (event) => {
+                  pinned = atBottom(distanceFromEnd(event));
+                  scrolled = {
+                    offset: event.offset.y,
+                    max: event.contentSize.height - event.size.height,
+                  };
+                }
+              : undefined
+          }
           contentStyle={{
             paddingLeft: 16,
             paddingRight: props.rail ? 60 : 16,
@@ -291,8 +302,8 @@ export function ConversationTimeline(props: {
             </Label>
           )}
         >
-          {(message) => (
-            <View onWheel={onWheel}>
+          {(message) => {
+            const row = (
               <Message
                 item={message()}
                 onReadDraft={readDraft}
@@ -318,8 +329,9 @@ export function ConversationTimeline(props: {
                   props.onWidgetDraft(message().conversationId, text)
                 }
               />
-            </View>
-          )}
+            );
+            return onWindows ? <View onWheel={onWheel}>{row}</View> : row;
+          }}
         </List>
         <If when={selected()}>
           {(message) => (

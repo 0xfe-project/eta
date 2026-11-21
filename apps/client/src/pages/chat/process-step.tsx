@@ -2,6 +2,7 @@ import type { EmailProposalView, RunBlock } from "@eta/client-contracts";
 import type { JSX, ScrollRef } from "nsh";
 import { commandOf } from "@eta/client-contracts";
 import { Scroll, signal, View } from "nsh";
+import { onWindows } from "../../app/platform";
 import { Caption, colors, Icon, Label, Markdown, row } from "../../components";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
@@ -225,8 +226,8 @@ export function ProcessWindow(props: {
       }}
       style={{ height: props.height, flexShrink: 0 }}
       // Listening keeps the wheel from also reaching the transcript's wheel
-      // handler: this window scrolls itself.
-      onWheel={() => {}}
+      // handler, which only Windows has: this window scrolls itself.
+      onWheel={onWindows ? () => {} : undefined}
       scrollEventThrottle={16}
       onScroll={(event) => {
         pinned =
