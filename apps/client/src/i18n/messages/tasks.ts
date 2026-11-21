@@ -357,6 +357,7 @@ export const tasksMessages = {
   taskActions: ["Task actions", "任务操作"],
   taskCard: ["Task card", "任务卡片"],
   taskKind: ["Task", "任务"],
+  taskCardOpenTask: ["Open task #{{number}}", "打开任务 #{{number}}"],
   taskDescription: ["Task description", "任务描述"],
   taskDetails: ["Task details", "任务详情"],
   taskThatWaits: ["Task that waits", "需要等待的任务"],
