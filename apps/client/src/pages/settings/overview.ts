@@ -19,6 +19,7 @@ export const sections = [
   ["Machines", "monitor", "machines"],
   ["MCP servers", "plug", "mcpServers"],
   ["External agents", "terminal", "externalAgents"],
+  ["Tasks", "tasks", "tasks"],
   ["Email", "email", "email"],
   ["Archived", "archive", "archived"],
   ["Appearance", "palette", "appearance"],
@@ -97,6 +98,8 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
       }
       case "External agents":
         return { text: String(externalAgents().length) };
+      case "Tasks":
+        return { text: "" };
       case "Email": {
         const errors = email().filter((item) => item.status === "error").length;
         return errors

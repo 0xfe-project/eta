@@ -38,6 +38,7 @@ import { SettingsNavigation } from "./navigation";
 import { sections, useSettingsOverview } from "./overview";
 import { emptyStyle, EntityRow, SectionHeader } from "./section";
 import { AgentSetting } from "./setting-row";
+import { TaskSettings } from "./tasks";
 import { UpdateSettings } from "./updates/update";
 
 export function Settings(
@@ -391,6 +392,9 @@ export function Settings(
                     />
                   )}
                 </If>
+              </If>
+              <If when={current() === "Tasks"}>
+                <TaskSettings phone={phone()} />
               </If>
               <If when={current() === "Archived"}>
                 <ArchiveSettings phone={phone()} />
