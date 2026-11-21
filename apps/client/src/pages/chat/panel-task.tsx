@@ -21,6 +21,7 @@ import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "../tasks/activity";
+import { actorLabel, CreatorChip } from "../tasks/creator";
 import { activeTaskRun } from "../tasks/run-log";
 import { statusName, TaskGlyph } from "../tasks/status";
 import { StatusSelect } from "../tasks/status-select";
@@ -62,10 +63,6 @@ export function PanelTask(props: {
           const last = item().runs.at(-1);
           return last && activeTaskRun(last) ? last : undefined;
         };
-        const author = () =>
-          item().createdBy.kind === "agent"
-            ? host.agent(item().createdBy.agentId)
-            : undefined;
         const goal = () =>
           fullGoal() || item().description.length <= goalPreview
             ? item().description
@@ -142,6 +139,7 @@ export function PanelTask(props: {
               >
                 {item().title}
               </Label>
+              <CreatorChip creator={item().createdBy} />
               <Edges
                 label={uiText("tasksBefore", {
                   count: item().dependsOn?.length ?? 0,
@@ -167,11 +165,11 @@ export function PanelTask(props: {
                   paddingHorizontal: inset,
                 }}
               >
-                <AgentFace id={author()?.id ?? "user"} size={20} />
+                <AgentFace id={item().createdBy.agentId ?? "user"} size={20} />
                 <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
                   <View style={{ ...row, gap: 8 }}>
                     <Label variant="small" weight={600}>
-                      {author()?.name ?? uiText("you")}
+                      {actorLabel(item().createdBy, host.agent)}
                     </Label>
                     <Label variant="caption" tone="muted">
                       {messageTime(item().createdAt, false)}
