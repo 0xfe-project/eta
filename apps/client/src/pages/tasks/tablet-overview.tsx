@@ -7,11 +7,11 @@ import { useHost } from "../../services/host";
 import { TaskActivity } from "./activity";
 import { NeighbourStrip, Prerequisites, Subtasks } from "./dependencies";
 import { taskMoment } from "./facts";
-import { StatusOptions, TaskMenu } from "./menu";
 import { activeTaskRun } from "./run-log";
 import { Segmented } from "./segmented";
 import { statusName, TaskGlyph, tones } from "./status";
-import { statusFill, TaskCommentBox, taskRunText } from "./task-fields";
+import { StatusSelect } from "./status-select";
+import { TaskCommentBox, taskRunText } from "./task-fields";
 import {
   DescriptionEditor,
   EditDescriptionLink,
@@ -103,7 +103,12 @@ export function TabletOverview(props: {
                 </Label>
               }
             >
-              <StatusSelect item={item()} state={props.state} />
+              <StatusSelect
+                item={item()}
+                state={props.state}
+                align="end"
+                compact
+              />
             </If>
           </View>
           <Prerequisites
@@ -189,68 +194,6 @@ export function TabletOverview(props: {
         </If>
       </View>
     </View>
-  );
-}
-
-/**
- * The status next to the title, tinted in the status's colour while it runs or
- * waits for review; it opens the "Change status" popover, a hint under each status.
- */
-function StatusSelect(props: {
-  item: BoardTaskDetail;
-  state: TaskDetailState;
-}) {
-  const c = colors();
-  const { change, status } = props.state;
-  const tint = () =>
-    statusFill[props.item.status as keyof typeof statusFill] as
-      | (typeof statusFill)[keyof typeof statusFill]
-      | undefined;
-  const ink = () => (tint() ? tones[props.item.status] : "ink");
-  return (
-    <TaskMenu
-      width={264}
-      align="end"
-      caption={uiText("changeStatus")}
-      open={status()}
-      onOpenChange={status.set}
-      trigger={
-        <View
-          accessibilityLabel={uiText("changeStatus")}
-          style={{
-            ...row,
-            height: tint() ? 28 : 22,
-            minWidth: tint() ? 128 : undefined,
-            paddingHorizontal: 8,
-            gap: 6,
-            borderWidth: 1,
-            borderColor: tint() ? c()[tones[props.item.status]] : c().strong,
-            backgroundColor: tint() ? c()[tint()!] : c().canvas,
-            cursor: "pointer",
-          }}
-        >
-          <If when={tint()}>
-            <TaskGlyph status={props.item.status} size={14} />
-          </If>
-          <Label
-            size={tint() ? 12 : 11}
-            line={tint() ? 16 : 14}
-            weight={tint() ? 400 : 600}
-            tone={ink()}
-            style={tint() ? { flex: 1 } : undefined}
-          >
-            {statusName(props.item.status)}
-          </Label>
-          <Icon name="down" size={tint() ? 14 : 10} tone={ink()} />
-        </View>
-      }
-    >
-      <StatusOptions
-        current={props.item.status}
-        waiting={props.item.dependents?.length ?? 0}
-        onChange={change}
-      />
-    </TaskMenu>
   );
 }
 

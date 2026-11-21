@@ -113,7 +113,7 @@ function ShapeImage(props: { shape: string; size?: number }) {
   );
 }
 
-export const fills = {
+const fills = {
   backlog: "selected",
   todo: "selected",
   in_progress: "blueFill",

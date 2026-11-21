@@ -1,7 +1,6 @@
 import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { JSX } from "nsh";
 import type { TaskDetailState } from "./task-detail-state";
-import { TASK_STATUSES } from "@eta/client-contracts";
 import { View } from "nsh";
 import { Button, colors, Field, Icon, Label, row } from "../../components";
 import { CheckControl } from "../../components/check-control";
@@ -9,9 +8,9 @@ import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 import { taskMoment } from "./facts";
-import { StatusOptions, TaskMenu } from "./menu";
 import { activeTaskRun } from "./run-log";
-import { statusName, TaskGlyph, TaskStatus, tones } from "./status";
+import { statusName, TaskGlyph } from "./status";
+import { StatusSelect } from "./status-select";
 
 export function TaskCommentBox(props: {
   state: TaskDetailState;
@@ -170,7 +169,7 @@ export function TaskFields(detail: {
   state: TaskDetailState;
 }) {
   const host = useHost();
-  const { change, phone, status } = detail.state;
+  const { phone } = detail.state;
   const item = () => detail.item;
   const executor = () =>
     host.agent(item().assigneeAgentId ?? item().createdBy.agentId);
@@ -200,29 +199,8 @@ export function TaskFields(detail: {
         <Label size={11} tone="muted" style={{ width: 68 }}>
           {uiText("status")}
         </Label>
-        <View style={{ gap: 4, flex: 1 }}>
-          <View
-            role="button"
-            accessibilityLabel={uiText("changeStatus")}
-            onPress={() => status.set(!status())}
-            style={{ ...row, gap: 6, cursor: "pointer" }}
-          >
-            <TaskStatus task={item()} />
-            <Icon name="down" size={9} tone="muted" />
-          </View>
-          <If when={status()}>
-            <View style={{ gap: 4 }}>
-              <Each of={TASK_STATUSES}>
-                {(entry) => (
-                  <Button
-                    label={statusName(entry())}
-                    selected={entry() === item().status}
-                    onPress={() => change(entry())}
-                  />
-                )}
-              </Each>
-            </View>
-          </If>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <StatusSelect item={item()} state={detail.state} />
         </View>
       </View>
       <Each of={fields()} key={(field) => field[0]}>
@@ -267,12 +245,6 @@ export function taskRunText(item: BoardTaskDetail) {
   );
 }
 
-export const statusFill = {
-  in_progress: "blueFill",
-  in_review: "amberFill",
-  done: "greenFill",
-} as const;
-
 /** The desktop page's right rail: every property of the task, one row each. */
 export function TaskRail(detail: {
   item: BoardTaskDetail;
@@ -281,16 +253,12 @@ export function TaskRail(detail: {
 }) {
   const host = useHost();
   const c = colors();
-  const { change, replacing, search, status, submitting } = detail.state;
+  const { replacing, search, submitting } = detail.state;
   const item = () => detail.item;
   const executor = () =>
     host.agent(item().assigneeAgentId ?? item().createdBy.agentId);
   const parent = () => item().ancestors?.at(-1);
   const run = () => item().runs.at(-1);
-  const tint = () =>
-    statusFill[item().status as keyof typeof statusFill] as
-      | (typeof statusFill)[keyof typeof statusFill]
-      | undefined;
   const runText = () => taskRunText(item());
   /** A stopped or finished run starts over from the rail; a running one has Stop instead. */
   const canStartOver = () =>
@@ -303,50 +271,7 @@ export function TaskRail(detail: {
   return (
     <View style={{ gap: 14 }}>
       <RailRow label={uiText("status")}>
-        <TaskMenu
-          width={264}
-          caption={uiText("changeStatus")}
-          open={status()}
-          onOpenChange={status.set}
-          trigger={
-            <View
-              accessibilityLabel={uiText("changeStatus")}
-              style={{
-                ...row,
-                alignSelf: "flex-start",
-                height: 28,
-                minWidth: 128,
-                paddingHorizontal: 8,
-                gap: 6,
-                borderWidth: 1,
-                borderColor: tint() ? c()[tones[item().status]] : c().strong,
-                backgroundColor: tint() ? c()[tint()!] : c().canvas,
-                cursor: "pointer",
-              }}
-            >
-              <TaskGlyph status={item().status} size={14} />
-              <Label
-                size={12}
-                line={16}
-                tone={tint() ? tones[item().status] : "ink"}
-                style={{ flex: 1 }}
-              >
-                {statusName(item().status)}
-              </Label>
-              <Icon
-                name="down"
-                size={10}
-                tone={tint() ? tones[item().status] : "ink"}
-              />
-            </View>
-          }
-        >
-          <StatusOptions
-            current={item().status}
-            waiting={item().dependents?.length ?? 0}
-            onChange={change}
-          />
-        </TaskMenu>
+        <StatusSelect item={item()} state={detail.state} />
       </RailRow>
       <RailRow label={uiText("executor")}>
         <Label size={12} line={16} weight={600}>

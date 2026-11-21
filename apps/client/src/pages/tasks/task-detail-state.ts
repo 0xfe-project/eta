@@ -7,6 +7,7 @@ import type {
 } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import { signal } from "nsh";
+import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { isActiveRunStatus } from "./run-log";
 
@@ -35,6 +36,10 @@ export function createTaskDetailState(props: {
   const describing = signal(false);
   const log = signal<TaskRunView | undefined>(undefined);
   const status = signal(false);
+  /** The status a change is on its way to, until the host answers. */
+  const changing = signal<BoardTaskStatus | undefined>(undefined);
+  /** Why the last status change failed, under the status until the menu opens again. */
+  const statusError = signal("");
   const review = signal<"done" | "todo" | undefined>(undefined);
   const feedback = signal("");
   const submitting = signal(false);
@@ -113,8 +118,28 @@ export function createTaskDetailState(props: {
     });
   }
   function change(next: BoardTaskStatus) {
+    if (submitting()) return;
+    // The current status again changes nothing: no call, as on the web.
+    if (next === task()?.status) {
+      status.set(false);
+      return;
+    }
+    statusError.set("");
+    changing.set(next);
     void mutate(async () => {
-      await host.call("tasks", "update", { taskId: props.id, status: next });
+      try {
+        await host.call("tasks", "update", { taskId: props.id, status: next });
+      } catch (problem) {
+        statusError.set(
+          uiText("statusChangeFailed", {
+            message:
+              problem instanceof Error ? problem.message : String(problem),
+          }),
+        );
+        throw problem;
+      } finally {
+        changing.set(undefined);
+      }
       status.set(false);
       cancelling.set(false);
       review.set(undefined);
@@ -192,6 +217,8 @@ export function createTaskDetailState(props: {
     saveDescription,
     log,
     status,
+    changing,
+    statusError,
     review,
     feedback,
     submitting,

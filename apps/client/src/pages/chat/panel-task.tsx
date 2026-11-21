@@ -1,7 +1,6 @@
 import type { TaskDependencyView } from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
 import type { Layout } from "../../components";
-import { TASK_STATUSES } from "@eta/client-contracts";
 import { Scroll, signal, View } from "nsh";
 import {
   ActionItem,
@@ -21,7 +20,8 @@ import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "../tasks/activity";
 import { activeTaskRun } from "../tasks/run-log";
-import { fills, statusName, TaskGlyph, tones } from "../tasks/status";
+import { statusName, TaskGlyph } from "../tasks/status";
+import { StatusSelect } from "../tasks/status-select";
 import { TaskDetailDialogs } from "../tasks/task-detail-dialogs";
 import { createTaskDetailState } from "../tasks/task-detail-state";
 import { messageTime } from "./message-time";
@@ -39,8 +39,7 @@ export function PanelTask(props: {
   const c = colors();
   const host = useHost();
   const state = createTaskDetailState({ ...props, docked: true });
-  const { task, activity, change, canComment, comment, post, posting, log } =
-    state;
+  const { task, activity, canComment, comment, post, posting, log } = state;
   const fullGoal = signal(false);
   // Once, when the task and its timeline first show: later replies do not pull the reader down.
   let opened = false;
@@ -83,32 +82,7 @@ export function PanelTask(props: {
                 {`#${item().number}`}
               </Label>
               <If when={!item().children?.length}>
-                <ActionMenu
-                  label={uiText("changeStatus")}
-                  triggerStyle={{
-                    height: 28,
-                    minWidth: 128,
-                    paddingHorizontal: 8,
-                    gap: 6,
-                    borderWidth: 1,
-                    borderColor: c()[tones[item().status]],
-                    backgroundColor: c()[fills[item().status]],
-                    justifyContent: "flex-start",
-                  }}
-                  leading={<TaskGlyph status={item().status} size={14} />}
-                  valueTone={tones[item().status]}
-                  value={statusName(item().status)}
-                >
-                  <Each of={TASK_STATUSES}>
-                    {(entry) => (
-                      <ActionItem
-                        label={statusName(entry())}
-                        checked={item().status === entry()}
-                        onSelect={() => change(entry())}
-                      />
-                    )}
-                  </Each>
-                </ActionMenu>
+                <StatusSelect item={item()} state={state} align="end" />
               </If>
               <ActionMenu
                 label={uiText("taskActions")}
