@@ -693,7 +693,7 @@ export function createProduct(options: {
     usage: taskUsage,
     warn,
     reactToResults: () => boardSettings(taskSettings).reactToResults,
-    isCaptain: (agentId) => captain.identity()?.agentId === agentId,
+    isCaptain: (agentId) => made.captain?.identity()?.agentId === agentId,
   });
   later.taskRunner = taskRunner;
   void taskUsage
