@@ -76,10 +76,6 @@ export const artifactsMessages = {
   artifactsPage: ["Page {{page}}", "第 {{page}} 页"],
   artifactsPreviousPage: ["Previous page", "上一页"],
   artifactsNextPage: ["Next page", "下一页"],
-  artifactsRecent: [
-    "{{total}} in all, the latest {{shown}} here",
-    "共 {{total}} 个，这里只列最近 {{shown}} 个",
-  ],
   artifactsViewAll: ["View all →", "查看全部 →"],
   noArtifactsYet: ["No Artifacts yet", "暂无产物"],
   openInBrowser: ["Open in browser", "在浏览器中打开"],

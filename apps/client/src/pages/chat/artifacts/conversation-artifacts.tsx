@@ -176,29 +176,21 @@ export function ConversationArtifacts(props: {
           )}
         </Each>
         <If when={recent.artifacts.length > RECENT}>
-          <ViewAllRow
-            total={recent.artifacts.length}
-            onViewAll={recent.onViewAll}
-          />
+          <ViewAllRow onViewAll={recent.onViewAll} />
         </If>
       </View>
     );
   }
 }
 
-/** "47 in all, the latest 5 here · View all →" under a short list of artifacts. */
-export function ViewAllRow(props: {
-  total: number;
-  phone?: boolean;
-  onViewAll?: () => void;
-}) {
+/** "View all →" under a short list of artifacts. */
+export function ViewAllRow(props: { phone?: boolean; onViewAll?: () => void }) {
   const c = colors();
   return (
     <View
       style={{
         ...row,
-        justifyContent: "space-between",
-        gap: 8,
+        justifyContent: "flex-end",
         minHeight: props.phone ? 48 : 32,
         paddingLeft: props.phone ? 16 : 12,
         paddingRight: props.phone ? 12 : 12,
@@ -207,9 +199,6 @@ export function ViewAllRow(props: {
         borderColor: c().border,
       }}
     >
-      <Label size={props.phone ? 12 : 11} line={16} tone="muted" lines={1}>
-        {uiText("artifactsRecent", { total: props.total, shown: RECENT })}
-      </Label>
       <View
         role="button"
         accessibilityLabel={uiText("artifactsViewAll")}

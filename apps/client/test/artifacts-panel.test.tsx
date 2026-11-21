@@ -165,7 +165,6 @@ for (const [name, width, height] of [
     const app = await open(fixture, { width, height, locale: "en-US" });
     if (name === "tablet") await app.press("label:Panel");
     expect(rows(app)).toEqual(["#5 Guided review", ...plans.slice(0, 4)]);
-    expect(app.texts()).toContain("23 in all, the latest 5 here");
     await app.press("label:View all →");
     expect(app.texts()).toContain("1–15 / 23");
   });
@@ -185,5 +184,5 @@ test("on a phone the info sheet lists the latest five and View all opens the who
   expect(rows(app)).toHaveLength(15);
 
   await app.press("label:Back");
-  expect(app.texts()).toContain("23 in all, the latest 5 here");
+  expect(rows(app)).toEqual(["#5 Guided review", ...plans.slice(0, 4)]);
 });
