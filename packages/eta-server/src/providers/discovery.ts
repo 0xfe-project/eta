@@ -27,7 +27,7 @@ import type {GatewayFacts} from "./metadata";
 import { modelSource } from "@eta/client-contracts";
 import { attributionHeaders } from "./attribution";
 import { resolveConfiguredModels } from "./catalog";
-import { applyProviderHeaders } from "./config-types";
+import { applyProviderHeaders, MODEL_THINKING_LEVELS } from "./config-types";
 import {
   fetchModelsDev,
   
@@ -149,12 +149,14 @@ export async function discoverModels(
       entry.outputTokenLimit,
     );
     const input = declaredInput(entry);
+    const reasoning = declaredReasoning(entry);
     if (contextWindow === undefined && requiresWindow) continue;
     discovered.push({
       id: entry.id.trim(),
       ...(input === undefined ? {} : { input }),
       ...(contextWindow === undefined ? {} : { contextWindow }),
       ...(maxTokens === undefined ? {} : { maxTokens }),
+      ...reasoning,
     });
   }
   // What the catalog knows about these models is merged in, and the user's own entries keep
@@ -194,6 +196,43 @@ interface DeclaredCapabilities {
   supported_input_modalities?: unknown;
   modalities?: unknown;
   capabilities?: { vision?: unknown };
+  reasoning?: unknown;
+  reasoning_levels?: unknown;
+  supported_reasoning_levels?: unknown;
+  supported_parameters?: unknown;
+}
+
+/**
+ * Whether an entry says it reasons (`reasoning: true`, or `reasoning` among its
+ * `supported_parameters`), and the effort levels it names: `supported_reasoning_levels`
+ * (`[{ effort }]`) first, else `reasoning_levels` (strings). Names eta has no level for
+ * (and `off`) are left out. An entry that says neither yields nothing.
+ */
+function declaredReasoning(
+  entry: DeclaredCapabilities,
+): Pick<EtaModelConfig, "reasoning" | "reasoningEfforts"> {
+  const reasons =
+    entry.reasoning === true ||
+    (Array.isArray(entry.supported_parameters) &&
+      entry.supported_parameters.includes("reasoning"));
+  const named = [entry.supported_reasoning_levels, entry.reasoning_levels]
+    .filter(Array.isArray)
+    .map((levels: unknown[]) =>
+      levels.map((level) =>
+        typeof level === "object" && level !== null
+          ? (level as { effort?: unknown }).effort
+          : level,
+      ),
+    )
+    .find((levels) => levels.length > 0);
+  const efforts = MODEL_THINKING_LEVELS.filter(
+    (level): level is Exclude<typeof level, "off"> =>
+      level !== "off" && named?.includes(level) === true,
+  );
+  return {
+    ...(reasons ? { reasoning: true } : {}),
+    ...(efforts.length > 0 ? { reasoningEfforts: efforts } : {}),
+  };
 }
 
 /**

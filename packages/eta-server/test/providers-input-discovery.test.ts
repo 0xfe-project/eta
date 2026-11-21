@@ -108,6 +108,67 @@ describe("input declared by the endpoint's /models", () => {
   });
 });
 
+describe("reasoning declared by the endpoint's /models", () => {
+  it("reads reasoning and the effort levels from a gateway's entry", async () => {
+    const { models } = await list([
+      {
+        id: "gateway/model-b",
+        reasoning: true,
+        reasoning_levels: ["low", "high", "max"],
+        supported_reasoning_levels: [
+          { effort: "low" },
+          { effort: "high" },
+          { effort: "max" },
+        ],
+        supported_parameters: ["tools", "tool_choice", "reasoning"],
+        context_length: 1000000,
+        context_window: 1000000,
+        max_output_tokens: 200000,
+        modalities: { input: ["text", "image", "pdf"] },
+      },
+    ]);
+    expect(models).toEqual([
+      {
+        id: "gateway/model-b",
+        input: ["text", "image"],
+        contextWindow: 1000000,
+        maxTokens: 200000,
+        reasoning: true,
+        reasoningEfforts: ["low", "high", "max"],
+      },
+    ]);
+  });
+
+  it("falls back to reasoning_levels, and flags reasoning from supported_parameters", async () => {
+    const { models } = await list([
+      { id: "a", reasoning_levels: ["medium", "high"] },
+      { id: "b", supported_parameters: ["reasoning"] },
+    ]);
+    expect(models).toEqual([
+      { id: "a", reasoningEfforts: ["medium", "high"] },
+      { id: "b", reasoning: true },
+    ]);
+  });
+
+  it("leaves out level names eta has none for", async () => {
+    const { models } = await list([
+      { id: "a", reasoning: true, reasoning_levels: ["off", "turbo", "low"] },
+    ]);
+    expect(models).toEqual([
+      { id: "a", reasoning: true, reasoningEfforts: ["low"] },
+    ]);
+  });
+
+  it("writes nothing when the entry declares no reasoning", async () => {
+    const { models } = await list([
+      { id: "a" },
+      { id: "b", reasoning: false, supported_parameters: ["tools"] },
+      { id: "c", reasoning_levels: "high", supported_reasoning_levels: [] },
+    ]);
+    expect(models).toEqual([{ id: "a" }, { id: "b" }, { id: "c" }]);
+  });
+});
+
 describe("window and output limit declared by the endpoint's /models", () => {
   it("reads the common spellings of the context length", async () => {
     const { models } = await list([
