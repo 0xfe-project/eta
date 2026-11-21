@@ -12,6 +12,7 @@ import {
   row,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
+import { ContextRing, useContextUsage } from "../../components/context-ring";
 import { BackButton, CloseButton } from "../../components/navigation-buttons";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -81,23 +82,12 @@ export function PhoneConversationInfo(props: {
           />
           <Each of={props.members} key={(member) => member.agentId}>
             {(member) => (
-              <InfoRow
-                height={52}
-                title={host.agent(member().agentId)?.name ?? uiText("agent")}
-                titleSize={14}
-                detail={memberStatus(member().status)}
-                onPress={
-                  member().sessionId
-                    ? () =>
-                        props.onInspect({
-                          id: member().agentId,
-                          session: member().sessionId!,
-                        })
-                    : undefined
+              <MemberRow
+                member={member()}
+                onInspect={(session) =>
+                  props.onInspect({ id: member().agentId, session })
                 }
-              >
-                <AgentFace id={member().agentId} size={24} />
-              </InfoRow>
+              />
             )}
           </Each>
           <Section label={uiText("tasks2")} count={tasks().length} />
@@ -226,6 +216,57 @@ export function PhoneConversationInfo(props: {
       </View>
     );
   }
+}
+
+/**
+ * A member in the sheet: the face ringed by how full its context is, and the status with the
+ * same percentage beside it, since a phone has no hover to ask the ring.
+ */
+function MemberRow(props: {
+  member: MemberView;
+  onInspect: (session: string) => void;
+}) {
+  const host = useHost();
+  const usage = useContextUsage(() => props.member.sessionId ?? undefined);
+  const detail = () => {
+    const status = memberStatus(props.member.status);
+    const current = usage();
+    return current ? `${status} · ${current.percent}%` : status;
+  };
+  return (
+    <InfoRow
+      height={52}
+      title={host.agent(props.member.agentId)?.name ?? uiText("agent")}
+      titleSize={14}
+      detail={detail()}
+      onPress={
+        props.member.sessionId
+          ? () => props.onInspect(props.member.sessionId!)
+          : undefined
+      }
+    >
+      <If
+        when={props.member.sessionId}
+        else={
+          <View
+            style={{
+              width: 32,
+              height: 32,
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            <AgentFace id={props.member.agentId} size={20} />
+          </View>
+        }
+      >
+        <ContextRing usage={usage} size={32} label={false}>
+          <AgentFace id={props.member.agentId} size={20} />
+        </ContextRing>
+      </If>
+    </InfoRow>
+  );
 }
 
 function InfoRow(props: {

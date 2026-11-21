@@ -9,9 +9,14 @@ import {
   row,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
+import {
+  ContextRing,
+  hint,
+  useContextUsage,
+} from "../../components/context-ring";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
-import { follow, useHost } from "../../services/host";
+import { followSession, useHost } from "../../services/host";
 import { activeReply, memberStatus } from "./member-status";
 import { MemberStepsLedger, MemberStepsToggle } from "./member-steps";
 
@@ -65,33 +70,17 @@ export function ConversationMembers(props: {
             <View
               style={{
                 ...row,
-                alignItems: "flex-start",
-                paddingVertical: 14,
+                paddingVertical: 8,
                 paddingHorizontal: 12,
-                gap: 12,
+                gap: 10,
               }}
             >
-              <If
-                when={entry().sessionId}
-                else={<AgentFace id={entry().agentId} size={28} />}
-              >
-                <View
-                  style={{
-                    ...row,
-                    justifyContent: "center",
-                    width: 40,
-                    height: 40,
-                    flexShrink: 0,
-                    borderWidth: 3,
-                    borderColor: c().selected,
-                    borderRadius: 20,
-                  }}
-                >
-                  <AgentFace id={entry().agentId} size={26} />
-                </View>
-              </If>
+              <MemberFace
+                agentId={entry().agentId}
+                session={entry().sessionId}
+              />
               <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                <View style={{ ...row, gap: entry().sessionId ? 6 : 8 }}>
+                <View style={{ ...row, gap: 6 }}>
                   <Label line={18} lines={1}>
                     {host.agent(entry().agentId)?.name ?? uiText("agent")}
                   </Label>
@@ -106,7 +95,7 @@ export function ConversationMembers(props: {
                 <If
                   when={entry().sessionId}
                   else={
-                    <Label size={10} line={14} tone="muted">
+                    <Label size={10} line={14} tone="muted" lines={1}>
                       {uiText("memberNoConversation")}
                     </Label>
                   }
@@ -217,11 +206,47 @@ const tokens = (count: number | undefined) =>
         ? `${(count / 1_000).toFixed(1)}k`
         : String(count);
 
-/** What one member's session has spent: model, tokens, tools. */
+/**
+ * A member's face in a fixed 36px slot, ringed by how full its context is. A member with no
+ * session yet has nothing to measure, so it is the face alone, in the same slot.
+ */
+function MemberFace(props: { agentId: string; session: string | null }) {
+  const usage = useContextUsage(() => props.session ?? undefined);
+  return (
+    <If
+      when={props.session}
+      else={
+        <View
+          style={{
+            width: 36,
+            height: 36,
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          <AgentFace id={props.agentId} size={22} />
+        </View>
+      }
+    >
+      <ContextRing usage={usage} size={36}>
+        <AgentFace id={props.agentId} size={22} />
+      </ContextRing>
+    </If>
+  );
+}
+
+/**
+ * What one member's session holds and has spent, on one line: how full the context is, then the
+ * tokens and the tool count. The model is a name, not a count, and the one field that can run
+ * longer than the row, so it is the line's tooltip (as in the web sidebar's inline stats).
+ */
 function MemberStats(props: { session: string; model?: string | null }) {
   const host = useHost();
+  const c = colors();
   const target = () => `sessions.${props.session}`;
-  follow(target);
+  followSession(() => props.session);
+  const context = useContextUsage(() => props.session);
   const usage = () =>
     host.section<{
       input: number;
@@ -234,25 +259,28 @@ function MemberStats(props: { session: string; model?: string | null }) {
     host.section<{ id: string }>(target(), "model")?.id ??
     props.model ??
     uiText("defaultModel");
+  const spent = () =>
+    `${uiText("memberUsage", {
+      input: tokens(usage()?.input),
+      output: tokens(usage()?.output),
+      cache: tokens(
+        usage() ? usage()!.cacheRead + usage()!.cacheWrite : undefined,
+      ),
+    })} · ${uiText("memberTools", {
+      count: tools() ? String(tools()!.length) : "—",
+    })}`;
   return (
-    <>
-      <Label size={10} line={14} tone="muted" lines={1}>
-        {model()}
+    <View tooltip={hint(model(), c)} style={{ ...row, minWidth: 0 }}>
+      <If when={context()}>
+        {(current) => (
+          <Label size={10} line={14} style={{ flexShrink: 0 }}>
+            {`${current().percent}%`}
+          </Label>
+        )}
+      </If>
+      <Label size={10} line={14} tone="muted" lines={1} style={{ flex: 1 }}>
+        {context() ? ` · ${spent()}` : spent()}
       </Label>
-      <Label size={10} line={14} tone="muted" lines={1}>
-        {uiText("memberUsage", {
-          input: tokens(usage()?.input),
-          output: tokens(usage()?.output),
-          cache: tokens(
-            usage() ? usage()!.cacheRead + usage()!.cacheWrite : undefined,
-          ),
-        })}
-      </Label>
-      <Label size={10} line={14} tone="muted">
-        {uiText("memberTools", {
-          count: tools() ? String(tools()!.length) : "—",
-        })}
-      </Label>
-    </>
+    </View>
   );
 }
