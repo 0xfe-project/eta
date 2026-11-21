@@ -146,6 +146,111 @@ describe("an agent's runtime", () => {
   });
 });
 
+describe("a runtime's account, read only", () => {
+  /** A Claude Code that says who it is signed in as and what of its plan is used. */
+  const signedIn = (): Runtime => ({
+    ...scriptedRuntime({ id: "claude", turn: (turn) => turn.say("ok") }),
+    authStatus: async () => ({
+      kind: "logged_in" as const,
+      source: "claude auth status",
+      account: { email: "ada@example.com", plan: "max", method: "claude.ai" },
+    }),
+    accountUsage: async () => ({
+      kind: "available" as const,
+      plan: "max",
+      email: "ada@example.com",
+      rateLimited: false,
+      windows: [
+        {
+          label: "5h",
+          usedRatio: 0.25,
+          resetsAt: "2026-11-18T12:00:00.000Z" as never,
+        },
+      ],
+    }),
+  });
+  const expected = {
+    auth: {
+      kind: "logged_in",
+      email: "ada@example.com",
+      plan: "max",
+      method: "claude.ai",
+    },
+    usage: {
+      kind: "available",
+      plan: "max",
+      email: "ada@example.com",
+      rateLimited: false,
+      windows: [
+        { label: "5h", usedRatio: 0.25, resetsAt: "2026-11-18T12:00:00.000Z" },
+      ],
+    },
+  };
+
+  it("is the runtime's own answer on the primary, and nothing for one that has no way to say", async () => {
+    const w = await world({
+      runtimes: createOarRuntimes({
+        registry: createRuntimeRegistry([
+          signedIn(),
+          scriptedRuntime({ id: "opencode", turn: (turn) => turn.say("ok") }),
+        ]),
+      }),
+    });
+    expect(
+      await w.client.call("agents", "runtimeAccount", { runtime: "claude" }),
+    ).toEqual({ account: expected });
+    // OpenCode has neither query: no part is made up for it.
+    expect(
+      await w.client.call("agents", "runtimeAccount", { runtime: "opencode" }),
+    ).toEqual({ account: {} });
+    await expect(
+      w.client.call("agents", "runtimeAccount", { runtime: "acp.nope" }),
+    ).rejects.toThrow(/no such runtime/);
+  });
+
+  it("keeps the sign-in when the usage read fails", async () => {
+    const w = await world({
+      runtimes: createOarRuntimes({
+        registry: createRuntimeRegistry([
+          {
+            ...signedIn(),
+            accountUsage: async () => {
+              throw new Error("usage endpoint timed out");
+            },
+          },
+        ]),
+      }),
+    });
+    expect(
+      await w.client.call("agents", "runtimeAccount", { runtime: "claude" }),
+    ).toEqual({
+      account: {
+        auth: expected.auth,
+        usage: { kind: "error", detail: "usage endpoint timed out" },
+      },
+    });
+  });
+
+  it("is asked of a daemon over its link", async () => {
+    const r = await remoteWorld(
+      {},
+      {
+        node: {
+          runtimes: createOarRuntimes({
+            registry: createRuntimeRegistry([signedIn()]),
+          }),
+        },
+      },
+    );
+    expect(
+      await r.client.call("agents", "runtimeAccount", {
+        runtime: "claude",
+        machineId: r.daemon.machineId,
+      }),
+    ).toEqual({ account: expected });
+  });
+});
+
 describe("a conversation with an agent on Claude Code", () => {
   it("is answered by the runtime, with its tool calls, and never by eta's models", async () => {
     const { w, turns, etaRequests } = await onClaude(async (turn) => {

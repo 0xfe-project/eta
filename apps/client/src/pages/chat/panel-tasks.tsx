@@ -118,6 +118,9 @@ const sections = [
   readonly BoardTaskStatus[],
 ])[];
 
+/** The Tasks tab's side inset, on each part rather than the whole, so rows can reach both edges. */
+const inset = 10;
+
 const folded = [
   ["done", "taskCompletedCount"],
   ["cancelled", "taskCancelledCount"],
@@ -168,11 +171,17 @@ export function TasksTab(props: {
     </View>
   );
   return (
-    <View style={{ paddingHorizontal: 10, paddingTop: 12 }}>
-      <Label weight={600} style={{ paddingBottom: 8 }}>
+    // No side padding here: each part carries its own, so the rows can reach both edges.
+    <View style={{ paddingTop: 12 }}>
+      <Label
+        weight={600}
+        style={{ paddingBottom: 8, paddingHorizontal: inset }}
+      >
         {uiText("tasks2")}
       </Label>
-      <View style={{ ...row, gap: 6, paddingBottom: 12 }}>
+      <View
+        style={{ ...row, gap: 6, paddingBottom: 12, paddingHorizontal: inset }}
+      >
         {scope(props.conversationName, !everywhere(), () =>
           everywhere.set(false),
         )}
@@ -191,7 +200,11 @@ export function TasksTab(props: {
               <Label
                 variant="small"
                 tone="muted"
-                style={{ paddingTop: index() ? 10 : 2, paddingBottom: 6 }}
+                style={{
+                  paddingTop: index() ? 10 : 2,
+                  paddingBottom: 6,
+                  paddingHorizontal: inset,
+                }}
               >
                 {`${uiText(section()[0])} ${items().length}`}
               </Label>
@@ -229,6 +242,7 @@ export function TasksTab(props: {
                   height: 28,
                   gap: 8,
                   paddingTop: index() ? 0 : 6,
+                  paddingHorizontal: inset,
                   cursor: "pointer",
                 }}
               >
@@ -257,7 +271,11 @@ export function TasksTab(props: {
         }}
       </Each>
       <If when={!tasks().length}>
-        <Label variant="small" tone="muted">
+        <Label
+          variant="small"
+          tone="muted"
+          style={{ paddingHorizontal: inset }}
+        >
           {uiText("noTasksYet")}
         </Label>
       </If>
@@ -287,7 +305,14 @@ function TaskRow(props: { task: BoardTaskView; onPress: () => void }) {
       accessibilityLabel={task().title}
       onPress={props.onPress}
       hoverStyle={{ backgroundColor: c().selected }}
-      style={{ ...row, height: 52, gap: 10, flexShrink: 0, cursor: "pointer" }}
+      style={{
+        ...row,
+        height: 52,
+        gap: 10,
+        flexShrink: 0,
+        paddingHorizontal: inset,
+        cursor: "pointer",
+      }}
     >
       <TaskGlyph status={task().status} size={14} />
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>

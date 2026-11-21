@@ -32,6 +32,16 @@ is not a release of either source. If you redistribute it, check both sets of te
 [Inter](https://github.com/rsms/inter), © The Inter Project Authors, under the SIL Open Font License 1.1
 (`apps/client/assets/Inter-OFL.txt`).
 
+## Lobe Icons (runtime marks)
+
+`apps/client/src/pages/settings/runtimes/logos.ts` holds the one-colour marks of the agent runtimes
+(Claude Code, Codex, OpenCode, Pi, Gemini CLI and other external agents) from
+[Lobe Icons](https://github.com/lobehub/lobe-icons) (`@lobehub/icons-static-svg` 1.104.0). They are in
+the client builds (web, desktop, phone).
+
+- Copyright (c) 2023 LobeHub, under the MIT License, not under eta's MIT License.
+- The marks themselves are the trademarks of their owners.
+
 ## Programs in a compiled host
 
 `eta-host`, `eta-daemon` and the desktop app are compiled with Bun, and `eta-host` embeds the programs

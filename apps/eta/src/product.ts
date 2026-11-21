@@ -7,7 +7,11 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
  * then. Between the two, the replies a dead process left in flight are failed, so nothing a client
  * is ever shown says `working` without something working.
  */
-import type { AgentRuntimeInfo, RoutinesStatus } from "@eta/client-contracts";
+import type {
+  AgentRuntimeAccount,
+  AgentRuntimeInfo,
+  RoutinesStatus,
+} from "@eta/client-contracts";
 import type { McpHostOptions } from "@eta/daemon";
 import type { Places } from "@eta/places";
 import type { AcpRuntimes } from "@eta/runtime-acp";
@@ -240,6 +244,10 @@ export function createProduct(options: {
   web?: Omit<WebOptions, "warn"> | undefined;
   /** The external runtimes the primary machine has, with their models, for the agent editor. */
   runtimes?: ((fresh: boolean) => Promise<AgentRuntimeInfo[]>) | undefined;
+  /** A runtime's sign-in and plan usage on the primary; undefined for one it does not have. */
+  runtimeAccount?:
+    | ((runtime: string) => Promise<AgentRuntimeAccount | undefined>)
+    | undefined;
   /** The ACP agents this host runs (`~/.eta/acp.json`), for the `acp` target; absent has none. */
   acp?: AcpRuntimes | undefined;
   /**
@@ -1061,6 +1069,19 @@ export function createProduct(options: {
                 { timeoutMs: 60_000 },
               );
               return runtimes;
+            },
+            runtimeAccount: options.runtimeAccount,
+            machineRuntimeAccount: async (machineId, runtime) => {
+              const link = hub.link(machineId);
+              if (link === undefined)
+                throw new Error(
+                  `${machines.get(machineId)?.name ?? machineId} is not online`,
+                );
+              return await link.daemon(
+                "runtimeAccount",
+                { runtime },
+                { timeoutMs: 70_000 },
+              );
             },
             capturePrompt: (input) => {
               captainStore.appendPromptVersion({

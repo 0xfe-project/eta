@@ -36,6 +36,7 @@ import { ModelSourceList, useModelSources } from "./models/source-list";
 import { SubscriptionDetail } from "./models/subscription-detail";
 import { SettingsNavigation } from "./navigation";
 import { sections, useSettingsOverview } from "./overview";
+import { RuntimeList } from "./runtimes/runtime-list";
 import { emptyStyle, EntityRow, SectionHeader } from "./section";
 import { AgentSetting } from "./setting-row";
 import { TaskSettings } from "./tasks";
@@ -78,9 +79,8 @@ export function Settings(
   const phone = () => props.layout === "phone";
   const showingProvider = () =>
     section() === "Model services" && (connector() || provider());
-  const { machines, email, externalAgents, summary } = useSettingsOverview(
-    () => props.theme,
-  );
+  const { machines, email, externalAgents, runtimes, summary } =
+    useSettingsOverview(() => props.theme);
   const selectedAcp = () => {
     const selected = acpAgent();
     return externalAgents().find(
@@ -109,9 +109,11 @@ export function Settings(
   const sectionHint = (name: SettingsSection) =>
     name === "External agents"
       ? uiText("externalAgentsHint")
-      : name === "Email"
-        ? uiText("settingsEmailHint")
-        : undefined;
+      : name === "Runtimes"
+        ? uiText("runtimesHint")
+        : name === "Email"
+          ? uiText("settingsEmailHint")
+          : undefined;
   /** Panes that draw their own header instead of the section header. */
   const ownHeader = (name: SettingsSection) =>
     name === "Machines" ||
@@ -313,6 +315,17 @@ export function Settings(
                   </Scroll>
                 </If>
               </If>
+              <If when={current() === "Runtimes"}>
+                <Scroll style={grow} scrollbar={false}>
+                  <RuntimeList
+                    listing={runtimes}
+                    phone={phone()}
+                    onExternalAgent={(machineId, id) =>
+                      acpAgent.set({ machineId, id })
+                    }
+                  />
+                </Scroll>
+              </If>
               <If when={current() === "Email"}>
                 <If
                   when={mailbox()}
@@ -435,6 +448,10 @@ export function Settings(
             onModelServices={() => {
               agent.set(undefined);
               section.set("Model services");
+            }}
+            onRuntimes={() => {
+              agent.set(undefined);
+              section.set("Runtimes");
             }}
           />
         )}

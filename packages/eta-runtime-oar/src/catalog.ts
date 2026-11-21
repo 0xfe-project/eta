@@ -50,6 +50,28 @@ export interface RuntimeInfo {
   models: RuntimeModel[];
 }
 
+/** Who a runtime is signed in as and how much of its plan is used; a part it cannot say is absent. */
+export interface RuntimeAccount {
+  auth?:
+    | { kind: "logged_in"; email?: string; plan?: string; method?: string }
+    | { kind: "logged_out"; detail?: string }
+    | { kind: "unknown"; detail?: string };
+  usage?:
+    | {
+        kind: "available";
+        plan?: string;
+        email?: string;
+        rateLimited: boolean;
+        windows: { label: string; usedRatio: number; resetsAt?: string }[];
+      }
+    | { kind: "reauth_required"; reason?: string }
+    | { kind: "unsupported"; reason?: string }
+    | { kind: "error"; detail: string };
+}
+
+const messageOf = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
 interface Entry {
   info: RuntimeInfo;
   installation: AvailableInstallation | undefined;
@@ -108,6 +130,87 @@ export class RuntimeCatalog {
         `runtime_unavailable: ${entry.info.label} ${entry.info.detail ?? "is not installed"}`,
       );
     return entry.installation;
+  }
+
+  /**
+   * A runtime's sign-in and plan usage, from its own read-only queries (oar's `authStatus` and
+   * `accountUsage`); undefined for a runtime that is not one of these. Each part is asked apart, so
+   * a usage read that fails still leaves the sign-in said. Never cached: a settings page asks.
+   */
+  async account(id: string): Promise<RuntimeAccount | undefined> {
+    if (!isRuntimeId(id)) return undefined;
+    const runtime = this.#registry.require(id);
+    if (runtime.authStatus === undefined && runtime.accountUsage === undefined)
+      return {};
+    const installation = await this.installation(id);
+    const options = { timeoutMs: this.#timeoutMs };
+    const [auth, usage] = await Promise.all([
+      runtime.authStatus === undefined
+        ? undefined
+        : runtime.authStatus(installation, options).then(
+            (status): RuntimeAccount["auth"] =>
+              status.kind === "logged_in"
+                ? {
+                    kind: "logged_in",
+                    ...(status.account?.email === undefined
+                      ? {}
+                      : { email: status.account.email }),
+                    ...(status.account?.plan === undefined
+                      ? {}
+                      : { plan: status.account.plan }),
+                    ...(status.account?.method === undefined
+                      ? {}
+                      : { method: status.account.method }),
+                  }
+                : {
+                    kind: status.kind,
+                    ...(status.detail === undefined
+                      ? {}
+                      : { detail: status.detail }),
+                  },
+            (error: unknown): RuntimeAccount["auth"] => ({
+              kind: "unknown",
+              detail: messageOf(error),
+            }),
+          ),
+      runtime.accountUsage === undefined
+        ? undefined
+        : runtime.accountUsage(installation, options).then(
+            (snapshot): RuntimeAccount["usage"] =>
+              snapshot.kind === "available"
+                ? {
+                    kind: "available",
+                    ...(snapshot.plan === undefined
+                      ? {}
+                      : { plan: snapshot.plan }),
+                    ...(snapshot.email === undefined
+                      ? {}
+                      : { email: snapshot.email }),
+                    rateLimited: snapshot.rateLimited,
+                    windows: snapshot.windows.map((window) => ({
+                      label: window.label,
+                      usedRatio: window.usedRatio,
+                      ...(window.resetsAt === undefined
+                        ? {}
+                        : { resetsAt: window.resetsAt }),
+                    })),
+                  }
+                : {
+                    kind: snapshot.kind,
+                    ...(snapshot.reason === undefined
+                      ? {}
+                      : { reason: snapshot.reason }),
+                  },
+            (error: unknown): RuntimeAccount["usage"] => ({
+              kind: "error",
+              detail: messageOf(error),
+            }),
+          ),
+    ]);
+    return {
+      ...(auth === undefined ? {} : { auth }),
+      ...(usage === undefined ? {} : { usage }),
+    };
   }
 
   async #entry(id: RuntimeId, fresh: boolean): Promise<Entry> {
@@ -169,7 +272,7 @@ export class RuntimeCatalog {
         info: {
           ...base,
           status: "error",
-          detail: error instanceof Error ? error.message : String(error),
+          detail: messageOf(error),
         },
         installation: undefined,
         at,

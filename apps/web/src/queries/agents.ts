@@ -1,12 +1,19 @@
 import type {
   AgentArgs,
   AgentResults,
+  AgentRuntimeAccount,
   AgentRuntimeInfo,
   AgentView,
   MachineView,
 } from "@eta/client-contracts";
 import type { Model } from "@/queries/providers";
-import { queryOptions, useQueries, useQuery } from "@tanstack/react-query";
+import {
+  queryOptions,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { translate } from "@/lib/i18n";
 import { declaredLevels } from "@/lib/thinking";
 import { getWire } from "@/lib/wire";
@@ -78,6 +85,8 @@ const runtimesQuery = (machineId: string | undefined) =>
           "agents",
           "runtimes",
           machineId === undefined ? {} : { machineId },
+          // Past a runtime's own 30s, so a probe that times out is told as one, not as a lost machine.
+          { timeoutMs: 70_000 },
         )
       ).runtimes,
     staleTime: 5 * 60_000,
@@ -110,6 +119,58 @@ export function useRuntimesByMachine(
   );
 }
 
+/**
+ * Ask a machine's runtimes again (`machineId` undefined is the primary), past both caches: the
+ * host keeps a failed answer as long as a good one, so only `fresh` gets a new look. The answer
+ * replaces the machine's list for every reader of it.
+ */
+export function useRefreshRuntimes() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (machineId: string | undefined) =>
+      (
+        await getWire().call<AgentResults["runtimes"]>(
+          "agents",
+          "runtimes",
+          machineId === undefined
+            ? { fresh: true }
+            : { fresh: true, machineId },
+          // Each runtime may take its full 30s to list its models, and a daemon is asked over its link.
+          { timeoutMs: 70_000 },
+        )
+      ).runtimes,
+    onSuccess: (runtimes, machineId) =>
+      queryClient.setQueryData(runtimesQuery(machineId).queryKey, runtimes),
+  });
+}
+
+/**
+ * A built-in runtime's sign-in and plan usage on a machine (`machineId` undefined is the primary),
+ * as the runtime reports them; asked only while `enabled` (a detail that is open).
+ */
+export function useRuntimeAccount(
+  runtime: string,
+  machineId: string | undefined,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ["wire", "agents", "runtimeAccount", machineId ?? "", runtime],
+    queryFn: async (): Promise<AgentRuntimeAccount> =>
+      (
+        await getWire().call<AgentResults["runtimeAccount"]>(
+          "agents",
+          "runtimeAccount",
+          machineId === undefined ? { runtime } : { runtime, machineId },
+          // The sign-in and the usage each have the runtime's 30s, and a daemon is asked over its link.
+          { timeoutMs: 70_000 },
+        )
+      ).account,
+    enabled,
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
 /** A runtime's models as a picker lists them: `runtime:modelId`, under the runtime's name. */
 function runtimeModelsOf(info: AgentRuntimeInfo): Model[] {
   return info.models.map((model) => ({
@@ -137,20 +198,28 @@ export function useAgentRuntimeChoices(
 ): {
   runtimes: AgentRuntimeInfo[] | null | undefined;
   models: Model[] | null | undefined;
+  /** Ask the machine's runtimes again. */
+  refresh: { run: () => void; pending: boolean; error: Error | null };
 } {
   const { machines } = useMachines();
   const { data: providerModels } = useModels();
   const primary = machines.find((machine) => machine.kind === "primary");
-  const runtimes = knownRuntimes(
-    useQuery(
-      runtimesQuery(
-        machineId === "" || machineId === primary?.id ? undefined : machineId,
-      ),
-    ),
-  );
-  if (runtime === "eta") return { runtimes, models: providerModels };
+  const asked =
+    machineId === "" || machineId === primary?.id ? undefined : machineId;
+  const runtimes = knownRuntimes(useQuery(runtimesQuery(asked)));
+  const again = useRefreshRuntimes();
+  const refresh = {
+    run: () => again.mutate(asked),
+    pending: again.isPending,
+    error: again.error,
+  };
+  if (runtime === "eta") return { runtimes, models: providerModels, refresh };
   // An external runtime's models come with the machine's list: loading or unknown with it.
-  if (!runtimes) return { runtimes, models: runtimes };
+  if (!runtimes) return { runtimes, models: runtimes, refresh };
   const info = runtimes.find((entry) => entry.id === runtime);
-  return { runtimes, models: info === undefined ? [] : runtimeModelsOf(info) };
+  return {
+    runtimes,
+    models: info === undefined ? [] : runtimeModelsOf(info),
+    refresh,
+  };
 }

@@ -315,10 +315,12 @@ describe("creating an agent step by step", () => {
     const off = options().find((option) =>
       option.textContent?.includes("Off agent"),
     )!;
-    // Not signed in: said, with the agent's own reason, and not to be picked.
-    expect(off.textContent).toContain("未登录");
-    expect(off.textContent).toContain("run `off login` first");
+    // Not signed in: said in a word, and not to be picked. Its own reason is under the details.
+    expect(off.textContent).toBe("Off agent（未登录）");
     expect(off.getAttribute("aria-disabled")).toBe("true");
+    expect(
+      document.querySelector("#agent-runtime ~ div details")!.textContent,
+    ).toContain("run `off login` first");
     const demo = options().find((option) =>
       option.textContent?.includes("Demo agent"),
     )!;

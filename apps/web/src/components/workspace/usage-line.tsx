@@ -1,15 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { formatLocale } from "@/lib/i18n";
+import { tokens } from "@/lib/tokens";
 import { useAgentUsage } from "@/queries/usage";
-
-/** 12,345 → "1.2万"; tokens read best in 万 and 亿. */
-function tokens(n: number) {
-  return new Intl.NumberFormat(formatLocale(), {
-    notation: "compact",
-    maximumFractionDigits: 1,
-    minimumFractionDigits: formatLocale() === "zh-CN" && n >= 1e4 ? 1 : 0,
-  }).format(n);
-}
 
 const WINDOWS = [
   ["5h", "common:time.windows.fiveHours"],

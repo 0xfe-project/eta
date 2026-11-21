@@ -111,8 +111,14 @@
     "status": {
       "unauthenticated": " (not signed in)",
       "missing": " (not installed)",
-      "error": " (unavailable)"
-    }
+      "error": " (unavailable)",
+      "timeout": " (probe timed out after 30s)",
+      "failed": " (probe failed)"
+    },
+    "details": "Details",
+    "retrying": "Checking again…",
+    "signIn": "{{runtime}} isn't signed in: run <code>{{command}}</code> in a terminal, then retry.",
+    "openRuntimes": "See it on Runtimes"
   },
   "plugins": {
     "empty": "No plugins yet.",

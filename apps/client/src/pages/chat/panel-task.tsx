@@ -32,6 +32,9 @@ import { messageTime } from "./message-time";
 /** How long a goal shows before "Expand full text". */
 const goalPreview = 600;
 
+/** The detail's side inset, on each part rather than the whole, so rows can reach both edges. */
+const inset = 11;
+
 /** A task opened in the conversation panel: under its tabs, compact. */
 export function PanelTask(props: {
   id: string;
@@ -70,8 +73,23 @@ export function PanelTask(props: {
         const replies = () =>
           activity().filter((entry) => entry.kind === "comment").length;
         return (
-          <View style={{ ...grow, padding: 11, backgroundColor: c().canvas }}>
-            <View style={{ ...row, height: 26, gap: 8, flexShrink: 0 }}>
+          // Side insets sit on each part, not here: the dependency rows reach both edges so their hover does.
+          <View
+            style={{
+              ...grow,
+              paddingVertical: 11,
+              backgroundColor: c().surface,
+            }}
+          >
+            <View
+              style={{
+                ...row,
+                height: 26,
+                gap: 8,
+                flexShrink: 0,
+                paddingHorizontal: inset,
+              }}
+            >
               <View
                 role="button"
                 accessibilityLabel={uiText("backToTasks")}
@@ -116,7 +134,11 @@ export function PanelTask(props: {
               <Label
                 variant="subtitle"
                 weight={700}
-                style={{ paddingTop: 4, paddingBottom: 7 }}
+                style={{
+                  paddingTop: 4,
+                  paddingBottom: 7,
+                  paddingHorizontal: inset,
+                }}
               >
                 {item().title}
               </Label>
@@ -142,6 +164,7 @@ export function PanelTask(props: {
                   alignItems: "flex-start",
                   gap: 15,
                   paddingTop: 7,
+                  paddingHorizontal: inset,
                 }}
               >
                 <AgentFace id={author()?.id ?? "user"} size={20} />
@@ -175,7 +198,14 @@ export function PanelTask(props: {
                 </View>
               </View>
               <If when={replies()}>
-                <View style={{ ...row, gap: 8, paddingTop: 14 }}>
+                <View
+                  style={{
+                    ...row,
+                    gap: 8,
+                    paddingTop: 14,
+                    paddingHorizontal: inset,
+                  }}
+                >
                   <Label variant="caption" tone="muted">
                     {uiText(replies() === 1 ? "oneTaskReply" : "taskReplies", {
                       count: replies(),
@@ -186,7 +216,7 @@ export function PanelTask(props: {
                   />
                 </View>
               </If>
-              <View style={{ paddingBottom: 11 }}>
+              <View style={{ paddingBottom: 11, paddingHorizontal: inset }}>
                 <TaskActivity
                   entries={activity()}
                   runs={item().runs}
@@ -200,7 +230,15 @@ export function PanelTask(props: {
             </Scroll>
             <If when={run()}>
               {(entry) => (
-                <View style={{ ...row, height: 24, gap: 8, flexShrink: 0 }}>
+                <View
+                  style={{
+                    ...row,
+                    height: 24,
+                    gap: 8,
+                    flexShrink: 0,
+                    paddingHorizontal: inset,
+                  }}
+                >
                   <StatusDot color={c().blue} />
                   <Label variant="caption" weight={600} style={{ flex: 1 }}>
                     {uiText("agentIsWorking", {
@@ -237,12 +275,16 @@ export function PanelTask(props: {
                 </View>
               )}
             </If>
-            <TaskCommentHint state={state} />
+            <TaskCommentHint
+              state={state}
+              style={{ paddingHorizontal: inset }}
+            />
             <View
               style={{
                 ...row,
                 height: 38,
                 gap: 8,
+                marginHorizontal: inset,
                 paddingHorizontal: 10,
                 flexShrink: 0,
                 borderWidth: 1,
@@ -300,7 +342,11 @@ function Edges(props: {
       <Label
         variant="small"
         tone="muted"
-        style={{ paddingTop: props.before ? 0 : 14, paddingBottom: 4 }}
+        style={{
+          paddingTop: props.before ? 0 : 14,
+          paddingBottom: 4,
+          paddingHorizontal: inset,
+        }}
       >
         {props.label}
       </Label>
@@ -315,8 +361,10 @@ function Edges(props: {
               ...row,
               height: 30,
               gap: 8,
-              paddingHorizontal: 10,
-              borderWidth: 1,
+              // Edge to edge, so the hover does too; the text stays where the bordered box put it.
+              paddingHorizontal: inset + 1 + 10,
+              borderTopWidth: 1,
+              borderBottomWidth: 1,
               borderColor: c().border,
               cursor: "pointer",
             }}
