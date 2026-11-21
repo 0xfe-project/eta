@@ -26,6 +26,7 @@ import {
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { Message } from "./message";
+import { questionRowIndex } from "./question-row";
 import {
   animateFollow,
   atBottom,
@@ -68,6 +69,8 @@ export function ConversationTimeline(props: {
   onPending?: () => void;
   onArtifact: (artifact: ArtifactView, version?: number) => void;
   onWidgetDraft: (conversationId: string, text: string) => void;
+  /** Hands out the function that scrolls to the row of a question's reply. */
+  revealer?: (reveal: (replyId: string | null) => void) => void;
 }) {
   const host = useHost();
   const c = colors();
@@ -123,6 +126,15 @@ export function ConversationTimeline(props: {
           animated: animateFollow(reduceMotion()),
         });
     });
+  props.revealer?.((replyId) => {
+    const index = questionRowIndex(props.rows, replyId);
+    if (index !== undefined)
+      transcriptList?.scrollToIndex({
+        index,
+        viewPosition: 0.5,
+        animated: true,
+      });
+  });
   let timelineFocus: ViewRef | undefined;
   let pendingFocus: string | undefined;
   let top: { id: string; offset: number } | undefined;

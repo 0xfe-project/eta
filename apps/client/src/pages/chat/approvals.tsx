@@ -9,6 +9,7 @@ import {
   Caption,
   colors,
   Field,
+  focusRing,
   grow,
   Icon,
   Label,
@@ -567,7 +568,10 @@ function QuestionCard(props: { item: InteractionView }) {
 }
 
 /** The questions waiting in a conversation, above its transcript. */
-export function PendingStrip(props: { items: InteractionView[] }) {
+export function PendingStrip(props: {
+  items: InteractionView[];
+  onOpen?: (item: InteractionView) => void;
+}) {
   const host = useHost();
   const c = colors();
   const first = () => props.items[0];
@@ -575,7 +579,13 @@ export function PendingStrip(props: { items: InteractionView[] }) {
     <If when={first()}>
       {(item) => (
         <View
+          role="button"
+          accessibilityLabel={item().prompt}
+          onPress={() => props.onOpen?.(item())}
+          hoverStyle={{ opacity: 0.85 }}
+          focusVisibleStyle={focusRing(c())}
           style={{
+            cursor: "pointer",
             gap: 2,
             paddingVertical: 4,
             paddingHorizontal: 8,

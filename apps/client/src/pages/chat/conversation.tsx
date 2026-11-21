@@ -109,6 +109,7 @@ export function Conversation(props: {
     host
       .list<CaptainOperationView>("captain", "operations")
       .filter((op) => op.requiresApproval && op.status === "pending");
+  let reveal: ((replyId: string | null) => void) | undefined;
   const asking = () =>
     host.pending().filter((entry) => entry.conversationId === props.id);
   const messages = () => [
@@ -359,7 +360,10 @@ export function Conversation(props: {
         >
           <If when={!phone() && asking().length}>
             <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
-              <PendingStrip items={asking()} />
+              <PendingStrip
+                items={asking()}
+                onOpen={(item) => reveal?.(item.replyId)}
+              />
             </View>
           </If>
           {/* The message area takes all the room between the header and the
@@ -367,6 +371,9 @@ export function Conversation(props: {
               rows), so the composer stays at the bottom by layout. */}
           <View testID="conversation-messages" style={grow}>
             <ConversationTimeline
+              revealer={(fn) => {
+                reveal = fn;
+              }}
               onAccessLost={props.onAccessLost}
               title={title()}
               projectName={
