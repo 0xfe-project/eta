@@ -38,6 +38,8 @@ import { cardOpen, setCardOpen } from "./card-folds";
 import { activeReply } from "./member-status";
 import { messageTime } from "./message-time";
 import { ProcessStep, ProcessWindow } from "./process-step";
+import { MemberRun } from "./run/member-run";
+import { RunPanel } from "./run/run-panel";
 import { draftTitle } from "./task-draft-detail";
 import { Widget, widgetFrom } from "./widgets/widget";
 
@@ -81,7 +83,8 @@ export function Message(props: {
 }) {
   const host = useHost();
   const c = colors();
-  const details = signal(false);
+  /** The reply's whole run is open in the run panel. */
+  const process = signal(false);
   const item = () => props.item;
   let action: ViewRef | undefined;
   effect(() => {
@@ -96,7 +99,7 @@ export function Message(props: {
   let previousId: string | undefined;
   effect(() => {
     const id = item().id;
-    if (id !== previousId) details.set(false);
+    if (id !== previousId) process.set(false);
     previousId = id;
   });
   const active = () => activeReply(item().status);
@@ -106,6 +109,10 @@ export function Message(props: {
           ?.sessionId
       : undefined;
   const target = () => (session() ? `sessions.${session()}` : undefined);
+  /** The member's session, at work or not: the run panel reads the reply's run from it. */
+  const memberSession = () =>
+    props.members.find((member) => member.agentId === item().agentId)
+      ?.sessionId;
   follow(target);
   const steps = () => {
     const id = target();
@@ -445,54 +452,39 @@ export function Message(props: {
           when={active()}
           else={
             <If when={stepCount()}>
-              <View>
-                <View
-                  role="button"
-                  accessibilityLabel={uiText("thinkingProcess")}
-                  accessibilityState={{ expanded: details() }}
-                  onPress={() => details.set(!details())}
-                  hoverStyle={{ backgroundColor: c().selected }}
-                  style={{
-                    ...row,
-                    height: 26,
-                    gap: 8,
-                    paddingHorizontal: 10,
-                    borderWidth: 1,
-                    borderColor: c().border,
-                    cursor: "pointer",
-                  }}
-                >
-                  <Icon
-                    name={details() ? "down" : "right"}
-                    size={props.phone ? 10 : 8}
-                    tone={props.phone ? "faint" : "muted"}
-                  />
-                  <Caption
-                    text={uiText("thinkingProcess")}
-                    style={{ letterSpacing: 0.8, color: c().faint }}
-                  />
-                  <View style={{ flex: 1 }} />
-                  <Caption
-                    style={{ letterSpacing: 0.8, color: c().faint }}
-                    text={`${props.phone ? "· " : ""}${uiText(
-                      stepCount() === 1 ? "oneProcessStep" : "processStepCount",
-                      { count: stepCount() },
-                    )}`}
-                  />
-                </View>
-                <If when={details()}>
-                  <View
-                    style={{
-                      borderWidth: 1,
-                      borderTopWidth: 0,
-                      borderColor: c().border,
-                    }}
-                  >
-                    <Each of={steps()} key={(step) => step.id}>
-                      {(step) => <ProcessStep value={step()} />}
-                    </Each>
-                  </View>
-                </If>
+              <View
+                role="button"
+                accessibilityLabel={uiText("thinkingProcess")}
+                onPress={() => process.set(true)}
+                hoverStyle={{ backgroundColor: c().selected }}
+                focusVisibleStyle={focusRing(c())}
+                style={{
+                  ...row,
+                  height: 26,
+                  gap: 8,
+                  paddingHorizontal: 10,
+                  borderWidth: 1,
+                  borderColor: c().border,
+                  cursor: "pointer",
+                }}
+              >
+                <Icon
+                  name="right"
+                  size={props.phone ? 10 : 8}
+                  tone={props.phone ? "faint" : "muted"}
+                />
+                <Caption
+                  text={uiText("thinkingProcess")}
+                  style={{ letterSpacing: 0.8, color: c().faint }}
+                />
+                <View style={{ flex: 1 }} />
+                <Caption
+                  style={{ letterSpacing: 0.8, color: c().faint }}
+                  text={`${props.phone ? "· " : ""}${uiText(
+                    stepCount() === 1 ? "oneProcessStep" : "processStepCount",
+                    { count: stepCount() },
+                  )}`}
+                />
               </View>
             </If>
           }
@@ -550,6 +542,30 @@ export function Message(props: {
                 {(step) => <ProcessStep value={step()} />}
               </Each>
             </ProcessWindow>
+          </View>
+          {/* The whole run, in the panel a task run is read in. Before the
+           * first step there is nothing more to see: kept, so the first step
+           * moves nothing. */}
+          <View
+            style={{
+              ...row,
+              justifyContent: "flex-end",
+              paddingRight: 8,
+              opacity: stepCount() ? 1 : 0,
+            }}
+          >
+            <View
+              role="button"
+              accessibilityLabel={uiText("processViewMore")}
+              onPress={stepCount() ? () => process.set(true) : undefined}
+              hoverStyle={{ opacity: 0.7 }}
+              focusVisibleStyle={focusRing(c())}
+              style={{ cursor: stepCount() ? "pointer" : undefined }}
+            >
+              <Label size={11} line={14} tone="muted">
+                {uiText("processViewMore")}
+              </Label>
+            </View>
           </View>
         </If>
         <If when={item().status === "failed" && !review()}>
@@ -623,6 +639,23 @@ export function Message(props: {
             {stamp()}
           </Label>
         </If>
+      </If>
+      <If when={process()}>
+        <RunPanel
+          title={uiText("processOf", {
+            name: host.agent(item().agentId)?.name ?? uiText("agent"),
+          })}
+          phone={props.phone}
+          onClose={() => process.set(false)}
+        >
+          <MemberRun
+            session={memberSession()}
+            agentId={item().agentId ?? ""}
+            phone={props.phone}
+            reply={item()}
+            onClose={() => process.set(false)}
+          />
+        </RunPanel>
       </If>
     </View>
   );

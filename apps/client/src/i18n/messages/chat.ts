@@ -139,6 +139,8 @@ export const chatMessages = {
   processSteps: ["Process · {{length}} steps", "过程 · {{length}} 步"],
   processOneStep: ["Process · 1 step", "过程 · 1 步"],
   processNote: ["Note", "说明"],
+  processViewMore: ["View more", "查看全部"],
+  processOf: ["{{name}} process", "{{name}} 的过程"],
   insertReceived: ["— Received your insert —", "— 收到你插入的消息 —"],
   replyStopped: ["Stopped", "已停止"],
   proposalFromCaptain: ["Proposal from Captain", "Captain 提议"],

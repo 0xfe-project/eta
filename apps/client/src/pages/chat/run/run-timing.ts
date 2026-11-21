@@ -1,5 +1,5 @@
 import type { AgentMessage, ViewMessageRow } from "@eta/client-contracts";
-import { streamDrawn } from "@eta/client-contracts";
+import { runFromOf, streamDrawn } from "@eta/client-contracts";
 import { summarizeArgs } from "@eta/client-contracts/tool-shape";
 
 export const runKinds = {
@@ -198,4 +198,72 @@ export function toolDescription(input: unknown) {
     }
   }
   return summarizeArgs(input, 100);
+}
+
+/**
+ * A reply's own rows in its member's session, as apps/web finds them: after where its run starts
+ * (`runFrom` on the row, or, once the host dropped it, before the briefing of the run that made
+ * `callId`, one of the calls the reply kept). A run in flight is everything after its start, the
+ * words the user inserted into it included; a finished one stops at the next run's briefing, the
+ * first user message written after the reply was. Undefined when the session does not hold the
+ * whole run.
+ */
+export function replyRun(
+  rows: readonly ViewMessageRow[],
+  reply: { data: Record<string, unknown>; updatedAt: number },
+  live: boolean,
+  callId: string | undefined,
+): ViewMessageRow[] | undefined {
+  const saved = runFromOf(reply.data);
+  const from =
+    saved ??
+    (live || callId === undefined ? undefined : runFromOfCall(rows, callId));
+  if (from === undefined) {
+    if (!live) return undefined;
+    const briefing = rows.findLastIndex((row) => row.message.role === "user");
+    return rows.slice(Math.max(0, briefing));
+  }
+  // A run that started before the oldest row the view holds is not all there.
+  if ((rows[0]?.seq ?? 0) > from + 1) return undefined;
+  const own: ViewMessageRow[] = [];
+  let worked = false;
+  for (const row of rows) {
+    if (row.seq <= from) continue;
+    if (
+      !live &&
+      worked &&
+      row.message.role === "user" &&
+      row.at > reply.updatedAt
+    )
+      break;
+    if (row.message.role !== "user") worked = true;
+    own.push(row);
+  }
+  return own;
+}
+
+/**
+ * Where a finished reply's run starts in its session when its row no longer says: before the
+ * briefing of the run that made `callId`. Undefined when the rows do not hold that call.
+ */
+function runFromOfCall(
+  rows: readonly ViewMessageRow[],
+  callId: string,
+): number | undefined {
+  const at = rows.findIndex(
+    (row) =>
+      row.message.role === "assistant" &&
+      row.message.content.some(
+        (part) => part.type === "toolCall" && part.id === callId,
+      ),
+  );
+  if (at < 0) return undefined;
+  for (let back = at - 1; back >= 0; back -= 1)
+    if (rows[back]!.message.role === "user") {
+      // The briefing may be several user messages in a row; the run starts before the first.
+      let first = back;
+      while (first > 0 && rows[first - 1]!.message.role === "user") first -= 1;
+      return rows[first]!.seq - 1;
+    }
+  return rows[0]!.seq - 1;
 }

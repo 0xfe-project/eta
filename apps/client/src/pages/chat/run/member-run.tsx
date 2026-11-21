@@ -1,4 +1,5 @@
 import type {
+  LogBlock,
   MessageView,
   SessionViewSections,
   TaskRunView,
@@ -6,7 +7,7 @@ import type {
   ViewCore,
 } from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
-import { logBlocks, runFromOf } from "@eta/client-contracts";
+import { logBlocks, savedSteps, savedTools } from "@eta/client-contracts";
 import { cleanup, computed, effect, Scroll, signal, View } from "nsh";
 import { Button, colors, grow, Icon, Label, row } from "../../../components";
 import { AgentFace } from "../../../components/agent-face";
@@ -14,7 +15,13 @@ import { CloseButton } from "../../../components/navigation-buttons";
 import { StatusDot } from "../../../components/status-dot";
 import { formatLocale, uiText } from "../../../i18n";
 import { clock, follow, useHost } from "../../../services/host";
-import { runDuration, runKinds, transcriptTiming } from "./run-timing";
+import { activeReply } from "../member-status";
+import {
+  replyRun,
+  runDuration,
+  runKinds,
+  transcriptTiming,
+} from "./run-timing";
 import { TranscriptLine } from "./transcript-line";
 
 function runDate(at: number) {
@@ -32,6 +39,21 @@ function runDate(at: number) {
   return `${day} ${hour % 12 || 12}:${minutes} ${hour < 12 ? "AM" : "PM"}`;
 }
 
+/**
+ * What a finished reply kept on its row, as a log: its process, then its answer. What a reply is
+ * read from when its session no longer holds its run (a member that left, an old run, a page
+ * opened afresh before the session came).
+ */
+function savedLog(reply: MessageView): LogBlock[] {
+  const steps = savedSteps(reply).filter(
+    (block): block is Exclude<typeof block, { type: "steer" }> =>
+      block.type !== "steer",
+  );
+  return reply.status !== "failed" && reply.text
+    ? [...steps, { type: "text", id: "answer", text: reply.text }]
+    : steps;
+}
+
 /** A finished run's length, "13m 47s"; a running one's clock, "1:04:17". */
 function runLength(ms: number, clockFace: boolean) {
   const seconds = Math.max(0, Math.floor(ms / 1000));
@@ -46,8 +68,15 @@ function runLength(ms: number, clockFace: boolean) {
   return m ? `${m}m ${s}s` : `${s}s`;
 }
 
+/**
+ * One run read whole: its header (who, when, how it went), its timing strip and every step, then
+ * what it said. A task run's log, a member's latest run, or a reply's process: `taskRun` bounds it
+ * by the run's times, `reply` by where the reply's run sits in the session, and a finished reply
+ * the session no longer holds is read from what its row kept.
+ */
 export function MemberRun(props: {
-  session: string;
+  /** The member's session; a finished reply can be read without one. */
+  session?: string | null;
   agentId: string;
   phone: boolean;
   reply?: MessageView;
@@ -65,8 +94,8 @@ export function MemberRun(props: {
   const open = signal<Record<string, boolean>>({});
   const now = signal(Date.now());
   const refs = new Map<string, ViewRef>();
-  const target = `sessions.${props.session}`;
-  follow(() => target);
+  const target = props.session ? `sessions.${props.session}` : "";
+  follow(() => target || undefined);
   const transcript = () =>
     host.section<TranscriptSection>(target, "transcript");
   const core = () => host.section<ViewCore>(target, "core");
@@ -75,11 +104,18 @@ export function MemberRun(props: {
   const thinking = () =>
     host.section<SessionViewSections["model"]>(target, "model")?.thinkingLevel;
   const online = () => host.state().status === "open";
+  /** The reply is still being written. */
+  const replyLive = () =>
+    props.reply !== undefined && activeReply(props.reply.status);
   const running = () =>
     core()?.running === true &&
-    (!props.taskRun || props.taskRun.status === "running");
+    (props.taskRun
+      ? props.taskRun.status === "running"
+      : !props.reply || replyLive());
   const stream = () =>
-    !props.taskRun || running() ? core()?.streaming : undefined;
+    running() || (!props.taskRun && !props.reply)
+      ? core()?.streaming
+      : undefined;
   effect(() => {
     if (!running() || !online()) return;
     now.set(Date.now());
@@ -94,15 +130,25 @@ export function MemberRun(props: {
       const until = props.nextRunAt ?? Infinity;
       return messages.filter((entry) => entry.at >= from && entry.at < until);
     }
-    const start = props.reply && runFromOf(props.reply.data);
-    if (start !== undefined)
-      return messages.filter((message) => message.seq > start);
+    if (props.reply)
+      return (
+        replyRun(
+          messages,
+          props.reply,
+          replyLive(),
+          savedTools(props.reply.data)[0]?.id,
+        ) ?? []
+      );
     const briefing = messages.findLastIndex(
       (entry) => entry.message.role === "user",
     );
     return messages.slice(Math.max(0, briefing));
   });
-  const blocks = computed(() => logBlocks(rows(), stream()));
+  const blocks = computed(() =>
+    props.reply && !replyLive() && !rows().length
+      ? savedLog(props.reply)
+      : logBlocks(rows(), stream()),
+  );
   const timing = computed(() =>
     transcriptTiming(rows(), stream(), running() ? now() : undefined),
   );
@@ -459,7 +505,7 @@ export function MemberRun(props: {
                 }}
               >
                 <TranscriptLine
-                  session={props.session}
+                  session={props.session ?? ""}
                   block={block()}
                   firstTool={
                     index() === 0 || visible()[index() - 1]?.type !== "tool"
@@ -520,15 +566,17 @@ export function MemberRun(props: {
             }
           >
             <Label tone="muted" size={12}>
-              {host.state().missing[target]
-                ? uiText("sessionUnavailable")
-                : !transcript() && !online()
-                  ? uiText("offlineRunTranscript")
-                  : !transcript()
-                    ? uiText("loadingRunTranscript")
-                    : running()
-                      ? uiText("waitingForAgent")
-                      : uiText("noRunTranscript")}
+              {!target
+                ? uiText("noRunTranscript")
+                : host.state().missing[target]
+                  ? uiText("sessionUnavailable")
+                  : !transcript() && !online()
+                    ? uiText("offlineRunTranscript")
+                    : !transcript()
+                      ? uiText("loadingRunTranscript")
+                      : running()
+                        ? uiText("waitingForAgent")
+                        : uiText("noRunTranscript")}
             </Label>
           </If>
         </View>
