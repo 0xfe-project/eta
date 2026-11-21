@@ -39,6 +39,10 @@ import { ProcessStep } from "./process-step";
 import { draftTitle } from "./task-draft-detail";
 import { Widget, widgetFrom } from "./widgets/widget";
 
+/** Every block of a reply (process, text, widget, artifact, question, time)
+ * sits this far from the next, on every screen size. */
+const replyBlockGap = 8;
+
 /** How each code the host fails a reply with is said. */
 const failureReasons: Record<string, Parameters<typeof uiText>[0]> = {
   restart: "replyRestart",
@@ -164,7 +168,7 @@ export function Message(props: {
     <View
       style={{
         alignSelf: "stretch",
-        gap: item().author === "user" || card() ? 4 : props.phone ? 8 : 0,
+        gap: item().author === "user" || card() ? 4 : replyBlockGap,
         // A review card and a failed reply are one block each, 24 apart.
         paddingVertical: card()
           ? 0
@@ -415,7 +419,8 @@ export function Message(props: {
             style={{
               ...row,
               gap: props.phone && !active() ? 6 : 8,
-              marginBottom: props.phone ? 0 : 10,
+              // The name sits 10 from the first block on wider screens.
+              marginBottom: props.phone ? 0 : 10 - replyBlockGap,
             }}
           >
             <AgentFace
@@ -432,57 +437,59 @@ export function Message(props: {
           when={active()}
           else={
             <If when={steps().length}>
-              <View
-                role="button"
-                accessibilityLabel={uiText("thinkingProcess")}
-                accessibilityState={{ expanded: details() }}
-                onPress={() => details.set(!details())}
-                hoverStyle={{ backgroundColor: c().selected }}
-                style={{
-                  ...row,
-                  height: 26,
-                  gap: 8,
-                  paddingHorizontal: 10,
-                  borderWidth: 1,
-                  borderColor: c().border,
-                  cursor: "pointer",
-                }}
-              >
-                <Icon
-                  name={details() ? "down" : "right"}
-                  size={props.phone ? 10 : 8}
-                  tone={props.phone ? "faint" : "muted"}
-                />
-                <Caption
-                  text={uiText("thinkingProcess")}
-                  style={{ letterSpacing: 0.8, color: c().faint }}
-                />
-                <View style={{ flex: 1 }} />
-                <Caption
-                  style={{ letterSpacing: 0.8, color: c().faint }}
-                  text={`${props.phone ? "· " : ""}${uiText(
-                    steps().length === 1
-                      ? "oneProcessStep"
-                      : "processStepCount",
-                    {
-                      count: steps().length,
-                    },
-                  )}`}
-                />
-              </View>
-              <If when={details()}>
+              <View>
                 <View
+                  role="button"
+                  accessibilityLabel={uiText("thinkingProcess")}
+                  accessibilityState={{ expanded: details() }}
+                  onPress={() => details.set(!details())}
+                  hoverStyle={{ backgroundColor: c().selected }}
                   style={{
+                    ...row,
+                    height: 26,
+                    gap: 8,
+                    paddingHorizontal: 10,
                     borderWidth: 1,
-                    borderTopWidth: 0,
                     borderColor: c().border,
+                    cursor: "pointer",
                   }}
                 >
-                  <Each of={steps()} key={(step) => step.id}>
-                    {(step) => <ProcessStep value={step()} />}
-                  </Each>
+                  <Icon
+                    name={details() ? "down" : "right"}
+                    size={props.phone ? 10 : 8}
+                    tone={props.phone ? "faint" : "muted"}
+                  />
+                  <Caption
+                    text={uiText("thinkingProcess")}
+                    style={{ letterSpacing: 0.8, color: c().faint }}
+                  />
+                  <View style={{ flex: 1 }} />
+                  <Caption
+                    style={{ letterSpacing: 0.8, color: c().faint }}
+                    text={`${props.phone ? "· " : ""}${uiText(
+                      steps().length === 1
+                        ? "oneProcessStep"
+                        : "processStepCount",
+                      {
+                        count: steps().length,
+                      },
+                    )}`}
+                  />
                 </View>
-              </If>
+                <If when={details()}>
+                  <View
+                    style={{
+                      borderWidth: 1,
+                      borderTopWidth: 0,
+                      borderColor: c().border,
+                    }}
+                  >
+                    <Each of={steps()} key={(step) => step.id}>
+                      {(step) => <ProcessStep value={step()} />}
+                    </Each>
+                  </View>
+                </If>
+              </View>
             </If>
           }
         >
@@ -548,9 +555,7 @@ export function Message(props: {
             </If>
           </View>
           <If when={steps().length > 5}>
-            <View
-              style={{ alignItems: "flex-end", paddingRight: 8, marginTop: 8 }}
-            >
+            <View style={{ alignItems: "flex-end", paddingRight: 8 }}>
               <View
                 role="button"
                 accessibilityLabel={
@@ -625,7 +630,6 @@ export function Message(props: {
             line={props.phone ? 12 : 14}
             tone={props.phone ? "muted" : "faint"}
             style={{
-              marginTop: props.phone ? 0 : 8,
               letterSpacing: props.phone ? 0 : 0.4,
               textTransform: props.phone ? "none" : "uppercase",
             }}

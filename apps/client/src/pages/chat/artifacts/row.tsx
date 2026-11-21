@@ -37,6 +37,47 @@ export function ArtifactRow(props: {
     props.onTask && props.artifact.taskId
       ? host.tasks().find((task) => task.id === props.artifact.taskId)
       : undefined;
+  if (!props.placement)
+    return (
+      <View
+        role="button"
+        accessibilityLabel={title()}
+        onPress={props.onPress}
+        hoverStyle={{ backgroundColor: c().selected }}
+        focusVisibleStyle={{
+          outlineWidth: 1,
+          outlineColor: c().blue,
+          outlineOffset: -1,
+        }}
+        style={{
+          ...row,
+          gap: 8,
+          minHeight: 32,
+          paddingVertical: 4,
+          paddingHorizontal: 12,
+          borderWidth: 1,
+          borderColor: c().border,
+          cursor: "pointer",
+        }}
+      >
+        <Icon name="artifact" size={16} tone="muted" />
+        <View style={{ ...row, ...grow }}>
+          <Label size={14} line={20} lines={1} style={{ flexShrink: 1 }}>
+            {props.artifact.title}
+          </Label>
+          <Label
+            size={14}
+            line={20}
+            lines={1}
+            tone="muted"
+            style={{ flexShrink: 0 }}
+          >
+            {title().slice(props.artifact.title.length)}
+          </Label>
+        </View>
+        <Icon name="right" size={12} tone="muted" />
+      </View>
+    );
   return (
     <View
       style={{
@@ -49,7 +90,7 @@ export function ArtifactRow(props: {
       <View
         role="button"
         accessibilityLabel={title()}
-        accessibilityHint={props.placement ? metadata() : undefined}
+        accessibilityHint={metadata()}
         onPress={props.onPress}
         focusVisibleStyle={{
           outlineWidth: 1,
@@ -64,9 +105,9 @@ export function ArtifactRow(props: {
           alignItems: "flex-start",
           gap: list() ? 10 : 8,
           minHeight: props.phone ? 44 : undefined,
-          paddingHorizontal: list() ? 10 : props.placement ? 12 : 0,
-          paddingTop: list() ? 10 : props.placement ? 2 : 5,
-          paddingBottom: props.placement ? 10 : 5,
+          paddingHorizontal: list() ? 10 : 12,
+          paddingTop: list() ? 10 : 2,
+          paddingBottom: 10,
           pointerEvents: "box-none",
         }}
       >
@@ -88,58 +129,56 @@ export function ArtifactRow(props: {
             lines={list() ? 2 : 1}
             style={{ pointerEvents: "none" }}
           >
-            {props.placement ? props.artifact.title : title()}
+            {props.artifact.title}
           </Label>
-          <If when={props.placement}>
-            <View style={{ ...row, gap: 6, pointerEvents: "box-none" }}>
-              <Label
-                size={10}
-                line={14}
-                tone="muted"
-                lines={1}
-                style={{ minWidth: 0, flexShrink: 1, pointerEvents: "none" }}
-              >
-                {metadata()}
-              </Label>
-              <If when={linkedTask()}>
-                {(task) => (
-                  <View
-                    role="button"
-                    accessibilityLabel={uiText("artifactOpenTask", {
-                      number: task().number,
-                    })}
-                    accessibilityHint={task().title}
-                    hitSlop={
-                      props.phone
-                        ? { top: 15, bottom: 15, left: 8, right: 8 }
-                        : undefined
-                    }
-                    style={{
-                      ...row,
-                      flexShrink: 0,
-                      paddingHorizontal: 4,
-                      borderWidth: 1,
-                      borderColor: c().border,
-                      cursor: "pointer",
-                      pointerEvents: "auto",
-                    }}
-                    hoverStyle={{ backgroundColor: c().canvas }}
-                    focusVisibleStyle={{
-                      outlineWidth: 1,
-                      outlineColor: c().blue,
-                    }}
-                    onPress={() => props.onTask?.(task().id)}
-                  >
-                    <Label
-                      size={10}
-                      line={14}
-                      tone="muted"
-                    >{`#${task().number}`}</Label>
-                  </View>
-                )}
-              </If>
-            </View>
-          </If>
+          <View style={{ ...row, gap: 6, pointerEvents: "box-none" }}>
+            <Label
+              size={10}
+              line={14}
+              tone="muted"
+              lines={1}
+              style={{ minWidth: 0, flexShrink: 1, pointerEvents: "none" }}
+            >
+              {metadata()}
+            </Label>
+            <If when={linkedTask()}>
+              {(task) => (
+                <View
+                  role="button"
+                  accessibilityLabel={uiText("artifactOpenTask", {
+                    number: task().number,
+                  })}
+                  accessibilityHint={task().title}
+                  hitSlop={
+                    props.phone
+                      ? { top: 15, bottom: 15, left: 8, right: 8 }
+                      : undefined
+                  }
+                  style={{
+                    ...row,
+                    flexShrink: 0,
+                    paddingHorizontal: 4,
+                    borderWidth: 1,
+                    borderColor: c().border,
+                    cursor: "pointer",
+                    pointerEvents: "auto",
+                  }}
+                  hoverStyle={{ backgroundColor: c().canvas }}
+                  focusVisibleStyle={{
+                    outlineWidth: 1,
+                    outlineColor: c().blue,
+                  }}
+                  onPress={() => props.onTask?.(task().id)}
+                >
+                  <Label
+                    size={10}
+                    line={14}
+                    tone="muted"
+                  >{`#${task().number}`}</Label>
+                </View>
+              )}
+            </If>
+          </View>
         </View>
       </View>
     </View>
