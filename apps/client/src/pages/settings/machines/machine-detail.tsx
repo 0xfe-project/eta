@@ -156,8 +156,7 @@ export function MachineDetail(props: {
                           <StatusDot color={c().amber} />
                         </If>
                         <Label
-                          size={12}
-                          line={16}
+                          variant="small"
                           lines={2}
                           tone={
                             props.phone &&
@@ -197,12 +196,8 @@ export function MachineDetail(props: {
                   onPress={editLimit}
                   style={{ ...rowStyle(), cursor: "pointer" }}
                 >
-                  <Label line={20} style={{ flex: 1 }}>
-                    {uiText("taskRunsAtOnce")}
-                  </Label>
-                  <Label size={12} line={16}>
-                    {runsAtOnce()}
-                  </Label>
+                  <Label style={{ flex: 1 }}>{uiText("taskRunsAtOnce")}</Label>
+                  <Label variant="small">{runsAtOnce()}</Label>
                 </View>
               </If>
               <If
@@ -210,7 +205,7 @@ export function MachineDetail(props: {
                 else={
                   <View style={rowStyle()}>
                     <Label weight={600}>{uiText("runningOnThisMachine")}</Label>
-                    <Label size={12} tone="muted">
+                    <Label variant="small" tone="muted">
                       {active().length}
                     </Label>
                   </View>
@@ -275,7 +270,7 @@ export function MachineDetail(props: {
               value={fingerprint()}
               onChange={fingerprint.set}
             />
-            <Label size={12} tone="muted">
+            <Label variant="small" tone="muted">
               {uiText("agentsRunOnThatMachineWith")}
             </Label>
           </View>
@@ -289,9 +284,7 @@ export function MachineDetail(props: {
           }
         >
           <View style={rowStyle()}>
-            <Label line={20} style={{ flex: 1 }}>
-              {uiText("removeMachine")}
-            </Label>
+            <Label style={{ flex: 1 }}>{uiText("removeMachine")}</Label>
             <Button
               label={uiText("remove2")}
               size={props.phone ? 28 : undefined}
@@ -301,7 +294,7 @@ export function MachineDetail(props: {
           </View>
         </If>
         <If when={props.item.updateError}>
-          <Label tone="red" size={12} style={{ padding: 16 }}>
+          <Label tone="red" variant="small" style={{ padding: 16 }}>
             {props.item.updateError}
           </Label>
         </If>

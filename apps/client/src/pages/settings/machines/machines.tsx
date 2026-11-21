@@ -85,7 +85,7 @@ function MachineRow(props: {
               : c().green
         }
       />
-      <Label size={12} line={16} tone="mutedInk">
+      <Label variant="small" tone="mutedInk">
         {machineStatus(props.item)}
       </Label>
     </View>
@@ -162,15 +162,13 @@ function MachineRow(props: {
           </View>
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
             <Label
-              size={14}
-              line={20}
               weight={500}
               tone={props.item.status === "offline" ? "muted" : "ink"}
             >
               {props.item.name}
             </Label>
             <If when={props.phone}>{status()}</If>
-            <Label size={12} line={16} tone="muted">
+            <Label variant="small" tone="muted">
               {metadata()}
             </Label>
           </View>

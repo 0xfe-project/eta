@@ -29,11 +29,7 @@ export function ReconnectingBanner(props: {
           }}
         />
       </If>
-      <Label
-        size={props.phone ? 13 : 12}
-        line={props.phone ? 18 : 16}
-        style={{ flex: 1 }}
-      >
+      <Label variant="small" style={{ flex: 1 }}>
         {props.phone
           ? uiText("connectionLostReconnectingWhatYouSee")
           : uiText("connectionLostReconnecting")}

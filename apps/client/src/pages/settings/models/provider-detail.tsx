@@ -16,6 +16,8 @@ import {
   Label,
   Modal,
   row,
+  textFaces,
+  textStyle,
 } from "../../../components";
 import { StatusDot } from "../../../components/status-dot";
 import { ToggleSwitch } from "../../../components/toggle-switch";
@@ -34,6 +36,7 @@ export function ProviderDetail(props: {
   const host = useHost();
   const logo = useSourceLogos();
   const c = colors();
+  const type = textFaces();
   const config = () => host.section<ProvidersView>("providers", "config");
   const provider = () =>
     config()?.providers.find((item) => item.id === props.id);
@@ -171,7 +174,7 @@ export function ProviderDetail(props: {
         ...(props.phone ? {} : { borderBottomWidth: 0, borderTopWidth: 1 }),
       }}
     >
-      <Label line={20} style={{ flex: 1, minWidth: 0 }}>
+      <Label style={{ flex: 1, minWidth: 0 }}>
         {uiText("removeThisSource")}
       </Label>
       <Button
@@ -205,7 +208,7 @@ export function ProviderDetail(props: {
             <StatusDot
               color={check()?.state === "ok" ? c().green : c().amber}
             />
-            <Label size={12} line={16} tone="mutedInk">
+            <Label variant="small" tone="mutedInk">
               {check()?.state === "ok"
                 ? uiText("sourceWorking")
                 : check()?.state === "invalid_key"
@@ -255,8 +258,6 @@ export function ProviderDetail(props: {
               }}
             >
               <Label
-                size={props.phone ? 12 : undefined}
-                line={props.phone ? 16 : 20}
                 weight={tab() === item() ? (props.phone ? 600 : 500) : 400}
                 tone={
                   tab() === item() ? "ink" : props.phone ? "mutedInk" : "muted"
@@ -267,7 +268,7 @@ export function ProviderDetail(props: {
                   : uiText("sourceConnectionTab")}
               </Label>
               <If when={item() === "models" && !props.phone}>
-                <Label size={12} line={16} tone="muted">
+                <Label variant="small" tone="muted">
                   {provider()?.models.length ?? 0}
                 </Label>
               </If>
@@ -278,8 +279,7 @@ export function ProviderDetail(props: {
       <If when={check()?.error}>
         <Label
           tone="red"
-          size={12}
-          line={16}
+          variant="small"
           style={{
             paddingHorizontal: 16,
             paddingVertical: 8,
@@ -300,9 +300,7 @@ export function ProviderDetail(props: {
           <>
             <Scroll style={grow} scrollbar={false}>
               <View style={preference}>
-                <Label line={20} style={{ flex: 1, minWidth: 0 }}>
-                  {uiText("name")}
-                </Label>
+                <Label style={{ flex: 1, minWidth: 0 }}>{uiText("name")}</Label>
                 <Field
                   label={uiText("name")}
                   value={name()}
@@ -312,8 +310,7 @@ export function ProviderDetail(props: {
                   style={{
                     width: props.phone ? 160 : 200,
                     height: 24,
-                    fontSize: 12,
-                    lineHeight: 16,
+                    ...textStyle(type("small")),
                     paddingHorizontal: 10,
                     paddingVertical: 3,
                     borderColor: c().strong,
@@ -322,8 +319,8 @@ export function ProviderDetail(props: {
               </View>
               <View style={preference}>
                 <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                  <Label line={20}>{uiText("sourceApiKey")}</Label>
-                  <Label size={12} line={16} tone="muted">
+                  <Label>{uiText("sourceApiKey")}</Label>
+                  <Label variant="small" tone="muted">
                     {provider()?.hasApiKey
                       ? uiText("apiKeySavedOnTheHost")
                       : uiText("noApiKeySaved")}
@@ -348,16 +345,13 @@ export function ProviderDetail(props: {
                   size={12}
                   tone="mutedInk"
                 />
-                <Label line={20}>{uiText("sourceAdvanced")}</Label>
+                <Label>{uiText("sourceAdvanced")}</Label>
               </View>
               <If when={advanced()}>
                 <View style={preference}>
-                  <Label line={20} style={{ flexShrink: 0 }}>
-                    {uiText("sourceUrl")}
-                  </Label>
+                  <Label style={{ flexShrink: 0 }}>{uiText("sourceUrl")}</Label>
                   <Label
-                    size={12}
-                    line={16}
+                    variant="small"
                     lines={1}
                     tone="mutedInk"
                     style={{ flex: 1, minWidth: 0, textAlign: "right" }}
@@ -366,12 +360,11 @@ export function ProviderDetail(props: {
                   </Label>
                 </View>
                 <View style={preference}>
-                  <Label line={20} style={{ flexShrink: 0 }}>
+                  <Label style={{ flexShrink: 0 }}>
                     {uiText("sourceHeaders")}
                   </Label>
                   <Label
-                    size={12}
-                    line={16}
+                    variant="small"
                     lines={2}
                     tone="mutedInk"
                     style={{ flex: 1, minWidth: 0, textAlign: "right" }}
@@ -426,8 +419,7 @@ export function ProviderDetail(props: {
                 paddingHorizontal: 0,
                 paddingVertical: 3,
                 borderWidth: 0,
-                fontSize: 12,
-                lineHeight: 16,
+                ...textStyle(type("small")),
               }}
             />
           </View>
@@ -461,7 +453,6 @@ export function ProviderDetail(props: {
               >
                 <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                   <Label
-                    line={20}
                     weight={500}
                     tone={configured(model().id) ? "ink" : "muted"}
                   >
@@ -470,7 +461,7 @@ export function ProviderDetail(props: {
                   <If
                     when={model().delisted}
                     else={
-                      <Label size={12} line={16} tone="muted">
+                      <Label variant="small" tone="muted">
                         {modelMeta(model())}
                       </Label>
                     }
@@ -488,7 +479,7 @@ export function ProviderDetail(props: {
             )}
           </Each>
           <If when={!shown().length}>
-            <Label size={12} line={16} tone="muted" style={{ padding: 16 }}>
+            <Label variant="small" tone="muted" style={{ padding: 16 }}>
               {query().trim()
                 ? uiText("noMatchingModels")
                 : uiText("refreshTheListToFindModels")}

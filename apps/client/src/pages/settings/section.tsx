@@ -56,16 +56,11 @@ export function SectionHeader(props: {
             gap: 8,
           }}
         >
-          <Label
-            weight={600}
-            line={20}
-            lines={1}
-            tone={props.muted ? "muted" : "ink"}
-          >
+          <Label weight={600} lines={1} tone={props.muted ? "muted" : "ink"}>
             {props.title}
           </Label>
           <If when={props.count !== undefined}>
-            <Label size={12} line={16} tone="muted">
+            <Label variant="small" tone="muted">
               {props.count}
             </Label>
           </If>
@@ -75,7 +70,7 @@ export function SectionHeader(props: {
         </If>
       </View>
       <If when={props.description}>
-        <Label size={12} line={16} tone="muted">
+        <Label variant="small" tone="muted">
           {props.description}
         </Label>
       </If>
@@ -104,7 +99,7 @@ export function StatusLane(props: { status?: EntityStatus; width?: number }) {
         {(status) => (
           <>
             <StatusDot color={status().color} />
-            <Label size={12} line={16} tone="mutedInk" lines={1}>
+            <Label variant="small" tone="mutedInk" lines={1}>
               {status().label}
             </Label>
           </>
@@ -119,7 +114,7 @@ export function StatusLine(props: { status: EntityStatus }) {
   return (
     <View style={{ ...row, height: 16, gap: 6, flexShrink: 0 }}>
       <StatusDot color={props.status.color} />
-      <Label size={12} line={16} tone="mutedInk" lines={1}>
+      <Label variant="small" tone="mutedInk" lines={1}>
         {props.status.label}
       </Label>
     </View>
@@ -169,12 +164,7 @@ export function WarningLine(props: { text: string; outline?: boolean }) {
           tone="warning"
         />
       </View>
-      <Label
-        size={12}
-        line={16}
-        tone="warningInk"
-        style={{ flex: 1, minWidth: 0 }}
-      >
+      <Label variant="small" tone="warningInk" style={{ flex: 1, minWidth: 0 }}>
         {props.text}
       </Label>
     </View>
@@ -259,7 +249,6 @@ export function EntityRow(props: {
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <Label
             weight={500}
-            line={20}
             tone={props.titleTone ?? "ink"}
             style={
               props.strike ? { textDecorationLine: "line-through" } : undefined
@@ -271,7 +260,7 @@ export function EntityRow(props: {
             {(status) => <StatusLine status={status()} />}
           </If>
           <If when={typeof props.meta === "string"}>
-            <Label size={12} line={16} tone="muted">
+            <Label variant="small" tone="muted">
               {props.meta as string}
             </Label>
           </If>
@@ -345,7 +334,7 @@ export function LetterBox(props: {
       <If
         when={props.logo}
         else={
-          <Label size={12} line={16} weight={600}>
+          <Label variant="small" weight={600}>
             {props.name.slice(0, 1).toUpperCase()}
           </Label>
         }

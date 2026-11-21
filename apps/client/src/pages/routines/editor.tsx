@@ -21,6 +21,8 @@ import {
   Label,
   Modal,
   row,
+  textFaces,
+  textStyle,
 } from "../../components";
 import { formatLocale, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -69,7 +71,7 @@ function PhoneSelect(props: {
             ...props.triggerStyle,
           }}
         >
-          <Label size={14} line={20} lines={1} style={{ flex: 1, minWidth: 0 }}>
+          <Label lines={1} style={{ flex: 1, minWidth: 0 }}>
             {props.value}
           </Label>
           <Icon name="down" size={14} tone="muted" />
@@ -80,9 +82,7 @@ function PhoneSelect(props: {
         <View style={{ width: 36, height: 4, backgroundColor: c().strong }} />
       </View>
       <View style={{ ...row, height: 44, paddingHorizontal: 16 }}>
-        <Label size={14} line={20} weight={600}>
-          {props.title}
-        </Label>
+        <Label weight={600}>{props.title}</Label>
       </View>
       <Each of={props.options}>
         {(option) => (
@@ -103,9 +103,7 @@ function PhoneSelect(props: {
             indicatorStyle={{ width: 0 }}
             onSelect={option().onSelect}
           >
-            <Label size={14} line={20} style={{ flex: 1 }}>
-              {option().label}
-            </Label>
+            <Label style={{ flex: 1 }}>{option().label}</Label>
             <View style={{ width: 16, height: 16, flexShrink: 0 }}>
               <If when={option().checked}>
                 <Icon name="check" size={16} />
@@ -195,7 +193,7 @@ function ScheduleSelect(props: {
               ...props.triggerStyle,
             }}
           >
-            <Label size={12} line={16} lines={1} style={{ minWidth: 0 }}>
+            <Label variant="small" lines={1} style={{ minWidth: 0 }}>
               {props.value}
             </Label>
             <Icon name="down" size={10} tone={props.tablet ? "ink" : "muted"} />
@@ -219,7 +217,7 @@ function ScheduleSelect(props: {
               indicatorStyle={{ width: 0 }}
               onSelect={option().onSelect}
             >
-              <Label size={12} line={16} style={{ flex: 1 }}>
+              <Label variant="small" style={{ flex: 1 }}>
                 {option().label}
               </Label>
               <View style={{ width: 12, height: 12, flexShrink: 0 }}>
@@ -268,6 +266,7 @@ export function RoutineEditor(props: {
     cron: "cronSchedule",
   } as const;
   const c = colors();
+  const type = textFaces();
   function schedule(): RoutineSchedule | undefined {
     switch (kind()) {
       case "daily":
@@ -338,8 +337,7 @@ export function RoutineEditor(props: {
   const input = () => ({
     height: control(),
     paddingHorizontal: controlInset(),
-    fontSize: sheet() ? 14 : 12,
-    lineHeight: sheet() ? 20 : 16,
+    ...textStyle(type("small")),
   });
   const select = () => ({
     height: control(),
@@ -351,7 +349,7 @@ export function RoutineEditor(props: {
     hours === 1 ? uiText("intervalHour") : uiText("intervalHours", { hours });
   const field = (label: string, content: JSX.Element, width?: number) => (
     <View style={{ gap: 6, width: width ?? "100%", maxWidth: "100%" }}>
-      <Label size={12} line={16} tone={sheet() ? "mutedInk" : undefined}>
+      <Label variant="small" tone={sheet() ? "mutedInk" : undefined}>
         {label}
       </Label>
       {content}
@@ -379,8 +377,7 @@ export function RoutineEditor(props: {
           style={{ ...row }}
           renderSegment={(entry) => (
             <Label
-              size={sheet() ? 14 : 12}
-              line={sheet() ? 20 : 16}
+              variant="small"
               style={{ marginLeft: entry.segment === "period" ? 4 : 0 }}
             >
               {entry.label}
@@ -388,8 +385,7 @@ export function RoutineEditor(props: {
           )}
           separatorStyle={{
             fontFamily: fontFamily(fonts().interface),
-            fontSize: sheet() ? 14 : 12,
-            lineHeight: sheet() ? 20 : 16,
+            ...textStyle(type("small")),
             color: c().ink,
           }}
         />
@@ -417,7 +413,6 @@ export function RoutineEditor(props: {
       <Button
         label={uiText("cancel")}
         size={sheet() ? 36 : 28}
-        labelSize={sheet() ? 14 : undefined}
         disabled={busy()}
         style={{ paddingHorizontal: 14 }}
         onPress={props.onClose}
@@ -426,7 +421,6 @@ export function RoutineEditor(props: {
         label={props.item ? uiText("save") : uiText("routineCreate")}
         tone="primary"
         size={sheet() ? 36 : 28}
-        labelSize={sheet() ? 14 : undefined}
         disabled={!valid() || busy()}
         dimDisabled={!sheet()}
         style={{
@@ -471,19 +465,11 @@ export function RoutineEditor(props: {
             }}
           >
             <Icon name="arrowLeft" size={12} />
-            <Label
-              size={props.tablet ? 11 : 12}
-              line={props.tablet ? 14 : 16}
-              tone={props.tablet ? "mutedInk" : "muted"}
-            >
+            <Label variant="small" tone={props.tablet ? "mutedInk" : "muted"}>
               {props.item?.name ?? uiText("routines2")}
             </Label>
           </View>
-          <Label
-            size={props.tablet ? 16 : 14}
-            line={props.tablet ? 22 : 18}
-            weight={600}
-          >
+          <Label weight={600}>
             {props.item ? uiText("edit") : uiText("newRoutine")}
           </Label>
         </View>
@@ -513,31 +499,29 @@ export function RoutineEditor(props: {
                     height: props.item ? 96 : 124,
                     paddingVertical: 8,
                     paddingHorizontal: 10,
-                    fontSize: 14,
-                    lineHeight: 20,
+                    ...textStyle(type("small"), "prose"),
                   }
                 : {
                     height: props.tablet ? 110 : 112,
                     padding: 10,
-                    fontSize: 12,
-                    lineHeight: 18,
+                    ...textStyle(type("small"), "prose"),
                   }
             }
           />
           <If when={props.tablet}>
-            <Label size={11} line={16} tone="muted">
+            <Label variant="small" tone="muted">
               {uiText("routineRunByCaptain")}
             </Label>
           </If>
           <If when={sheet()}>
-            <Label size={12} line={18} tone="muted">
+            <Label variant="small" tone="muted">
               {uiText("routineRunByCaptain")}
             </Label>
           </If>
         </>,
       )}
       <If when={!props.tablet && !sheet()}>
-        <Label size={12} line={18} tone="muted">
+        <Label variant="small" tone="muted">
           {uiText("routineRunByCaptain")}
         </Label>
       </If>
@@ -608,8 +592,7 @@ export function RoutineEditor(props: {
                       }}
                     >
                       <Label
-                        size={props.tablet ? 11 : 12}
-                        line={props.tablet ? 14 : 16}
+                        variant="small"
                         tone={
                           days().includes(day())
                             ? "buttonInk"
@@ -656,7 +639,7 @@ export function RoutineEditor(props: {
             </If>
           </View>
           <If when={kind() === "cron" && !props.tablet}>
-            <Label size={12} line={16} tone="muted">
+            <Label variant="small" tone="muted">
               {uiText("minuteHourDayOfMonthMonth")}
             </Label>
           </If>
@@ -664,7 +647,7 @@ export function RoutineEditor(props: {
             when={props.tablet}
             else={
               <If when={preview()}>
-                <Label size={12} line={16} tone="muted">
+                <Label variant="small" tone="muted">
                   {preview()}
                 </Label>
               </If>
@@ -673,12 +656,12 @@ export function RoutineEditor(props: {
             <View style={{ ...row, gap: 8, flexWrap: "wrap" }}>
               {time()}
               <If when={kind() === "cron"}>
-                <Label size={11} line={14} tone="muted">
+                <Label variant="caption" tone="muted">
                   {uiText("minuteHourDayOfMonthMonth")}
                 </Label>
               </If>
               <If when={preview()}>
-                <Label size={11} line={14} tone="muted" style={{ flex: 1 }}>
+                <Label variant="caption" tone="muted" style={{ flex: 1 }}>
                   {preview()}
                 </Label>
               </If>

@@ -29,6 +29,7 @@ import {
   Label,
   ListSkeleton,
   row,
+  textFaces,
 } from "../../../components";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
@@ -42,6 +43,7 @@ export function Skills(props: {
 }) {
   const host = useHost();
   const c = colors();
+  const type = textFaces();
   const device = signal("");
   const scope = signal<"personal" | "project">("personal");
   const projectId = signal("");
@@ -277,8 +279,7 @@ export function Skills(props: {
               }}
             >
               <Label
-                size={11}
-                line={14}
+                variant="caption"
                 tone={scope() === item() ? "ink" : "muted"}
               >
                 {uiText(item() === "personal" ? "personal" : "project2")}
@@ -344,7 +345,7 @@ export function Skills(props: {
           style={{
             width: "100%",
             height: phone() ? 32 : 28,
-            fontSize: 12,
+            fontSize: type("small").size,
             paddingRight: 25,
           }}
         />
@@ -521,17 +522,11 @@ export function Skills(props: {
                       gap: tablet() || phone() ? 2 : 4,
                     }}
                   >
-                    <Label
-                      size={tablet() ? 13 : 14}
-                      line={tablet() ? 18 : 20}
-                      weight={tablet() || phone() ? 400 : 500}
-                      lines={1}
-                    >
+                    <Label weight={tablet() || phone() ? 400 : 500} lines={1}>
                       {entry().name}
                     </Label>
                     <Label
-                      size={tablet() ? 10 : phone() ? 11 : 12}
-                      line={tablet() || phone() ? 14 : 16}
+                      variant="small"
                       tone="muted"
                       lines={tablet() || phone() ? 1 : 2}
                       style={{ height: tablet() || phone() ? undefined : 32 }}

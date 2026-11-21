@@ -118,7 +118,7 @@ export function composerAttachments(
         <Each of={failedUploads()}>
           {(item) => (
             <View role="alert" style={{ ...row, gap: 6, flexWrap: "wrap" }}>
-              <Label size={12} tone="amber">
+              <Label variant="small" tone="amber">
                 {`${item().file.name} · ${item().error}`}
               </Label>
               <Button

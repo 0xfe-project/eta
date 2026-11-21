@@ -2,7 +2,14 @@ import type { JSX } from "nsh";
 import type { HostUpdate } from "./host-update";
 import { View } from "nsh";
 import { Select } from "nsh/base";
-import { Button, colors, Icon, Label, row } from "../../../components";
+import {
+  Button,
+  colors,
+  Icon,
+  Label,
+  row,
+  textFaces,
+} from "../../../components";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { GroupHeading } from "./group-heading";
@@ -27,10 +34,8 @@ function SettingBand(props: {
       }}
     >
       <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-        <Label size={14} line={20}>
-          {props.title}
-        </Label>
-        <Label size={12} line={16} tone="muted">
+        <Label>{props.title}</Label>
+        <Label variant="small" tone="muted">
           {props.detail}
         </Label>
       </View>
@@ -41,6 +46,7 @@ function SettingBand(props: {
 
 export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
   const c = colors();
+  const type = textFaces();
   const host = useHost();
   const { advanced, check, source, token, editable, save, edit } = props.update;
   const advancedOpen = () =>
@@ -90,11 +96,9 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
         <View
           style={{ flex: props.phone ? undefined : 1, minWidth: 0, gap: 2 }}
         >
-          <Label size={14} line={19}>
-            {uiText("channel")}
-          </Label>
+          <Label>{uiText("channel")}</Label>
           <If when={!props.phone}>
-            <Label size={12} line={16} tone="muted">
+            <Label variant="small" tone="muted">
               {uiText("preReleasesRcBetaGetNew")}
             </Label>
           </If>
@@ -117,7 +121,7 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
             }}
             itemStyle={{
               color: c().ink,
-              fontSize: 12,
+              fontSize: type("small").size,
               minHeight: 29,
               paddingHorizontal: 10,
             }}
@@ -133,7 +137,7 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
                   backgroundColor: c().canvas,
                 }}
               >
-                <Label size={12} lines={1} style={{ flex: 1 }}>
+                <Label variant="small" lines={1} style={{ flex: 1 }}>
                   {channelName()}
                 </Label>
                 <Icon name="down" size={12} tone="muted" />
@@ -146,7 +150,7 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
           />
         </View>
         <If when={props.phone}>
-          <Label size={12} line={17} tone="muted">
+          <Label variant="small" tone="muted">
             {uiText("preReleasesRcBetaGetNew")}
           </Label>
         </If>
@@ -170,7 +174,7 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
             cursor: "pointer",
           }}
         >
-          <Label size={12}>{uiText("advanced")}</Label>
+          <Label variant="small">{uiText("advanced")}</Label>
           <View
             style={{
               transform: advancedOpen() ? [{ rotate: "180deg" }] : undefined,

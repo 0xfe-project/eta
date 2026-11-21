@@ -60,7 +60,7 @@ export function RoutineDetail(props: {
           }}
         >
           <View style={{ ...row, height: 24, gap: 16 }}>
-            <Label size={16} line={24} weight={600} style={{ flex: 1 }}>
+            <Label variant="subtitle" weight={600} style={{ flex: 1 }}>
               {props.routine.name}
             </Label>
             <View style={{ ...row, gap: 8 }}>
@@ -96,22 +96,21 @@ export function RoutineDetail(props: {
             </View>
           </View>
           <View style={{ ...row, gap: 12 }}>
-            <Label size={12} line={16} tone="muted" style={{ width: 72 }}>
+            <Label variant="small" tone="muted" style={{ width: 72 }}>
               {uiText("schedule")}
             </Label>
-            <Label size={12} line={16} tone="mutedInk" style={{ flex: 1 }}>
+            <Label variant="small" tone="mutedInk" style={{ flex: 1 }}>
               {scheduleFor(props.routine.schedule, props.routine.timezone)}
             </Label>
           </View>
           <View style={{ ...row, gap: 12 }}>
-            <Label size={12} line={16} tone="muted" style={{ width: 72 }}>
+            <Label variant="small" tone="muted" style={{ width: 72 }}>
               {uiText("briefV", {
                 value1: props.brief?.version ?? 1,
               })}
             </Label>
             <Label
-              size={12}
-              line={16}
+              variant="small"
               tone="mutedInk"
               lines={1}
               style={{ flex: 1 }}
@@ -126,8 +125,7 @@ export function RoutineDetail(props: {
               style={{ flexShrink: 0, cursor: "pointer" }}
             >
               <Label
-                size={12}
-                line={16}
+                variant="small"
                 style={{
                   textDecorationLine: "underline",
                   textDecorationThickness: 1,
@@ -151,18 +149,18 @@ export function RoutineDetail(props: {
             }}
           >
             <View style={{ ...row, alignItems: "baseline", gap: 12 }}>
-              <Label size={12} line={16} tone="muted" style={{ width: 64 }}>
+              <Label variant="small" tone="muted" style={{ width: 64 }}>
                 {uiText("schedule")}
               </Label>
-              <Label size={12} line={16} tone="mutedInk" style={{ flex: 1 }}>
+              <Label variant="small" tone="mutedInk" style={{ flex: 1 }}>
                 {scheduleFor(props.routine.schedule, props.routine.timezone)}
               </Label>
             </View>
             <View style={{ ...row, alignItems: "baseline", gap: 12 }}>
-              <Label size={12} line={16} tone="muted" style={{ width: 64 }}>
+              <Label variant="small" tone="muted" style={{ width: 64 }}>
                 {uiText("briefV", { value1: props.brief?.version ?? 1 })}
               </Label>
-              <Label size={14} line={20} lines={3} style={{ flex: 1 }}>
+              <Label lines={3} style={{ flex: 1 }}>
                 {props.brief?.text ?? ""}
               </Label>
             </View>
@@ -179,8 +177,7 @@ export function RoutineDetail(props: {
           <If when={phone() ? null : props.routine.nextRunAt}>
             {(at) => (
               <Label
-                size={12}
-                line={16}
+                variant="small"
                 tone="mutedInk"
                 style={{ width: 72, flexShrink: 0 }}
               >
@@ -188,7 +185,7 @@ export function RoutineDetail(props: {
               </Label>
             )}
           </If>
-          <Label size={12} line={16} tone="mutedInk" style={{ flex: 1 }}>
+          <Label variant="small" tone="mutedInk" style={{ flex: 1 }}>
             {props.routine.nextRunAt
               ? uiText("nextReportOn", {
                   // The phone has no time column, so the time joins the day.
@@ -239,7 +236,7 @@ export function RoutineDetail(props: {
               borderColor: c().border,
             }}
           >
-            <Label size={12} line={16} tone="muted">
+            <Label variant="small" tone="muted">
               {uiText("earlierReports")}
             </Label>
             <View style={{ gap: props.layout === "desktop" ? 12 : 8 }}>
@@ -282,15 +279,14 @@ export function RoutineDetail(props: {
         >
           <If when={!phone()}>
             <Label
-              size={12}
-              line={16}
+              variant="small"
               tone="muted"
               style={{ width: 72, flexShrink: 0 }}
             >
               {shortDate(props.routine.createdAt)}
             </Label>
           </If>
-          <Label size={12} line={16} tone="muted" style={{ flex: 1 }}>
+          <Label variant="small" tone="muted" style={{ flex: 1 }}>
             {uiText("routineCreatedMarker", {
               version: props.firstBrief?.version ?? 1,
               date: shortDate(props.routine.createdAt),

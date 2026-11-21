@@ -1,4 +1,5 @@
 import type { ThinkingLevel } from "@eta/client-contracts";
+import type { TextVariant } from "../../../components";
 import type { AgentForm } from "./form";
 import { View } from "nsh";
 import { ActionItem, ActionMenu, Field, Label, row } from "../../../components";
@@ -45,8 +46,7 @@ export function AgentGeneral(props: {
     noModels,
   } = props.form;
   const goToModelServices = (
-    size: number,
-    line: number,
+    variant: TextVariant,
     tone: "ink" | "mutedInk",
   ) => (
     <View
@@ -56,8 +56,7 @@ export function AgentGeneral(props: {
       style={{ cursor: "pointer" }}
     >
       <Label
-        size={size}
-        line={line}
+        variant={variant}
         tone={tone}
         style={
           tone === "mutedInk" ? { textDecorationLine: "underline" } : undefined
@@ -75,7 +74,7 @@ export function AgentGeneral(props: {
           else={
             // The creator's hint is one 10px line: the muted reason, then the link in ink.
             <View style={{ ...row, flexWrap: "wrap", columnGap: 6 }}>
-              <Label size={10} line={12} tone="muted">
+              <Label variant="caption" tone="muted">
                 {missingModel()
                   ? localizedText(
                       "This model is no longer available. Choose another one.",
@@ -83,7 +82,7 @@ export function AgentGeneral(props: {
                     )
                   : localizedText("No models available.", "暂无可用模型。")}
               </Label>
-              {goToModelServices(10, 12, "ink")}
+              {goToModelServices("caption", "ink")}
             </View>
           }
         >
@@ -91,7 +90,7 @@ export function AgentGeneral(props: {
             <If
               when={missingModel()}
               else={
-                <Label size={12} line={16} tone="muted">
+                <Label variant="small" tone="muted">
                   {localizedText("No models available.", "暂无可用模型。")}
                 </Label>
               }
@@ -104,7 +103,7 @@ export function AgentGeneral(props: {
                 )}
               />
             </If>
-            {goToModelServices(12, 16, "mutedInk")}
+            {goToModelServices("small", "mutedInk")}
           </View>
         </If>
       </If>

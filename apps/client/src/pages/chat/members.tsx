@@ -63,7 +63,7 @@ export function StewardMenu(props: {
           <If when={props.current}>
             <AgentFace id={props.current} size={10} />
           </If>
-          <Label size={11} line={16} tone="muted">
+          <Label variant="small" tone="muted">
             {host.agent(props.current)?.name ?? uiText("steward2")}
           </Label>
           <Icon name="down" size={8} tone="muted" />
@@ -84,7 +84,7 @@ export function StewardMenu(props: {
             onSelect={() => void choose(member().agentId)}
           >
             <AgentFace id={member().agentId} size={10} />
-            <Label size={11} style={{ flex: 1 }}>
+            <Label variant="caption" style={{ flex: 1 }}>
               {host.agent(member().agentId)?.name ?? uiText("agent")}
             </Label>
             <If when={member().agentId === props.current}>
@@ -102,7 +102,7 @@ export function StewardMenu(props: {
         hoverStyle={{ backgroundColor: c().selected }}
         onSelect={() => void choose(null)}
       >
-        <Label size={11} style={{ flex: 1 }}>
+        <Label variant="caption" style={{ flex: 1 }}>
           {uiText("noSteward")}
         </Label>
         <If when={!props.current}>
@@ -167,9 +167,7 @@ export function InviteAgents(props: {
             paddingHorizontal: 14,
           }}
         >
-          <Label size={14} weight={500}>
-            {title()}
-          </Label>
+          <Label weight={500}>{title()}</Label>
           <CloseButton
             size={18}
             iconSize={14}
@@ -187,7 +185,7 @@ export function InviteAgents(props: {
           ...(phone() ? grow : {}),
         }}
       >
-        <Label tone="muted" size={phone() ? 12 : 10} line={16}>
+        <Label tone="muted" variant="caption">
           {uiText("membersCanReadTheGroupChat")}
         </Label>
         <Scroll
@@ -231,7 +229,7 @@ export function InviteAgents(props: {
                 <Label style={{ flex: phone() ? 1 : undefined }}>
                   {agent().name}
                 </Label>
-                <Label size={phone() ? 11 : 10} tone="muted">
+                <Label variant="caption" tone="muted">
                   {agent().runtime === "eta"
                     ? uiText("etaBuiltIn")
                     : agent().runtime}
@@ -258,7 +256,7 @@ export function InviteAgents(props: {
         }}
       >
         <If when={!phone() && candidates().length && !inviteIds().length}>
-          <Label size={10} tone="muted" style={{ flex: 1 }}>
+          <Label variant="caption" tone="muted" style={{ flex: 1 }}>
             {formatLocale().startsWith("zh")
               ? "勾选要邀请的智能体"
               : "Tick the agents to invite"}

@@ -1,5 +1,5 @@
 import { View } from "nsh";
-import { colors, Field, Label, row } from "../../components";
+import { colors, Field, Label, row, textFaces } from "../../components";
 import { uiText } from "../../i18n";
 
 export function HostFields(props: {
@@ -13,6 +13,7 @@ export function HostFields(props: {
   onSubmit: () => void;
 }) {
   const c = colors();
+  const type = textFaces();
   const fieldStyle = () =>
     props.plain
       ? {
@@ -20,17 +21,15 @@ export function HostFields(props: {
           height: 54,
           borderWidth: 0,
           paddingHorizontal: 0,
-          fontSize: 16,
+          fontSize: type("subtitle").size,
         }
       : props.tablet
         ? {
             flex: 1,
             height: 44,
             paddingHorizontal: 12,
-            fontSize: 16,
-            lineHeight: 24,
           }
-        : { flex: 1, height: 32, fontSize: 14 };
+        : { flex: 1, height: 32 };
   const line = () =>
     props.plain
       ? {
@@ -52,8 +51,7 @@ export function HostFields(props: {
     >
       <View style={line()}>
         <Label
-          size={props.plain ? 11 : 14}
-          line={props.tablet ? 20 : undefined}
+          variant={props.plain ? "caption" : "body"}
           tone="muted"
           style={{ width: props.plain ? 44 : 64 }}
         >
@@ -70,8 +68,7 @@ export function HostFields(props: {
       </View>
       <View style={line()}>
         <Label
-          size={props.plain ? 11 : 14}
-          line={props.tablet ? 20 : undefined}
+          variant={props.plain ? "caption" : "body"}
           tone="muted"
           style={{ width: props.plain ? 44 : 64 }}
         >

@@ -1,3 +1,4 @@
+import type { TextVariant } from "../../components";
 import { View } from "nsh";
 import { colors, Label, row } from "../../components";
 
@@ -6,7 +7,10 @@ export function Segmented<T extends string>(props: {
   options: readonly { value: T; label: string }[];
   value: T;
   height?: number;
-  labelSize?: number;
+  /** The labels' role; `small` by default. */
+  labelVariant?: TextVariant;
+  /** Draw the chosen label semibold. */
+  boldActive?: boolean;
   paddingHorizontal?: number;
   bordered?: boolean;
   /** The darker outline the tablet header draws. */
@@ -47,9 +51,8 @@ export function Segmented<T extends string>(props: {
               }}
             >
               <Label
-                size={props.labelSize ?? 12}
-                line={16}
-                weight={active() && props.labelSize === 10 ? 600 : 400}
+                variant={props.labelVariant ?? "small"}
+                weight={active() && props.boldActive ? 600 : 400}
                 tone={active() ? "buttonInk" : "muted"}
               >
                 {option().label}

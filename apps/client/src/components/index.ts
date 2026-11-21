@@ -9,7 +9,7 @@ export {
 export { Modal } from "./modal";
 export { keyboardShown, SafeArea } from "./safe-area";
 export { Caption, Icon, Label, Markdown, RowChevron } from "./text";
-export type { Layout } from "./theme";
+export type { Layout, TextVariant } from "./theme";
 export {
   appFont,
   colors,
@@ -22,5 +22,8 @@ export {
   palette,
   Palette,
   row,
+  Screen,
   sizes,
+  textFaces,
+  textStyle,
 } from "./theme";

@@ -3,7 +3,7 @@ import type {
   TaskDependencyView,
   TaskRunView,
 } from "@eta/client-contracts";
-import type { Layout } from "../../components";
+import type { Layout, TextVariant } from "../../components";
 import type { TaskDetailState } from "./task-detail-state";
 import { Scroll, View } from "nsh";
 import {
@@ -18,6 +18,8 @@ import {
   Markdown,
   monoFontFamily,
   row,
+  textFaces,
+  textStyle,
 } from "../../components";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
@@ -77,12 +79,12 @@ function RunSummary(props: { item: BoardTaskDetail; state: TaskDetailState }) {
             onPress={() => log.set(entry())}
           >
             <View style={{ flex: 1, gap: 2 }}>
-              <Label size={13} line={18} weight={600}>
+              <Label variant="small" weight={600}>
                 {uiText(review() ? "taskDeliveredTurn" : "taskIsWorking", {
                   name: executor()?.name ?? uiText("executor"),
                 })}
               </Label>
-              <Label size={11} line={14} tone="muted">
+              <Label variant="caption" tone="muted">
                 {uiText("executionLogWithCount", {
                   runCaption: caption(entry()),
                 })}
@@ -155,7 +157,7 @@ function RunRow(props: {
         />
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-        <Label size={13} line={18} lines={1}>
+        <Label variant="small" lines={1}>
           {uiText("taskRunExecutor", {
             number: props.index + 1,
             name:
@@ -163,7 +165,7 @@ function RunRow(props: {
               props.executor,
           })}
         </Label>
-        <Label size={11} line={14} lines={1} tone={active() ? "blue" : "muted"}>
+        <Label variant="caption" lines={1} tone={active() ? "blue" : "muted"}>
           {`${state()} · ${runElapsed(props.run)}`}
         </Label>
       </View>
@@ -202,11 +204,7 @@ export function RunLine(props: {
             <If when={!props.tablet && review()}>
               <StatusDot color={c().amber} />
             </If>
-            <Label
-              size={props.tablet ? 11 : 10}
-              line={props.tablet ? 14 : 12}
-              weight={600}
-            >
+            <Label variant="caption" weight={600}>
               {uiText(review() ? "taskDeliveredTurn" : "taskIsWorking", {
                 name: executor()?.name ?? uiText("executor"),
               })}
@@ -219,7 +217,7 @@ export function RunLine(props: {
               onPress={() => log.set(entry())}
               style={{ cursor: "pointer" }}
             >
-              <Label size={10} line={12} tone="muted">
+              <Label variant="caption" tone="muted">
                 {uiText("executionLog")}
               </Label>
             </View>
@@ -234,11 +232,7 @@ export function RunLine(props: {
                 style={{ ...row, gap: 4, cursor: "pointer" }}
               >
                 <Icon name="stop" size={props.tablet ? 12 : 10} />
-                <Label
-                  size={props.tablet ? 11 : 10}
-                  line={props.tablet ? 14 : 12}
-                  weight={600}
-                >
+                <Label variant="caption" weight={600}>
                   {uiText("stop")}
                 </Label>
               </View>
@@ -258,6 +252,7 @@ function DesktopOverview(props: {
 }) {
   const host = useHost();
   const c = colors();
+  const type = textFaces();
   const {
     activity,
     cancelling,
@@ -290,11 +285,7 @@ function DesktopOverview(props: {
           }}
         >
           <View style={{ gap: 12, paddingBottom: parent() ? 0 : 0 }}>
-            <Label
-              size={parent() ? 12 : 10}
-              line={parent() ? 16 : 12}
-              tone="muted"
-            >
+            <Label variant={parent() ? "small" : "caption"} tone="muted">
               {parent()
                 ? uiText("parentCreatedBy", {
                     number: item().number,
@@ -329,8 +320,7 @@ function DesktopOverview(props: {
                     style={{ flex: 1, minWidth: 0, cursor: "text" }}
                   >
                     <Label
-                      size={parent() ? 20 : 18}
-                      line={parent() ? 24 : 22}
+                      variant={parent() ? "title" : "subtitle"}
                       weight={parent() ? 600 : 700}
                     >
                       {item().title}
@@ -351,8 +341,7 @@ function DesktopOverview(props: {
                     height: 32,
                     paddingHorizontal: 8,
                     borderColor: c().ink,
-                    fontSize: 16,
-                    lineHeight: 20,
+                    ...textStyle(type("subtitle")),
                     fontWeight: 600,
                   }}
                 />
@@ -395,17 +384,15 @@ function DesktopOverview(props: {
                     }
                   >
                     <If when={!opensWithHeading()}>
-                      <Label size={16} line={20} weight={700}>
+                      <Label variant="subtitle" weight={700}>
                         {uiText("goal")}
                       </Label>
                     </If>
                     <Markdown
                       value={item().description}
-                      size={12}
-                      line={16}
+                      dense
                       heading={{
-                        size: 16,
-                        line: 20,
+                        variant: "subtitle",
                         weight: 700,
                         space: 0,
                         after: 0,
@@ -427,7 +414,7 @@ function DesktopOverview(props: {
                       }}
                     >
                       <Icon name="pencil" size={10} tone="muted" />
-                      <Label size={10} line={12} tone="muted">
+                      <Label variant="caption" tone="muted">
                         {uiText("editDescription")}
                       </Label>
                     </View>
@@ -436,14 +423,8 @@ function DesktopOverview(props: {
               }
             >
               <View style={{ gap: 6 }}>
-                <Label size={14} line={18} weight={600}>
-                  {uiText("description")}
-                </Label>
-                <Markdown
-                  value={item().description}
-                  line={18}
-                  compactHeadings
-                />
+                <Label weight={600}>{uiText("description")}</Label>
+                <Markdown value={item().description} compactHeadings />
               </View>
             </If>
           </If>
@@ -580,7 +561,7 @@ export function TaskOverview(props: {
               }}
             >
               <View style={{ gap: phone() ? 8 : 12 }}>
-                <Label size={11} line={phone() ? 14 : undefined} tone="muted">
+                <Label variant="caption" tone="muted">
                   {uiText("createdBy", {
                     number: item().number,
                     value2: item().subtasks?.total ? " · Parent" : "",
@@ -598,12 +579,7 @@ export function TaskOverview(props: {
                   <If
                     when={phone()}
                     else={
-                      <Label
-                        size={20}
-                        line={26}
-                        weight={600}
-                        style={{ flex: 1 }}
-                      >
+                      <Label variant="title" weight={600} style={{ flex: 1 }}>
                         {item().title}
                       </Label>
                     }
@@ -611,8 +587,7 @@ export function TaskOverview(props: {
                     <TitleInPlace
                       title={item().title}
                       state={props.state}
-                      size={18}
-                      line={24}
+                      variant="subtitle"
                       weight={600}
                     />
                   </If>
@@ -626,7 +601,7 @@ export function TaskOverview(props: {
                     onPress={parent() ? undefined : () => status.set(true)}
                     style={{ alignSelf: "flex-start" }}
                   >
-                    <Label size={12} line={16} tone={statusTone()}>
+                    <Label variant="small" tone={statusTone()}>
                       {statusLine()}
                     </Label>
                   </View>
@@ -661,7 +636,7 @@ export function TaskOverview(props: {
               </If>
               <If when={phone() && !describing() && !item().description.trim()}>
                 <EditDescriptionLink
-                  size={11}
+                  iconSize={11}
                   onPress={() => {
                     editDescription.set("");
                     describing.set(true);
@@ -677,11 +652,7 @@ export function TaskOverview(props: {
                   }}
                 >
                   <If when={!phone() || !opensWithHeading()}>
-                    <Label
-                      weight={600}
-                      size={phone() ? 14 : 15}
-                      line={phone() ? 20 : undefined}
-                    >
+                    <Label weight={600}>
                       {item().children?.length
                         ? uiText("description")
                         : uiText("goal")}
@@ -689,13 +660,10 @@ export function TaskOverview(props: {
                   </If>
                   <Markdown
                     value={item().description}
-                    size={phone() ? 13 : undefined}
-                    line={phone() ? 20 : 22}
                     heading={
                       phone()
                         ? {
-                            size: 14,
-                            line: 20,
+                            variant: "body",
                             weight: 600,
                             space: 9,
                             after: -5,
@@ -706,7 +674,7 @@ export function TaskOverview(props: {
                   />
                   <If when={phone()}>
                     <EditDescriptionLink
-                      size={11}
+                      iconSize={11}
                       onPress={() => {
                         editDescription.set(item().description);
                         describing.set(true);
@@ -795,7 +763,7 @@ export function TaskOverview(props: {
                               borderColor: c().border,
                             }}
                           >
-                            <Label size={12} style={{ flex: 1 }}>
+                            <Label variant="small" style={{ flex: 1 }}>
                               {run().status}
                             </Label>
                             <Button
@@ -854,7 +822,7 @@ export function TaskOverview(props: {
 export function DescriptionEditor(props: {
   value: string;
   disabled: boolean;
-  /** Tablet's 19px lines and 24px buttons. */
+  /** Tablet's 24px buttons. */
   tablet?: boolean;
   phone?: boolean;
   onChange: (value: string) => void;
@@ -863,12 +831,13 @@ export function DescriptionEditor(props: {
 }) {
   const c = colors();
   const fonts = Fonts();
+  const type = textFaces();
   const button = () =>
     props.phone
-      ? { size: 32, labelSize: 14, padding: 14 }
+      ? { size: 32, padding: 14 }
       : props.tablet
-        ? { size: 24, labelSize: 12, padding: 10 }
-        : { size: undefined, labelSize: undefined, padding: 10 };
+        ? { size: 24, padding: 10 }
+        : { size: undefined, padding: 10 };
   return (
     <View style={{ gap: props.phone ? 16 : 8 }}>
       <Field
@@ -884,8 +853,7 @@ export function DescriptionEditor(props: {
           paddingHorizontal: 12,
           borderColor: c().ink,
           fontFamily: monoFontFamily(fonts()),
-          fontSize: props.phone ? 14 : 13,
-          lineHeight: props.phone ? 20 : props.tablet ? 19 : 22,
+          ...textStyle(type("body"), "prose"),
         }}
       />
       <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>
@@ -893,7 +861,6 @@ export function DescriptionEditor(props: {
           label={uiText("cancel")}
           tone="ghost"
           size={button().size}
-          labelSize={button().labelSize}
           style={{ paddingHorizontal: button().padding }}
           onPress={props.onCancel}
         />
@@ -902,7 +869,6 @@ export function DescriptionEditor(props: {
           tone="primary"
           disabled={props.disabled}
           size={button().size}
-          labelSize={button().labelSize}
           style={{ paddingHorizontal: button().padding }}
           onPress={props.onSave}
         />
@@ -913,10 +879,9 @@ export function DescriptionEditor(props: {
 
 /** The muted pencil link under a description that opens it in place. */
 export function EditDescriptionLink(props: {
-  size?: number;
+  iconSize?: number;
   onPress: () => void;
 }) {
-  const size = () => props.size ?? 10;
   return (
     <View
       role="button"
@@ -924,8 +889,8 @@ export function EditDescriptionLink(props: {
       onPress={props.onPress}
       style={{ ...row, alignSelf: "flex-start", gap: 5, cursor: "pointer" }}
     >
-      <Icon name="pencil" size={size()} tone="muted" />
-      <Label size={size()} line={size() + 2} tone="muted">
+      <Icon name="pencil" size={props.iconSize ?? 10} tone="muted" />
+      <Label variant="caption" tone="muted">
         {uiText("editDescription")}
       </Label>
     </View>
@@ -936,11 +901,11 @@ export function EditDescriptionLink(props: {
 export function TitleInPlace(props: {
   title: string;
   state: TaskDetailState;
-  size: number;
-  line: number;
+  variant: TextVariant;
   weight: number;
 }) {
   const c = colors();
+  const type = textFaces();
   const { editTitle, renaming, saveTitle } = props.state;
   return (
     <If
@@ -955,7 +920,7 @@ export function TitleInPlace(props: {
           }}
           style={{ flex: 1, minWidth: 0, cursor: "text" }}
         >
-          <Label size={props.size} line={props.line} weight={props.weight}>
+          <Label variant={props.variant} weight={props.weight}>
             {props.title}
           </Label>
         </View>
@@ -971,11 +936,10 @@ export function TitleInPlace(props: {
         style={{
           flex: 1,
           minWidth: 0,
-          height: props.line + 8,
+          height: type(props.variant).line + 8,
           paddingHorizontal: 8,
           borderColor: c().ink,
-          fontSize: props.size - 2,
-          lineHeight: props.line - 4,
+          ...textStyle(type(props.variant)),
           fontWeight: 600,
         }}
       />

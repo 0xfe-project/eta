@@ -25,7 +25,7 @@ export function ConfirmHostUpdate(props: {
         }}
       >
         <View style={{ padding: 16, gap: 10 }}>
-          <Label size={12} tone="mutedInk">
+          <Label variant="small" tone="mutedInk">
             {uiText("etaDownloadsTheReleaseBacksUp")}
           </Label>
           <BusyList
@@ -33,7 +33,7 @@ export function ConfirmHostUpdate(props: {
             label={uiText("theRestartWouldStop")}
           />
           <If when={error()}>
-            <Label size={12} tone="red">
+            <Label variant="small" tone="red">
               {error()}
             </Label>
           </If>

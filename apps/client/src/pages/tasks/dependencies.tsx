@@ -53,11 +53,11 @@ export function TaskLink(link: {
         <TaskGlyph status={link.item.status} size={14} />
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-        <Label size={13} line={18} lines={1}>
+        <Label variant="small" lines={1}>
           {`#${link.item.number} ${link.item.title}`}
         </Label>
         <If when={link.suffix}>
-          <Label size={11} line={14} lines={1} tone={link.tone ?? "muted"}>
+          <Label variant="caption" lines={1} tone={link.tone ?? "muted"}>
             {link.suffix}
           </Label>
         </If>
@@ -170,12 +170,12 @@ export function Prerequisites(props: {
                 alignSelf: "stretch",
               }}
             >
-              <Label size={13} line={18} weight={600}>
+              <Label variant="small" weight={600}>
                 {cancelled()
                   ? uiText("thisTaskIsStuckAndNeeds")
                   : uiText("waitingForPrerequisites")}
               </Label>
-              <Label size={12} line={18}>
+              <Label variant="small">
                 {cancelled() ? stuckBody() : waitingBody()}
               </Label>
               <If when={decidable()}>
@@ -183,7 +183,7 @@ export function Prerequisites(props: {
                   <Button
                     label={uiText("dontWaitStartNow")}
                     size={40}
-                    labelSize={13}
+                    labelVariant="small"
                     tone="primary"
                     disabled={props.submitting}
                     onPress={props.onResolve}
@@ -191,14 +191,14 @@ export function Prerequisites(props: {
                   <Button
                     label={uiText("waitForAnotherTask")}
                     size={40}
-                    labelSize={13}
+                    labelVariant="small"
                     disabled={props.submitting}
                     onPress={props.onReplace}
                   />
                   <Button
                     label={uiText("cancelThisTask")}
                     size={40}
-                    labelSize={13}
+                    labelVariant="small"
                     disabled={props.submitting}
                     onPress={props.onCancel}
                   />
@@ -211,7 +211,7 @@ export function Prerequisites(props: {
                     onPress={() => openLink(edge())}
                     style={{ cursor: "pointer", alignSelf: "flex-start" }}
                   >
-                    <Label size={12} line={16} tone="blue">
+                    <Label variant="small" tone="blue">
                       {linkLabel(edge())}
                     </Label>
                   </View>
@@ -236,13 +236,11 @@ export function Prerequisites(props: {
           >
             <View style={{ ...row, gap: props.tablet ? 6 : 8 }}>
               <Icon name="warning" size={props.tablet ? 14 : 16} />
-              <Label size={12} line={16} weight={600}>
+              <Label variant="small" weight={600}>
                 {uiText("thisTaskIsStuckAndNeeds")}
               </Label>
             </View>
-            <Label size={props.tablet ? 11 : 12} line={props.tablet ? 16 : 18}>
-              {stuckBody()}
-            </Label>
+            <Label variant="small">{stuckBody()}</Label>
             <View style={{ ...row, flexWrap: "wrap", gap: 6 }}>
               <If when={decidable()}>
                 <StuckAction
@@ -311,8 +309,7 @@ function StuckAction(props: {
       }}
     >
       <Label
-        size={props.tablet ? 11 : 10}
-        line={props.tablet ? 14 : 12}
+        variant="caption"
         weight={props.tablet && props.bare ? 400 : 600}
         tone={props.tablet && props.bare ? "mutedInk" : "ink"}
       >
@@ -350,10 +347,10 @@ function StripCard(props: {
             cursor: "pointer",
           }}
         >
-          <Label size={11} line={14} weight={600} style={{ flex: 1 }}>
+          <Label variant="caption" weight={600} style={{ flex: 1 }}>
             {props.task.title}
           </Label>
-          <Label size={10} line={12} tone="muted" style={{ flexShrink: 0 }}>
+          <Label variant="caption" tone="muted" style={{ flexShrink: 0 }}>
             {props.state}
           </Label>
         </View>
@@ -377,11 +374,11 @@ function StripCard(props: {
       >
         <View style={{ ...row, alignItems: "flex-start", gap: 5, flex: 1 }}>
           <TaskGlyph status={props.task.status} size={12} />
-          <Label size={10} line={12} weight={600} style={{ flex: 1 }}>
+          <Label variant="caption" weight={600} style={{ flex: 1 }}>
             {props.task.title}
           </Label>
         </View>
-        <Label size={10} line={12} tone="muted" style={{ flexShrink: 0 }}>
+        <Label variant="caption" tone="muted" style={{ flexShrink: 0 }}>
           {props.state}
         </Label>
       </View>
@@ -420,7 +417,7 @@ export function NeighbourStrip(props: {
         <View style={{ ...row, alignItems: "flex-start", gap: 8 }}>
           <If when={before().length}>
             <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-              <Label size={10} line={12} tone="muted">
+              <Label variant="caption" tone="muted">
                 {uiText("taskBefore", { count: before().length })}
               </Label>
               <Each of={before()} key={(edge) => edge.taskId}>
@@ -439,7 +436,7 @@ export function NeighbourStrip(props: {
             </View>
           </If>
           <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-            <Label size={10} line={12} tone="muted">
+            <Label variant="caption" tone="muted">
               {" "}
             </Label>
             <View
@@ -453,12 +450,11 @@ export function NeighbourStrip(props: {
                 borderColor: c().ink,
               }}
             >
-              <Label size={11} line={14} weight={600}>
+              <Label variant="caption" weight={600}>
                 {uiText("thisTask")}
               </Label>
               <Label
-                size={10}
-                line={12}
+                variant="caption"
                 tone={props.item.status === "in_review" ? "amber" : "muted"}
               >
                 {own()}
@@ -470,7 +466,7 @@ export function NeighbourStrip(props: {
               <Icon name="arrowRight" size={12} />
             </View>
             <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-              <Label size={10} line={12} tone="muted">
+              <Label variant="caption" tone="muted">
                 {uiText("taskAfter", { count: after().length })}
               </Label>
               <Each of={after()} key={(edge) => edge.taskId}>
@@ -498,7 +494,7 @@ export function NeighbourStrip(props: {
         >
           <If when={before().length}>
             <View style={{ width: 180, gap: 6, flexShrink: 0 }}>
-              <Label size={10} line={12} tone="muted">
+              <Label variant="caption" tone="muted">
                 {uiText("taskBefore", { count: before().length })}
               </Label>
               <Each of={before()} key={(edge) => edge.taskId}>
@@ -516,7 +512,7 @@ export function NeighbourStrip(props: {
             </View>
           </If>
           <View style={{ width: 206, gap: 6, flexShrink: 0 }}>
-            <Label size={10} line={12} tone="muted">
+            <Label variant="caption" tone="muted">
               {" "}
             </Label>
             <View
@@ -532,11 +528,11 @@ export function NeighbourStrip(props: {
             >
               <View style={{ ...row, gap: 5 }}>
                 <TaskGlyph status={props.item.status} size={12} />
-                <Label size={10} line={12} weight={600}>
+                <Label variant="caption" weight={600}>
                   {uiText("thisTask")}
                 </Label>
               </View>
-              <Label size={10} line={12} tone="muted">
+              <Label variant="caption" tone="muted">
                 {own()}
               </Label>
             </View>
@@ -546,7 +542,7 @@ export function NeighbourStrip(props: {
               <Icon name="arrowRight" size={14} tone="muted" />
             </View>
             <View style={{ width: 180, gap: 6, flexShrink: 0 }}>
-              <Label size={10} line={12} tone="muted">
+              <Label variant="caption" tone="muted">
                 {uiText("taskAfter", { count: after().length })}
               </Label>
               <Each of={after()} key={(edge) => edge.taskId}>
@@ -632,8 +628,7 @@ export function Subtasks(props: {
             }}
           >
             <Label
-              size={10}
-              line={12}
+              variant="caption"
               tone="muted"
               style={{
                 letterSpacing: props.tablet ? 1 : 0.8,
@@ -657,11 +652,7 @@ export function Subtasks(props: {
             </View>
             <If when={props.item.subtasks}>
               {(count) => (
-                <Label
-                  size={props.tablet ? 11 : 12}
-                  line={props.tablet ? 14 : 16}
-                  tone="mutedInk"
-                >
+                <Label variant="small" tone="mutedInk">
                   {uiText("ofDoneTheParentDoesNo", {
                     done: count().done,
                     total: count().total,
@@ -676,16 +667,14 @@ export function Subtasks(props: {
               {(entry) => (
                 <View style={{ ...row, gap: 10, alignItems: "flex-start" }}>
                   <Label
-                    size={props.tablet ? 11 : 12}
-                    line={props.tablet ? 14 : 16}
+                    variant="small"
                     tone="muted"
                     style={{ width: props.tablet ? 60 : 70 }}
                   >
                     {entry()[1]}
                   </Label>
                   <Label
-                    size={props.tablet ? 11 : 12}
-                    line={props.tablet ? 14 : 16}
+                    variant="small"
                     tone={entry()[0] === "To review" ? "amber" : "ink"}
                     style={{ flex: 1 }}
                   >
@@ -696,12 +685,7 @@ export function Subtasks(props: {
             </Each>
           </View>
           <View>
-            <Label
-              size={props.tablet ? 13 : 14}
-              line={props.tablet ? 16 : 18}
-              weight={600}
-              style={{ paddingBottom: props.tablet ? 4 : 8 }}
-            >
+            <Label weight={600} style={{ paddingBottom: props.tablet ? 4 : 8 }}>
               {`${uiText("subtasks")} ${props.item.subtasks?.done ?? 0}/${props.item.subtasks?.total ?? 0}`}
             </Label>
             <Each of={children()} key={(child) => child.taskId}>
@@ -723,15 +707,14 @@ export function Subtasks(props: {
                   }}
                 >
                   <TaskGlyph status={child().status} size={12} />
-                  <Label size={10} line={12} tone="muted" style={{ width: 24 }}>
+                  <Label variant="caption" tone="muted" style={{ width: 24 }}>
                     {`#${child().number}`}
                   </Label>
-                  <Label size={12} line={16} lines={1} style={{ flex: 1 }}>
+                  <Label variant="small" lines={1} style={{ flex: 1 }}>
                     {child().title}
                   </Label>
                   <Label
-                    size={10}
-                    line={12}
+                    variant="caption"
                     lines={1}
                     tone={
                       child().status === "in_review"
@@ -756,8 +739,7 @@ export function Subtasks(props: {
     >
       <View style={{ gap: 8 }}>
         <Label
-          size={10}
-          line={12}
+          variant="caption"
           weight={600}
           tone="mutedInk"
           style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
@@ -779,7 +761,7 @@ export function Subtasks(props: {
         </View>
         <If when={props.item.subtasks}>
           {(count) => (
-            <Label size={12} line={16} tone="mutedInk">
+            <Label variant="small" tone="mutedInk">
               {uiText("ofDoneTheParentDoesNo", {
                 done: count().done,
                 total: count().total,
@@ -796,12 +778,11 @@ export function Subtasks(props: {
           >
             {(entry) => (
               <View style={{ ...row, gap: 12, alignItems: "flex-start" }}>
-                <Label size={12} line={16} tone="muted" style={{ width: 64 }}>
+                <Label variant="small" tone="muted" style={{ width: 64 }}>
                   {entry()[1]}
                 </Label>
                 <Label
-                  size={12}
-                  line={16}
+                  variant="small"
                   tone={entry()[0] === "To review" ? "amber" : "ink"}
                   style={{ flex: 1 }}
                 >

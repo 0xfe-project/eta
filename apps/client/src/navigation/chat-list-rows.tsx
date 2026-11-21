@@ -59,10 +59,8 @@ export function GroupRow(props: {
           </Each>
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Label line={20} lines={1}>
-            {props.group.name}
-          </Label>
-          <Label size={11} line={14} tone="muted" lines={1}>
+          <Label lines={1}>{props.group.name}</Label>
+          <Label variant="caption" tone="muted" lines={1}>
             {props.group.preview}
           </Label>
         </View>
@@ -70,8 +68,7 @@ export function GroupRow(props: {
           <StatusDot color={c().blue} />
         </If>
         <Label
-          size={11}
-          line={14}
+          variant="caption"
           tone="muted"
           style={{ width: 28, textAlign: "right", flexShrink: 0 }}
         >
@@ -86,14 +83,14 @@ export function GroupRow(props: {
               {(person) => <AgentFace id={person().agentId} size={16} />}
             </Each>
           </View>
-          <Label size={16} line={22} lines={1} style={{ flex: 1 }}>
+          <Label variant="subtitle" lines={1} style={{ flex: 1 }}>
             {props.group.name}
           </Label>
-          <Label size={10} line={14} tone="muted">
+          <Label variant="caption" tone="muted">
             {time()}
           </Label>
         </View>
-        <Label size={10} line={14} tone="muted" lines={1}>
+        <Label variant="caption" tone="muted" lines={1}>
           {project()?.display ?? ""}
         </Label>
       </If>
@@ -160,13 +157,12 @@ export function AgentRow(props: {
       >
         <AgentFace id={props.agent.id} size={20} />
       </View>
-      <Label line={20} lines={1} style={{ flex: 1 }}>
+      <Label lines={1} style={{ flex: 1 }}>
         {props.agent.name}
       </Label>
       <If when={props.phone}>
         <Label
-          size={11}
-          line={14}
+          variant="caption"
           tone="muted"
           lines={1}
           style={{ minWidth: 32, textAlign: "right", flexShrink: 0 }}

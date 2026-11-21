@@ -35,14 +35,12 @@ export function HostRestartScreen() {
       }}
     >
       <View style={{ width: 448, maxWidth: "100%", gap: 12 }}>
-        <Label size={16} weight={500} line={24}>
+        <Label variant="subtitle" weight={500}>
           {update()?.to
             ? uiText("updatingTo", { to: update()?.to })
             : uiText("updatingTheHost")}
         </Label>
-        <Label size={14} line={20} tone="muted">
-          {description()}
-        </Label>
+        <Label tone="muted">{description()}</Label>
         <View
           style={{
             height: 4,

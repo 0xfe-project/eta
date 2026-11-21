@@ -125,7 +125,6 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
           dialog
           inset={16}
           end={12}
-          titleLine={24}
         />
         <If when={step() > 0}>
           <View
@@ -142,15 +141,14 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
             <View style={{ ...row, gap: 8 }}>
               <If when={step() < 3} else={<Icon name="check" size={12} />}>
                 <Label
-                  size={10}
-                  line={12}
+                  variant="caption"
                   tone="muted"
                   style={{ letterSpacing: 0.8 }}
                 >
                   {`${step()}/2`}
                 </Label>
               </If>
-              <Label size={12} line={16} weight={600}>
+              <Label variant="small" weight={600}>
                 {step() === 1
                   ? uiText("connectAModel")
                   : step() === 2
@@ -159,8 +157,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
               </Label>
             </View>
             <Label
-              size={12}
-              line={16}
+              variant="small"
               tone="muted"
               style={{ flex: 1, textAlign: "right" }}
             >
@@ -205,7 +202,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
           </If>
           <If when={step() === 1}>
             <View style={{ padding: 16, paddingTop: 24, gap: 4 }}>
-              <Label size={16} line={24} weight={600}>
+              <Label variant="subtitle" weight={600}>
                 {uiText("whichModelShouldYourAgentsUse")}
               </Label>
               <Label tone="mutedInk">
@@ -255,7 +252,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                     </View>
                     <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                       <Label weight={500}>{source().name ?? source().id}</Label>
-                      <Label size={12} line={16} tone="muted">
+                      <Label variant="small" tone="muted">
                         {[
                           ...(source().hasApiKey
                             ? [uiText("sourceApiKey")]
@@ -278,7 +275,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                       <StatusDot
                         color={source().models.length ? c().green : c().amber}
                       />
-                      <Label size={12} line={16} tone="mutedInk">
+                      <Label variant="small" tone="mutedInk">
                         {source().models.length
                           ? uiText("working2")
                           : uiText("needsAttention")}
@@ -331,7 +328,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
             <View
               style={{ paddingHorizontal: 16, paddingVertical: 24, gap: 4 }}
             >
-              <Label size={16} line={24} weight={600}>
+              <Label variant="subtitle" weight={600}>
                 {uiText("yourAgentsAreReady")}
               </Label>
               <Label tone="mutedInk">
@@ -417,7 +414,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
               />
             </If>
             <If when={step() === 0 || (step() === 1 && !chosenModel())}>
-              <Label size={12} line={16} tone="muted">
+              <Label variant="small" tone="muted">
                 {step() === 0
                   ? uiText("youCanChangeAnyOfThis")
                   : uiText("addASourceToContinue")}
@@ -426,14 +423,13 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
           </View>
           <View style={{ ...row, flexShrink: 1, gap: 12 }}>
             <If when={step() === 2 && loadingCards()}>
-              <Label size={12} line={16} tone="muted">
+              <Label variant="small" tone="muted">
                 {uiText("loadingEllipsis")}
               </Label>
             </If>
             <If when={showCount()}>
               <Label
-                size={12}
-                line={16}
+                variant="small"
                 tone="muted"
                 style={{ flexShrink: 1, textAlign: "right" }}
               >

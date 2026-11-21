@@ -20,10 +20,10 @@ export function PhoneHostSetup(props: { noModel: boolean; hostName?: string }) {
           gap: 8,
         }}
       >
-        <Label size={24} line={30}>
+        <Label variant="title">
           {uiText("isntReadyYet", { hostname: hostname() })}
         </Label>
-        <Label size={13} line={19} tone="muted">
+        <Label variant="small" tone="muted">
           {props.noModel
             ? uiText("twoStepsLeftOpenEtaOn")
             : uiText("oneStepLeftOpenEtaOn")}
@@ -46,8 +46,7 @@ export function PhoneHostSetup(props: { noModel: boolean; hostName?: string }) {
       </View>
       <View style={{ ...grow }} />
       <Label
-        size={12}
-        line={17}
+        variant="small"
         tone="muted"
         style={{
           paddingHorizontal: 16,
@@ -81,18 +80,15 @@ function SetupStep(props: {
       }}
     >
       <Label
-        size={13}
-        line={18}
+        variant="small"
         tone={props.waiting ? "faint" : "ink"}
         style={{ width: 16 }}
       >
         {props.number}
       </Label>
       <View style={{ ...grow, gap: 4 }}>
-        <Label size={14} line={18} tone={props.waiting ? "muted" : "ink"}>
-          {props.title}
-        </Label>
-        <Label size={12} line={17} tone="muted">
+        <Label tone={props.waiting ? "muted" : "ink"}>{props.title}</Label>
+        <Label variant="small" tone="muted">
           {props.detail}
         </Label>
       </View>

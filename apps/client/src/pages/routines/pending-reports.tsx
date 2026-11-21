@@ -50,7 +50,7 @@ export function PendingReports(props: {
                   <StatusDot
                     color={entry().run.status === "sent" ? c().blue : c().red}
                   />
-                  <Label size={11} line={14} tone="muted">
+                  <Label variant="caption" tone="muted">
                     {uiText("routine", {
                       value1:
                         entry().run.status === "sent" ? "report" : "failure",
@@ -58,10 +58,7 @@ export function PendingReports(props: {
                     })}
                   </Label>
                 </View>
-                <Label
-                  size={13}
-                  line={18}
-                >{`${entry().routine.name}: ${entry().run.title ?? "No report"}`}</Label>
+                <Label variant="small">{`${entry().routine.name}: ${entry().run.title ?? "No report"}`}</Label>
                 <View
                   role="button"
                   accessibilityLabel={
@@ -79,8 +76,7 @@ export function PendingReports(props: {
                   style={{ alignSelf: "flex-start", cursor: "pointer" }}
                 >
                   <Label
-                    size={11}
-                    line={14}
+                    variant="caption"
                     tone="mutedInk"
                     style={{
                       textDecorationLine: "underline",

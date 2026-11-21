@@ -10,6 +10,8 @@ import {
   Markdown,
   monoFontFamily,
   row,
+  textFaces,
+  textStyle,
 } from "../../components";
 import { formatLocale, uiText } from "../../i18n";
 import { EmailMetaCard } from "./thread-context";
@@ -27,8 +29,7 @@ export function EmailBadge(props: { tall?: boolean }) {
   const c = colors();
   return (
     <Label
-      size={10}
-      line={props.tall ? 14 : 10}
+      variant="caption"
       tone="canvas"
       style={{
         backgroundColor: c().ink,
@@ -83,17 +84,11 @@ function RfcLine(props: { label: string; value?: string | null }) {
   const fonts = Fonts();
   return (
     <View style={{ ...row, alignItems: "flex-start", gap: 12 }}>
-      <Label
-        size={12}
-        line={18}
-        tone="muted"
-        style={{ width: 112, flexShrink: 0 }}
-      >
+      <Label variant="small" tone="muted" style={{ width: 112, flexShrink: 0 }}>
         {props.label}
       </Label>
       <Label
-        size={12}
-        line={18}
+        variant="small"
         style={{
           flex: 1,
           minWidth: 0,
@@ -110,35 +105,22 @@ function MailBody(props: {
   message: EmailMessageView;
   agentMail: boolean;
   html: boolean;
-  /** Phone: 13/20 copy and an 18/24 heading. */
+  /** Phone: tighter blocks and a lighter heading. */
   compact?: boolean;
 }) {
   const c = colors();
   const fonts = Fonts();
-  const size = () => (props.compact ? 13 : 14);
-  const line = () => (props.compact ? 20 : props.agentMail ? 21 : 22);
+  const type = textFaces();
   // The text view already spaces its blocks by about 12px.
   const blockMargin = () => (props.compact ? 0 : 10);
   return (
     <If
       when={props.html}
       else={
-        <If
-          when={props.agentMail}
-          else={
-            <Label size={size()} line={props.compact ? 20 : 22}>
-              {props.message.text}
-            </Label>
-          }
-        >
+        <If when={props.agentMail} else={<Label>{props.message.text}</Label>}>
           <If
             when={props.compact}
-            else={
-              <Markdown
-                value={props.message.text || "No message body"}
-                line={22}
-              />
-            }
+            else={<Markdown value={props.message.text || "No message body"} />}
           >
             <TextView
               markdown={props.message.text || "No message body"}
@@ -148,8 +130,7 @@ function MailBody(props: {
               styles={{
                 root: {
                   fontFamily: fontFamily(fonts().interface),
-                  fontSize: 13,
-                  lineHeight: 20,
+                  ...textStyle(type("body"), "prose"),
                   color: c().ink,
                 },
                 paragraph: { marginTop: 0, marginBottom: 0 },
@@ -170,21 +151,18 @@ function MailBody(props: {
         styles={{
           root: {
             fontFamily: fontFamily(fonts().interface),
-            fontSize: size(),
-            lineHeight: line(),
+            ...textStyle(type("body"), "prose"),
             color: props.agentMail ? c().mutedInk : c().ink,
           },
           heading1: {
-            fontSize: props.compact ? 18 : 20,
-            lineHeight: props.compact ? 24 : 26,
+            ...textStyle(type("title")),
             fontWeight: props.compact ? 600 : 700,
             color: c().ink,
             marginTop: 0,
             marginBottom: blockMargin(),
           },
           paragraph: {
-            fontSize: size(),
-            lineHeight: line(),
+            ...textStyle(type("body"), "prose"),
             marginTop: 0,
             marginBottom: blockMargin(),
           },
@@ -259,7 +237,7 @@ function BodyPreview(props: { message: EmailMessageView; agentMail: boolean }) {
             cursor: "pointer",
           }}
         >
-          <Label size={12} line={16}>
+          <Label variant="small">
             {expanded() ? uiText("collapseBody") : uiText("expandBody")}
           </Label>
           <View
@@ -312,8 +290,7 @@ export function MailMessage(props: {
           when={props.phone}
           else={
             <Label
-              size={10}
-              line={12}
+              variant="caption"
               style={{
                 backgroundColor: c().selected,
                 paddingVertical: 4,
@@ -327,8 +304,7 @@ export function MailMessage(props: {
           }
         >
           <Label
-            size={10}
-            line={14}
+            variant="caption"
             tone="mutedInk"
             style={{
               backgroundColor: c().selected,
@@ -342,21 +318,17 @@ export function MailMessage(props: {
           </Label>
         </If>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Label size={props.phone ? 13 : 14} line={18} weight={600} lines={1}>
+          <Label weight={600} lines={1}>
             {mailSubject(subject())}
           </Label>
-          <Label size={12} line={16} tone="muted" lines={2}>
+          <Label variant="small" tone="muted" lines={2}>
             {uiText("fromTo", {
               from: props.message.from,
               to: props.message.to,
             })}
           </Label>
         </View>
-        <Label
-          size={props.phone ? 11 : 10}
-          line={props.phone ? 18 : 16}
-          tone="muted"
-        >
+        <Label variant="caption" tone="muted">
           {mailTime(props.message.createdAt)}
         </Label>
       </View>
@@ -415,16 +387,10 @@ export function MailMessage(props: {
                 tone={props.phone ? "ink" : "muted"}
               />
             </View>
-            <Label size={11} line={props.phone ? 14 : 16} weight={600}>
+            <Label variant="caption" weight={600}>
               {uiText("rfc5322Headers")}
             </Label>
-            <Label
-              size={props.phone ? 11 : 10}
-              line={props.phone ? 14 : 16}
-              tone="muted"
-              lines={1}
-              style={{ flex: 1 }}
-            >
+            <Label variant="caption" tone="muted" lines={1} style={{ flex: 1 }}>
               {props.message.rfcMessageId}
             </Label>
           </View>

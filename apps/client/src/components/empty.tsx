@@ -1,14 +1,14 @@
 import type { JSX, ViewStyle } from "nsh";
 import type { IconName } from "./icons";
-import type { light } from "./theme";
+import type { light, TextVariant } from "./theme";
 import { View } from "nsh";
 import { Icon, Label } from "./text";
 import { grow } from "./theme";
 
 /**
- * The design's empty and error state: an icon, a 14/18 title and a 12/18
+ * The design's empty and error state: an icon, a `body` title and a `small`
  * description up to 280 wide, 8 apart. Panes whose design draws it smaller or
- * bolder pass the sizes, weights and tones they need.
+ * bolder pass the roles, weights and tones they need.
  */
 export function Empty(props: {
   title: string;
@@ -16,12 +16,10 @@ export function Empty(props: {
   icon?: IconName;
   iconSize?: number;
   iconTone?: keyof typeof light;
-  titleSize?: number;
-  titleLine?: number;
+  titleVariant?: TextVariant;
   titleWeight?: number;
   titleTone?: keyof typeof light;
-  descriptionSize?: number;
-  descriptionLine?: number;
+  descriptionVariant?: TextVariant;
   descriptionWidth?: number;
   children?: JSX.Element;
   style?: ViewStyle;
@@ -45,8 +43,7 @@ export function Empty(props: {
         />
       </If>
       <Label
-        size={props.titleSize ?? 14}
-        line={props.titleLine ?? 18}
+        variant={props.titleVariant ?? "body"}
         weight={props.titleWeight ?? (props.description ? 500 : 400)}
         tone={props.titleTone ?? (props.description ? "ink" : "muted")}
         style={{ textAlign: "center" }}
@@ -56,8 +53,7 @@ export function Empty(props: {
       <If when={props.description !== undefined}>
         <Label
           tone="muted"
-          size={props.descriptionSize ?? 12}
-          line={props.descriptionLine ?? 18}
+          variant={props.descriptionVariant ?? "small"}
           style={{
             textAlign: "center",
             maxWidth: props.descriptionWidth ?? 280,

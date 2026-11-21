@@ -44,7 +44,7 @@ export function MemberStepsToggle(props: {
         cursor: "pointer",
       }}
     >
-      <Label size={10} tone={props.open ? "ink" : "muted"}>
+      <Label variant="caption" tone={props.open ? "ink" : "muted"}>
         {uiText("stepCount", { completed: count(), total: steps().length })}
       </Label>
     </View>
@@ -104,7 +104,7 @@ export function MemberStepsLedger(props: { session: string; phone: boolean }) {
     >
       <If when={!online()}>
         <View style={{ ...row, gap: 8 }}>
-          <Label size={11} tone="muted" style={{ flex: 1 }}>
+          <Label variant="caption" tone="muted" style={{ flex: 1 }}>
             {uiText("runReconnectStatus")}
           </Label>
           <Button
@@ -117,7 +117,7 @@ export function MemberStepsLedger(props: { session: string; phone: boolean }) {
       <If
         when={!!steps()?.length}
         else={
-          <Label size={12} tone="muted" style={{ paddingVertical: 3 }}>
+          <Label variant="small" tone="muted" style={{ paddingVertical: 3 }}>
             {host.state().missing[target()]
               ? uiText("sessionUnavailable")
               : !steps()
@@ -153,9 +153,7 @@ export function MemberStepsLedger(props: { session: string; phone: boolean }) {
                   cursor: "pointer",
                 }}
               >
-                <Label size={10} line={12}>
-                  {statuses[step().status].mark}
-                </Label>
+                <Label variant="caption">{statuses[step().status].mark}</Label>
               </View>
               <View
                 role="button"
@@ -168,7 +166,7 @@ export function MemberStepsLedger(props: { session: string; phone: boolean }) {
                 focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
                 style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
               >
-                <Label size={12} lines={1}>
+                <Label variant="small" lines={1}>
                   {step().content}
                 </Label>
               </View>
@@ -186,7 +184,7 @@ export function MemberStepsLedger(props: { session: string; phone: boolean }) {
         </Each>
       </If>
       <If when={error() && !editing() && !removing()}>
-        <Label size={11} tone="red">
+        <Label variant="caption" tone="red">
           {error()}
         </Label>
       </If>
@@ -222,7 +220,7 @@ export function MemberStepsLedger(props: { session: string; phone: boolean }) {
                 </Each>
               </View>
               <If when={error() || !online()}>
-                <Label size={11} tone="red">
+                <Label variant="caption" tone="red">
                   {error() || uiText("stepConnectToSave")}
                 </Label>
               </If>
@@ -267,7 +265,7 @@ export function MemberStepsLedger(props: { session: string; phone: boolean }) {
             <View style={{ padding: 14, gap: 10 }}>
               <Label>{step().content}</Label>
               <If when={error() || !online()}>
-                <Label size={11} tone="red">
+                <Label variant="caption" tone="red">
                   {error() || uiText("stepConnectToRemove")}
                 </Label>
               </If>

@@ -70,8 +70,6 @@ export function McpSettings(props: { layout: Layout; onBack: () => void }) {
                 title={uiText("mcpEmptyTitle")}
                 titleWeight={500}
                 description={uiText("mcpEmptyHint")}
-                titleLine={20}
-                descriptionLine={16}
                 descriptionWidth={320}
                 style={emptyStyle}
               />

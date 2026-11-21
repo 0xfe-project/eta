@@ -1,12 +1,21 @@
 import type { InputRef, JSX, TextStyle, ViewRef, ViewStyle } from "nsh";
 import type { IconName } from "./icons";
-import type { light } from "./theme";
+import type { light, TextVariant } from "./theme";
 import { platform, signal, View } from "nsh";
 import { Input, Menu, MenuItem } from "nsh/base";
 import { useText } from "../i18n";
 import { pickerTarget } from "./element-picker";
 import { Icon, Label } from "./text";
-import { colors, focusRing, fontFamily, Fonts, grow, row } from "./theme";
+import {
+  colors,
+  focusRing,
+  fontFamily,
+  Fonts,
+  grow,
+  row,
+  textFaces,
+  textStyle,
+} from "./theme";
 
 export function Button(props: {
   label: string;
@@ -19,7 +28,8 @@ export function Button(props: {
   selected?: boolean;
   disabled?: boolean;
   size?: number;
-  labelSize?: number;
+  /** The label's role; `small` by default. */
+  labelVariant?: TextVariant;
   labelWeight?: number;
   /** The colour of the label and icon of a plain or ghost button, such as
    * "muted" for a filter trigger that reads as secondary. */
@@ -97,8 +107,7 @@ export function Button(props: {
       </If>
       <If when={!props.iconOnly}>
         <Label
-          size={props.labelSize ?? 12}
-          line={16}
+          variant={props.labelVariant ?? "small"}
           weight={props.labelWeight ?? (props.selected ? 600 : 400)}
           tone={textTone()}
         >
@@ -148,6 +157,7 @@ export function Field(
 ) {
   const color = colors();
   const fonts = Fonts();
+  const type = textFaces();
   const picker = pickerTarget(
     "Field",
     "apps/client/src/components/controls.tsx",
@@ -194,8 +204,7 @@ export function Field(
         placeholderColor: color().muted,
         backgroundColor: color().canvas,
         fontFamily: fontFamily(fonts().interface),
-        fontSize: 14,
-        lineHeight: 20,
+        ...textStyle(type("body")),
         height: 32,
         paddingHorizontal: 8,
         paddingVertical: 4,
@@ -293,7 +302,7 @@ export function ActionMenu(props: {
           {props.leading}
           <If when={props.value}>
             <Label
-              size={12}
+              variant="small"
               tone={props.valueTone}
               lines={props.truncateValue ? 1 : undefined}
               style={
@@ -329,7 +338,7 @@ export function ActionMenu(props: {
           <View
             style={{ ...row, height: 44, paddingLeft: 16, paddingRight: 8 }}
           >
-            <Label size={14} line={20} weight={600} lines={1} style={grow}>
+            <Label weight={600} lines={1} style={grow}>
               {props.sheetTitle}
             </Label>
             <Button
@@ -353,7 +362,7 @@ export function ActionItem(props: {
   label: string;
   /** Muted text at the end of the row, such as a count. */
   detail?: string;
-  /** The design's tablet menu row: 14px text in a 32px row. */
+  /** The design's tablet menu row: `body` text in a 32px row. */
   roomy?: boolean;
   disabled?: boolean;
   checked?: boolean;
@@ -386,15 +395,14 @@ export function ActionItem(props: {
       onSelect={props.onSelect}
     >
       <Label
-        size={touchSheet || props.roomy ? 14 : 12}
-        line={touchSheet ? 18 : props.roomy ? 20 : undefined}
+        variant={props.roomy ? "body" : "small"}
         tone={props.tone}
         style={{ flex: 1 }}
       >
         {props.label}
       </Label>
       <If when={props.detail}>
-        <Label size={12} line={16} tone="muted" style={{ flexShrink: 0 }}>
+        <Label variant="small" tone="muted" style={{ flexShrink: 0 }}>
           {props.detail}
         </Label>
       </If>

@@ -16,7 +16,7 @@ export function OutboxRows(props: {
     <Each of={props.messages} key={(message) => message.id}>
       {(message) => (
         <View style={{ gap: 4 }}>
-          <Label lines={2} size={12}>
+          <Label lines={2} variant="small">
             {[message().text, ...message().attachments.map((file) => file.name)]
               .filter(Boolean)
               .join(" · ")}
@@ -24,13 +24,13 @@ export function OutboxRows(props: {
           <If
             when={message().failure}
             else={
-              <Label size={11} tone="muted">
+              <Label variant="caption" tone="muted">
                 {uiText("sendingMessage")}
               </Label>
             }
           >
             <View role="alert" style={{ ...row, gap: 6, flexWrap: "wrap" }}>
-              <Label size={12} tone="amber">
+              <Label variant="small" tone="amber">
                 {message().failure}
               </Label>
               <Button
@@ -118,7 +118,7 @@ export function HeldRows(props: {
             focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
             style={{ ...row, gap: 6 }}
           >
-            <Label size={12} tone="muted" style={{ flex: 1 }} lines={1}>
+            <Label variant="small" tone="muted" style={{ flex: 1 }} lines={1}>
               {uiText("queuedWithCount", { text: message().text })}
             </Label>
             <Button

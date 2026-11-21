@@ -4,6 +4,7 @@ import type {
   TaskResults,
 } from "@eta/client-contracts";
 import type { JSX } from "nsh";
+import type { TextVariant } from "../../components";
 import { Image, Scroll, signal, View } from "nsh";
 import {
   ActionItem,
@@ -44,7 +45,7 @@ const sizes = {
     legendGap: 12,
     bottom: 16,
     padding: 9,
-    titleSize: 12,
+    titleVariant: "small" as TextVariant,
     criticalBorder: 1,
     indent: 0,
   },
@@ -60,7 +61,7 @@ const sizes = {
     legendGap: 16,
     bottom: 15,
     padding: 10,
-    titleSize: 10,
+    titleVariant: "caption" as TextVariant,
     criticalBorder: 2,
     indent: 18,
   },
@@ -82,7 +83,7 @@ function tabletSize(cardWidth: number) {
     legendGap: 0,
     bottom: 12,
     padding: 8,
-    titleSize: 12,
+    titleVariant: "small" as TextVariant,
     criticalBorder: 1,
     indent: 18,
   };
@@ -215,14 +216,10 @@ function PlanGraph(props: {
                 justifyContent: "space-between",
               }}
             >
-              <Label
-                size={isTablet(props.variant) ? 11 : 10}
-                line={isTablet(props.variant) ? 14 : 12}
-                weight={600}
-              >
+              <Label variant="caption" weight={600}>
                 {uiText("step", { value1: index() + 1 })}
               </Label>
-              <Label size={10} line={12} tone="muted">
+              <Label variant="caption" tone="muted">
                 {stepLabel(column(), index())}
               </Label>
             </View>
@@ -275,7 +272,7 @@ function PlanGraph(props: {
                 size={isTablet(props.variant) ? 11 : 10}
                 tone="mutedInk"
               />
-              <Label size={10} line={12} tone="mutedInk">
+              <Label variant="caption" tone="mutedInk">
                 {uiText("addAStepAtTheEnd")}
               </Label>
             </View>
@@ -297,7 +294,7 @@ function PlanGraph(props: {
         >
           <PlanLegend />
           <If when={props.desktop}>
-            <Label size={10} line={12} tone="muted">
+            <Label variant="caption" tone="muted">
               {uiText("dragToMakeWait")}
             </Label>
           </If>
@@ -314,25 +311,25 @@ function PlanLegend() {
     <>
       <View style={{ ...row, gap: 5 }}>
         <TaskGlyph status="done" size={11} />
-        <Label size={10} line={12} tone="muted">
+        <Label variant="caption" tone="muted">
           {uiText("taskDone")}
         </Label>
       </View>
       <View style={{ ...row, gap: 5 }}>
         <TaskGlyph status="in_review" size={12} />
-        <Label size={10} line={12} tone="muted">
+        <Label variant="caption" tone="muted">
           {uiText("inReviewLetsNextGo")}
         </Label>
       </View>
       <View style={{ ...row, gap: 5 }}>
         <TaskGlyph status="in_progress" size={11} />
-        <Label size={10} line={12} tone="muted">
+        <Label variant="caption" tone="muted">
           {statusName("in_progress")}
         </Label>
       </View>
       <View style={{ ...row, gap: 5 }}>
         <Icon name="lock" size={11} tone="muted" />
-        <Label size={10} line={12} tone="muted">
+        <Label variant="caption" tone="muted">
           {uiText("taskWaitingForOthers")}
         </Label>
       </View>
@@ -344,7 +341,7 @@ function PlanLegend() {
             backgroundColor: c().ink,
           }}
         />
-        <Label size={10} line={12} tone="muted">
+        <Label variant="caption" tone="muted">
           {uiText("criticalPath")}
         </Label>
       </View>
@@ -410,9 +407,8 @@ function PlanCard(props: {
           size={isTablet(props.variant) ? 12 : 11}
         />
         <Label
-          size={size().titleSize}
-          line={size().titleSize === 10 ? 12 : 16}
-          weight={size().titleSize === 10 ? 600 : 400}
+          variant={size().titleVariant}
+          weight={size().titleVariant === "caption" ? 600 : 400}
           lines={isTablet(props.variant) ? 2 : 1}
           style={{ flex: 1, minWidth: 0 }}
         >
@@ -420,15 +416,14 @@ function PlanCard(props: {
         </Label>
       </View>
       <View style={{ ...row, gap: 4, paddingLeft: size().indent }}>
-        <Label size={10} line={12} tone="muted">
+        <Label variant="caption" tone="muted">
           {`#${props.task.number} ·`}
         </Label>
         <If when={isWaiting(props.task)}>
           <Icon name="lock" size={10} tone="muted" />
         </If>
         <Label
-          size={10}
-          line={12}
+          variant="caption"
           tone={tone()}
           lines={isTablet(props.variant) ? 2 : 1}
           style={{ flex: 1, minWidth: 0 }}
@@ -522,7 +517,7 @@ function createPlanEditing(owner: () => string | undefined) {
             >
               <View style={{ padding: 16, gap: 8 }}>
                 <If when={target().dependsOn.length}>
-                  <Label size={12} tone="muted">
+                  <Label variant="small" tone="muted">
                     {uiText("thisTaskWaitsForTheTasks")}
                   </Label>
                 </If>
@@ -665,7 +660,7 @@ export function TaskPlan(props: {
             : { paddingHorizontal: 22, paddingTop: 16, gap: 14 }
         }
       >
-        <Label size={10} line={12} tone="muted">
+        <Label variant="caption" tone="muted">
           {stepsCaption(props.task().number, children())}
         </Label>
         <Scroll horizontal>
@@ -701,7 +696,7 @@ export function TaskPlan(props: {
           <View style={{ ...row, gap: 18 }}>
             <PlanLegend />
           </View>
-          <Label size={10} line={12} tone="muted">
+          <Label variant="caption" tone="muted">
             {uiText("dragToMakeWait")}
           </Label>
         </If>
@@ -763,15 +758,9 @@ export function TaskPlanBoard(props: {
                 onPress={() => props.onOpen(parent().id)}
                 style={{ cursor: "pointer" }}
               >
-                <Label
-                  size={props.tablet ? 12 : 14}
-                  line={props.tablet ? 16 : 18}
-                  weight={600}
-                >
-                  {parent().title}
-                </Label>
+                <Label weight={600}>{parent().title}</Label>
               </View>
-              <Label size={10} line={12} tone="muted" style={{ flex: 1 }}>
+              <Label variant="caption" tone="muted" style={{ flex: 1 }}>
                 {stepsCaption(parent().number, childrenOf(parent()))}
               </Label>
               <View
@@ -784,12 +773,7 @@ export function TaskPlanBoard(props: {
                 style={{ ...row, gap: 4, height: 24, cursor: "pointer" }}
               >
                 <Icon name="plus" size={props.tablet ? 11 : 10} />
-                <Label
-                  size={props.tablet ? 11 : 10}
-                  line={props.tablet ? 14 : 12}
-                >
-                  {uiText("subtask")}
-                </Label>
+                <Label variant="caption">{uiText("subtask")}</Label>
               </View>
             </View>
             <PlanGraph
@@ -826,11 +810,7 @@ export function TaskPlanBoard(props: {
               borderColor: c().border,
             }}
           >
-            <Label
-              size={props.tablet ? 11 : 10}
-              line={props.tablet ? 14 : 12}
-              tone="mutedInk"
-            >
+            <Label variant="caption" tone="mutedInk">
               {uiText("notPartOfAnything")}
             </Label>
           </View>
@@ -845,7 +825,7 @@ export function TaskPlanBoard(props: {
         </PlanFrame>
       </If>
       <If when={props.tablet}>
-        <Label size={10} line={12} tone="muted">
+        <Label variant="caption" tone="muted">
           {uiText("dragToMakeWait")}
         </Label>
       </If>

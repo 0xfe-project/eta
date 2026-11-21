@@ -223,7 +223,7 @@ export function ConversationTimeline(props: {
                     cursor: props.paging ? "default" : "pointer",
                   }}
                 >
-                  <Label size={12} line={16} tone="muted">
+                  <Label variant="small" tone="muted">
                     {uiText("loadEarlierMessages")}
                   </Label>
                 </View>

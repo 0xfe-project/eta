@@ -133,7 +133,7 @@ export function ComposerRecipients(props: {
                 <Icon name="check" size={10} />
               </If>
             </View>
-            <Label size={12} line={16} tone="mutedInk">
+            <Label variant="small" tone="mutedInk">
               {uiText("everyone")}
             </Label>
           </View>
@@ -176,8 +176,7 @@ export function ComposerRecipients(props: {
                   >
                     <AgentFace id={id()} size={16} />
                     <Label
-                      size={props.phone ? 11 : 12}
-                      line={props.phone ? 14 : 16}
+                      variant="small"
                       lines={1}
                       tone={selected() ? "ink" : "mutedInk"}
                       weight={selected() ? 600 : 400}
@@ -190,7 +189,7 @@ export function ComposerRecipients(props: {
                       <StatusDot color={c().blue} />
                     </If>
                     <If when={!props.phone && id() === props.steward}>
-                      <Label size={10} line={12} tone="muted">
+                      <Label variant="caption" tone="muted">
                         {uiText("steward")}
                       </Label>
                     </If>
@@ -206,8 +205,7 @@ export function ComposerRecipients(props: {
                         style={{ cursor: "pointer" }}
                       >
                         <Label
-                          size={11}
-                          line={14}
+                          variant="caption"
                           tone="mutedInk"
                           style={{ textDecorationLine: "underline" }}
                         >
@@ -244,11 +242,7 @@ export function ComposerRecipients(props: {
       </Scroll>
       <View style={{ ...row, gap: 6 }}>
         <StatusDot color={props.waitsFor ? c().blue : c().green} />
-        <Label
-          size={props.phone ? 11 : 12}
-          line={props.phone ? 14 : 16}
-          tone={props.waitsFor ? "blue" : "mutedInk"}
-        >
+        <Label variant="small" tone={props.waitsFor ? "blue" : "mutedInk"}>
           {props.waitsFor
             ? uiText("waitsUntilFinishes", { names: props.waitsFor })
             : props.names

@@ -1,16 +1,16 @@
 import type { JSX, TextStyle } from "nsh";
 import type { TextViewDocument } from "nsh/base";
 import type { IconName } from "./icons";
-import type { light } from "./theme";
+import type { light, TextVariant } from "./theme";
 import { Image, Text, View } from "nsh";
 import { TextView } from "nsh/base";
 import { iconPaths } from "./icons";
-import { colors, fontFamily, Fonts, monoFontFamily } from "./theme";
+import { colors, fontFamily, Fonts, monoFontFamily, textFaces } from "./theme";
 
 export function Label(props: {
   children?: JSX.Element | string | number;
-  size?: number;
-  line?: number;
+  /** The text's role in the type scale; `body` by default. */
+  variant?: TextVariant;
   tone?: keyof typeof light;
   weight?: number;
   lines?: number;
@@ -18,12 +18,14 @@ export function Label(props: {
 }) {
   const color = colors();
   const fonts = Fonts();
+  const type = textFaces();
+  const face = () => type(props.variant ?? "body");
   return (
     <Text
       style={{
         fontFamily: fontFamily(fonts().interface),
-        fontSize: props.size ?? 14,
-        lineHeight: props.line ?? (props.size ?? 14) + 6,
+        fontSize: face().size,
+        lineHeight: face().line,
         fontWeight: props.weight ?? 400,
         color: color()[props.tone ?? "ink"],
         numberOfLines: props.lines,
@@ -63,18 +65,18 @@ export function Icon(props: {
 export function Markdown(props: {
   value?: string;
   document?: TextViewDocument;
-  line?: number;
   streaming?: boolean;
   compactHeadings?: boolean;
-  /** 12/16 text with 16/22 headings, for a narrow panel. */
+  /** `small` text at its tight line height with `subtitle` headings, for a
+   * narrow panel. */
   dense?: boolean;
-  /** The body size, such as 12 (with `line` 16) in a task's description. */
-  size?: number;
-  /** Compact headings (with `compactHeadings` or `dense`): size, line,
-   * weight and the space above and below, such as 13/16/600 with 6 above. */
+  /** The body's role: `body` by default, `small` with `dense`. Running text
+   * takes the role's `prose` line height, dense text its `line`. */
+  variant?: TextVariant;
+  /** Compact headings (with `compactHeadings` or `dense`): role, weight and
+   * the space above and below, such as `small`/600 with 6 above. */
   heading?: {
-    size?: number;
-    line?: number;
+    variant?: TextVariant;
     weight?: number;
     space?: number;
     after?: number;
@@ -82,17 +84,22 @@ export function Markdown(props: {
 }) {
   const c = colors();
   const fonts = Fonts();
+  const type = textFaces();
   const code = () => ({ fontFamily: monoFontFamily(fonts()) });
   const base = props.dense
-    ? { size: 16, line: 22, weight: 600, space: 0, after: 0 }
-    : { size: 15, line: 20, weight: undefined, space: 16, after: 6 };
-  const heading = () => ({
-    fontSize: props.heading?.size ?? base.size,
-    lineHeight: props.heading?.line ?? base.line,
-    fontWeight: props.heading?.weight ?? base.weight,
-    marginTop: props.heading?.space ?? base.space,
-    marginBottom: props.heading?.after ?? base.after,
-  });
+    ? { weight: 600, space: 0, after: 0 }
+    : { weight: undefined, space: 16, after: 6 };
+  const body = () => type(props.variant ?? (props.dense ? "small" : "body"));
+  const heading = () => {
+    const face = type(props.heading?.variant ?? "subtitle");
+    return {
+      fontSize: face.size,
+      lineHeight: face.line,
+      fontWeight: props.heading?.weight ?? base.weight,
+      marginTop: props.heading?.space ?? base.space,
+      marginBottom: props.heading?.after ?? base.after,
+    };
+  };
   const headings = props.compactHeadings || props.dense;
   return (
     <TextView
@@ -104,8 +111,8 @@ export function Markdown(props: {
       styles={{
         root: {
           fontFamily: fontFamily(fonts().interface),
-          fontSize: props.size ?? (props.dense ? 12 : 14),
-          lineHeight: props.line ?? (props.dense ? 16 : 24),
+          fontSize: body().size,
+          lineHeight: props.dense ? body().line : body().prose,
           color: c().ink,
         },
         paragraph: { marginTop: 0, marginBottom: 0 },
@@ -123,15 +130,14 @@ export function Markdown(props: {
 
 export function Caption(props: {
   text: string;
-  /** The phone's tighter 10/12 caption with 0.08em tracking. */
+  /** The phone's 0.08em tracking. */
   phone?: boolean;
   tone?: keyof typeof light;
   style?: TextStyle;
 }) {
   return (
     <Label
-      size={10}
-      line={props.phone ? 12 : 14}
+      variant="caption"
       tone={props.tone ?? "muted"}
       style={{
         letterSpacing: props.phone ? 0.8 : 1.2,

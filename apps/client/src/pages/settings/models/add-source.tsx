@@ -245,14 +245,7 @@ export function AddSource(props: {
     >
       <If when={!props.phone}>
         {/* The design's dialog header: 16/500/24 title at 16, a bare 16px X ending 12 from the edge. */}
-        <Header
-          title={title()}
-          layout="desktop"
-          dialog
-          inset={16}
-          end={12}
-          titleLine={24}
-        >
+        <Header title={title()} layout="desktop" dialog inset={16} end={12}>
           <View style={grow} />
           <CloseButton
             size={16}
@@ -399,7 +392,7 @@ export function AddSource(props: {
                   </If>
                   <If when={keyNote(kind())}>
                     {(note) => (
-                      <Label size={12} line={16} tone="muted">
+                      <Label variant="small" tone="muted">
                         {note()}
                       </Label>
                     )}
@@ -453,7 +446,6 @@ export function AddSource(props: {
           label={uiText("cancel")}
           tone="ghost"
           size={props.phone ? 32 : undefined}
-          labelSize={props.phone ? 14 : undefined}
           disabled={busy()}
           onPress={props.onClose}
         />
@@ -462,7 +454,6 @@ export function AddSource(props: {
             <Button
               label={uiText("addSourceBack")}
               size={props.phone ? 32 : undefined}
-              labelSize={props.phone ? 14 : undefined}
               style={{ paddingHorizontal: props.phone ? 14 : 12 }}
               disabled={busy()}
               onPress={back}
@@ -477,7 +468,6 @@ export function AddSource(props: {
               }
               tone="primary"
               size={props.phone ? 32 : undefined}
-              labelSize={props.phone ? 14 : undefined}
               style={{ paddingHorizontal: props.phone ? 14 : 12 }}
               disabled={
                 connecting() ||
@@ -496,7 +486,6 @@ export function AddSource(props: {
               }
               tone="primary"
               size={props.phone ? 32 : undefined}
-              labelSize={props.phone ? 14 : undefined}
               style={{ paddingHorizontal: props.phone ? 14 : 12 }}
               disabled={connecting()}
               onPress={() => gatewaySubmit?.()}
@@ -507,7 +496,6 @@ export function AddSource(props: {
               label={uiText("addSourceDone")}
               tone="primary"
               size={props.phone ? 32 : undefined}
-              labelSize={props.phone ? 14 : undefined}
               style={{ paddingHorizontal: props.phone ? 14 : 12 }}
               disabled={!connector() && (saving() || selected().size === 0)}
               onPress={() => (connector() ? props.onClose() : void finish())}
@@ -550,8 +538,7 @@ function SourceSteps(props: { step: number }) {
             }}
           >
             <Label
-              size={12}
-              line={16}
+              variant="small"
               weight={index() === props.step ? 600 : 400}
               tone={index() === props.step ? "ink" : "mutedInk"}
             >
@@ -663,7 +650,7 @@ function PresetList(props: {
 function FieldBlock(props: { label: string; children?: JSX.Element }) {
   return (
     <View style={{ gap: 6 }}>
-      <Label size={12} line={16} tone="muted">
+      <Label variant="small" tone="muted">
         {props.label}
       </Label>
       {props.children}
@@ -680,8 +667,7 @@ function LinkText(props: { text: string; onPress: () => void }) {
       style={{ alignSelf: "flex-start", cursor: "pointer" }}
     >
       <Label
-        size={12}
-        line={16}
+        variant="small"
         tone="muted"
         style={{ textDecorationLine: "underline" }}
       >
@@ -705,7 +691,7 @@ function Alert(props: { text: string }) {
           backgroundColor: c().red,
         }}
       />
-      <Label size={12} line={16} style={{ flex: 1, minWidth: 0 }}>
+      <Label variant="small" style={{ flex: 1, minWidth: 0 }}>
         {props.text}
       </Label>
     </View>
@@ -813,7 +799,7 @@ function DeviceLogin(props: { connector: LlmConnector; onDone: () => void }) {
   const hint = () => connectorHint(props.connector.id);
   return (
     <View style={{ paddingHorizontal: 16, paddingVertical: 14, gap: 12 }}>
-      <Label size={12} line={16} tone="muted">
+      <Label variant="small" tone="muted">
         {uiText("addSourceLoginInstructions")}
       </Label>
       <If when={error() ? undefined : login()?.userCode}>
@@ -836,8 +822,7 @@ function DeviceLogin(props: { connector: LlmConnector; onDone: () => void }) {
               })}
             >
               <Label
-                size={18}
-                line={24}
+                variant="subtitle"
                 weight={600}
                 style={{
                   fontFamily: monoFontFamily(Fonts()()),
@@ -877,7 +862,7 @@ function DeviceLogin(props: { connector: LlmConnector; onDone: () => void }) {
               <View
                 style={{ width: 6, height: 6, backgroundColor: c().blue }}
               />
-              <Label size={12} line={16} tone="mutedInk">
+              <Label variant="small" tone="mutedInk">
                 {login()
                   ? uiText("addSourceWaiting", {
                       minutes: Math.floor(seconds() / 60),
@@ -902,7 +887,7 @@ function DeviceLogin(props: { connector: LlmConnector; onDone: () => void }) {
       </If>
       <If when={hint()}>
         {(text) => (
-          <Label size={12} line={16} tone="muted">
+          <Label variant="small" tone="muted">
             {text()}
           </Label>
         )}
@@ -998,7 +983,7 @@ function AccountReady(props: { connector: LlmConnector }) {
     <View style={{ paddingHorizontal: 16, paddingVertical: 14, gap: 8 }}>
       <View style={{ ...row, gap: 6 }}>
         <View style={{ width: 6, height: 6, backgroundColor: c().green }} />
-        <Label size={12} line={16}>
+        <Label variant="small">
           {models().length === 1
             ? uiText("addSourceAccountReadyOne", { name: props.connector.name })
             : uiText("addSourceAccountReady", {
@@ -1010,7 +995,7 @@ function AccountReady(props: { connector: LlmConnector }) {
       <If
         when={models().length}
         else={
-          <Label size={12} line={16} tone="muted">
+          <Label variant="small" tone="muted">
             {uiText("addSourceNoModels")}
           </Label>
         }
@@ -1024,13 +1009,13 @@ function AccountReady(props: { connector: LlmConnector }) {
               borderColor: c().border,
             }}
           >
-            <Label size={11} line={16} tone="faint" style={{ flex: 1 }}>
+            <Label variant="small" tone="faint" style={{ flex: 1 }}>
               {uiText("addSourceModelColumn")}
             </Label>
-            <Label size={11} line={16} tone="faint" style={{ width: 64 }}>
+            <Label variant="small" tone="faint" style={{ width: 64 }}>
               {uiText("addSourceContextColumn")}
             </Label>
-            <Label size={11} line={16} tone="faint" style={{ width: 96 }}>
+            <Label variant="small" tone="faint" style={{ width: 96 }}>
               {uiText("addSourceStateColumn")}
             </Label>
           </View>
@@ -1046,19 +1031,17 @@ function AccountReady(props: { connector: LlmConnector }) {
                 }}
               >
                 <Label
-                  size={12}
-                  line={16}
+                  variant="small"
                   lines={1}
                   style={{ flex: 1, minWidth: 0 }}
                 >
                   {model().name}
                 </Label>
-                <Label size={12} line={16} tone="muted" style={{ width: 64 }}>
+                <Label variant="small" tone="muted" style={{ width: 64 }}>
                   {formatContext(model().contextWindow)}
                 </Label>
                 <Label
-                  size={12}
-                  line={16}
+                  variant="small"
                   tone={model().available ? "muted" : "red"}
                   style={{ width: 96 }}
                 >
@@ -1107,7 +1090,7 @@ function ModelPicker(props: {
           (props.listing.unsupported?.length ?? 0) > 0
         }
         else={
-          <Label size={12} line={16} tone="muted">
+          <Label variant="small" tone="muted">
             {uiText("addSourceNoModels")}
           </Label>
         }
@@ -1125,7 +1108,7 @@ function ModelPicker(props: {
           />
           <View style={grow} />
           <View>
-            <Label size={12} line={16} tone="muted">
+            <Label variant="small" tone="muted">
               {uiText("addSourceSelected", { count: props.selected.size })}
             </Label>
           </View>
@@ -1148,12 +1131,7 @@ function ModelPicker(props: {
                 style={rowStyle}
               >
                 <View style={{ ...row, flex: 1, minWidth: 0, gap: 6 }}>
-                  <Label
-                    size={12}
-                    line={16}
-                    lines={1}
-                    style={{ flexShrink: 1 }}
-                  >
+                  <Label variant="small" lines={1} style={{ flexShrink: 1 }}>
                     {model().name ?? model().id}
                   </Label>
                   <If
@@ -1163,8 +1141,7 @@ function ModelPicker(props: {
                     }
                   >
                     <Label
-                      size={11}
-                      line={16}
+                      variant="small"
                       tone="faint"
                       lines={1}
                       style={{
@@ -1185,8 +1162,7 @@ function ModelPicker(props: {
                   </Each>
                 </If>
                 <Label
-                  size={12}
-                  line={16}
+                  variant="small"
                   tone="muted"
                   style={{ width: 48, textAlign: "right", flexShrink: 0 }}
                 >
@@ -1206,20 +1182,14 @@ function ModelPicker(props: {
                 style={rowStyle}
               >
                 <Label
-                  size={12}
-                  line={16}
+                  variant="small"
                   tone="faint"
                   lines={1}
                   style={{ flex: 1, minWidth: 0 }}
                 >
                   {model().name ?? model().id}
                 </Label>
-                <Label
-                  size={12}
-                  line={16}
-                  tone="faint"
-                  style={{ flexShrink: 1 }}
-                >
+                <Label variant="small" tone="faint" style={{ flexShrink: 1 }}>
                   {unsupportedReason(model())}
                 </Label>
               </CheckControl>
@@ -1227,7 +1197,7 @@ function ModelPicker(props: {
           </Each>
           <If when={models().length === 0 && unsupported().length === 0}>
             <View style={rowStyle}>
-              <Label size={12} line={16} tone="muted">
+              <Label variant="small" tone="muted">
                 {uiText("addSourceNoMatches")}
               </Label>
             </View>
@@ -1249,7 +1219,7 @@ function Tag(props: { text: string }) {
         flexShrink: 0,
       }}
     >
-      <Label size={11} line={16} tone="mutedInk">
+      <Label variant="small" tone="mutedInk">
         {props.text}
       </Label>
     </View>

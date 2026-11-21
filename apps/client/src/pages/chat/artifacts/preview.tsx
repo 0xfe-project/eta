@@ -327,7 +327,7 @@ export function ArtifactPreview(props: {
       {files.writer()}
       <If when={downloadProblem()}>
         <View style={{ ...row, padding: 8, gap: 8 }}>
-          <Label size={12} style={{ flex: 1 }} tone="red">
+          <Label variant="small" style={{ flex: 1 }} tone="red">
             {downloadProblem()}
           </Label>
           <Button label={uiText("retry")} onPress={() => void download()} />
@@ -335,7 +335,7 @@ export function ArtifactPreview(props: {
       </If>
       <If when={files.savedPath()}>
         <View style={{ ...row, padding: 8, gap: 8 }}>
-          <Label size={12} style={{ flex: 1 }}>
+          <Label variant="small" style={{ flex: 1 }}>
             {uiText("artifactSavedTo", { path: files.savedPath() })}
           </Label>
           <Button
@@ -357,7 +357,7 @@ export function ArtifactPreview(props: {
               borderColor: c().border,
             }}
           >
-            <Label size={12} lines={1} style={{ flex: 1 }}>
+            <Label variant="small" lines={1} style={{ flex: 1 }}>
               {shareUrl()}
             </Label>
             <Button
@@ -436,7 +436,7 @@ export function ArtifactPreview(props: {
           onClose={dismissPdf}
         >
           <View style={{ padding: 16, gap: 12 }}>
-            <Label size={13} line={19}>
+            <Label variant="small">
               {pdfProblem() || uiText("artifactPdfPreparing")}
             </Label>
             <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>

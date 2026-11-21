@@ -11,7 +11,15 @@ import {
 } from "@eta/client-contracts";
 import { keymap, View } from "nsh";
 import { Input } from "nsh/base";
-import { Button, colors, grow, Icon, Label, row } from "../../components";
+import {
+  Button,
+  colors,
+  grow,
+  Icon,
+  Label,
+  row,
+  textFaces,
+} from "../../components";
 import { localizedText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -23,6 +31,7 @@ export function DirectoryOptions(props: {
   const host = useHost();
   const phone = () => props.layout === "phone";
   const c = colors();
+  const type = textFaces();
   const {
     flow,
     busy,
@@ -116,7 +125,7 @@ export function DirectoryOptions(props: {
                   paddingHorizontal: 8,
                   color: c().ink,
                   placeholderColor: c().muted,
-                  fontSize: 14,
+                  fontSize: type("body").size,
                 }}
               />
             )}
@@ -138,14 +147,13 @@ export function DirectoryOptions(props: {
           <If when={phone()}>
             <Icon name="monitor" size={14} />
           </If>
-          <Label size={12}>{machineName()}</Label>
+          <Label variant="small">{machineName()}</Label>
         </View>
         <If
           when={!phone()}
           else={
             <Label
               tone="muted"
-              size={14}
               style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 }}
             >
               {localizedText(
@@ -164,7 +172,7 @@ export function DirectoryOptions(props: {
               borderColor: c().border,
             }}
           >
-            <Label tone="muted" size={14} line={18}>
+            <Label tone="muted">
               {localizedText(
                 "How do you want to add it?",
                 "你想怎样添加目录？",
@@ -209,7 +217,7 @@ export function DirectoryOptions(props: {
         when={kind() === "search" && query() && !loading() && rows().length > 0}
       >
         <Label
-          size={10}
+          variant="caption"
           tone="muted"
           style={{
             paddingHorizontal: 16,
@@ -271,8 +279,7 @@ export function DirectoryOptions(props: {
               }}
             >
               <Label
-                size={phone() ? 14 : 12}
-                line={phone() ? 18 : undefined}
+                variant="small"
                 lines={1}
                 style={phone() ? undefined : { flexShrink: 1 }}
               >
@@ -281,7 +288,7 @@ export function DirectoryOptions(props: {
               <If when={entry().detail}>
                 <Label
                   tone="muted"
-                  size={phone() ? 11 : 12}
+                  variant="small"
                   lines={1}
                   style={phone() ? undefined : { flexShrink: 1 }}
                 >

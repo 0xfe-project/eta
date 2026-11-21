@@ -127,8 +127,7 @@ export function InsertMessage(props: {
       </View>
       <If when={error()}>
         <Label
-          size={11}
-          line={14}
+          variant="caption"
           tone="red"
           style={{ paddingHorizontal: 8, paddingBottom: 8 }}
         >
@@ -144,7 +143,7 @@ export function InsertMessage(props: {
           paddingBottom: 8,
         }}
       >
-        <Label size={11} line={14} tone="faint" lines={1} style={{ flex: 1 }}>
+        <Label variant="caption" tone="faint" lines={1} style={{ flex: 1 }}>
           {props.phone
             ? uiText("to", { join: names() })
             : uiText("insertHint", { names: names() })}
@@ -152,7 +151,6 @@ export function InsertMessage(props: {
         <Button
           label={uiText("insert")}
           size={22}
-          labelSize={12}
           labelTone={ready() ? "ink" : "faint"}
           dimDisabled={false}
           disabled={!ready()}

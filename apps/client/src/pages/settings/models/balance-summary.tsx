@@ -120,12 +120,12 @@ export function BalanceSummary(props: { id: string }) {
         <Each of={value()?.lines ?? []} key={(item) => item.currency}>
           {(line) => (
             <View role="text" accessibilityLabel={balanceLabel(line())}>
-              <Label size={12}>{balanceLabel(line())}</Label>
+              <Label variant="small">{balanceLabel(line())}</Label>
             </View>
           )}
         </Each>
         <If when={age() >= 300_000 || state() !== "available"}>
-          <Label size={12} tone="muted">
+          <Label variant="small" tone="muted">
             {uiText("modelReadLastSuccess", {
               time: localTime(value()?.observedAt),
             })}
@@ -133,19 +133,19 @@ export function BalanceSummary(props: { id: string }) {
         </If>
       </If>
       <If when={value()?.partial && age() < 1_800_000}>
-        <Label size={12} tone="amber">
+        <Label variant="small" tone="amber">
           {[value()?.failedCurrencies?.join(", "), uiText("modelReadPartial")]
             .filter(Boolean)
             .join(" · ")}
         </Label>
       </If>
       <If when={status()}>
-        <Label size={12} tone="muted">
+        <Label variant="small" tone="muted">
           {status()}
         </Label>
       </If>
       <If when={canQuery()}>
-        <Label size={12} tone="muted">
+        <Label variant="small" tone="muted">
           {uiText("modelBalanceQueryFeeUnknown")}
         </Label>
         <Button

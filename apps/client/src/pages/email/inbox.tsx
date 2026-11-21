@@ -236,8 +236,7 @@ export function Email(props: {
                       }}
                     >
                       <Label
-                        size={12}
-                        line={16}
+                        variant="small"
                         weight={folder() === tab() ? 600 : 400}
                         tone={folder() === tab() ? "ink" : "muted"}
                       >
@@ -253,14 +252,14 @@ export function Email(props: {
               <If
                 when={phone()}
                 else={
-                  <Label size={12} line={16} tone="muted">
+                  <Label variant="small" tone="muted">
                     {checked().length
                       ? uiText("countSelected", { count: checked().length })
                       : threads().length}
                   </Label>
                 }
               >
-                <Label size={11} line={14} tone="muted">
+                <Label variant="caption" tone="muted">
                   {checked().length
                     ? uiText("countSelected", { count: checked().length })
                     : threads().length}
@@ -359,7 +358,7 @@ export function Email(props: {
                     <Button
                       label={uiText("context")}
                       icon="sidebar"
-                      labelSize={11}
+                      labelVariant="caption"
                       style={{ gap: 6 }}
                       onPress={() => threadContext.set(message())}
                     />
@@ -483,7 +482,7 @@ function DeleteMail(props: {
         when={props.phone}
         else={
           <View style={{ paddingTop: 6 }}>
-            <Label size={12} line={18} tone="muted">
+            <Label variant="small" tone="muted">
               {uiText("deleteEmailsDescription")}
             </Label>
             <View
@@ -510,12 +509,11 @@ function DeleteMail(props: {
         }
       >
         <View style={{ ...row, height: 44, paddingLeft: 16, paddingRight: 8 }}>
-          <Label weight={600} line={20} style={{ flex: 1 }}>
+          <Label weight={600} style={{ flex: 1 }}>
             {title()}
           </Label>
         </View>
         <Label
-          line={20}
           tone="mutedInk"
           style={{ paddingHorizontal: 16, paddingBottom: 12 }}
         >
@@ -533,15 +531,9 @@ function DeleteMail(props: {
             label={uiText("deleteMail")}
             tone="primary"
             size={40}
-            labelSize={13}
             onPress={props.onDelete}
           />
-          <Button
-            label={uiText("cancel")}
-            size={40}
-            labelSize={13}
-            onPress={props.onClose}
-          />
+          <Button label={uiText("cancel")} size={40} onPress={props.onClose} />
         </View>
       </If>
     </Modal>
@@ -555,7 +547,6 @@ function NoMailbox(props: { phone: boolean; onSettings: () => void }) {
       <Button
         label={uiText("connectMailbox")}
         size={props.phone ? 34 : undefined}
-        labelSize={props.phone ? 13 : undefined}
         style={
           props.phone
             ? { marginTop: 8, paddingHorizontal: 16 }
@@ -587,11 +578,7 @@ function ListNotice(props: {
       }}
     >
       <Icon name="email" size={24} tone={props.phone ? "ink" : "muted"} />
-      <Label
-        weight={props.phone ? 400 : 500}
-        line={20}
-        style={{ textAlign: "center" }}
-      >
+      <Label weight={props.phone ? 400 : 500} style={{ textAlign: "center" }}>
         {props.title}
       </Label>
       {props.children}
@@ -619,7 +606,7 @@ function PaneHeader(props: {
         backgroundColor: c().surface,
       }}
     >
-      <Label weight={600} line={20} lines={1}>
+      <Label weight={600} lines={1}>
         {props.title}
       </Label>
       <View style={{ flex: 1 }} />

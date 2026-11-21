@@ -88,7 +88,7 @@ export function ExternalAgentDetail(props: {
           <BackButton size={40} iconSize={16} onPress={props.onClose} />
           <View style={{ ...row, flex: 1, minWidth: 0, gap: 4 }}>
             <LetterBox name={props.agent.label} />
-            <Label line={20} weight={600} lines={1} style={{ flex: 1 }}>
+            <Label weight={600} lines={1} style={{ flex: 1 }}>
               {props.agent.label}
             </Label>
           </View>
@@ -108,7 +108,7 @@ export function ExternalAgentDetail(props: {
           }}
         >
           <StatusDot color={status() === "available" ? c().green : c().amber} />
-          <Label size={12} line={16} tone="mutedInk">
+          <Label variant="small" tone="mutedInk">
             {uiText(acpStatus[status()])}
           </Label>
         </View>
@@ -135,7 +135,6 @@ export function ExternalAgentDetail(props: {
               }}
             >
               <Label
-                line={20}
                 style={
                   props.phone ? { flexShrink: 0 } : { width: 82, flexShrink: 0 }
                 }
@@ -143,7 +142,7 @@ export function ExternalAgentDetail(props: {
                 {item()[0]}
               </Label>
               <Label
-                size={12}
+                variant="small"
                 tone="muted"
                 lines={2}
                 style={{ flex: 1, minWidth: 0, textAlign: "right" }}
@@ -169,8 +168,7 @@ export function ExternalAgentDetail(props: {
             }}
           >
             <Label
-              size={12}
-              line={16}
+              variant="small"
               tone={status() === "available" ? "muted" : "amber"}
             >
               {result()?.detail ??
@@ -194,9 +192,7 @@ export function ExternalAgentDetail(props: {
               borderColor: c().border,
             }}
           >
-            <Label line={20} style={{ flex: 1 }}>
-              {uiText("removeAgent")}
-            </Label>
+            <Label style={{ flex: 1 }}>{uiText("removeAgent")}</Label>
             <Button
               label={uiText("remove2")}
               icon="archive"

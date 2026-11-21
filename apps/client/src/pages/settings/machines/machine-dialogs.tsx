@@ -1,7 +1,16 @@
 import type { MachineView } from "@eta/client-contracts";
 import type { JSX } from "nsh";
 import { signal, View } from "nsh";
-import { Button, colors, Field, Label, Modal, row } from "../../../components";
+import {
+  Button,
+  colors,
+  Field,
+  Label,
+  Modal,
+  row,
+  textFaces,
+  textStyle,
+} from "../../../components";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 
@@ -24,6 +33,7 @@ function MachineFieldDialog(props: {
   onClose: () => void;
 }) {
   const c = colors();
+  const type = textFaces();
   const field = () => (
     <Field
       label={props.label}
@@ -33,8 +43,7 @@ function MachineFieldDialog(props: {
       inputRef={(node) => setTimeout(() => node.focus(), 50)}
       style={{
         height: props.phone ? 36 : 30,
-        fontSize: props.phone ? 14 : 12,
-        lineHeight: props.phone ? 20 : 16,
+        ...textStyle(type("small")),
         paddingHorizontal: 10,
         borderColor: c().strong,
       }}
@@ -180,7 +189,7 @@ export function MachineRunsLimit(props: {
       valid={valid()}
       description={
         <If when={props.phone}>
-          <Label size={12} line={16} tone="muted">
+          <Label variant="small" tone="muted">
             {uiText("machineRunsField")}
           </Label>
         </If>
