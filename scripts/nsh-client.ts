@@ -241,7 +241,14 @@ if (desktop) {
   } else if (target === "linux") {
     await run("tar", ["-czf", join(out, `${name}.tar.gz`), "-C", out, name]);
   } else {
-    await run("tar", ["-ac", "-f", join(out, `${name}.zip`), "-C", out, name]);
+    // Windows' own bsdtar: the GNU tar of Git's bash, first on a runner's PATH, reads `D:\…` as
+    // a remote host, and cannot write a zip either.
+    const tar = join(
+      process.env.SystemRoot ?? "C:\\Windows",
+      "System32",
+      "tar.exe",
+    );
+    await run(tar, ["-ac", "-f", join(out, `${name}.zip`), "-C", out, name]);
     // NSH may have emitted an Inno installer before the launcher was available.
     const setup = join(out, `${name}-setup.exe`);
     if (existsSync(setup)) rmSync(setup);
