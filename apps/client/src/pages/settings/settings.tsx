@@ -88,13 +88,7 @@ export function Settings(
     );
   };
   const info = (text: string) => (
-    <Empty
-      title={text}
-      titleLine={20}
-      descriptionLine={16}
-      descriptionWidth={320}
-      style={emptyStyle}
-    />
+    <Empty title={text} descriptionWidth={320} style={emptyStyle} />
   );
   const { count: sourceCount } = useModelSources();
   const acpLists = () =>
@@ -231,8 +225,6 @@ export function Settings(
                           description={uiText("noModelSourcesHint")}
                           icon="powerPlug"
                           iconSize={24}
-                          titleLine={20}
-                          descriptionLine={16}
                           descriptionWidth={320}
                           style={emptyStyle}
                         >
@@ -304,8 +296,6 @@ export function Settings(
                       description={uiText("settingsNoExternalAgentsHint")}
                       icon="terminal"
                       iconSize={24}
-                      titleLine={20}
-                      descriptionLine={16}
                       descriptionWidth={320}
                       style={emptyStyle}
                     />
@@ -335,8 +325,6 @@ export function Settings(
                           title={uiText("emailEmptyTitle")}
                           titleWeight={500}
                           description={uiText("emailEmptyHint")}
-                          titleLine={20}
-                          descriptionLine={16}
                           descriptionWidth={320}
                           style={emptyStyle}
                         />
@@ -477,7 +465,6 @@ export function Settings(
             layout="tablet"
             background="canvas"
             inset={16}
-            titleLine={18}
             leading={
               <Button
                 label={text("back")}

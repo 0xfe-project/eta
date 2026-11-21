@@ -38,8 +38,7 @@ function McpFact(props: { label: string; value: string }) {
     >
       <Label style={{ flex: 1 }}>{props.label}</Label>
       <Label
-        size={12}
-        line={16}
+        variant="small"
         tone="muted"
         style={{ maxWidth: "70%", textAlign: "right" }}
       >
@@ -106,7 +105,7 @@ export function McpDetail(props: {
           }}
         >
           <StatusDot color={c()[statusTone(server())]} />
-          <Label size={12} line={16} tone="mutedInk">
+          <Label variant="small" tone="mutedInk">
             {serverStatus(server())}
           </Label>
         </View>
@@ -133,8 +132,7 @@ export function McpDetail(props: {
         </If>
         <If when={signInNeeded() && operating()}>
           <Label
-            size={12}
-            line={16}
+            variant="small"
             tone="muted"
             style={{
               paddingHorizontal: 16,
@@ -147,14 +145,14 @@ export function McpDetail(props: {
           </Label>
         </If>
         <If when={feedback() || server().error}>
-          <Label size={12} tone="red" style={{ padding: 16 }}>
+          <Label variant="small" tone="red" style={{ padding: 16 }}>
             {feedback() || server().error}
           </Label>
         </If>
         <If when={login() && signInNeeded() ? login() : undefined}>
           {(flow) => (
             <View style={{ padding: 16, gap: 8 }}>
-              <Label size={12} tone="muted">
+              <Label variant="small" tone="muted">
                 {uiText("mcpReturnHint")}
               </Label>
               <View style={{ ...row, gap: 8, flexWrap: "wrap" }}>
@@ -266,7 +264,7 @@ export function McpDetail(props: {
           onClose={() => confirm.set(false)}
         >
           <View style={{ padding: 16, gap: 12 }}>
-            <Label size={13} tone="muted">
+            <Label variant="small" tone="muted">
               {uiText("mcpSignOutHint")}
             </Label>
             <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>

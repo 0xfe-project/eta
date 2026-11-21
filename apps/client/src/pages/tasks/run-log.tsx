@@ -94,7 +94,7 @@ export function TaskRunLog(props: {
         when={props.run.sessionId}
         else={
           <View style={{ ...grow, padding: 16, gap: 8 }}>
-            <Label size={12} tone={props.run.error ? "red" : "muted"}>
+            <Label variant="small" tone={props.run.error ? "red" : "muted"}>
               {props.run.error ??
                 (props.run.status === "queued"
                   ? uiText("awaitingTaskSession")
@@ -127,7 +127,7 @@ export function TaskRunLog(props: {
             borderColor: c().border,
           }}
         >
-          <Label size={12} tone="muted" style={{ flex: 1 }}>
+          <Label variant="small" tone="muted" style={{ flex: 1 }}>
             {uiText("readOnlyReplyOnTheTask", { executor: props.executor })}
           </Label>
           <Button

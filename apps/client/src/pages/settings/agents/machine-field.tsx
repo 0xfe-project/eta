@@ -86,7 +86,7 @@ export function MachineField(props: { form: AgentForm }) {
                         color={item().online ? c().green : c().strong}
                       />
                     </If>
-                    <Label size={12} tone="muted">
+                    <Label variant="small" tone="muted">
                       {item().detail}
                     </Label>
                   </View>
@@ -104,7 +104,7 @@ export function MachineField(props: { form: AgentForm }) {
               borderColor: c().border,
             }}
           >
-            <Label size={12} line={16} tone="muted">
+            <Label variant="small" tone="muted">
               {localizedText(
                 "Runtimes are listed from the primary for now, and may differ if the project is on another machine.",
                 "运行时目前按主机器列出，项目在其他机器上时可能不同。",

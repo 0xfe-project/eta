@@ -94,10 +94,10 @@ export function ThreadDetail(props: {
                     <EmailBadge tall />
                   </View>
                 </If>
-                <Label weight={600} size={18} line={24}>
+                <Label weight={600} variant="subtitle">
                   {mailSubject(props.thread.subject)}
                 </Label>
-                <Label size={12} line={16} tone="muted" lines={1}>
+                <Label variant="small" tone="muted" lines={1}>
                   {`${props.thread.peer} · ${props.thread.messageCount}${
                     props.thread.messageCount === 1 ? " message" : " messages"
                   }`}
@@ -122,14 +122,13 @@ export function ThreadDetail(props: {
                   </If>
                   <Label
                     weight={600}
-                    size={18}
-                    line={24}
+                    variant="subtitle"
                     style={{ flex: 1, minWidth: 0 }}
                   >
                     {mailSubject(props.thread.subject)}
                   </Label>
                 </View>
-                <Label size={12} line={16} tone="muted" lines={1}>
+                <Label variant="small" tone="muted" lines={1}>
                   {props.thread.peer}
                 </Label>
               </View>
@@ -179,23 +178,23 @@ export function ThreadDetail(props: {
                       }}
                     >
                       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                        <Label size={10} line={12} tone="muted">
+                        <Label variant="caption" tone="muted">
                           {uiText("processingAgent2")}
                         </Label>
                         <View style={{ ...row, gap: 8 }}>
                           <AgentFace id={assignment().agentId} size={16} />
-                          <Label size={14} line={20} weight={600} lines={1}>
+                          <Label weight={600} lines={1}>
                             {agentName(assignment().agentId)}
                           </Label>
                         </View>
-                        <Label size={12} line={16} tone="muted" lines={1}>
+                        <Label variant="small" tone="muted" lines={1}>
                           {uiText("project", {
                             value1: projectName(assignment().projectId),
                           })}
                         </Label>
                       </View>
                       <View style={{ ...row, gap: 4, flexShrink: 0 }}>
-                        <Label size={12} line={16} tone="mutedInk">
+                        <Label variant="small" tone="mutedInk">
                           {uiText("view")}
                         </Label>
                         <Icon name="right" size={14} />
@@ -241,18 +240,18 @@ export function ThreadDetail(props: {
                   }}
                 >
                   <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                    <Label size={14} line={18} weight={600}>
+                    <Label weight={600}>
                       {uiText("processingAgent", {
                         value1: agentName(assignment().agentId),
                       })}
                     </Label>
-                    <Label size={12} line={16} tone="muted">
+                    <Label variant="small" tone="muted">
                       {uiText("project", {
                         value1: projectName(assignment().projectId),
                       })}
                     </Label>
                   </View>
-                  <Label size={12} line={16} tone="muted">
+                  <Label variant="small" tone="muted">
                     {uiText("view")}
                   </Label>
                   <View
@@ -315,7 +314,6 @@ export function ThreadDetail(props: {
             icon="send"
             iconSize={14}
             size={40}
-            labelSize={13}
             tone="primary"
             style={{ gap: 8 }}
             onPress={props.onAssign}

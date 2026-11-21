@@ -87,8 +87,7 @@ export function PhoneTaskList(props: {
                 }}
               >
                 <Label
-                  size={10}
-                  line={12}
+                  variant="caption"
                   weight={600}
                   tone={group().name === "Needs you" ? "amber" : "mutedInk"}
                   style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
@@ -96,8 +95,7 @@ export function PhoneTaskList(props: {
                   {uiText(group().label)}
                 </Label>
                 <Label
-                  size={10}
-                  line={12}
+                  variant="caption"
                   tone={group().name === "Needs you" ? "amber" : "muted"}
                 >
                   {entries().length}
@@ -184,12 +182,9 @@ export function PhoneTaskList(props: {
                           />
                         </View>
                         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                          <Label lines={1} line={20}>
-                            {entry().title}
-                          </Label>
+                          <Label lines={1}>{entry().title}</Label>
                           <Label
-                            size={11}
-                            line={14}
+                            variant="caption"
                             lines={1}
                             tone={
                               entry().status === "blocked"
@@ -199,8 +194,7 @@ export function PhoneTaskList(props: {
                           >
                             {lead()}
                             <Label
-                              size={11}
-                              line={14}
+                              variant="caption"
                               tone={
                                 stateTone() ??
                                 (entry().status === "blocked"
@@ -212,7 +206,7 @@ export function PhoneTaskList(props: {
                             </Label>
                           </Label>
                         </View>
-                        <Label size={11} line={14} tone="muted">
+                        <Label variant="caption" tone="muted">
                           {relativeTime(entry().updatedAt)}
                         </Label>
                         <Icon name="right" size={14} tone="muted" />
@@ -231,7 +225,7 @@ export function PhoneTaskList(props: {
                       borderColor: c().border,
                     }}
                   >
-                    <Label size={12} line={16} tone="muted">
+                    <Label variant="small" tone="muted">
                       {uiText("noTasksInGroup", {
                         group: uiText(group().label),
                       })}
@@ -332,14 +326,14 @@ export function TabletTaskList(props: {
           >
             <TaskGlyph status={task().status} size={14} />
             <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-              <Label size={13} line={18} lines={1}>
+              <Label variant="small" lines={1}>
                 {task().title}
               </Label>
-              <Label size={10} line={14} lines={1} tone={tone(task())}>
+              <Label variant="caption" lines={1} tone={tone(task())}>
                 {meta(task())}
               </Label>
             </View>
-            <Label size={10} line={12} tone="muted">
+            <Label variant="caption" tone="muted">
               {time(task())}
             </Label>
           </View>
@@ -398,12 +392,11 @@ export function TaskTableRow(props: {
         <TaskGlyph status={props.item.status} size={phone() ? 14 : 12} />
       </View>
       <Label
-        size={10}
-        line={12}
+        variant="caption"
         tone="muted"
         style={{ width: desktop() ? 36 : 30 }}
       >{`#${props.item.number}`}</Label>
-      <Label size={12} line={16} lines={1} style={{ flex: 1 }}>
+      <Label variant="small" lines={1} style={{ flex: 1 }}>
         {props.item.title}
       </Label>
       <View
@@ -426,8 +419,7 @@ export function TaskTableRow(props: {
           <Icon name="lock" size={10} tone="mutedInk" />
         </If>
         <Label
-          size={desktop() ? 10 : 11}
-          line={desktop() ? 12 : 14}
+          variant="caption"
           lines={1}
           tone={hintTone()}
           style={{ flexShrink: 1, minWidth: 0 }}
@@ -437,8 +429,7 @@ export function TaskTableRow(props: {
       </View>
       <If when={!phone()}>
         <Label
-          size={desktop() ? 10 : 11}
-          line={desktop() ? 12 : 14}
+          variant="caption"
           tone="mutedInk"
           lines={1}
           style={{ width: desktop() ? 100 : 50 }}
@@ -448,8 +439,7 @@ export function TaskTableRow(props: {
           )?.name ?? uiText("unassigned")}
         </Label>
         <Label
-          size={desktop() ? 10 : 11}
-          line={desktop() ? 12 : 14}
+          variant="caption"
           tone="muted"
           lines={1}
           style={{ width: desktop() ? 116 : 80, textAlign: "right" }}

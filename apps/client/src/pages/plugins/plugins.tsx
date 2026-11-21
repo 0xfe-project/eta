@@ -106,8 +106,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                 }}
               >
                 <Label
-                  size={12}
-                  line={16}
+                  variant="small"
                   tone={
                     tab() === item()
                       ? "buttonInk"
@@ -151,7 +150,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
           gap: 16,
         }}
       >
-        <Label size={12} line={20} tone="muted" style={{ maxWidth: 1000 }}>
+        <Label variant="small" tone="muted" style={{ maxWidth: 1000 }}>
           {uiText("pluginsGiveAgentsSkillsAndMcp")}
         </Label>
         <If when={!list().length}>
@@ -257,8 +256,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                   <If when={phone()} else={desktopList()}>
                     <Scroll style={grow} scrollbar={false}>
                       <Label
-                        size={12}
-                        line={16}
+                        variant="small"
                         tone="muted"
                         style={{ paddingHorizontal: 16, paddingVertical: 12 }}
                       >
@@ -352,8 +350,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
             }
           >
             <Label
-              size={phone() ? 14 : 12}
-              line={phone() ? 20 : 18}
+              variant="small"
               tone="muted"
               style={phone() ? undefined : { paddingTop: 6 }}
             >
@@ -370,7 +367,6 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
               <Button
                 label={uiText("cancel")}
                 size={phone() ? 44 : 28}
-                labelSize={phone() ? 14 : undefined}
                 style={phone() ? { flex: 1 } : undefined}
                 onPress={() => remove.set("")}
               />
@@ -378,7 +374,6 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                 label={uiText("remove2")}
                 tone="primary"
                 size={phone() ? 44 : 28}
-                labelSize={phone() ? 14 : undefined}
                 labelWeight={phone() ? 500 : undefined}
                 style={phone() ? { flex: 1 } : undefined}
                 onPress={() =>
@@ -433,12 +428,12 @@ function PluginCard(props: {
           <Icon name="plugins" size={20} tone="muted" />
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-          <Label weight={500} line={18} lines={1}>
+          <Label weight={500} lines={1}>
             {props.item.name}
           </Label>
           <View style={{ ...row, height: 20, gap: 8 }}>
             <If when={props.item.version}>
-              <Label size={12} line={16} tone="muted">
+              <Label variant="small" tone="muted">
                 {props.item.version ?? ""}
               </Label>
             </If>
@@ -446,7 +441,7 @@ function PluginCard(props: {
           </View>
         </View>
       </View>
-      <Label size={12} line={18} tone="muted" lines={2} style={{ height: 36 }}>
+      <Label variant="small" tone="muted" lines={2} style={{ height: 36 }}>
         {props.item.description}
       </Label>
       <View style={{ gap: 4 }}>
@@ -454,7 +449,7 @@ function PluginCard(props: {
           <If
             when={git()}
             else={
-              <Label size={12} line={16} tone="muted">
+              <Label variant="small" tone="muted">
                 {uiText("localDirectory")}
               </Label>
             }
@@ -462,8 +457,7 @@ function PluginCard(props: {
             {(source) => (
               <>
                 <Label
-                  size={12}
-                  line={16}
+                  variant="small"
                   tone="muted"
                   lines={1}
                   style={{ flex: 1, minWidth: 0 }}
@@ -482,7 +476,7 @@ function PluginCard(props: {
           </If>
         </View>
         <View style={{ ...row, height: 24, gap: 4 }}>
-          <Label size={12} line={16} tone="muted">
+          <Label variant="small" tone="muted">
             {uiText("skillsMcpServers", {
               length: props.item.skills.length,
               value2: props.item.servers.length,
@@ -550,7 +544,7 @@ function PluginSourceDialog(props: { item: PluginView; onClose: () => void }) {
       onClose={props.onClose}
     >
       <View style={{ padding: 16 }}>
-        <Label size={12} line={16} tone="muted" style={{ userSelect: "text" }}>
+        <Label variant="small" tone="muted" style={{ userSelect: "text" }}>
           {source()}
         </Label>
       </View>
@@ -617,10 +611,8 @@ function PluginRows(props: {
             >
               <PluginGlyph size={32} />
               <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-                <Label size={14} line={20} lines={1}>
-                  {item().name}
-                </Label>
-                <Label size={11} line={14} tone="muted" lines={1}>
+                <Label lines={1}>{item().name}</Label>
+                <Label variant="caption" tone="muted" lines={1}>
                   {[
                     item().version,
                     uiText("skillsMcpServers", {

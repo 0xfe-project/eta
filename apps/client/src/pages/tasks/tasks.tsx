@@ -18,6 +18,8 @@ import {
   Icon,
   Label,
   row,
+  textFaces,
+  textStyle,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { uiText } from "../../i18n";
@@ -47,6 +49,7 @@ export function Tasks(props: {
 }) {
   const host = useHost();
   const c = colors();
+  const type = textFaces();
   follow(() => "tasks");
   const boardDrag = taskDropZones<BoardTaskStatus>((id, status) => {
     const task = host.tasks().find((item) => item.id === id);
@@ -118,7 +121,7 @@ export function Tasks(props: {
             layout={props.layout}
             inset={14}
             end={10}
-            countSize={14}
+            countVariant="body"
           >
             <View style={{ flex: 1 }} />
             <ExecutorMenu
@@ -199,8 +202,7 @@ export function Tasks(props: {
                     paddingVertical: 0,
                     borderWidth: 0,
                     backgroundColor: "transparent",
-                    fontSize: 12,
-                    lineHeight: 16,
+                    ...textStyle(type("small")),
                   }}
                 />
                 <If when={query()}>
@@ -387,8 +389,6 @@ export function Tasks(props: {
                           ? "ink"
                           : undefined
                     }
-                    titleSize={designed() && tablet() ? 13 : undefined}
-                    titleLine={designed() && tablet() ? 16 : undefined}
                     titleWeight={designed() ? 600 : undefined}
                     titleTone={designed() ? "ink" : undefined}
                     description={
@@ -553,7 +553,7 @@ function ArchiveToggle(props: {
         size={props.selected ? 13 : 12}
         tone={props.selected ? "ink" : "muted"}
       />
-      <Label size={12} line={16} tone={props.selected ? "ink" : "muted"}>
+      <Label variant="small" tone={props.selected ? "ink" : "muted"}>
         {props.label}
       </Label>
     </View>
@@ -579,6 +579,7 @@ function ArchivedTasks(props: {
   onOpen: (id: string) => void;
 }) {
   const c = colors();
+  const type = textFaces();
   return (
     <View
       style={{
@@ -593,10 +594,8 @@ function ArchivedTasks(props: {
     >
       <View style={{ ...row, gap: 8 }}>
         <View style={{ ...row, flex: 1, gap: 6, alignItems: "baseline" }}>
-          <Label size={14} line={18} weight={600}>
-            {uiText("archivedTitle")}
-          </Label>
-          <Label size={12} line={16} tone="muted">
+          <Label weight={600}>{uiText("archivedTitle")}</Label>
+          <Label variant="small" tone="muted">
             {props.count}
           </Label>
         </View>
@@ -614,9 +613,7 @@ function ArchivedTasks(props: {
           }}
         >
           <Icon name="arrowLeft" size={12} />
-          <Label size={12} line={16}>
-            {uiText("backToBoard")}
-          </Label>
+          <Label variant="small">{uiText("backToBoard")}</Label>
         </View>
       </View>
       <View
@@ -644,8 +641,7 @@ function ArchivedTasks(props: {
             paddingVertical: 0,
             borderWidth: 0,
             backgroundColor: "transparent",
-            fontSize: 12,
-            lineHeight: 16,
+            ...textStyle(type("small")),
           }}
         />
       </View>

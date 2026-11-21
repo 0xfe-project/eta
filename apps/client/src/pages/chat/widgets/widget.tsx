@@ -184,7 +184,7 @@ export function Widget(props: {
   return (
     <View style={{ alignSelf: "stretch", minWidth: 0, gap: 4 }}>
       <If when={problem() || !height()}>
-        <Label size={11} tone="muted">
+        <Label variant="caption" tone="muted">
           {problem()
             ? uiText("unavailable", { title: props.value.title })
             : uiText("drawing", { title: props.value.title })}

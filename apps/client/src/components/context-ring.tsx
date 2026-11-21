@@ -64,7 +64,7 @@ export function hint(text: string | undefined, c: ReturnType<typeof colors>) {
         backgroundColor: c().ink,
       }}
     >
-      <Label size={11} line={16} tone="canvas">
+      <Label variant="small" tone="canvas">
         {text}
       </Label>
     </View>

@@ -76,9 +76,7 @@ function MoreRow(props: {
       >
         <Icon name={props.icon} size={18} />
       </View>
-      <Label line={20} style={{ flex: 1 }}>
-        {props.title}
-      </Label>
+      <Label style={{ flex: 1 }}>{props.title}</Label>
       <If when={props.count}>
         <View
           style={{
@@ -91,7 +89,7 @@ function MoreRow(props: {
             flexShrink: 0,
           }}
         >
-          <Label size={10} line={12} style={{ color: "#ffffff" }}>
+          <Label variant="caption" style={{ color: "#ffffff" }}>
             {props.count}
           </Label>
         </View>

@@ -20,9 +20,7 @@ export function GroupHeading(props: {
         borderColor: c().border,
       }}
     >
-      <Label size={14} line={20} weight={600}>
-        {props.title}
-      </Label>
+      <Label weight={600}>{props.title}</Label>
       {props.children}
     </View>
   );

@@ -54,8 +54,7 @@ export function NavItem(props: {
         tone={props.selected || wide() ? "ink" : "muted"}
       />
       <Label
-        size={wide() ? 14 : 10}
-        line={wide() ? 20 : 14}
+        variant={wide() ? "body" : "caption"}
         tone={wide() || props.selected ? "ink" : "muted"}
         weight={phone() && props.selected ? 600 : 400}
         style={wide() ? { flex: 1 } : undefined}
@@ -64,8 +63,7 @@ export function NavItem(props: {
       </Label>
       <If when={(props.count ?? 0) > 0}>
         <Label
-          size={wide() ? 12 : 10}
-          line={14}
+          variant={wide() ? "small" : "caption"}
           tone={wide() ? "ink" : "buttonInk"}
           style={
             wide()
@@ -133,8 +131,7 @@ export function DesktopSidebar(
         }}
       >
         <Label
-          size={props.collapsed ? 10 : 16}
-          line={props.collapsed ? 14 : 20}
+          variant={props.collapsed ? "caption" : "subtitle"}
           tone={props.collapsed ? "muted" : "ink"}
           style={{ letterSpacing: props.collapsed ? 0.8 : 3.2 }}
         >

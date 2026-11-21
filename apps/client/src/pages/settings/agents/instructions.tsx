@@ -7,6 +7,8 @@ import {
   Field,
   Label,
   row,
+  textFaces,
+  textStyle,
 } from "../../../components";
 import { formatLocale, localizedText, uiText } from "../../../i18n";
 
@@ -86,6 +88,7 @@ export function PersonaField(props: { form: AgentForm }) {
 export function AgentInstructions(props: { form: AgentForm }) {
   const { creating, instructions, saved, phoneEditor } = props.form;
   const c = colors();
+  const type = textFaces();
   const limit = () =>
     Math.max(agentInstructionsLimit, saved?.instructions.length ?? 0);
   const count = () =>
@@ -107,7 +110,7 @@ export function AgentInstructions(props: { form: AgentForm }) {
                 title={uiText("instructions")}
                 description={instructionsHelp()}
               >
-                <Label size={12} line={16} tone="muted">
+                <Label variant="small" tone="muted">
                   {count()}
                 </Label>
               </SectionHeader>
@@ -118,8 +121,7 @@ export function AgentInstructions(props: { form: AgentForm }) {
                   maxLength={limit()}
                   style={{
                     height: 250,
-                    fontSize: 12,
-                    lineHeight: 18,
+                    ...textStyle(type("small"), "prose"),
                     padding: 10,
                     borderColor: c().strong,
                   }}
@@ -140,9 +142,9 @@ export function AgentInstructions(props: { form: AgentForm }) {
             }}
           >
             <View style={{ ...row, justifyContent: "space-between" }}>
-              <Label line={20}>{uiText("instructions")}</Label>
+              <Label>{uiText("instructions")}</Label>
               <If when={instructions().length}>
-                <Label size={12} line={16} tone="muted">
+                <Label variant="small" tone="muted">
                   {count()}
                 </Label>
               </If>
@@ -153,15 +155,14 @@ export function AgentInstructions(props: { form: AgentForm }) {
               maxLength={limit()}
               style={{
                 height: 240,
-                fontSize: 12,
-                lineHeight: 18,
+                ...textStyle(type("small"), "prose"),
                 padding: 12,
                 borderColor: c().strong,
               }}
               value={instructions()}
               onChange={instructions.set}
             />
-            <Label size={12} line={16} tone="muted">
+            <Label variant="small" tone="muted">
               {instructionsHelp()}
             </Label>
           </View>
@@ -171,11 +172,9 @@ export function AgentInstructions(props: { form: AgentForm }) {
       <View style={{ paddingVertical: 16, paddingHorizontal: 14, gap: 16 }}>
         <View style={{ gap: 6 }}>
           <View style={{ ...row, justifyContent: "space-between" }}>
-            <Label size={10} line={12}>
-              {uiText("instructions")}
-            </Label>
+            <Label variant="caption">{uiText("instructions")}</Label>
             <If when={instructions().length}>
-              <Label size={10} line={12} tone="muted">
+              <Label variant="caption" tone="muted">
                 {count()}
               </Label>
             </If>
@@ -185,11 +184,15 @@ export function AgentInstructions(props: { form: AgentForm }) {
             multiline
             maxLength={limit()}
             inputRef={focusOnOpen}
-            style={{ height: 192, fontSize: 10, lineHeight: 16, padding: 9 }}
+            style={{
+              height: 192,
+              ...textStyle(type("caption"), "prose"),
+              padding: 9,
+            }}
             value={instructions()}
             onChange={instructions.set}
           />
-          <Label size={10} line={14} tone="muted">
+          <Label variant="caption" tone="muted">
             {instructionsHelp()}
           </Label>
         </View>

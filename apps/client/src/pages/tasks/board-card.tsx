@@ -139,13 +139,13 @@ export function BoardCard(props: {
         <If when={parent()}>
           {(entry) => (
             <View style={{ ...row, gap: 6 }}>
-              <Label size={12} line={16} tone="muted" lines={1}>
+              <Label variant="small" tone="muted" lines={1}>
                 {entry().title}
               </Label>
-              <Label size={12} line={16} tone="muted">
+              <Label variant="small" tone="muted">
                 ›
               </Label>
-              <Label size={12} line={16} tone="muted" style={{ flexShrink: 0 }}>
+              <Label variant="small" tone="muted" style={{ flexShrink: 0 }}>
                 {uiText("step", {
                   value1: stepOf(props.task, host.tasks()),
                 })}
@@ -157,7 +157,7 @@ export function BoardCard(props: {
           <If
             when={isParent()}
             else={
-              <Label size={12} line={16} tone="muted">
+              <Label variant="small" tone="muted">
                 {`#${props.task.number}`}
               </Label>
             }
@@ -165,7 +165,7 @@ export function BoardCard(props: {
             <If
               when={!tablet()}
               else={
-                <Label size={12} line={16} tone="muted" style={{ flex: 1 }}>
+                <Label variant="small" tone="muted" style={{ flex: 1 }}>
                   {`#${props.task.number} · ${uiText("taskSubtaskCount", {
                     count: props.task.subtasks?.total ?? 0,
                   })}`}
@@ -174,13 +174,13 @@ export function BoardCard(props: {
             >
               <View style={{ ...row, gap: 6 }}>
                 <SubtreeGlyph size={10} />
-                <Label size={12} line={16} tone="mutedInk">
+                <Label variant="small" tone="mutedInk">
                   {`#${props.task.number}`}
                 </Label>
-                <Label size={12} line={16} tone="mutedInk">
+                <Label variant="small" tone="mutedInk">
                   ·
                 </Label>
-                <Label size={12} line={16} tone="mutedInk">
+                <Label variant="small" tone="mutedInk">
                   {uiText("taskSubtaskCount", {
                     count: props.task.subtasks?.total ?? 0,
                   })}
@@ -191,7 +191,7 @@ export function BoardCard(props: {
               <If when={!tablet()}>
                 <TaskGlyph status={props.task.status} size={10} />
               </If>
-              <Label size={12} line={16} tone={tones[props.task.status]}>
+              <Label variant="small" tone={tones[props.task.status]}>
                 {uiText("taskAuto")}
               </Label>
             </View>
@@ -201,14 +201,13 @@ export function BoardCard(props: {
               <If
                 when={!tablet()}
                 else={
-                  <Label size={12} line={16} tone="amber" lines={1}>
+                  <Label variant="small" tone="amber" lines={1}>
                     {uiText("forYouToCheck2")}
                   </Label>
                 }
               >
                 <Label
-                  size={12}
-                  line={16}
+                  variant="small"
                   tone="amber"
                   style={{
                     backgroundColor: c().amberFill,
@@ -223,7 +222,7 @@ export function BoardCard(props: {
               <If
                 when={!tablet()}
                 else={
-                  <Label size={12} line={16} tone="blue">
+                  <Label variant="small" tone="blue">
                     {`■ ${runningFor(props.task)}`}
                   </Label>
                 }
@@ -232,7 +231,7 @@ export function BoardCard(props: {
                   <View
                     style={{ width: 6, height: 6, backgroundColor: c().blue }}
                   />
-                  <Label size={12} line={16} tone="blue">
+                  <Label variant="small" tone="blue">
                     {runningFor(props.task)}
                   </Label>
                 </View>
@@ -256,9 +255,7 @@ export function BoardCard(props: {
             </If>
           </If>
         </View>
-        <Label line={19.25} lines={4}>
-          {props.task.title}
-        </Label>
+        <Label lines={4}>{props.task.title}</Label>
         <If when={isParent()}>
           <View style={{ ...row, gap: 2, height: tablet() ? 3 : 4 }}>
             <Each of={children()} key={(task) => task.id}>
@@ -286,8 +283,7 @@ export function BoardCard(props: {
                 />
               </If>
               <Label
-                size={12}
-                line={16}
+                variant="small"
                 tone={tablet() ? "muted" : "mutedInk"}
                 lines={2}
                 style={{ flex: 1 }}
@@ -303,14 +299,14 @@ export function BoardCard(props: {
               justifyContent: "space-between",
             }}
           >
-            <Label size={12} line={16} tone="muted" style={{ flex: 1 }}>
+            <Label variant="small" tone="muted" style={{ flex: 1 }}>
               {summary()
                 .filter(([, count]) => count)
                 .map(([key, count]) => uiText(key, { count }))
                 .join(" · ")}
             </Label>
             <If when={!tablet()}>
-              <Label size={12} line={16} tone="muted">
+              <Label variant="small" tone="muted">
                 ›
               </Label>
             </If>
@@ -337,8 +333,7 @@ export function BoardCard(props: {
             >
               <Icon name="lock" size={tablet() ? 9 : 10} />
               <Label
-                size={12}
-                line={16}
+                variant="small"
                 lines={1}
                 tone={tablet() ? "mutedInk" : "ink"}
                 style={{ flex: 1 }}
@@ -351,7 +346,7 @@ export function BoardCard(props: {
         <If when={cancelled()}>
           {(edge) => (
             <>
-              <Label size={12} line={16} tone="mutedInk">
+              <Label variant="small" tone="mutedInk">
                 {uiText("taskBlockedReason", { title: edge().title })}
               </Label>
               <BlockedAction
@@ -376,12 +371,12 @@ export function BoardCard(props: {
               justifyContent: "space-between",
             }}
           >
-            <Label size={12} line={16} tone="faint" lines={1}>
+            <Label variant="small" tone="faint" lines={1}>
               {host.agent(
                 props.task.assigneeAgentId ?? props.task.createdBy.agentId,
               )?.name ?? ""}
             </Label>
-            <Label size={12} line={16} tone="faint" lines={1}>
+            <Label variant="small" tone="faint" lines={1}>
               {footer()}
             </Label>
           </View>
@@ -412,9 +407,7 @@ function BlockedAction(props: {
         cursor: "pointer",
       }}
     >
-      <Label size={12} line={16}>
-        {props.label}
-      </Label>
+      <Label variant="small">{props.label}</Label>
     </View>
   );
 }

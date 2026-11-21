@@ -13,6 +13,8 @@ import {
   Label,
   Markdown,
   row,
+  textFaces,
+  textStyle,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
@@ -38,6 +40,7 @@ export function PanelTask(props: {
   onTask: (id: string) => void;
 }) {
   const c = colors();
+  const type = textFaces();
   const host = useHost();
   const state = createTaskDetailState({ ...props, docked: true });
   const { task, activity, comment, post, posting, log } = state;
@@ -75,11 +78,9 @@ export function PanelTask(props: {
                 onPress={props.onClose}
                 style={{ cursor: "pointer" }}
               >
-                <Label size={11} line={16}>
-                  {`← ${uiText("tasks2")}`}
-                </Label>
+                <Label variant="small">{`← ${uiText("tasks2")}`}</Label>
               </View>
-              <Label size={11} line={16} tone="muted" style={{ flex: 1 }}>
+              <Label variant="small" tone="muted" style={{ flex: 1 }}>
                 {`#${item().number}`}
               </Label>
               <If when={!item().children?.length}>
@@ -113,8 +114,7 @@ export function PanelTask(props: {
             </View>
             <Scroll style={grow} scrollbar={false}>
               <Label
-                size={16}
-                line={24}
+                variant="subtitle"
                 weight={700}
                 style={{ paddingTop: 4, paddingBottom: 7 }}
               >
@@ -147,10 +147,10 @@ export function PanelTask(props: {
                 <AgentFace id={author()?.id ?? "user"} size={20} />
                 <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
                   <View style={{ ...row, gap: 8 }}>
-                    <Label size={12} line={16} weight={600}>
+                    <Label variant="small" weight={600}>
                       {author()?.name ?? uiText("you")}
                     </Label>
-                    <Label size={10} line={14} tone="muted">
+                    <Label variant="caption" tone="muted">
                       {messageTime(item().createdAt, false)}
                     </Label>
                   </View>
@@ -164,7 +164,7 @@ export function PanelTask(props: {
                         onPress={() => fullGoal.set(!fullGoal())}
                         style={{ cursor: "pointer" }}
                       >
-                        <Label size={10} line={14} tone="muted">
+                        <Label variant="caption" tone="muted">
                           {fullGoal()
                             ? uiText("collapseFullText")
                             : uiText("expandFullText")}
@@ -176,7 +176,7 @@ export function PanelTask(props: {
               </View>
               <If when={replies()}>
                 <View style={{ ...row, gap: 8, paddingTop: 14 }}>
-                  <Label size={10} line={14} tone="muted">
+                  <Label variant="caption" tone="muted">
                     {uiText(replies() === 1 ? "oneTaskReply" : "taskReplies", {
                       count: replies(),
                     })}
@@ -202,7 +202,7 @@ export function PanelTask(props: {
               {(entry) => (
                 <View style={{ ...row, height: 24, gap: 8, flexShrink: 0 }}>
                   <StatusDot color={c().blue} />
-                  <Label size={10} line={14} weight={600} style={{ flex: 1 }}>
+                  <Label variant="caption" weight={600} style={{ flex: 1 }}>
                     {uiText("agentIsWorking", {
                       name: state.executor()?.name ?? uiText("agent"),
                     })}
@@ -212,7 +212,7 @@ export function PanelTask(props: {
                     onPress={() => log.set(entry())}
                     style={{ cursor: "pointer" }}
                   >
-                    <Label size={10} line={14} tone="muted">
+                    <Label variant="caption" tone="muted">
                       {uiText("executionLog")}
                     </Label>
                   </View>
@@ -230,7 +230,7 @@ export function PanelTask(props: {
                         borderColor: c().ink,
                       }}
                     />
-                    <Label size={10} line={14} weight={600}>
+                    <Label variant="caption" weight={600}>
                       {uiText("stop")}
                     </Label>
                   </View>
@@ -260,8 +260,7 @@ export function PanelTask(props: {
                   height: 36,
                   paddingHorizontal: 0,
                   borderWidth: 0,
-                  fontSize: 12,
-                  lineHeight: 16,
+                  ...textStyle(type("small")),
                 }}
               />
               <View
@@ -299,8 +298,7 @@ function Edges(props: {
   return (
     <If when={props.edges.length}>
       <Label
-        size={11}
-        line={16}
+        variant="small"
         tone="muted"
         style={{ paddingTop: props.before ? 0 : 14, paddingBottom: 4 }}
       >
@@ -324,16 +322,10 @@ function Edges(props: {
             }}
           >
             <TaskGlyph status={edge().status} size={12} />
-            <Label
-              size={11}
-              line={16}
-              weight={600}
-              lines={1}
-              style={{ flex: 1 }}
-            >
+            <Label variant="small" weight={600} lines={1} style={{ flex: 1 }}>
               {edge().title}
             </Label>
-            <Label size={10} line={14} tone="muted">
+            <Label variant="caption" tone="muted">
               {props.before
                 ? edge().state === "resolved"
                   ? uiText("dependencyDelivered")

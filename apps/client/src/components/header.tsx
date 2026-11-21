@@ -1,6 +1,6 @@
 import type { JSX } from "nsh";
 import type { IconName } from "./icons";
-import type { Layout } from "./theme";
+import type { Layout, TextVariant } from "./theme";
 import { View } from "nsh";
 import { pickerTarget } from "./element-picker";
 import { BackButton } from "./navigation-buttons";
@@ -11,15 +11,15 @@ import { colors, row, sizes } from "./theme";
 export function Header(props: {
   title: string;
   count?: number;
-  /** The count's type size; 14 draws it at 14/18, 6pt after the title. */
-  countSize?: number;
+  /** The count's role (`small` by default); `body` draws it 6pt after the title. */
+  countVariant?: TextVariant;
   subtitle?: string;
   subtitleTone?: "green" | "amber" | "muted";
   layout?: Layout;
   inset?: number;
   /** Right padding when the trailing control carries its own inset (a phone's 40pt button). */
   end?: number;
-  /** A phone conversation's 44pt bar with a 15/18 title. */
+  /** A phone conversation's 44pt bar with a `body` title. */
   compact?: boolean;
   /** Drawn before the title, such as an avatar. */
   leading?: JSX.Element;
@@ -30,9 +30,8 @@ export function Header(props: {
   height?: number;
   /** The bottom border; on by default. */
   divider?: boolean;
-  titleSize?: number;
+  titleVariant?: TextVariant;
   titleWeight?: number;
-  titleLine?: number;
   /** Gap between the bar's items; defaults to 4 on phones and 8 elsewhere. */
   gap?: number;
   backIcon?: IconName;
@@ -47,29 +46,22 @@ export function Header(props: {
   );
   const phone = () => props.layout === "phone";
   const back = () => props.onBack !== undefined;
-  // A phone top bar: 8pt insets around 40pt buttons, a 14/20 semibold title.
+  // A phone top bar: 8pt insets around 40pt buttons, a `body` semibold title.
   const phoneBar = () => phone() && !props.compact && !props.dialog;
   const fallbackInset = () => (phone() ? (back() ? 8 : 16) : 22);
   const paddingLeft = () => {
     if (phone() && back()) return props.compact ? 0 : 8;
     return props.inset ?? fallbackInset();
   };
-  const titleSize = () =>
-    props.titleSize ??
+  const titleVariant = (): TextVariant =>
+    props.titleVariant ??
     (phone() && props.compact
-      ? 15
+      ? "body"
       : phoneBar()
-        ? 14
+        ? "body"
         : phone() || props.dialog
-          ? 16
-          : 14);
-  const titleLine = () =>
-    props.titleLine ??
-    (props.subtitle || (phone() && props.compact)
-      ? 18
-      : props.dialog && !phone()
-        ? 22
-        : 20);
+          ? "subtitle"
+          : "body");
   return (
     <View
       {...picker}
@@ -113,8 +105,7 @@ export function Header(props: {
       <View style={{ minWidth: 0, flexShrink: 1 }}>
         <Label
           weight={props.titleWeight ?? (props.dialog ? 500 : 600)}
-          size={titleSize()}
-          line={titleLine()}
+          variant={titleVariant()}
           lines={1}
         >
           {props.title}
@@ -124,7 +115,7 @@ export function Header(props: {
             <If when={props.subtitleTone}>
               <StatusDot color={color()[props.subtitleTone ?? "muted"]} />
             </If>
-            <Label size={11} line={15} tone="muted" lines={1}>
+            <Label variant="caption" tone="muted" lines={1}>
               {props.subtitle}
             </Label>
           </View>
@@ -132,11 +123,10 @@ export function Header(props: {
       </View>
       <If when={props.count !== undefined}>
         <Label
-          size={props.countSize ?? 12}
-          line={props.countSize ? props.countSize + 4 : undefined}
+          variant={props.countVariant ?? "small"}
           tone="muted"
           style={
-            props.countSize
+            props.countVariant
               ? { marginLeft: 6 - (props.gap ?? (phoneBar() ? 4 : 8)) }
               : undefined
           }

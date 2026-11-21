@@ -28,14 +28,11 @@ export function BusyList(props: {
   return (
     <If when={props.work.length > 0}>
       <View style={{ gap: 1 }}>
-        <Label size={12} line={17}>
-          {props.label}
-        </Label>
+        <Label variant="small">{props.label}</Label>
         <Each of={busyLabels(props.work)} key={(label) => label}>
           {(label) => (
             <Label
-              size={12}
-              line={17}
+              variant="small"
               tone="muted"
               style={{ paddingLeft: 16 }}
             >{`• ${label()}`}</Label>

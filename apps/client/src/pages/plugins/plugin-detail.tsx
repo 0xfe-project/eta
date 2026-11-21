@@ -110,10 +110,10 @@ export function PluginDetail(props: DetailProps) {
             }}
           >
             <View style={{ ...row, flex: 1, minWidth: 0, gap: 8 }}>
-              <Label size={14} weight={600} lines={1} style={{ flexShrink: 1 }}>
+              <Label weight={600} lines={1} style={{ flexShrink: 1 }}>
                 {props.item.name}
               </Label>
-              <Label size={12} line={16} tone="muted" lines={1}>
+              <Label variant="small" tone="muted" lines={1}>
                 {props.item.version ?? ""}
               </Label>
               <Status item={props.item} />
@@ -123,14 +123,14 @@ export function PluginDetail(props: DetailProps) {
                 label={updating() ? uiText("updating") : uiText("update")}
                 disabled={updating()}
                 tone="ghost"
-                labelSize={11}
+                labelVariant="caption"
                 style={ghostFrame}
                 onPress={update}
               />
               <Button
                 label={uiText("remove2")}
                 tone="ghost"
-                labelSize={11}
+                labelVariant="caption"
                 style={ghostFrame}
                 onPress={props.onRemove}
               />
@@ -139,7 +139,7 @@ export function PluginDetail(props: DetailProps) {
               <Button
                 label={uiText("configure")}
                 tone={needsConfig() ? "primary" : "plain"}
-                labelSize={11}
+                labelVariant="caption"
                 onPress={props.onConfigure}
               />
             </If>
@@ -179,15 +179,14 @@ export function PluginDetail(props: DetailProps) {
               <View style={{ gap: 4, flex: 1 }}>
                 <View style={{ ...row, gap: 8 }}>
                   <Label
-                    size={16}
-                    line={20}
+                    variant="subtitle"
                     weight={600}
                     lines={1}
                     style={{ flexShrink: 1 }}
                   >
                     {props.item.name}
                   </Label>
-                  <Label size={12} line={16} tone="muted" lines={1}>
+                  <Label variant="small" tone="muted" lines={1}>
                     {props.item.version ?? ""}
                   </Label>
                 </View>
@@ -205,8 +204,7 @@ export function PluginDetail(props: DetailProps) {
             <View style={props.phone ? undefined : { gap: 14 }}>
               <If when={props.item.description}>
                 <Label
-                  size={props.phone ? 13 : 12}
-                  line={18}
+                  variant="small"
                   tone="mutedInk"
                   style={
                     props.phone
@@ -226,7 +224,7 @@ export function PluginDetail(props: DetailProps) {
                   label={uiText("configure")}
                   tone={needsConfig() ? "primary" : "plain"}
                   size={40}
-                  labelSize={14}
+                  labelVariant="body"
                   style={{ marginHorizontal: 16 }}
                   onPress={props.onConfigure}
                 />
@@ -262,7 +260,7 @@ export function PluginDetail(props: DetailProps) {
               }}
             >
               <Icon name={git() ? "link" : "folder"} size={14} tone="muted" />
-              <Label size={12} line={16} style={{ flex: 1, minWidth: 0 }}>
+              <Label variant="small" style={{ flex: 1, minWidth: 0 }}>
                 {source().label}
               </Label>
               <View
@@ -321,12 +319,9 @@ export function PluginDetail(props: DetailProps) {
                       }}
                     >
                       <Icon name="terminal" size={14} tone="muted" />
-                      <Label size={12} line={16}>
-                        {server().name}
-                      </Label>
+                      <Label variant="small">{server().name}</Label>
                       <Label
-                        size={10}
-                        line={14}
+                        variant="caption"
                         tone={props.phone ? "ink" : "mutedInk"}
                         style={{
                           paddingHorizontal: 5,
@@ -339,15 +334,13 @@ export function PluginDetail(props: DetailProps) {
                       <View style={{ flex: 1 }} />
                       <If when={server().env.length}>
                         <Label
-                          size={10}
-                          line={14}
+                          variant="caption"
                           tone="muted"
                         >{`${text(props.phone ? "envShort" : "env")}: ${server().env.join(", ")}`}</Label>
                       </If>
                       <If when={server().headers.length}>
                         <Label
-                          size={10}
-                          line={14}
+                          variant="caption"
                           tone="muted"
                         >{`${text("headers")}: ${server().headers.join(", ")}`}</Label>
                       </If>
@@ -356,8 +349,7 @@ export function PluginDetail(props: DetailProps) {
                 )}
               </Each>
               <Label
-                size={11}
-                line={16}
+                variant="small"
                 tone="muted"
                 style={{ paddingHorizontal: 10, paddingVertical: 7 }}
               >
@@ -385,10 +377,10 @@ export function PluginDetail(props: DetailProps) {
                       }}
                     >
                       <AgentFace id={entry().agentId} size={14} />
-                      <Label size={12} line={16} lines={1} style={{ flex: 1 }}>
+                      <Label variant="small" lines={1} style={{ flex: 1 }}>
                         {`${entry().agentName ?? text("deletedAgent")} · ${entry().field}`}
                       </Label>
-                      <Label size={10} line={14} tone="muted">
+                      <Label variant="caption" tone="muted">
                         {readTime(entry().at)}
                       </Label>
                     </View>
@@ -458,10 +450,8 @@ function ActionRow(props: {
     >
       <Icon name={props.icon} size={18} />
       <View style={{ flex: 1, gap: 2 }}>
-        <Label size={14} line={18}>
-          {props.label}
-        </Label>
-        <Label size={11} line={14} tone="muted">
+        <Label>{props.label}</Label>
+        <Label variant="caption" tone="muted">
           {props.hint}
         </Label>
       </View>

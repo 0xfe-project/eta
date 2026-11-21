@@ -24,12 +24,7 @@ export function EditorRow(props: {
       }}
     >
       <View style={props.stack ? undefined : { flex: 1, minWidth: 0, gap: 2 }}>
-        <Label
-          size={props.stack && !props.phone ? 10 : 14}
-          line={props.stack && !props.phone ? 12 : 20}
-        >
-          {props.label}
-        </Label>
+        <Label variant={props.stack ? "caption" : "body"}>{props.label}</Label>
         <If when={!props.stack}>{props.hint}</If>
       </View>
       <View

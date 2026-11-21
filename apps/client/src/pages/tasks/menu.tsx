@@ -144,11 +144,11 @@ export function TaskMenuItem(props: {
         </View>
       </If>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Label size={12} line={16} lines={props.hint ? undefined : 1}>
+        <Label variant="small" lines={props.hint ? undefined : 1}>
           {props.label}
           <If when={props.suffix}>
             {(suffix) => (
-              <Label size={12} line={16} tone="muted">
+              <Label variant="small" tone="muted">
                 {`  ${suffix()}`}
               </Label>
             )}
@@ -156,7 +156,7 @@ export function TaskMenuItem(props: {
         </Label>
         <If when={props.hint}>
           {(hint) => (
-            <Label size={11} line={14} tone="muted">
+            <Label variant="caption" tone="muted">
               {hint()}
             </Label>
           )}
@@ -206,8 +206,7 @@ export function FilterTrigger(props: {
       }}
     >
       <Label
-        size={12}
-        line={16}
+        variant="small"
         weight={props.tablet ? 500 : 400}
         tone={props.active ? "ink" : "muted"}
       >

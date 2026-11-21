@@ -52,7 +52,7 @@ export function AgentEditor(props: AgentEditorProps) {
             borderColor: c().border,
           }}
         >
-          <Label line={20} style={{ flex: 1 }}>
+          <Label style={{ flex: 1 }}>
             {localizedText("Delete agent", "删除智能体")}
           </Label>
           <Button
@@ -120,8 +120,7 @@ export function AgentEditor(props: AgentEditorProps) {
             when={phoneEditor()}
             else={
               <Label
-                size={creating ? 14 : 16}
-                line={creating ? 18 : 22}
+                variant={creating ? "body" : "subtitle"}
                 style={{ flex: 1 }}
                 weight={500}
               >
@@ -129,7 +128,7 @@ export function AgentEditor(props: AgentEditorProps) {
               </Label>
             }
           >
-            <Label line={20} weight={600} lines={1} style={{ flex: 1 }}>
+            <Label weight={600} lines={1} style={{ flex: 1 }}>
               {title()}
             </Label>
           </If>
@@ -185,10 +184,7 @@ export function AgentEditor(props: AgentEditorProps) {
                           cursor: "pointer",
                         }}
                       >
-                        <Label
-                          line={20}
-                          tone={tab() === entry() ? "ink" : "mutedInk"}
-                        >
+                        <Label tone={tab() === entry() ? "ink" : "mutedInk"}>
                           {tabLabel(entry())}
                         </Label>
                       </View>
@@ -210,8 +206,7 @@ export function AgentEditor(props: AgentEditorProps) {
                       }}
                     >
                       <Label
-                        size={12}
-                        line={16}
+                        variant="small"
                         weight={tab() === entry() ? 600 : 400}
                         tone={tab() === entry() ? "ink" : "mutedInk"}
                       >
@@ -257,20 +252,18 @@ export function AgentEditor(props: AgentEditorProps) {
         >
           <View style={{ ...row, gap: 8 }}>
             <Label
-              size={10}
-              line={12}
+              variant="caption"
               tone="muted"
               style={{ letterSpacing: 0.8 }}
             >{`${step()}/2`}</Label>
-            <Label size={12} line={16} weight={600}>
+            <Label variant="small" weight={600}>
               {step() === 1
                 ? localizedText("Name and model", "名称与模型")
                 : uiText("instructions")}
             </Label>
           </View>
           <Label
-            size={12}
-            line={16}
+            variant="small"
             tone="muted"
             style={{ flex: 1, textAlign: "right" }}
           >

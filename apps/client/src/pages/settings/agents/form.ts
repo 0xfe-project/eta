@@ -8,7 +8,7 @@ import type {
 } from "@eta/client-contracts";
 import { AGENT_RUNTIMES } from "@eta/client-contracts";
 import { cleanup, effect, signal } from "nsh";
-import { colors } from "../../../components";
+import { colors, textFaces } from "../../../components";
 import { useModels } from "../../../components/model-select";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
@@ -41,6 +41,7 @@ export function createAgentForm(props: AgentEditorProps) {
   const stacked = () => creating || props.phone;
   const controlHeight = () => (phoneEditor() ? 32 : creating ? 28 : 24);
   const c = colors();
+  const type = textFaces();
   /** The editor's selects and fields: 24px with a strong border in the dialog. */
   const compact = () => !phoneEditor() && !creating;
   const selectStyle = () => ({
@@ -52,13 +53,13 @@ export function createAgentForm(props: AgentEditorProps) {
   });
   const fieldStyle = () => ({
     height: controlHeight(),
-    fontSize: 12,
+    fontSize: type("small").size,
     ...(phoneEditor()
       ? { paddingHorizontal: 10, borderColor: c().strong }
       : {}),
     ...(compact()
       ? {
-          lineHeight: 16,
+          lineHeight: type("small").line,
           paddingHorizontal: 10,
           paddingVertical: 3,
           borderColor: c().strong,

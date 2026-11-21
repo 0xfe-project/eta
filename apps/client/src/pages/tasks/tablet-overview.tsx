@@ -54,7 +54,7 @@ export function TabletOverview(props: {
           }}
         >
           <View style={{ ...row, gap: 8 }}>
-            <Label size={10} line={12} tone="muted" style={{ flex: 1 }}>
+            <Label variant="caption" tone="muted" style={{ flex: 1 }}>
               {parent()
                 ? uiText("parentCreatedBy", {
                     number: item().number,
@@ -78,7 +78,7 @@ export function TabletOverview(props: {
                 ]}
                 value={plan() ? "plan" : "overview"}
                 height={20}
-                labelSize={11}
+                labelVariant="caption"
                 paddingHorizontal={8}
                 strong
                 onChange={(value) => plan.set(value === "plan")}
@@ -90,14 +90,13 @@ export function TabletOverview(props: {
             <TitleInPlace
               title={item().title}
               state={props.state}
-              size={18}
-              line={22}
+              variant="subtitle"
               weight={600}
             />
             <If
               when={!parent()}
               else={
-                <Label size={11} line={14} tone={tones[item().status]}>
+                <Label variant="caption" tone={tones[item().status]}>
                   {`${statusName(item().status)} · ${uiText("taskAuto")}`}
                 </Label>
               }
@@ -148,18 +147,16 @@ export function TabletOverview(props: {
                   (parent() || !/^\s*#/.test(item().description))
                 }
               >
-                <Label size={13} line={16} weight={600}>
+                <Label variant="small" weight={600}>
                   {parent() ? uiText("description") : uiText("goal")}
                 </Label>
               </If>
               <If when={item().description}>
                 <Markdown
                   value={item().description}
-                  size={12}
-                  line={16}
+                  dense
                   heading={{
-                    size: 13,
-                    line: 16,
+                    variant: "small",
                     weight: 600,
                     space: 0,
                     after: -8,
@@ -289,8 +286,7 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
               {(field) => (
                 <View style={{ ...row, alignItems: "flex-start", gap: 8 }}>
                   <Label
-                    size={10}
-                    line={12}
+                    variant="caption"
                     tone="muted"
                     style={{ width: parent() ? 64 : 74, flexShrink: 0 }}
                   >
@@ -299,14 +295,13 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
                   <If
                     when={field()[1]}
                     else={
-                      <Label size={11} line={14} tone="muted">
+                      <Label variant="caption" tone="muted">
                         {uiText("pickAPieceOfWork")}
                       </Label>
                     }
                   >
                     <Label
-                      size={11}
-                      line={14}
+                      variant="caption"
                       weight={600}
                       style={{ flex: 1, minWidth: 0 }}
                     >
@@ -338,7 +333,7 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
                         }}
                       >
                         <Icon name="refresh" size={11} />
-                        <Label size={11} line={14} weight={600}>
+                        <Label variant="caption" weight={600}>
                           {uiText("rerun")}
                         </Label>
                       </View>

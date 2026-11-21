@@ -74,7 +74,7 @@ export function PhoneRoutineRow(props: {
     >
       <View style={{ flex: 1, minWidth: 0, gap: 3, paddingBottom: 6 }}>
         <View style={{ ...row, gap: 8 }}>
-          <Label lines={1} line={20} style={{ flex: 1, minWidth: 0 }}>
+          <Label lines={1} style={{ flex: 1, minWidth: 0 }}>
             {props.item.name}
           </Label>
           <If when={!props.paused}>
@@ -83,8 +83,7 @@ export function PhoneRoutineRow(props: {
         </View>
         <View style={{ ...row, gap: 8 }}>
           <Label
-            size={11}
-            line={14}
+            variant="caption"
             tone="muted"
             lines={1}
             style={{ flex: 1, minWidth: 0 }}
@@ -92,8 +91,7 @@ export function PhoneRoutineRow(props: {
             {scheduleLabel(props.item.schedule)}
           </Label>
           <Label
-            size={11}
-            line={14}
+            variant="caption"
             tone={props.paused ? "warningInk" : "muted"}
             lines={1}
           >
@@ -142,11 +140,11 @@ export function LatestReportCard(props: {
   return (
     <View style={{ borderWidth: 1, borderColor: c().border }}>
       <View style={{ padding: inset(), gap: 6 }}>
-        <Label size={12} line={16} tone="muted">
+        <Label variant="small" tone="muted">
           {feedTime(props.run.startedAt)}
         </Label>
         <View style={{ gap: 8 }}>
-          <Label size={16} line={22} weight={600}>
+          <Label variant="subtitle" weight={600}>
             {runTitle(props.run)}
           </Label>
           <If when={props.run.report}>
@@ -155,7 +153,7 @@ export function LatestReportCard(props: {
                 props.phone ? undefined : { maxHeight: 280, overflow: "hidden" }
               }
             >
-              <Markdown value={reportBody(props.run)} line={22} />
+              <Markdown value={reportBody(props.run)} />
             </View>
           </If>
         </View>
@@ -176,7 +174,7 @@ export function LatestReportCard(props: {
           focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
           style={{ ...row, gap: 6, cursor: "pointer" }}
         >
-          <Label size={12} line={16} weight={600}>
+          <Label variant="small" weight={600}>
             {uiText("readReport")}
           </Label>
           <Icon name="arrowRight" size={12} />
@@ -211,7 +209,7 @@ export function EarlierReportCard(props: {
           cursor: props.canRetry ? "pointer" : "default",
         }}
       >
-        <Label size={12} line={16} tone={props.canRetry ? "mutedInk" : "faint"}>
+        <Label variant="small" tone={props.canRetry ? "mutedInk" : "faint"}>
           {uiText("retry")}
         </Label>
       </View>
@@ -243,19 +241,17 @@ export function EarlierReportCard(props: {
         height: missed() && !props.compact ? 110 : undefined,
       }}
     >
-      <Label size={12} line={16} tone="muted">
+      <Label variant="small" tone="muted">
         {feedTime(props.run.startedAt)}
       </Label>
       <If
         when={missed()}
         else={
           <>
-            <Label size={14} line={20} weight={600} lines={1}>
+            <Label weight={600} lines={1}>
               {runTitle(props.run)}
             </Label>
             <Label
-              size={14}
-              line={22}
               lines={props.compact ? undefined : 2}
               style={props.compact ? undefined : { height: 44 }}
             >
@@ -267,16 +263,10 @@ export function EarlierReportCard(props: {
         <If when={props.compact}>
           <View style={{ ...row, gap: 8 }}>
             <StatusDot color={c().red} />
-            <Label size={14} line={20} weight={600} tone="muted">
+            <Label weight={600} tone="muted">
               {uiText("noReport")}
             </Label>
-            <Label
-              size={14}
-              line={20}
-              tone="muted"
-              lines={1}
-              style={{ flex: 1, minWidth: 0 }}
-            >
+            <Label tone="muted" lines={1} style={{ flex: 1, minWidth: 0 }}>
               {props.run.error ?? ""}
             </Label>
             {retry()}
@@ -285,11 +275,11 @@ export function EarlierReportCard(props: {
         <If when={!props.compact}>
           <View style={{ ...row, gap: 8 }}>
             <StatusDot color={c().red} />
-            <Label size={14} line={20} weight={600} tone="muted">
+            <Label weight={600} tone="muted">
               {uiText("noReport")}
             </Label>
           </View>
-          <Label size={14} line={22} tone="muted" lines={1} style={{ flex: 1 }}>
+          <Label tone="muted" lines={1} style={{ flex: 1 }}>
             {props.run.error ?? ""}
           </Label>
           {retry()}

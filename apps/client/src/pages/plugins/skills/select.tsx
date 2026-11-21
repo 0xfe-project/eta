@@ -53,11 +53,11 @@ export function SkillSelect(props: {
             }}
           >
             <View style={{ ...row, flex: 1, minWidth: 0, gap: 6 }}>
-              <Label size={12} line={16} lines={1} style={{ flexShrink: 1 }}>
+              <Label variant="small" lines={1} style={{ flexShrink: 1 }}>
                 {item?.title ?? entry.title}
               </Label>
               <If when={item?.suffix}>
-                <Label size={12} line={16} tone="muted" lines={1}>
+                <Label variant="small" tone="muted" lines={1}>
                   {item?.suffix ?? ""}
                 </Label>
               </If>
@@ -87,8 +87,7 @@ export function SkillSelect(props: {
           }}
         >
           <Label
-            size={12}
-            line={16}
+            variant="small"
             lines={1}
             tone={current() ? "ink" : "muted"}
             style={{ flex: 1, minWidth: 0 }}

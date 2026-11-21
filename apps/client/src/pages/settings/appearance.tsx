@@ -9,6 +9,8 @@ import {
   grow,
   Label,
   row,
+  textFaces,
+  textStyle,
 } from "../../components";
 import { ElementPicking, pickerTarget } from "../../components/element-picker";
 import { ToggleSwitch } from "../../components/toggle-switch";
@@ -65,14 +67,14 @@ function AppearanceRow(props: {
       }}
     >
       <View style={props.stack ? undefined : { flex: 1, minWidth: 0, gap: 2 }}>
-        <Label line={20}>{props.title}</Label>
+        <Label>{props.title}</Label>
         <If when={props.error}>
-          <Label size={12} line={16} tone="red">
+          <Label variant="small" tone="red">
             {props.error}
           </Label>
         </If>
         <If when={!props.error && props.hint}>
-          <Label size={12} line={16} tone="muted">
+          <Label variant="small" tone="muted">
             {props.hint}
           </Label>
         </If>
@@ -130,6 +132,7 @@ function FontRow(props: {
 }) {
   const text = useText();
   const c = colors();
+  const type = textFaces();
   const fonts = Fonts();
   const name = () => fonts()[props.kind];
   const draft = signal(name());
@@ -175,8 +178,7 @@ function FontRow(props: {
         style={{
           width: props.phone ? "100%" : 200,
           height: props.phone ? 32 : 24,
-          fontSize: 12,
-          lineHeight: 16,
+          ...textStyle(type("small")),
           paddingHorizontal: props.phone ? 12 : 10,
           paddingVertical: 2,
           borderColor: invalid() ? c().red : c().strong,

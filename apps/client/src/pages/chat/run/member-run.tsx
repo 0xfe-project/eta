@@ -260,12 +260,7 @@ export function MemberRun(props: {
       >
         <View style={{ ...row, height: props.phone ? 24 : 28, gap: 8 }}>
           <AgentFace id={props.agentId} size={18} />
-          <Label
-            size={props.phone ? 14 : 12}
-            line={props.phone ? 18 : 16}
-            weight={props.phone ? 400 : 500}
-            lines={1}
-          >
+          <Label variant="small" weight={props.phone ? 400 : 500} lines={1}>
             {props.executorName ??
               host.agent(props.agentId)?.name ??
               uiText("agent")}
@@ -274,13 +269,12 @@ export function MemberRun(props: {
             {(state) => (
               <View style={{ ...row, flex: 1, minWidth: 0, gap: 8 }}>
                 <StatusDot color={state().color} />
-                <Label size={12} line={16} lines={1}>
+                <Label variant="small" lines={1}>
                   {state().word}
                 </Label>
                 <If when={state().took}>
                   <Label
-                    size={12}
-                    line={16}
+                    variant="small"
                     tone="muted"
                     lines={1}
                     style={{ flex: 1, minWidth: 0 }}
@@ -293,8 +287,7 @@ export function MemberRun(props: {
           </If>
           <If when={props.phone && !runState()}>
             <Label
-              size={12}
-              line={16}
+              variant="small"
               tone="muted"
               lines={1}
               style={{ flex: 1, minWidth: 0 }}
@@ -307,14 +300,13 @@ export function MemberRun(props: {
           </If>
           <If when={!props.phone}>
             <If when={!runState() && !props.meta && stamp()}>
-              <Label size={10} line={12} tone="muted" lines={1}>
+              <Label variant="caption" tone="muted" lines={1}>
                 {runDate(stamp()!)}
               </Label>
             </If>
             <If when={!runState()}>
               <Label
-                size={12}
-                line={16}
+                variant="small"
                 tone="muted"
                 lines={1}
                 style={{ flex: 1, minWidth: 0 }}
@@ -336,7 +328,7 @@ export function MemberRun(props: {
               }}
               style={{ ...row, gap: 4, flexShrink: 0, cursor: "pointer" }}
             >
-              <Label size={10} line={12} tone="muted">
+              <Label variant="caption" tone="muted">
                 {uiText(expanded() ? "collapseDetails" : "expandDetails")}
               </Label>
               <Icon name="down" size={12} tone="muted" />
@@ -443,25 +435,16 @@ export function MemberRun(props: {
                             }
                           >
                             <Label
-                              size={11}
-                              line={14}
+                              variant="caption"
                               style={{ color: runKinds[kind()].color }}
                             >
                               ■
                             </Label>
                           </If>
-                          <Label
-                            size={11}
-                            line={props.phone ? 14 : 16}
-                            tone="muted"
-                          >
+                          <Label variant="caption" tone="muted">
                             {uiText(runKinds[kind()].label)}
                           </Label>
-                          <Label
-                            size={11}
-                            line={props.phone ? 14 : 16}
-                            weight={500}
-                          >
+                          <Label variant="caption" weight={500}>
                             {runDuration(duration())}
                           </Label>
                         </View>
@@ -484,7 +467,7 @@ export function MemberRun(props: {
             backgroundColor: c().selected,
           }}
         >
-          <Label size={12} tone="muted" style={{ flex: 1 }}>
+          <Label variant="small" tone="muted" style={{ flex: 1 }}>
             {uiText("runReconnectStatus")}
           </Label>
           <Button
@@ -529,7 +512,7 @@ export function MemberRun(props: {
               body's last line, in plain ink. */}
           <If when={!props.taskRun && failure()}>
             {(reason) => (
-              <Label size={12} tone="red" style={{ marginTop: 8 }}>
+              <Label variant="small" tone="red" style={{ marginTop: 8 }}>
                 {`${uiText("runFailed")} · ${reason()}`}
               </Label>
             )}
@@ -539,18 +522,14 @@ export function MemberRun(props: {
               props.taskRun && !visible().length && transcript() && online()
             }
           >
-            <Label
-              tone="muted"
-              size={props.phone ? 14 : 12}
-              line={props.phone ? 20 : 16}
-            >
+            <Label tone="muted" variant="small">
               {uiText("noRunRecords")}
             </Label>
           </If>
           <If when={props.taskRun ? failure() : undefined}>
             {(reason) => (
               <Label
-                size={12}
+                variant="small"
                 tone="mutedInk"
                 style={{ marginTop: visible().length ? 8 : 4 }}
               >
@@ -565,7 +544,7 @@ export function MemberRun(props: {
               !(props.taskRun && transcript() && online())
             }
           >
-            <Label tone="muted" size={12}>
+            <Label tone="muted" variant="small">
               {!target
                 ? uiText("noRunTranscript")
                 : host.state().missing[target]

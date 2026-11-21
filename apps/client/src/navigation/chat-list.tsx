@@ -173,7 +173,7 @@ export function ChatList(
           )}
         </Each>
         <If when={!props.collapsed && groups().length === 0}>
-          <Label size={12} tone="muted" style={{ padding: 14 }}>
+          <Label variant="small" tone="muted" style={{ padding: 14 }}>
             {text(query() ? "noMatchingConversations" : "noConversations")}
           </Label>
         </If>

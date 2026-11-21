@@ -73,8 +73,6 @@ export function AgentPlugins(props: { form: AgentForm }) {
         else={
           <Empty
             title={uiText("noPluginsInstalled")}
-            titleLine={20}
-            descriptionLine={16}
             descriptionWidth={320}
             style={emptyStyle}
           />
@@ -115,13 +113,11 @@ export function AgentPlugins(props: { form: AgentForm }) {
                   else={
                     <>
                       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                        <Label line={20} weight={500}>
-                          {item().name}
-                        </Label>
+                        <Label weight={500}>{item().name}</Label>
                         <If
                           when={checked() && !ready()}
                           else={
-                            <Label size={12} line={16} tone="muted">
+                            <Label variant="small" tone="muted">
                               {meta(item())}
                             </Label>
                           }
@@ -139,15 +135,13 @@ export function AgentPlugins(props: { form: AgentForm }) {
                   }
                 >
                   <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                    <Label line={20} weight={500}>
-                      {item().name}
-                    </Label>
+                    <Label weight={500}>{item().name}</Label>
                     <StatusLine status={status(item())} />
-                    <Label size={12} line={16} tone="muted">
+                    <Label variant="small" tone="muted">
                       {counts(item())}
                     </Label>
                     <If when={serverLine(item())}>
-                      <Label size={12} line={16} tone="muted">
+                      <Label variant="small" tone="muted">
                         {serverLine(item())}
                       </Label>
                     </If>

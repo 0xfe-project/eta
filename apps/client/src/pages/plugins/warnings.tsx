@@ -73,11 +73,7 @@ function WarningsText(props: { item: PluginView; inline?: boolean }) {
     >
       <Each of={warnings()} key={(warning) => warning.text}>
         {(warning) => (
-          <Label
-            size={12}
-            line={16}
-            tone={warningTone(warning(), props.inline)}
-          >
+          <Label variant="small" tone={warningTone(warning(), props.inline)}>
             {warning().text}
           </Label>
         )}
@@ -110,13 +106,7 @@ export function PluginWarningsDialog(props: {
           paddingTop: 16,
         }}
       >
-        <Label
-          size={14}
-          line={20}
-          weight={500}
-          lines={1}
-          style={{ flexShrink: 1 }}
-        >
+        <Label weight={500} lines={1} style={{ flexShrink: 1 }}>
           {uiText("warningsFor", { name: props.item.name })}
         </Label>
         <CloseButton
@@ -181,11 +171,7 @@ export function PluginWarnings(props: {
         }}
       >
         <Icon name="warning" size={14} />
-        <Label
-          weight={600}
-          size={props.phone ? 13 : 12}
-          line={props.phone ? 18 : 16}
-        >
+        <Label weight={600} variant="small">
           {uiText("warningsFor", { name: props.item.name })}
         </Label>
       </View>
@@ -196,7 +182,7 @@ export function PluginWarnings(props: {
           disabled={checking()}
           icon="refresh"
           size={props.phone ? 28 : undefined}
-          labelSize={props.phone ? 12 : 11}
+          labelVariant="caption"
           style={
             props.phone
               ? { alignSelf: "flex-start", gap: 6, paddingHorizontal: 10 }

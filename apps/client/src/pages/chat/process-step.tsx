@@ -86,7 +86,7 @@ export function ProcessStep(props: { value: RunBlock }) {
                   alignItems: "center",
                 }}
               >
-                <Label size={10} line={14} tone="faint">
+                <Label variant="caption" tone="faint">
                   {uiText("insertReceived")}
                 </Label>
               </View>
@@ -107,7 +107,7 @@ export function ProcessStep(props: { value: RunBlock }) {
                   borderColor: c().border,
                 }}
               >
-                <Label size={12} lines={1} style={{ flex: 1 }}>
+                <Label variant="small" lines={1} style={{ flex: 1 }}>
                   {title()}
                 </Label>
                 <Caption
@@ -125,17 +125,16 @@ export function ProcessStep(props: { value: RunBlock }) {
                           color: c().buttonInk,
                           paddingHorizontal: 8,
                           paddingVertical: 2,
-                          lineHeight: 12,
                           letterSpacing: 1,
                           fontWeight: 600,
                         }
-                      : { lineHeight: 12, letterSpacing: 1, color: c().faint }
+                      : { letterSpacing: 1, color: c().faint }
                   }
                 />
               </View>
               <If when={expanded() && step().output}>
                 <View style={{ padding: 8, backgroundColor: c().surface }}>
-                  <Label size={12} tone="muted">
+                  <Label variant="small" tone="muted">
                     {step().output}
                   </Label>
                 </View>
@@ -190,17 +189,15 @@ function TextStep(props: {
           <If
             when={props.kind === "note"}
             else={
-              <Label size={12} line={18} tone="muted">
+              <Label variant="small" tone="muted">
                 {props.text}
               </Label>
             }
           >
             <Markdown
               value={props.text}
-              size={12}
-              line={18}
               dense
-              heading={{ size: 12, line: 18, weight: 600, space: 4, after: 2 }}
+              heading={{ variant: "small", weight: 600, space: 4, after: 2 }}
               streaming
             />
           </If>

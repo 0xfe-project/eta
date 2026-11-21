@@ -52,7 +52,7 @@ export function ContextTasks(props: {
         }}
       >
         <Caption text={uiText("tasks2")} />
-        <Label size={10} line={12} tone="muted">
+        <Label variant="caption" tone="muted">
           {open().length}
         </Label>
       </View>
@@ -75,10 +75,10 @@ export function ContextTasks(props: {
             }}
           >
             <TaskGlyph status={entry().task.status} size={14} />
-            <Label size={11} line={14} tone="muted">
+            <Label variant="caption" tone="muted">
               {`#${entry().task.number}`}
             </Label>
-            <Label size={12} line={16} lines={1} style={{ flex: 1 }}>
+            <Label variant="small" lines={1} style={{ flex: 1 }}>
               {entry().task.title}
             </Label>
             <If
@@ -88,7 +88,7 @@ export function ContextTasks(props: {
               <SubtaskSegments
                 subtasks={subtasksOf(host.tasks(), entry().task)}
               />
-              <Label size={11} line={14} tone="muted">
+              <Label variant="caption" tone="muted">
                 {`${entry().task.subtasks?.done ?? 0}/${entry().task.subtasks?.total ?? 0}`}
               </Label>
             </If>
@@ -98,7 +98,7 @@ export function ContextTasks(props: {
       </Each>
       <If when={!props.tasks.length}>
         <Label
-          size={12}
+          variant="small"
           tone="muted"
           style={{ paddingHorizontal: 12, paddingBottom: 8 }}
         >
@@ -158,8 +158,7 @@ export function TasksTab(props: {
       }}
     >
       <Label
-        size={11}
-        line={16}
+        variant="small"
         weight={selected ? 600 : 400}
         tone={selected ? "ink" : "muted"}
         lines={1}
@@ -170,7 +169,7 @@ export function TasksTab(props: {
   );
   return (
     <View style={{ paddingHorizontal: 10, paddingTop: 12 }}>
-      <Label weight={600} line={20} style={{ paddingBottom: 8 }}>
+      <Label weight={600} style={{ paddingBottom: 8 }}>
         {uiText("tasks2")}
       </Label>
       <View style={{ ...row, gap: 6, paddingBottom: 12 }}>
@@ -190,8 +189,7 @@ export function TasksTab(props: {
           return (
             <If when={items().length}>
               <Label
-                size={11}
-                line={16}
+                variant="small"
                 tone="muted"
                 style={{ paddingTop: index() ? 10 : 2, paddingBottom: 6 }}
               >
@@ -240,7 +238,7 @@ export function TasksTab(props: {
                   tone="muted"
                 />
                 <TaskGlyph status={group()[0]} size={12} />
-                <Label size={11} line={16}>
+                <Label variant="small">
                   {uiText(group()[1], { count: items().length })}
                 </Label>
               </View>
@@ -259,7 +257,7 @@ export function TasksTab(props: {
         }}
       </Each>
       <If when={!tasks().length}>
-        <Label size={12} tone="muted">
+        <Label variant="small" tone="muted">
           {uiText("noTasksYet")}
         </Label>
       </If>
@@ -293,10 +291,10 @@ function TaskRow(props: { task: BoardTaskView; onPress: () => void }) {
     >
       <TaskGlyph status={task().status} size={14} />
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Label size={13} line={18} lines={1}>
+        <Label variant="small" lines={1}>
           {task().title}
         </Label>
-        <Label size={10} line={14} tone="muted" lines={1}>
+        <Label variant="caption" tone="muted" lines={1}>
           {meta()}
         </Label>
       </View>
@@ -305,7 +303,7 @@ function TaskRow(props: { task: BoardTaskView; onPress: () => void }) {
           subtasks={subtasksOf(host.tasks(), task())}
           width={6}
         />
-        <Label size={11} line={16} tone="muted">
+        <Label variant="small" tone="muted">
           {`${task().subtasks?.done ?? 0}/${task().subtasks?.total ?? 0}`}
         </Label>
       </If>
@@ -314,7 +312,7 @@ function TaskRow(props: { task: BoardTaskView; onPress: () => void }) {
           {(wait) => (
             <View style={{ ...row, gap: 4, flexShrink: 1, maxWidth: 160 }}>
               <Icon name="lock" size={11} tone="muted" />
-              <Label size={11} line={16} tone="muted" lines={1}>
+              <Label variant="small" tone="muted" lines={1}>
                 {wait().title}
               </Label>
             </View>
@@ -323,7 +321,7 @@ function TaskRow(props: { task: BoardTaskView; onPress: () => void }) {
         <If when={task().status === "in_progress"}>
           <View style={{ ...row, gap: 4 }}>
             <StatusDot color={c().blue} />
-            <Label size={11} line={16} tone="blue">
+            <Label variant="small" tone="blue">
               {uiText("minutesShort", { count: minutes() })}
             </Label>
           </View>
@@ -339,7 +337,7 @@ function TaskRow(props: { task: BoardTaskView; onPress: () => void }) {
           <TaskStatus task={task()} />
         </If>
         <If when={task().status === "todo" && !waitingFor()}>
-          <Label size={11} line={16} tone="muted">
+          <Label variant="small" tone="muted">
             {statusName(task().status)}
           </Label>
         </If>

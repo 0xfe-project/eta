@@ -144,9 +144,7 @@ export function TaskDetail(props: {
                       borderColor: c().border,
                     }}
                   >
-                    <Label size={14} line={20} style={{ flex: 1 }}>
-                      {action().label}
-                    </Label>
+                    <Label style={{ flex: 1 }}>{action().label}</Label>
                   </View>
                 )}
               </Each>
@@ -166,7 +164,9 @@ export function TaskDetail(props: {
         onBack={paned() ? undefined : props.onClose}
         inset={props.docked ? 8 : paned() ? 16 : undefined}
         end={paned() ? 10 : undefined}
-        titleSize={props.layout === "desktop" && !props.docked ? 12 : undefined}
+        titleVariant={
+          props.layout === "desktop" && !props.docked ? "small" : undefined
+        }
         backIcon={
           props.layout === "desktop" && !props.docked ? "arrowLeft" : undefined
         }
@@ -186,7 +186,8 @@ export function TaskDetail(props: {
               ]}
               value={plan() ? "plan" : "overview"}
               height={paned() ? 20 : 22}
-              labelSize={paned() ? 11 : 10}
+              labelVariant="caption"
+              boldActive={!paned()}
               paddingHorizontal={paned() ? 8 : undefined}
               strong={paned()}
               onChange={(value) => plan.set(value === "plan")}
@@ -198,7 +199,7 @@ export function TaskDetail(props: {
               label={uiText("panel")}
               icon="sidebar"
               iconSize={14}
-              labelSize={11}
+              labelVariant="caption"
               onPress={() => panel.set(true)}
             />
           </If>
@@ -267,7 +268,7 @@ export function TaskDetail(props: {
                   borderColor: c().border,
                 }}
               >
-                <Label size={12} tone="muted" style={{ flex: 1 }}>
+                <Label variant="small" tone="muted" style={{ flex: 1 }}>
                   {uiText("forYouToCheck2")}
                 </Label>
                 <TaskReviewActions state={state} />
@@ -290,7 +291,7 @@ export function TaskDetail(props: {
                     borderColor: c().border,
                   }}
                 >
-                  <Label size={11} line={14} tone="muted">
+                  <Label variant="caption" tone="muted">
                     {uiText("taskReviewLetsDependentsGo")}
                   </Label>
                   <TaskReviewActions state={state} />

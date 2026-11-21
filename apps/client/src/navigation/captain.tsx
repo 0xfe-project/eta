@@ -50,11 +50,11 @@ export function CaptainCard(props: { onPress: () => void }) {
         <View style={{ flex: 1, gap: 1 }}>
           <View style={{ ...row, gap: 8 }}>
             <Label weight={500}>{text("captain")}</Label>
-            <Label size={10} tone="muted">
+            <Label variant="caption" tone="muted">
               {text(host.captain()?.status === "working" ? "working" : "idle")}
             </Label>
           </View>
-          <Label size={10} line={15} tone="muted" lines={1}>
+          <Label variant="caption" tone="muted" lines={1}>
             {lastReply()
               ? uiText("captainLastReply", {
                   time: messageTime(lastReply()!, false),
@@ -100,9 +100,7 @@ export function RailCaptain(props: { selected: boolean; onPress: () => void }) {
         <CaptainContextRing>
           <CaptainFace size={36} />
         </CaptainContextRing>
-        <Label size={10} line={14}>
-          {text("captain")}
-        </Label>
+        <Label variant="caption">{text("captain")}</Label>
       </View>
     </View>
   );

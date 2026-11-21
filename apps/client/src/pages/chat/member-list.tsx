@@ -45,7 +45,7 @@ export function ConversationMembers(props: {
           borderColor: c().border,
         }}
       >
-        <Label size={12} tone="muted">
+        <Label variant="small" tone="muted">
           {uiText(
             props.members.length === 1
               ? "oneConversationMember"
@@ -81,21 +81,21 @@ export function ConversationMembers(props: {
               />
               <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                 <View style={{ ...row, gap: 6 }}>
-                  <Label line={18} lines={1}>
+                  <Label lines={1}>
                     {host.agent(entry().agentId)?.name ?? uiText("agent")}
                   </Label>
                   <StatusDot
                     color={activeReply(entry().status) ? c().blue : c().muted}
                     opacity={activeReply(entry().status) ? 1 : 0.4}
                   />
-                  <Label size={10} line={12} tone="muted">
+                  <Label variant="caption" tone="muted">
                     {memberStatus(entry().status)}
                   </Label>
                 </View>
                 <If
                   when={entry().sessionId}
                   else={
-                    <Label size={10} line={14} tone="muted" lines={1}>
+                    <Label variant="caption" tone="muted" lines={1}>
                       {uiText("memberNoConversation")}
                     </Label>
                   }
@@ -273,12 +273,12 @@ function MemberStats(props: { session: string; model?: string | null }) {
     <View tooltip={hint(model(), c)} style={{ ...row, minWidth: 0 }}>
       <If when={context()}>
         {(current) => (
-          <Label size={10} line={14} style={{ flexShrink: 0 }}>
+          <Label variant="caption" style={{ flexShrink: 0 }}>
             {`${current().percent}%`}
           </Label>
         )}
       </If>
-      <Label size={10} line={14} tone="muted" lines={1} style={{ flex: 1 }}>
+      <Label variant="caption" tone="muted" lines={1} style={{ flex: 1 }}>
         {context() ? ` · ${spent()}` : spent()}
       </Label>
     </View>

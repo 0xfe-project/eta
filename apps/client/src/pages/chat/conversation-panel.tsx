@@ -156,12 +156,10 @@ export function ConversationPanel(props: {
                       tone={selected() ? "ink" : "muted"}
                     />
                     <If when={selected()}>
-                      <Label size={11} line={16}>
-                        {uiText(tab()[2])}
-                      </Label>
+                      <Label variant="small">{uiText(tab()[2])}</Label>
                     </If>
                     <If when={tab()[0] === "Pending" && needsAttention()}>
-                      <Label size={11} line={16} tone="muted">
+                      <Label variant="small" tone="muted">
                         {needsAttention()}
                       </Label>
                     </If>
@@ -172,7 +170,7 @@ export function ConversationPanel(props: {
                         artifactCount()
                       }
                     >
-                      <Label size={11} line={16} tone="muted">
+                      <Label variant="small" tone="muted">
                         {artifactCount()}
                       </Label>
                     </If>
@@ -238,7 +236,7 @@ export function ConversationPanel(props: {
                             }
                           />
                         </View>
-                        <Label size={10} line={12} tone="muted">
+                        <Label variant="caption" tone="muted">
                           {uiText("chooseTheModelUsedForCaptains")}
                         </Label>
                       </View>
@@ -258,7 +256,7 @@ export function ConversationPanel(props: {
                         <If
                           when={approvals().length}
                           else={
-                            <Label size={12} line={16}>
+                            <Label variant="small">
                               {uiText("nothingIsWaitingForApproval")}
                             </Label>
                           }

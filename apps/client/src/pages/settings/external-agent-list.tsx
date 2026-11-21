@@ -79,7 +79,7 @@ export function ExternalAgentList(props: {
                 }}
               >
                 <StatusDot color={c().strong} />
-                <Label size={12} line={16} tone="muted">
+                <Label variant="small" tone="muted">
                   {uiText("externalAgentsOffline", {
                     name: group().name,
                   })}
@@ -99,7 +99,7 @@ export function ExternalAgentList(props: {
                 leading={<LetterBox name={agent().label} />}
                 meta={
                   <>
-                    <Label size={12} line={16} tone="muted">
+                    <Label variant="small" tone="muted">
                       {[agent().command, ...agent().args].join(" ")}
                     </Label>
                     <If when={agent().status === "unauthenticated"}>

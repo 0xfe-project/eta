@@ -81,11 +81,8 @@ function MonthlyAccount(props: {
                   : uiText("modelQuotaUsed", { percent: percentText(used()!) });
               return (
                 <View style={{ gap: 2 }}>
-                  <Label
-                    size={12}
-                    line={16}
-                  >{`${title()} · ${uiText("modelQuotaMonthly")} · ${usage()}`}</Label>
-                  <Label size={12} line={16} tone="muted">
+                  <Label variant="small">{`${title()} · ${uiText("modelQuotaMonthly")} · ${usage()}`}</Label>
+                  <Label variant="small" tone="muted">
                     {localTime(window().resetsAt)
                       ? uiText("modelQuotaResetsAt", {
                           time: localTime(window().resetsAt),
@@ -99,7 +96,7 @@ function MonthlyAccount(props: {
                         600_000
                     }
                   >
-                    <Label size={12} tone="muted">
+                    <Label variant="small" tone="muted">
                       {uiText("modelReadLastSuccess", {
                         time: localTime(props.quota?.observedAt),
                       })}
@@ -111,8 +108,8 @@ function MonthlyAccount(props: {
           </Each>
         }
       >
-        <Label size={12}>{title()}</Label>
-        <Label size={12} tone="muted">
+        <Label variant="small">{title()}</Label>
+        <Label variant="small" tone="muted">
           {problem()}
         </Label>
       </If>
@@ -182,7 +179,7 @@ export function SubscriptionDetail(props: {
         )}
       </Each>
       <If when={failed()}>
-        <Label size={12} tone="amber">
+        <Label variant="small" tone="amber">
           {uiText("modelReadFailed")}
         </Label>
       </If>
@@ -250,8 +247,6 @@ export function SubscriptionDetail(props: {
                 }}
               >
                 <Label
-                  size={props.phone ? 12 : undefined}
-                  line={props.phone ? 16 : 20}
                   weight={tab() === item() ? (props.phone ? 600 : 500) : 400}
                   tone={
                     tab() === item()
@@ -266,7 +261,7 @@ export function SubscriptionDetail(props: {
                     : uiText("sourceConnectionTab")}
                 </Label>
                 <If when={item() === "models" && !props.phone}>
-                  <Label size={12} line={16} tone="muted">
+                  <Label variant="small" tone="muted">
                     {models().length}
                   </Label>
                 </If>

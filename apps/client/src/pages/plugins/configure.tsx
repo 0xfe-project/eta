@@ -18,6 +18,8 @@ import {
   Label,
   Modal,
   row,
+  textFaces,
+  textStyle,
 } from "../../components";
 import { CloseButton } from "../../components/navigation-buttons";
 import { ToggleSwitch } from "../../components/toggle-switch";
@@ -35,6 +37,7 @@ export const sheetEdge = {
 export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
   const host = useHost();
   const c = colors();
+  const type = textFaces();
   const fonts = Fonts();
   const repo = signal("");
   const rev = signal("");
@@ -74,8 +77,7 @@ export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
         placeholderColor: c().faint,
         backgroundColor: c().canvas,
         fontFamily: fontFamily(fonts().interface),
-        fontSize: props.phone ? 14 : 12,
-        lineHeight: props.phone ? 20 : 16,
+        ...textStyle(type("small")),
         height: props.phone ? 40 : 28,
         paddingHorizontal: props.phone ? 12 : 8,
         borderWidth: 1,
@@ -105,8 +107,7 @@ export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
         }
       >
         <Label
-          size={props.phone ? 14 : 12}
-          line={props.phone ? 20 : 18}
+          variant="small"
           tone="muted"
           style={props.phone ? undefined : { paddingTop: 6 }}
         >
@@ -133,7 +134,6 @@ export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
             label={busy() ? uiText("adding") : uiText("addPluginSubmit")}
             tone="primary"
             size={props.phone ? 44 : 28}
-            labelSize={props.phone ? 14 : undefined}
             labelWeight={props.phone ? 500 : undefined}
             dimDisabled={false}
             style={{
@@ -157,6 +157,7 @@ export function ConfigurePlugin(props: {
 }) {
   const host = useHost();
   const c = colors();
+  const type = textFaces();
   const values = signal<Record<string, PluginValue | null>>({});
   const numberInput = signal<Record<string, string>>({});
   const issues = signal<PluginResults["configure"]["issues"]>([]);
@@ -222,15 +223,13 @@ export function ConfigurePlugin(props: {
   const title = () => uiText("configureWithCount", { name: props.item.name });
   const compactField = () => ({
     height: 28,
-    fontSize: 12,
-    lineHeight: 16,
+    ...textStyle(type("small")),
     borderColor: c().strong,
     placeholderColor: c().faint,
   });
   const phoneField = () => ({
     height: 40,
-    fontSize: 13,
-    lineHeight: 18,
+    ...textStyle(type("small")),
     paddingHorizontal: 10,
     borderColor: c().strong,
   });
@@ -253,7 +252,7 @@ export function ConfigurePlugin(props: {
           }
         >
           <If when={props.phone}>
-            <Label size={12} line={16} tone="muted">
+            <Label variant="small" tone="muted">
               {pluginConfigText("fields")}
             </Label>
           </If>
@@ -271,17 +270,8 @@ export function ConfigurePlugin(props: {
                         gap: props.phone ? 8 : 6,
                       }}
                     >
-                      <Label
-                        size={props.phone ? 13 : 12}
-                        line={props.phone ? 18 : 16}
-                      >
-                        {item().title}
-                      </Label>
-                      <Label
-                        size={props.phone ? 11 : 10}
-                        line={14}
-                        tone="muted"
-                      >
+                      <Label variant="small">{item().title}</Label>
+                      <Label variant="caption" tone="muted">
                         {pluginConfigText(
                           item().required
                             ? "required"
@@ -293,7 +283,7 @@ export function ConfigurePlugin(props: {
                     </View>
                   </If>
                   <If when={item().description && item().type !== "boolean"}>
-                    <Label size={11} tone="muted">
+                    <Label variant="caption" tone="muted">
                       {item().description}
                     </Label>
                   </If>
@@ -339,18 +329,9 @@ export function ConfigurePlugin(props: {
                       >
                         <View style={{ ...row, gap: props.phone ? 12 : 10 }}>
                           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                            <Label
-                              size={props.phone ? 13 : 12}
-                              line={props.phone ? 18 : 16}
-                            >
-                              {item().title}
-                            </Label>
+                            <Label variant="small">{item().title}</Label>
                             <If when={item().description}>
-                              <Label
-                                size={props.phone ? 11 : 10}
-                                line={14}
-                                tone="muted"
-                              >
+                              <Label variant="caption" tone="muted">
                                 {item().description}
                               </Label>
                             </If>
@@ -451,8 +432,7 @@ export function ConfigurePlugin(props: {
                   <If when={item().secret}>
                     <View style={{ ...row, gap: 8 }}>
                       <Label
-                        size={11}
-                        line={props.phone ? 14 : 16}
+                        variant="small"
                         tone={props.phone ? "muted" : "mutedInk"}
                       >
                         {pluginConfigText("access")}
@@ -463,7 +443,7 @@ export function ConfigurePlugin(props: {
                           host.can("plugins.setLevel")
                         }
                         else={
-                          <Label size={11} tone="muted">
+                          <Label variant="caption" tone="muted">
                             {pluginConfigText(item().level)}
                           </Label>
                         }
@@ -506,7 +486,7 @@ export function ConfigurePlugin(props: {
                       issues().some((issue) => issue.field === item().name)
                     }
                   >
-                    <Label size={11} tone="red">
+                    <Label variant="caption" tone="red">
                       {numericIssue(item()) ||
                         uiText("checkThisValueAgainstThePlugins")}
                     </Label>
@@ -515,11 +495,7 @@ export function ConfigurePlugin(props: {
               );
             }}
           </Each>
-          <Label
-            size={props.phone ? 11 : 10}
-            line={props.phone ? 15 : 14}
-            tone="muted"
-          >
+          <Label variant="caption" tone="muted">
             {pluginConfigText("encrypted")}
           </Label>
         </View>
@@ -536,12 +512,7 @@ export function ConfigurePlugin(props: {
         }}
       >
         <If when={props.item.state === "needs_config"}>
-          <Label
-            size={11}
-            line={props.phone ? 14 : 16}
-            tone="muted"
-            style={{ flex: 1 }}
-          >
+          <Label variant="small" tone="muted" style={{ flex: 1 }}>
             {pluginConfigText("missing")}
           </Label>
         </If>
@@ -549,7 +520,7 @@ export function ConfigurePlugin(props: {
           label={uiText("save")}
           tone="primary"
           size={props.phone ? 36 : undefined}
-          labelSize={props.phone ? 13 : 11}
+          labelVariant="caption"
           style={{ paddingHorizontal: props.phone ? 20 : 10 }}
           disabled={
             busy() ||
@@ -619,10 +590,8 @@ export function ConfigurePlugin(props: {
             }}
           >
             <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-              <Label size={14} line={20} weight={600}>
-                {title()}
-              </Label>
-              <Label size={12} line={16} tone="muted">
+              <Label weight={600}>{title()}</Label>
+              <Label variant="small" tone="muted">
                 {pluginConfigText("fields")}
               </Label>
             </View>

@@ -4,7 +4,7 @@ import type {
   RoutineSummary,
 } from "@eta/client-contracts";
 import type { JSX } from "nsh";
-import type { Layout } from "../../components";
+import type { Layout, TextVariant } from "../../components";
 import { Scroll, signal, View } from "nsh";
 import {
   Caption,
@@ -114,10 +114,10 @@ export function Pending(props: {
           </If>
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Label line={20} weight={props.strong ? 600 : 400} lines={1}>
+          <Label weight={props.strong ? 600 : 400} lines={1}>
             {props.title}
           </Label>
-          <Label size={11} line={14} tone="muted" lines={1}>
+          <Label variant="caption" tone="muted" lines={1}>
             {props.detail}
           </Label>
         </View>
@@ -126,8 +126,7 @@ export function Pending(props: {
         </If>
         <If when={props.when}>
           <Label
-            size={11}
-            line={14}
+            variant="caption"
             tone="muted"
             style={{ width: 28, textAlign: "right", flexShrink: 0 }}
           >
@@ -156,7 +155,7 @@ export function Pending(props: {
         }}
       >
         <Caption text={props.label} phone />
-        <Label size={10} line={12} tone="muted">
+        <Label variant="caption" tone="muted">
           {props.count}
         </Label>
       </View>
@@ -176,7 +175,7 @@ export function Pending(props: {
         }}
       >
         <Caption text={props.label} />
-        <Label size={10} line={14} tone="muted">
+        <Label variant="caption" tone="muted">
           {props.count}
         </Label>
       </View>
@@ -186,7 +185,7 @@ export function Pending(props: {
     title: string;
     detail: string;
     detailTone?: "amber" | "ink" | "muted";
-    detailSize?: number;
+    detailVariant?: TextVariant;
     action: string;
     actionLink?: boolean;
     actionTone?: "ink" | "muted";
@@ -222,12 +221,11 @@ export function Pending(props: {
           {props.children}
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Label size={13} line={17} lines={1}>
+          <Label variant="small" lines={1}>
             {props.title}
           </Label>
           <Label
-            size={props.detailSize ?? 11}
-            line={props.detailSize === 12 ? 20 : 14}
+            variant={props.detailVariant ?? "caption"}
             tone={props.detailTone ?? "muted"}
             lines={1}
           >
@@ -235,8 +233,7 @@ export function Pending(props: {
           </Label>
         </View>
         <Label
-          size={props.actionLink ? 11 : 10}
-          line={14}
+          variant="caption"
           tone={props.actionTone ?? "ink"}
           style={{
             width: 56,
@@ -271,11 +268,8 @@ export function Pending(props: {
                 borderColor: c().border,
               }}
             >
-              <Caption
-                text={uiText("waitingForYouCaption")}
-                style={{ lineHeight: 12 }}
-              />
-              <Label size={10} line={12} tone="muted">
+              <Caption text={uiText("waitingForYouCaption")} />
+              <Label variant="caption" tone="muted">
                 {asks()}
               </Label>
             </View>
@@ -319,7 +313,9 @@ export function Pending(props: {
                       : uiText("taskInReview")
                   }
                   detailTone={item().status === "blocked" ? "ink" : "amber"}
-                  detailSize={item().status === "blocked" ? 11 : 12}
+                  detailVariant={
+                    item().status === "blocked" ? "caption" : "small"
+                  }
                   action={
                     item().status === "blocked"
                       ? uiText("decideAction")
@@ -394,17 +390,14 @@ export function Pending(props: {
         }}
       >
         <Label
-          size={10}
-          line={12}
+          variant="caption"
           tone="amber"
           lines={1}
           style={{ letterSpacing: 1, textTransform: "uppercase" }}
         >
           {props.caption}
         </Label>
-        <Label size={12} line={16}>
-          {props.text}
-        </Label>
+        <Label variant="small">{props.text}</Label>
       </View>
     );
   }
@@ -412,7 +405,7 @@ export function Pending(props: {
     <View style={{ ...grow, backgroundColor: c().canvas }}>
       <If when={!props.conversationId}>
         <Header title={uiText("pending")} layout={props.layout}>
-          <Label size={11} tone="muted">
+          <Label variant="caption" tone="muted">
             {uiText("waitingForYou", {
               value1: items().length + proposals().length + reviews().length,
             })}
@@ -616,7 +609,7 @@ export function Pending(props: {
               }}
             >
               <AgentFace id={entry().agentId} size={20} />
-              <Label size={14} line={20} weight={600} style={{ flex: 1 }}>
+              <Label weight={600} style={{ flex: 1 }}>
                 {uiText("questionFromWithCount", {
                   value1: host.agent(entry().agentId)?.name ?? "Agent",
                 })}
@@ -662,7 +655,7 @@ export function Pending(props: {
               }}
             >
               <CaptainFace size={20} />
-              <Label size={14} line={20} weight={600} style={{ flex: 1 }}>
+              <Label weight={600} style={{ flex: 1 }}>
                 {uiText("proposalFromCaptain")}
               </Label>
               <CloseButton

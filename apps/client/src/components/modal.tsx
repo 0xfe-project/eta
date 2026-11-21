@@ -121,12 +121,7 @@ export function Modal(props: {
         </If>
         <If when={!props.hideHeader && props.compact}>
           <View style={{ ...row, gap: 12, flexShrink: 0 }}>
-            <Label
-              size={14}
-              line={20}
-              weight={props.titleWeight ?? 600}
-              style={{ flex: 1 }}
-            >
+            <Label weight={props.titleWeight ?? 600} style={{ flex: 1 }}>
               {props.title}
             </Label>
             {props.headerActions}
@@ -166,14 +161,11 @@ export function Modal(props: {
             }
             divider={!(sheetChrome() && props.plainSheetHeader)}
             background={sideDrawer() ? "surface" : undefined}
-            titleSize={
-              sheetChrome() || sideDrawer() || stepHeader() ? 14 : undefined
+            titleVariant={
+              sheetChrome() || sideDrawer() || stepHeader() ? "body" : undefined
             }
             titleWeight={
               sheetChrome() || sideDrawer() || stepHeader() ? 600 : undefined
-            }
-            titleLine={
-              stepHeader() ? 18 : sheetChrome() || sideDrawer() ? 20 : undefined
             }
             dialog={!props.phonePage}
             onBack={props.phonePage ? close : undefined}

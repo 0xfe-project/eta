@@ -39,13 +39,13 @@ export function TaskReviewDialog(props: {
         }}
       >
         <If when={props.phone && props.decision === "todo"}>
-          <Label size={13} line={20}>
+          <Label>
             {uiText("sendBackIntro", {
               executor: props.executor ?? uiText("executor"),
             })}
           </Label>
           <View style={{ gap: 6 }}>
-            <Label size={11} line={14} tone="muted">
+            <Label variant="caption" tone="muted">
               {uiText("comment")}
             </Label>
             <Field
@@ -58,12 +58,10 @@ export function TaskReviewDialog(props: {
                 paddingVertical: 10,
                 paddingHorizontal: 12,
                 borderColor: c().strong,
-                fontSize: 13,
-                lineHeight: 20,
               }}
             />
           </View>
-          <Label size={11} line={14} tone="muted">
+          <Label variant="caption" tone="muted">
             {uiText("sendBackHelper", {
               executor: props.executor ?? uiText("executor"),
             })}
@@ -82,18 +80,18 @@ export function TaskReviewDialog(props: {
         <If when={props.decision === "done"}>
           <View style={{ ...row, gap: 8 }}>
             <TaskGlyph status="in_review" />
-            <Label size={13} tone="muted">
+            <Label variant="small" tone="muted">
               {uiText("inReview")}
             </Label>
-            <Label size={13}>→</Label>
+            <Label variant="small">→</Label>
             <TaskGlyph status="done" />
-            <Label size={13} weight={600}>
+            <Label variant="small" weight={600}>
               {uiText("completed")}
             </Label>
           </View>
         </If>
         <If when={!props.phone || props.decision === "done"}>
-          <Label size={13} line={20}>
+          <Label>
             {props.decision === "done"
               ? [
                   uiText("acceptTaskDescription", {
@@ -118,7 +116,7 @@ export function TaskReviewDialog(props: {
               backgroundColor: c().selected,
             }}
           >
-            <Label size={11} line={props.phone ? 14 : undefined} tone="muted">
+            <Label variant="caption" tone="muted">
               {uiText(
                 props.task?.dependents?.length === 1
                   ? "oneTaskWaitsForIt"
@@ -141,7 +139,7 @@ export function TaskReviewDialog(props: {
                       status={edge().status}
                       size={props.phone ? 12 : 14}
                     />
-                    <Label size={13} line={props.phone ? 18 : undefined}>
+                    <Label variant="small">
                       {`#${edge().number} ${edge().title}`}
                     </Label>
                   </View>
@@ -167,7 +165,6 @@ export function TaskReviewDialog(props: {
           disabled={props.submitting}
           size={32}
           tone="ghost"
-          labelSize={props.phone ? 13 : undefined}
           style={props.phone ? { paddingHorizontal: 12 } : undefined}
           onPress={props.onClose}
         />
@@ -179,7 +176,6 @@ export function TaskReviewDialog(props: {
           }
           size={32}
           tone="primary"
-          labelSize={props.phone ? 13 : undefined}
           style={props.phone ? { paddingHorizontal: 14 } : undefined}
           disabled={
             props.submitting ||

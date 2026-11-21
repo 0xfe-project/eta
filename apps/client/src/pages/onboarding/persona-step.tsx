@@ -115,7 +115,7 @@ export function PersonaStep(props: {
           gap: 4,
         }}
       >
-        <Label size={16} weight={600}>
+        <Label variant="subtitle" weight={600}>
           {props.working
             ? uiText("gettingYourAgentsReady")
             : uiText("whoWouldYouLikeToWork")}
@@ -137,8 +137,7 @@ export function PersonaStep(props: {
               {uiText("unableToLoadAgents")}
             </Label>
             <Label
-              size={12}
-              line={16}
+              variant="small"
               tone="muted"
               style={{ maxWidth: 320, textAlign: "center" }}
             >
@@ -195,7 +194,7 @@ export function PersonaStep(props: {
               >
                 <View style={{ flex: 1, gap: 2 }}>
                   <Label weight={500}>{card().name}</Label>
-                  <Label size={12} line={16} tone="muted">
+                  <Label variant="small" tone="muted">
                     {card().description}
                   </Label>
                 </View>
@@ -208,8 +207,7 @@ export function PersonaStep(props: {
                         <Icon name="check" size={12} />
                       </If>
                       <Label
-                        size={12}
-                        line={16}
+                        variant="small"
                         tone={props.installedHere(card().id) ? "ink" : "muted"}
                       >
                         {uiText("installed")}
@@ -220,9 +218,7 @@ export function PersonaStep(props: {
                     <View
                       style={{ gap: 6, paddingTop: 2, alignItems: "flex-end" }}
                     >
-                      <Label size={12} line={16}>
-                        {uiText("installing")}
-                      </Label>
+                      <Label variant="small">{uiText("installing")}</Label>
                       <View
                         style={{
                           width: 96,

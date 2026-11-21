@@ -125,11 +125,11 @@ export function TaskWorkspaceList(props: {
                       }}
                     >
                       <TaskGlyph status={group().parent.status} size={12} />
-                      <Label size={12} weight={600} lines={1}>
+                      <Label variant="small" weight={600} lines={1}>
                         {group().parent.title}
                       </Label>
                       <Label
-                        size={10}
+                        variant="caption"
                         tone="muted"
                         lines={1}
                         style={{ flex: 1 }}
@@ -204,18 +204,10 @@ export function TaskWorkspaceList(props: {
                   borderColor: c().border,
                 }}
               >
-                <Label
-                  size={tablet() ? 11 : 10}
-                  line={tablet() ? 14 : 12}
-                  tone="mutedInk"
-                >
+                <Label variant="caption" tone="mutedInk">
                   {uiText("notPartOfAnything")}
                 </Label>
-                <Label
-                  size={tablet() ? 11 : 10}
-                  line={tablet() ? 14 : 12}
-                  tone="muted"
-                >
+                <Label variant="caption" tone="muted">
                   {byParent().orphans.length}
                 </Label>
               </View>

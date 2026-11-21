@@ -12,9 +12,7 @@ export function RoutineRow(props: {
   onOpen: () => void;
 }) {
   const c = colors();
-  // The tablet list is a flush column of 60px rows with smaller type.
-  const small = () => (props.tablet ? 11 : 12);
-  const smallLine = () => (props.tablet ? 14 : 16);
+  // The tablet list is a flush column of 60px rows.
   return (
     <View
       role="button"
@@ -34,15 +32,10 @@ export function RoutineRow(props: {
       }}
     >
       <View style={{ flex: 1, minWidth: 0, gap: props.tablet ? 3 : 4 }}>
-        <Label
-          size={props.tablet ? 13 : 14}
-          line={18}
-          weight={props.tablet && props.selected ? 600 : 400}
-          lines={1}
-        >
+        <Label weight={props.tablet && props.selected ? 600 : 400} lines={1}>
           {props.item.name}
         </Label>
-        <Label size={small()} line={smallLine()} tone="muted">
+        <Label variant="small" tone="muted">
           {scheduleLabel(props.item.schedule)}
         </Label>
       </View>
@@ -77,7 +70,7 @@ export function RoutineRow(props: {
             </Each>
           </View>
         </If>
-        <Label size={small()} line={smallLine()} tone="muted">
+        <Label variant="small" tone="muted">
           {props.paused
             ? uiText("captainIsOff")
             : !props.item.enabled

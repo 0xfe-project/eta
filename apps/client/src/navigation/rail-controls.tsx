@@ -63,9 +63,7 @@ export function RailButton(props: {
               backgroundColor: c().surface,
             }}
           >
-            <Label size={9} line={12}>
-              {props.count}
-            </Label>
+            <Label variant="caption">{props.count}</Label>
           </View>
         </If>
       </View>
@@ -106,8 +104,7 @@ export function RailEntry(props: {
     >
       {props.children}
       <Label
-        size={10}
-        line={12}
+        variant="caption"
         lines={1}
         style={{ maxWidth: props.agent ? "100%" : 49, textAlign: "center" }}
       >

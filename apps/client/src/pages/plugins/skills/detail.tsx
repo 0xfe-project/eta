@@ -331,15 +331,13 @@ export function SkillDetail(props: {
               }}
             >
               <Icon name={metadata() ? "down" : "right"} size={10} />
-              <Label size={12} line={16}>
-                {uiText("metadata")}
-              </Label>
+              <Label variant="small">{uiText("metadata")}</Label>
             </View>
             <If when={metadata()}>
               <View style={{ paddingLeft: 16, gap: 2 }}>
                 <Each of={preview()!.metadata!.split("\n")}>
                   {(line) => (
-                    <Label size={11} line={14} tone="muted">
+                    <Label variant="caption" tone="muted">
                       {line()}
                     </Label>
                   )}
@@ -352,7 +350,7 @@ export function SkillDetail(props: {
           when={file()}
           else={
             <If when={!failure()}>
-              <Label tone="muted" size={12} style={{ paddingTop: 8 }}>
+              <Label tone="muted" variant="small" style={{ paddingTop: 8 }}>
                 {reading() || !handle()
                   ? uiText("loadingSkill")
                   : uiText("selectAFile")}
@@ -405,7 +403,7 @@ export function SkillDetail(props: {
                   backgroundColor: c().warning,
                 }}
               />
-              <Label size={12} line={16} style={{ flex: 1, minWidth: 0 }}>
+              <Label variant="small" style={{ flex: 1, minWidth: 0 }}>
                 {message()}
               </Label>
             </View>
@@ -453,7 +451,7 @@ export function SkillDetail(props: {
       <If when={tablet()}>
         <Header title={props.skill.name} layout="tablet" inset={14}>
           <Label
-            size={12}
+            variant="small"
             tone="muted"
             style={{ flex: 1 }}
           >{`${props.scope} · ${props.location}`}</Label>
@@ -478,8 +476,8 @@ export function SkillDetail(props: {
             {previousButton()}
           </View>
           <View style={{ ...row, gap: 4, minHeight: 24 }}>
-            <Label size={12} line={16} tone="muted">{`${crumbs()}  /`}</Label>
-            <Label size={12} line={16} weight={600}>
+            <Label variant="small" tone="muted">{`${crumbs()}  /`}</Label>
+            <Label variant="small" weight={600}>
               {props.skill.name}
             </Label>
             {reload()}
@@ -506,7 +504,7 @@ export function SkillDetail(props: {
           }}
         >
           <View style={{ ...row, height: 16 }}>
-            <Label size={11} line={16} tone="muted" style={{ flex: 1 }}>
+            <Label variant="small" tone="muted" style={{ flex: 1 }}>
               {crumbs()}
             </Label>
             {reload()}
@@ -530,9 +528,9 @@ export function SkillDetail(props: {
             }}
           >
             <Icon name="folder" size={11} />
-            <Label size={12}>{uiText("files")}</Label>
+            <Label variant="small">{uiText("files")}</Label>
             <If when={!showFiles() && fileName()}>
-              <Label size={11} tone="muted">
+              <Label variant="caption" tone="muted">
                 {fileName()}
               </Label>
             </If>

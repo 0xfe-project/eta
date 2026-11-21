@@ -75,7 +75,7 @@ export function ArtifactToolbar(props: {
         iconSize={12}
         tone={phone() ? "plain" : "ghost"}
         size={phone() ? 28 : 24}
-        labelSize={phone() ? 12 : 10}
+        labelVariant="caption"
         style={{ minWidth: phone() ? 99 : undefined }}
         disabled={props.sharing || !props.item}
         onPress={props.onShare}
@@ -92,7 +92,7 @@ export function ArtifactToolbar(props: {
           iconSize={12}
           tone={phone() ? "plain" : "ghost"}
           size={phone() ? 28 : 24}
-          labelSize={phone() ? 12 : 10}
+          labelVariant="caption"
           style={{ minWidth: phone() ? 82 : undefined }}
           disabled={props.exportDisabled}
           onPress={props.onExport}
@@ -119,7 +119,7 @@ export function ArtifactToolbar(props: {
         >
           <Icon name="appWindow" size={14} tone="muted" />
           <Label
-            size={12}
+            variant="small"
             weight={500}
             lines={1}
             style={{ flex: 1, minWidth: 0 }}
@@ -137,7 +137,7 @@ export function ArtifactToolbar(props: {
                 iconSize={12}
                 tone="ghost"
                 size={24}
-                labelSize={10}
+                labelVariant="caption"
                 disabled={!props.previewReady}
                 onPress={props.onPreview}
               />
@@ -148,7 +148,7 @@ export function ArtifactToolbar(props: {
               iconSize={12}
               tone="ghost"
               size={24}
-              labelSize={10}
+              labelVariant="caption"
               disabled={props.downloadDisabled}
               onPress={props.onDownload}
             />

@@ -15,6 +15,8 @@ import {
   Label,
   ListSkeleton,
   row,
+  textFaces,
+  textStyle,
 } from "../../../components";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
@@ -96,9 +98,7 @@ export function ConversationArtifacts(props: {
                 icon={host.state().missing.artifacts ? "warning" : "appWindow"}
                 iconSize={24}
                 iconTone={host.state().missing.artifacts ? "red" : "muted"}
-                titleLine={20}
-                descriptionSize={10}
-                descriptionLine={16}
+                descriptionVariant="caption"
                 style={{ flex: 0, marginTop: 16, paddingVertical: 48 }}
                 title={
                   host.state().missing.artifacts
@@ -157,7 +157,7 @@ export function ConversationArtifacts(props: {
         />
         <If when={!recent.artifacts.length}>
           <Label
-            size={12}
+            variant="small"
             tone="muted"
             style={{ marginHorizontal: 12, marginBottom: 12 }}
           >
@@ -209,9 +209,7 @@ export function ViewAllRow(props: { phone?: boolean; onViewAll?: () => void }) {
         }
         style={{ flexShrink: 0, cursor: "pointer" }}
       >
-        <Label size={props.phone ? 13 : 11} line={props.phone ? 18 : 16}>
-          {uiText("artifactsViewAll")}
-        </Label>
+        <Label variant="small">{uiText("artifactsViewAll")}</Label>
       </View>
     </View>
   );
@@ -226,6 +224,7 @@ export function ArtifactBrowser(props: {
   onTask: (id: string) => void;
 }) {
   const c = colors();
+  const type = textFaces();
   const host = useHost();
   const filters = props.filters;
   const update = (patch: Partial<ArtifactFilters>) =>
@@ -286,8 +285,7 @@ export function ArtifactBrowser(props: {
                 paddingHorizontal: 0,
                 paddingVertical: 4,
                 borderWidth: 0,
-                fontSize: props.phone ? 13 : 11,
-                lineHeight: 16,
+                ...textStyle(type("small")),
               }}
               value={filters().query}
               onChange={(value) => update({ query: value })}
@@ -303,7 +301,7 @@ export function ArtifactBrowser(props: {
                       borderColor: c().border,
                     }}
                   >
-                    <Label size={10} line={14} tone="muted">
+                    <Label variant="caption" tone="muted">
                       /
                     </Label>
                   </View>
@@ -328,7 +326,7 @@ export function ArtifactBrowser(props: {
         </View>
         <If when={narrowed()}>
           <View style={{ ...row, justifyContent: "space-between" }}>
-            <Label size={10} line={14} tone="faint">
+            <Label variant="caption" tone="faint">
               {uiText("artifactsFound", {
                 count: shown().length,
                 total: props.artifacts.length,
@@ -342,7 +340,7 @@ export function ArtifactBrowser(props: {
               hoverStyle={{ opacity: 0.7 }}
               style={{ cursor: "pointer" }}
             >
-              <Label size={10} line={14} tone="mutedInk">
+              <Label variant="caption" tone="mutedInk">
                 {uiText("artifactsClearFilters")}
               </Label>
             </View>
@@ -368,8 +366,7 @@ export function ArtifactBrowser(props: {
               }}
             >
               <Label
-                size={12}
-                line={16}
+                variant="small"
                 tone="muted"
                 style={{ textAlign: "center" }}
               >
@@ -382,7 +379,7 @@ export function ArtifactBrowser(props: {
               <Button
                 label={uiText("artifactsClearFilters")}
                 size={props.phone ? 32 : 24}
-                labelSize={11}
+                labelVariant="caption"
                 onPress={clear}
               />
             </View>
@@ -394,8 +391,7 @@ export function ArtifactBrowser(props: {
                 <If when={entry().heading ? entry().group : null}>
                   {(group) => (
                     <Label
-                      size={11}
-                      line={16}
+                      variant="small"
                       tone="muted"
                       style={{
                         paddingHorizontal: 10,
@@ -436,7 +432,7 @@ export function ArtifactBrowser(props: {
             paddingHorizontal: 10,
           }}
         >
-          <Label size={10} line={14} tone="muted">
+          <Label variant="caption" tone="muted">
             {uiText("artifactsRange", {
               first: view().first,
               last: view().last,
@@ -457,7 +453,7 @@ export function ArtifactBrowser(props: {
                   <If
                     when={number() !== null}
                     else={
-                      <Label size={10} line={14} tone="muted">
+                      <Label variant="caption" tone="muted">
                         …
                       </Label>
                     }
@@ -499,9 +495,7 @@ export function ArtifactBrowser(props: {
         leading={
           <View style={{ ...row, gap: 6 }}>
             <Icon name="funnel" size={12} />
-            <Label size={11} line={16}>
-              {uiText("artifactsFilter")}
-            </Label>
+            <Label variant="small">{uiText("artifactsFilter")}</Label>
           </View>
         }
         triggerStyle={{
@@ -567,7 +561,7 @@ export function ArtifactBrowser(props: {
           borderColor: c().border,
         }}
       >
-        <Label size={props.phone ? 11 : 10} line={14} tone="faint">
+        <Label variant="caption" tone="faint">
           {section.label}
         </Label>
       </View>
@@ -606,7 +600,7 @@ function PageButton(props: {
         cursor: props.disabled ? "default" : "pointer",
       }}
     >
-      <Label size={10} line={14} tone={props.selected ? "ink" : "muted"}>
+      <Label variant="caption" tone={props.selected ? "ink" : "muted"}>
         {props.label}
       </Label>
     </View>

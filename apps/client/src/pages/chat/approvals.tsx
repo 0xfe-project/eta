@@ -13,6 +13,8 @@ import {
   Icon,
   Label,
   row,
+  textFaces,
+  textStyle,
 } from "../../components";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
@@ -77,15 +79,13 @@ function SheetQuestion(props: {
           }
         >
           <If when={props.sheet} else={<Caption text={uiText("question")} />}>
-            <Label size={11} line={14} tone="muted">
+            <Label variant="caption" tone="muted">
               {[conversation()?.name, relativeTime(props.item.createdAt)]
                 .filter(Boolean)
                 .join(" · ")}
             </Label>
           </If>
-          <Label size={props.sheet ? 16 : 14} line={props.sheet ? 22 : 20}>
-            {props.item.prompt}
-          </Label>
+          <Label>{props.item.prompt}</Label>
           <View
             style={
               props.sheet ? { gap: 8 } : { ...row, flexWrap: "wrap", gap: 6 }
@@ -107,7 +107,6 @@ function SheetQuestion(props: {
                       : undefined
                   }
                   size={props.sheet ? 44 : undefined}
-                  labelSize={props.sheet ? 14 : undefined}
                   style={
                     props.sheet
                       ? {
@@ -165,7 +164,7 @@ function SheetQuestion(props: {
             }}
           >
             <If when={props.onConversation}>
-              <Label size={12} line={16} tone="muted">
+              <Label variant="small" tone="muted">
                 {uiText("openConversation")}
               </Label>
             </If>
@@ -234,24 +233,20 @@ function SheetProposal(props: {
                 .filter(Boolean)
                 .join(" · ")}
             />
-            <Label size={16} line={22}>
-              {title()}
-            </Label>
+            <Label variant="subtitle">{title()}</Label>
           </View>
           <Each of={proposalFields(op(), host).filter(([, value]) => value)}>
             {(field) => (
               <View style={{ gap: 4 }}>
                 <Caption phone text={uiText(field()[0])} />
-                <Label size={13} line={19}>
-                  {field()[1]}
-                </Label>
+                <Label variant="small">{field()[1]}</Label>
               </View>
             )}
           </Each>
           <If
             when={pending()}
             else={
-              <Label size={12} line={16} tone="muted">
+              <Label variant="small" tone="muted">
                 {op().error ?? op().status}
               </Label>
             }
@@ -263,7 +258,7 @@ function SheetProposal(props: {
                 onPress={() => props.onConversation?.()}
                 style={{ cursor: "pointer" }}
               >
-                <Label size={12} line={16} tone="muted">
+                <Label variant="small" tone="muted">
                   {uiText("proposalSeeConversation")}
                 </Label>
               </View>
@@ -415,8 +410,7 @@ function Choice(props: {
       }}
     >
       <Label
-        size={11}
-        line={14}
+        variant="caption"
         tone={props.selected ? "buttonInk" : props.quiet ? "muted" : "ink"}
         style={{ letterSpacing: 0.9, textTransform: "uppercase" }}
       >
@@ -429,6 +423,7 @@ function Choice(props: {
 function QuestionCard(props: { item: InteractionView }) {
   const host = useHost();
   const c = colors();
+  const type = textFaces();
   const selected = signal<string[]>([]);
   const reply = signal("");
   const busy = signal(false);
@@ -474,23 +469,21 @@ function QuestionCard(props: { item: InteractionView }) {
         }}
       >
         <Label
-          size={10}
-          line={14}
+          variant="caption"
           tone="amber"
           style={{ letterSpacing: 1.4, textTransform: "uppercase" }}
         >
           {uiText("confirmationRequestCaption")}
         </Label>
         <Label
-          size={10}
-          line={14}
+          variant="caption"
           lines={1}
           style={{ letterSpacing: 1.4, textTransform: "uppercase" }}
         >
           {name()}
         </Label>
       </View>
-      <Label line={23} style={{ paddingVertical: 8, paddingHorizontal: 10 }}>
+      <Label style={{ paddingVertical: 8, paddingHorizontal: 10 }}>
         {props.item.prompt}
       </Label>
       <View
@@ -515,8 +508,7 @@ function QuestionCard(props: { item: InteractionView }) {
               width: 400,
               maxWidth: "100%",
               height: 28,
-              fontSize: 12,
-              lineHeight: 16,
+              ...textStyle(type("small")),
             }}
           />
         </If>
@@ -576,19 +568,18 @@ export function PendingStrip(props: { items: InteractionView[] }) {
         >
           <View style={{ ...row, gap: 8, paddingVertical: 2 }}>
             <Label
-              size={10}
-              line={14}
+              variant="caption"
               tone="amber"
               style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
             >
               {host.agent(item().agentId)?.name ?? uiText("agent")}
             </Label>
-            <Label size={11} line={16} lines={1} style={{ flex: 1 }}>
+            <Label variant="small" lines={1} style={{ flex: 1 }}>
               {item().prompt}
             </Label>
           </View>
           <If when={props.items.length > 1}>
-            <Label size={10} line={14} tone="muted">
+            <Label variant="caption" tone="muted">
               {uiText("moreWaiting", { count: props.items.length - 1 })}
             </Label>
           </If>
@@ -678,14 +669,13 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
       >
         <Icon name={expanded() ? "down" : "right"} size={8} tone="muted" />
         <Label
-          size={10}
-          line={12}
+          variant="caption"
           tone="muted"
           style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
         >
           {kindName(op().kind)}
         </Label>
-        <Label size={12} line={16} weight={600} lines={1} style={{ flex: 1 }}>
+        <Label variant="small" weight={600} lines={1} style={{ flex: 1 }}>
           {title()}
         </Label>
         <View
@@ -696,7 +686,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
             flexShrink: 0,
           }}
         >
-          <Label size={10} line={12} tone={badge()[1]}>
+          <Label variant="caption" tone={badge()[1]}>
             {`■ ${uiText(badge()[0])}`}
           </Label>
         </View>
@@ -714,8 +704,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
             {(field) => (
               <View style={{ ...row, alignItems: "flex-start", gap: 8 }}>
                 <Label
-                  size={10}
-                  line={12}
+                  variant="caption"
                   tone="muted"
                   style={{
                     width: 72,
@@ -726,7 +715,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
                 >
                   {uiText(field()[0])}
                 </Label>
-                <Label size={12} line={16} style={{ flex: 1 }}>
+                <Label variant="small" style={{ flex: 1 }}>
                   {field()[1]}
                 </Label>
               </View>
@@ -737,7 +726,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
               label={uiText("proposalCreate")}
               tone="primary"
               size={22}
-              labelSize={11}
+              labelVariant="caption"
               style={{ paddingHorizontal: 10 }}
               disabled={working()}
               onPress={() => void decide("approve")}
@@ -756,7 +745,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
                 cursor: "pointer",
               }}
             >
-              <Label size={11} line={14} tone="muted">
+              <Label variant="caption" tone="muted">
                 {uiText("reject")}
               </Label>
             </View>
@@ -765,8 +754,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
       </If>
       <If when={expanded() && !pending() && result()}>
         <Label
-          size={12}
-          line={16}
+          variant="small"
           tone={op().status === "failed" ? "mutedInk" : "ink"}
           style={{
             paddingVertical: 8,

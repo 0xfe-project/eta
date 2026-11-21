@@ -18,8 +18,7 @@ function Mono(props: { children?: string }) {
   const fonts = Fonts();
   return (
     <Label
-      size={12}
-      line={16}
+      variant="small"
       tone="muted"
       style={{ fontFamily: monoFontFamily(fonts()) }}
     >
@@ -74,7 +73,6 @@ export function ConnectionError(
         title={lost() ? uiText("lostTheConnectionToTheHost") : props.message[0]}
         layout={props.layout}
         inset={16}
-        titleLine={props.layout === "phone" ? undefined : 24}
         dialog
       />
       <View style={{ padding: 16, gap: lost() ? 8 : 12 }}>
@@ -93,11 +91,11 @@ export function ConnectionError(
             </If>
           }
         >
-          <Label size={14} line={20} tone="muted">
+          <Label tone="muted">
             {lastSeen(props.address, props.lastOnline)}
           </Label>
         </If>
-        <Label size={14} line={20} tone="mutedInk">
+        <Label tone="mutedInk">
           {lost() ? uiText("agentsKeepRunningOnTheHost") : props.message[1]}
         </Label>
         <If when={props.problem === "local" && props.error}>
@@ -138,7 +136,7 @@ export function ConnectionError(
           <Button
             label={uiText("useAnotherHost")}
             size={44}
-            labelSize={14}
+            labelVariant="body"
             style={{ paddingHorizontal: 24 }}
             onPress={props.onChange}
           />
@@ -146,7 +144,7 @@ export function ConnectionError(
             label={uiText("retry")}
             tone="primary"
             size={44}
-            labelSize={14}
+            labelVariant="body"
             style={{ paddingHorizontal: 24 }}
             onPress={props.onRetry}
           />
@@ -170,10 +168,10 @@ export function LostPhoneConnection(
           paddingBottom: 32,
         }}
       >
-        <Label size={64} line={64} style={{ letterSpacing: -1.28 }}>
+        <Label variant="display" style={{ letterSpacing: -1.28 }}>
           ETA
         </Label>
-        <Label size={24} line={32} style={{ letterSpacing: -0.24 }}>
+        <Label variant="title" style={{ letterSpacing: -0.24 }}>
           {uiText("lostTheConnectionToTheHost")}
         </Label>
         <Label tone="muted">{lastSeen(props.address, props.lastOnline)}</Label>
@@ -191,13 +189,13 @@ export function LostPhoneConnection(
           label={uiText("retry")}
           tone="primary"
           size={52}
-          labelSize={14}
+          labelVariant="body"
           onPress={props.onRetry}
         />
         <Button
           label={uiText("useAnotherHost")}
           size={52}
-          labelSize={14}
+          labelVariant="body"
           onPress={props.onChange}
         />
       </View>

@@ -42,7 +42,7 @@ export function TranscriptLine(props: {
           }}
         >
           <If when={props.block.type === "error"}>
-            <Label size={12} tone="red">
+            <Label variant="small" tone="red">
               {props.block.type === "error"
                 ? [
                     props.block.aborted
@@ -79,7 +79,6 @@ export function TranscriptLine(props: {
                   ? props.block.text
                   : ""
               }
-              line={21}
             />
           </If>
           <Each
@@ -126,11 +125,11 @@ export function TranscriptLine(props: {
               backgroundColor: props.selected ? c().selected : c().canvas,
             }}
           >
-            <Label size={12} lines={1}>
+            <Label variant="small" lines={1}>
               {title().name}
             </Label>
             <Label
-              size={12}
+              variant="small"
               tone="muted"
               lines={1}
               style={{ flex: 1, minWidth: 0 }}
@@ -154,7 +153,7 @@ export function TranscriptLine(props: {
             <View style={{ padding: 10, gap: 6, backgroundColor: c().surface }}>
               <If when={entry().input !== undefined}>
                 <Caption text={uiText("runInput")} />
-                <Label size={11}>
+                <Label variant="caption">
                   {typeof entry().input === "string"
                     ? String(entry().input)
                     : JSON.stringify(entry().input, null, 2)}
@@ -162,7 +161,7 @@ export function TranscriptLine(props: {
               </If>
               <If when={output()}>
                 <Caption text={uiText("runOutput")} />
-                <Label size={11}>{output()}</Label>
+                <Label variant="caption">{output()}</Label>
               </If>
               <Each
                 of={images()}
@@ -177,7 +176,7 @@ export function TranscriptLine(props: {
                   entry().input === undefined && !output() && !images().length
                 }
               >
-                <Label size={11} tone="muted">
+                <Label variant="caption" tone="muted">
                   {uiText("noRunDetails")}
                 </Label>
               </If>
@@ -218,7 +217,7 @@ function TranscriptImage(props: {
     <If
       when={source()}
       else={
-        <Label size={11} tone="muted">
+        <Label variant="caption" tone="muted">
           {uiText("imageUnavailable")}
         </Label>
       }

@@ -17,6 +17,8 @@ import {
   Icon,
   Label,
   row,
+  textFaces,
+  textStyle,
 } from "../../components";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
@@ -47,6 +49,7 @@ export function MailboxEditor(props: {
 }) {
   const host = useHost();
   const c = colors();
+  const type = textFaces();
   const initial = props.item;
   const account = signal(initial);
   const provider = signal<Provider>(
@@ -183,7 +186,7 @@ export function MailboxEditor(props: {
           borderColor: c().border,
         }}
       >
-        <Label line={20} style={stack() ? undefined : { flex: 1, minWidth: 0 }}>
+        <Label style={stack() ? undefined : { flex: 1, minWidth: 0 }}>
           {p.title}
         </Label>
         {p.children}
@@ -206,16 +209,14 @@ export function MailboxEditor(props: {
               ? {
                   width: inputWidth(),
                   height: 32,
-                  fontSize: 12,
-                  lineHeight: 16,
+                  ...textStyle(type("small")),
                   paddingHorizontal: 10,
                   borderColor: c().strong,
                 }
               : {
                   width: inputWidth(),
                   height: 24,
-                  fontSize: 12,
-                  lineHeight: 16,
+                  ...textStyle(type("small")),
                   paddingHorizontal: 10,
                   paddingVertical: 3,
                   borderColor: c().strong,
@@ -267,7 +268,7 @@ export function MailboxEditor(props: {
                       : c().faint
                 }
               />
-              <Label size={12} line={16} tone={phone() ? "mutedInk" : "ink"}>
+              <Label variant="small" tone={phone() ? "mutedInk" : "ink"}>
                 {a().status === "ready"
                   ? uiText("mailConnected")
                   : a().status === "error"
@@ -279,8 +280,7 @@ export function MailboxEditor(props: {
         </If>
         <If when={phone()}>
           <Label
-            size={12}
-            line={16}
+            variant="small"
             tone="muted"
             style={{
               paddingHorizontal: 16,
@@ -354,7 +354,7 @@ export function MailboxEditor(props: {
               cursor: "pointer",
             }}
           >
-            <Label line={20} weight={600} style={{ flex: 1 }}>
+            <Label weight={600} style={{ flex: 1 }}>
               {uiText("mailAdvanced")}
             </Label>
             <Icon
@@ -401,7 +401,7 @@ export function MailboxEditor(props: {
           </FormRow>
         </If>
         <If when={error()}>
-          <Label tone="red" size={12} style={{ padding: 12 }}>
+          <Label tone="red" variant="small" style={{ padding: 12 }}>
             {error()}
           </Label>
         </If>

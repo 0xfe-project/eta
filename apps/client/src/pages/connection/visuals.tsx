@@ -6,10 +6,8 @@ import { uiText } from "../../i18n";
 export function ConnectionIntro(props: { phone: boolean }) {
   return (
     <View style={{ gap: props.phone ? 12 : 6 }}>
-      <Label size={18} line={26}>
-        {uiText("connectToOneHostReachEvery")}
-      </Label>
-      <Label size={12} line={18} tone="muted">
+      <Label variant="subtitle">{uiText("connectToOneHostReachEvery")}</Label>
+      <Label variant="small" tone="muted">
         {uiText("thePhoneIsOnlyAScreen")}
       </Label>
     </View>
@@ -22,7 +20,7 @@ export function ConnectionMessage(props: { error: string; detail?: string }) {
       <View style={{ gap: 2, paddingVertical: 4 }}>
         <Label>{props.error}</Label>
         <If when={props.detail}>
-          <Label size={12} line={16} tone="muted">
+          <Label variant="small" tone="muted">
             {props.detail}
           </Label>
         </If>
@@ -62,7 +60,7 @@ export function LocationOption(props: {
       }}
     >
       <Label>{props.title}</Label>
-      <Label size={12} line={16} tone="muted">
+      <Label variant="small" tone="muted">
         {props.description}
       </Label>
     </View>
@@ -106,14 +104,13 @@ export function PhoneHero() {
         }}
       />
       <Label
-        size={30}
-        line={34}
+        variant="display"
         weight={600}
         style={{ color: "#ffffff", maxWidth: 320, letterSpacing: -0.9 }}
       >
         {uiText("yourMachinesInYourPocket")}
       </Label>
-      <Label size={10} line={12} style={{ color: "#ffffffbf" }}>
+      <Label variant="caption" style={{ color: "#ffffffbf" }}>
         Photo: Barnabas Davoti / Unsplash
       </Label>
     </View>

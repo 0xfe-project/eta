@@ -15,6 +15,7 @@ import {
   windowSize,
 } from "nsh";
 import { useText } from "../i18n";
+import { textFaces } from "./theme";
 
 const storageKey = "eta.appearance.element-picker";
 
@@ -119,6 +120,7 @@ export function pickerTarget(component: string, source: string, touch = true) {
 
 export function ElementPickerOverlay() {
   const picker = ElementPicking();
+  const type = textFaces();
   const text = useText();
   if (!picker) return null;
   return (
@@ -162,7 +164,7 @@ export function ElementPickerOverlay() {
                 backgroundColor: "#24417f",
               }}
             >
-              <Text style={{ color: "#ffffff", fontSize: 12 }}>
+              <Text style={{ color: "#ffffff", fontSize: type("small").size }}>
                 {text(message())}
               </Text>
             </View>

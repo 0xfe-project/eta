@@ -35,7 +35,7 @@ export function UpdateSettings(props: {
       <GroupHeading title={uiText("update")} phone={phone()}>
         <View style={{ ...row, gap: 10 }}>
           <If when={checkedAt()}>
-            <Label size={12} tone="muted">
+            <Label variant="small" tone="muted">
               {checkedLabel()}
             </Label>
           </If>
@@ -58,7 +58,7 @@ export function UpdateSettings(props: {
           when={check()}
           else={
             <View style={{ padding: 16, gap: 8 }}>
-              <Label size={12} tone="muted">
+              <Label variant="small" tone="muted">
                 {!connected()
                   ? uiText("reconnectToCheckForUpdates")
                   : !host.can("upgrade.check")
@@ -68,7 +68,7 @@ export function UpdateSettings(props: {
                       : uiText("updateInformationUnavailable")}
               </Label>
               <If when={error()}>
-                <Label size={12} tone="red">
+                <Label variant="small" tone="red">
                   {error()}
                 </Label>
               </If>

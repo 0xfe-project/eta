@@ -131,3 +131,83 @@ export const sizes = {
 };
 
 export type Layout = "desktop" | "tablet" | "phone";
+
+/** The layout the app is drawn in, for what follows it everywhere (the type scale). */
+export const Screen = context<() => Layout>(() => "desktop");
+
+/** A role of text. Text takes one of these, never a number: each role's size
+ * and line height per layout are set once, in `typeScale`. */
+export type TextVariant =
+  | "caption"
+  | "small"
+  | "body"
+  | "subtitle"
+  | "title"
+  | "display";
+
+/** `line` is the line height of interface text (labels, rows, buttons);
+ * `prose` the roomier one of running text (Markdown: messages, descriptions). */
+export interface TextFace {
+  size: number;
+  line: number;
+  prose: number;
+}
+
+const face = (size: number, line: number, prose: number): TextFace => ({
+  size,
+  line,
+  prose,
+});
+
+/** The type scale. Phones read one step larger in the three smallest roles.
+ * - caption: times, counts, badges, metadata
+ * - small: list rows, secondary text, help
+ * - body: running text, buttons, inputs
+ * - subtitle: section and dialog titles, Markdown headings
+ * - title: page and detail titles
+ * - display: only the connection page's and empty states' artwork */
+const typeScale: Record<TextVariant, Record<Layout, TextFace>> = {
+  caption: {
+    desktop: face(10, 14, 16),
+    tablet: face(10, 14, 16),
+    phone: face(11, 15, 16),
+  },
+  small: {
+    desktop: face(12, 16, 18),
+    tablet: face(12, 16, 18),
+    phone: face(13, 18, 20),
+  },
+  body: {
+    desktop: face(14, 20, 22),
+    tablet: face(14, 20, 22),
+    phone: face(15, 21, 22),
+  },
+  subtitle: {
+    desktop: face(16, 22, 24),
+    tablet: face(16, 22, 24),
+    phone: face(16, 22, 24),
+  },
+  title: {
+    desktop: face(20, 26, 28),
+    tablet: face(20, 26, 28),
+    phone: face(20, 26, 28),
+  },
+  display: {
+    desktop: face(30, 36, 36),
+    tablet: face(30, 36, 36),
+    phone: face(30, 36, 36),
+  },
+};
+
+/** The type scale in the current layout: `const type = textFaces();` then
+ * `fontSize: type("small").size`, inside a reactive scope. */
+export function textFaces() {
+  const layout = Screen();
+  return (variant: TextVariant): TextFace => typeScale[variant][layout()];
+}
+
+/** `{ fontSize, lineHeight }` of a role, for a style that is not a `Label`
+ * (a text input, a TextView's styles). */
+export function textStyle(face: TextFace, leading: "line" | "prose" = "line") {
+  return { fontSize: face.size, lineHeight: face[leading] };
+}
