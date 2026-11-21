@@ -224,6 +224,9 @@ export function ProcessWindow(props: {
         scroll = node;
       }}
       style={{ height: props.height, flexShrink: 0 }}
+      // Listening keeps the wheel from also reaching the transcript's wheel
+      // handler: this window scrolls itself.
+      onWheel={() => {}}
       scrollEventThrottle={16}
       onScroll={(event) => {
         pinned =
