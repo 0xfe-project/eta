@@ -196,7 +196,11 @@ export class RuntimeCatalog {
                     })),
                   }
                 : {
-                    kind: snapshot.kind,
+                    // oar's `unavailable` is an expired access token: a sign-in to renew, as said.
+                    kind:
+                      snapshot.kind === "unavailable"
+                        ? "reauth_required"
+                        : snapshot.kind,
                     ...(snapshot.reason === undefined
                       ? {}
                       : { reason: snapshot.reason }),
@@ -233,8 +237,13 @@ export class RuntimeCatalog {
       const runtime = this.#registry.require(id);
       const snapshot = await runtime.installation?.();
       if (snapshot === undefined || snapshot.kind !== "available") {
+        // Installed but not usable here (a version oar does not run, say): say why, not "missing".
+        const detail =
+          snapshot?.kind === "unsupported"
+            ? `cannot run here: ${snapshot.reason}`
+            : "is not installed";
         return {
-          info: { ...base, status: "missing", detail: "is not installed" },
+          info: { ...base, status: "missing", detail },
           installation: undefined,
           at,
         };
