@@ -57,3 +57,23 @@ test("a phone that lost the host before any message shows the error in the messa
   expect(app.shows(composer)).toBe(true);
   expect(app.shows(`${messages} >> ${composer}`)).toBe(false);
 });
+
+for (const [name, width, height] of sizes)
+  test(`a queued message waits above the composer, not in the transcript, until a lane takes it (${name})`, async () => {
+    const app = await open(fixture, {
+      width,
+      height,
+      locale: "en-US",
+      urlScheme: "eta://fixture/held",
+    });
+    // Above the box, not in the conversation: neither the words nor the
+    // empty reply the host queued for them.
+    expect(app.shows(`${composer} >> label:Queued message: Queued words`)).toBe(
+      true,
+    );
+    expect(app.shows(`${messages} >> text:Queued words`)).toBe(false);
+    expect(app.shows(`${messages} >> text:Queued`)).toBe(false);
+    await app.press("label:Deliver");
+    await app.waitFor(`${messages} >> text:Queued words`);
+    expect(app.shows("label:Queued message: Queued words")).toBe(false);
+  });
