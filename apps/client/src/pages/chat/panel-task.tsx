@@ -66,7 +66,7 @@ export function PanelTask(props: {
         const replies = () =>
           activity().filter((entry) => entry.kind === "comment").length;
         return (
-          <View style={{ ...grow, padding: 10, backgroundColor: c().canvas }}>
+          <View style={{ ...grow, padding: 11, backgroundColor: c().canvas }}>
             <View style={{ ...row, height: 26, gap: 8, flexShrink: 0 }}>
               <View
                 role="button"
@@ -115,7 +115,7 @@ export function PanelTask(props: {
                 size={16}
                 line={24}
                 weight={700}
-                style={{ paddingTop: 12, paddingBottom: 14 }}
+                style={{ paddingTop: 4, paddingBottom: 7 }}
               >
                 {item().title}
               </Label>
@@ -134,16 +134,17 @@ export function PanelTask(props: {
                 edges={item().dependents ?? []}
                 onTask={props.onTask}
               />
+              {/* Spacing as the web's panel: every line of the thread, the description too, starts 35px in. */}
               <View
                 style={{
                   ...row,
                   alignItems: "flex-start",
-                  gap: 10,
-                  paddingTop: 12,
+                  gap: 15,
+                  paddingTop: 7,
                 }}
               >
                 <AgentFace id={author()?.id ?? "user"} size={20} />
-                <View style={{ flex: 1, minWidth: 0, gap: 14 }}>
+                <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
                   <View style={{ ...row, gap: 8 }}>
                     <Label size={12} line={16} weight={600}>
                       {author()?.name ?? uiText("you")}
@@ -152,7 +153,7 @@ export function PanelTask(props: {
                       {messageTime(item().createdAt, false)}
                     </Label>
                   </View>
-                  <View style={{ paddingLeft: 10, gap: 12 }}>
+                  <View style={{ gap: 12 }}>
                     <If when={item().description}>
                       <Markdown value={goal()} dense />
                     </If>
@@ -173,7 +174,7 @@ export function PanelTask(props: {
                 </View>
               </View>
               <If when={replies()}>
-                <View style={{ ...row, gap: 8, paddingTop: 16 }}>
+                <View style={{ ...row, gap: 8, paddingTop: 14 }}>
                   <Label size={10} line={14} tone="muted">
                     {uiText(replies() === 1 ? "oneTaskReply" : "taskReplies", {
                       count: replies(),
@@ -184,12 +185,12 @@ export function PanelTask(props: {
                   />
                 </View>
               </If>
-              <View style={{ paddingBottom: 12 }}>
+              <View style={{ paddingBottom: 11 }}>
                 <TaskActivity
                   entries={activity()}
                   runs={item().runs}
                   createdBy={item().createdBy}
-                  gap={10}
+                  gap={15}
                   onLog={(entry) => log.set(entry)}
                 />
               </View>
