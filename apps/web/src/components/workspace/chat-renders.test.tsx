@@ -936,11 +936,41 @@ describe("a reply that is writing", () => {
       },
     });
     history = [user];
-    const { container } = await start();
+    const { container } = await start(undefined, (h) =>
+      h.handle("conversations.attachment", () => ({
+        contentType: "image/png",
+        data: "AAAA",
+      })),
+    );
     await flush();
     expect(container.textContent).toContain("看这个");
     expect(container.textContent).toContain("[报告.pdf · 2.0 KB]");
-    expect(container.textContent).toContain("[图.png · 10 B]");
+    // An image is drawn, not named.
+    expect(
+      container.querySelector(".image-thumb img")?.getAttribute("src"),
+    ).toBe("data:image/png;base64,AAAA");
+    expect(container.textContent).not.toContain("[图.png");
+  });
+
+  it("says so when an attached image cannot be read", async () => {
+    history = [
+      row({
+        text: "看这个",
+        data: {
+          attachments: [
+            { id: "f3", name: "图.bmp", contentType: "image/bmp", size: 10 },
+          ],
+        },
+      }),
+    ];
+    const { container } = await start(undefined, (h) =>
+      h.handle("conversations.attachment", () => {
+        throw new Error("gone");
+      }),
+    );
+    await flush();
+    expect(container.querySelector(".image-thumb")).toBeNull();
+    expect(container.textContent).toContain("图.bmp · 图片读取失败");
   });
 
   // A long paste folds into a chip in the composer; the sent message keeps it that way, with

@@ -33,6 +33,7 @@ import { clock, follow, useHost } from "../../services/host";
 import { subtasksOf, TaskSummary } from "../tasks/status";
 import { Proposal, Question } from "./approvals";
 import { ArtifactRow } from "./artifacts/row";
+import { AttachmentImage } from "./attachment-image";
 import { CaptainReview, reviewItemsOf } from "./captain-review";
 import { cardOpen, setCardOpen } from "./card-folds";
 import { activeReply } from "./member-status";
@@ -205,6 +206,7 @@ export function Message(props: {
       <If when={item().author === "user"}>
         <View style={{ alignItems: "flex-end", gap: props.phone ? 4 : 6 }}>
           <View
+            selectable
             style={{
               maxWidth: props.phone ? "84%" : "72%",
               borderWidth: 1,
@@ -234,11 +236,18 @@ export function Message(props: {
               )}
             </Each>
             <Each of={attached()} key={(file) => file.id}>
-              {(file) => (
-                <Label>
-                  {`[${file().name} · ${(file().size / 1024).toFixed(1)} KB]`}
-                </Label>
-              )}
+              {(file) =>
+                file().contentType?.startsWith("image/") ? (
+                  <AttachmentImage
+                    conversationId={item().conversationId}
+                    file={file()}
+                  />
+                ) : (
+                  <Label>
+                    {`[${file().name} · ${(file().size / 1024).toFixed(1)} KB]`}
+                  </Label>
+                )
+              }
             </Each>
           </View>
           <View style={{ ...row, gap: 8 }}>

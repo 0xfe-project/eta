@@ -9,6 +9,7 @@ export const commonMessages = {
   inboxFolder: ["Inbox", "收件箱"],
   skillsTab: ["Skills", "技能"],
   imageUnavailable: ["Image unavailable", "图片不可用"],
+  enlargeImage: ["Enlarge {{name}}", "放大 {{name}}"],
   acceptAsDone2: ["Accept as done?", "确认验收通过？"],
   accessToken: ["Access token", "访问令牌"],
   address: ["Address", "地址"],

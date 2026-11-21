@@ -40,28 +40,28 @@ Upstream provides (bundled plugins):
 
 Product plugins (`apps/eta`, all are cordis plugins, injecting `wire` and `sessions`):
 
-| Plugin        | target                                                      | action                                                                                                          |
-| ------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| agents        | `agents`（eager）                                           | `create` `update` `delete` `direct`                                                                             |
-| machines      | `machines`（eager）                                         | `enroll` `approve` `revoke` `rename` `setMaxActiveRuns`                                                         |
-| projects      | `projects` (eager)                                          | `create` `update` `files` `directories` (archive via `update`)                                                  |
-| conversations | `conversations`、`conversations.<id>`                       | `create` `update` `invite` `remove` `setSteward` `send` `stop` `read` `history` `attach` `unattach`             |
-| inbox         | `inbox`                                                     | `answer` `setApprovals`                                                                                         |
-| email         | `email`、`email.<thread-id>`                                | `saveAccount` `removeAccount` `verifyAccount` `refresh` `markRead` `assign` `confirmProposal` `discardProposal` |
-| usage         | `usage`                                                     | Read-only                                                                                                       |
-| tasks         | `tasks`, `tasks.<id>`                                       | `update` `comment` `delete` `link` `confirmDraft` `interrupt` `rerun` (no `create`, see [Tasks](tasks.md))      |
-| artifacts     | `artifacts`                                                 | `share` `unshare` `delete` `preview`                                                                            |
-| routines      | `routines`、`routines.<id>`                                 | `create` `update` `delete` `run` `seen` `feedback` `restoreBrief`                                               |
-| mcp           | `mcp`                                                       | `connect` `reconnect` `login` `completeLogin` `logout`, see [MCP](mcp.md)                                       |
-| plugins       | `list` `audit`                                              | `configure` `setLevel` `add` `update` `remove` `recheck`, see [Plugins](plugins.md)                             |
-| memory        | `memory` (mounted only when sidecar is present)             | `list` `remember` `forget`                                                                                      |
-| llm           | `llm` (eager; mounted only when gateway library is present) | `refresh` `loginStart` `loginPoll` `loginSubmit` `loginCancel` `setEnabled` `remove`                            |
+| Plugin        | target                                                      | action                                                                                                           |
+| ------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| agents        | `agents`（eager）                                           | `create` `update` `delete` `direct`                                                                              |
+| machines      | `machines`（eager）                                         | `enroll` `approve` `revoke` `rename` `setMaxActiveRuns`                                                          |
+| projects      | `projects` (eager)                                          | `create` `update` `files` `directories` (archive via `update`)                                                   |
+| conversations | `conversations`、`conversations.<id>`                       | `create` `update` `invite` `remove` `setSteward` `send` `stop` `read` `history` `attach` `unattach` `attachment` |
+| inbox         | `inbox`                                                     | `answer` `setApprovals`                                                                                          |
+| email         | `email`、`email.<thread-id>`                                | `saveAccount` `removeAccount` `verifyAccount` `refresh` `markRead` `assign` `confirmProposal` `discardProposal`  |
+| usage         | `usage`                                                     | Read-only                                                                                                        |
+| tasks         | `tasks`, `tasks.<id>`                                       | `update` `comment` `delete` `link` `confirmDraft` `interrupt` `rerun` (no `create`, see [Tasks](tasks.md))       |
+| artifacts     | `artifacts`                                                 | `share` `unshare` `delete` `preview`                                                                             |
+| routines      | `routines`、`routines.<id>`                                 | `create` `update` `delete` `run` `seen` `feedback` `restoreBrief`                                                |
+| mcp           | `mcp`                                                       | `connect` `reconnect` `login` `completeLogin` `logout`, see [MCP](mcp.md)                                        |
+| plugins       | `list` `audit`                                              | `configure` `setLevel` `add` `update` `remove` `recheck`, see [Plugins](plugins.md)                              |
+| memory        | `memory` (mounted only when sidecar is present)             | `list` `remember` `forget`                                                                                       |
+| llm           | `llm` (eager; mounted only when gateway library is present) | `refresh` `loginStart` `loginPoll` `loginSubmit` `loginCancel` `setEnabled` `remove`                             |
 
 Eager targets arrive with `hello`, so the page can render without subscribing first.
 
 ## How to upload attachments
 
-Attachments use the same WebSocket, without opening a separate HTTP route: `conversations.attach` sends one chunk at a time (up to 384 KiB of base64 file content), `index` strictly increments from 0, `last` marks the final chunk, and the reply includes the attachment on the last chunk. The upload ID (`uploadId`, a client-generated UUID) is the attachment ID, so resending the same chunk after a lost reply is part of the same upload. Chosen over HTTP upload: access control, reconnection, and timeouts are already handled on this connection, and the UI doesn't need to recognize a second authentication; the tradeoff is that the 20 MB file limit requires splitting into up to 54 calls, which is sufficient for manually pasted files. The `attachments` in `conversations.send` lists uploaded attachment IDs (up to 10, text can be empty); once the message claims them, they can no longer be unattached (`unattach` only unattaches unsent ones).
+Attachments use the same WebSocket, without opening a separate HTTP route: `conversations.attach` sends one chunk at a time (up to 384 KiB of base64 file content), `index` strictly increments from 0, `last` marks the final chunk, and the reply includes the attachment on the last chunk. The upload ID (`uploadId`, a client-generated UUID) is the attachment ID, so resending the same chunk after a lost reply is part of the same upload. Chosen over HTTP upload: access control, reconnection, and timeouts are already handled on this connection, and the UI doesn't need to recognize a second authentication; the tradeoff is that the 20 MB file limit requires splitting into up to 54 calls, which is sufficient for manually pasted files. The `attachments` in `conversations.send` lists uploaded attachment IDs (up to 10, text can be empty); once the message claims them, they can no longer be unattached (`unattach` only unattaches unsent ones). `conversations.attachment` reads one sent image of the conversation back as base64 (`{contentType, data}`, at most 8 MB, any `image/*` type) for the transcript to draw; it takes an attachment ID only, never a path, and refuses unsent files, other conversations' files and non-images.
 
 ## Images in sessions
 

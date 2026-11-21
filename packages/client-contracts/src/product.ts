@@ -798,6 +798,7 @@ export const CONVERSATION_ACTIONS = [
   "history",
   "attach",
   "unattach",
+  "attachment",
 ] as const;
 export type ConversationAction = (typeof CONVERSATION_ACTIONS)[number];
 
@@ -889,6 +890,8 @@ export interface ConversationArgs {
   };
   /** Takes back an attachment that has not been sent. */
   unattach: { conversationId: string; attachmentId: string };
+  /** Reads a sent image attachment of the conversation, to show it in the transcript. */
+  attachment: { conversationId: string; attachmentId: string };
   /** One reply (`messageId`), or every reply in flight in the conversation. */
   stop: { conversationId: string; messageId?: string };
   /** Moves the user's read mark forward to `seq` (never back, never past the newest row). */
@@ -964,6 +967,7 @@ export interface ConversationResults {
   history: HistoryResult;
   attach: { attachment: AttachmentView | null };
   unattach: { removed: boolean };
+  attachment: { contentType: string; data: string };
 }
 export type ConversationCall = {
   [A in ConversationAction]: Omit<CallFrame, "target" | "action" | "args"> & {
