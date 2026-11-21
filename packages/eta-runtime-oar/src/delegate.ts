@@ -122,12 +122,6 @@ interface Input {
  */
 const KEEPS_APPEND_ON_RESUME: ReadonlySet<RuntimeId> = new Set(["grok"]);
 
-/** Whether an MCP server carries a credential, as oar reads one: a stdio env, http headers. */
-function carriesCredentials(server: McpServer): boolean {
-  const values = "type" in server ? server.headers : server.env;
-  return values !== undefined && Object.keys(values).length > 0;
-}
-
 function inputOf(messages: readonly AgentMessage[]): Input {
   const texts: string[] = [];
   const images: Input["images"] = [];
@@ -677,25 +671,19 @@ export class OarDelegate implements RunDelegate {
     const runtime = catalog.runtime(id);
     const installation = await catalog.installation(id);
     const refusals = this.#refused(installation);
-    // The host's server carries its bearer token: a runtime that refuses credentials takes none,
-    // and of the plugins' servers only those that carry none (Antigravity keeps an entry's env
-    // and headers in plain text in its own conversation database).
-    const noServers = refusals.mcpServers !== undefined;
-    const noCredentials = refusals.mcpServerCredentials !== undefined;
-    const served =
-      noServers || noCredentials ? undefined : await this.#host.serve(context);
+    // The host's server carries its bearer token: a runtime that refuses credentials takes none.
+    const refused =
+      refusals.mcpServers !== undefined ||
+      refusals.mcpServerCredentials !== undefined;
+    const served = refused ? undefined : await this.#host.serve(context);
     const plugins = this.#options.mcpServers ?? [];
-    const taken = noServers
-      ? []
-      : noCredentials
-        ? plugins.filter((server) => !carriesCredentials(server))
-        : plugins;
-    const left = plugins.filter((server) => !taken.includes(server));
-    if (left.length > 0)
+    if (refused && plugins.length > 0)
       this.#options.warn(
-        `[eta-runtime-oar] ${id} takes no MCP servers${noServers ? "" : " that carry credentials"}; ${left.map((server) => server.name).join(", ")} left out`,
+        `[eta-runtime-oar] ${id} takes no MCP servers; ${plugins.map((server) => server.name).join(", ")} left out`,
       );
-    const mcpServers = [...(served === undefined ? [] : [served]), ...taken];
+    const mcpServers = refused
+      ? []
+      : [...(served === undefined ? [] : [served]), ...plugins];
     const options = (resume: string | undefined): SessionOptions =>
       this.#sessionOptions(settings, resume, mcpServers, refusals);
     let session: Session;

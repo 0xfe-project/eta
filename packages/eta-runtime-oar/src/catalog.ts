@@ -17,7 +17,6 @@ export const RUNTIME_IDS = [
   "codex",
   "opencode",
   "pi",
-  "antigravity",
   "grok",
 ] as const;
 
@@ -28,7 +27,6 @@ const LABELS: Record<RuntimeId, string> = {
   codex: "Codex",
   opencode: "OpenCode",
   pi: "Pi",
-  antigravity: "Antigravity",
   grok: "Grok Build",
 };
 

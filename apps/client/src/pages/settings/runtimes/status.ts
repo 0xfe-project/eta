@@ -43,8 +43,6 @@ export const LOGIN_COMMANDS: Partial<Record<string, string>> = {
   claude: "claude",
   codex: "codex login",
   grok: "grok login",
-  // agy signs in from its first interactive start; it has no login command of its own.
-  antigravity: "agy",
 };
 
 /**

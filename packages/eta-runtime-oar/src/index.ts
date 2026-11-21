@@ -1,5 +1,6 @@
 /**
- * Claude Code, Codex, OpenCode, Pi, Antigravity and Grok Build as runtimes an eta session can run on, through oar.
+ * Claude Code, Codex, OpenCode, Pi and Grok Build as runtimes an eta session can run on, through
+ * oar.
  *
  * `createOarRuntimes` is what a session host is given (`SessionRuntimes`): for a session whose
  * metadata names one of these runtimes it opens a delegate that takes the session's runs, and the
