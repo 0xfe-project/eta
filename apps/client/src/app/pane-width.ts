@@ -2,20 +2,23 @@ import { signal, Storage } from "nsh";
 import { sizes } from "../components/theme";
 
 /**
- * The widths the reader dragged the desktop sidebar and conversation panel to, kept on this device.
- * Range and keys follow the web app (`apps/web/src/lib/pane.ts`), so one habit holds on both;
+ * The widths the reader dragged the desktop sidebar, conversation panel and task page's rail to,
+ * kept on this device. The sidebar's and panel's range and keys follow the web app
+ * (`apps/web/src/lib/pane.ts`), so one habit holds on both; the rail is this client's own;
  * the defaults are the fixed widths the panes had before they could be dragged.
  */
-export type Pane = "sidebar" | "panel";
+export type Pane = "sidebar" | "panel" | "task";
 
 export const paneLimits = {
   sidebar: { min: 260, max: 420, fallback: sizes.sidebar },
   panel: { min: 320, max: 720, fallback: sizes.panel },
+  task: { min: 240, max: 480, fallback: 280 },
 } as const;
 
 const keys: Record<Pane, string> = {
   sidebar: "eta.sidebar.width",
   panel: "eta.panel.width",
+  task: "eta.task.width",
 };
 
 /** `width` rounded and held to the pane's range; a value that is not a number is the default. */
@@ -37,7 +40,8 @@ export function parsePaneWidth(
 
 /**
  * The width after a drag of `delta` points from `start`. The sidebar's handle is on its right
- * edge, so dragging right widens it; the panel's is on its left edge, so dragging left does.
+ * edge, so dragging right widens it; the panel's and the task page's rail are on their left edge,
+ * so dragging left does.
  */
 export function draggedPaneWidth(pane: Pane, start: number, delta: number) {
   return clampPaneWidth(
@@ -49,14 +53,15 @@ export function draggedPaneWidth(pane: Pane, start: number, delta: number) {
 const widths = {
   sidebar: signal<number>(paneLimits.sidebar.fallback),
   panel: signal<number>(paneLimits.panel.fallback),
+  task: signal<number>(paneLimits.task.fallback),
 };
-const touched = { sidebar: false, panel: false };
+const touched = { sidebar: false, panel: false, task: false };
 let loaded = false;
 
 function load() {
   if (loaded) return;
   loaded = true;
-  for (const pane of ["sidebar", "panel"] as const)
+  for (const pane of ["sidebar", "panel", "task"] as const)
     void Storage.getItem(keys[pane])
       .then((raw) => {
         const stored = parsePaneWidth(pane, raw);

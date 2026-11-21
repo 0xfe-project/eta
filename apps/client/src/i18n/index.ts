@@ -42,6 +42,7 @@ const messages = {
   collapseSidebar: ["Collapse sidebar", "收起侧栏"],
   resizeSidebar: ["Resize sidebar", "调整侧栏宽度"],
   resizePanel: ["Resize panel", "调整面板宽度"],
+  resizeTaskRail: ["Resize task properties", "调整任务属性栏宽度"],
   back: ["Back", "返回"],
   close: ["Close", "关闭"],
   colorMode: ["Color mode", "颜色模式"],

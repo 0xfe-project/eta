@@ -29,6 +29,23 @@ export function ownerLine(
   return `${actorLabel({ kind: "agent", agentId: assignee }, agent)} · ${creator}`;
 }
 
+/** An actor as a face and a name: its own face for an agent, the user's for anyone else. */
+export function ActorName(props: { actor: TaskActor; size: number }) {
+  const host = useHost();
+  return (
+    <View style={{ ...row, gap: 6, flex: 1, minWidth: 0 }}>
+      {props.actor.kind === "agent" ? (
+        <AgentFace id={props.actor.agentId} size={props.size} />
+      ) : (
+        <UserFace size={props.size} />
+      )}
+      <Label variant="small" weight={600} lines={1} style={{ flexShrink: 1 }}>
+        {actorLabel(props.actor, host.agent)}
+      </Label>
+    </View>
+  );
+}
+
 /** The maker of a task as a chip under its title: "Creator", a face, a name. */
 export function CreatorChip(props: { creator: TaskActor }) {
   const host = useHost();

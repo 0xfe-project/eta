@@ -16,6 +16,7 @@ import { CheckControl } from "../../components/check-control";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
+import { ActorName } from "./creator";
 import { taskMoment } from "./facts";
 import { activeTaskRun } from "./run-log";
 import { statusName, TaskGlyph } from "./status";
@@ -286,8 +287,8 @@ export function TaskRail(detail: {
   const c = colors();
   const { replacing, search, submitting } = detail.state;
   const item = () => detail.item;
-  const executor = () =>
-    host.agent(item().assigneeAgentId ?? item().createdBy.agentId);
+  const executorId = () => item().assigneeAgentId ?? item().createdBy.agentId;
+  const executor = () => host.agent(executorId());
   const parent = () => item().ancestors?.at(-1);
   const run = () => item().runs.at(-1);
   const runText = () => taskRunText(item());
@@ -305,9 +306,24 @@ export function TaskRail(detail: {
         <StatusSelect item={item()} state={detail.state} />
       </RailRow>
       <RailRow label={uiText("executor")}>
-        <Label variant="small" weight={600}>
-          {executor()?.name ?? uiText("unassigned")}
-        </Label>
+        <If
+          when={executor()}
+          else={
+            <Label variant="small" weight={600}>
+              {uiText("unassigned")}
+            </Label>
+          }
+        >
+          {() => (
+            <ActorName
+              actor={{ kind: "agent", agentId: executorId() }}
+              size={16}
+            />
+          )}
+        </If>
+      </RailRow>
+      <RailRow label={uiText("taskCreator")}>
+        <ActorName actor={item().createdBy} size={16} />
       </RailRow>
       <RailRow label={uiText("taskBelongsTo")}>
         <If

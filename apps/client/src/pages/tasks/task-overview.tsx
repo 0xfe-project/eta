@@ -17,10 +17,12 @@ import {
   Label,
   Markdown,
   monoFontFamily,
+  PaneHandle,
   row,
   textFaces,
   textStyle,
 } from "../../components";
+import { paneWidth } from "../../app/pane-width";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
@@ -345,7 +347,6 @@ function DesktopOverview(props: {
               </If>
             </View>
           </View>
-          <CreatorChip creator={item().createdBy} />
           <Prerequisites
             item={item()}
             compact
@@ -439,7 +440,7 @@ function DesktopOverview(props: {
       </Scroll>
       <View
         style={{
-          width: 280,
+          width: paneWidth("task"),
           paddingVertical: 20,
           paddingHorizontal: 16,
           borderLeftWidth: 1,
@@ -448,6 +449,7 @@ function DesktopOverview(props: {
         }}
       >
         <TaskRail item={item()} state={props.state} onTask={props.onTask} />
+        <PaneHandle pane="task" />
       </View>
     </View>
   );
