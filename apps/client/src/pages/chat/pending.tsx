@@ -591,7 +591,7 @@ export function Pending(props: {
             title={uiText("questionFromWithCount", {
               value1: host.agent(entry().agentId)?.name ?? "Agent",
             })}
-            height={phone() ? 474 : undefined}
+            height={474}
             phone={phone()}
             sheet={phone()}
             hideHeader

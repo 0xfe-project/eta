@@ -92,6 +92,8 @@ export interface GoalEntry extends EntryBase {
 export interface AskPayload {
   questionId: string;
   question: string;
+  /** Why the model is asking, when it said. */
+  context?: string;
   options?: string[];
   multi?: boolean;
 }

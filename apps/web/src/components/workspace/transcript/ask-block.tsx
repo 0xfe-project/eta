@@ -43,6 +43,11 @@ export function AskBlock({
         )}
       </div>
       <p className="ask-body">{question.prompt}</p>
+      {question.context === undefined ? null : (
+        <p className="whitespace-pre-wrap text-xs text-muted-foreground">
+          {question.context}
+        </p>
+      )}
       <div className="ask-options">
         {question.options.map((option) =>
           question.multi ? (
