@@ -83,7 +83,7 @@ export default {
     "apps/client": {
       entry: [
         "App.tsx",
-        "test/**/*.test.tsx",
+        "test/**/*.test.{ts,tsx}",
         "test/composer-fixture.tsx",
         "test/fixtures/*.tsx",
       ],
