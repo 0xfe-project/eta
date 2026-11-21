@@ -1,7 +1,6 @@
 import type { JSX } from "nsh";
 import type { HostUpdate } from "./host-update";
 import { View } from "nsh";
-import { Select } from "nsh/base";
 import {
   Button,
   colors,
@@ -10,6 +9,7 @@ import {
   row,
   textFaces,
 } from "../../../components";
+import { LayoutSelect } from "../../../components/select";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { GroupHeading } from "./group-heading";
@@ -104,7 +104,7 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
           </If>
         </View>
         <View style={{ width: props.phone ? "100%" : 160, flexShrink: 0 }}>
-          <Select
+          <LayoutSelect
             accessibilityLabel={uiText("channel")}
             items={[
               { value: "full", title: uiText("updateFullReleases") },

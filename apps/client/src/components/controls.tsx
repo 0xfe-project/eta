@@ -1,10 +1,19 @@
 import type { InputRef, JSX, TextStyle, ViewRef, ViewStyle } from "nsh";
 import type { IconName } from "./icons";
 import type { light, TextVariant } from "./theme";
-import { platform, signal, View } from "nsh";
-import { Input, Menu, MenuItem } from "nsh/base";
+import { signal, View } from "nsh";
+import { Input } from "nsh/base";
 import { useText } from "../i18n";
 import { pickerTarget } from "./element-picker";
+import {
+  canHover,
+  inSheet,
+  MenuFrame,
+  menuPresentation,
+  MenuRow,
+  touchRow,
+  touchScreen,
+} from "./menu";
 import { Icon, Label } from "./text";
 import {
   colors,
@@ -13,6 +22,7 @@ import {
   Fonts,
   grow,
   row,
+  Screen,
   textFaces,
   textStyle,
 } from "./theme";
@@ -217,10 +227,9 @@ export function Field(
   );
 }
 
-/** Touch screens get the menu as a sheet at the bottom (NSH's `Menu`), which
- * takes the design's phone sheet: full width, a grabber and 52px rows. */
-const touchSheet = !platform.desktop;
-
+/** A menu its trigger opens: in the phone layout the design's sheet at the
+ * bottom (full width, a grabber, 52pt rows), in the tablet and desktop
+ * layouts a popup at the trigger (`menuPresentation`). */
 export function ActionMenu(props: {
   label: string;
   value?: string;
@@ -250,40 +259,51 @@ export function ActionMenu(props: {
   // Open, for the pressed trigger; a titled sheet closes itself from its
   // close button.
   const open = signal(false);
-  const titled = () => touchSheet && !!props.sheetTitle;
+  const layout = Screen();
+  const titled = () =>
+    menuPresentation(layout()) === "sheet" && !!props.sheetTitle;
   return (
-    <Menu
-      placement="bottom"
+    <MenuFrame
       align="end"
-      offset={3}
       open={titled() ? open() : undefined}
-      onOpenChange={(event) => open.set(event.open)}
-      popupStyle={
-        touchSheet
-          ? {
-              width: "100%",
-              paddingBottom: 8,
-              borderTopWidth: 1,
-              borderColor: c().strong,
-              backgroundColor: c().canvas,
-            }
-          : {
-              width: props.popupWidth ?? 172,
-              paddingVertical: props.lifted ? 4 : 0,
-              borderWidth: 1,
-              borderColor: c().strong,
-              backgroundColor: c().canvas,
-              boxShadow: props.lifted
-                ? [{ x: 0, y: 8, blur: 24, color: "#0000001f" }]
-                : undefined,
-            }
+      onOpenChange={(next) => open.set(next)}
+      popupStyle={{
+        width: props.popupWidth ?? 172,
+        paddingVertical: props.lifted ? 4 : 0,
+        borderWidth: 1,
+        borderColor: c().strong,
+        backgroundColor: c().canvas,
+        boxShadow: props.lifted
+          ? [{ x: 0, y: 8, blur: 24, color: "#0000001f" }]
+          : undefined,
+      }}
+      sheetHeader={
+        <If when={props.sheetTitle}>
+          <View
+            style={{ ...row, height: 44, paddingLeft: 16, paddingRight: 8 }}
+          >
+            <Label weight={600} lines={1} style={grow}>
+              {props.sheetTitle}
+            </Label>
+            <Button
+              label={text("close")}
+              icon="close"
+              iconOnly
+              iconSize={16}
+              tone="ghost"
+              size={32}
+              onPress={() => open.set(false)}
+            />
+          </View>
+        </If>
       }
-      backdropStyle={{ backgroundColor: c().sheetShade }}
       trigger={
         <View
           {...picker}
           accessibilityLabel={props.label}
-          hoverStyle={{ backgroundColor: c().selected }}
+          // A finger's tap area, without changing the 30pt trigger.
+          hitSlop={touchScreen ? 7 : undefined}
+          hoverStyle={canHover ? { backgroundColor: c().selected } : undefined}
           style={{
             ...row,
             justifyContent: props.value ? "space-between" : "center",
@@ -330,31 +350,8 @@ export function ActionMenu(props: {
         </View>
       }
     >
-      <If when={touchSheet}>
-        <View style={{ alignItems: "center", paddingTop: 8, paddingBottom: 4 }}>
-          <View style={{ width: 36, height: 4, backgroundColor: c().strong }} />
-        </View>
-        <If when={props.sheetTitle}>
-          <View
-            style={{ ...row, height: 44, paddingLeft: 16, paddingRight: 8 }}
-          >
-            <Label weight={600} lines={1} style={grow}>
-              {props.sheetTitle}
-            </Label>
-            <Button
-              label={text("close")}
-              icon="close"
-              iconOnly
-              iconSize={16}
-              tone="ghost"
-              size={32}
-              onPress={() => open.set(false)}
-            />
-          </View>
-        </If>
-      </If>
       {props.children}
-    </Menu>
+    </MenuFrame>
   );
 }
 
@@ -371,13 +368,13 @@ export function ActionItem(props: {
 }) {
   const c = colors();
   return (
-    <MenuItem
+    <MenuRow
+      label={props.label}
       disabled={props.disabled}
       role={props.checked === undefined ? "menuitem" : "menuitemradio"}
       checked={props.checked}
-      accessibilityLabel={props.label}
       style={
-        touchSheet
+        inSheet()
           ? {
               ...row,
               minHeight: 52,
@@ -387,11 +384,19 @@ export function ActionItem(props: {
               borderColor: c().border,
             }
           : props.roomy
-            ? { ...row, minHeight: 32, paddingHorizontal: 12, gap: 8 }
-            : { ...row, minHeight: 33, paddingHorizontal: 9, gap: 6 }
+            ? {
+                ...row,
+                minHeight: touchScreen ? touchRow : 32,
+                paddingHorizontal: 12,
+                gap: 8,
+              }
+            : {
+                ...row,
+                minHeight: touchScreen ? touchRow : 33,
+                paddingHorizontal: 9,
+                gap: 6,
+              }
       }
-      hoverStyle={{ backgroundColor: c().selected }}
-      indicatorStyle={{ width: 0 }}
       onSelect={props.onSelect}
     >
       <Label
@@ -410,6 +415,6 @@ export function ActionItem(props: {
       <If when={props.checked}>
         <Icon name="check" size={12} />
       </If>
-    </MenuItem>
+    </MenuRow>
   );
 }
