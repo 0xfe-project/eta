@@ -83,10 +83,13 @@ jobs:
                 echo
               fi
             } > "$RUNNER_TEMP/notes.md"
-            # Prepended to the generated notes. A pre-release by its version: the tag itself
-            # always has a `-` in it.
+            # Prepended to the generated notes, after a blank line, or the last quote would swallow them.
+            if [[ -s $RUNNER_TEMP/notes.md ]]; then
+              notes+=(--notes "$(cat "$RUNNER_TEMP/notes.md")"$'\n\n')
+            fi
+            # A pre-release by its version: the tag itself always has a `-` in it.
             gh release create "$TAG" --draft --verify-tag --title "eta desktop ${TAG#desktop-v}" \
-              --generate-notes "${notes[@]}" --notes "$(cat "$RUNNER_TEMP/notes.md")" --latest=false \
+              --generate-notes "${notes[@]}" --latest=false \
               --prerelease="$([[ ${TAG#desktop-v} == *-* ]] && echo true || echo false)"
           fi
 
