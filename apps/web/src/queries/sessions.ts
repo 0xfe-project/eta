@@ -30,6 +30,8 @@ export type SessionSections = Partial<
     | "core"
     | "transcript"
     | "usage"
+    | "context"
+    | "spend"
     | "goal"
     | "model"
     | "tools"

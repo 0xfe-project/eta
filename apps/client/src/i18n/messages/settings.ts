@@ -71,6 +71,8 @@ export const settingsMessages = {
   ],
   modelMonthlyUsed: ["{{percent}} used this month", "本月已用 {{percent}}"],
   modelQuotaResetsAt: ["Resets {{time}}", "{{time}} 重置"],
+  modelQuotaUsed: ["{{percent}} used", "已用 {{percent}}"],
+  modelReadLoading: ["Loading", "正在读取"],
   settingsNoAgents: ["No agents yet", "暂无智能体"],
   settingsNoExternalAgents: ["No external agents", "还没有外部智能体"],
   settingsNoExternalAgentsHint: [

@@ -188,6 +188,7 @@ function optionFor(
 export class AcpDelegate implements RunDelegate {
   readonly #options: AcpDelegateOptions;
   #opened: Opened | undefined;
+  #connection: symbol | undefined;
   /** The agent's own session id, once there is one. */
   #native: string | undefined;
   #choices: AcpChoices = {};
@@ -302,6 +303,7 @@ export class AcpDelegate implements RunDelegate {
     )
       return false;
     this.#opened = undefined;
+    this.#connection = undefined;
     this.#releasing = opened.process
       .stop()
       .catch(() => undefined)
@@ -315,6 +317,7 @@ export class AcpDelegate implements RunDelegate {
   /** Let the agent go: its questions, its session, its process. */
   async dispose(): Promise<void> {
     this.#disposed = true;
+    this.#connection = undefined;
     this.#permissions?.abort();
     await this.#releasing;
     const opened = this.#opened;
@@ -392,6 +395,8 @@ export class AcpDelegate implements RunDelegate {
       await known.process.stop().catch(() => undefined);
     }
     const agent = this.#options.agent();
+    const connection = Symbol("ACP connection");
+    this.#connection = connection;
     const process = await AcpProcess.start(
       {
         command: agent.command,
@@ -400,7 +405,10 @@ export class AcpDelegate implements RunDelegate {
         cwd: this.#options.cwd,
       },
       {
-        update: (notification) => this.#update(notification),
+        update: (notification) => {
+          if (this.#connection === connection)
+            this.#update(notification, context.emit);
+        },
         permission: async (request) => this.#permission(request),
       },
       { warn: this.#options.warn, label: this.#options.runtime },
@@ -600,7 +608,6 @@ export class AcpDelegate implements RunDelegate {
       this.#charged,
     );
     const permissions = new AbortController();
-    this.#translator = translator;
     this.#permissions = permissions;
     let grace: ReturnType<typeof setTimeout> | undefined;
     const onAbort = (): void => {
@@ -621,6 +628,7 @@ export class AcpDelegate implements RunDelegate {
       translator.setModel(
         this.#choices.model?.current ?? context.config().model.modelId,
       );
+      this.#translator = translator;
       const prompt = opened.process.agent.request(
         methods.agent.session.prompt,
         { sessionId, prompt: this.#blocks(opened, input) },
@@ -657,16 +665,27 @@ export class AcpDelegate implements RunDelegate {
     }
   }
 
-  #update(notification: SessionNotification): void {
+  #update(
+    notification: SessionNotification,
+    emit: RunDelegateContext["emit"],
+  ): void {
     if (this.#replaying) return;
     if (notification.sessionId !== this.#native) return;
     this.#lastActive = Date.now();
     const { update } = notification;
     if (update.sessionUpdate === "config_option_update") {
+      const previous = this.#choices.model?.current;
       this.#learn(update.configOptions);
       const model = this.#choices.model?.current;
-      if (model !== undefined && this.#translator !== undefined)
-        this.#translator.setModel(model);
+      if (model !== undefined && previous !== model) {
+        if (this.#translator) this.#translator.setModel(model);
+        else
+          emit("context:invalidated", {
+            reason: "model",
+            model,
+            at: Date.now(),
+          });
+      }
       return;
     }
     // Between prompts there is no turn to tell it in.

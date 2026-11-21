@@ -1088,6 +1088,16 @@ export function installChat(host: FakeHost): void {
       tokensBefore: 48_200,
       timestamp: Date.now(),
     } as AgentMessage);
+    const current = host.section<
+      import("@eta/client-contracts").ContextReading | undefined
+    >(`sessions.${id}`, "context");
+    if (current)
+      host.patch(`sessions.${id}`, "context", {
+        ...current,
+        used: null,
+        reason: "compacted",
+        compactedAt: Date.now(),
+      });
     return { session: id, compacted: true };
   });
   host.on("sessions.history", ({ session: id }: { session: string }) => ({

@@ -16,16 +16,20 @@ test("03j shows the group's facts, tasks, artifacts, members and goal", async ()
   const app = await start("group:wire");
   await app.waitFor("text:eta · mac-studio");
   const texts = app.texts();
-  expect(texts).toContain("wire 重连");
-  expect(texts).toContain("阿澈");
-  expect(texts).toContain("#128 重连后补发丢失的帧");
-  expect(texts).toContain("#129 备份归档到 nas");
-  await app.waitFor("text:重连方案 · 第 2 版");
+  expect(texts).toContain("wire reconnect");
+  expect(texts).toContain("Ache");
+  expect(texts).toContain("#128 Backfill lost frames after reconnect");
+  expect(texts).toContain("#129 Archive backup to nas");
+  await app.waitFor("text:Reconnect plan · 第 2 版");
   expect(app.texts()).toContain("产物 1");
   expect(texts).toContain("2 位成员");
   expect(texts).toContain("在这个群里还没和它说过话");
-  await app.waitFor("text:claude-opus-5-5 · in 48.2k · out 6.1k");
-  expect(app.texts()).toContain("断线重连后不丢帧、不重复，迁移能回滚。");
+  await app.waitFor(
+    "text:claude-opus-5-5 · 50% · in 48.2k · out 6.1k · cache 210.0k",
+  );
+  expect(app.texts()).toContain(
+    "No dropped or duplicated frames after reconnect, and the migration can roll back.",
+  );
 });
 
 test("the menu edits the group and saves through conversations.update", async () => {
@@ -35,10 +39,10 @@ test("the menu edits the group and saves through conversations.update", async ()
   await app.press("编辑群信息");
   await app.waitFor("id:edit-name");
   expect(app.value("id:edit-goal")).toBe(
-    "断线重连后不丢帧、不重复，迁移能回滚。",
+    "No dropped or duplicated frames after reconnect, and the migration can roll back.",
   );
   expect(app.value("id:edit-decided")).toBe(
-    "客户端带 last_seq，host 从那一行往后重放。",
+    "The client carries last_seq; the host replays from that line forward.",
   );
   await app.clear("id:edit-name");
   expect(app.enabled("保存")).toBe(true);
@@ -66,12 +70,13 @@ test("related tasks link and unlink", async () => {
   await app.waitFor("id:group-more");
   await app.press("id:group-more");
   await app.press("相关任务");
-  const open = () => app.count("text:#131 看板列宽记住上次拖动");
+  const open = () =>
+    app.count("text:#131 Board column width remembers last drag");
   const before = open();
   await app.press("id:related-131");
   await app.waitUntil(() => open() > before);
   await app.press("id:related-129");
-  await app.waitUntil(() => app.count("text:#129 备份归档到 nas") === 1);
+  await app.waitUntil(() => app.count("text:#129 Archive backup to nas") === 1);
 });
 
 test("03l the steward is one of the members, or none", async () => {
@@ -96,16 +101,16 @@ test("no steward is a choice of its own", async () => {
   await app.press("label:主理人");
   await app.press("id:steward-none");
   await app.waitFor("text:没有主理人");
-  expect(app.shows("text:/^(阿澈|Ache) 主理人 · 等待确认$/")).toBe(false);
+  expect(app.shows("text:/^(Ache|Ache) 主理人 · 等待确认$/")).toBe(false);
 });
 
 test("the steward leaving leaves the group with none", async () => {
   const app = await start("group:wire");
   // The fixture names its agents in English now.
-  await app.waitFor("text:/^(阿澈|Ache) 主理人 · 等待确认$/");
+  await app.waitFor("text:/^(Ache|Ache) 主理人 · 等待确认$/");
   await app.press("id:member-agent-ache");
   await app.press("移出群");
-  await app.waitFor("text:/^把「(阿澈|Ache)」移出群？$/");
+  await app.waitFor("text:/^把「(Ache|Ache)」移出群？$/");
   await app.press("移出群 >> nth=0");
   await app.waitFor("text:1 位成员");
   await app.waitFor("text:没有主理人");
@@ -116,12 +121,12 @@ test("03k member sheet: stats, invite, remove with a confirmation", async () => 
   const app = await start("group:wire");
   await app.waitFor("id:member-agent-ache");
   await app.press("id:member-agent-ache");
-  await app.waitFor("text:in 48.2k · out 6.1k · cache 210k");
+  await app.waitFor("text:in 48.2k · out 6.1k · cache 210.0k");
   expect(app.texts()).toContain("42 tok/s");
   expect(app.shows("text:/tools 23/")).toBe(true);
-  expect(app.texts()).toContain("单独和 阿澈 说");
+  expect(app.texts()).toContain("单独和 Ache 说");
   await app.press("移出群");
-  await app.waitFor("text:把「阿澈」移出群？");
+  await app.waitFor("text:把「Ache」移出群？");
   await app.press("移出群 >> nth=0");
   await app.waitFor("text:1 位成员");
   await app.press("邀请");
@@ -134,7 +139,7 @@ test("stop reaches the member's own reply", async () => {
   await app.waitFor("id:member-agent-mori");
   await app.press("id:member-agent-mori");
   await app.waitFor("text:步骤 1/2");
-  await app.press("把列宽写进设置");
+  await app.press("Write column widths into settings");
   await app.waitFor("text:步骤 2/2");
   await app.press("停止");
   await app.waitFor("text:停止", { state: "gone" });
@@ -144,13 +149,15 @@ test("只看 shows that member's rows", async () => {
   const app = await start("group:wire");
   await app.waitFor("id:member-agent-ache");
   await app.press("id:member-agent-ache");
-  await app.press("只看 阿澈");
-  await app.waitFor("text:迁移会锁 message 表大约 40 秒，得你定。");
+  await app.press("只看 Ache");
+  await app.waitFor(
+    "text:The migration will lock the message table for about 40 seconds — that's your call.",
+  );
 });
 
 test("basic info leads to 03h2, read-only", async () => {
   const app = await start("agent:agent-xiaoman");
-  await app.waitFor("text:小满");
+  await app.waitFor("text:Xiaoman");
   for (const text of [
     "工作中",
     "mac-studio",
@@ -161,7 +168,7 @@ test("basic info leads to 03h2, read-only", async () => {
   ])
     expect(app.texts()).toContain(text);
   expect(app.texts()).toContain(
-    "你负责每周把任务汇总成周报，只写做完的和受阻的，下周计划单列一节。",
+    "Each week you compile the tasks into a weekly report: only what's done and what's blocked, with next week's plan in its own section.",
   );
 });
 
@@ -236,9 +243,34 @@ test("03k a member's context: how full, when last compacted, and compacting it",
   await app.waitFor("id:member-context");
   await app.press("id:member-context");
   await app.waitFor("id:context-panel");
-  await app.waitFor("text:/^已用 [\\d.]+k? \\/ 128k tokens · \\d+%$/");
+  await app.waitFor("text:50% · 64,000 / 128,000 tokens");
   expect(app.texts()).toContain("上次压缩：没有");
   await app.press("id:context-compact");
   await app.waitFor("text:已压缩上下文。");
   await app.waitFor("text:/^上次压缩：\\d+:\\d\\d$/");
 });
+
+for (const [scenario, detail] of [
+  ["acp", "50% · 64,000 / 128,000 tokens"],
+  ["codex", "25% · 32,000 / 128,000 tokens"],
+  ["missing", "N/A · 尚未上报上下文读数"],
+  ["legacy", "N/A · 缺少可靠的最近调用读数或窗口"],
+  ["noWindow", "N/A · 缺少有效的上下文窗口"],
+  ["compacted", "N/A · 等待压缩后的新读数"],
+  ["overflow", "N/A · 上下文读数超出有效范围"],
+  ["empty", "0% · 0 / 128,000 tokens"],
+  ["full", "100% · 128,000 / 128,000 tokens"],
+  ["switched", "N/A · 等待新模型的读数"],
+  ["estimated", "约 13% · 16,000 / 128,000 tokens"],
+] as const) {
+  test(`member context replay: ${scenario}`, async () => {
+    const app = await start("group:wire", `context-${scenario}`);
+    await app.press("id:member-agent-ache");
+    await app.press("id:member-context");
+    await app.waitFor(`text:${detail}`);
+    if (scenario === "acp")
+      expect(app.texts()).toContain("in — · out — · cache —");
+    if (scenario === "codex")
+      expect(app.texts()).toContain("in 240.0k · out 0 · cache 1.0k (部分)");
+  });
+}

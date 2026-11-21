@@ -71,6 +71,11 @@ function session() {
     transcript: { messages: [] },
     prompt: { stableChars: 800, adaptiveChars: 2000, sections: [] },
     tools: [],
+    spend: {
+      input: { value: 12345, coverage: "complete" },
+      output: { value: 678, coverage: "complete" },
+      cache: { value: 10000, coverage: "complete" },
+    },
     usage: { input: 12_345, output: 678, cacheRead: 9_000, cacheWrite: 1_000 },
     metrics: { tokensPerSec: 12 },
   };

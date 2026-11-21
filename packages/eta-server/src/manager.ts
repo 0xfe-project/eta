@@ -47,7 +47,7 @@ import { join } from "node:path";
  * hand `openSession` something that can generate.
  */
 import process from "node:process";
-import { DEFAULT_COMPACTION_SETTINGS, kernelOn } from "@eta/core";
+import { DEFAULT_COMPACTION_SETTINGS, kernelEmit, kernelOn } from "@eta/core";
 import { forkChain } from "@eta/core/session";
 import {
   AskRegistry,
@@ -59,6 +59,7 @@ import { forkWrites } from "./fork";
 import { parseModelId } from "./model-id";
 import { resolvePersona } from "./personas";
 import { runtimeIdlePolicyFromEnv } from "./runtime-idle";
+import { attachSessionContext } from "./session-context";
 
 /**
  * Put tools on an open session, and make sure the model is offered them.
@@ -440,12 +441,21 @@ export class SessionManager {
   async compactRuntime(managed: ManagedSession): Promise<RuntimeCompaction> {
     const { id, runtime: runtimeId = "" } = managed.meta;
     const runtime = this.runtimeOf.get(id);
-    return (
-      (await runtime?.compact?.(managed.session.kernel.config.get())) ?? {
-        runtime: runtimeId,
-        outcome: "unsupported",
-      }
-    );
+    const result = (await runtime?.compact?.(
+      managed.session.kernel.config.get(),
+    )) ?? {
+      runtime: runtimeId,
+      outcome: "unsupported",
+    };
+    if (result.outcome === "completed" || result.outcome === "unconfirmed") {
+      const at = Date.now();
+      kernelEmit(managed.session.kernel.ctx)("context:invalidated", {
+        reason: "compacted",
+        at,
+        ...(result.outcome === "completed" ? { compactedAt: at } : {}),
+      });
+    }
+    return result;
   }
 
   /** The sessions that are open right now. */
@@ -593,6 +603,7 @@ export class SessionManager {
     }
     const tools = this.sessionTools?.({ meta, session }) ?? [];
     registerSessionTools(session, tools);
+    await attachSessionContext(session, meta);
     await this.sessionAttach?.({ meta, session });
     // A session the host opened is a session whose inbox becomes runs: the pump is what
     // decides that, and leaving it off would make "prompt a session nobody attached yet"
@@ -692,6 +703,7 @@ export class SessionManager {
       // The host attaches its tools and starts the pump, here as in an eta session.
       const hostTools = this.sessionTools?.({ meta, session }) ?? [];
       registerSessionTools(session, hostTools);
+      await attachSessionContext(session, meta);
       await this.sessionAttach?.({ meta, session });
       session.pump.start();
       tools.names = hostTools.map((tool) => tool.name);

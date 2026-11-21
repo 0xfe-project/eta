@@ -8,7 +8,7 @@
 import type { Event, EventBody, TokenTotals } from "@botiverse/oar";
 import type { AgentMessage, AssistantMessage } from "@eta/core";
 import type { TranslatorTarget } from "../src/translate";
-import { tokensReported } from "@eta/core";
+import { reportedField, tokensReported } from "@eta/core";
 import { describe, expect, it } from "vitest";
 import { HostCalls } from "../src/host-calls";
 import { Translator } from "../src/translate";
@@ -70,6 +70,19 @@ const sum = (messages: AssistantMessage[]) =>
   );
 
 describe("oar's running totals, as each message's share", () => {
+  it("only charges new cache traffic when an optional counter returns", () => {
+    const turn = run(undefined);
+    turn.total({ input: 1000, output: 0, cacheRead: 200 });
+    turn.step("one", "c1");
+    turn.total({ input: 1200, output: 0 });
+    turn.step("two", "c2");
+    turn.total({ input: 1500, output: 0, cacheRead: 300 });
+    turn.step("three", "c3");
+    expect(
+      turn.assistants().map(({ usage }) => reportedField(usage, "cacheRead")),
+    ).toEqual([200, null, 100]);
+  });
+
   it("add up to what was reported, each token once, across messages and runs", () => {
     const first = run(undefined);
     // Nothing reported yet: the first message has no count, which is not a count of 0.

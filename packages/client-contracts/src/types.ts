@@ -1,3 +1,4 @@
+import type { ContextReading, MemberSpend } from "./context-usage";
 import type {
   AgentMessage,
   AskPayload,
@@ -141,6 +142,8 @@ export interface SessionViewSections {
   thinking: { rows: string[] };
   branch: { tipId: string | null; compactionEpoch: number };
   usage: Usage;
+  context: ContextReading;
+  spend: MemberSpend;
   goal: GoalState | undefined;
   tasks: StoredTask[];
   sideThread: SessionViewBtwThread[];

@@ -1,6 +1,11 @@
 import type { AgentView, ConversationSummary } from "@eta/client-contracts";
+import {
+  memberReadings,
+  memberSnapshot,
+  type Replay,
+} from "../../../../test/fixtures/member-context";
 import type { Layout } from "../../src/components";
-import { mount, View, windowSize } from "nsh";
+import { mount, Text, View, windowSize } from "nsh";
 import { Conversation } from "../../src/pages/chat/conversation";
 import { createHost, Host } from "../../src/services/host";
 
@@ -27,37 +32,16 @@ const summary: ConversationSummary = {
 
 const agent = (id: string, name: string) => ({ id, name }) as AgentView;
 
-const x = (n: number) => "x".repeat(n);
-let seq = 0;
-const row = (message: object) => {
-  seq += 1;
-  return { entryId: `e${seq}`, seq, at: seq, message };
-};
-const user = (n: number) => row({ role: "user", content: x(n) });
-const reply = (n: number) =>
-  row({ role: "assistant", content: [{ type: "text", text: x(n) }] });
-
-/**
- * A session with a 20,000-character prompt (5,000 tokens) and one tool whose name and description
- * come to 4,000 characters (1,000 tokens), on a model with no published window (128k).
- */
-const session = (messages: object[]) => ({
+const session = (id: string, replay: Replay) => ({
   sections: {
-    transcript: { messages },
-    prompt: { sections: [], stableChars: 20_000, adaptiveChars: 20_000 },
-    tools: [{ name: "esmrun", description: x(3994) }],
-    model: { id: "fake:fake-model", thinkingLevel: "off" },
-    usage: { input: 1200, output: 340, cacheRead: 0, cacheWrite: 0 },
+    ...memberSnapshot(id, replay),
+    tools: [],
+    model: { id: "fake:m", thinkingLevel: "off" },
   },
   revisions: {},
   version: 0,
 });
 
-/**
- * Group "Website redesign": Ada has 4,000 characters from the user and 40,000 in replies (17,000
- * tokens in all, 13%); Bo had 400,000 characters of replies before a 2,000-character compaction
- * summary and 400 from the user after it (6,600 tokens, 5%); Cyrus has no session yet.
- */
 function Fixture() {
   const host = createHost();
   const list = <T,>(items: T[]) => ({
@@ -76,18 +60,8 @@ function Fixture() {
         agent("bo", "Bo"),
         agent("cy", "Cyrus"),
       ]),
-      "sessions.s-ada": session([user(4000), reply(40_000)]),
-      "sessions.s-bo": session([
-        user(400),
-        reply(400_000),
-        row({
-          role: "compactionSummary",
-          summary: x(2000),
-          tokensBefore: 100_000,
-          timestamp: 1,
-        }),
-        user(400),
-      ]),
+      "sessions.s-ada": session("s-ada", "acp"),
+      "sessions.s-bo": session("s-bo", "codex"),
       "conversations.group": {
         sections: { timeline: { messages: [], hasMore: false, held: [] } },
         revisions: {},
@@ -103,10 +77,43 @@ function Fixture() {
       : windowSize().width < 1200
         ? "tablet"
         : "desktop";
+  let step = 0;
+  const replays = Object.keys(memberReadings) as Replay[];
+  function advance() {
+    const replay = replays[++step % replays.length]!;
+    host.state.update((s) => ({
+      ...s,
+      targets: { ...s.targets, "sessions.s-ada": session("s-ada", replay) },
+    }));
+  }
+  function replaceSession() {
+    const participants = summary.participants.map((member) =>
+      member.agentId === "ada"
+        ? { ...member, sessionId: "s-replacement" }
+        : member,
+    );
+    host.state.update((s) => ({
+      ...s,
+      targets: {
+        ...s.targets,
+        conversations: list([{ ...summary, participants }]),
+      },
+    }));
+  }
   const noop = () => {};
   return (
     <Host.Provider value={host}>
       <View style={{ flex: 1 }}>
+        <View role="button" accessibilityLabel="Next reading" onPress={advance}>
+          <Text>Next reading</Text>
+        </View>
+        <View
+          role="button"
+          accessibilityLabel="Replace session"
+          onPress={replaceSession}
+        >
+          <Text>Replace session</Text>
+        </View>
         <Conversation
           id="group"
           layout={layout()}

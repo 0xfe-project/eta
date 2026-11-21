@@ -12,8 +12,13 @@ import type {
   RoutineSummary,
   TimelineSection,
 } from "@eta/client-contracts";
+import type { Replay } from "../../../../../test/fixtures/member-context";
 import type { FakeHost } from "../fake-host";
 import { effect, Storage, untracked } from "nsh";
+import {
+  memberReadings,
+  memberSnapshot,
+} from "../../../../../test/fixtures/member-context";
 import { agents } from "../../app/lists";
 import { phase, wire } from "../../app/session";
 import { go } from "../../nav/links";
@@ -426,8 +431,20 @@ function installArtifactOps(host: FakeHost): void {
 }
 
 function installSessions(host: FakeHost): void {
+  const replay = host.scenario.startsWith("context-")
+    ? host.scenario.slice("context-".length)
+    : "";
   host.set("sessions.session-agent-ache", {
     model: { id: "claude-opus-5-5", thinkingLevel: "high" },
+    context: memberSnapshot("session-agent-ache", "acp").context,
+    spend: {
+      input: { value: 48200, coverage: "complete" },
+      output: { value: 6100, coverage: "complete" },
+      cache: { value: 210000, coverage: "complete" },
+    },
+    ...(Object.hasOwn(memberReadings, replay)
+      ? memberSnapshot("session-agent-ache", replay as Replay)
+      : {}),
     usage: usage(48_200, 6_100, 210_000),
     metrics: { tokensPerSec: 42 },
     tools: tools(23),
@@ -435,6 +452,7 @@ function installSessions(host: FakeHost): void {
   });
   host.set("sessions.session-agent-mori", {
     model: { id: "claude-opus-5-5", thinkingLevel: "high" },
+    ...memberSnapshot("session-agent-mori", "codex"),
     usage: usage(12_400, 1_800, 40_000),
     metrics: { tokensPerSec: 0 },
     tools: tools(18),
@@ -453,6 +471,7 @@ function installSessions(host: FakeHost): void {
   });
   host.set("sessions.session-agent-xiaoman", {
     model: { id: "gpt-5.1-codex", thinkingLevel: "medium" },
+    ...memberSnapshot("session-agent-xiaoman", "legacy"),
     usage: usage(3_200, 640, 0),
     metrics: { tokensPerSec: 0 },
     tools: tools(12),

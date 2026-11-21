@@ -55,7 +55,23 @@ beforeEach(() => {
   );
   host.target("sessions.s1", {
     core: { session: "s1", running: true },
+    context: {
+      session: "s1",
+      model: "p:m",
+      runId: "run",
+      source: "oar",
+      observedAt: 1,
+      compactedAt: null,
+      used: 64000,
+      window: 128000,
+      reason: null,
+    },
     model: { id: "p:m", thinkingLevel: "off" },
+    spend: {
+      input: { value: 1500, coverage: "complete" },
+      output: { value: 200, coverage: "complete" },
+      cache: { value: 0, coverage: "complete" },
+    },
     usage: {
       input: 1500,
       output: 200,
@@ -148,7 +164,7 @@ describe("成员和群的管理", () => {
     );
     await flush();
     const panel = document.querySelector('[data-slot="popover-content"]')!;
-    expect(panel.textContent).toMatch(/上下文 \S+ \/ \S+（\d+%）/);
+    expect(panel.textContent).toContain("50% · 64,000 / 128,000 tokens");
     expect(panel.textContent).toContain("上次压缩：没有");
     const compact = [...panel.querySelectorAll("button")].find(
       (b) => b.textContent === "压缩上下文",
