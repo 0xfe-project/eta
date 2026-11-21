@@ -1,8 +1,9 @@
 /**
  * The parts of `scripts/upgrade-e2e` that decide something without a service: what the seed check
  * leaves out on a host that has since started (the Captain a later build makes for itself, and
- * nothing else), and how the button's driver reads the pre-release switch. The views are over the
- * real schema, so a migration that renames what they read breaks this, not a release.
+ * nothing else), how the button's driver reads the pre-release switch, and whether the workflow
+ * still runs for the client files the browser scenario presses. The views are over the real schema,
+ * so a migration that renames what they read breaks this, not a release.
  *
  * The real runs are `upgrade-cross.yml` (between releases, over `test/upgrade-seed`) and
  * `upgrade-e2e.yml`.
@@ -11,6 +12,8 @@ import type { Database } from "bun:sqlite";
 import type { Check } from "../../../scripts/upgrade-e2e/button";
 import type { Manifest } from "../../../scripts/upgrade-e2e/seed";
 import { Buffer } from "node:buffer";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { hasPrereleaseSwitch } from "../../../scripts/upgrade-e2e/button";
 import {
@@ -200,5 +203,62 @@ describe("hasPrereleaseSwitch", () => {
   it("is not there when the field is missing or null", () => {
     expect(hasPrereleaseSwitch(check(undefined))).toBe(false);
     expect(hasPrereleaseSwitch(check(null))).toBe(false);
+  });
+});
+
+describe("upgrade-e2e.yml's paths", () => {
+  const repo = join(import.meta.dirname, "../../..");
+  const workflow = readFileSync(
+    join(repo, ".github/workflows/upgrade-e2e.yml"),
+    "utf8",
+  );
+  const paths = [
+    ...(
+      /^ {4}paths:\n((?: {6}(?:- \S+|#.*)\n)+)/m.exec(workflow)?.[1] ?? ""
+    ).matchAll(/^ {6}- (\S+)$/gm),
+  ].map((match) => match[1]!);
+  const runsFor = (file: string): boolean =>
+    paths.some((path) => new Bun.Glob(path).match(file));
+  const clientFiles = [
+    "apps/client/App.tsx",
+    ...new Bun.Glob("apps/client/src/**/*.{ts,tsx}").scanSync({ cwd: repo }),
+  ];
+
+  it("each names a file that exists", () => {
+    expect(paths.length).toBeGreaterThan(10);
+    const nothing = paths.filter(
+      (path) =>
+        [...new Bun.Glob(path).scanSync({ cwd: repo, dot: true })].length === 0,
+    );
+    expect(nothing).toEqual([]);
+  });
+
+  // What drive.ts's "a person presses the button on the page" finds on the page: the test id and
+  // the messages behind its labels. A file showing one of them, or saying it, has to start a run.
+  it("cover every client file the browser scenario finds its way by", () => {
+    const marks = [
+      'testID="host-version"',
+      '"updateToVersion"',
+      "updateToVersion:",
+      '"updateTheHostTo"',
+      "updateTheHostTo:",
+      '"hostUpdateInProgress"',
+      "hostUpdateInProgress:",
+      '"updateLastFailed"',
+      "updateLastFailed:",
+      "  update: [",
+    ];
+    const using = clientFiles.filter((file) => {
+      const text = readFileSync(join(repo, file), "utf8");
+      return marks.some((mark) => text.includes(mark));
+    });
+    expect(using.length).toBeGreaterThanOrEqual(6);
+    expect(using.filter((file) => !runsFor(file))).toEqual([]);
+  });
+
+  it("leave out the client pages an upgrade does not go through", () => {
+    expect(runsFor("apps/client/src/pages/chat/conversation.tsx")).toBe(false);
+    expect(runsFor("apps/client/src/pages/tasks/task-detail.tsx")).toBe(false);
+    expect(runsFor("apps/client/src/pages/connection/index.tsx")).toBe(true);
   });
 });

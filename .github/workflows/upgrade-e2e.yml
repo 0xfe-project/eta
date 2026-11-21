@@ -34,7 +34,35 @@ on:
       - apps/daemon/src/windows-*.ts
       - apps/eta/src/stop.ts
       - apps/eta/src/upgrade/**
-      - apps/client/**
+      # Of the client, what "a person presses the button on the page" goes through: the route to
+      # Settings → Update, that page, its confirm dialog, the restart screen, the connection that
+      # reloads after it, and the components, fonts and copy they draw with. The rest of the client
+      # does not take part in an upgrade, and its own tests run in CI. A file the scenario starts
+      # to use belongs here.
+      - apps/client/App.tsx
+      - apps/client/package.json
+      - apps/client/nsh.json
+      - apps/client/packaged-host-bootstrap.ts
+      - apps/client/assets/**
+      - apps/client/src/app/workspace.tsx
+      - apps/client/src/navigation/location.ts
+      - apps/client/src/navigation/routes.ts
+      - apps/client/src/pages/settings/settings.tsx
+      - apps/client/src/pages/settings/navigation.tsx
+      - apps/client/src/pages/settings/overview.ts
+      - apps/client/src/pages/settings/section.tsx
+      - apps/client/src/pages/settings/updates/**
+      - apps/client/src/pages/connection/**
+      - apps/client/src/services/**
+      - apps/client/src/components/**
+      - apps/client/src/i18n/index.ts
+      - apps/client/src/i18n/messages/index.ts
+      - apps/client/src/i18n/messages/common.ts
+      - apps/client/src/i18n/messages/connection.ts
+      - apps/client/src/i18n/messages/settings.ts
+      - apps/client/src/i18n/messages/updates.ts
+      - packages/client-contracts/src/wire.ts
+      - packages/client-wire-proto/src/**
       - scripts/nsh-client.ts
       - .github/actions/setup-nsh/**
       - scripts/upgrade-e2e/**
@@ -87,7 +115,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: e2e-builds
-          key: upgrade-e2e-${{ matrix.platform }}-${{ hashFiles('bun.lock', 'apps/daemon/src/**', 'apps/eta/scripts/**', 'apps/eta/src/**', 'apps/client/**', 'scripts/nsh-client.ts', '.github/actions/setup-nsh/action.yml', 'scripts/upgrade-e2e/build.ts') }}
+          key: upgrade-e2e-${{ matrix.platform }}-${{ hashFiles('bun.lock', 'apps/daemon/src/**', 'apps/eta/scripts/**', 'apps/eta/src/**', 'apps/client/**', 'packages/client-contracts/src/**', 'packages/client-wire-proto/src/**', 'scripts/nsh-client.ts', '.github/actions/setup-nsh/action.yml', 'scripts/upgrade-e2e/build.ts') }}
 
       - uses: ./.github/actions/setup-nsh
         if: steps.builds.outputs.cache-hit != 'true'
