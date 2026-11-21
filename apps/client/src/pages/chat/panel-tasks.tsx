@@ -1,6 +1,6 @@
 import type { BoardTaskStatus, BoardTaskView } from "@eta/client-contracts";
 import { signal, View } from "nsh";
-import { Caption, colors, Icon, Label, row } from "../../components";
+import { Caption, colors, Icon, Label, row, Screen } from "../../components";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -12,6 +12,7 @@ import {
   TaskGlyph,
   TaskStatus,
 } from "../tasks/status";
+import { cardUsage, UsageLine, usageShown, useLiveRate } from "../tasks/usage";
 
 const closed = (task: BoardTaskView) =>
   task.status === "done" || task.status === "cancelled";
@@ -283,7 +284,24 @@ export function TasksTab(props: {
   );
 }
 
+/** The live rate of a task's run going on eta's own loop, before its running time. */
+function PanelRate(props: { task: BoardTaskView }) {
+  const rate = useLiveRate(() =>
+    usageShown() ? props.task.usage?.liveSessionId : undefined,
+  );
+  return (
+    <If when={rate()}>
+      {(value) => (
+        <Label variant="small" tone="green" style={{ flexShrink: 0 }}>
+          {uiText("usageRate", { rate: value().toFixed(1) })}
+        </Label>
+      )}
+    </If>
+  );
+}
+
 function TaskRow(props: { task: BoardTaskView; onPress: () => void }) {
+  const layout = Screen();
   const host = useHost();
   const c = colors();
   const task = () => props.task;
@@ -319,10 +337,36 @@ function TaskRow(props: { task: BoardTaskView; onPress: () => void }) {
         <Label variant="small" lines={1}>
           {task().title}
         </Label>
-        <Label variant="caption" tone="muted" lines={1}>
-          {meta()}
-        </Label>
+        <View style={{ ...row, minWidth: 0 }}>
+          <Label
+            variant="caption"
+            tone="muted"
+            lines={1}
+            style={{ flexShrink: 0 }}
+          >
+            {meta()}
+          </Label>
+          <If when={usageShown() && cardUsage(task())}>
+            <Label
+              variant="caption"
+              tone="muted"
+              style={{ flexShrink: 0, marginHorizontal: 4 }}
+            >
+              ·
+            </Label>
+            <UsageLine
+              task={task()}
+              variant="caption"
+              model={layout() === "desktop"}
+              tone="mutedInk"
+              style={{ flexShrink: 1 }}
+            />
+          </If>
+        </View>
       </View>
+      <If when={!task().subtasks?.total}>
+        <PanelRate task={task()} />
+      </If>
       <If when={task().subtasks?.total}>
         <SubtaskSegments
           subtasks={subtasksOf(host.tasks(), task())}

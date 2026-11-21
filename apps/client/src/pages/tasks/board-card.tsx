@@ -15,6 +15,7 @@ import {
 } from "./facts";
 import { ownerLine } from "./creator";
 import { progressColor, SubtreeGlyph, TaskGlyph, tones } from "./status";
+import { UsageLine } from "./usage";
 
 export function BoardCard(props: {
   task: BoardTaskView;
@@ -380,6 +381,12 @@ export function BoardCard(props: {
             </Label>
           </View>
         </If>
+        <UsageLine
+          task={props.task}
+          model={!tablet()}
+          rate
+          style={{ justifyContent: "space-between" }}
+        />
       </View>
     </View>
   );

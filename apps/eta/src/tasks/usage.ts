@@ -4,6 +4,7 @@ import type {
   TaskRunStatus,
   TaskRunUsage,
   TaskTokenTotals,
+  TaskUsageBrief,
   TaskUsageGroup,
   TaskUsageView,
   TokenCounts,
@@ -281,6 +282,126 @@ export class TaskUsageStore {
       )
       .all(taskId)
       .map((row) => row.id);
+  }
+
+  /**
+   * Every task's usage in brief, for the board's cards and rows: its own runs, and for a task with
+   * subtasks, theirs added in. One pass over all runs, so a board of any size costs two queries,
+   * not one per card. A task none of whose runs got a session is not in `own`.
+   */
+  briefs(): {
+    own: Map<string, TaskUsageBrief>;
+    withSubtasks: Map<string, TaskUsageBrief | null>;
+  } {
+    const rows = this.#db
+      .query<
+        {
+          run_id: string;
+          task_id: string;
+          status: string;
+          session_id: string;
+          provider: string | null;
+          model: string | null;
+          input: number | null;
+          output: number | null;
+          cache_read: number | null;
+          cache_write: number | null;
+          reasoning: number | null;
+        },
+        []
+      >(
+        `SELECT r.id AS run_id, r.task_id, r.status, r.session_id, u.provider, u.model,
+                SUM(u.input) AS input, SUM(u.output) AS output, SUM(u.cache_read) AS cache_read,
+                SUM(u.cache_write) AS cache_write, SUM(u.reasoning) AS reasoning
+           FROM task_run r LEFT JOIN task_usage u ON u.run_id = r.id
+          WHERE r.session_id IS NOT NULL
+          GROUP BY r.id, u.provider, u.model
+          ORDER BY r.created_at, r.rowid`,
+      )
+      .all();
+    interface Acc {
+      tokens: TaskTokenTotals | null;
+      models: Map<string, number>;
+      runs: Set<string>;
+      withData: Set<string>;
+      liveSessionId: string | null;
+    }
+    const fresh = (): Acc => ({
+      tokens: null,
+      models: new Map(),
+      runs: new Set(),
+      withData: new Set(),
+      liveSessionId: null,
+    });
+    const own = new Map<string, Acc>();
+    for (const row of rows) {
+      const acc = own.get(row.task_id) ?? fresh();
+      own.set(row.task_id, acc);
+      acc.runs.add(row.run_id);
+      if (OPEN.has(row.status)) acc.liveSessionId = row.session_id;
+      if (row.input === null || row.model === null) continue;
+      acc.withData.add(row.run_id);
+      acc.tokens = add(acc.tokens, row);
+      const sum = row.input + row.output! + row.cache_read! + row.cache_write!;
+      acc.models.set(row.model, (acc.models.get(row.model) ?? 0) + sum);
+    }
+    const merge = (into: Acc, from: Acc): void => {
+      into.tokens = addTotals(into.tokens, from.tokens);
+      for (const [model, sum] of from.models)
+        into.models.set(model, (into.models.get(model) ?? 0) + sum);
+      for (const run of from.runs) into.runs.add(run);
+      for (const run of from.withData) into.withData.add(run);
+      into.liveSessionId ??= from.liveSessionId;
+    };
+    const brief = (acc: Acc): TaskUsageBrief => {
+      const models = [...acc.models].sort(
+        (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+      );
+      return {
+        tokens: acc.tokens,
+        model: models[0]?.[0] ?? null,
+        models: models.length,
+        runs: acc.runs.size,
+        runsWithoutData: acc.runs.size - acc.withData.size,
+        liveSessionId: acc.liveSessionId,
+      };
+    };
+
+    const children = new Map<string, string[]>();
+    for (const { id, parent_id } of this.#db
+      .query<{ id: string; parent_id: string }, []>(
+        "SELECT id, parent_id FROM task WHERE parent_id IS NOT NULL",
+      )
+      .all()) {
+      const list = children.get(parent_id) ?? [];
+      list.push(id);
+      children.set(parent_id, list);
+    }
+    const subtree = new Map<string, Acc | null>();
+    const total = (id: string, depth: number): Acc | null => {
+      if (subtree.has(id)) return subtree.get(id)!;
+      subtree.set(id, null); // a cycle (never made, but never followed either)
+      let acc: Acc | null = null;
+      const mine = own.get(id);
+      if (mine !== undefined) merge((acc = fresh()), mine);
+      if (depth < 64)
+        for (const child of children.get(id) ?? []) {
+          const theirs = total(child, depth + 1);
+          if (theirs !== null) merge((acc ??= fresh()), theirs);
+        }
+      subtree.set(id, acc);
+      return acc;
+    };
+
+    const withSubtasks = new Map<string, TaskUsageBrief | null>();
+    for (const id of children.keys()) {
+      const acc = total(id, 0);
+      withSubtasks.set(id, acc === null ? null : brief(acc));
+    }
+    return {
+      own: new Map([...own].map(([id, acc]) => [id, brief(acc)])),
+      withSubtasks,
+    };
   }
 
   /** `tasks.usage`: what the task's runs used, its subtasks' with `includeSubtasks`. */

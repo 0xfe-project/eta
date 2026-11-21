@@ -30,6 +30,7 @@ import { FilterTrigger, TaskMenu, TaskMenuItem, TaskMenuRule } from "./menu";
 import { Segmented } from "./segmented";
 import { TaskListSkeleton } from "./skeleton";
 import { TaskGlyph } from "./status";
+import { ViewMenu } from "./view-menu";
 import { TaskWorkspaceBoard } from "./workspace-board";
 import { TaskWorkspaceList } from "./workspace-list";
 
@@ -170,7 +171,12 @@ export function Tasks(props: {
           }
           layout={props.layout}
           inset={tablet() ? 14 : undefined}
+          end={phone() ? 8 : undefined}
         >
+          <If when={phone()}>
+            <View style={{ flex: 1 }} />
+            <ViewMenu phone />
+          </If>
           <If when={!phone()}>
             <If when={!archive()} else={<View style={{ flex: 1 }} />}>
               <View
@@ -290,6 +296,9 @@ export function Tasks(props: {
                   archive.set(!archive());
                 }}
               />
+              <If when={!archive()}>
+                <ViewMenu tablet={tablet()} />
+              </If>
               <If
                 when={
                   props.layout === "desktop" && view() === "List" && !archive()

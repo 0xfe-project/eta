@@ -17,6 +17,7 @@ import {
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { followSession, useHost } from "../../services/host";
+import { tokens } from "../tasks/usage";
 import { activeReply, memberStatus } from "./member-status";
 import { MemberStepsLedger, MemberStepsToggle } from "./member-steps";
 
@@ -196,15 +197,6 @@ export function ConversationMembers(props: {
     </>
   );
 }
-
-const tokens = (count: number | undefined) =>
-  count === undefined
-    ? "—"
-    : count >= 1_000_000
-      ? `${(count / 1_000_000).toFixed(1)}M`
-      : count >= 1_000
-        ? `${(count / 1_000).toFixed(1)}k`
-        : String(count);
 
 /**
  * A member's face in a fixed 36px slot, ringed by how full its context is. A member with no
