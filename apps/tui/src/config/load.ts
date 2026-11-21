@@ -274,7 +274,8 @@ function readThemePreset(
   problems: Problems,
 ): void {
   const key = `theme.${PRESET_KEY}`;
-  if (typeof value !== "string") return problems.value(key, "wrong-type", value);
+  if (typeof value !== "string")
+    return problems.value(key, "wrong-type", value);
   if (value === DEFAULT_PRESET) return;
   if (!Object.hasOwn(THEME_PRESETS, value))
     return problems.value(key, "invalid-value", value);

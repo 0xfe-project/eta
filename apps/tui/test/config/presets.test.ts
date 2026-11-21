@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { parseConfig } from "../../src/config/load";
 import { THEME_PRESETS } from "../../src/config/presets";
 
-const kebab = (id: string) => id.replaceAll(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+const kebab = (id: string) =>
+  id.replaceAll(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 
 describe("theme presets of the shared themes", () => {
   it("has a dark and a light of each, and the four Catppuccin", () => {
@@ -13,7 +14,10 @@ describe("theme presets of the shared themes", () => {
         "catppuccin-latte",
         "catppuccin-macchiato",
         "catppuccin-mocha",
-        ...themeIds.flatMap((id) => [`${kebab(id)}-dark`, `${kebab(id)}-light`]),
+        ...themeIds.flatMap((id) => [
+          `${kebab(id)}-dark`,
+          `${kebab(id)}-light`,
+        ]),
       ].sort(),
     );
   });
@@ -23,7 +27,10 @@ describe("theme presets of the shared themes", () => {
       const name = `${kebab(id)}-${mode}`;
       it(`resolves ${name} to the colours the client's palette uses`, () => {
         const c = themes[id][mode];
-        const { config, problems } = parseConfig(JSON.stringify({ theme: { preset: name } }), "/conf/tui.json");
+        const { config, problems } = parseConfig(
+          JSON.stringify({ theme: { preset: name } }),
+          "/conf/tui.json",
+        );
         expect(problems).toEqual([]);
         expect(config.theme).toEqual({
           brand: c.mauve,

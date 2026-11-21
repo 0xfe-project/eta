@@ -28,7 +28,14 @@ export interface ThemeColors {
   pink: string;
 }
 
-export const themeIds = ["dracula", "nord", "gruvbox", "tokyoNight", "solarized", "rosePine"] as const;
+export const themeIds = [
+  "dracula",
+  "nord",
+  "gruvbox",
+  "tokyoNight",
+  "solarized",
+  "rosePine",
+] as const;
 export type ThemeId = (typeof themeIds)[number];
 
 export const themes: Record<
