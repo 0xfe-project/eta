@@ -10,7 +10,6 @@ import {
   mount,
   openUrl,
   platform,
-  safeAreaInsets,
   signal,
   Storage,
   UrlScheme,
@@ -22,11 +21,11 @@ import { Workspace } from "./src/app/workspace";
 import {
   Button,
   Fonts,
-  grow,
   Label,
   palette,
   Palette,
   row,
+  SafeArea,
 } from "./src/components";
 import {
   createElementPicker,
@@ -105,7 +104,6 @@ function App() {
   };
   const startingLocal = signal(false);
   const offeredAddress = signal<HostAddress | undefined>(openedWith);
-  const insets = safeAreaInsets();
   const dismissCompatibility = signal(false);
   const applicationVersion = appInfo().version ?? undefined;
   cleanup(() => host.start(null));
@@ -204,15 +202,9 @@ function App() {
         <Host.Provider value={host}>
           <Palette.Provider value={c}>
             <Fonts.Provider value={fonts}>
-              <View
-                style={{
-                  ...grow,
-                  backgroundColor: c().canvas,
-                  paddingTop: insets().top,
-                  paddingBottom: insets().bottom,
-                  paddingLeft: insets().left,
-                  paddingRight: insets().right,
-                }}
+              <SafeArea
+                testID="app-safe-area"
+                style={{ backgroundColor: c().canvas }}
               >
                 <If
                   when={
@@ -328,7 +320,7 @@ function App() {
                     />
                   </View>
                 </If>
-              </View>
+              </SafeArea>
               <ElementPickerOverlay />
             </Fonts.Provider>
           </Palette.Provider>
