@@ -3,6 +3,14 @@
   "id": "dev.eta.client",
   "version": "0.1.0",
   "build": 1,
+  "icon": {
+    "macos": ".nsh/icons/macos.png",
+    "ios": ".nsh/icons/ios.png",
+    "windows": "../web/public/Eta-Logo.png",
+    "linux": "../web/public/Eta-Logo.png",
+    "android": "../web/public/Eta-Logo.png",
+    "web": "../web/public/Eta-Logo.png"
+  },
   "schemes": ["eta"],
   "web": {
     "base": "/"

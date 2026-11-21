@@ -12,6 +12,7 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { thirdPartyNotices } from "../apps/eta/scripts/notices";
+import { writeClientIcons } from "./client-icons";
 
 const root = resolve(import.meta.dir, "..");
 const cwd = join(root, "apps", "client");
@@ -22,6 +23,7 @@ const meta = (await Bun.file(join(cwd, "nsh.json")).json()) as {
   id: string;
   name: string;
   version: string;
+  icon: Record<string, string>;
 };
 
 function option(name: string, short?: string): string | undefined {
@@ -84,6 +86,8 @@ if (args[0] !== "publish" && args[0] !== "update-manifest") {
     join(cwd, "assets", "artifact-pdf-module-lexer.txt"),
   );
 }
+// `nsh.json` names them for every package, a store upload's included.
+if (args[0] !== "update-manifest") await writeClientIcons(root);
 
 const updateUrl = process.env.ETA_CLIENT_UPDATE_URL;
 const updateKey = process.env.ETA_CLIENT_UPDATE_PUBLIC_KEY;
@@ -141,6 +145,13 @@ try {
       join(staging, "nsh.json"),
       JSON.stringify({
         ...meta,
+        // Its paths are relative to nsh.json, which is written elsewhere here.
+        icon: Object.fromEntries(
+          Object.entries(meta.icon).map(([platform, file]) => [
+            platform,
+            resolve(cwd, file),
+          ]),
+        ),
         ...(manifest
           ? {
               id: process.env.ETA_CLIENT_ID ?? meta.id,
