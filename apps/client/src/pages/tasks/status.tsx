@@ -17,6 +17,28 @@ export function statusName(status: BoardTaskStatus) {
   return uiText(statusKeys[status]);
 }
 
+const statusHints = {
+  backlog: "statusHintBacklog",
+  todo: "statusHintTodo",
+  in_progress: "statusHintInProgress",
+  in_review: "statusHintInReview",
+  done: "statusHintDone",
+  blocked: "statusHintBlocked",
+  cancelled: "statusHintCancelled",
+} as const satisfies Record<BoardTaskStatus, Parameters<typeof uiText>[0]>;
+
+/** What moving a task to a status does, under its name in the status menu. */
+export function statusHint(status: BoardTaskStatus, waiting = 0) {
+  if (status === "cancelled" && waiting)
+    return uiText(
+      waiting === 1
+        ? "statusHintCancelledDependent"
+        : "statusHintCancelledDependents",
+      { count: waiting },
+    );
+  return uiText(statusHints[status]);
+}
+
 export const tones = {
   backlog: "faint",
   todo: "ink",
@@ -53,12 +75,30 @@ export function taskNeedsAttention(task: BoardTaskView): boolean {
 
 export function TaskGlyph(props: { status: BoardTaskStatus; size?: number }) {
   const c = colors();
-  const src = () => {
-    const shape = statusShapes[props.status]
-      .replaceAll("currentColor", c()[tones[props.status]])
-      .replaceAll("paper", c().canvas);
-    return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">${shape}</svg>`)}`;
-  };
+  return (
+    <ShapeImage
+      shape={statusShapes[props.status]
+        .replaceAll("currentColor", c()[tones[props.status]])
+        .replaceAll("paper", c().canvas)}
+      size={props.size}
+    />
+  );
+}
+
+/** A parent's mark on its board card: the tree of its subtasks. */
+export function SubtreeGlyph(props: { size?: number }) {
+  const c = colors();
+  return (
+    <ShapeImage
+      shape={`<path d="M2 3h4v3H2zM2 10h4v3H2zM6 4.5h4M6 11.5h4M10 4.5v7" fill="none" stroke="${c().mutedInk}"/>`}
+      size={props.size}
+    />
+  );
+}
+
+function ShapeImage(props: { shape: string; size?: number }) {
+  const src = () =>
+    `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">${props.shape}</svg>`)}`;
   return (
     <Image
       src={src()}
@@ -228,6 +268,16 @@ function runText(task: BoardTaskView) {
     default:
       return statusName(task.status);
   }
+}
+
+/** A subtask's segment in its parent's progress bar: what is not started yet stays grey. */
+export function progressColor(
+  status: BoardTaskStatus,
+  c: ReturnType<ReturnType<typeof colors>>,
+) {
+  return status === "todo" || status === "backlog" || status === "cancelled"
+    ? c.strong
+    : c[tones[status]];
 }
 
 export function TaskSummary(props: {

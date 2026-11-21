@@ -2,11 +2,12 @@ import type { BoardTaskStatus, BoardTaskView } from "@eta/client-contracts";
 import type { Signal } from "nsh";
 import type { Layout } from "../../components";
 import { computed, Scroll, View } from "nsh";
-import { Button, colors, grow, Label, row } from "../../components";
+import { Button, colors, grow, Icon, Label, row } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskTableRow } from "./list";
-import { statusName, TaskGlyph, TaskSummary, tones } from "./status";
+import { TaskPlanBoard } from "./plan";
+import { progressColor, statusName, TaskGlyph } from "./status";
 import { visibleStatuses } from "./workspace-board";
 
 export function TaskWorkspaceList(props: {
@@ -22,6 +23,7 @@ export function TaskWorkspaceList(props: {
   const host = useHost();
   const c = colors();
   const phone = () => props.layout === "phone";
+  const tablet = () => props.layout === "tablet";
   const column = (status: BoardTaskStatus) =>
     props.items.filter((task) => task.status === status);
   const byParent = computed(() => {
@@ -49,71 +51,66 @@ export function TaskWorkspaceList(props: {
     <Scroll style={grow}>
       <View
         style={{
-          padding: props.groupByParent ? 0 : 22,
+          padding: props.groupByParent || props.view === "Plan" ? 0 : 22,
           gap: props.groupByParent ? 0 : 12,
         }}
       >
-        <Each
-          of={
-            props.view === "Plan" && !phone()
-              ? props.items.filter((task) => !task.parentId)
-              : []
-          }
-          key={(task) => task.id}
-        >
-          {(task) => (
-            <View style={{ gap: 6 }}>
-              <TaskSummary
-                task={task()}
-                onPress={() => props.onOpen(task().id)}
-              />
-              <View style={{ paddingLeft: 20, gap: 6 }}>
-                <Each
-                  of={props.items.filter(
-                    (subtask) => subtask.parentId === task().id,
-                  )}
-                  key={(subtask) => subtask.id}
-                >
-                  {(subtask) => (
-                    <TaskSummary
-                      task={subtask()}
-                      onPress={() => props.onOpen(subtask().id)}
-                    />
-                  )}
-                </Each>
-              </View>
-            </View>
-          )}
-        </Each>
+        <If when={props.view === "Plan" && !phone()}>
+          <TaskPlanBoard
+            items={props.items}
+            tablet={tablet()}
+            onOpen={props.onOpen}
+          />
+        </If>
         <If when={props.groupByParent}>
           <Each of={byParent().groups} key={(group) => group.parent.id}>
             {(group) => {
               const isFolded = () =>
                 props.foldedParents().includes(group().parent.id);
+              const fold = () =>
+                props.foldedParents.update((ids) =>
+                  isFolded()
+                    ? ids.filter((id) => id !== group().parent.id)
+                    : [...ids, group().parent.id],
+                );
+              const foldLabel = () =>
+                `${isFolded() ? "Expand" : "Collapse"} ${group().parent.title}`;
               return (
                 <View>
                   <View
                     style={{
                       ...row,
-                      paddingLeft: 8,
+                      paddingLeft: tablet() ? 14 : 8,
+                      gap: tablet() ? 8 : 0,
                       borderBottomWidth: 1,
                       borderColor: c().border,
-                      backgroundColor: c().surface,
+                      backgroundColor: tablet() ? c().selected : c().surface,
                     }}
                   >
-                    <Button
-                      label={`${isFolded() ? "Expand" : "Collapse"} ${group().parent.title}`}
-                      icon={isFolded() ? "right" : "down"}
-                      iconOnly
-                      tone="ghost"
-                      onPress={() =>
-                        props.foldedParents.update((ids) =>
-                          isFolded()
-                            ? ids.filter((id) => id !== group().parent.id)
-                            : [...ids, group().parent.id],
-                        )
+                    <If
+                      when={!tablet()}
+                      else={
+                        <View
+                          role="button"
+                          accessibilityLabel={foldLabel()}
+                          onPress={fold}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <Icon
+                            name={isFolded() ? "right" : "down"}
+                            size={10}
+                          />
+                        </View>
                       }
-                    />
+                    >
+                      <Button
+                        label={foldLabel()}
+                        icon={isFolded() ? "right" : "down"}
+                        iconOnly
+                        tone="ghost"
+                        onPress={fold}
+                      />
+                    </If>
                     <View
                       role="button"
                       accessibilityLabel={group().parent.title}
@@ -121,7 +118,7 @@ export function TaskWorkspaceList(props: {
                       style={{
                         ...row,
                         flex: 1,
-                        height: 29,
+                        height: tablet() ? 31 : 29,
                         paddingRight: 14,
                         gap: 8,
                         cursor: "pointer",
@@ -165,7 +162,10 @@ export function TaskWorkspaceList(props: {
                               style={{
                                 height: props.layout === "desktop" ? 4 : 3,
                                 flex: 1,
-                                backgroundColor: c()[tones[child().status]],
+                                backgroundColor: progressColor(
+                                  child().status,
+                                  c(),
+                                ),
                               }}
                             />
                           )}
@@ -193,11 +193,32 @@ export function TaskWorkspaceList(props: {
           </Each>
           <If when={byParent().orphans.length}>
             <View>
-              <Label size={12} tone="muted" style={{ padding: 8 }}>
-                {uiText("notPartOfAnything", {
-                  length: byParent().orphans.length,
-                })}
-              </Label>
+              <View
+                style={{
+                  ...row,
+                  height: tablet() ? 32 : 29,
+                  paddingHorizontal: 14,
+                  gap: tablet() ? 8 : 6,
+                  backgroundColor: tablet() ? c().selected : c().surface,
+                  borderBottomWidth: 1,
+                  borderColor: c().border,
+                }}
+              >
+                <Label
+                  size={tablet() ? 11 : 10}
+                  line={tablet() ? 14 : 12}
+                  tone="mutedInk"
+                >
+                  {uiText("notPartOfAnything")}
+                </Label>
+                <Label
+                  size={tablet() ? 11 : 10}
+                  line={tablet() ? 14 : 12}
+                  tone="muted"
+                >
+                  {byParent().orphans.length}
+                </Label>
+              </View>
               <Each of={byParent().orphans} key={(task) => task.id}>
                 {(task) => (
                   <TaskTableRow

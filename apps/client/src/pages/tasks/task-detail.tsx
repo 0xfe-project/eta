@@ -1,19 +1,22 @@
 import type { Layout } from "../../components";
-import { View } from "nsh";
+import { signal, View } from "nsh";
 import {
-  ActionItem,
-  ActionMenu,
   Button,
   colors,
-  Empty,
   grow,
   Header,
+  Icon,
   Label,
+  Modal,
   row,
 } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { TaskMenu, TaskMenuItem } from "./menu";
 import { TaskPlan } from "./plan";
+import { activeTaskRun } from "./run-log";
+import { Segmented } from "./segmented";
+import { TaskDetailSkeleton } from "./skeleton";
 import { TaskDetailDialogs } from "./task-detail-dialogs";
 import { createTaskDetailState } from "./task-detail-state";
 import { TaskCommentBox, TaskReviewActions } from "./task-fields";
@@ -29,6 +32,11 @@ export function TaskDetail(props: {
   const host = useHost();
   const c = colors();
   const state = createTaskDetailState(props);
+  /** The desktop page, which edits its title and description in place and
+   * starts over from its rail. */
+  const page = () => props.layout === "desktop" && !props.docked;
+  /** Beside the task list on tablet: no way back, the list is there. */
+  const paned = () => props.layout === "tablet" && !props.docked;
   const {
     archive,
     canComment,
@@ -38,13 +46,115 @@ export function TaskDetail(props: {
     panel,
     phone,
     plan,
-    status,
     task,
   } = state;
+  /** The phone's … sheet, titled with the task. */
+  const more = signal(false);
+  const parent = () => !!task()?.children?.length;
+  const run = () => task()?.runs.at(-1);
+  /** The task's … actions. The desktop and tablet pages and the phone edit the
+   * title and description in place, change status from the status itself and
+   * start over from the run row, so their menu is mostly Archive. */
+  const actions = () => {
+    const item = task();
+    if (!item) return [];
+    const list: { label: string; run: () => void }[] = [];
+    const inPlace = page() || paned() || phone();
+    if (!inPlace || (page() && parent()))
+      list.push({
+        label: uiText("edit"),
+        run: () => {
+          editTitle.set(item.title);
+          editDescription.set(item.description ?? "");
+          editing.set(true);
+        },
+      });
+    // The phone has no run row to start over from; it offers it here once the run has stopped.
+    const startOver = phone()
+      ? !!run() && !activeTaskRun(run()!)
+      : !page() && !paned() && item.runs.length > 0;
+    if (!parent() && startOver)
+      list.push({
+        label: uiText("rerun"),
+        run: () =>
+          void host.action(() =>
+            host.call("tasks", "rerun", { taskId: props.id }),
+          ),
+      });
+    list.push(
+      item.archivedAt
+        ? {
+            label: uiText("unarchive"),
+            run: () =>
+              void host.action(() =>
+                host.call("tasks", "unarchive", { taskId: props.id }),
+              ),
+          }
+        : { label: uiText("archive"), run: () => archive.set(true) },
+    );
+    return list;
+  };
+  /** The header's … button, filled muted while hovered or open. */
+  const MoreTrigger = (trigger: { onPress?: () => void }) => (
+    <View
+      role={trigger.onPress ? "button" : undefined}
+      accessibilityLabel={uiText("taskActions")}
+      onPress={trigger.onPress}
+      hoverStyle={{ backgroundColor: c().selected }}
+      expandedStyle={{ backgroundColor: c().selected }}
+      style={{
+        ...row,
+        justifyContent: "center",
+        minWidth: 32,
+        height: 30,
+        cursor: "pointer",
+      }}
+    >
+      <Icon name="more" size={17} />
+    </View>
+  );
   return (
     <View
       style={{ ...grow, position: "relative", backgroundColor: c().canvas }}
     >
+      <If when={phone() && more() ? task() : undefined}>
+        {(item) => (
+          <Modal
+            title={`#${item().number} ${item().title}`}
+            phone
+            sheet
+            overPhoneNavigation
+            onClose={() => more.set(false)}
+          >
+            <View style={{ paddingTop: 4, paddingBottom: 24 }}>
+              <Each of={actions()} key={(action) => action.label}>
+                {(action, index) => (
+                  <View
+                    role="button"
+                    accessibilityLabel={action().label}
+                    onPress={() => {
+                      more.set(false);
+                      action().run();
+                    }}
+                    activeStyle={{ backgroundColor: `${c().selected}80` }}
+                    style={{
+                      ...row,
+                      height: 48,
+                      paddingHorizontal: 16,
+                      borderBottomWidth: index() < actions().length - 1 ? 1 : 0,
+                      borderColor: c().border,
+                    }}
+                  >
+                    <Label size={14} line={20} style={{ flex: 1 }}>
+                      {action().label}
+                    </Label>
+                  </View>
+                )}
+              </Each>
+            </View>
+          </Modal>
+        )}
+      </If>
       <Header
         title={
           phone() || props.docked
@@ -54,74 +164,69 @@ export function TaskDetail(props: {
             : (task()?.title ?? "Task")
         }
         layout={props.layout}
-        onBack={props.onClose}
-        inset={props.docked ? 8 : undefined}
+        onBack={paned() ? undefined : props.onClose}
+        inset={props.docked ? 8 : paned() ? 16 : undefined}
+        end={paned() ? 10 : undefined}
+        titleSize={props.layout === "desktop" && !props.docked ? 12 : undefined}
+        backIcon={
+          props.layout === "desktop" && !props.docked ? "arrowLeft" : undefined
+        }
+        backIconSize={
+          props.layout === "desktop" && !props.docked ? 14 : undefined
+        }
       >
         <View style={{ flex: 1 }} />
         <If when={task()}>
-          <If when={!phone() && task()?.children?.length}>
-            <View style={row}>
-              <Button
-                label={uiText("overview")}
-                tone={plan() ? "ghost" : "primary"}
-                onPress={() => plan.set(false)}
-              />
-              <Button
-                label={uiText("plan")}
-                tone={plan() ? "primary" : "ghost"}
-                onPress={() => plan.set(true)}
-              />
-            </View>
+          <If
+            when={!phone() && task()?.children?.length && (!paned() || plan())}
+          >
+            <Segmented
+              options={[
+                { value: "overview", label: uiText("overview") },
+                { value: "plan", label: uiText("plan") },
+              ]}
+              value={plan() ? "plan" : "overview"}
+              height={paned() ? 20 : 22}
+              labelSize={paned() ? 11 : 10}
+              paddingHorizontal={paned() ? 8 : undefined}
+              strong={paned()}
+              onChange={(value) => plan.set(value === "plan")}
+            />
+            <View style={{ width: paned() ? 0 : 8 }} />
           </If>
-          <If when={props.layout === "tablet" && !props.docked}>
+          <If when={paned()}>
             <Button
               label={uiText("panel")}
               icon="sidebar"
-              tone="ghost"
+              iconSize={14}
+              labelSize={11}
               onPress={() => panel.set(true)}
             />
           </If>
-          <ActionMenu label={uiText("taskActions")}>
-            <ActionItem
-              label={uiText("edit")}
-              onSelect={() => {
-                editTitle.set(task()?.title ?? "");
-                editDescription.set(task()?.description ?? "");
-                editing.set(true);
-              }}
-            />
-            <If when={phone() && !task()?.children?.length}>
-              <ActionItem
-                label={uiText("changeStatus")}
-                onSelect={() => status.set(true)}
-              />
-            </If>
-            <If when={!task()?.children?.length && task()?.runs.length}>
-              <ActionItem
-                label={uiText("rerun")}
-                onSelect={() =>
-                  void host.action(() =>
-                    host.call("tasks", "rerun", { taskId: props.id }),
-                  )
-                }
-              />
-            </If>
-            <ActionItem
-              label={
-                task()?.archivedAt ? uiText("unarchive") : uiText("archive")
-              }
-              onSelect={() => {
-                if (task()?.archivedAt)
-                  void host.action(() =>
-                    host.call("tasks", "unarchive", { taskId: props.id }),
-                  );
-                else archive.set(true);
-              }}
-            />
-          </ActionMenu>
+          <If
+            when={phone()}
+            else={
+              <TaskMenu width={172} align="end" trigger={<MoreTrigger />}>
+                <Each of={actions()} key={(action) => action.label}>
+                  {(action) => (
+                    <TaskMenuItem
+                      label={action().label}
+                      height={30}
+                      onSelect={action().run}
+                    />
+                  )}
+                </Each>
+              </TaskMenu>
+            }
+          >
+            <MoreTrigger onPress={() => more.set(true)} />
+          </If>
         </If>
       </Header>
-      <If when={task()} else={<Empty title={uiText("loadingTask")} />}>
+      <If
+        when={task()}
+        else={<TaskDetailSkeleton label={uiText("loadingTask")} />}
+      >
         {(item) => (
           <>
             <If
@@ -140,6 +245,7 @@ export function TaskDetail(props: {
                 task={item}
                 onOpen={props.onTask}
                 desktop={props.layout === "desktop"}
+                tablet={props.layout === "tablet" && !props.docked}
               />
             </If>
             <If
@@ -174,31 +280,21 @@ export function TaskDetail(props: {
               <If when={item().status === "in_review"}>
                 <View
                   style={{
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
+                    gap: 8,
                     borderTopWidth: 1,
                     borderColor: c().border,
-                    paddingTop: 9,
                   }}
                 >
-                  <Label
-                    size={11}
-                    tone="muted"
-                    style={{ paddingHorizontal: 16 }}
-                  >
-                    {uiText("acceptTheResultOrSendIt")}
+                  <Label size={11} line={14} tone="muted">
+                    {uiText("taskReviewLetsDependentsGo")}
                   </Label>
                   <TaskReviewActions state={state} />
                 </View>
               </If>
               <If when={canComment(item())}>
-                <View
-                  style={{
-                    padding: 12,
-                    borderTopWidth: 1,
-                    borderColor: c().border,
-                  }}
-                >
-                  <TaskCommentBox state={state} />
-                </View>
+                <TaskCommentBox state={state} />
               </If>
             </If>
           </>

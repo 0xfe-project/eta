@@ -29,6 +29,7 @@ export function TaskWorkspaceBoard(props: {
   onOpen: (id: string) => void;
 }) {
   const c = colors();
+  const tablet = () => props.layout === "tablet";
   const boardDrag = props.drag;
   const column = (status: BoardTaskStatus) =>
     props.items.filter((task) => task.status === status);
@@ -37,9 +38,10 @@ export function TaskWorkspaceBoard(props: {
       style={{
         ...row,
         ...grow,
-        paddingHorizontal: 22,
+        paddingHorizontal: tablet() ? 14 : 22,
         paddingTop: 12,
-        gap: 8,
+        paddingBottom: tablet() ? 12 : 0,
+        gap: tablet() ? 8 : 9,
         alignItems: "stretch",
       }}
     >
@@ -53,80 +55,127 @@ export function TaskWorkspaceBoard(props: {
               ref={(view) => boardDrag.register(status(), view)}
               style={{
                 flex: folded() ? undefined : 1,
-                width: folded() ? 34 : undefined,
+                width: folded() ? (tablet() ? 28 : 32) : undefined,
+                maxWidth: tablet() && !folded() ? 160 : undefined,
                 minWidth: 0,
-                backgroundColor: folded() ? c().surface : c().canvas,
+                backgroundColor: folded()
+                  ? tablet()
+                    ? c().selected
+                    : c().surface
+                  : c().canvas,
               }}
             >
               <View
                 role="button"
                 accessibilityLabel={statusName(status())}
                 onPress={() => props.onFoldStatus(status())}
-                style={{
-                  ...row,
-                  gap: 7,
-                  minHeight: 32,
-                  justifyContent: folded() ? "center" : "flex-start",
-                }}
+                style={
+                  folded()
+                    ? {
+                        alignItems: "center",
+                        paddingTop: tablet() ? 6 : 9,
+                        gap: tablet() ? 8 : 7,
+                        cursor: "pointer",
+                      }
+                    : {
+                        ...row,
+                        gap: tablet() ? 6 : 7,
+                        height: tablet() ? 24 : 25,
+                        paddingTop: tablet() ? 6 : 7,
+                        paddingLeft: tablet() ? 0 : 2,
+                        cursor: "pointer",
+                      }
+                }
               >
-                <TaskGlyph status={status()} size={12.6} />
-                <If when={!folded()}>
-                  <Label size={12}>{statusName(status())}</Label>
-                  <Label size={12} tone="muted">
+                <TaskGlyph status={status()} size={tablet() ? 12 : 12.6} />
+                <If
+                  when={!folded()}
+                  else={
+                    <>
+                      <SideLabel
+                        text={
+                          tablet()
+                            ? `${statusName(status())} ${column(status()).length}`
+                            : statusName(status())
+                        }
+                        tone={tablet() ? "mutedInk" : "muted"}
+                      />
+                      <If when={!tablet()}>
+                        <Label size={12} line={16} tone="muted">
+                          {column(status()).length}
+                        </Label>
+                      </If>
+                    </>
+                  }
+                >
+                  <Label size={12} line={16}>
+                    {statusName(status())}
+                  </Label>
+                  <Label size={12} line={16} tone="muted">
                     {column(status()).length}
                   </Label>
                 </If>
               </View>
-              <If
-                when={folded()}
-                else={
-                  <Scroll style={grow} scrollbar={false}>
-                    <View style={{ gap: 7 }}>
-                      <Each of={column(status())} key={(task) => task.id}>
-                        {(task) => (
-                          <BoardCard
-                            task={task()}
-                            drag={boardDrag}
-                            draggable={
-                              props.layout === "desktop" && !task().subtasks
-                            }
-                            onOpen={() => props.onOpen(task().id)}
-                          />
-                        )}
-                      </Each>
-                    </View>
-                  </Scroll>
-                }
-              >
-                <View
-                  style={{
-                    width: 34,
-                    height: 85,
-                    alignItems: "center",
-                    justifyContent: "flex-start",
-                  }}
+              <If when={!folded()}>
+                <Scroll
+                  style={{ ...grow, marginTop: tablet() ? 8 : 7 }}
+                  scrollbar={false}
                 >
-                  <Label
-                    size={12}
-                    line={16}
-                    tone="muted"
-                    style={{
-                      width: 85,
-                      textAlign: "left",
-                      position: "absolute",
-                      top: 34,
-                      left: -26,
-                      transform: "rotate(90deg)",
-                    }}
-                  >
-                    {`${statusName(status())}  ${column(status()).length}`}
-                  </Label>
-                </View>
+                  <View style={{ gap: tablet() ? 8 : 7 }}>
+                    <Each of={column(status())} key={(task) => task.id}>
+                      {(task) => (
+                        <BoardCard
+                          task={task()}
+                          layout={props.layout}
+                          drag={boardDrag}
+                          draggable={
+                            props.layout === "desktop" && !task().subtasks
+                          }
+                          onOpen={() => props.onOpen(task().id)}
+                        />
+                      )}
+                    </Each>
+                  </View>
+                </Scroll>
               </If>
             </View>
           );
         }}
       </Each>
     </View>
+  );
+}
+
+/** A folded column's name, turned on its side. */
+function SideLabel(props: { text: string; tone: "muted" | "mutedInk" }) {
+  const length = () => railLength(props.text);
+  return (
+    <View style={{ width: 16, height: length() }}>
+      <Label
+        size={12}
+        line={16}
+        tone={props.tone}
+        lines={1}
+        style={{
+          position: "absolute",
+          top: length() / 2 - 8,
+          left: 8 - length() / 2,
+          width: length(),
+          transform: "rotate(90deg)",
+        }}
+      >
+        {props.text}
+      </Label>
+    </View>
+  );
+}
+
+/** How long a folded column's name runs once turned on its side. */
+function railLength(name: string) {
+  return Math.ceil(
+    [...name].reduce(
+      (length, char) => length + (char.charCodeAt(0) > 0x2e80 ? 12 : 6.8),
+      0,
+    ),
   );
 }

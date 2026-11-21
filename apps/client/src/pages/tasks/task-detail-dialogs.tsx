@@ -1,14 +1,24 @@
+import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import type { TaskDetailState } from "./task-detail-state";
 import { TASK_STATUSES } from "@eta/client-contracts";
 import { Scroll, View } from "nsh";
-import { Button, Field, grow, Label, Modal, row } from "../../components";
+import {
+  Button,
+  colors,
+  Field,
+  grow,
+  Icon,
+  Label,
+  Modal,
+  row,
+} from "../../components";
+import { CloseButton } from "../../components/navigation-buttons";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskReviewDialog } from "./review-dialog";
 import { TaskRunLog } from "./run-log";
-import { statusName } from "./status";
-import { TaskFields } from "./task-fields";
+import { statusHint, statusName, TaskGlyph } from "./status";
 
 export function TaskDetailDialogs(props: {
   id: string;
@@ -17,6 +27,7 @@ export function TaskDetailDialogs(props: {
   state: TaskDetailState;
 }) {
   const host = useHost();
+  const c = colors();
   const {
     activeArchiveTargets,
     archive,
@@ -42,6 +53,33 @@ export function TaskDetailDialogs(props: {
     task,
     updateFeedback,
   } = props.state;
+  const archiveTitle = () =>
+    activeArchiveTargets().length === 1
+      ? uiText("isRunningArchivingStopsItsRun", {
+          number: activeArchiveTargets()[0]!.number,
+        })
+      : activeArchiveTargets().length > 1
+        ? uiText("archivingStopsOngoingTaskRunsArchive")
+        : uiText("archiveTask");
+  const archiveBody = () =>
+    activeArchiveTargets().length === 1
+      ? uiText("theRunStopsTheTaskStays", {
+          status: statusName(activeArchiveTargets()[0]!.status),
+        })
+      : activeArchiveTargets().length
+        ? uiText("theRunsStopAndTheTasks")
+        : uiText("thisWillPutTheTaskAnd");
+  const archiveLabel = () =>
+    activeArchiveTargets().length
+      ? uiText("stopAndArchive")
+      : uiText("archive");
+  function archiveTask() {
+    const stopRuns = activeArchiveTargets().length > 0;
+    void mutate(async () => {
+      await host.call("tasks", "archive", { taskId: props.id, stopRuns });
+      props.onClose();
+    });
+  }
   return (
     <>
       <If when={phone() && status()}>
@@ -49,17 +87,68 @@ export function TaskDetailDialogs(props: {
           title={uiText("changeStatus")}
           phone
           sheet
+          overPhoneNavigation
           onClose={() => status.set(false)}
         >
-          <View style={{ padding: 16, gap: 6 }}>
+          <View style={{ paddingTop: 4, paddingBottom: 20 }}>
             <Each of={TASK_STATUSES}>
               {(entry) => (
-                <Button
-                  label={statusName(entry())}
-                  selected={entry() === task()?.status}
-                  disabled={submitting()}
-                  onPress={() => change(entry())}
-                />
+                <>
+                  <If when={entry() === "blocked"}>
+                    <View
+                      style={{
+                        height: 1,
+                        marginVertical: 4,
+                        backgroundColor: c().border,
+                      }}
+                    />
+                  </If>
+                  <View
+                    role="button"
+                    accessibilityLabel={statusName(entry())}
+                    accessibilityState={{
+                      selected: entry() === task()?.status,
+                      disabled: submitting(),
+                    }}
+                    onPress={() => {
+                      if (!submitting()) change(entry());
+                    }}
+                    activeStyle={{ backgroundColor: c().selected }}
+                    style={{
+                      ...row,
+                      alignItems: "flex-start",
+                      paddingVertical: 10,
+                      paddingHorizontal: 16,
+                      gap: 8,
+                      backgroundColor:
+                        entry() === task()?.status ? c().selected : undefined,
+                    }}
+                  >
+                    <View style={{ ...row, width: 12, height: 20 }}>
+                      <TaskGlyph status={entry()} size={12} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Label size={14} line={20}>
+                        {statusName(entry())}
+                      </Label>
+                      <Label size={12} line={16} tone="muted">
+                        {statusHint(entry(), task()?.dependents?.length ?? 0)}
+                      </Label>
+                    </View>
+                    <View
+                      style={{
+                        ...row,
+                        justifyContent: "center",
+                        width: 14,
+                        height: 16,
+                      }}
+                    >
+                      <If when={entry() === task()?.status}>
+                        <Icon name="check" size={12} />
+                      </If>
+                    </View>
+                  </View>
+                </>
               )}
             </Each>
           </View>
@@ -153,13 +242,11 @@ export function TaskDetailDialogs(props: {
           side
           width={360}
           height="100%"
-          blurBackdrop={false}
+          hideHeader
           overPhoneNavigation
           onClose={() => panel.set(false)}
         >
-          <View style={{ padding: 16 }}>
-            <TaskFields item={task()!} state={props.state} />
-          </View>
+          <TaskContextPanel item={task()!} onClose={() => panel.set(false)} />
         </Modal>
       </If>
       <If when={editing()}>
@@ -208,51 +295,112 @@ export function TaskDetailDialogs(props: {
       </If>
       <If when={archive()}>
         <Modal
-          title={
-            activeArchiveTargets().length === 1
-              ? uiText("isRunningArchivingStopsItsRun", {
-                  number: activeArchiveTargets()[0]!.number,
-                })
-              : activeArchiveTargets().length > 1
-                ? uiText("archivingStopsOngoingTaskRunsArchive")
-                : uiText("archiveTask")
-          }
+          title={archiveTitle()}
           phone={phone()}
+          sheet={phone()}
+          hideHeader={phone()}
+          compact={!phone()}
+          titleWeight={500}
+          panelStyle={
+            props.layout === "desktop"
+              ? { position: "absolute", top: 340 }
+              : undefined
+          }
           overPhoneNavigation
           onClose={() => archive.set(false)}
         >
-          <View style={{ padding: 16, gap: 12 }}>
-            <Label size={12} tone="muted">
-              {activeArchiveTargets().length
-                ? uiText("theRunsStopAndTheTasks")
-                : uiText("thisWillPutTheTaskAnd")}
-            </Label>
-            <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>
+          <If
+            when={phone()}
+            else={
+              <View style={{ paddingTop: 6 }}>
+                <Label size={12} line={18} tone="muted">
+                  {archiveBody()}
+                </Label>
+                <View
+                  style={{
+                    ...row,
+                    justifyContent: "flex-end",
+                    gap: 8,
+                    paddingTop: 20,
+                  }}
+                >
+                  <Button
+                    label={uiText("keepIt")}
+                    size={28}
+                    onPress={() => archive.set(false)}
+                  />
+                  <Button
+                    label={archiveLabel()}
+                    size={28}
+                    tone="primary"
+                    disabled={submitting()}
+                    onPress={archiveTask}
+                  />
+                </View>
+              </View>
+            }
+          >
+            <View
+              style={{
+                ...row,
+                alignItems: "flex-start",
+                gap: 8,
+                paddingVertical: 8,
+                paddingLeft: 16,
+                paddingRight: 8,
+                borderBottomWidth: 1,
+                borderColor: c().border,
+              }}
+            >
+              <Label
+                size={14}
+                line={20}
+                weight={600}
+                style={{ flex: 1, minWidth: 0, paddingTop: 6 }}
+              >
+                {archiveTitle()}
+              </Label>
+              <CloseButton
+                size={32}
+                iconSize={16}
+                onPress={() => archive.set(false)}
+              />
+            </View>
+            <View style={{ padding: 16 }}>
+              <Label size={14} line={20}>
+                {archiveBody()}
+              </Label>
+            </View>
+            <View
+              style={{
+                ...row,
+                justifyContent: "flex-end",
+                height: 56,
+                gap: 8,
+                paddingHorizontal: 16,
+                borderTopWidth: 1,
+                borderColor: c().border,
+              }}
+            >
               <Button
                 label={uiText("keepIt")}
+                tone="ghost"
+                size={32}
+                labelSize={13}
+                style={{ paddingHorizontal: 12 }}
                 onPress={() => archive.set(false)}
               />
               <Button
-                label={
-                  activeArchiveTargets().length
-                    ? uiText("stopAndArchive")
-                    : uiText("archive")
-                }
+                label={archiveLabel()}
                 tone="primary"
+                size={32}
+                labelSize={13}
+                style={{ paddingHorizontal: 14 }}
                 disabled={submitting()}
-                onPress={() => {
-                  const stopRuns = activeArchiveTargets().length > 0;
-                  void mutate(async () => {
-                    await host.call("tasks", "archive", {
-                      taskId: props.id,
-                      stopRuns,
-                    });
-                    props.onClose();
-                  });
-                }}
+                onPress={archiveTask}
               />
             </View>
-          </View>
+          </If>
         </Modal>
       </If>
       <If when={log()}>
@@ -282,5 +430,114 @@ export function TaskDetailDialogs(props: {
         )}
       </If>
     </>
+  );
+}
+
+/** The tablet task page's drawer: who works on the task and the group it came from. */
+function TaskContextPanel(props: {
+  item: BoardTaskDetail;
+  onClose: () => void;
+}) {
+  const c = colors();
+  const host = useHost();
+  const executor = () =>
+    props.item.assigneeAgentId ?? props.item.createdBy.agentId;
+  const name = (id: string | null | undefined) =>
+    (id ? host.agent(id)?.name : undefined) ?? uiText("taskMe");
+  const members = () => [
+    [name(executor()), uiText("executor")],
+    ...(props.item.createdBy.agentId === executor()
+      ? []
+      : [[name(props.item.createdBy.agentId), uiText("taskCreatedTheTask")]]),
+  ];
+  const group = () =>
+    host
+      .conversations()
+      .find(
+        (conversation) => conversation.id === props.item.originConversationId,
+      )?.name;
+  const caption = {
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  } as const;
+  return (
+    <View style={grow}>
+      <View
+        style={{
+          ...row,
+          justifyContent: "space-between",
+          height: 40,
+          paddingLeft: 10,
+          paddingRight: 8,
+          borderBottomWidth: 1,
+          borderColor: c().border,
+          backgroundColor: c().surface,
+        }}
+      >
+        <View
+          role="tablist"
+          style={{ ...row, gap: 2, padding: 2, backgroundColor: c().selected }}
+        >
+          <View
+            role="tab"
+            accessibilityLabel={uiText("taskContext")}
+            accessibilityState={{ selected: true }}
+            style={{
+              ...row,
+              height: 24,
+              paddingHorizontal: 10,
+              gap: 6,
+              backgroundColor: c().canvas,
+            }}
+          >
+            <Icon name="context" size={12} />
+            <Label size={11} line={16}>
+              {uiText("taskContext")}
+            </Label>
+          </View>
+        </View>
+        <CloseButton onPress={props.onClose} />
+      </View>
+      <View style={{ padding: 12, gap: 12 }}>
+        <Label size={10} line={12} tone="muted" style={caption}>
+          {uiText("members")}
+        </Label>
+        <View style={{ borderTopWidth: 1, borderColor: c().border }}>
+          <Each of={members()} key={(member) => member.join()}>
+            {(member) => (
+              <View
+                style={{
+                  ...row,
+                  justifyContent: "space-between",
+                  paddingVertical: 10,
+                  borderBottomWidth: 1,
+                  borderColor: c().border,
+                }}
+              >
+                <Label size={12} line={16}>
+                  {member()[0]}
+                </Label>
+                <Label size={12} line={16} tone="muted">
+                  {member()[1]}
+                </Label>
+              </View>
+            )}
+          </Each>
+        </View>
+        <If when={group()}>
+          <Label
+            size={10}
+            line={12}
+            tone="muted"
+            style={{ ...caption, paddingTop: 8 }}
+          >
+            {uiText("taskGroup")}
+          </Label>
+          <Label size={12} line={16}>
+            {group()}
+          </Label>
+        </If>
+      </View>
+    </View>
   );
 }
