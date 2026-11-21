@@ -11,12 +11,12 @@ import {
   Caption,
   colors,
   Field,
-  fontFamily,
   Fonts,
   grow,
   Icon,
   Label,
   Markdown,
+  monoFontFamily,
   row,
 } from "../../components";
 import { StatusDot } from "../../components/status-dot";
@@ -875,7 +875,7 @@ export function DescriptionEditor(props: {
           paddingVertical: 10,
           paddingHorizontal: 12,
           borderColor: c().ink,
-          fontFamily: fontFamily(fonts().mono),
+          fontFamily: monoFontFamily(fonts()),
           fontSize: props.phone ? 14 : 13,
           lineHeight: props.phone ? 20 : props.tablet ? 19 : 22,
         }}

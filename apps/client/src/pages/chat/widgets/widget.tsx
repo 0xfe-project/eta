@@ -1,13 +1,42 @@
 import type { RunBlock } from "@eta/client-contracts";
 import type { WebViewRef } from "nsh";
 import { cleanup, effect, signal, View, WebView } from "nsh";
-import { colors, Label, palette } from "../../../components";
+import dwgFile from "../../../../assets/AKRDWGSCNFM-Regular.woff2?url";
+import {
+  appFont,
+  colors,
+  fontFamily,
+  Fonts,
+  Label,
+  monoFontFamily,
+  palette,
+} from "../../../components";
 import { uiText } from "../../../i18n";
 import { widgetDocument } from "./widget-document";
 
 const MAX_CODE = 60_000;
 const MAX_HEIGHT = 1_200;
 const STREAM_INTERVAL = 120;
+
+let appFontData: Promise<string> | undefined;
+
+/**
+ * The shipped face as base64, read once for every widget. The frame may load fonts from `data:`
+ * only, so the face goes in as bytes, as the web app's widget shell takes it: a widget drawn in a
+ * system face would be a second typeface in the product.
+ */
+function appFontBytes() {
+  appFontData ??= fetch(dwgFile)
+    .then((response) => {
+      if (!response.ok) throw new Error(`font: HTTP ${response.status}`);
+      return response.arrayBuffer();
+    })
+    .then((data) => Buffer.from(data).toString("base64"));
+  appFontData.catch(() => {
+    appFontData = undefined;
+  });
+  return appFontData;
+}
 
 export function widgetFrom(block: RunBlock) {
   if (
@@ -38,6 +67,7 @@ export function Widget(props: {
   onDraft?: (text: string) => void;
 }) {
   const c = colors();
+  const fonts = Fonts();
   const token = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
     byte.toString(16).padStart(2, "0"),
   ).join("");
@@ -48,7 +78,7 @@ export function Widget(props: {
   let frame: WebViewRef | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let sent: { code: string; final: boolean } | undefined;
-  let themeSent: ReturnType<typeof c> | undefined;
+  let themeSent: string | undefined;
   let disposed = false;
   const startup = setTimeout(() => {
     if (!ready()) problem.set(true);
@@ -72,8 +102,11 @@ export function Widget(props: {
   effect(() => {
     if (!ready()) return;
     const theme = c();
-    if (theme !== themeSent) {
-      themeSent = theme;
+    const sans = fontFamily(fonts().interface);
+    const mono = monoFontFamily(fonts());
+    const themeKey = JSON.stringify([theme, sans, mono]);
+    if (themeKey !== themeSent) {
+      themeSent = themeKey;
       post({
         kind: "theme",
         mode: theme.canvas === palette("dark").canvas ? "dark" : "light",
@@ -88,6 +121,8 @@ export function Widget(props: {
           "--color-text-success": theme.green,
           "--color-text-warning": theme.amber,
           "--color-text-danger": theme.red,
+          "--font-sans": sans,
+          "--font-mono": mono,
         },
       });
     }
@@ -124,6 +159,12 @@ export function Widget(props: {
       clearTimeout(startup);
       problem.set(false);
       ready.set(true);
+      appFontBytes().then(
+        (data) => {
+          if (!disposed) post({ kind: "font", family: appFont, data });
+        },
+        (error: unknown) => console.error("eta widget: font", error),
+      );
     } else if (
       message.kind === "height" &&
       typeof message.height === "number" &&

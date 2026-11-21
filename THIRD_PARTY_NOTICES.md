@@ -8,8 +8,13 @@ running host serves it at `/THIRD_PARTY_NOTICES.md`; `apps/eta/scripts/notices.t
 
 ## Eta Sans (font)
 
-`apps/web/public/AKRDWGSCNFM-Regular.woff2`, declared as "Eta Sans" in `apps/web/index.html`. It is in
-the web build and in every compiled host. It is **not** covered by eta's MIT License.
+`apps/client/assets/AKRDWGSCNFM-Regular.woff2`, the default interface and monospace face of the client
+(`apps/client/src/components/theme.ts`), and the same file as `apps/web/public/AKRDWGSCNFM-Regular.woff2`,
+declared as "Eta Sans" in `apps/web/index.html`. It is the
+[AKR DWG SC NFM 1.1.0 release](https://github.com/AkaraChen/font/releases/tag/v1.1.0) and is in the client
+builds (web, desktop, phone) and in every compiled host. It is **not** covered by eta's MIT License. The
+release's own notes and the texts of both sources are next to it in `apps/client/assets/`
+(`AKRDWGSCNFM-README.txt`, `AKRDWGSCNFM-OFL-CascadiaCode.txt`, `AKRDWGSCNFM-Alibaba-PuHuiTi.txt`).
 
 The file is a merge of two fonts, named "AKR DWG SC NFM" inside it:
 
@@ -20,6 +25,12 @@ The file is a merge of two fonts, named "AKR DWG SC NFM" inside it:
 
 The license text inside the file came along with the merge and does not describe it. The merged file
 is not a release of either source. If you redistribute it, check both sets of terms first.
+
+## Inter (font)
+
+`apps/client/assets/InterVariable.woff2`, the client's fallback interface face after Eta Sans:
+[Inter](https://github.com/rsms/inter), © The Inter Project Authors, under the SIL Open Font License 1.1
+(`apps/client/assets/Inter-OFL.txt`).
 
 ## Programs in a compiled host
 

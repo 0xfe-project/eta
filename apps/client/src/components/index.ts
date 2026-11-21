@@ -10,12 +10,14 @@ export { Modal } from "./modal";
 export { Caption, Icon, Label, Markdown, RowChevron } from "./text";
 export type { Layout } from "./theme";
 export {
+  appFont,
   colors,
   fill,
   focusRing,
   fontFamily,
   Fonts,
   grow,
+  monoFontFamily,
   palette,
   Palette,
   row,

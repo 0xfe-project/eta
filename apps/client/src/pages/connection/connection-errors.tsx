@@ -5,11 +5,11 @@ import { View } from "nsh";
 import {
   Button,
   colors,
-  fontFamily,
   Fonts,
   grow,
   Header,
   Label,
+  monoFontFamily,
   row,
 } from "../../components";
 import { uiText } from "../../i18n";
@@ -21,7 +21,7 @@ function Mono(props: { children?: string }) {
       size={12}
       line={16}
       tone="muted"
-      style={{ fontFamily: fontFamily(fonts().mono, "monospace") }}
+      style={{ fontFamily: monoFontFamily(fonts()) }}
     >
       {props.children}
     </Label>

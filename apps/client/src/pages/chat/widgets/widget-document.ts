@@ -128,7 +128,15 @@ const widgetRuntime = `(() => {
       }
     }
     port.onmessage = ({ data }) => {
-      if (data.kind === "theme") {
+      if (data.kind === "font" && typeof data.family === "string" &&
+          typeof data.data === "string") {
+        // The app's face arrives as bytes: the frame loads fonts from data: only.
+        const family = data.family.replace(/^(["'])(.*)\\1$/, "$2");
+        const bytes = Uint8Array.from(atob(data.data), (char) => char.charCodeAt(0));
+        new FontFace(family, bytes).load()
+          .then((face) => document.fonts.add(face))
+          .catch((error) => console.error("eta widget: font", error));
+      } else if (data.kind === "theme") {
         const element = document.documentElement;
         for (const [name, value] of Object.entries(data.colors))
           element.style.setProperty(name, value);
