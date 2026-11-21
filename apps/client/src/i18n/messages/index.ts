@@ -5,6 +5,7 @@ import { connectionMessages } from "./connection";
 import { conversationsMessages } from "./conversations";
 import { emailMessages } from "./email";
 import { machinesMessages } from "./machines";
+import { modelSourcesMessages } from "./model-sources";
 import { onboardingMessages } from "./onboarding";
 import { pluginsMessages } from "./plugins";
 import { routinesMessages } from "./routines";
@@ -21,6 +22,7 @@ export const clientMessages = {
   ...conversationsMessages,
   ...emailMessages,
   ...machinesMessages,
+  ...modelSourcesMessages,
   ...onboardingMessages,
   ...pluginsMessages,
   ...routinesMessages,
