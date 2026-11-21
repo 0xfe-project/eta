@@ -134,7 +134,6 @@ describe("an agent's runtime", () => {
       "codex",
       "opencode",
       "pi",
-      "antigravity",
       "grok",
     ]);
     // The scripted one is there; the others are not in this registry at all.

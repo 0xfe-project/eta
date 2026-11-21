@@ -31,7 +31,6 @@ const PREFIXES: Partial<Record<RuntimeId, string>> = {
   claude: `mcp__${HOST_SERVER}__`,
   pi: `mcp__${HOST_SERVER}__`,
   opencode: `${HOST_SERVER}_`,
-  // Antigravity would say `mcp_eta_x`, but it takes no host server: it refuses MCP credentials.
 };
 
 /** A runtime's one tool that calls any MCP tool, by the name it is called under. */

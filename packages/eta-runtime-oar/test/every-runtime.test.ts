@@ -8,11 +8,7 @@ import type { Runtime } from "@botiverse/oar";
 import type { ScriptedTurn } from "@botiverse/oar/testing";
 import type { AgentMessage, KernelTool } from "@eta/core";
 import type { ManagedSession } from "@eta/server";
-import {
-  antigravityRuntime,
-  createRuntimeRegistry,
-  UnsupportedOptionError,
-} from "@botiverse/oar";
+import { createRuntimeRegistry, UnsupportedOptionError } from "@botiverse/oar";
 import { scriptedRuntime } from "@botiverse/oar/testing";
 import { MemorySessionStore, SessionManager } from "@eta/server";
 import { describe, expect, it } from "vitest";
@@ -58,16 +54,8 @@ const GATEWAY: Record<
   },
 };
 
-/** Antigravity refuses MCP servers that carry credentials, which the host's server does. */
-const NO_HOST_SERVER = new Set(["antigravity"]);
-
 /** The scripted runtime under a real one's refusals. */
 function asReal(id: string, scripted: Runtime): Runtime {
-  if (id === "antigravity")
-    return {
-      ...scripted,
-      refusedSessionOptions: antigravityRuntime.refusedSessionOptions,
-    };
   if (id === "grok")
     return {
       ...scripted,
@@ -157,9 +145,7 @@ describe.each(RUNTIME_IDS)("%s, scripted", (id) => {
 
     expect((await run(created, "hello")).status).toBe("completed");
     expect(turns[0]!.options.appendSystemPrompt).toContain("You are Probe.");
-    expect(turns[0]!.options.mcpServers ?? []).toHaveLength(
-      NO_HOST_SERVER.has(id) ? 0 : 1,
-    );
+    expect(turns[0]!.options.mcpServers).toHaveLength(1);
 
     if (SPELLED[id] !== undefined || GATEWAY[id] !== undefined) {
       expect((await run(created, "use the tool")).status).toBe("completed");
@@ -191,61 +177,6 @@ describe.each(RUNTIME_IDS)("%s, scripted", (id) => {
       id === "grok" ? undefined : turns[0]!.options.appendSystemPrompt,
     );
     expect(transcript(reopened).at(-1)).toBe("assistant:ok again");
-    await manager.closeAll();
-  });
-});
-
-describe("a runtime that refuses MCP credentials (Antigravity)", () => {
-  it("gets the plugins' servers that carry none, and is told of the rest", async () => {
-    const turns: ScriptedTurn[] = [];
-    const warnings: string[] = [];
-    const manager = new SessionManager({
-      store: new MemorySessionStore(),
-      modelsFor: () => {
-        throw new Error("an eta model was asked for");
-      },
-      runtimes: createOarRuntimes({
-        registry: createRuntimeRegistry([
-          asReal(
-            "antigravity",
-            scriptedRuntime({
-              id: "antigravity",
-              turn: (turn) => {
-                turns.push(turn);
-                turn.say("ok");
-              },
-            }),
-          ),
-        ]),
-        warn: (message) => warnings.push(message),
-      }),
-      sessionTools: () => [echo],
-      runtimeExtrasFor: async () => ({
-        mcpServers: [
-          { name: "plain", command: "plain-mcp" },
-          { name: "keyed", command: "keyed-mcp", env: { TOKEN: "secret" } },
-          {
-            name: "remote",
-            type: "http",
-            url: "http://127.0.0.1:1/mcp",
-            headers: { Authorization: "Bearer secret" },
-          },
-          { name: "open", type: "http", url: "http://127.0.0.1:2/mcp" },
-        ],
-      }),
-    });
-    const created = await manager.create({
-      cwd: "/work",
-      runtime: "antigravity",
-    });
-    expect((await run(created, "hello")).status).toBe("completed");
-    expect(turns[0]!.options.mcpServers?.map((server) => server.name)).toEqual([
-      "plain",
-      "open",
-    ]);
-    expect(warnings).toEqual([
-      "[eta-runtime-oar] antigravity takes no MCP servers that carry credentials; keyed, remote left out",
-    ]);
     await manager.closeAll();
   });
 });
