@@ -1,6 +1,7 @@
 import { blobatar } from "blobatar";
 import { computed, Image, View } from "nsh";
 import { Host } from "../services/host";
+import { faceFrame } from "./face-frame";
 
 /**
  * The agent's face, drawn from its avatar seed, or from its id when it never drew one, so a rename
@@ -16,17 +17,17 @@ export function AgentFace(props: {
   const size = () => props.size ?? 20;
   const seed = () =>
     props.seed ?? host?.agent(props.id)?.avatarSeed ?? props.id ?? "agent";
-  // Blobatar draws inside the middle of a 100x100 box; crop to the blob so the
-  // face fills the avatar like the design's solid circle.
-  const src = computed(
-    () =>
-      `data:image/svg+xml;utf8,${encodeURIComponent(
-        blobatar(seed()).replace(
-          'viewBox="0 0 100 100"',
-          'viewBox="16 16 68 68"',
-        ),
-      )}`,
-  );
+  // Blobatar draws somewhere inside a 100x100 box; show the square around this
+  // face so it fills the avatar like the design's solid circle, whole.
+  const src = computed(() => {
+    const frame = faceFrame(seed());
+    return `data:image/svg+xml;utf8,${encodeURIComponent(
+      blobatar(seed()).replace(
+        'viewBox="0 0 100 100"',
+        `viewBox="${frame.x} ${frame.y} ${frame.size} ${frame.size}"`,
+      ),
+    )}`;
+  });
   return (
     <Image
       src={src()}
