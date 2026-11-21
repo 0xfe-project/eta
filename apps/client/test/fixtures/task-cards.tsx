@@ -89,6 +89,7 @@ function Fixture() {
           onTask={(id) => opened.update((list) => [...list, id])}
           onArtifact={noop}
           onWidgetDraft={noop}
+          onQuote={noop}
         />
         <Text>{`Opened: ${opened().join(",")}`}</Text>
       </View>

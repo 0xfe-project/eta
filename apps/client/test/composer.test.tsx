@@ -293,3 +293,20 @@ test("an uploaded picture previews on hover and opens from its block, from its o
   await app.press("label:Remove pixel.png");
   await app.waitUntil(() => !app.shows(block));
 });
+
+test("a quoted selection goes after the draft, and a second quote after the first", async () => {
+  const app = await fixture();
+  await app.type(input, "Look at this:");
+  await app.press("label:Quote");
+  expect(app.value(input)).toBe(
+    "Look at this:\n\n> Line one\n>\n> Line two\n\n",
+  );
+  await app.type(input, "Why?");
+  await app.press("label:Quote");
+  expect(app.value(input)).toBe(
+    "Look at this:\n\n> Line one\n>\n> Line two\n\nWhy?\n\n> Line one\n>\n> Line two\n\n",
+  );
+  // The quote belongs to the chat it was made in.
+  await app.press("label:Switch");
+  expect(app.value(input)).toBe("");
+});

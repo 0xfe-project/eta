@@ -42,6 +42,7 @@ function Fixture() {
   const resultBlocks = signal("");
   const uploadNames = new Map<string, string>();
   const resultFiles = signal("");
+  const quote = signal<{ conversationId: string; text: string }>();
   Object.assign(host, {
     agent: (id: string) => ({ id, name: id }),
     tasks: () => [
@@ -141,6 +142,15 @@ function Fixture() {
             handedOn = true;
           }}
         />
+        <Button
+          label="Quote"
+          onPress={() =>
+            quote.set({
+              conversationId: group(),
+              text: " Line one\n\nLine two \n",
+            })
+          }
+        />
         <Each of={[group()]}>
           {(id) => (
             <Composer
@@ -157,6 +167,7 @@ function Fixture() {
               writing
               projectId="project"
               held={held()}
+              quote={quote()}
             />
           )}
         </Each>

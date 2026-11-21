@@ -82,6 +82,9 @@ export function Conversation(props: {
   const widgetDraft = signal<
     { conversationId: string; text: string } | undefined
   >(undefined);
+  const quote = signal<{ conversationId: string; text: string } | undefined>(
+    undefined,
+  );
   const older = signal<MessageView[]>([]);
   const hasOlder = signal<boolean | undefined>(undefined);
   const paging = signal(false);
@@ -441,6 +444,9 @@ export function Conversation(props: {
               onWidgetDraft={(conversationId, text) =>
                 widgetDraft.set({ conversationId, text })
               }
+              onQuote={(conversationId, text) =>
+                quote.set({ conversationId, text })
+              }
             />
           </View>
           <If when={lateInsert()}>
@@ -508,6 +514,7 @@ export function Conversation(props: {
             alignWithContent={props.alignComposer}
             held={timeline()?.held ?? []}
             widgetDraft={widgetDraft()}
+            quote={quote()}
           />
         </View>
       </View>

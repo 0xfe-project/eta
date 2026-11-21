@@ -8,6 +8,7 @@ import type {
   ViewCore,
 } from "@eta/client-contracts";
 import type { JSX, ViewRef } from "nsh";
+import type { TextViewSelectionEvent } from "nsh/base";
 import {
   captainProposalOf,
   publishedRefs,
@@ -84,6 +85,12 @@ export function Message(props: {
   members: MemberView[];
   onArtifact: (artifact: ArtifactView, version: number) => void;
   onWidgetDraft: (text: string) => void;
+  /** The reader selected part of the reply's text (`""`: nothing); `reply` is
+   * the view around that text. */
+  onSelectionChange?: (
+    event: TextViewSelectionEvent,
+    reply: ViewRef | undefined,
+  ) => void;
   onTask: (id: string) => void;
   onPending?: () => void;
   onReadDraft: (item: MessageView) => void;
@@ -95,6 +102,7 @@ export function Message(props: {
   const process = signal(false);
   const item = () => props.item;
   let action: ViewRef | undefined;
+  let reply: ViewRef | undefined;
   effect(() => {
     const message = item();
     if (message.kind === "task_draft" || message.kind === "task_card")
@@ -634,8 +642,19 @@ export function Message(props: {
           else={
             <If when={answer()}>
               {(text) => (
-                <View testID="reply-answer" style={{ paddingHorizontal: 2 }}>
-                  <Markdown value={text()} />
+                <View
+                  testID="reply-answer"
+                  ref={(node) => {
+                    reply = node;
+                  }}
+                  style={{ paddingHorizontal: 2 }}
+                >
+                  <Markdown
+                    value={text()}
+                    onSelectionChange={(event) =>
+                      props.onSelectionChange?.(event, reply)
+                    }
+                  />
                 </View>
               )}
             </If>
