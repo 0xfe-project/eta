@@ -77,3 +77,18 @@ export function sessionTokenTotal(usage: Usage | undefined): number {
   const parts = usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
   return usage.totalTokens > 0 ? usage.totalTokens : parts;
 }
+
+/**
+ * The usage of a message whose runtime reported no tokens for it. Its numbers are zeros because the
+ * shape needs numbers, not because nothing was used; `tokensReported` tells the two apart. It is
+ * kept on the message, so a journal says the same thing when it is read again.
+ */
+export function unreportedUsage(): Usage {
+  return Object.assign(emptyUsage(), { tokensUnreported: true as const });
+}
+
+/** Whether these tokens were reported, rather than zeros standing in for "nobody said". */
+export function tokensReported(usage: Usage | undefined): boolean {
+  if (usage === undefined) return false;
+  return (usage as { tokensUnreported?: unknown }).tokensUnreported !== true;
+}

@@ -61,6 +61,7 @@ import type { ProjectStore } from "../projects/store";
 import type { TaskBoard, TaskRuns } from "./board";
 import type { RunRecord, TaskRunStore } from "./runs";
 import type { TaskRecord, TaskStore } from "./store";
+import type { TaskUsageStore } from "./usage";
 import { homedir } from "node:os";
 import { LinkError } from "@eta/daemon";
 import { shellQuote } from "@eta/ssh";
@@ -129,6 +130,8 @@ export interface TaskRunnerDeps {
   hooks: RunHooks | undefined;
   /** These conversations' timelines moved. */
   changed: (conversations: readonly string[]) => void;
+  /** Where a run on an external runtime leaves what its messages used. */
+  usage?: Pick<TaskUsageStore, "fromTranscript"> | undefined;
   warn: (message: string) => void;
 }
 
@@ -1044,6 +1047,16 @@ export class TaskRunner implements TaskRuns {
       } finally {
         stopActivity();
         live.inFlight = false;
+      }
+      // Before the run can end: it ends with these counted, and its end is what tells the clients.
+      if (result.usage !== undefined) {
+        try {
+          this.#deps.usage?.fromTranscript(run, result.usage);
+        } catch (error) {
+          this.#deps.warn(
+            `[eta] could not count what run ${run.id} used: ${messageOf(error)}`,
+          );
+        }
       }
       if (result.text.trim() !== "") live.said = result.text;
       if (live.stopped !== undefined || result.status === "aborted")

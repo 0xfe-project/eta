@@ -1,8 +1,8 @@
 /**
  * A small ACP agent on stdio, for tests: the agent side of the same SDK the runtime uses.
  *
- * What it does is chosen by words in the prompt (`tool`, `write`, `slow`, `die`, `state`), and
- * what it is by its environment:
+ * What it does is chosen by words in the prompt (`tool`, `write`, `slow`, `die`, `state`,
+ * `[usage:...]`), and what it is by its environment:
  *
  * - `FAKE_ACP_DIR`: where it keeps its sessions (so one survives its process) and its log.
  * - `FAKE_ACP_CAPS`: `resume` (default), `load`, or `none`: how a session can be picked up.
@@ -205,6 +205,47 @@ const app = acp
           ...(messageId === undefined ? {} : { messageId }),
         },
       });
+    // `[usage:<json>]`: it works as a task's executor does (calls `finish_task` over the MCP server
+    // it was given) and answers the prompt with that JSON as the turn's tokens (ACP's unstable
+    // `PromptResponse.usage`); `[usage:none]` answers with none. Either way it sends a
+    // `usage_update` first, which tells the context's size and the cost, never the tokens used.
+    const usage = /\[usage:(.*?)\]/.exec(asked)?.[1];
+    if (usage !== undefined) {
+      await client.notify(methods.client.session.update, {
+        sessionId,
+        update: {
+          sessionUpdate: "usage_update",
+          used: 99_999,
+          size: 200_000,
+          cost: { amount: 0.5, currency: "USD" },
+        },
+      });
+      await say("worked. ");
+      if (stored.eta !== undefined)
+        await fetch(stored.eta.url, {
+          method: "POST",
+          headers: {
+            ...Object.fromEntries(
+              stored.eta.headers.map((h) => [h.name, h.value]),
+            ),
+            "content-type": "application/json",
+            accept: "application/json, text/event-stream",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "finish_task", arguments: { summary: "worked" } },
+          }),
+        });
+      await say("finished.");
+      return usage === "none"
+        ? { stopReason: "end_turn" }
+        : ({
+            stopReason: "end_turn",
+            usage: JSON.parse(usage) as unknown,
+          } as acp.PromptResponse);
+    }
     if (asked.includes("late")) {
       // Ends its turn now, and asks for a permission only once the test says the turn is over
       // (by writing `late.go`): a request that belongs to no turn.

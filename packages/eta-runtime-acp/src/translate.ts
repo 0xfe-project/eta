@@ -22,6 +22,7 @@ import type {
   ToolCallContent,
   ToolCallUpdate,
 } from "@agentclientprotocol/sdk";
+import type { Usage as AcpUsage } from "@agentclientprotocol/sdk/unstable";
 import type {
   AgentMessage,
   AssistantMessage,
@@ -29,6 +30,7 @@ import type {
   RunDelegateContext,
   Usage,
 } from "@eta/core";
+import { unreportedUsage } from "@eta/core";
 
 type Block = AssistantMessage["content"][number];
 
@@ -78,6 +80,43 @@ export interface TranslatorIdentity {
   provider: string;
   /** The model in effect, as far as the agent said. */
   model: string;
+}
+
+/**
+ * The tokens of a prompt turn, as the agent answered the prompt with them (`PromptResponse.usage`,
+ * unstable in ACP). `usage_update` is no help here: it tells how full the context window is and
+ * what the session cost, not what was used. ACP's `totalTokens` is the sum of every kind, so its
+ * input does not hold the cache's reads and writes, as eta counts them too. Whether thought tokens
+ * are a part of `outputTokens` or beside them is not said; the total tells which: when the parts
+ * only add up with them, they are beside, and eta's `output` (which holds its reasoning) gets them.
+ */
+export function usageOfTurn(reported: AcpUsage): Usage {
+  const count = (value: number | null | undefined): number =>
+    typeof value === "number" && Number.isFinite(value) && value > 0
+      ? value
+      : 0;
+  const input = count(reported.inputTokens);
+  const cacheRead = count(reported.cachedReadTokens);
+  const cacheWrite = count(reported.cachedWriteTokens);
+  const thought =
+    typeof reported.thoughtTokens === "number"
+      ? count(reported.thoughtTokens)
+      : undefined;
+  const parts = input + count(reported.outputTokens) + cacheRead + cacheWrite;
+  const beside =
+    thought !== undefined &&
+    thought > 0 &&
+    parts + thought === count(reported.totalTokens);
+  const output = count(reported.outputTokens) + (beside ? thought : 0);
+  return {
+    ...emptyUsage(),
+    input,
+    output,
+    cacheRead,
+    cacheWrite,
+    ...(thought === undefined ? {} : { reasoning: thought }),
+    totalTokens: input + output + cacheRead + cacheWrite,
+  };
 }
 
 function emptyUsage(): Usage {
@@ -161,6 +200,8 @@ export class Translator {
   /** The agent's running cost, and how much of it the messages so far were charged. */
   #cost: number;
   #charged: number;
+  /** The prompt turn's tokens, when the agent answered with them: the last message carries them. */
+  #tokens: Usage | undefined;
 
   constructor(
     target: TranslatorTarget,
@@ -202,6 +243,8 @@ export class Translator {
         this.call(update);
         break;
       case "usage_update":
+        // How full the context is (`used`, `size`) and the running cost: no tokens used to count.
+        // Those come with the prompt's answer, if the agent gives them (`usageOfTurn`).
         if (typeof update.cost?.amount === "number")
           this.#cost = update.cost.amount;
         break;
@@ -252,7 +295,14 @@ export class Translator {
    * The prompt ended: the message in flight ends with it. A call that never came back gets a
    * result that says so, or the transcript would hold a call nobody answered.
    */
-  finish(outcome: "completed" | "aborted" | "failed", error?: string): void {
+  finish(
+    outcome: "completed" | "aborted" | "failed",
+    error?: string,
+    /** What the agent said the turn used, if it said; else its messages report no tokens. */
+    tokens?: AcpUsage | null,
+  ): void {
+    if (tokens !== undefined && tokens !== null)
+      this.#tokens = usageOfTurn(tokens);
     this.#close(
       outcome === "aborted"
         ? "aborted"
@@ -544,7 +594,10 @@ export class Translator {
     if (errorMessage !== undefined) message.errorMessage = errorMessage;
     const cost = Math.max(0, this.#cost - this.#charged);
     this.#charged = this.#cost;
-    message.usage = emptyUsage();
+    // A message is charged the turn's tokens only when it is the turn's last; the others, and every
+    // message of an agent that never says, report none (which is not zero).
+    message.usage = this.#tokens ?? unreportedUsage();
+    this.#tokens = undefined;
     message.usage.cost.total = cost;
     this.#open = open;
     this.#update(

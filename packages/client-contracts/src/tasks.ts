@@ -558,6 +558,79 @@ export interface TaskDetailSections {
   task: BoardTaskDetail;
   /** Oldest first. */
   activity: TaskActivityView[];
+  /**
+   * The tokens its runs used, its subtasks' included (`tasks.usage` with `includeSubtasks`). Pushed
+   * again when a run ends or a generation of one is counted, here and on every task above it.
+   * Absent from an older host.
+   */
+  usage?: TaskUsageView;
+}
+
+/* ------------------------------------------------------------------ usage */
+
+/**
+ * Tokens summed over the messages that reported them. `total` is the four parts together; there is
+ * no money here, only tokens.
+ */
+export interface TaskTokenTotals {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  /** A subset of `output`. Null when none of the messages broke reasoning out. */
+  reasoning: number | null;
+  total: number;
+}
+
+/**
+ * A group of runs' tokens. `tokens` is null when not one of its messages reported any: that is "no
+ * data", never "used nothing". `runsWithoutData` of the `runs` reported nothing at all.
+ */
+export interface TaskUsageGroup {
+  tokens: TaskTokenTotals | null;
+  runs: number;
+  runsWithoutData: number;
+}
+
+/** One model's share: the model that answered, as the provider or runtime reported it. */
+export interface TaskModelUsage extends TaskUsageGroup {
+  provider: string;
+  model: string;
+}
+
+/** One run's tokens. Only a run that got a session is here: a run that never started used nothing. */
+export interface TaskRunUsage {
+  runId: string;
+  taskId: string;
+  /** The agent that worked in it: the task's executor, or the agent mentioned in this lane. */
+  agentId: string | null;
+  /** It was a mentioned agent's answer, not the executor's work. */
+  mentioned: boolean;
+  status: TaskRunStatus;
+  startedAt: number | null;
+  finishedAt: number | null;
+  /** Null: the run has no token data (its runtime said nothing, or it ran before counting began). */
+  tokens: TaskTokenTotals | null;
+  /** The models that answered in it, the most tokens first. */
+  models: { provider: string; model: string; tokens: TaskTokenTotals | null }[];
+}
+
+/**
+ * `tasks.usage`: what a task's runs used, in tokens. Every run of the task is counted (the
+ * executor's and those of agents mentioned on it), and with `includesSubtasks` those of every task
+ * under it, at any depth. Each run belongs to exactly one task, so the sums are of distinct runs and
+ * nothing is counted twice; `taskIds` says which tasks went in.
+ */
+export interface TaskUsageView {
+  taskId: string;
+  includesSubtasks: boolean;
+  taskIds: string[];
+  /** Everything together. `totals.runsWithoutData` is the runs with no token data. */
+  totals: TaskUsageGroup;
+  /** By the model that answered, the most tokens first. */
+  models: TaskModelUsage[];
+  /** Oldest first. */
+  runs: TaskRunUsage[];
 }
 
 /* ------------------------------------------------------------------ actions */
@@ -579,6 +652,7 @@ export const TASK_ACTIONS = [
   "unarchive",
   "setSettings",
   "workspaceFor",
+  "usage",
 ] as const;
 export type TaskAction = (typeof TASK_ACTIONS)[number];
 
@@ -701,6 +775,12 @@ export interface TaskArgs {
    * for a conversation whose project is a git repository and its directory for one that is not.
    */
   workspaceFor: { parent?: string; conversationId?: string };
+  /**
+   * What the task's runs used, in tokens, by model and by run; with `includeSubtasks`, every task
+   * under it too (each run counted once, under its own task). Read, not polled: the task's `usage`
+   * section is pushed when it moves.
+   */
+  usage: { taskId: string; includeSubtasks?: boolean };
 }
 export interface TaskResults {
   create: { tasks: BoardTaskDetail[] };
@@ -719,6 +799,7 @@ export interface TaskResults {
   unarchive: { tasks: BoardTaskDetail[] };
   setSettings: { settings: TaskBoardSettings };
   workspaceFor: { mode: TaskWorkspaceMode };
+  usage: { usage: TaskUsageView };
 }
 export type TaskCall = {
   [A in TaskAction]: Omit<CallFrame, "target" | "action" | "args"> & {
