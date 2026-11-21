@@ -223,6 +223,7 @@ export function AgentEditor(props: AgentEditorProps) {
                   <AgentGeneral
                     form={form}
                     onModelServices={props.onModelServices}
+                    onRuntimes={props.onRuntimes}
                   />
                   {deleteRow()}
                 </If>
@@ -295,7 +296,11 @@ export function AgentEditor(props: AgentEditorProps) {
           scrollbar={false}
         >
           <If when={step() === 1} else={<AgentInstructions form={form} />}>
-            <AgentGeneral form={form} onModelServices={props.onModelServices} />
+            <AgentGeneral
+              form={form}
+              onModelServices={props.onModelServices}
+              onRuntimes={props.onRuntimes}
+            />
           </If>
         </Scroll>
       </If>
