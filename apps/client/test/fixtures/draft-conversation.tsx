@@ -49,6 +49,8 @@ function Fixture() {
         { taskId: "second", requireDone: false },
       ],
     };
+  if (scenario === "eta://fixture/discarded")
+    sample.data = { ...sample.data, discarded: true };
   if (scenario === "eta://fixture/empty") {
     sample.data = {};
     sample.agentId = null;

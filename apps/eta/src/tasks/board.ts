@@ -1111,6 +1111,15 @@ export class TaskBoard {
     return { task: this.#detailOf(this.#existing(task.id)), message };
   }
 
+  /** The user discards a draft: no task is made and the card says so. */
+  discardDraft(input: { conversationId: string; messageId: string }): {
+    message: MessageView;
+  } {
+    const message = this.#deps.cards.discard(input);
+    this.#deps.changed([input.conversationId]);
+    return { message };
+  }
+
   /* ---------------------------------------------------------------- inside */
 
   #graphOf(tasks: readonly TaskRecord[]): TaskGraph {

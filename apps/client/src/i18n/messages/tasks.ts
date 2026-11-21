@@ -225,6 +225,7 @@ export const tasksMessages = {
     "Goes to To do when confirmed and starts when ready",
     "确认后进入待办，满足执行条件后开始",
   ],
+  draftDiscarded: ["Discarded", "已丢弃"],
   draftCreated: [
     "This draft has been created as a task",
     "这份草案已创建为任务",

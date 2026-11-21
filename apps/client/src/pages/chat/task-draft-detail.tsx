@@ -77,7 +77,8 @@ export function TaskDraftDetail(props: {
   const description = signal(data().description ?? "");
   const status = signal<TaskDraftStatus>(draftStatus(data()));
   const busy = signal(false);
-  const pending = () => props.message.kind === "task_draft";
+  const discarded = () => data().discarded === true;
+  const pending = () => props.message.kind === "task_draft" && !discarded();
   const canConfirm = () =>
     pending() &&
     Boolean(title().trim()) &&
@@ -170,7 +171,9 @@ export function TaskDraftDetail(props: {
             when={pending()}
             else={
               <View role="alert">
-                <Label>{uiText("draftCreated")}</Label>
+                <Label>
+                  {uiText(discarded() ? "draftDiscarded" : "draftCreated")}
+                </Label>
               </View>
             }
           >
