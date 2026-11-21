@@ -174,6 +174,8 @@ export function AgentGeneral(props: {
           label={uiText("runtime")}
           value={runtimeLabel(runtime())}
           triggerStyle={selectStyle()}
+          // Wide enough for a name and its reason on one line ("OpenCode  Probe timed out (30s)").
+          popupWidth={260}
         >
           <Each of={runtimeList()}>
             {(item) => (
