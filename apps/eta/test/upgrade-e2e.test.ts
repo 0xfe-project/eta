@@ -206,23 +206,23 @@ describe("hasPrereleaseSwitch", () => {
   });
 });
 
-describe("upgrade-e2e.yml's paths", () => {
-  const { on } = Bun.YAML.parse(
+describe("upgrade-e2e.yml's patterns", () => {
+  const { env } = Bun.YAML.parse(
     readFileSync(
       join(import.meta.dirname, "../../../.github/workflows/upgrade-e2e.yml"),
       "utf8",
     ),
-  ) as { on: Record<"pull_request" | "push", { paths: string[] }> };
-  const runs = (event: "pull_request" | "push", file: string): boolean =>
-    on[event].paths.some((path) => new Bun.Glob(path).match(file));
+  ) as { env: Record<"on_pr" | "on_main", string> };
+  const onPr = new RegExp(env.on_pr);
+  const onMain = new RegExp(env.on_main);
 
-  it("run on a pull request for the update page, and on a merge for the rest of the client", () => {
-    expect(
-      runs("pull_request", "apps/client/src/pages/settings/updates/update.tsx"),
-    ).toBe(true);
-    expect(
-      runs("pull_request", "apps/client/src/components/controls.tsx"),
-    ).toBe(false);
-    expect(runs("push", "apps/client/src/components/controls.tsx")).toBe(true);
+  it("run on a pull request for the upgrade, and on a merge for the rest of the client", () => {
+    expect(onPr.test("apps/client/src/pages/settings/updates/update.tsx")).toBe(
+      true,
+    );
+    expect(onPr.test("apps/eta/src/upgrade/upgrade.ts")).toBe(true);
+    expect(onPr.test("apps/daemon/src/swap.ts")).toBe(true);
+    expect(onPr.test("apps/client/src/components/controls.tsx")).toBe(false);
+    expect(onMain.test("apps/client/src/components/controls.tsx")).toBe(true);
   });
 });
