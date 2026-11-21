@@ -340,7 +340,8 @@ describe("refreshing a provider's model list", () => {
     const auth: (string | null)[] = [];
     const send = (async (url: string, init?: RequestInit) => {
       // The public catalog is asked for custom endpoints too; these tests are about the endpoint.
-      if (String(url) === MODELS_DEV_URL) return new Response(null, { status: 404 });
+      if (String(url) === MODELS_DEV_URL)
+        return new Response(null, { status: 404 });
       calls.push(String(url));
       auth.push(new Headers(init?.headers).get("authorization"));
       return new Response(
@@ -446,7 +447,8 @@ describe("unsaved model discovery", () => {
       init?: RequestInit,
     ) => {
       // The public catalog is asked for custom endpoints too; these tests are about the endpoint.
-      if (String(url) === MODELS_DEV_URL) return new Response(null, { status: 404 });
+      if (String(url) === MODELS_DEV_URL)
+        return new Response(null, { status: 404 });
       requested = { url: String(url), headers: new Headers(init?.headers) };
       return Response.json({
         data: [{ id: "new-model", context_window: 12000 }],
@@ -484,7 +486,8 @@ describe("unsaved model discovery", () => {
     const h = await harness({
       fetch: (async (url: Parameters<typeof fetch>[0], init?: RequestInit) => {
         // The public catalog is asked for custom endpoints too; these tests are about the endpoint.
-        if (String(url) === MODELS_DEV_URL) return new Response(null, { status: 404 });
+        if (String(url) === MODELS_DEV_URL)
+          return new Response(null, { status: 404 });
         keys.push(new Headers(init?.headers).get("Authorization"));
         return Response.json({ data: [{ id: "new-model" }] });
       }) as unknown as typeof fetch,

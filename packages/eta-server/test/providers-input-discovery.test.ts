@@ -102,9 +102,7 @@ describe("input declared by the endpoint's /models", () => {
     const { models } = await list([
       { id: "gateway/model-a", input_modalities: ["text"] },
     ]);
-    expect(models).toEqual([
-      { id: "gateway/model-a", input: ["text"] },
-    ]);
+    expect(models).toEqual([{ id: "gateway/model-a", input: ["text"] }]);
   });
 });
 
@@ -266,7 +264,9 @@ describe("input from models.dev for a custom endpoint", () => {
     const send = (async (input: Parameters<typeof fetch>[0]) =>
       String(input) === MODELS_DEV_URL
         ? new Response(null, { status: 500 })
-        : Response.json({ data: [{ id: "gateway/model-a" }] })) as unknown as typeof fetch;
+        : Response.json({
+            data: [{ id: "gateway/model-a" }],
+          })) as unknown as typeof fetch;
     const result = await listProviderModels({
       reference: { kind: "openai-responses", baseUrl: BASE },
       fetch: send,

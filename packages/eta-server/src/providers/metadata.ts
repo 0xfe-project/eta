@@ -408,7 +408,9 @@ export async function gatewayModelFacts(
     for (const provider of providers) {
       if (!Object.hasOwn(provider.models, bare)) continue;
       try {
-        listings.push(parseModelsDevModel(bare, provider.models[bare], provider));
+        listings.push(
+          parseModelsDevModel(bare, provider.models[bare], provider),
+        );
       } catch {
         // An entry that does not parse says nothing.
       }

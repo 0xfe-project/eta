@@ -23,19 +23,18 @@ import type {
 } from "@eta/client-contracts";
 import type { ProviderReference } from "./catalog";
 import type { EtaModelConfig, ModelInput } from "./config-types";
-import type {GatewayFacts} from "./metadata";
+import type { GatewayFacts } from "./metadata";
 import { modelSource } from "@eta/client-contracts";
 import { attributionHeaders } from "./attribution";
 import { resolveConfiguredModels } from "./catalog";
 import { applyProviderHeaders, MODEL_THINKING_LEVELS } from "./config-types";
 import {
   fetchModelsDev,
-  
   gatewayModelFacts,
   modelsDevProvider,
   officialModelsDevId,
   parseModelsDevModel,
-  publicModelMetadata
+  publicModelMetadata,
 } from "./metadata";
 
 /** What a discovery call needs: where to ask, how to authenticate, and who to tell. */
