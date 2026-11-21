@@ -3,7 +3,7 @@ import type {
   MemberView,
   MessageView,
 } from "@eta/client-contracts";
-import type { JSX, ListRef, ViewRef } from "nsh";
+import type { JSX, ListRef, ViewRef, WheelEvent } from "nsh";
 import {
   cleanup,
   computed,
@@ -31,6 +31,9 @@ import {
   bottomThreshold,
   distanceFromEnd,
   followNewRows,
+  wheelDistance,
+  wheelIsNotch,
+  wheelTarget,
 } from "./scroll-follow";
 import { TaskDraftDetail } from "./task-draft-detail";
 
@@ -87,6 +90,25 @@ export function ConversationTimeline(props: {
   // Whether the reader is at the end of the transcript, from its scroll events.
   let pinned = true;
   let seen: string[] = [];
+  // The wheel scrolls the list itself, so mouse notches can glide.
+  // No scroll event yet: the end is not known, and the list clamps to it.
+  let scrolled = { offset: 0, max: Number.POSITIVE_INFINITY };
+  let wheel: { aim?: number; last: number } = { last: 0 };
+  function onWheel(event: WheelEvent) {
+    // The list scrolls along its own axis only.
+    if (Math.abs(event.delta.x) > Math.abs(event.delta.y)) return;
+    const now = Date.now();
+    const target = wheelTarget({
+      ...scrolled,
+      aim: wheel.aim,
+      last: wheel.last,
+      now,
+      distance: wheelDistance(event),
+    });
+    const glide = wheelIsNotch(event) && animateFollow(reduceMotion());
+    wheel = { aim: glide ? target : undefined, last: now };
+    transcriptList?.scrollToOffset({ offset: target, animated: glide });
+  }
   effect(() => {
     const ids = props.rows.map((row) => row.id);
     const previous = seen;
@@ -224,6 +246,10 @@ export function ConversationTimeline(props: {
           scrollEventThrottle={16}
           onScroll={(event) => {
             pinned = atBottom(distanceFromEnd(event));
+            scrolled = {
+              offset: event.offset.y,
+              max: event.contentSize.height - event.size.height,
+            };
           }}
           contentStyle={{
             paddingLeft: 16,
@@ -266,31 +292,33 @@ export function ConversationTimeline(props: {
           )}
         >
           {(message) => (
-            <Message
-              item={message()}
-              onReadDraft={readDraft}
-              registerAction={registerAction}
-              additions={props.additions.get(message().id) ?? []}
-              canInsert={
-                host.state().status === "open" &&
-                props.recipients.has(message().id)
-              }
-              onInsert={() => props.onInsert(message())}
-              inserting={props.insertingId === message().id}
-              onInsertClose={props.onInsertClose}
-              insertPanel={props.insertPanel}
-              sameFailureAsNext={sameFailures().has(message().id)}
-              phone={phone()}
-              compact={props.compact}
-              captain={props.captain}
-              members={props.members}
-              onTask={props.onTask}
-              onPending={props.onPending}
-              onArtifact={props.onArtifact}
-              onWidgetDraft={(text) =>
-                props.onWidgetDraft(message().conversationId, text)
-              }
-            />
+            <View onWheel={onWheel}>
+              <Message
+                item={message()}
+                onReadDraft={readDraft}
+                registerAction={registerAction}
+                additions={props.additions.get(message().id) ?? []}
+                canInsert={
+                  host.state().status === "open" &&
+                  props.recipients.has(message().id)
+                }
+                onInsert={() => props.onInsert(message())}
+                inserting={props.insertingId === message().id}
+                onInsertClose={props.onInsertClose}
+                insertPanel={props.insertPanel}
+                sameFailureAsNext={sameFailures().has(message().id)}
+                phone={phone()}
+                compact={props.compact}
+                captain={props.captain}
+                members={props.members}
+                onTask={props.onTask}
+                onPending={props.onPending}
+                onArtifact={props.onArtifact}
+                onWidgetDraft={(text) =>
+                  props.onWidgetDraft(message().conversationId, text)
+                }
+              />
+            </View>
           )}
         </List>
         <If when={selected()}>
