@@ -37,9 +37,57 @@ UI conventions live in [DESIGN.md](../DESIGN.md) and [apps/web/AGENTS.md](../app
 
 ## Environment and setup
 
-Needs Bun 1.4.3 (`bun check` is what every package type-checks with) and uv (Python 3.13, fetched by
-uv from `.python-version`). The LLM gateway's CLIProxyAPI binary comes with `bun install`. Nothing else
-to install and no service to stand up.
+Needs Bun 1.4.3 (`bun check` is what every package type-checks with), Node 24 and uv (Python 3.13,
+fetched by uv from `.python-version`). The LLM gateway's CLIProxyAPI binary comes with `bun install`.
+Nothing else to install and no service to stand up.
+
+### Node
+
+The host runs on Bun, but ESLint, knip, `vite build` and some of the vitest runs start under the `node`
+on your PATH. Use Node 24. The lowest our tools support is 22.22.2, or 24.15 on Node 24 (`engines` in
+`package.json`), because ESLint plugins from `@antfu/eslint-config` (jsdoc, command) declare that.
+On 22.11 and older, knip fails with `ERR_REQUIRE_ESM`.
+
+`.nvmrc` and `.node-version` both say `24`. fnm, mise, asdf and Volta read `.node-version`, and nvm
+reads `.nvmrc`. With nvm, run this in the checkout (and `nvm install` once if 24 is not installed yet):
+
+```sh
+nvm use
+```
+
+To switch on `cd`, add the hook from nvm's
+[Deeper Shell Integration](https://github.com/nvm-sh/nvm#deeper-shell-integration) section to your
+shell. eta cannot do that for you: the files only work when your shell reads them. For zsh, put this
+in `~/.zshrc` after the lines that load nvm:
+
+```zsh
+autoload -U add-zsh-hook
+
+load-nvmrc() {
+  local nvmrc_path
+  nvmrc_path="$(nvm_find_nvmrc)"
+
+  if [ -n "$nvmrc_path" ]; then
+    local nvmrc_node_version
+    nvmrc_node_version=$(nvm version "$(cat "${nvmrc_path}")")
+
+    if [ "$nvmrc_node_version" = "N/A" ]; then
+      nvm install
+    elif [ "$nvmrc_node_version" != "$(nvm version)" ]; then
+      nvm use
+    fi
+  elif [ -n "$(PWD=$OLDPWD nvm_find_nvmrc)" ] && [ "$(nvm version)" != "$(nvm version default)" ]; then
+    echo "Reverting to nvm default version"
+    nvm use default
+  fi
+}
+
+add-zsh-hook chpwd load-nvmrc
+load-nvmrc
+```
+
+For bash, use the `cdnvm` function from the same section and put it at the end of `~/.bashrc`. fnm
+does the same with `eval "$(fnm env --use-on-cd)"`.
 
 ```sh
 bun run setup     # bun install + uv sync

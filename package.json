@@ -6,7 +6,7 @@
   "license": "MIT",
   "workspaces": ["apps/*", "packages/*"],
   "engines": {
-    "node": ">=22.12.0"
+    "node": "^22.22.2 || >=24.15.0"
   },
   "scripts": {
     "prepare": "lefthook install",
