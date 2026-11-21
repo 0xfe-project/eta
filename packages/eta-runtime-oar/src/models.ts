@@ -13,8 +13,11 @@ import type { Api, KernelModels, Model, ThinkingLevel } from "@eta/core";
 import type { RuntimeCatalog, RuntimeId, RuntimeModel } from "./catalog";
 import { THINKING_LEVELS } from "@eta/core";
 
-/** The runtimes whose `--model` takes names their list does not show. */
-const OPEN_NAMES: ReadonlySet<RuntimeId> = new Set(["claude", "codex"]);
+/**
+ * The runtimes whose `--model` takes names their list does not show (Grok's own form offers a
+ * typed model id beside its list).
+ */
+const OPEN_NAMES: ReadonlySet<RuntimeId> = new Set(["claude", "codex", "grok"]);
 
 /**
  * The effort a runtime is asked for at a thinking level: the level itself where the model takes

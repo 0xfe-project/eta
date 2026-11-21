@@ -113,6 +113,21 @@ interface Input {
   images: { data: string; mimeType: string }[];
 }
 
+/**
+ * The runtimes that keep a conversation's appended prompt across a resume, through compaction
+ * too, and refuse it given again alone (Grok Build 1.0.89 through oar 0.128: "Omit
+ * appendSystemPrompt to retain the saved append"). oar says so only when the session opens, not
+ * in `resumedSessionOptions`, so it is named here. A resumed conversation keeps the words it
+ * started with.
+ */
+const KEEPS_APPEND_ON_RESUME: ReadonlySet<RuntimeId> = new Set(["grok"]);
+
+/** Whether an MCP server carries a credential, as oar reads one: a stdio env, http headers. */
+function carriesCredentials(server: McpServer): boolean {
+  const values = "type" in server ? server.headers : server.env;
+  return values !== undefined && Object.keys(values).length > 0;
+}
+
 function inputOf(messages: readonly AgentMessage[]): Input {
   const texts: string[] = [];
   const images: Input["images"] = [];
@@ -632,7 +647,10 @@ export class OarDelegate implements RunDelegate {
     refused: RefusedSessionOptions,
   ): SessionOptions {
     const { launchArgs } = this.#options;
-    const systemPrompt = this.#systemPrompt(refused);
+    const systemPrompt =
+      resume !== undefined && KEEPS_APPEND_ON_RESUME.has(this.#options.runtime)
+        ? undefined
+        : this.#systemPrompt(refused);
     return {
       cwd: this.#options.cwd,
       ...(model === undefined ? {} : { model }),
@@ -640,6 +658,7 @@ export class OarDelegate implements RunDelegate {
       ...(resume === undefined ? {} : { resume }),
       // Told on every open, resumed or not: a resumed conversation that was not told keeps the
       // prompt only until its next compaction (`resumedSessionOptions`), and then forgets it.
+      // Not on a runtime that keeps it itself and refuses it again (`KEEPS_APPEND_ON_RESUME`).
       ...(systemPrompt === undefined
         ? {}
         : { appendSystemPrompt: systemPrompt }),
@@ -658,19 +677,25 @@ export class OarDelegate implements RunDelegate {
     const runtime = catalog.runtime(id);
     const installation = await catalog.installation(id);
     const refusals = this.#refused(installation);
-    // The host's server carries its bearer token: a runtime that refuses credentials takes none.
-    const refused =
-      refusals.mcpServers !== undefined ||
-      refusals.mcpServerCredentials !== undefined;
-    const served = refused ? undefined : await this.#host.serve(context);
+    // The host's server carries its bearer token: a runtime that refuses credentials takes none,
+    // and of the plugins' servers only those that carry none (Antigravity keeps an entry's env
+    // and headers in plain text in its own conversation database).
+    const noServers = refusals.mcpServers !== undefined;
+    const noCredentials = refusals.mcpServerCredentials !== undefined;
+    const served =
+      noServers || noCredentials ? undefined : await this.#host.serve(context);
     const plugins = this.#options.mcpServers ?? [];
-    if (refused && plugins.length > 0)
-      this.#options.warn(
-        `[eta-runtime-oar] ${id} takes no MCP servers; ${plugins.map((server) => server.name).join(", ")} left out`,
-      );
-    const mcpServers = refused
+    const taken = noServers
       ? []
-      : [...(served === undefined ? [] : [served]), ...plugins];
+      : noCredentials
+        ? plugins.filter((server) => !carriesCredentials(server))
+        : plugins;
+    const left = plugins.filter((server) => !taken.includes(server));
+    if (left.length > 0)
+      this.#options.warn(
+        `[eta-runtime-oar] ${id} takes no MCP servers${noServers ? "" : " that carry credentials"}; ${left.map((server) => server.name).join(", ")} left out`,
+      );
+    const mcpServers = [...(served === undefined ? [] : [served]), ...taken];
     const options = (resume: string | undefined): SessionOptions =>
       this.#sessionOptions(settings, resume, mcpServers, refusals);
     let session: Session;
