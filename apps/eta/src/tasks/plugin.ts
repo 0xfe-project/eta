@@ -397,6 +397,16 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
             }),
           };
         }),
+
+        wire.handle("tasks", "discardDraft", (call) => {
+          const args = new Args(call);
+          return {
+            result: board.discardDraft({
+              conversationId: args.string("conversationId"),
+              messageId: args.string("messageId"),
+            }),
+          };
+        }),
       ];
 
       return () => {

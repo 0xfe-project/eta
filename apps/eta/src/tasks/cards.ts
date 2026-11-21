@@ -208,6 +208,7 @@ export class TaskCards {
     }
 
     const draft = row.data as unknown as TaskDraftData;
+    if (draft.discarded) throw new Error("that draft was discarded");
     const title = (input.fields.title ?? draft.title).trim();
     if (title === "") throw new Error("a task needs a title");
     // Resolved again: a draft written before assignees were resolved may hold a name, and the
@@ -249,6 +250,27 @@ export class TaskCards {
         parentId: draft.parentId,
       };
     })();
+  }
+
+  /**
+   * Discard a draft: the row stays where it is, marked, and no task is made. Only a draft that
+   * still waits is discarded; a confirmed or an already discarded one is refused, so confirming
+   * and discarding exclude each other.
+   */
+  discard(input: { conversationId: string; messageId: string }): MessageView {
+    const { timeline } = this.#deps;
+    const row = timeline.get(input.messageId);
+    if (
+      row === undefined ||
+      row.conversationId !== input.conversationId ||
+      (row.kind !== "task_draft" && row.kind !== "task_card")
+    )
+      throw new Error("no such task draft");
+    if (row.kind === "task_card")
+      throw new Error("that draft was already confirmed");
+    if ((row.data as unknown as TaskDraftData).discarded)
+      throw new Error("that draft was already discarded");
+    return timeline.setData(row.id, { ...row.data, discarded: true })!;
   }
 
   /**

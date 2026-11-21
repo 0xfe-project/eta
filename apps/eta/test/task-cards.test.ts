@@ -264,6 +264,44 @@ describe("a task draft", () => {
     ).toEqual({ n: 1 });
   });
 
+  it("is discarded once: no task, the row stays marked, and it cannot be confirmed", async () => {
+    const { w, group, draft } = await drafted();
+    const discard = (id: string) =>
+      w.client.call("tasks", "discardDraft", {
+        conversationId: group.id,
+        messageId: id,
+      }) as Promise<{ message: MessageView }>;
+    const { message } = await discard(draft.id);
+    expect(message).toMatchObject({
+      kind: "task_draft",
+      data: { discarded: true, turnMessageId: draft.data.turnMessageId },
+    });
+    expect(
+      w.rows(group.id).find((row) => row.id === draft.id)!.data.discarded,
+    ).toBe(true);
+    expect(w.host.db.query("SELECT COUNT(*) AS n FROM task").get()).toEqual({
+      n: 0,
+    });
+    await expect(discard(draft.id)).rejects.toThrow(/already discarded/);
+    await expect(confirm(w, group.id, draft.id)).rejects.toThrow(
+      /draft was discarded/,
+    );
+    expect(w.host.db.query("SELECT COUNT(*) AS n FROM task").get()).toEqual({
+      n: 0,
+    });
+  });
+
+  it("is not discarded once confirmed", async () => {
+    const { w, group, draft } = await drafted();
+    await confirm(w, group.id, draft.id);
+    await expect(
+      w.client.call("tasks", "discardDraft", {
+        conversationId: group.id,
+        messageId: draft.id,
+      }),
+    ).rejects.toThrow(/already confirmed/);
+  });
+
   it("is refused when the row is not a draft of that conversation", async () => {
     const { w, ada, project, group, draft } = await drafted();
     const other = await w.group(project.id, [ada.id], "elsewhere");

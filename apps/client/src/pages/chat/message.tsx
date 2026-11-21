@@ -180,6 +180,19 @@ export function Message(props: {
     const detail = code === "restart" || !item().text ? "" : ` ${item().text}`;
     return `${uiText(reason)}${detail}`;
   };
+  const discarded = () => item().data.discarded === true;
+  const busy = signal(false);
+  async function discard() {
+    if (busy()) return;
+    busy.set(true);
+    await host.action(() =>
+      host.call("tasks", "discardDraft", {
+        conversationId: item().conversationId,
+        messageId: item().id,
+      }),
+    );
+    busy.set(false);
+  }
   const card = () =>
     item().kind === "task_card" || item().kind === "task_draft";
   // A draft is one folded line from the moment it exists; a card, which is here because the reader
@@ -377,29 +390,53 @@ export function Message(props: {
               >
                 {draftTitle(item())}
               </Label>
-              <View
-                style={{
-                  flexShrink: 0,
-                  paddingHorizontal: 5,
-                  borderWidth: 1,
-                  borderColor: c().warning,
-                }}
+              <If
+                when={!discarded()}
+                else={
+                  <View
+                    style={{
+                      flexShrink: 0,
+                      paddingHorizontal: 5,
+                      borderWidth: 1,
+                      borderColor: c().border,
+                    }}
+                  >
+                    <Label variant="caption" tone="faint">
+                      {uiText("draftDiscarded")}
+                    </Label>
+                  </View>
+                }
               >
-                <Label variant="caption" tone="warningInk">
-                  {uiText("draftNeedsConfirming")}
-                </Label>
-              </View>
-              {/* The draft's one action, as in the design and apps/web: it
-               * opens the form, and only the form's own confirm creates the
-               * task. */}
-              <Button
-                label={uiText("editAndConfirm")}
-                size={22}
-                controlRef={(node) => {
-                  action = node;
-                }}
-                onPress={() => props.onReadDraft(item())}
-              />
+                <View
+                  style={{
+                    flexShrink: 0,
+                    paddingHorizontal: 5,
+                    borderWidth: 1,
+                    borderColor: c().warning,
+                  }}
+                >
+                  <Label variant="caption" tone="warningInk">
+                    {uiText("draftNeedsConfirming")}
+                  </Label>
+                </View>
+                {/* The draft's actions, as in the design and apps/web: one
+                 * opens the form, and only the form's own confirm creates the
+                 * task; the other discards the draft, as the proposals' does. */}
+                <Button
+                  label={uiText("editAndConfirm")}
+                  size={22}
+                  controlRef={(node) => {
+                    action = node;
+                  }}
+                  onPress={() => props.onReadDraft(item())}
+                />
+                <Button
+                  label={uiText("discard")}
+                  size={22}
+                  disabled={busy() || host.state().status !== "open"}
+                  onPress={() => void discard()}
+                />
+              </If>
             </View>
             <If when={cardIsOpen() && draftDescription()}>
               <View
