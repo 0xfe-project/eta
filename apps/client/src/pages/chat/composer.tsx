@@ -377,7 +377,15 @@ export function Composer(props: {
       });
       selection = { start: 0, end: 0 };
       queueMicrotask(() => input?.setSelection(0));
-    } else if (text) input?.insertText(text);
+    } else if (text) {
+      // Not `input.insertText`: the native (GPUI) target does not carry it out, so the text was
+      // dropped; the draft is the field's value on every target.
+      const { start, end } = selection;
+      const caret = start + text.length;
+      change(draft().slice(0, start) + text + draft().slice(end));
+      selection = { start: caret, end: caret };
+      queueMicrotask(() => input?.setSelection(caret));
+    }
   }
   return (
     <View
