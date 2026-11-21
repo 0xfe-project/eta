@@ -35,6 +35,7 @@ import { Composer } from "./composer";
 import { PhoneConversationInfo } from "./conversation-info";
 import { ConversationPanel, panelAttention } from "./conversation-panel";
 import { ConversationTimeline } from "./conversation-timeline";
+import { withoutHeldReplies } from "./held-rows";
 import { indexInserts, InsertMessage } from "./insert-message";
 import { InviteAgents, StewardMenu } from "./members";
 import { RemoveMember } from "./remove-member";
@@ -111,14 +112,18 @@ export function Conversation(props: {
       .filter((op) => op.requiresApproval && op.status === "pending");
   const asking = () =>
     host.pending().filter((entry) => entry.conversationId === props.id);
-  const messages = () => [
-    ...new Map(
-      [...older(), ...(timeline()?.messages ?? [])].map((message) => [
-        message.id,
-        message,
-      ]),
-    ).values(),
-  ];
+  const messages = () =>
+    withoutHeldReplies(
+      [
+        ...new Map(
+          [...older(), ...(timeline()?.messages ?? [])].map((message) => [
+            message.id,
+            message,
+          ]),
+        ).values(),
+      ],
+      timeline()?.held ?? [],
+    );
   const indexed = computed(() => indexInserts(messages()));
   const inserting = signal<
     { message: MessageView; recipients: string[] } | undefined
