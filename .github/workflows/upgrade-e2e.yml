@@ -22,7 +22,11 @@
 # For #144, for example, they were 43801834485 (Linux), 43802029578 (macOS) and 43802032299
 # (Windows), on f47b4176.
 #
-# It runs for what can break it, and by hand (workflow_dispatch) on any branch.
+# It runs for what can break it, and by hand (workflow_dispatch) on any branch. A pull request
+# starts it for the upgrade code and the few client files the upgrade itself goes through; the rest
+# of the client (App, workspace, navigation, shared components, services, the other settings pages,
+# common copy) can break the button too, but changes far more often, so that is tested once per
+# merge to main instead of on every push to every pull request.
 name: Upgrade end to end
 
 on:
@@ -34,25 +38,32 @@ on:
       - apps/daemon/src/windows-*.ts
       - apps/eta/src/stop.ts
       - apps/eta/src/upgrade/**
-      # The client, but of its pages only the ones "a person presses the button on the page" goes
-      # through: Settings (the Update section and the frame around it), the connection and restart
-      # screens, and two files the connection skeleton imports; of the message catalogs, the ones
-      # its copy comes from. A later pattern wins over an earlier one.
-      # apps/eta/test/upgrade-e2e.test.ts follows the imports of those pages and fails for any file
-      # they reach that this leaves out.
-      - apps/client/**
-      - "!apps/client/test/**"
-      - "!apps/client/src/pages/**"
-      - apps/client/src/pages/settings/**
-      - apps/client/src/pages/connection/**
-      - apps/client/src/pages/tasks/status.tsx
-      - apps/client/src/pages/chat/message-time.ts
-      - "!apps/client/src/i18n/messages/*"
-      - apps/client/src/i18n/messages/index.ts
-      - apps/client/src/i18n/messages/common.ts
-      - apps/client/src/i18n/messages/connection.ts
-      - apps/client/src/i18n/messages/settings.ts
+      # What "a person presses the button on the page" goes through: the Update section, the
+      # settings dialog that shows it, the restart screen and the reconnecting banner, their copy.
+      - apps/client/src/pages/settings/updates/**
+      - apps/client/src/pages/settings/settings.tsx
+      - apps/client/src/pages/settings/overview.ts
+      - apps/client/src/pages/connection/host-restart.tsx
+      - apps/client/src/pages/connection/reconnecting-banner.tsx
+      - apps/client/src/services/upgrade-watch.ts
       - apps/client/src/i18n/messages/updates.ts
+      - apps/client/src/i18n/messages/connection.ts
+      - packages/client-contracts/src/wire.ts
+      - packages/client-wire-proto/src/**
+      - scripts/nsh-client.ts
+      - .github/actions/setup-nsh/**
+      - scripts/upgrade-e2e/**
+  # The same, and the whole client, once per merge.
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/upgrade-e2e.yml
+      - apps/daemon/src/service*.ts
+      - apps/daemon/src/swap.ts
+      - apps/daemon/src/windows-*.ts
+      - apps/eta/src/stop.ts
+      - apps/eta/src/upgrade/**
+      - apps/client/**
       - packages/client-contracts/src/wire.ts
       - packages/client-wire-proto/src/**
       - scripts/nsh-client.ts
@@ -60,11 +71,11 @@ on:
       - scripts/upgrade-e2e/**
   workflow_dispatch:
 
-# A newer push to the same pull request makes the older run's answer moot, and its macOS and
-# Windows legs take over ten minutes. A run started by hand gets a group of its own, so it neither
-# waits for nor cancels another.
+# A newer push to the same pull request, or a newer merge to main, makes the older run's answer
+# moot, and its macOS and Windows legs take over ten minutes. A run started by hand gets a group of
+# its own, so it neither waits for nor cancels another.
 concurrency:
-  group: upgrade-e2e-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  group: upgrade-e2e-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
   cancel-in-progress: true
 
 permissions:

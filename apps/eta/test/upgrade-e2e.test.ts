@@ -208,67 +208,53 @@ describe("hasPrereleaseSwitch", () => {
 
 describe("upgrade-e2e.yml's paths", () => {
   const repo = join(import.meta.dirname, "../../..");
-  const workflow = readFileSync(
-    join(repo, ".github/workflows/upgrade-e2e.yml"),
-    "utf8",
-  );
-  const patterns = [
-    ...(
-      /^ {4}paths:\n((?: {6}(?:- \S+|#.*)\n)+)/m.exec(workflow)?.[1] ?? ""
-    ).matchAll(/^ {6}- "?([^"\s]+)"?$/gm),
-  ].map((match) => match[1]!);
-  // As GitHub reads them: the last pattern that matches decides, and `!` leaves out.
-  const runsFor = (file: string): boolean =>
-    patterns.reduce(
-      (runs, pattern) =>
-        pattern.startsWith("!")
-          ? runs && !new Bun.Glob(pattern.slice(1)).match(file)
-          : runs || new Bun.Glob(pattern).match(file),
-      false,
-    );
+  const { on } = Bun.YAML.parse(
+    readFileSync(join(repo, ".github/workflows/upgrade-e2e.yml"), "utf8"),
+  ) as { on: Record<"pull_request" | "push", { paths: string[] }> };
+  const matches = (paths: string[], file: string): boolean =>
+    paths.some((path) => new Bun.Glob(path).match(file));
+  const onPullRequest = (file: string) => matches(on.pull_request.paths, file);
+  const onMerge = (file: string) => matches(on.push.paths, file);
   const clientFiles = [
+    "apps/client/App.tsx",
+    "apps/client/packaged-host-bootstrap.ts",
     ...new Bun.Glob("apps/client/src/**/*.{ts,tsx}").scanSync({ cwd: repo }),
   ];
 
-  // What the update section, the connection and restart screens and the settings frame import,
-  // all the way down: a change to any of them can break the button the scenario presses.
-  it("cover everything the pages the scenario goes through import", () => {
-    const transpiler = new Bun.Transpiler({ loader: "tsx" });
-    const resolveFrom = (from: string, spec: string): string | undefined => {
-      if (!spec.startsWith(".")) return undefined;
-      const base = join(from, "..", spec);
-      return ["", ".ts", ".tsx", "/index.ts", "/index.tsx"]
-        .map((ext) => base + ext)
-        .find((file) => clientFiles.includes(file));
-    };
-    const pending = clientFiles.filter(
-      (file) =>
-        file.startsWith("apps/client/src/pages/settings/updates/") ||
-        file.startsWith("apps/client/src/pages/connection/"),
-    );
-    const seen = new Set<string>(["apps/client/App.tsx"]);
-    pending.push("apps/client/src/pages/settings/settings.tsx");
-    while (pending.length > 0) {
-      const file = pending.pop()!;
-      if (seen.has(file)) continue;
-      seen.add(file);
-      const source = readFileSync(join(repo, file), "utf8");
-      for (const { path } of transpiler.scanImports(source)) {
-        const found = resolveFrom(file, path);
-        if (found !== undefined) pending.push(found);
-      }
-    }
-    // Every catalog is imported through messages/index.ts; the scenario reads only some.
-    const catalog = /^apps\/client\/src\/i18n\/messages\//;
-    expect(seen.size).toBeGreaterThan(40);
-    expect(
-      [...seen].filter((file) => !runsFor(file) && !catalog.test(file)),
-    ).toEqual([]);
+  it("run on a merge for everything they run on in a pull request", () => {
+    for (const path of on.pull_request.paths)
+      expect(onMerge(path.replace(/\*\*?/g, "x.ts")), path).toBe(true);
   });
 
-  it("leave out the client pages an upgrade does not go through", () => {
-    expect(runsFor("apps/client/src/pages/chat/conversation.tsx")).toBe(false);
-    expect(runsFor("apps/client/src/pages/tasks/task-detail.tsx")).toBe(false);
-    expect(runsFor("apps/client/test/app.test.tsx")).toBe(false);
+  // The pages the scenario goes through start it from a pull request; what they import is either
+  // one of them or shared with the rest of the client, which starts it once merged.
+  it("cover what the scenario's pages import, on a pull request or once merged", () => {
+    const transpiler = new Bun.Transpiler({ loader: "tsx" });
+    const pages = clientFiles.filter(onPullRequest);
+    expect(pages.length).toBeGreaterThan(10);
+    const imported = pages.flatMap((page) =>
+      transpiler
+        .scanImports(readFileSync(join(repo, page), "utf8"))
+        .filter(({ path }) => path.startsWith("."))
+        .map(({ path }) => join(page, "..", path.replace(/\?.*$/, ""))),
+    );
+    const left = imported.filter(
+      (file) =>
+        !onPullRequest(file) &&
+        !onMerge(file) &&
+        !["", ".ts", ".tsx", "/index.ts"].some((ext) => onMerge(file + ext)),
+    );
+    expect(left).toEqual([]);
+  });
+
+  it("leave the rest of the client to the merge", () => {
+    for (const file of [
+      "apps/client/App.tsx",
+      "apps/client/src/components/controls.tsx",
+      "apps/client/src/pages/chat/conversation.tsx",
+    ]) {
+      expect(onPullRequest(file), file).toBe(false);
+      expect(onMerge(file), file).toBe(true);
+    }
   });
 });
