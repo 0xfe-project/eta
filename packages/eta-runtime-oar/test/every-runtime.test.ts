@@ -250,7 +250,7 @@ describe("a runtime that refuses MCP credentials (Antigravity)", () => {
   });
 });
 
-describe("Grok Build's sign-in, in the catalog", () => {
+describe("the catalog's reading of Grok Build's sign-in", () => {
   /** Grok lists its built-in models signed out too: only its sign-in query tells. */
   const grok = (kind: "logged_in" | "logged_out" | "unknown"): Runtime => ({
     ...scriptedRuntime({ id: "grok", turn: (turn) => turn.say("ok") }),
