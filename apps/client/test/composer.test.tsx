@@ -210,3 +210,13 @@ test("a second pasted file waits for the first upload in the same draft", async 
   await app.waitFor("label:composer-fixture.tsx");
   expect(app.shows("label:composer.test.tsx")).toBe(true);
 });
+
+test("a pasted BMP screenshot is attached as a PNG and other images keep their name", async () => {
+  const app = await fixture();
+  await app.paste(input, { files: ["test/paste-pixel.bmp"] });
+  await app.waitFor("label:paste-pixel.png");
+  expect(app.shows("label:paste-pixel.bmp")).toBe(false);
+  await app.paste(input, { files: ["assets/onboard.jpg"] });
+  // the fixture fails a first upload of onboard.jpg; the label still shows it kept its name
+  await app.waitFor("text:onboard.jpg · upload interrupted");
+});
