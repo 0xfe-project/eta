@@ -22,33 +22,20 @@
 # For #144, for example, they were 43801834485 (Linux), 43802029578 (macOS) and 43802032299
 # (Windows), on f47b4176.
 #
-# It runs for what can break it, and by hand (workflow_dispatch) on any branch. Of the client, a
-# pull request starts it only for the update page, the restart screen and their copy; the rest of
-# the client runs it once it is merged to main.
+# It runs by hand (workflow_dispatch) on any branch, and otherwise when a changed file matches
+# `on_pr` (a pull request: the upgrade and the client files it goes through) or `on_main` (a merge
+# to main: the rest of the client).
 name: Upgrade end to end
 
 on:
   pull_request:
-    paths:
-      - .github/workflows/upgrade-e2e.yml
-      - apps/daemon/src/service*.ts
-      - apps/daemon/src/swap.ts
-      - apps/daemon/src/windows-*.ts
-      - apps/eta/src/stop.ts
-      - apps/eta/src/upgrade/**
-      - apps/client/src/pages/settings/updates/**
-      - apps/client/src/pages/connection/host-restart.tsx
-      - apps/client/src/services/upgrade-watch.ts
-      - apps/client/src/i18n/messages/updates.ts
-      - scripts/nsh-client.ts
-      - .github/actions/setup-nsh/**
-      - scripts/upgrade-e2e/**
   push:
     branches: [main]
-    paths:
-      - apps/client/**
-      - packages/client-*/src/**
   workflow_dispatch:
+
+env:
+  on_pr: ^(\.github/(workflows/upgrade-e2e\.yml|actions/setup-nsh/)|apps/daemon/src/(service|swap|windows-)|apps/eta/src/(stop\.ts|upgrade/)|apps/client/src/(pages/settings/updates/|pages/connection/host-restart|services/upgrade-watch|i18n/messages/updates)|scripts/(nsh-client|upgrade-e2e/))
+  on_main: ^(apps/client/|packages/client-[^/]+/src/)
 
 # A newer push to the same pull request, or a newer merge to main, makes the older run's answer
 # moot, and its macOS and Windows legs take over ten minutes. A run started by hand gets a group of
@@ -59,9 +46,33 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
+  match:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.match.outputs.run }}
+    steps:
+      - id: match
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.number }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          case "$GITHUB_EVENT_NAME" in
+            pull_request) files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename'); pattern=$on_pr ;;
+            push) files=$(gh api "repos/$REPO/compare/$BEFORE...$SHA" --jq '.files[].filename'); pattern=$on_main ;;
+            *) files=; pattern= ;;
+          esac
+          if [ -z "$pattern" ] || grep -Eq "$pattern" <<<"$files"; then run=true; else run=false; fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
   upgrade:
+    needs: match
+    if: needs.match.outputs.run == 'true'
     strategy:
       fail-fast: false
       matrix:
