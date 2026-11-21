@@ -1,7 +1,7 @@
 import type { BoardTaskStatus, BoardTaskView } from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
 import { Image, View } from "nsh";
-import { Caption, colors, Icon, Label, row } from "../../components";
+import { Caption, colors, focusRing, Icon, Label, row } from "../../components";
 import { uiText } from "../../i18n";
 
 export const statusKeys = {
@@ -281,11 +281,20 @@ export function progressColor(
     : c[tones[status]];
 }
 
+/**
+ * A task card in the transcript. Its head line folds it, as a turn's process and a draft fold:
+ * chevron, status, kind, number, title and status pill. The number and title are the way to the
+ * task, and so is the body under the head while the card is open; pressing them is spent there and
+ * does not also fold the card.
+ */
 export function TaskSummary(props: {
   task: BoardTaskView;
   subtasks?: BoardTaskView[];
-  /** The phone transcript's folded card: a right caret and the kind "Task". */
+  /** The phone transcript says the kind "Task" rather than "Task card". */
   phone?: boolean;
+  /** Whether the body under the head line shows. */
+  open: boolean;
+  onToggle: () => void;
   controlRef?: (node: ViewRef) => void;
   onPress: () => void;
 }) {
@@ -303,67 +312,91 @@ export function TaskSummary(props: {
     ]
       .filter(Boolean)
       .join(" · ");
+  const kind = () => uiText(props.phone ? "taskKind" : "taskCard");
+  const openTask = () =>
+    uiText("taskCardOpenTask", { number: props.task.number });
   return (
-    <View
-      ref={(node) => props.controlRef?.(node)}
-      role="button"
-      onPress={() => props.onPress()}
-      hoverStyle={{ backgroundColor: c().selected }}
-      style={{ borderWidth: 1, borderColor: c().border, cursor: "pointer" }}
-    >
+    <View style={{ borderWidth: 1, borderColor: c().border }}>
       <View
+        ref={(node) => props.controlRef?.(node)}
+        role="button"
+        accessibilityLabel={`${kind()} #${props.task.number} ${props.task.title}`}
+        accessibilityState={{ expanded: props.open }}
+        onPress={() => props.onToggle()}
+        hoverStyle={{ backgroundColor: c().selected }}
+        focusVisibleStyle={focusRing(c())}
         style={{
           ...row,
           paddingHorizontal: 10,
           paddingVertical: 6,
           gap: 8,
-          borderBottomWidth: 1,
-          borderColor: c().border,
+          cursor: "pointer",
         }}
       >
         <Icon
-          name={props.phone ? "right" : "down"}
-          size={props.phone ? 10 : 8}
-          tone={props.phone ? "faint" : "muted"}
+          name={props.open ? "down" : "right"}
+          size={props.open ? 8 : 10}
+          tone={props.open ? "muted" : "faint"}
         />
         <TaskGlyph status={props.task.status} size={12} />
         <Caption
-          text={uiText(props.phone ? "taskKind" : "taskCard")}
+          text={kind()}
           style={{ letterSpacing: 1.4, color: c().faint, flexShrink: 0 }}
         />
-        <Label size={12} line={16} tone="muted">
-          {`#${props.task.number}`}
-        </Label>
-        <Label
-          size={12}
-          line={16}
-          weight={500}
-          lines={1}
-          style={{ flex: 1, minWidth: 50 }}
+        <View
+          role="link"
+          accessibilityLabel={openTask()}
+          onPress={() => props.onPress()}
+          focusVisibleStyle={focusRing(c())}
+          style={{ ...row, gap: 8, flex: 1, minWidth: 50, cursor: "pointer" }}
         >
-          {props.task.title}
-        </Label>
-        <TaskCardStatus task={props.task} />
-      </View>
-      <If
-        when={subtasks().length}
-        else={
+          <Label size={12} line={16} tone="muted">
+            {`#${props.task.number}`}
+          </Label>
           <Label
             size={12}
             line={16}
-            tone="muted"
-            style={{ paddingVertical: 8, paddingHorizontal: 10 }}
+            weight={500}
+            lines={1}
+            style={{ flex: 1, minWidth: 0 }}
           >
-            {runText(props.task)}
+            {props.task.title}
           </Label>
-        }
-      >
-        <View style={{ paddingVertical: 8, paddingHorizontal: 10, gap: 6 }}>
-          <SubtaskSegments subtasks={subtasks()} width={44} gap={4} />
-          <If when={plan()}>
-            <Label size={10} line={12} tone="muted">
-              {plan()}
-            </Label>
+        </View>
+        <TaskCardStatus task={props.task} />
+      </View>
+      <If when={props.open}>
+        <View
+          onPress={() => props.onPress()}
+          focusable={false}
+          hoverStyle={{ backgroundColor: c().selected }}
+          style={{
+            borderTopWidth: 1,
+            borderColor: c().border,
+            cursor: "pointer",
+          }}
+        >
+          <If
+            when={subtasks().length}
+            else={
+              <Label
+                size={12}
+                line={16}
+                tone="muted"
+                style={{ paddingVertical: 8, paddingHorizontal: 10 }}
+              >
+                {runText(props.task)}
+              </Label>
+            }
+          >
+            <View style={{ paddingVertical: 8, paddingHorizontal: 10, gap: 6 }}>
+              <SubtaskSegments subtasks={subtasks()} width={44} gap={4} />
+              <If when={plan()}>
+                <Label size={10} line={12} tone="muted">
+                  {plan()}
+                </Label>
+              </If>
+            </View>
           </If>
         </View>
       </If>

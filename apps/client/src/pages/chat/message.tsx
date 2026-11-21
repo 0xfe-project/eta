@@ -21,6 +21,7 @@ import {
   Button,
   Caption,
   colors,
+  focusRing,
   Icon,
   Label,
   Markdown,
@@ -33,6 +34,7 @@ import { subtasksOf, TaskSummary } from "../tasks/status";
 import { Proposal, Question } from "./approvals";
 import { ArtifactRow } from "./artifacts/row";
 import { CaptainReview, reviewItemsOf } from "./captain-review";
+import { cardOpen, setCardOpen } from "./card-folds";
 import { activeReply } from "./member-status";
 import { messageTime } from "./message-time";
 import { ProcessStep } from "./process-step";
@@ -73,7 +75,6 @@ export function Message(props: {
   const host = useHost();
   const c = colors();
   const details = signal(false);
-  const draftOpen = signal(false);
   const item = () => props.item;
   let action: ViewRef | undefined;
   effect(() => {
@@ -88,10 +89,7 @@ export function Message(props: {
   let previousId: string | undefined;
   effect(() => {
     const id = item().id;
-    if (id !== previousId) {
-      details.set(false);
-      draftOpen.set(false);
-    }
+    if (id !== previousId) details.set(false);
     previousId = id;
   });
   const active = () => activeReply(item().status);
@@ -160,6 +158,10 @@ export function Message(props: {
   };
   const card = () =>
     item().kind === "task_card" || item().kind === "task_draft";
+  // A draft is one folded line from the moment it exists; a card, which is here because the reader
+  // confirmed it, is open. Either way the reader's own choice stands, through a reload.
+  const cardIsOpen = () => cardOpen(item().id, item().kind === "task_card");
+  const toggleCard = () => setCardOpen(item().id, !cardIsOpen());
   return (
     <View
       style={{
@@ -281,6 +283,8 @@ export function Message(props: {
                 action = node;
               }}
               task={value()}
+              open={cardIsOpen()}
+              onToggle={toggleCard}
               subtasks={
                 value().subtasks?.total
                   ? subtasksOf(host.tasks(), value())
@@ -306,13 +310,15 @@ export function Message(props: {
               role={draftDescription() ? "button" : undefined}
               accessibilityLabel={uiText("taskDraft")}
               accessibilityState={
-                draftDescription() ? { expanded: draftOpen() } : undefined
+                draftDescription() ? { expanded: cardIsOpen() } : undefined
               }
-              onPress={
+              onPress={draftDescription() ? toggleCard : undefined}
+              hoverStyle={
                 draftDescription()
-                  ? () => draftOpen.set(!draftOpen())
+                  ? { backgroundColor: c().selected }
                   : undefined
               }
+              focusVisibleStyle={focusRing(c())}
               style={{
                 ...row,
                 flexWrap: props.phone ? "wrap" : "nowrap",
@@ -325,7 +331,7 @@ export function Message(props: {
             >
               <If when={draftDescription()}>
                 <Icon
-                  name={draftOpen() ? "down" : "right"}
+                  name={cardIsOpen() ? "down" : "right"}
                   size={10}
                   tone="faint"
                 />
@@ -387,7 +393,7 @@ export function Message(props: {
                 }
               />
             </View>
-            <If when={draftOpen() && draftDescription()}>
+            <If when={cardIsOpen() && draftDescription()}>
               <View
                 style={{
                   padding: 10,
