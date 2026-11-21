@@ -16,7 +16,7 @@ The agent calls `draft_task` in a conversation: title, goal, decisions made, acc
 
 ### A draft belongs to the turn that wrote it
 
-`task_draft`'s `data` carries `turnMessageId`: the id of the reply row that wrote it. The host already has to find this row (to compute the origin's "items N–M"), so it records its id along the way—**attribution relies on data, not on guessing order**; two drafts in one turn, or two turns interleaved, will not be misaligned. On confirmation the same row becomes `task_card`, and this field is carried over; the card therefore stays in the turn that proposed it and refreshes with the task. `MessageView.data` is JSON, with no migration; old rows missing this field are rendered independently as-is on the timeline.
+`task_draft`'s `data` carries `turnMessageId`: the id of the reply row that wrote it. The host already has to find this row (to compute the origin's "items N–M"), so it records its id along the way—**attribution relies on data, not on guessing order**; two drafts in one turn, or two turns interleaved, will not be misaligned. On confirmation the same row becomes `task_card`, and this field is carried over; the card therefore stays in the turn that proposed it and refreshes with the task. The user can also discard a waiting draft (`tasks.discardDraft`): the row stays a `task_draft` with `data.discarded = true`, no task is made, and confirming it afterwards is refused (and discarding a confirmed or discarded draft is refused). `draft_task` does not wait for the user, so nothing is blocked by a discard. `MessageView.data` is JSON, with no migration; old rows missing this field are rendered independently as-is on the timeline.
 
 The page draws rows with this field inside that reply's frame (`Turn` → `.turn-tasks` in `chat-panel.tsx`): same author, same footer time, with indentation and a hairline indicating which turn it comes from. It does **not** go into the collapsed execution process (`ProcessBox`): a draft asks the user for a decision, not a step the agent took; once the turn settles, it is at the same level as the answer.
 
@@ -83,6 +83,7 @@ What a task's runs used, in tokens and by model (no money: the cost fields of th
 | action                | Meaning                                                                  |
 | --------------------- | ------------------------------------------------------------------------ |
 | `confirmDraft`        | Confirm draft, create task and enqueue                                   |
+| `discardDraft`        | Discard a waiting draft: no task, the row stays marked `discarded`       |
 | `update`              | Change title, description, status (drag between columns too)             |
 | `comment`             | Comment; deliver into the running run, or wake a continuation run        |
 | `interrupt` / `rerun` | Stop a run / start a new run                                             |

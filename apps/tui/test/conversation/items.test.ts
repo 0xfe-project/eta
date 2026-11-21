@@ -897,6 +897,23 @@ describe("a backlog task draft", () => {
   });
 });
 
+describe("a discarded task draft", () => {
+  it("says it was discarded, whatever it would have done once confirmed", () => {
+    const gone = row({
+      kind: "task_draft",
+      author: "agent",
+      agentId: ADA.id,
+      data: { title: "Plan it", status: "backlog", discarded: true },
+    });
+    expect(items({ rows: [gone] })[0]).toMatchObject({
+      text: "Task draft: Plan it (discarded)",
+    });
+    expect(items({ rows: [gone], locale: "zh" })[0]).toMatchObject({
+      text: "任务草稿：Plan it（已丢弃）",
+    });
+  });
+});
+
 describe("keys", () => {
   it("are unique across a mixed timeline and the same when worked out again", () => {
     const user = row({ text: "go", data: { joined: [ADA.id] } });
