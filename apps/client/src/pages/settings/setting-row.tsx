@@ -9,7 +9,7 @@ import { follow, useHost } from "../../services/host";
 import { EntityRow, WarningLine } from "./section";
 
 /** 48,213 → "48k": a token count the way a row's meta line says it. */
-function tokens(count: number) {
+export function tokens(count: number) {
   return new Intl.NumberFormat(formatLocale(), {
     notation: "compact",
     maximumFractionDigits: 1,

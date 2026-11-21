@@ -1,0 +1,144 @@
+import type { AgentRuntimeInfo } from "@eta/client-contracts";
+import { signal, View } from "nsh";
+import {
+  Button,
+  Fonts,
+  Icon,
+  Label,
+  monoFontFamily,
+  row,
+} from "../../../components";
+import { uiText } from "../../../i18n";
+import { WarningLine } from "../section";
+import { LOGIN_COMMANDS } from "./status";
+
+/** A runtime's own words, as it said them: monospace, wrapped. */
+export function RuntimeWords(props: { children: string }) {
+  const fonts = Fonts();
+  return (
+    <Label
+      variant="small"
+      tone="muted"
+      style={{ fontFamily: monoFontFamily(fonts()) }}
+    >
+      {props.children}
+    </Label>
+  );
+}
+
+/**
+ * What goes under the Runtime field: the chosen runtime's sign-in command when it is signed out,
+ * then "Details" (each runtime that cannot be picked, in its own words) and "Retry", which asks
+ * the machine again past the host's cache.
+ */
+export function RuntimeHints(props: {
+  /** Undefined while the machine answers; null when it could not be asked. */
+  runtimes: AgentRuntimeInfo[] | null | undefined;
+  explained: AgentRuntimeInfo[];
+  chosen: AgentRuntimeInfo | undefined;
+  probing: boolean;
+  error: string | undefined;
+  onRetry: () => void;
+  onRuntimes?: (() => void) | undefined;
+}) {
+  const open = signal(false);
+  const signIn = () =>
+    props.chosen?.status === "unauthenticated"
+      ? LOGIN_COMMANDS[props.chosen.id]
+      : undefined;
+  const shown = () =>
+    props.runtimes === null || props.explained.length > 0 || !!signIn();
+  return (
+    <If when={shown()}>
+      <View style={{ alignSelf: "stretch", gap: 4 }}>
+        <If when={signIn()}>
+          {(command) => (
+            <View style={{ gap: 2 }}>
+              <WarningLine
+                outline
+                text={uiText("runtimeSignInHint", {
+                  runtime: props.chosen!.label,
+                  command: command(),
+                })}
+              />
+              <If when={props.onRuntimes}>
+                <View
+                  role="link"
+                  accessibilityLabel={uiText("runtimeSeeInSettings")}
+                  onPress={() => props.onRuntimes?.()}
+                  style={{ cursor: "pointer", paddingLeft: 18 }}
+                >
+                  <Label
+                    variant="small"
+                    tone="mutedInk"
+                    style={{ textDecorationLine: "underline" }}
+                  >
+                    {uiText("runtimeSeeInSettings")}
+                  </Label>
+                </View>
+              </If>
+            </View>
+          )}
+        </If>
+        <If when={props.runtimes === null}>
+          <Label variant="small" tone="muted">
+            {uiText("runtimeUnreachable")}
+          </Label>
+        </If>
+        <View style={{ ...row, gap: 8, minHeight: 20 }}>
+          <If when={props.explained.length > 0}>
+            <View
+              role="button"
+              accessibilityLabel={uiText("runtimeDetails")}
+              accessibilityState={{ expanded: open() }}
+              onPress={() => open.set(!open())}
+              style={{ ...row, gap: 4, cursor: "pointer" }}
+            >
+              <Icon
+                name={open() ? "down" : "right"}
+                size={12}
+                tone="mutedInk"
+              />
+              <Label variant="small" tone="mutedInk">
+                {uiText("runtimeDetails")}
+              </Label>
+            </View>
+          </If>
+          <View style={{ flex: 1 }} />
+          <Button
+            label={
+              props.probing ? uiText("runtimeRetrying") : uiText("runtimeRetry")
+            }
+            tone="ghost"
+            size={20}
+            labelTone="mutedInk"
+            disabled={props.probing}
+            style={{ paddingHorizontal: 0 }}
+            onPress={props.onRetry}
+          />
+        </View>
+        <If when={open() && props.explained.length > 0}>
+          <View style={{ gap: 6, paddingLeft: 16 }}>
+            <Each of={props.explained} key={(item) => item.id}>
+              {(item) => (
+                <View style={{ gap: 1 }}>
+                  <Label variant="small" weight={500} tone="mutedInk">
+                    {item().label}
+                  </Label>
+                  <RuntimeWords>{item().detail ?? ""}</RuntimeWords>
+                </View>
+              )}
+            </Each>
+          </View>
+        </If>
+        <If when={props.error}>
+          {(error) => (
+            <Label variant="small" tone="mutedInk">
+              {error()}
+            </Label>
+          )}
+        </If>
+      </View>
+    </If>
+  );
+}

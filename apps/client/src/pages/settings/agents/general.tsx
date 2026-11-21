@@ -5,6 +5,8 @@ import { View } from "nsh";
 import { ActionItem, ActionMenu, Field, Label, row } from "../../../components";
 import { ModelSelect } from "../../../components/model-select";
 import { localizedText, uiText } from "../../../i18n";
+import { RuntimeHints } from "../runtimes/runtime-hints";
+import { reasonText, runtimeReason } from "../runtimes/status";
 import { WarningLine } from "../section";
 
 import { EditorRow, focusOnOpen } from "./editor-row";
@@ -25,6 +27,7 @@ const thinkingOptions: ThinkingLevel[] = [
 export function AgentGeneral(props: {
   form: AgentForm;
   onModelServices: () => void;
+  onRuntimes?: (() => void) | undefined;
 }) {
   const {
     creating,
@@ -39,6 +42,11 @@ export function AgentGeneral(props: {
     chooseRuntime,
     runtime,
     external,
+    installed,
+    explained,
+    probing,
+    probeError,
+    reprobe,
     model,
     chooseModel,
     thinking,
@@ -109,6 +117,12 @@ export function AgentGeneral(props: {
       </If>
     );
   }
+  /** Why a runtime cannot be picked, in a few words; its own words are under Details. */
+  const reasonOf = (id: string) => {
+    const info = installed()?.find((item) => item.id === id);
+    const reason = info && runtimeReason(info);
+    return reason ? uiText(reasonText[reason]) : undefined;
+  };
   return (
     <View
       style={
@@ -144,6 +158,17 @@ export function AgentGeneral(props: {
         label={uiText("runtime")}
         stack={stacked()}
         phone={phoneEditor()}
+        hint={
+          <RuntimeHints
+            runtimes={installed()}
+            explained={explained()}
+            chosen={external()}
+            probing={probing()}
+            error={probeError()}
+            onRetry={() => void reprobe()}
+            onRuntimes={props.onRuntimes}
+          />
+        }
       >
         <ActionMenu
           label={uiText("runtime")}
@@ -154,6 +179,9 @@ export function AgentGeneral(props: {
             {(item) => (
               <ActionItem
                 label={runtimeLabel(item())}
+                detail={reasonOf(item())}
+                // One that cannot run stays selectable only while it is the agent's own.
+                disabled={!!reasonOf(item()) && runtime() !== item()}
                 checked={runtime() === item()}
                 onSelect={() => chooseRuntime(item())}
               />
