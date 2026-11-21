@@ -225,6 +225,8 @@ export function ActionMenu(props: {
   iconSize?: number;
   /** As a sheet: a title row with a close button under the grabber. */
   sheetTitle?: string;
+  /** Without the caret after the value, such as the Artifacts tab's Filter button. */
+  noCaret?: boolean;
   /** As a popup: its width, and a lifted shadow (the design's tablet menus). */
   popupWidth?: number;
   lifted?: boolean;
@@ -303,13 +305,19 @@ export function ActionMenu(props: {
               {props.value}
             </Label>
           </If>
-          <Icon
-            name={props.value ? "down" : "more"}
-            size={
-              props.value ? (props.valueTone ? 14 : 9) : (props.iconSize ?? 17)
-            }
-            tone={props.valueTone}
-          />
+          <If when={!props.noCaret}>
+            <Icon
+              name={props.value ? "down" : "more"}
+              size={
+                props.value
+                  ? props.valueTone
+                    ? 14
+                    : 9
+                  : (props.iconSize ?? 17)
+              }
+              tone={props.valueTone}
+            />
+          </If>
         </View>
       }
     >

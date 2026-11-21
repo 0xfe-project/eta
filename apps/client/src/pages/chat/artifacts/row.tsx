@@ -1,9 +1,24 @@
 import type { ArtifactView } from "@eta/client-contracts";
-import { View } from "nsh";
+import type { DayGroup } from "./filter";
+import { Text, View } from "nsh";
 import { colors, fill, grow, Icon, Label, row } from "../../../components";
 import { uiText } from "../../../i18n";
 import { clock, useHost } from "../../../services/host";
 import { messageTime } from "../message-time";
+import { highlightParts } from "./filter";
+
+/**
+ * When, as short as the row's place lets it be: under a Today or Yesterday heading the clock is
+ * enough, under Earlier the date; with no heading above (sorted by title), both.
+ */
+function listTime(at: number, group: DayGroup | null) {
+  if (group === "today" || group === "yesterday") return clock(at);
+  if (group === "earlier") {
+    const date = new Date(at);
+    return `${date.getMonth() + 1}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+  return messageTime(at, false);
+}
 
 export function ArtifactRow(props: {
   artifact: ArtifactView;
@@ -12,6 +27,12 @@ export function ArtifactRow(props: {
   phone?: boolean;
   onPress: () => void;
   onTask?: (id: string) => void;
+  /** In the Artifacts tab: what the search matched in the title, marked. */
+  query?: string;
+  /** The day heading the row sits under, which decides how much of the time to say. */
+  group?: DayGroup | null;
+  /** The time it is listed by (created or updated). */
+  at?: number;
 }) {
   const host = useHost();
   const c = colors();
@@ -27,7 +48,7 @@ export function ArtifactRow(props: {
     uiText("artifactPublisherUnavailable");
   const timestamp = () =>
     list()
-      ? clock(props.artifact.updatedAt)
+      ? listTime(props.at ?? props.artifact.updatedAt, props.group ?? null)
       : messageTime(props.artifact.updatedAt, false);
   const metadata = () =>
     [publisher(), version() ? `v${version()}` : undefined, timestamp()]
@@ -129,7 +150,15 @@ export function ArtifactRow(props: {
             lines={list() ? 2 : 1}
             style={{ pointerEvents: "none" }}
           >
-            {props.artifact.title}
+            <Each of={highlightParts(props.artifact.title, props.query ?? "")}>
+              {(part) => (
+                <If when={part().match} else={part().text}>
+                  <Text style={{ backgroundColor: c().highlight }}>
+                    {part().text}
+                  </Text>
+                </If>
+              )}
+            </Each>
           </Label>
           <View style={{ ...row, gap: 6, pointerEvents: "box-none" }}>
             <Label
