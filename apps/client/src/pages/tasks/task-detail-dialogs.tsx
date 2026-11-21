@@ -47,6 +47,7 @@ export function TaskDetailDialogs(props: {
     review,
     search,
     status,
+    statusError,
     stop,
     submitting,
     submitReview,
@@ -151,6 +152,18 @@ export function TaskDetailDialogs(props: {
                 </>
               )}
             </Each>
+            <If when={statusError()}>
+              {(message) => (
+                <Label
+                  size={12}
+                  line={16}
+                  tone="red"
+                  style={{ paddingTop: 8, paddingHorizontal: 16 }}
+                >
+                  {message()}
+                </Label>
+              )}
+            </If>
           </View>
         </Modal>
       </If>

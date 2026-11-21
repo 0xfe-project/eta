@@ -279,6 +279,10 @@ export const tasksMessages = {
   cancelThisTask: ["Cancel this task", "取消这个任务"],
   cancelThisTask2: ["Cancel this task?", "取消这个任务"],
   changeStatus: ["Change status", "改状态"],
+  statusChangeFailed: [
+    "Status not changed: {{message}}",
+    "状态没改成：{{message}}",
+  ],
   chooseTheTaskThatWaitsAnd: [
     "Choose the task that waits and the task it waits for.",
     "选择需要等待的任务，以及它依赖的前置任务。",
