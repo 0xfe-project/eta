@@ -275,6 +275,12 @@ export const settingsMessages = {
     "Done or cancelled tasks whose timeline has had nothing new for this long go to Archived. Anything new brings them back.",
     "已完成或已取消的任务，时间线在这段时间内没有新内容，就会移到「已归档」。有新内容时会自动回来。",
   ],
+  taskFollowUp: ["Task follow-up", "任务跟进"],
+  reactToResults: ["Review finished tasks", "任务完成后让负责人验收"],
+  reactToResultsHint: [
+    "When on, a finished task wakes the agent that made it to review the result and follow up.",
+    "开启后，任务完成时会叫醒创建任务的负责人去验收并跟进。",
+  ],
   autoArchiveDefault: ["{{label}} (default)", "{{label}}（默认）"],
   pluginsHint: [
     "Tick the plugins this agent may use.",

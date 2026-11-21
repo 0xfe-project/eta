@@ -20,6 +20,7 @@ import {
   Label,
   row,
 } from "../../components";
+import { ToggleSwitch } from "../../components/toggle-switch";
 import { formatLocale, uiText, useText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { messageTime } from "../chat/message-time";
@@ -41,6 +42,17 @@ export function ArchiveSettings(props: { phone?: boolean }) {
       ? uiText("autoArchiveDefault", { label })
       : label;
   };
+  const reacting = () =>
+    host.section<TaskBoardSettings>("tasks", "settings")?.reactToResults ===
+    true;
+  async function setReacting(value: boolean) {
+    if (saving()) return;
+    saving.set(true);
+    await host.action(() =>
+      host.call("tasks", "setSettings", { reactToResults: value }),
+    );
+    saving.set(false);
+  }
   async function setDays(value: TaskBoardSettings["archiveAfterDays"]) {
     if (saving() || value === days()) return;
     saving.set(true);
@@ -127,6 +139,31 @@ export function ArchiveSettings(props: { phone?: boolean }) {
             </Label>
           </View>
         </If>
+        <SectionHeader title={uiText("taskFollowUp")} phone={props.phone} />
+        <View
+          style={{
+            ...row,
+            minHeight: 40,
+            gap: 16,
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            borderBottomWidth: 1,
+            borderColor: c().border,
+          }}
+        >
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <Label>{uiText("reactToResults")}</Label>
+            <Label variant="small" tone="muted">
+              {uiText("reactToResultsHint")}
+            </Label>
+          </View>
+          <ToggleSwitch
+            label={uiText("reactToResults")}
+            checked={reacting()}
+            disabled={saving()}
+            onChange={(checked) => void setReacting(checked)}
+          />
+        </View>
       </If>
       <Scroll style={grow} scrollbar={false}>
         <SectionHeader

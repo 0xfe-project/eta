@@ -346,13 +346,16 @@ describe("the setting", () => {
       r.w.client.call("tasks", "setSettings", {}) as Promise<{
         settings: TaskBoardSettings;
       }>;
-    expect((await settings()).settings).toEqual({ archiveAfterDays: 7 });
+    expect((await settings()).settings).toEqual({
+      archiveAfterDays: 7,
+      reactToResults: false,
+    });
     expect(
       await r.w.client.call("tasks", "setSettings", { archiveAfterDays: 30 }),
-    ).toEqual({ settings: { archiveAfterDays: 30 } });
+    ).toEqual({ settings: { archiveAfterDays: 30, reactToResults: false } });
     expect(
       await r.w.client.call("tasks", "setSettings", { archiveAfterDays: null }),
-    ).toEqual({ settings: { archiveAfterDays: null } });
+    ).toEqual({ settings: { archiveAfterDays: null, reactToResults: false } });
     await expect(
       r.w.client.call("tasks", "setSettings", { archiveAfterDays: 5 }),
     ).rejects.toThrow(/one of 3, 7, 30 or null/);

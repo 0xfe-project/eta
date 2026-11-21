@@ -14,6 +14,9 @@ import {
 /** The setting's key: a number of days from `TASK_ARCHIVE_DAYS`, or null for never. */
 const ARCHIVE_AFTER_SETTING = "tasks.archiveAfterDays";
 
+/** The setting's key: whether `finish_task` wakes the task's maker (a boolean; off when never set). */
+const REACT_TO_RESULTS_SETTING = "tasks.reactToResults";
+
 const HOUR = 60 * 60 * 1000;
 
 /** The board's settings as stored; anything unreadable is the default. */
@@ -21,19 +24,28 @@ export function boardSettings(
   settings: Pick<SettingStore, "get">,
 ): TaskBoardSettings {
   const stored = settings.get(ARCHIVE_AFTER_SETTING);
-  if (stored === null) return { archiveAfterDays: null };
+  const reactToResults = settings.get(REACT_TO_RESULTS_SETTING) === true;
+  if (stored === null) return { archiveAfterDays: null, reactToResults };
   return {
     archiveAfterDays: (TASK_ARCHIVE_DAYS as readonly unknown[]).includes(stored)
       ? (stored as TaskArchiveDays)
       : DEFAULT_TASK_ARCHIVE_DAYS,
+    reactToResults,
   };
 }
 
 /** Check and keep what a caller asked for; a value the setting does not offer is refused. */
 export function saveBoardSettings(
   settings: Pick<SettingStore, "get" | "set">,
-  input: { archiveAfterDays?: unknown },
+  input: { archiveAfterDays?: unknown; reactToResults?: unknown },
 ): TaskBoardSettings {
+  if (
+    input.reactToResults !== undefined &&
+    typeof input.reactToResults !== "boolean"
+  )
+    throw new Error(
+      `reactToResults is true or false, not ${JSON.stringify(input.reactToResults)}`,
+    );
   if (input.archiveAfterDays !== undefined) {
     const days = input.archiveAfterDays;
     if (
@@ -45,6 +57,8 @@ export function saveBoardSettings(
       );
     settings.set(ARCHIVE_AFTER_SETTING, days);
   }
+  if (input.reactToResults !== undefined)
+    settings.set(REACT_TO_RESULTS_SETTING, input.reactToResults);
   return boardSettings(settings);
 }
 

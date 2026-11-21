@@ -133,6 +133,10 @@ export interface TaskRunnerDeps {
   /** Where a run on an external runtime leaves what its messages used. */
   usage?: Pick<TaskUsageStore, "fromTranscript"> | undefined;
   warn: (message: string) => void;
+  /** Whether a finished task wakes its maker (`tasks.reactToResults`); asked at each `finish_task`. */
+  reactToResults?: (() => boolean) | undefined;
+  /** Captain makes tasks too, and its results are its own: it is never woken here. */
+  isCaptain?: ((agentId: string) => boolean) | undefined;
 }
 
 /** What `finish_task` is told. */
@@ -605,6 +609,9 @@ export class TaskRunner implements TaskRuns {
       this.#deps.board.update(task.id, { status: submission.status }, executor);
     live.reported = true;
     this.#post(task, executor, summary);
+    // A mentioned agent's run answers in the thread; only the executor's run reports a result.
+    if (run.agentId === null && !split)
+      this.#wakeMaker(task, submission.status, summary);
     return split
       ? `Your summary is posted. Task #${task.number} has subtasks, so its status comes from them: it is [${this.#task(task.id).status}].`
       : `Task #${task.number} is now [${submission.status}] and your summary is posted.`;
@@ -630,6 +637,47 @@ export class TaskRunner implements TaskRuns {
         `[eta] task ${task.id} could not post its result: ${messageOf(error)}`,
       );
     }
+  }
+
+  /**
+   * With `tasks.reactToResults` on, the agent that made the task is woken once, in its lane, to
+   * review the result. Nothing it says wakes anyone: its lane's answers are comments that wake nobody,
+   * and only an executor's run reaches here. The user's tasks, the executor's own, Captain's and
+   * tasks with no conversation to come back to are left as they are.
+   */
+  #wakeMaker(
+    task: TaskRecord,
+    status: Submission["status"],
+    summary: string,
+  ): void {
+    const { agents, board } = this.#deps;
+    const makerId = task.createdBy.agentId;
+    if (
+      this.#deps.reactToResults?.() !== true ||
+      task.originConversationId === null ||
+      makerId === null ||
+      makerId === this.#executorOf(task) ||
+      this.#deps.isCaptain?.(makerId) === true
+    )
+      return;
+    const maker = agents.get(makerId);
+    if (maker === undefined) return;
+    const executor = agents.get(this.#executorOf(task) ?? "")?.name;
+    board.comment(
+      task.id,
+      `${maker.name} was woken to review this result: it made the task and "react to results" is on.`,
+      { kind: "system", agentId: null },
+      { deliver: false },
+    );
+    this.consult(
+      task.id,
+      makerId,
+      [
+        `This is not a comment from the user. ${executor ?? "The executor"} finished its work on task #${task.number}, "${task.title}", and you made the task, so the result comes to you first. The user is often away: follow it up yourself.`,
+        `## Result (status: ${status === "blocked" ? "blocked: the user must act" : "in review"})\n\n${summary}`,
+        `## What to do\n\n- Read the work (get_task shows the task and its timeline) and check it against what the task asked.\n- If it is good, say so in the thread; mark the task done if you may.\n- If it is not, comment on the task what is missing: that carries the executor on.\n- Tell the user only what needs their decision. A new task you draft is yours to weigh: each one runs on its own.`,
+      ].join("\n\n"),
+    );
   }
 
   /* ---------------------------------------------------------------- the queue */

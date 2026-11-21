@@ -110,7 +110,7 @@ import {
 import { SettingStore } from "./settings/store";
 import { skillFilesPlugin } from "./skills/plugin";
 import { SkillFileService } from "./skills/service";
-import { TaskArchiver } from "./tasks/archiver";
+import { boardSettings, TaskArchiver } from "./tasks/archiver";
 import { TaskAsks } from "./tasks/asks";
 import { TaskBoard } from "./tasks/board";
 import { TaskCards } from "./tasks/cards";
@@ -667,6 +667,7 @@ export function createProduct(options: {
     machines,
     transport,
   });
+  const taskSettings = new SettingStore(db);
   const taskRunner = new TaskRunner({
     board,
     tasks: taskRows,
@@ -683,6 +684,8 @@ export function createProduct(options: {
     changed: (touched) => changed(touched),
     usage: taskUsage,
     warn,
+    reactToResults: () => boardSettings(taskSettings).reactToResults,
+    isCaptain: (agentId) => captain.identity()?.agentId === agentId,
   });
   later.taskRunner = taskRunner;
   void taskUsage
@@ -760,7 +763,6 @@ export function createProduct(options: {
       `[eta] corrected the status of ${corrected.length} parent task(s) from their subtasks`,
     );
   // Done and cancelled tasks left quiet are put away, now and every hour.
-  const taskSettings = new SettingStore(db);
   const archiver = new TaskArchiver({
     board,
     settings: taskSettings,
