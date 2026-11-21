@@ -23,6 +23,7 @@ import {
   cleanup,
   context,
   effect,
+  lifecycle,
   platform,
   signal,
   untracked,
@@ -140,7 +141,19 @@ function openSocket(
   };
 }
 
-export function createHost() {
+/**
+ * How long the connection may be away before the app says so. Most drops (a phone switching
+ * networks, a host restarting) are over sooner, and a notice that flashes for them is noise.
+ */
+const RECONNECT_GRACE_MS = 2_000;
+
+export interface HostOptions {
+  /** How a socket to `address` is opened; a test supplies its own. */
+  openSocket?: (address: HostAddress, events: WireSocketEvents) => WireSocket;
+}
+
+export function createHost(options: HostOptions = {}) {
+  const open = options.openSocket ?? openSocket;
   const state = signal<WireState>(initialWireState());
   const error = signal("");
   const address = signal<HostAddress | null>(null);
@@ -152,6 +165,34 @@ export function createHost() {
   const upgradeCheck = signal<UpgradeCheckView>();
   let wire: Wire | undefined;
   const subscriptionWire = signal<Wire | undefined>(undefined);
+
+  // `reconnecting` that has lasted the grace period: what the app shows as disconnected.
+  const disconnected = signal(false);
+  let grace: ReturnType<typeof setTimeout> | undefined;
+  effect(() => {
+    if (state().status !== "reconnecting") {
+      clearTimeout(grace);
+      grace = undefined;
+      disconnected.set(false);
+      return;
+    }
+    // Every failed attempt sets the status again: the period runs from the first.
+    if (grace !== undefined || untracked(disconnected)) return;
+    grace = setTimeout(() => {
+      grace = undefined;
+      disconnected.set(true);
+    }, RECONNECT_GRACE_MS);
+  });
+  cleanup(() => clearTimeout(grace));
+
+  // Back in the foreground (the system may have cut the connection meanwhile, and the retries
+  // have slowed to their longest pause): reconnect now, or check the one that looks open.
+  let active = untracked(lifecycle) === "active";
+  effect(() => {
+    const now = lifecycle() === "active";
+    if (now && !active) wire?.wake();
+    active = now;
+  });
 
   function start(next: HostAddress | null) {
     wire?.close();
@@ -169,7 +210,7 @@ export function createHost() {
       return;
     }
     wire = new Wire({
-      open: (events) => openSocket(next, events),
+      open: (events) => open(next, events),
       store: {
         getState: () => untracked(state),
         setState: (update) =>
@@ -244,6 +285,7 @@ export function createHost() {
   return {
     address,
     state,
+    disconnected,
     error,
     failures,
     paused,

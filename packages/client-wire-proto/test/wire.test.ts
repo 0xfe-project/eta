@@ -36,6 +36,7 @@ describe("the vocabulary", () => {
       "error",
       "event",
       "hello",
+      "pong",
       "reply",
       "state",
     ]);

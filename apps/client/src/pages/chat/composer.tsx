@@ -166,7 +166,7 @@ export function Composer(props: {
       .filter((member) => member.busy && target().ids.includes(member.id))
       .map((member) => member.name)
       .join(", ");
-  const offline = () => props.phone && host.state().status === "reconnecting";
+  const offline = () => props.phone && host.disconnected();
   const files = signal<string[]>([]);
   const wanted = computed(() =>
     mentionAt(draft()) !== null ? props.projectId : undefined,

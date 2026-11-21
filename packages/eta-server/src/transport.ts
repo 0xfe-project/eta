@@ -21,6 +21,8 @@
  *   told so and keeps its session.
  * - **hello is the first frame**: the ops, the mounted plugins, and the state of every eager
  *   target, so a client that just connected can draw before it asks for anything.
+ * - **A ping is answered at once**, not after the calls before it: it asks whether the connection
+ *   is alive, and a slow call ahead of it says nothing about that.
  */
 
 import type {
@@ -28,6 +30,7 @@ import type {
   ClientFrame,
   ErrorProblem,
   OpDescriptor,
+  PingFrame,
   ServerFrame,
 } from "@eta/client-wire-proto";
 import type { DispatchOutcome, OpContext } from "./registry";
@@ -115,6 +118,7 @@ export function createConnection(
           ] => entry[1] !== undefined,
         ),
     ),
+    heartbeat: true,
   };
   send(hello);
 
@@ -126,7 +130,9 @@ export function createConnection(
     },
   });
 
-  const applyOne = async (frame: ClientFrame): Promise<void> => {
+  const applyOne = async (
+    frame: Exclude<ClientFrame, PingFrame>,
+  ): Promise<void> => {
     if (frame.op === "subscribe") {
       // The service decides what this socket is owed; the sink (installed by the pipe)
       // puts it on this socket.
@@ -198,7 +204,12 @@ export function createConnection(
         send({ type: "error", message: "bad frame" });
         return;
       }
-      const run = (): Promise<void> => applyOne(frame);
+      if (frame.op === "ping") {
+        send({ type: "pong" });
+        return;
+      }
+      const queued = frame;
+      const run = (): Promise<void> => applyOne(queued);
       const chained = tail.then(run, run);
       tail = chained;
       await chained;
