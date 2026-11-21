@@ -69,9 +69,13 @@ test("mouse notches glide and touchpad deltas follow the fingers", () => {
 test("notches in one glide add up from where it aims", () => {
   const base = { offset: 100, max: 1000, last: 1000 };
   expect(wheelTarget({ ...base, now: 5000, distance: 100 })).toBe(200);
-  expect(wheelTarget({ ...base, aim: 200, now: 1100, distance: 100 })).toBe(300);
+  expect(wheelTarget({ ...base, aim: 200, now: 1100, distance: 100 })).toBe(
+    300,
+  );
   // The glide ended: start again from where the list is.
-  expect(wheelTarget({ ...base, aim: 200, now: 1300, distance: 100 })).toBe(200);
+  expect(wheelTarget({ ...base, aim: 200, now: 1300, distance: 100 })).toBe(
+    200,
+  );
 });
 
 test("a wheel target stays inside the content", () => {
