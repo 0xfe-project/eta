@@ -28,7 +28,10 @@ export interface WindowsShellProbe {
 }
 
 const parentDir = (path: string, levels = 1): string =>
-  path.split(/[\\/]+/).slice(0, -levels).join("\\");
+  path
+    .split(/[\\/]+/)
+    .slice(0, -levels)
+    .join("\\");
 
 /**
  * Bun on Windows cannot execute the POSIX literal `/bin/sh`. Git for Windows ships the same
@@ -77,14 +80,19 @@ function gitExecPath(): string | undefined {
   }
 }
 
-const shellCommand =
-  process.platform === "win32"
-    ? windowsShell({ env: process.env, exists: existsSync, gitExecPath })
-    : "/bin/sh";
+/** This machine's probe for `windowsShell`. Nothing is probed until the shell is asked for, so importing never throws. */
+export const localWindowsProbe: WindowsShellProbe = {
+  env: process.env,
+  exists: existsSync,
+  gitExecPath,
+};
 
-const childEnv =
+const shellCommand = (): string =>
+  process.platform === "win32" ? windowsShell(localWindowsProbe) : "/bin/sh";
+
+const childEnv = (): { PATH?: string } =>
   process.platform === "win32"
-    ? windowsChildEnv(shellCommand, process.env.PATH)
+    ? windowsChildEnv(shellCommand(), process.env.PATH)
     : {};
 
 /** Git Bash accepts drive paths with forward slashes; scripts receive shell-quoted paths. */
@@ -123,8 +131,8 @@ export class LocalTransport implements SshTransport {
 
   async run(script: string, options: SshRunOptions = {}): Promise<SshResult> {
     return await new Promise<SshResult>((resolve) => {
-      const child = spawn(shellCommand, ["-c", windowsScript(script)], {
-        env: { ...process.env, ...childEnv, TMPDIR: this.tempDir },
+      const child = spawn(shellCommand(), ["-c", windowsScript(script)], {
+        env: { ...process.env, ...childEnv(), TMPDIR: this.tempDir },
         stdio: ["pipe", "pipe", "pipe"],
       });
       let settled = false;
