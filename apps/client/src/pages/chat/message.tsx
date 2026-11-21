@@ -314,7 +314,7 @@ export function Message(props: {
         </If>
         <If when={item().kind === "task_draft"}>
           {/* Folded to one line, as a turn's process is: what it is, its
-           * title, that it waits for you and the way to confirm it. */}
+           * title, that it waits for you and the way to the form. */}
           <View
             style={{
               alignSelf: "stretch",
@@ -386,28 +386,17 @@ export function Message(props: {
                   {uiText("draftNeedsConfirming")}
                 </Label>
               </View>
+              {/* The draft's one action, as in the design and apps/web: it
+               * opens the form, and only the form's own confirm creates the
+               * task. */}
               <Button
-                label={uiText("readDraft")}
+                label={uiText("editAndConfirm")}
                 size={22}
                 labelSize={12}
-                tone="ghost"
                 controlRef={(node) => {
                   action = node;
                 }}
                 onPress={() => props.onReadDraft(item())}
-              />
-              <Button
-                label={uiText("confirmTask")}
-                size={22}
-                labelSize={12}
-                onPress={() =>
-                  void host.action(() =>
-                    host.call("tasks", "confirmDraft", {
-                      conversationId: item().conversationId,
-                      messageId: item().id,
-                    }),
-                  )
-                }
               />
             </View>
             <If when={cardIsOpen() && draftDescription()}>
