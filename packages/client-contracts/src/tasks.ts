@@ -213,10 +213,32 @@ export const TASK_ARCHIVE_DAYS = [3, 7, 30] as const;
 export type TaskArchiveDays = (typeof TASK_ARCHIVE_DAYS)[number];
 export const DEFAULT_TASK_ARCHIVE_DAYS: TaskArchiveDays = 7;
 
+/** What a draft nobody decided on is made into when its wait runs out: a task, or nothing. */
+export const TASK_DRAFT_TIMEOUT_ACTIONS = ["accept", "discard"] as const;
+export type TaskDraftTimeoutAction =
+  (typeof TASK_DRAFT_TIMEOUT_ACTIONS)[number];
+/** How many minutes a draft may wait, as the setting offers. */
+export const TASK_DRAFT_TIMEOUT_MINUTES = {
+  min: 1,
+  max: 1440,
+  default: 10,
+} as const;
+
+/** The host's own decision for a draft that waited too long; off by default. */
+export interface TaskDraftTimeout {
+  enabled: boolean;
+  /** Whole minutes from `TASK_DRAFT_TIMEOUT_MINUTES.min` to `.max`. */
+  minutes: number;
+  /** `accept` confirms it as it stands, so the task starts; `discard` makes no task. */
+  action: TaskDraftTimeoutAction;
+}
+
 /** The board's own settings, on `tasks`. */
 export interface TaskBoardSettings {
   /** Days a done or cancelled task stays quiet before the host archives it; null never does. */
   archiveAfterDays: TaskArchiveDays | null;
+  /** What happens to a draft nobody confirmed or discarded in time. Absent from a host that predates it. */
+  draftTimeout?: TaskDraftTimeout | undefined;
 }
 
 /** The newest version of an artifact published for a task. */
@@ -535,6 +557,13 @@ export interface TaskDraftData {
   parentId?: string | undefined;
   /** The user discarded it: it waits for nothing and makes no task. Absent is still waiting. */
   discarded?: boolean | undefined;
+  /**
+   * The host decided it, not the user: the draft waited past the `draftTimeout` setting. Set on a
+   * draft the host discarded; a draft it confirmed says so on its task's timeline.
+   */
+  autoHandled?: "timeout" | undefined;
+  /** Why the host's own confirmation failed; it keeps the draft waiting and does not try again. */
+  autoFailure?: string | undefined;
   /** The Captain instruction that authorized this draft, when it came from one. */
   captainAssignmentId?: string | undefined;
   captainMessageId?: string | undefined;

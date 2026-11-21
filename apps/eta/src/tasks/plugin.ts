@@ -235,6 +235,7 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
           const raw = (call.args ?? {}) as Record<string, unknown>;
           const saved = saveBoardSettings(settings, {
             archiveAfterDays: raw.archiveAfterDays,
+            draftTimeout: raw.draftTimeout,
           });
           wire.pushNow("tasks");
           deps.settingsChanged?.();

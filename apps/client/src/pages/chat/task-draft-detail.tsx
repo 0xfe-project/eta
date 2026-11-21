@@ -172,7 +172,13 @@ export function TaskDraftDetail(props: {
             else={
               <View role="alert">
                 <Label>
-                  {uiText(discarded() ? "draftDiscarded" : "draftCreated")}
+                  {uiText(
+                    !discarded()
+                      ? "draftCreated"
+                      : data().autoHandled === "timeout"
+                        ? "draftDiscardedAuto"
+                        : "draftDiscarded",
+                  )}
                 </Label>
               </View>
             }
