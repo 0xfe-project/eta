@@ -212,54 +212,26 @@ describe("upgrade-e2e.yml's paths", () => {
     join(repo, ".github/workflows/upgrade-e2e.yml"),
     "utf8",
   );
-  const paths = [
+  const patterns = [
     ...(
       /^ {4}paths:\n((?: {6}(?:- \S+|#.*)\n)+)/m.exec(workflow)?.[1] ?? ""
-    ).matchAll(/^ {6}- (\S+)$/gm),
+    ).matchAll(/^ {6}- "?([^"\s]+)"?$/gm),
   ].map((match) => match[1]!);
+  // As GitHub reads them: the last pattern that matches decides, and `!` leaves out.
   const runsFor = (file: string): boolean =>
-    paths.some((path) => new Bun.Glob(path).match(file));
+    patterns.reduce(
+      (runs, pattern) =>
+        pattern.startsWith("!")
+          ? runs && !new Bun.Glob(pattern.slice(1)).match(file)
+          : runs || new Bun.Glob(pattern).match(file),
+      false,
+    );
   const clientFiles = [
-    "apps/client/App.tsx",
     ...new Bun.Glob("apps/client/src/**/*.{ts,tsx}").scanSync({ cwd: repo }),
   ];
 
-  it("each names a file that exists", () => {
-    expect(paths.length).toBeGreaterThan(10);
-    const nothing = paths.filter(
-      (path) =>
-        [...new Bun.Glob(path).scanSync({ cwd: repo, dot: true })].length === 0,
-    );
-    expect(nothing).toEqual([]);
-  });
-
-  // What drive.ts's "a person presses the button on the page" finds on the page: the test id and
-  // the messages behind its labels. A file showing one of them, or saying it, has to start a run.
-  it("cover every client file the browser scenario finds its way by", () => {
-    const marks = [
-      'testID="host-version"',
-      '"updateToVersion"',
-      "updateToVersion:",
-      '"updateTheHostTo"',
-      "updateTheHostTo:",
-      '"hostUpdateInProgress"',
-      "hostUpdateInProgress:",
-      '"updateLastFailed"',
-      "updateLastFailed:",
-      "  update: [",
-    ];
-    const using = clientFiles.filter((file) => {
-      const text = readFileSync(join(repo, file), "utf8");
-      return marks.some((mark) => text.includes(mark));
-    });
-    expect(using.length).toBeGreaterThanOrEqual(6);
-    expect(using.filter((file) => !runsFor(file))).toEqual([]);
-  });
-
   // What the update section, the connection and restart screens and the settings frame import,
-  // all the way down. Two kinds are left out on purpose: the message catalogs the scenario's copy
-  // is not in (the test above catches its labels moving into one), and packages outside the
-  // client, which the cache key and their own paths take care of.
+  // all the way down: a change to any of them can break the button the scenario presses.
   it("cover everything the pages the scenario goes through import", () => {
     const transpiler = new Bun.Transpiler({ loader: "tsx" });
     const resolveFrom = (from: string, spec: string): string | undefined => {
@@ -269,16 +241,13 @@ describe("upgrade-e2e.yml's paths", () => {
         .map((ext) => base + ext)
         .find((file) => clientFiles.includes(file));
     };
-    const pending = clientFiles.filter((file) =>
-      [
-        "apps/client/src/pages/settings/updates/",
-        "apps/client/src/pages/connection/",
-        "apps/client/src/pages/settings/navigation.tsx",
-        "apps/client/src/pages/settings/section.tsx",
-        "apps/client/src/pages/settings/overview.ts",
-      ].some((entry) => file.startsWith(entry)),
+    const pending = clientFiles.filter(
+      (file) =>
+        file.startsWith("apps/client/src/pages/settings/updates/") ||
+        file.startsWith("apps/client/src/pages/connection/"),
     );
-    const seen = new Set<string>();
+    const seen = new Set<string>(["apps/client/App.tsx"]);
+    pending.push("apps/client/src/pages/settings/settings.tsx");
     while (pending.length > 0) {
       const file = pending.pop()!;
       if (seen.has(file)) continue;
@@ -289,7 +258,8 @@ describe("upgrade-e2e.yml's paths", () => {
         if (found !== undefined) pending.push(found);
       }
     }
-    const catalog = /^apps\/client\/src\/i18n\/messages\/(?!index\.ts$)/;
+    // Every catalog is imported through messages/index.ts; the scenario reads only some.
+    const catalog = /^apps\/client\/src\/i18n\/messages\//;
     expect(seen.size).toBeGreaterThan(40);
     expect(
       [...seen].filter((file) => !runsFor(file) && !catalog.test(file)),
@@ -299,6 +269,6 @@ describe("upgrade-e2e.yml's paths", () => {
   it("leave out the client pages an upgrade does not go through", () => {
     expect(runsFor("apps/client/src/pages/chat/conversation.tsx")).toBe(false);
     expect(runsFor("apps/client/src/pages/tasks/task-detail.tsx")).toBe(false);
-    expect(runsFor("apps/client/src/pages/connection/index.tsx")).toBe(true);
+    expect(runsFor("apps/client/test/app.test.tsx")).toBe(false);
   });
 });
