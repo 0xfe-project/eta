@@ -22,16 +22,20 @@ import type {
   UnsupportedModel,
 } from "@eta/client-contracts";
 import type { ProviderReference } from "./catalog";
-import type { EtaModelConfig } from "./config-types";
+import type { EtaModelConfig, ModelInput } from "./config-types";
+import type {GatewayFacts} from "./metadata";
 import { modelSource } from "@eta/client-contracts";
 import { attributionHeaders } from "./attribution";
 import { resolveConfiguredModels } from "./catalog";
 import { applyProviderHeaders } from "./config-types";
 import {
   fetchModelsDev,
+  
+  gatewayModelFacts,
   modelsDevProvider,
+  officialModelsDevId,
   parseModelsDevModel,
-  publicModelMetadata,
+  publicModelMetadata
 } from "./metadata";
 
 /** What a discovery call needs: where to ask, how to authenticate, and who to tell. */
@@ -127,19 +131,28 @@ export async function discoverModels(
   const requiresWindow = source.requireContextWindow === true;
   const discovered: EtaModelConfig[] = [];
   for (const raw of entries) {
-    const entry = raw as {
-      id?: unknown;
-      context_window?: unknown;
-      contextWindow?: unknown;
-      max_tokens?: unknown;
-    };
+    const entry = raw as { id?: unknown } & DeclaredCapabilities;
     if (typeof entry?.id !== "string" || entry.id.trim().length === 0) continue;
-    const contextWindow =
-      numberOr(entry.context_window) ?? numberOr(entry.contextWindow);
-    const maxTokens = numberOr(entry.max_tokens);
+    const contextWindow = firstNumber(
+      entry.context_window,
+      entry.contextWindow,
+      entry.context_length,
+      entry.max_context_length,
+      entry.max_model_len,
+      entry.top_provider?.context_length,
+      entry.inputTokenLimit,
+    );
+    const maxTokens = firstNumber(
+      entry.max_tokens,
+      entry.max_output_tokens,
+      entry.top_provider?.max_completion_tokens,
+      entry.outputTokenLimit,
+    );
+    const input = declaredInput(entry);
     if (contextWindow === undefined && requiresWindow) continue;
     discovered.push({
       id: entry.id.trim(),
+      ...(input === undefined ? {} : { input }),
       ...(contextWindow === undefined ? {} : { contextWindow }),
       ...(maxTokens === undefined ? {} : { maxTokens }),
     });
@@ -150,10 +163,65 @@ export async function discoverModels(
   return { models: merged };
 }
 
+function firstNumber(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    const found = numberOr(value);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
 function numberOr(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0
     ? value
     : undefined;
+}
+
+/** The capability fields a `/models` entry may carry; gateways spell them differently. */
+interface DeclaredCapabilities {
+  context_window?: unknown;
+  contextWindow?: unknown;
+  context_length?: unknown;
+  max_context_length?: unknown;
+  max_model_len?: unknown;
+  inputTokenLimit?: unknown;
+  max_tokens?: unknown;
+  max_output_tokens?: unknown;
+  outputTokenLimit?: unknown;
+  top_provider?: { context_length?: unknown; max_completion_tokens?: unknown };
+  architecture?: { input_modalities?: unknown };
+  input_modalities?: unknown;
+  supported_input_modalities?: unknown;
+  modalities?: unknown;
+  capabilities?: { vision?: unknown };
+}
+
+/**
+ * What an entry says it takes in, only when it says so outright: OpenRouter's
+ * `architecture.input_modalities`, a flat `input_modalities` / `supported_input_modalities`,
+ * `modalities` (a list, or models.dev's `{ input }`), or `capabilities.vision: true`. An entry
+ * that declares nothing yields nothing: whether it sees images stays unknown, not "no".
+ */
+function declaredInput(entry: DeclaredCapabilities): ModelInput[] | undefined {
+  const modalities = entry.modalities;
+  const listed = [
+    entry.architecture?.input_modalities,
+    entry.input_modalities,
+    entry.supported_input_modalities,
+    Array.isArray(modalities)
+      ? modalities
+      : (modalities as { input?: unknown } | null | undefined)?.input,
+  ].find(Array.isArray);
+  if (listed !== undefined) {
+    const input = (["text", "image"] as const).filter((kind) =>
+      listed.some(
+        (value: unknown) =>
+          typeof value === "string" && value.toLowerCase() === kind,
+      ),
+    );
+    return input.length > 0 ? input : undefined;
+  }
+  return entry.capabilities?.vision === true ? ["text", "image"] : undefined;
 }
 
 /**
@@ -345,15 +413,31 @@ export async function listProviderModels(
     return discovered;
   }
   const facts = new Map(known.map((model) => [model.id, model]));
+  const filled = discovered.models.map((model) => {
+    const found = facts.get(model.id);
+    if (found === undefined) return model;
+    // The provider's own answer and the built-in catalog win; models.dev fills the gaps.
+    const { id: _id, ...listed } = found;
+    return { ...listed, ...model };
+  });
+  // A custom endpoint is no models.dev entry's address, so its models were looked up by nothing.
+  // Every model is asked of the catalog by id (gateway prefix dropped) for the fields it left out.
+  if (officialModelsDevId(options.reference.baseUrl) !== undefined)
+    return { ...discovered, models: filled };
+  let catalog: Map<string, GatewayFacts>;
+  try {
+    catalog = await gatewayModelFacts(
+      filled.map((model) => model.id),
+      options.fetch ?? fetch,
+      options.signal,
+    );
+  } catch {
+    return { ...discovered, models: filled };
+  }
+  // The endpoint's own declarations win; the catalog fills what they left out.
   return {
     ...discovered,
-    models: discovered.models.map((model) => {
-      const found = facts.get(model.id);
-      if (found === undefined) return model;
-      // The provider's own answer and the built-in catalog win; models.dev fills the gaps.
-      const { id: _id, ...listed } = found;
-      return { ...listed, ...model };
-    }),
+    models: filled.map((model) => ({ ...catalog.get(model.id), ...model })),
   };
 }
 
