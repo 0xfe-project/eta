@@ -39,6 +39,7 @@ import { activeTaskRun, runCaption, runElapsed } from "./run-log";
 import { statusName, TaskGlyph } from "./status";
 import { TabletOverview } from "./tablet-overview";
 import { TaskCommentBox, TaskFields, TaskRail } from "./task-fields";
+import { PhoneRunTokens, TaskUsageSection } from "./usage-section";
 
 function RunSummary(props: { item: BoardTaskDetail; state: TaskDetailState }) {
   const c = colors();
@@ -111,6 +112,7 @@ function RunSummary(props: { item: BoardTaskDetail; state: TaskDetailState }) {
 /** One run on the phone's task page: its state and how long, the whole row opening its log. */
 function RunRow(props: {
   run: TaskRunView;
+  taskId: string;
   index: number;
   last: boolean;
   executor: string;
@@ -172,6 +174,11 @@ function RunRow(props: {
           {`${state()} · ${runElapsed(props.run)}`}
         </Label>
       </View>
+      <PhoneRunTokens
+        taskId={props.taskId}
+        runId={props.run.id}
+        session={props.run.sessionId}
+      />
       <Icon name="right" size={14} tone="muted" />
     </View>
   );
@@ -364,6 +371,7 @@ function DesktopOverview(props: {
           </If>
           <If when={parent()}>
             <Subtasks item={item()} onTask={props.onTask} />
+            <TaskUsageSection item={item()} layout="desktop" />
           </If>
           <If when={item().description}>
             <If
@@ -426,6 +434,9 @@ function DesktopOverview(props: {
                 <Markdown value={item().description} compactHeadings />
               </View>
             </If>
+          </If>
+          <If when={!parent()}>
+            <TaskUsageSection item={item()} layout="desktop" />
           </If>
           <TaskActivity
             heading="desktop"
@@ -682,6 +693,10 @@ export function TaskOverview(props: {
                   </If>
                 </View>
               </If>
+              <TaskUsageSection
+                item={item()}
+                layout={phone() ? "phone" : props.layout}
+              />
               <If
                 when={
                   item().waitingOn?.length ||
@@ -782,6 +797,7 @@ export function TaskOverview(props: {
                       >
                         <RunRow
                           run={run()}
+                          taskId={item().id}
                           index={index()}
                           last={index() === item().runs.length - 1}
                           executor={executor()?.name ?? uiText("executor")}

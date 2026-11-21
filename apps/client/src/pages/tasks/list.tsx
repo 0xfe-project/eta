@@ -14,6 +14,14 @@ import {
   taskTime,
 } from "./facts";
 import { statusName, TaskGlyph } from "./status";
+import {
+  cardUsage,
+  tokens,
+  UsageLine,
+  usageShown,
+  usageText,
+  useLiveRate,
+} from "./usage";
 
 const phoneGroups = [
   { name: "Needs you", label: "taskNeedsYou", fold: false },
@@ -204,9 +212,10 @@ export function PhoneTaskList(props: {
                             </Label>
                           </Label>
                         </View>
-                        <Label variant="caption" tone="muted">
-                          {relativeTime(entry().updatedAt)}
-                        </Label>
+                        <PhoneRowEnd
+                          task={entry()}
+                          time={relativeTime(entry().updatedAt)}
+                        />
                         <Icon name="right" size={14} tone="muted" />
                       </View>
                     );
@@ -236,6 +245,60 @@ export function PhoneTaskList(props: {
         }}
       </Each>
     </Scroll>
+  );
+}
+
+/**
+ * The end of a phone's (or a narrow tablet list's) row: its time, and under it what it used while
+ * the setting is on. A run of eta's own loop that is going says tokens over its live rate instead.
+ */
+function PhoneRowEnd(props: { task: BoardTaskView; time: string }) {
+  const usage = () => (usageShown() ? cardUsage(props.task) : undefined);
+  const rate = useLiveRate(() =>
+    usage() && !usage()!.withSubtasks
+      ? usage()!.brief.liveSessionId
+      : undefined,
+  );
+  return (
+    <View style={{ alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
+      <If
+        when={rate()}
+        else={
+          <Label variant="caption" tone="muted">
+            {props.time}
+          </Label>
+        }
+      >
+        <Label variant="caption" tone="mutedInk">
+          {usageText(usage()!, {})}
+        </Label>
+      </If>
+      <If when={usage()}>
+        {(current) => (
+          <If
+            when={rate()}
+            else={
+              <Label
+                variant="caption"
+                tone={current().brief.tokens ? "mutedInk" : "faint"}
+              >
+                {current().brief.tokens
+                  ? uiText("usageTok", {
+                      count: tokens(current().brief.tokens!.total),
+                    })
+                  : uiText("usageNoDataShort")}
+              </Label>
+            }
+          >
+            {(value) => (
+              <Label variant="caption" tone="green">
+                {uiText("usageRate", { rate: value().toFixed(1) })}
+              </Label>
+            )}
+          </If>
+        )}
+      </If>
+    </View>
   );
 }
 
@@ -329,9 +392,7 @@ export function TabletTaskList(props: {
                 {meta(task())}
               </Label>
             </View>
-            <Label variant="caption" tone="muted">
-              {time(task())}
-            </Label>
+            <PhoneRowEnd task={task()} time={time(task())} />
           </View>
         )}
       </Each>
@@ -395,6 +456,22 @@ export function TaskTableRow(props: {
       <Label variant="small" lines={1} style={{ flex: 1 }}>
         {props.item.title}
       </Label>
+      <If when={usageShown() && !phone()}>
+        <View
+          style={{
+            width: desktop() ? 200 : 96,
+            paddingRight: 12,
+            flexShrink: 0,
+          }}
+        >
+          <UsageLine
+            task={props.item}
+            model={desktop()}
+            rate
+            variant="caption"
+          />
+        </View>
+      </If>
       <View
         style={{
           ...row,
