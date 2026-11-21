@@ -354,63 +354,68 @@ export function Conversation(props: {
               <PendingStrip items={asking()} />
             </View>
           </If>
-          <ConversationTimeline
-            onAccessLost={props.onAccessLost}
-            title={title()}
-            projectName={
-              host.state().missing.projects ? undefined : project()?.name
-            }
-            accessible={!host.state().missing[target()] && Boolean(summary())}
-            onReadDraft={props.onReadDraft}
-            rows={indexed().rows}
-            additions={indexed().additions}
-            recipients={indexed().recipients}
-            members={members()}
-            loaded={Boolean(timeline())}
-            noCachedMessages={noCachedMessages()}
-            hasMessages={messages().length > 0}
-            hasOlder={hasOlder() ?? timeline()?.hasMore}
-            paging={paging()}
-            phone={phone()}
-            compact={props.layout === "tablet" || props.alignComposer}
-            captain={props.captain}
-            rail={props.rail}
-            onPending={props.onPending}
-            onPageOlder={() => void history()}
-            onInsert={(message) => {
-              lateInsert.set(false);
-              inserting.set({
-                message,
-                recipients: indexed().recipients.get(message.id) ?? [],
-              });
-            }}
-            insertingId={inserting()?.message.id}
-            onInsertClose={() => inserting.set(undefined)}
-            insertPanel={() => (
-              <If when={inserting()}>
-                {(entry) => (
-                  <InsertMessage
-                    message={entry().message}
-                    initialRecipients={entry().recipients}
-                    recipients={() =>
-                      indexed().recipients.get(entry().message.id) ?? []
-                    }
-                    phone={phone()}
-                    onLate={() => lateInsert.set(true)}
-                    onClose={() => inserting.set(undefined)}
-                  />
-                )}
-              </If>
-            )}
-            onTask={(id) => {
-              props.onTask(id);
-              if (!phone()) drawer.set(true);
-            }}
-            onArtifact={openArtifact}
-            onWidgetDraft={(conversationId, text) =>
-              widgetDraft.set({ conversationId, text })
-            }
-          />
+          {/* The message area takes all the room between the header and the
+              composer, whatever it holds (loading, empty, an error or a few
+              rows), so the composer stays at the bottom by layout. */}
+          <View testID="conversation-messages" style={grow}>
+            <ConversationTimeline
+              onAccessLost={props.onAccessLost}
+              title={title()}
+              projectName={
+                host.state().missing.projects ? undefined : project()?.name
+              }
+              accessible={!host.state().missing[target()] && Boolean(summary())}
+              onReadDraft={props.onReadDraft}
+              rows={indexed().rows}
+              additions={indexed().additions}
+              recipients={indexed().recipients}
+              members={members()}
+              loaded={Boolean(timeline())}
+              noCachedMessages={noCachedMessages()}
+              hasMessages={messages().length > 0}
+              hasOlder={hasOlder() ?? timeline()?.hasMore}
+              paging={paging()}
+              phone={phone()}
+              compact={props.layout === "tablet" || props.alignComposer}
+              captain={props.captain}
+              rail={props.rail}
+              onPending={props.onPending}
+              onPageOlder={() => void history()}
+              onInsert={(message) => {
+                lateInsert.set(false);
+                inserting.set({
+                  message,
+                  recipients: indexed().recipients.get(message.id) ?? [],
+                });
+              }}
+              insertingId={inserting()?.message.id}
+              onInsertClose={() => inserting.set(undefined)}
+              insertPanel={() => (
+                <If when={inserting()}>
+                  {(entry) => (
+                    <InsertMessage
+                      message={entry().message}
+                      initialRecipients={entry().recipients}
+                      recipients={() =>
+                        indexed().recipients.get(entry().message.id) ?? []
+                      }
+                      phone={phone()}
+                      onLate={() => lateInsert.set(true)}
+                      onClose={() => inserting.set(undefined)}
+                    />
+                  )}
+                </If>
+              )}
+              onTask={(id) => {
+                props.onTask(id);
+                if (!phone()) drawer.set(true);
+              }}
+              onArtifact={openArtifact}
+              onWidgetDraft={(conversationId, text) =>
+                widgetDraft.set({ conversationId, text })
+              }
+            />
+          </View>
           <If when={lateInsert()}>
             {/* A toast over the end of the transcript, just above the composer. */}
             <View style={{ height: 0, zIndex: 10 }}>

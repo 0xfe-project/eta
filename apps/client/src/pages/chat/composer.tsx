@@ -378,6 +378,7 @@ export function Composer(props: {
   }
   return (
     <View
+      testID="conversation-composer"
       style={{
         position: "relative",
         zIndex: 2,

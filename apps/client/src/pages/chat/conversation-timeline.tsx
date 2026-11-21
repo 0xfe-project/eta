@@ -148,7 +148,12 @@ export function ConversationTimeline(props: {
       else={
         <If
           when={props.noCachedMessages}
-          else={<MessagesSkeleton label={uiText("loadingConversation")} />}
+          else={
+            <MessagesSkeleton
+              label={uiText("loadingConversation")}
+              style={{ ...grow, overflow: "hidden" }}
+            />
+          }
         >
           <Empty
             title={uiText("lostTheConnectionToTheHost")}
