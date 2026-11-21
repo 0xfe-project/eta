@@ -448,7 +448,13 @@ function DesktopOverview(props: {
               </View>
             </If>
           </If>
-          <TaskActivity phone={false} desktop entries={activity()} />
+          <TaskActivity
+            heading="desktop"
+            entries={activity()}
+            runs={item().runs}
+            createdBy={item().createdBy}
+            onLog={(run) => props.state.log.set(run)}
+          />
           <RunLine item={item()} state={props.state} />
           <If when={canComment(item())}>
             <TaskCommentBox state={props.state} />
@@ -823,7 +829,13 @@ export function TaskOverview(props: {
                   </Each>
                 </View>
               </If>
-              <TaskActivity phone={phone()} entries={activity()} />
+              <TaskActivity
+                heading={phone() ? "phone" : "desktop"}
+                entries={activity()}
+                runs={item().runs}
+                createdBy={item().createdBy}
+                onLog={(run) => log.set(run)}
+              />
               <If when={!phone() && canComment(item())}>
                 <TaskCommentBox state={props.state} />
               </If>

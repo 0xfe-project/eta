@@ -1,4 +1,5 @@
 import type { TaskDependencyView } from "@eta/client-contracts";
+import type { ViewRef } from "nsh";
 import type { Layout } from "../../components";
 import { TASK_STATUSES } from "@eta/client-contracts";
 import { Scroll, signal, View } from "nsh";
@@ -18,7 +19,7 @@ import { AgentFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-import { TaskActivity, taskActivityLabel } from "../tasks/activity";
+import { TaskActivity } from "../tasks/activity";
 import { activeTaskRun } from "../tasks/run-log";
 import { fills, statusName, TaskGlyph, tones } from "../tasks/status";
 import { TaskDetailDialogs } from "../tasks/task-detail-dialogs";
@@ -41,7 +42,13 @@ export function PanelTask(props: {
   const { task, activity, change, canComment, comment, post, posting, log } =
     state;
   const fullGoal = signal(false);
-  const updates = signal(false);
+  // Once, when the task and its timeline first show: later replies do not pull the reader down.
+  let opened = false;
+  const end = (node: ViewRef | null) => {
+    if (!node || opened) return;
+    opened = true;
+    setTimeout(() => node.reveal({ vertical: "end", animated: false }), 0);
+  };
   return (
     <If when={task()} else={<DetailSkeleton label={uiText("loadingTask")} />}>
       {(item) => {
@@ -57,7 +64,8 @@ export function PanelTask(props: {
           fullGoal() || item().description.length <= goalPreview
             ? item().description
             : `${item().description.slice(0, goalPreview)}…`;
-        const latest = () => activity().at(-1);
+        const replies = () =>
+          activity().filter((entry) => entry.kind === "comment").length;
         return (
           <View style={{ ...grow, padding: 10, backgroundColor: c().canvas }}>
             <View style={{ ...row, height: 26, gap: 8, flexShrink: 0 }}>
@@ -187,53 +195,32 @@ export function PanelTask(props: {
                         </Label>
                       </View>
                     </If>
-                    <If when={activity().length}>
-                      <If when={updates() ? undefined : latest()}>
-                        {(entry) => (
-                          <View style={{ gap: 2 }}>
-                            <Label size={11} line={16} tone="muted">
-                              {`${
-                                host.agent(entry().actor.agentId)?.name ??
-                                uiText(
-                                  entry().actor.kind === "user"
-                                    ? "you"
-                                    : "agent",
-                                )
-                              } ${taskActivityLabel(entry())}`}
-                            </Label>
-                            <Label size={10} line={14} tone="mutedInk">
-                              {messageTime(entry().createdAt, false)}
-                            </Label>
-                          </View>
-                        )}
-                      </If>
-                      <View
-                        role="button"
-                        accessibilityState={{ expanded: updates() }}
-                        onPress={() => updates.set(!updates())}
-                        style={{ ...row, gap: 4, cursor: "pointer" }}
-                      >
-                        <Icon
-                          name={updates() ? "down" : "right"}
-                          size={10}
-                          tone="muted"
-                        />
-                        <Label size={11} line={16} tone="muted">
-                          {uiText(
-                            activity().length === 1
-                              ? "oneTaskUpdate"
-                              : "taskUpdates",
-                            { count: activity().length },
-                          )}
-                        </Label>
-                      </View>
-                      <If when={updates()}>
-                        <TaskActivity entries={activity()} phone={false} />
-                      </If>
-                    </If>
                   </View>
                 </View>
               </View>
+              <If when={replies()}>
+                <View style={{ ...row, gap: 8, paddingTop: 16 }}>
+                  <Label size={10} line={14} tone="muted">
+                    {uiText(replies() === 1 ? "oneTaskReply" : "taskReplies", {
+                      count: replies(),
+                    })}
+                  </Label>
+                  <View
+                    style={{ flex: 1, height: 1, backgroundColor: c().border }}
+                  />
+                </View>
+              </If>
+              <View style={{ paddingBottom: 12 }}>
+                <TaskActivity
+                  entries={activity()}
+                  runs={item().runs}
+                  createdBy={item().createdBy}
+                  gap={10}
+                  onLog={(entry) => log.set(entry)}
+                />
+              </View>
+              {/* A thread opens on its latest reply, next to the box to answer it, as on the web. */}
+              <View ref={end} />
             </Scroll>
             <If when={run()}>
               {(entry) => (

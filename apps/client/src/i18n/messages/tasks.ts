@@ -431,6 +431,8 @@ export const tasksMessages = {
   expandFullText: ["Expand full text", "展开全文"],
   collapseFullText: ["Collapse", "收起"],
   oneTaskUpdate: ["{{count}} update", "{{count}} 条动态"],
+  oneTaskReply: ["{{count}} reply", "{{count}} 条回复"],
+  taskReplies: ["{{count}} replies", "{{count}} 条回复"],
   taskUpdates: ["{{count}} updates", "{{count}} 条动态"],
   agentIsWorking: ["{{name}} is working", "{{name}} 正在工作"],
   dependencyDelivered: ["Delivered", "已交付"],
