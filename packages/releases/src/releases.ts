@@ -48,8 +48,13 @@ const STALL_MS = 60_000;
 const API_TIMEOUT_MS = 30_000;
 const MAX_REDIRECTS = 5;
 const GH_TIMEOUT_MS = 5000;
-/** One page of the release list, newest first: a host release further back than this is not the latest. */
+/** One page of the release list, newest first, as many as the API gives at once. */
 const LIST_PAGE = 100;
+/**
+ * How many pages are read before giving up on finding a host release: the desktop app's releases
+ * share the list, and enough of them push every `v*` off the first page.
+ */
+const MAX_PAGES = 10;
 
 /** `v0.2.0` or `v0.2.0-rc.1`: what `release.yml` publishes. `desktop-v0.1.0` is the app's. */
 const HOST_TAG = /^v\d+\.\d+\.\d+(?:-[0-9a-z.-]+)?$/i;
@@ -214,6 +219,18 @@ export interface ReleaseChannel {
   prerelease?: boolean | undefined;
 }
 
+/** The `rel="next"` address of a `Link` header, as GitHub pages its lists. */
+export function nextPage(
+  link: string | null,
+  base: string,
+): string | undefined {
+  for (const part of link?.split(",") ?? []) {
+    const match = /<([^>]+)>\s*;\s*rel="?next"?/.exec(part);
+    if (match !== null) return new URL(match[1] as string, base).href;
+  }
+  return undefined;
+}
+
 const describe = (release: ListedRelease): Release => {
   const notes = release.body?.trim() ?? "";
   return {
@@ -267,8 +284,8 @@ export class Releases {
    * With `prerelease`, the highest published `v*` among the newest releases, pre-release or not.
    * GitHub's latest never is a pre-release, so that is always the list.
    *
-   * The list is one page (`LIST_PAGE`, the newest 100 releases of any kind): a `v*` further back
-   * than that is not seen.
+   * The list is read a page (`LIST_PAGE`) at a time, newest first, until a page has a release the
+   * channel takes, so releases of the desktop app in between do not hide one (`#list`).
    */
   async latest({ prerelease = false }: ReleaseChannel = {}): Promise<Release> {
     const what = prerelease
@@ -282,11 +299,11 @@ export class Releases {
       } else if (answer.status !== 404) throw await this.#refused(what, answer);
     }
     // No latest at all, or one that is not a full host release: either way, the list says.
-    const listed = await this.#getApi(`releases?per_page=${LIST_PAGE}`);
-    if (!listed.ok) throw await this.#refused(what, listed);
-    const newest = newestHost((await listed.json()) as ListedRelease[], {
-      prerelease,
-    });
+    const listed = await this.#list(
+      what,
+      prerelease ? isPublishedHost : isHostRelease,
+    );
+    const newest = newestHost(listed, { prerelease });
     if (newest === undefined)
       throw new ReleaseError(
         "none",
@@ -295,16 +312,44 @@ export class Releases {
     return describe(newest);
   }
 
-  /** The published host releases that are not pre-releases among the newest, highest first. */
+  /**
+   * The published host releases that are not pre-releases among the newest, highest first: the
+   * pages up to and including the first that has one.
+   */
   async hosts(): Promise<Release[]> {
-    const listed = await this.#getApi(`releases?per_page=${LIST_PAGE}`);
-    if (!listed.ok) throw await this.#refused("the releases", listed);
-    return ((await listed.json()) as ListedRelease[])
+    return (await this.#list("the releases", isHostRelease))
       .filter(isHostRelease)
       .sort((a, b) =>
         Bun.semver.order(b.tag_name.slice(1), a.tag_name.slice(1)),
       )
       .map(describe);
+  }
+
+  /**
+   * The release list, newest first, page by page until a page has a release `wanted` takes, the
+   * list ends, or `MAX_PAGES` are read. The next page is the one the API names in its `Link`
+   * header, so a server that does not page (a static mirror of one page) is read once.
+   */
+  async #list(
+    what: string,
+    wanted: (release: ListedRelease) => boolean,
+  ): Promise<ListedRelease[]> {
+    const listed: ListedRelease[] = [];
+    let url: string | undefined =
+      `${this.upstream.api}/releases?per_page=${LIST_PAGE}`;
+    for (let page = 0; url !== undefined && page < MAX_PAGES; page += 1) {
+      const answer = await this.#get(
+        url,
+        "application/vnd.github+json",
+        AbortSignal.timeout(API_TIMEOUT_MS),
+      );
+      if (!answer.ok) throw await this.#refused(what, answer);
+      const releases = (await answer.json()) as ListedRelease[];
+      listed.push(...releases);
+      if (releases.some(wanted)) break;
+      url = nextPage(answer.headers.get("link"), url);
+    }
+    return listed;
   }
 
   async byVersion(version: string): Promise<Release> {

@@ -3,7 +3,7 @@
  * `v*` ones, whatever GitHub calls the latest release.
  */
 import { afterEach, describe, expect, it } from "vitest";
-import { isHostTag, newestHost, Releases } from "../src/releases";
+import { isHostTag, newestHost, nextPage, Releases } from "../src/releases";
 
 interface Listed {
   tag_name: string;
@@ -18,8 +18,12 @@ afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.stop(true)));
 });
 
-/** The API with `releases`, newest first, and `latest` as GitHub has it. */
-function fakeApi(releases: Listed[], latest?: string) {
+/**
+ * The API with `releases`, newest first, and `latest` as GitHub has it. The list comes in pages
+ * of `per_page`, with a `Link` to the next as GitHub sends it, unless `paged` is false: then it is
+ * a server that sends everything at once, whatever it is asked.
+ */
+function fakeApi(releases: Listed[], latest?: string, paged = true) {
   const asked: string[] = [];
   const answer = (release: Listed) => Response.json({ ...release, assets: [] });
   const server = Bun.serve({
@@ -33,10 +37,23 @@ function fakeApi(releases: Listed[], latest?: string) {
           ? new Response("not found", { status: 404 })
           : answer(found);
       }
-      if (pathname === "/repo/releases")
-        return Response.json(
-          releases.map((release) => ({ ...release, assets: [] })),
-        );
+      if (pathname === "/repo/releases") {
+        const all = releases.map((release) => ({ ...release, assets: [] }));
+        if (!paged) return Response.json(all);
+        const query = new URL(request.url).searchParams;
+        const size = Number(query.get("per_page") ?? 30);
+        const page = Number(query.get("page") ?? 1);
+        const next = new URL(request.url);
+        next.searchParams.set("page", String(page + 1));
+        return Response.json(all.slice((page - 1) * size, page * size), {
+          headers:
+            page * size < all.length
+              ? {
+                  link: `<${next.href}>; rel="next", <${next.href}>; rel="last"`,
+                }
+              : {},
+        });
+      }
       return new Response("not found", { status: 404 });
     },
   });
@@ -250,5 +267,117 @@ describe("the pre-release channel", () => {
       "v0.4.0-beta.10",
     );
     expect(newestHost(listed)?.tag_name).toBe("v0.3.1");
+  });
+});
+
+describe("a list longer than a page", () => {
+  /** `count` desktop releases, newest first: more of them than a page holds. */
+  const desktop = (count: number, prerelease = false): Listed[] =>
+    Array.from({ length: count }, (_, index) => ({
+      tag_name: `desktop-v0.${String(count - index)}.0`,
+      prerelease,
+    }));
+
+  it("finds the host release behind a page of desktop releases", async () => {
+    const api = fakeApi(
+      [
+        ...desktop(150),
+        { tag_name: "v0.4.0-rc.1", prerelease: true },
+        { tag_name: "v0.3.0" },
+        { tag_name: "v0.2.0" },
+      ],
+      "desktop-v0.150.0",
+    );
+    await expect(api.releases.latest()).resolves.toMatchObject({
+      version: "0.3.0",
+    });
+    expect(api.asked).toEqual([
+      "/repo/releases/latest",
+      "/repo/releases?per_page=100",
+      "/repo/releases?per_page=100&page=2",
+    ]);
+  });
+
+  it("does so on the pre-release channel too", async () => {
+    const api = fakeApi([
+      ...desktop(120, true),
+      { tag_name: "v0.4.0-rc.1", prerelease: true },
+      { tag_name: "v0.3.0" },
+    ]);
+    await expect(
+      api.releases.latest({ prerelease: true }),
+    ).resolves.toMatchObject({ version: "0.4.0-rc.1" });
+  });
+
+  it("gives the app its host candidates from behind them", async () => {
+    const api = fakeApi([
+      ...desktop(230),
+      { tag_name: "v0.3.0" },
+      { tag_name: "v0.2.0" },
+    ]);
+    expect((await api.releases.hosts()).map(({ version }) => version)).toEqual([
+      "0.3.0",
+      "0.2.0",
+    ]);
+    expect(api.asked.at(-1)).toBe("/repo/releases?per_page=100&page=3");
+  });
+
+  it("stops at the first page that has a host release", async () => {
+    const api = fakeApi([
+      { tag_name: "v0.3.0" },
+      ...desktop(150),
+      { tag_name: "v0.2.0" },
+    ]);
+    await expect(api.releases.latest()).resolves.toMatchObject({
+      version: "0.3.0",
+    });
+    expect(api.asked).toEqual([
+      "/repo/releases/latest",
+      "/repo/releases?per_page=100",
+    ]);
+  });
+
+  it("says there is none once the list ends", async () => {
+    const api = fakeApi(desktop(250));
+    await expect(api.releases.latest()).rejects.toThrow(
+      "has no host release (a v* tag)",
+    );
+    expect(api.asked).toHaveLength(4);
+  });
+
+  it("is read once from a server that does not page", async () => {
+    const api = fakeApi(
+      [...desktop(150), { tag_name: "v0.3.0" }],
+      undefined,
+      false,
+    );
+    await expect(api.releases.latest()).resolves.toMatchObject({
+      version: "0.3.0",
+    });
+    expect(api.asked).toEqual([
+      "/repo/releases/latest",
+      "/repo/releases?per_page=100",
+    ]);
+  });
+});
+
+describe("the next page", () => {
+  it("is the address GitHub's Link header names next", () => {
+    const base = "https://api.github.com/repos/o/r/releases?per_page=100";
+    expect(
+      nextPage(
+        '<https://api.github.com/repositories/1/releases?per_page=100&page=2>; rel="next", <https://api.github.com/repositories/1/releases?per_page=100&page=5>; rel="last"',
+        base,
+      ),
+    ).toBe(
+      "https://api.github.com/repositories/1/releases?per_page=100&page=2",
+    );
+    expect(
+      nextPage(
+        '<https://api.github.com/repositories/1/releases?page=1>; rel="prev"',
+        base,
+      ),
+    ).toBe(undefined);
+    expect(nextPage(null, base)).toBe(undefined);
   });
 });
