@@ -27,7 +27,8 @@
     "@eta/plugin-sdk": "*",
     "@eta/storage-jsonl": "*",
     "@searxng-js/sex-egress": "0.2.0",
-    "cordis": "4.0.0-rc.10"
+    "cordis": "4.0.0-rc.10",
+    "p-limit": "7.3.3"
   },
   "devDependencies": {
     "@types/node": "22.19.19",

@@ -2,11 +2,13 @@ import type {
   BalanceLine,
   ProviderBalance,
   ProvidersView,
+  SourceSummary,
 } from "@eta/client-contracts";
 import type { EtaProviderConfig } from "./config-types";
 import type { ProviderConfigStore } from "./store";
 import { billingRetryAt, modelSource } from "@eta/client-contracts";
 
+import pLimit from "p-limit";
 import { balanceRevision } from "./config-types";
 
 const HISTORY_MS = 30 * 60_000;
@@ -21,7 +23,7 @@ interface Sample {
 }
 
 interface Entry {
-  revision: string;
+  bindings: Map<string, string>;
   abort: AbortController;
   next: number;
   failures: number;
@@ -133,57 +135,116 @@ export class ProviderBalances {
   readonly #entries = new Map<string, Entry>();
   readonly #store: ProviderConfigStore;
   readonly #request: typeof fetch;
-  constructor(store: ProviderConfigStore, request: typeof fetch = fetch) {
+  readonly schedule = pLimit(4);
+  readonly #warn: (message: string) => void;
+  constructor(
+    store: ProviderConfigStore,
+    request: typeof fetch = fetch,
+    warn = console.warn,
+  ) {
     this.#store = store;
     this.#request = request;
+    this.#warn = warn;
   }
 
   invalidate(view?: ProvidersView): void {
-    for (const [id, entry] of this.#entries) {
-      if (
-        entry.revision ===
-        view?.providers.find((item) => item.id === id)?.balanceRevision
-      )
-        continue;
+    const revisions = new Map(
+      view?.providers.map((item) => [item.id, item.balanceRevision]),
+    );
+    for (const [key, entry] of this.#entries) {
+      for (const [id, revision] of entry.bindings) {
+        if (revisions.get(id) !== revision) entry.bindings.delete(id);
+      }
+      if (entry.bindings.size) continue;
       entry.abort.abort();
-      this.#entries.delete(id);
+      this.#entries.delete(key);
     }
   }
 
   async read(id: string, refresh: boolean): Promise<ProviderBalance> {
-    const { config } = await this.#store.read();
-    const provider = config.providers?.find((item) => item.id === id);
-    const revision = provider && balanceRevision(provider);
-    const previous = this.#entries.get(id);
-    if (previous && previous.revision !== revision) {
-      previous.abort.abort();
-      this.#entries.delete(id);
-    }
-    if (!provider || !revision) return { state: "unsupported" };
+    const provider = (await this.#store.read()).config.providers?.find(
+      (item) => item.id === id,
+    );
+    if (!provider) return { state: "unsupported" };
+    const result = await this.#read(provider, refresh ? "refresh" : "cached");
+    const current = (await this.#store.read()).config.providers?.find(
+      (item) => item.id === id,
+    );
+    return current && balanceRevision(current) === balanceRevision(provider)
+      ? result
+      : { state: "unavailable" };
+  }
+
+  async summaries(): Promise<SourceSummary[]> {
+    const providers = (await this.#store.read()).config.providers ?? [];
+    const items = await Promise.all(
+      providers.map(async (provider) => {
+        const revision = balanceRevision(provider);
+        const result = await this.#read(provider, "fresh").catch(() => {
+          this.#warn(
+            `[eta-server] billing provider=${revision.slice(0, 12)} failure=unavailable`,
+          );
+          return undefined;
+        });
+        return {
+          source: "provider" as const,
+          id: provider.id,
+          balanceRevision: revision,
+          value:
+            result?.state === "available" && result.lines?.length
+              ? { balance: { lines: result.lines } }
+              : null,
+        };
+      }),
+    );
+    const current = (await this.#store.view()).providers;
+    const revisions = new Map(
+      current.map((item) => [item.id, item.balanceRevision]),
+    );
+    return items.map((item) =>
+      revisions.get(item.id) === item.balanceRevision
+        ? item
+        : { ...item, value: null },
+    );
+  }
+
+  async #read(
+    provider: EtaProviderConfig,
+    mode: "fresh" | "refresh" | "cached",
+  ): Promise<ProviderBalance> {
     const capability = lookup(provider);
     if ("state" in capability) return capability;
-    const entry: Entry = this.#entries.get(id) ?? {
-      revision,
+    // Two configured names for the same official endpoint and credential share its in-flight
+    // request and retry policy. The public row revision still includes its own id.
+    const key = balanceRevision({
+      ...provider,
+      id: "",
+      baseUrl: capability.endpoint,
+      headers: {},
+    });
+    const entry: Entry = this.#entries.get(key) ?? {
+      bindings: new Map(),
       next: 0,
       failures: 0,
       state: "query",
       abort: new AbortController(),
     };
-    this.#entries.set(id, entry);
+    entry.bindings.set(provider.id, balanceRevision(provider));
+    this.#entries.set(key, entry);
     if (entry.reading) return entry.reading;
     if (
-      !refresh ||
-      Date.now() < entry.next ||
+      mode === "cached" ||
+      (Date.now() < entry.next &&
+        !(mode === "fresh" && entry.state === "available")) ||
       entry.state === "forbidden" ||
       entry.state === "invalid_key"
     )
       return this.#view(entry);
-    entry.next = Date.now() + COOLDOWN_MS;
-    entry.reading = this.#query(entry, provider, capability.endpoint).finally(
-      () => {
-        entry.reading = undefined;
-      },
-    );
+    entry.reading = this.schedule(() =>
+      this.#query(entry, provider, capability.endpoint),
+    ).finally(() => {
+      entry.reading = undefined;
+    });
     return entry.reading;
   }
 
@@ -209,6 +270,8 @@ export class ProviderBalances {
     provider: EtaProviderConfig,
     endpoint: string,
   ): Promise<ProviderBalance> {
+    entry.next = Date.now() + COOLDOWN_MS;
+    let failure = "unavailable";
     const timeout = AbortSignal.timeout(15_000);
     try {
       const response = await this.#request(endpoint, {
@@ -230,6 +293,7 @@ export class ProviderBalances {
         );
         entry.state = "rate_limited";
       } else {
+        failure = response.ok ? "invalid_response" : `http_${response.status}`;
         if (!response.ok) throw new Error("balance");
         // Preserve numeric JSON money as its source decimal, before binary64 rounding.
         const data: unknown = JSON.parse(
@@ -247,16 +311,24 @@ export class ProviderBalances {
       }
     } catch {
       entry.state = timeout.aborted ? "timeout" : "unavailable";
+      entry.next = Date.now() + COOLDOWN_MS;
     }
-    const current = (await this.#store.read()).config.providers?.find(
-      (item) => item.id === provider.id,
-    );
-    if (
-      entry.abort.signal.aborted ||
-      !current ||
-      balanceRevision(current) !== entry.revision
-    )
-      return { state: "unavailable" };
+    if (entry.abort.signal.aborted) return { state: "unavailable" };
+    if (entry.state !== "available" || entry.sample?.partial) {
+      const reason =
+        entry.state === "available"
+          ? "partial_response"
+          : entry.state === "unavailable"
+            ? failure
+            : entry.state;
+      const retry =
+        entry.state === "forbidden" || entry.state === "invalid_key"
+          ? "credential_change"
+          : new Date(entry.next).toISOString();
+      this.#warn(
+        `[eta-server] billing ${provider.kind} source=${balanceRevision(provider).slice(0, 12)} failure=${reason} retry=${retry}`,
+      );
+    }
     return this.#view(entry);
   }
 }

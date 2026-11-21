@@ -17,10 +17,12 @@
  * the host injected, or fail honestly with `model_unavailable`).
  */
 import type {
+  LlmQuota,
   ProviderArgs,
   ProviderCheck,
   ProviderHeaders,
   ProvidersView,
+  SourceSummary,
 } from "@eta/client-contracts";
 import type { DiscoveryResult } from "../providers/discovery";
 import type { ProviderConfigStore } from "../providers/store";
@@ -39,6 +41,11 @@ export { PROVIDER_ACTIONS } from "@eta/client-contracts";
 
 export interface ProvidersPluginOptions {
   store: ProviderConfigStore;
+  monthlySummaries?:
+    | ((
+        schedule: (read: () => Promise<LlmQuota>) => Promise<LlmQuota>,
+      ) => Promise<SourceSummary[]>)
+    | undefined;
   /**
    * The HTTP client discovery uses. A test supplies one; production uses `fetch`, which is what
    * makes the refresh path the same client the requests go through.
@@ -140,7 +147,11 @@ export function providersPlugin(options: ProvidersPluginOptions) {
         // The last check of each provider, since this host started. Only a save that changes how
         // a provider is reached, or a delete, forgets one; nothing re-checks by itself.
         const checks = new Map<string, ProviderCheck>();
-        const balances = new ProviderBalances(options.store, options.fetch);
+        const balances = new ProviderBalances(
+          options.store,
+          options.fetch,
+          options.warn,
+        );
         const logos = new ProviderLogos(options.fetch);
         let checksRevision = 0;
         const record = (id: string, check: ProviderCheck | undefined): void => {
@@ -371,6 +382,21 @@ export function providersPlugin(options: ProvidersPluginOptions) {
                   : { delisted: updated.delisted }),
               },
             };
+          }),
+          wire.handle("billing", "readSourceSummaries", async () => {
+            const failed = (source: string) => {
+              options.warn?.(
+                `[eta-server] billing ${source} failure=enumeration`,
+              );
+              return [];
+            };
+            const [providers, accounts] = await Promise.all([
+              balances.summaries().catch(() => failed("providers")),
+              options
+                .monthlySummaries?.(balances.schedule)
+                .catch(() => failed("accounts")),
+            ]);
+            return { result: { items: [...providers, ...(accounts ?? [])] } };
           }),
           wire.handle("providers", "readBalance", async (call) => {
             const args = (call.args ?? {}) as Partial<

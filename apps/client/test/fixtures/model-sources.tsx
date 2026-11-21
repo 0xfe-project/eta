@@ -1,4 +1,4 @@
-import type { LlmAccounts, LlmQuota } from "@eta/client-contracts";
+import type { LlmAccounts, SourceSummaries } from "@eta/client-contracts";
 import { mount, Text, signal, View, windowSize, UrlScheme } from "nsh";
 import { createHost, Host } from "../../src/services/host";
 import { Settings } from "../../src/pages/settings/settings";
@@ -6,40 +6,19 @@ import { Settings } from "../../src/pages/settings/settings";
 function Fixture() {
   const host = createHost();
   const calls = signal("");
-  const multi = UrlScheme.url()?.endsWith("multi");
-  const connections: LlmAccounts["connections"] = (
-    multi ? ["one", "two", "three", "four"] : ["one"]
-  ).map((id) => ({
+  const mode = UrlScheme.url()?.split("/").pop();
+  const connections: LlmAccounts["connections"] = ["one", "two"].map((id) => ({
     id,
-    label: id === "four" ? "Other" : "Lab",
+    label: id === "one" ? "Lab" : "Other",
     connector: "codex",
     state: "active",
+    quotaRevision: id,
+    plan: "Team",
     createdAt: "2026-01-01",
   }));
-  const quota: LlmQuota[] = connections
-    .map<LlmQuota>(({ id }, index) => ({
-      connectionId: id,
-      observedAt: new Date().toISOString(),
-      windows:
-        index === 2
-          ? []
-          : [
-              { kind: "5h", used: 88 },
-              { kind: "weekly", used: 79 },
-              ...(index === 3
-                ? []
-                : [{ kind: "monthly" as const, used: index ? 0 : 37.5 }]),
-              ...(multi && index === 0
-                ? [{ kind: "monthly" as const, used: 99.99 }]
-                : []),
-            ],
-      ...(index === 2
-        ? { error: { code: "login_expired" as const, message: "sign in" } }
-        : {}),
-    }))
-    .reverse();
   const configured = {
     id: "source",
+    balanceRevision: "first",
     kind: "deepseek",
     name: "Source",
     baseUrl: "https://api.deepseek.com",
@@ -49,7 +28,10 @@ function Fixture() {
   host.state.update((prev) => ({
     ...prev,
     status: "open",
-    ops: ["providers.readBalance", "llm.refresh"],
+    ops:
+      mode === "legacy"
+        ? ["providers.readBalance"]
+        : ["billing.readSourceSummaries"],
     targets: {
       llm: {
         version: 1,
@@ -60,7 +42,7 @@ function Fixture() {
             connections,
             connectors: [{ id: "codex", name: "Codex", flow: "oauth_device" }],
           },
-          quota,
+          quota: [],
           models: [],
         },
       },
@@ -71,32 +53,111 @@ function Fixture() {
       },
     },
   }));
+  let visits = 0;
+  let release: (() => void) | undefined;
+  const delayed = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   host.call = async <T,>(target: string, action: string, args?: unknown) => {
+    if (action === "readSourceSummaries") {
+      if (target !== "billing" || JSON.stringify(args) !== "{}")
+        throw new Error("unexpected billing call");
+      const visit = ++visits;
+      calls.set(`visits ${visit}`);
+      if (visit === 1 && mode === "race") await delayed;
+      if (mode === "offline") throw new Error("offline");
+      const result: SourceSummaries = {
+        items: [
+          {
+            source: "account",
+            id: "one",
+            quotaRevision: "one",
+            value: { monthly: { usedPercent: 37.5 } },
+          },
+          {
+            source: "account",
+            id: "two",
+            quotaRevision: "two",
+            value: { monthly: { usedPercent: 0 } },
+          },
+          {
+            source: "provider",
+            id: "source",
+            balanceRevision: "first",
+            value: {
+              balance: {
+                lines: [
+                  { currency: "USD", available: String(visit) },
+                  { currency: "CNY", available: "0" },
+                ],
+              },
+            },
+          },
+        ],
+      };
+      return result as T;
+    }
     calls.set(target + "." + action);
-    const refresh = (args as { refresh?: boolean })?.refresh;
-    if (action === "readBalance")
-      return (
-        refresh
-          ? {
-              state: "available",
-              observedAt: new Date().toISOString(),
-              lines: [{ currency: "USD", available: "0" }],
-              partial: true,
-            }
-          : { state: "query" }
-      ) as T;
     if (action === "check")
       return {
         checks: { source: { state: "ok", checkedAt: "2026-01-01" } },
       } as T;
     return {} as T;
   };
+  function setProvider(revision?: string) {
+    host.state.update((prev) => ({
+      ...prev,
+      targets: {
+        ...prev.targets,
+        providers: {
+          version: 2,
+          revisions: {},
+          sections: {
+            config: {
+              revision: "r2",
+              providers: revision
+                ? [{ ...configured, balanceRevision: revision }]
+                : [],
+            },
+          },
+        },
+      },
+    }));
+  }
   const width = windowSize().width;
   const noop = () => {};
   return (
     <Host.Provider value={host}>
       <View style={{ flex: 1 }}>
         <Text>{calls()}</Text>
+        <View
+          role="button"
+          accessibilityLabel="Release first"
+          onPress={() => release?.()}
+        >
+          <Text>Release first</Text>
+        </View>
+        <View
+          role="button"
+          accessibilityLabel="Switch Host"
+          onPress={() => host.address.set({ origin: "http://second.test" })}
+        >
+          <Text>Switch Host</Text>
+        </View>
+        <View
+          role="button"
+          accessibilityLabel="Rotate"
+          onPress={() => setProvider("second")}
+        >
+          <Text>Rotate</Text>
+        </View>
+        <View role="button" onPress={() => setProvider()}>
+          <Text>Remove row</Text>
+        </View>
+        <View role="button" onPress={() => setProvider("first")}>
+          <Text>Restore row</Text>
+        </View>
+
         <Settings
           initial="Model services"
           layout={width < 600 ? "phone" : width < 1200 ? "tablet" : "desktop"}

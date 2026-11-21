@@ -6,7 +6,6 @@ import type {
 } from "@eta/client-contracts";
 import { signal, View } from "nsh";
 import {
-  Button,
   colors,
   grow,
   Label,
@@ -18,115 +17,6 @@ import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { LetterBox, PaneBack, SectionHeader } from "../section";
 import { logoKey, useSourceLogos } from "./logos";
-import {
-  accountQuota,
-  billingClock,
-  currentPercent,
-  localTime,
-  monthlyWindows,
-  percentText,
-} from "./quota";
-
-function MonthlyAccount(props: {
-  title: string;
-  account: LlmConnection;
-  quota?: LlmQuota;
-  now: number;
-}) {
-  const windows = () => monthlyWindows(props.quota);
-  const problem = () => {
-    if (props.account.state === "disabled") return uiText("modelReadDisabled");
-    if (props.account.connector === "gemini")
-      return uiText("modelReadSpendOnly");
-    if (!props.quota) return uiText("modelQuotaUnknown");
-    switch (props.quota.error?.code) {
-      case "invalid_api_key":
-        return uiText("modelReadInvalidKey");
-      case "login_expired":
-        return uiText("modelReadSignIn");
-      case "no_token":
-        return uiText("modelReadMissingKey");
-      case "model_forbidden":
-        return uiText("modelReadForbidden");
-      case "rate_limited":
-        return props.quota.retryAt || props.account.retryAt
-          ? uiText("modelReadLimited", {
-              time: localTime(props.quota.retryAt ?? props.account.retryAt),
-            })
-          : uiText("modelReadLimitedUnknown");
-      case undefined:
-        return windows().length
-          ? ""
-          : uiText(
-              props.quota.windows.length
-                ? "modelQuotaNoMonthly"
-                : "modelQuotaNoWindows",
-            );
-      default:
-        return uiText("modelReadFailed");
-    }
-  };
-  const title = () =>
-    [props.title, props.quota?.plan || props.account.plan]
-      .filter(Boolean)
-      .join(" · ");
-  return (
-    <View
-      android={{ accessibilityLiveRegion: "polite" }}
-      style={{ gap: space[2] }}
-    >
-      <If
-        when={problem()}
-        else={
-          <Each of={windows()} key="index">
-            {(window) => {
-              const used = () =>
-                currentPercent(props.quota!, window(), props.now);
-              const usage = () =>
-                used() === undefined
-                  ? uiText(
-                      Date.parse(window().resetsAt ?? "") <= props.now
-                        ? "modelQuotaElapsed"
-                        : "modelQuotaUnknown",
-                    )
-                  : uiText("modelQuotaUsed", { percent: percentText(used()!) });
-              return (
-                <View style={{ gap: space[2] }}>
-                  <Label variant="small">{`${title()} · ${uiText("modelQuotaMonthly")} · ${usage()}`}</Label>
-                  <Label variant="small" tone="muted">
-                    {localTime(window().resetsAt)
-                      ? uiText("modelQuotaResetsAt", {
-                          time: localTime(window().resetsAt),
-                        })
-                      : uiText("modelQuotaResetUnknown")}
-                  </Label>
-                  <If
-                    when={
-                      used() !== undefined &&
-                      props.now - Date.parse(props.quota?.observedAt ?? "") >=
-                        600_000
-                    }
-                  >
-                    <Label variant="small" tone="muted">
-                      {uiText("modelReadLastSuccess", {
-                        time: localTime(props.quota?.observedAt),
-                      })}
-                    </Label>
-                  </If>
-                </View>
-              );
-            }}
-          </Each>
-        }
-      >
-        <Label variant="small">{title()}</Label>
-        <Label variant="small" tone="muted">
-          {problem()}
-        </Label>
-      </If>
-    </View>
-  );
-}
 
 export function SubscriptionDetail(props: {
   connector: string;
@@ -135,11 +25,8 @@ export function SubscriptionDetail(props: {
 }) {
   const host = useHost();
   const c = colors();
-  const now = billingClock();
   const logo = useSourceLogos();
   const tab = signal<"models" | "connection">("models");
-  const busy = signal(false);
-  const failed = signal(false);
   const accounts = () => host.section<LlmAccounts>("llm", "accounts");
   const connections = () =>
     accounts()?.connections.filter(
@@ -153,58 +40,18 @@ export function SubscriptionDetail(props: {
   const name = () =>
     accounts()?.connectors.find((item) => item.id === props.connector)?.name ??
     props.connector;
-  async function refresh() {
-    if (busy()) return;
-    busy.set(true);
-    failed.set(false);
-    try {
-      await host.call("llm", "refresh", {});
-    } catch {
-      failed.set(true);
-    } finally {
-      busy.set(false);
-    }
-  }
-  const summary = () => (
-    <View
-      style={{
-        paddingHorizontal: space[16],
-        paddingVertical: space[8],
-        gap: space[4],
-        alignItems: "flex-start",
-      }}
-    >
-      <Each of={connections()} key={(item) => item.id}>
-        {(account) => (
-          <MonthlyAccount
-            account={account()}
-            title={
-              connections().filter((item) => item.label === account().label)
-                .length > 1
-                ? `${account().label} (${account().id})`
-                : account().label
-            }
-            quota={accountQuota(quota(), account())}
-            now={now()}
-          />
-        )}
-      </Each>
-      <If when={failed()}>
-        <Label variant="small" tone="warning">
-          {uiText("modelReadFailed")}
-        </Label>
-      </If>
-      <If when={props.connector !== "gemini"}>
-        <Button
-          label={uiText(busy() ? "modelReadLoading" : "modelRefreshQuota")}
-          disabled={
-            busy() || !connections().some((item) => item.state !== "disabled")
-          }
-          onPress={() => void refresh()}
-        />
-      </If>
-    </View>
-  );
+  const accountName = (item: LlmConnection) => {
+    const label =
+      connections().filter((account) => account.label === item.label).length > 1
+        ? `${item.label} (${item.id})`
+        : item.label;
+    const plan =
+      quota()?.find(
+        (q) =>
+          q.connectionId === item.id && q.quotaRevision === item.quotaRevision,
+      )?.plan || item.plan;
+    return [label, plan, item.state].filter(Boolean).join(" · ");
+  };
   return (
     <View style={grow}>
       <SectionHeader
@@ -223,7 +70,6 @@ export function SubscriptionDetail(props: {
         phone={props.phone}
       />
       <SmoothScroll style={grow} scrollbar={false}>
-        <If when={!props.phone}>{summary()}</If>
         <View
           role="tablist"
           style={{
@@ -293,12 +139,11 @@ export function SubscriptionDetail(props: {
               {(item) => (
                 <Label
                   style={{ padding: space[16] }}
-                >{`${item().label} · ${item().state}`}</Label>
+                >{accountName(item())}</Label>
               )}
             </Each>
           }
         >
-          <If when={props.phone}>{summary()}</If>
           <Label
             weight={weight.strong}
             style={{ padding: space[16] }}

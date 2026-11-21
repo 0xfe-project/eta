@@ -33,7 +33,11 @@ import { Machines } from "./machines/machines";
 import { McpSettings } from "./mcp/server-list";
 import { AddSource } from "./models/add-source";
 import { ProviderDetail } from "./models/provider-detail";
-import { ModelSourceList, useModelSources } from "./models/source-list";
+import {
+  ModelSourceList,
+  useModelSources,
+  useSourceSummaries,
+} from "./models/source-list";
 import { SubscriptionDetail } from "./models/subscription-detail";
 import { SettingsNavigation } from "./navigation";
 import { NetworkSettings } from "./network";
@@ -89,9 +93,11 @@ export function Settings(
   const phone = () => props.layout === "phone";
   const showingProvider = () =>
     section() === "Model services" && (connector() || provider());
-  const { machines, externalAgents, runtimes, summary } = useSettingsOverview(
-    () => props.theme,
+  const summaries = useSourceSummaries(
+    () => section() === "Model services" && !showingProvider(),
   );
+  const { machines, email, externalAgents, runtimes, summary } =
+    useSettingsOverview(() => props.theme);
   const selectedAcp = () => {
     const selected = acpAgent();
     return externalAgents().find(
@@ -258,6 +264,7 @@ export function Settings(
                     >
                       <SmoothScroll style={grow} scrollbar={false}>
                         <ModelSourceList
+                          summaries={summaries()}
                           phone={phone()}
                           onRef={sourceRef}
                           onProvider={(item) => {

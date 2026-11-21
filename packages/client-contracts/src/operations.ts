@@ -183,6 +183,29 @@ export interface BalanceLine {
   available: string;
 }
 
+export interface MonthlyUsage {
+  usedPercent: number;
+  resetsAt?: string;
+}
+
+export type SourceSummary =
+  | {
+      source: "provider";
+      id: string;
+      balanceRevision: string;
+      value: { balance: { lines: BalanceLine[] } } | null;
+    }
+  | {
+      source: "account";
+      id: string;
+      quotaRevision: string | null;
+      value: { monthly: MonthlyUsage } | null;
+    };
+
+export interface SourceSummaries {
+  items: SourceSummary[];
+}
+
 export interface ProviderBalance {
   state:
     | "available"

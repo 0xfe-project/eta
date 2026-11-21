@@ -10,6 +10,7 @@ import type {
   ProviderCheckResult,
   ProviderRefreshResult,
   ProvidersView,
+  SourceSummaries,
 } from "@eta/client-contracts";
 import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -139,7 +140,10 @@ describe("what the plugin puts on the pipe", () => {
         .map((descriptor) => descriptor.name)
         .sort(),
     ).toEqual(
-      [...PROVIDER_ACTIONS].map((action) => `providers.${action}`).sort(),
+      [
+        "billing.readSourceSummaries",
+        ...PROVIDER_ACTIONS.map((action) => `providers.${action}`),
+      ].sort(),
     );
     // Eager: a client that just connected draws the settings page from `hello`.
     expect(h.wire.registry.eagerTargets()).toContain("providers");
@@ -1058,4 +1062,100 @@ describe("account balances through the saved source", () => {
       }
     },
   );
+});
+
+describe("billing.readSourceSummaries", () => {
+  it("bounds concurrent reads across visits, shares aliases and never returns a previous success on failure", async () => {
+    const release = Promise.withResolvers<void>();
+    let active = 0;
+    let peak = 0;
+    let phase = 0;
+    const request = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      const credential = new Headers(init?.headers).get("Authorization");
+      peak = Math.max(peak, ++active);
+      try {
+        await release.promise;
+        if (
+          phase === 2 ||
+          (phase === 1 && credential === "Bearer synthetic-0")
+        ) {
+          return new Response("private upstream body", {
+            status: 429,
+            headers: { "Retry-After": "120" },
+          });
+        }
+        return Response.json({
+          balance_infos: [{ currency: "CNY", total_balance: String(phase) }],
+        });
+      } finally {
+        active--;
+      }
+    });
+    const h = await harness({ fetch: request as unknown as typeof fetch });
+    const providers = Array.from({ length: 7 }, (_, i) => ({
+      id: String(i),
+      kind: "deepseek",
+      baseUrl: "https://api.deepseek.com",
+      apiKey: `synthetic-${i % 6}`,
+      models: [],
+    }));
+    await writeFile(
+      h.store.path,
+      JSON.stringify({ providers: [...providers, provider("custom")] }),
+    );
+    const warnings = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await h.load();
+    const batch = async () =>
+      (
+        (await h.wire.dispatch(
+          {
+            op: "call",
+            target: "billing",
+            action: "readSourceSummaries",
+            args: {},
+          },
+          { reply: () => {} } as never,
+        )) as { result: SourceSummaries }
+      ).result.items;
+    try {
+      const one = batch();
+      const two = batch();
+      await until(() => active === 4);
+      release.resolve();
+      expect(await two).toEqual(await one);
+      expect((await one)[0]?.value).toEqual({
+        balance: { lines: [{ currency: "CNY", available: "0" }] },
+      });
+      expect((await one).at(-1)?.value).toBeNull();
+      expect(peak).toBe(4);
+      expect(request).toHaveBeenCalledTimes(6);
+      phase = 1;
+      const partial = await batch();
+      expect(partial.map((i) => !!i.value)).toEqual([
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+      ]);
+      expect(request).toHaveBeenCalledTimes(12);
+      phase = 2;
+      expect((await batch()).every((i) => i.value === null)).toBe(true);
+      expect(request).toHaveBeenCalledTimes(17);
+      expect((await batch()).every((i) => i.value === null)).toBe(true);
+      expect(request).toHaveBeenCalledTimes(17);
+      expect(warnings.mock.calls.flat().join(" ")).toMatch(
+        /failure=rate_limited retry=\d{4}/,
+      );
+      expect(warnings.mock.calls.flat().join(" ")).not.toMatch(
+        /synthetic|private upstream/,
+      );
+    } finally {
+      release.resolve();
+      await h.unload();
+    }
+  });
 });

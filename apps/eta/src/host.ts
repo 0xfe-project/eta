@@ -271,6 +271,8 @@ export async function startHost(options: HostOptions): Promise<Host> {
       // smaller of `window − reserve` and the 64k ceiling (`DEFAULT_MAX_CONTEXT_TOKENS`), which
       // is what the session's kernel config carries by default.
       compaction: etaCompaction(),
+      monthlySummaries: async (schedule) =>
+        llm?.gateway.monthlySummaries(schedule, warn) ?? [],
       // What the product adds to every session it owns: the agent's words in the system prompt,
       // and, from each of its features, tools, tool middleware and an ear for questions.
       agentPromptFor: product.engine.agentPromptFor,
