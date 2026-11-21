@@ -61,6 +61,17 @@ export function ArchiveSettings(props: { phone?: boolean }) {
     );
     saving.set(false);
   }
+  const autoAnswer = () =>
+    host.section<TaskBoardSettings>("tasks", "settings")?.autoAnswerAsks ??
+    false;
+  async function setAutoAnswer(value: boolean) {
+    if (saving()) return;
+    saving.set(true);
+    await host.action(() =>
+      host.call("tasks", "setSettings", { autoAnswerAsks: value }),
+    );
+    saving.set(false);
+  }
   const conversations = () =>
     host.conversations().filter((item) => item.archived);
   const tasks = () => host.list<BoardTaskView>("tasks", "archived");
@@ -162,6 +173,30 @@ export function ArchiveSettings(props: { phone?: boolean }) {
             checked={reacting()}
             disabled={saving()}
             onChange={(checked) => void setReacting(checked)}
+          />
+        </View>
+        <View
+          style={{
+            ...row,
+            minHeight: 40,
+            gap: 16,
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            borderBottomWidth: 1,
+            borderColor: c().border,
+          }}
+        >
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <Label>{uiText("taskAsksMakerFirst")}</Label>
+            <Label variant="small" tone="muted">
+              {uiText("taskAsksHint")}
+            </Label>
+          </View>
+          <ToggleSwitch
+            label={uiText("taskAsksMakerFirst")}
+            checked={autoAnswer()}
+            disabled={saving()}
+            onChange={(value) => void setAutoAnswer(value)}
           />
         </View>
       </If>

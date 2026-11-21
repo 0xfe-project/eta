@@ -219,6 +219,7 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
           const saved = saveBoardSettings(settings, {
             archiveAfterDays: raw.archiveAfterDays,
             reactToResults: raw.reactToResults,
+            autoAnswerAsks: raw.autoAnswerAsks,
           });
           wire.pushNow("tasks");
           deps.settingsChanged?.();

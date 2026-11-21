@@ -8,6 +8,9 @@
  * user (`escalate_task_question`). One that does neither is sent on when the deadline passes, so
  * a task never waits on an agent that did not come.
  *
+ * All of it is the user's choice (`tasks.autoAnswerAsks`, off by default): off, every question goes
+ * to the user as it did before.
+ *
  * Whether a question is the maker's is worked out from the row each time, as Captain's
  * `assignmentForInbox` does, so nothing here outlives a restart (which expires every pending
  * question anyway) and the Inbox hides exactly what this says it holds. Left as they were: a task
@@ -40,6 +43,8 @@ export interface TaskAsksDeps {
   ) => Promise<{ answered: boolean }>;
   /** Captain's questions and Captain's tasks are Captain's own. */
   captainOwns: (interaction: InteractionView, makerId: string) => boolean;
+  /** Whether the user turned the maker's answering on; read at each question, so a change is at once. */
+  enabled: () => boolean;
   /** The Inbox moved. */
   changed: () => void;
   warn: (message: string) => void;
@@ -51,6 +56,8 @@ export class TaskAsks {
   readonly #timeoutMs: number;
   /** The questions sent on to the user. */
   readonly #escalated = new Set<string>();
+  /** The questions that were the user's from the start (the setting was off): turning it on later does not take them back. */
+  readonly #theirs = new Set<string>();
   readonly #timers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(deps: TaskAsksDeps) {
@@ -62,6 +69,7 @@ export class TaskAsks {
   holds(interaction: InteractionView): boolean {
     return (
       interaction.status === "pending" &&
+      !this.#theirs.has(interaction.id) &&
       !this.#escalated.has(interaction.id) &&
       Date.now() < interaction.createdAt + this.#timeoutMs &&
       this.#makerOf(interaction) !== undefined
@@ -71,7 +79,10 @@ export class TaskAsks {
   /** A question became pending: if it is the maker's, wake the maker and start the clock. */
   opened(interaction: InteractionView): void {
     const route = this.#makerOf(interaction);
-    if (route === undefined) return;
+    if (route === undefined) {
+      this.#theirs.add(interaction.id);
+      return;
+    }
     const timer = setTimeout(
       () => this.#expire(interaction.id),
       Math.max(0, interaction.createdAt + this.#timeoutMs - Date.now()),
@@ -207,6 +218,7 @@ export class TaskAsks {
   #makerOf(
     interaction: InteractionView,
   ): { task: TaskRecord; makerId: string } | undefined {
+    if (!this.#deps.enabled()) return undefined;
     const run = this.#deps.runs.bySession(interaction.sessionId);
     // A mentioned agent's own questions go to the user, or two agents could ask each other for ever.
     if (run === undefined || run.agentId !== null) return undefined;

@@ -190,6 +190,8 @@ export interface TaskBoardSettings {
   archiveAfterDays: TaskArchiveDays | null;
   /** Whether a finished task's result wakes the agent that made it, to review and follow up. Off by default. */
   reactToResults: boolean;
+  /** Whether the agent that made a task answers its executor's questions before the user is asked. */
+  autoAnswerAsks: boolean;
 }
 
 /** The newest version of an artifact published for a task. */

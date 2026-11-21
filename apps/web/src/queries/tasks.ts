@@ -70,6 +70,7 @@ export const isArchived = (task: Pick<BoardTaskView, "archivedAt">): boolean =>
 const DEFAULT_SETTINGS: TaskBoardSettings = {
   archiveAfterDays: 7,
   reactToResults: false,
+  autoAnswerAsks: false,
 };
 
 /** The board's settings: how soon a quiet done task is archived. */

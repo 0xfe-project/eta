@@ -349,13 +349,26 @@ describe("the setting", () => {
     expect((await settings()).settings).toEqual({
       archiveAfterDays: 7,
       reactToResults: false,
+      autoAnswerAsks: false,
     });
     expect(
       await r.w.client.call("tasks", "setSettings", { archiveAfterDays: 30 }),
-    ).toEqual({ settings: { archiveAfterDays: 30, reactToResults: false } });
+    ).toEqual({
+      settings: {
+        archiveAfterDays: 30,
+        reactToResults: false,
+        autoAnswerAsks: false,
+      },
+    });
     expect(
       await r.w.client.call("tasks", "setSettings", { archiveAfterDays: null }),
-    ).toEqual({ settings: { archiveAfterDays: null, reactToResults: false } });
+    ).toEqual({
+      settings: {
+        archiveAfterDays: null,
+        reactToResults: false,
+        autoAnswerAsks: false,
+      },
+    });
     await expect(
       r.w.client.call("tasks", "setSettings", { archiveAfterDays: 5 }),
     ).rejects.toThrow(/one of 3, 7, 30 or null/);

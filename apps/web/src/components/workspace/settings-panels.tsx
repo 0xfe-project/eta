@@ -21,7 +21,7 @@ import { McpSettings } from "./mcp-settings";
 import { ProviderSettings } from "./provider-settings";
 import { SettingsNav } from "./settings-nav";
 import { settingsSections } from "./settings-sections";
-import { TaskArchiveSetting } from "./task-archive";
+import { TaskArchiveSetting, TaskAskSetting } from "./task-archive";
 import { UpdateSettings } from "./update-settings";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -299,6 +299,7 @@ function SectionContent({ section }: { section: SettingsSection }) {
   ) : section === "archived" ? (
     <>
       <TaskArchiveSetting />
+      <TaskAskSetting />
       <ArchivedGroups />
     </>
   ) : section === "host" ? (

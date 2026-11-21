@@ -816,6 +816,7 @@ export function createProduct(options: {
     captainOwns: (interaction, makerId) =>
       captain.identity()?.agentId === makerId ||
       captain.assignmentForInbox(interaction) !== undefined,
+    enabled: () => boardSettings(taskSettings).autoAnswerAsks,
     changed: () => wire?.pushNow("inbox"),
     warn,
     timeoutMs: options.tasks?.askTimeoutMs,
