@@ -206,6 +206,7 @@ export function Message(props: {
       <If when={item().author === "user"}>
         <View style={{ alignItems: "flex-end", gap: props.phone ? 4 : 6 }}>
           <View
+            selectable
             style={{
               maxWidth: props.phone ? "84%" : "72%",
               borderWidth: 1,
