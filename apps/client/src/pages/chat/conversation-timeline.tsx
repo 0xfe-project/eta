@@ -4,7 +4,15 @@ import type {
   MessageView,
 } from "@eta/client-contracts";
 import type { JSX, ListRef, ViewRef } from "nsh";
-import { cleanup, computed, effect, List, signal, View } from "nsh";
+import {
+  cleanup,
+  computed,
+  effect,
+  List,
+  reduceMotion,
+  signal,
+  View,
+} from "nsh";
 import {
   Button,
   colors,
@@ -17,6 +25,13 @@ import {
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { Message } from "./message";
+import {
+  animateFollow,
+  atBottom,
+  bottomThreshold,
+  distanceFromEnd,
+  followNewRows,
+} from "./scroll-follow";
 import { TaskDraftDetail } from "./task-draft-detail";
 
 export function ConversationTimeline(props: {
@@ -69,6 +84,16 @@ export function ConversationTimeline(props: {
       : undefined;
   };
   const actions = new Map<string, () => void>();
+  // Whether the reader is at the end of the transcript, from its scroll events.
+  let pinned = true;
+  let seen: string[] = [];
+  effect(() => {
+    const ids = props.rows.map((row) => row.id);
+    const previous = seen;
+    seen = ids;
+    if (followNewRows(previous, ids, pinned))
+      transcriptList?.scrollToEnd({ animated: animateFollow(reduceMotion()) });
+  });
   let timelineFocus: ViewRef | undefined;
   let pendingFocus: string | undefined;
   let top: { id: string; offset: number } | undefined;
@@ -193,9 +218,13 @@ export function ConversationTimeline(props: {
           initialScrollAtEnd
           estimatedItemSize={134}
           maintainVisibleContentPosition={{
-            autoscrollToBottomThreshold: 40,
+            autoscrollToBottomThreshold: bottomThreshold,
           }}
           scrollbar={false}
+          scrollEventThrottle={16}
+          onScroll={(event) => {
+            pinned = atBottom(distanceFromEnd(event));
+          }}
           contentStyle={{
             paddingLeft: 16,
             paddingRight: props.rail ? 60 : 16,
