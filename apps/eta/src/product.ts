@@ -57,7 +57,10 @@ import { CaptainService } from "./captain/service";
 import { CaptainStore } from "./captain/store";
 import { CaptainSupervisor } from "./captain/supervisor";
 import { captainSessionTools } from "./captain/tools";
-import { AttachmentStore } from "./conversations/attachments";
+import {
+  AttachmentStore,
+  createAttachmentRoutes,
+} from "./conversations/attachments";
 import {
   combineRunHooks,
   Engine,
@@ -785,6 +788,7 @@ export function createProduct(options: {
     changed: () => wire?.pushNow("artifacts"),
   });
   const artifactRoutes = createArtifactRoutes(artifacts);
+  const attachmentRoutes = createAttachmentRoutes(attachments);
 
   const answerCaptainInbox: Parameters<
     typeof captainSessionTools
@@ -955,6 +959,7 @@ export function createProduct(options: {
       (await hub.route(request)) ??
       (await mcp.route(request)) ??
       (await artifactRoutes(request)) ??
+      (await attachmentRoutes(request)) ??
       upgradeRoutes(request, dataDir),
     remote: router,
     endpoints: [hub.endpoint],

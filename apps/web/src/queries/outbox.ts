@@ -13,6 +13,7 @@ import { draftOf } from "@/lib/composer";
 import { translate } from "@/lib/i18n";
 import { randomUUID } from "@/lib/random-uuid";
 import { getWire, WireError } from "@/lib/wire";
+import { forgetPicture, rememberPicture } from "@/queries/attachment-pictures";
 import { rememberRows } from "@/queries/conversations";
 
 // What the user has written and not yet seen arrive: a draft per conversation, and the messages on
@@ -380,6 +381,7 @@ async function upload(conversationId: string, id: string, file: File) {
 /** A file pasted or picked into the conversation's draft: the block for it, already uploading. */
 export function beginUpload(conversationId: string, file: File): FilePart {
   const id = randomUUID();
+  rememberPicture(id, file);
   void upload(conversationId, id, file);
   return {
     type: "file",
@@ -404,6 +406,7 @@ export function dropUpload(id: string) {
   const { uploads, setUpload } = useOutbox.getState();
   const saved = uploads[id];
   files.delete(id);
+  forgetPicture(id);
   // Should an undo bring the block back, it says so.
   if (saved)
     setUpload(id, {
