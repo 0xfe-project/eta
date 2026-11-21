@@ -134,6 +134,7 @@ describe("the seeds a release upgrades", () => {
       "0055-steward-only-in-groups",
       "0056-places",
       "0057-task-usage",
+      "0058-interaction-context",
     ]);
   });
 

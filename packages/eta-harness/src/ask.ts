@@ -278,6 +278,7 @@ export function createAskUserTool(
       const payload: AskPayload = {
         questionId: run.call.toolCallId,
         question: params.question,
+        ...(params.context === undefined ? {} : { context: params.context }),
         ...(options === undefined
           ? {}
           : { options: options.map((option) => option.title) }),

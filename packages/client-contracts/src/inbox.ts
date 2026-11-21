@@ -38,6 +38,8 @@ export interface InteractionView {
   /** The reply row that was running when it was asked, when the ask happened inside a wake. */
   replyId: string | null;
   prompt: string;
+  /** Why the agent asked, when it said. */
+  context?: string;
   options: string[];
   /** The user may pick more than one option. */
   multi: boolean;

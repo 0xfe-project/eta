@@ -86,6 +86,13 @@ function SheetQuestion(props: {
             </Label>
           </If>
           <Label>{props.item.prompt}</Label>
+          <If when={props.item.context}>
+            {(text) => (
+              <Label variant="small" tone="muted">
+                {text()}
+              </Label>
+            )}
+          </If>
           <View
             style={
               props.sheet ? { gap: 8 } : { ...row, flexWrap: "wrap", gap: 6 }
@@ -486,6 +493,17 @@ function QuestionCard(props: { item: InteractionView }) {
       <Label style={{ paddingVertical: 8, paddingHorizontal: 10 }}>
         {props.item.prompt}
       </Label>
+      <If when={props.item.context}>
+        {(text) => (
+          <Label
+            variant="small"
+            tone="muted"
+            style={{ paddingHorizontal: 10, paddingBottom: 8 }}
+          >
+            {text()}
+          </Label>
+        )}
+      </If>
       <View
         style={{
           ...row,

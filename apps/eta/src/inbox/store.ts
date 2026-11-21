@@ -23,6 +23,7 @@ interface Row {
   conversation_id: string | null;
   reply_id: string | null;
   prompt: string;
+  context: string | null;
   options: string;
   multi: number;
   status: string;
@@ -55,6 +56,7 @@ const viewOf = (row: Row): InteractionView => ({
   conversationId: row.conversation_id,
   replyId: row.reply_id,
   prompt: row.prompt,
+  ...(row.context === null ? {} : { context: row.context }),
   options:
     parse<string[]>(
       row.options,
@@ -84,6 +86,7 @@ export interface NewInteraction {
   sessionId: string;
   questionId: string;
   prompt: string;
+  context?: string | undefined;
   options: readonly string[];
   multi: boolean;
   agentId: string | null;
@@ -109,11 +112,12 @@ export class InteractionStore {
     this.#db
       .query(
         `INSERT INTO interaction
-           (id, session_id, question_id, agent_id, conversation_id, reply_id, prompt, options, multi,
+           (id, session_id, question_id, agent_id, conversation_id, reply_id, prompt, context, options, multi,
             status, revision, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1, ?, ?)
          ON CONFLICT (id) DO UPDATE SET
-           reply_id = excluded.reply_id, prompt = excluded.prompt, options = excluded.options,
+           reply_id = excluded.reply_id, prompt = excluded.prompt, context = excluded.context,
+           options = excluded.options,
            multi = excluded.multi, status = 'pending', answer = NULL,
            revision = interaction.revision + 1, updated_at = excluded.updated_at
          WHERE interaction.status <> 'pending'`,
@@ -126,6 +130,7 @@ export class InteractionStore {
         input.conversationId,
         input.replyId,
         input.prompt,
+        input.context ?? null,
         JSON.stringify(input.options),
         input.multi ? 1 : 0,
         now,
