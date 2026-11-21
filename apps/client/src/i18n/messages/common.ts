@@ -133,7 +133,6 @@ export const commonMessages = {
   routines2: ["Routines", "定时任务"],
   running: ["Running", "运行中"],
   runs: ["Runs · {{length}}", "运行 · {{length}}"],
-  saveChanges: ["Save changes", "保存更改"],
   saveConfiguration: ["Save configuration", "保存配置"],
   saveMailbox: ["Save mailbox", "保存邮箱"],
   search: ["Search", "搜索"],

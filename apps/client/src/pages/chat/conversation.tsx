@@ -8,7 +8,6 @@ import type {
   TimelineSection,
 } from "@eta/client-contracts";
 import type { Layout } from "../../components";
-import type { ConversationAction } from "./conversation-actions";
 import type { PanelTab } from "./conversation-panel";
 import { computed, effect, signal, View, windowSize } from "nsh";
 import {
@@ -30,12 +29,12 @@ import { follow, useHost } from "../../services/host";
 import { PendingStrip } from "./approvals";
 import { ArtifactPreview } from "./artifacts/preview";
 import { Composer } from "./composer";
-import { ConversationActions } from "./conversation-actions";
 import { PhoneConversationInfo } from "./conversation-info";
 import { ConversationPanel, panelAttention } from "./conversation-panel";
 import { ConversationTimeline } from "./conversation-timeline";
 import { indexInserts, InsertMessage } from "./insert-message";
 import { InviteAgents, StewardMenu } from "./members";
+import { RemoveMember } from "./remove-member";
 import { MemberRun } from "./run/member-run";
 
 export function Conversation(props: {
@@ -61,7 +60,7 @@ export function Conversation(props: {
   const panel = signal<PanelTab>("Context");
   const drawer = signal(false);
   const invite = signal(false);
-  const actions = signal<ConversationAction | undefined>(undefined);
+  const removing = signal<string | undefined>(undefined);
   const projectInfo = signal(false);
   const member = signal<{ id: string; session: string }>();
   const memberSteps = signal("");
@@ -183,7 +182,7 @@ export function Conversation(props: {
         }
         onInspect={member.set}
         onInvite={() => invite.set(true)}
-        onActions={actions.set}
+        onRemove={removing.set}
         onTask={props.onTask}
         onRelatedTask={props.onRelatedTask}
         onCloseTask={props.onCloseTask}
@@ -517,9 +516,6 @@ export function Conversation(props: {
               name={title()}
               project={project()?.display ?? project()?.path}
               members={members()}
-              info={info()}
-              captain={props.captain}
-              onActions={actions.set}
               onClose={closeDrawer}
               onInspect={member.set}
               onTask={(id) => {
@@ -542,14 +538,14 @@ export function Conversation(props: {
           </Label>
         </Modal>
       </If>
-      <If when={actions() && info() ? actions() : undefined}>
-        {(action) => (
-          <ConversationActions
+      <If when={removing() && info() ? removing() : undefined}>
+        {(agentId) => (
+          <RemoveMember
             info={info()!}
             members={members()}
-            action={action()}
+            agentId={agentId()}
             phone={phone()}
-            onClose={() => actions.set(undefined)}
+            onClose={() => removing.set(undefined)}
           />
         )}
       </If>

@@ -1,5 +1,4 @@
 import type { ConversationInfo, MemberView } from "@eta/client-contracts";
-import type { ConversationAction } from "./conversation-actions";
 import { View } from "nsh";
 import {
   ActionItem,
@@ -13,7 +12,6 @@ import { AgentFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
-import { ConversationActionsMenu } from "./conversation-actions";
 import { activeReply, memberStatus } from "./member-status";
 import { MemberStepsLedger, MemberStepsToggle } from "./member-steps";
 
@@ -26,10 +24,7 @@ export function ConversationMembers(props: {
   onToggleSteps: (session: string) => void;
   onInspect: (member: { id: string; session: string }) => void;
   onInvite: () => void;
-  captain?: boolean;
-  /** The tablet's roomier menu. */
-  tablet?: boolean;
-  onActions: (action: ConversationAction) => void;
+  onRemove: (agentId: string) => void;
 }) {
   const host = useHost();
   const c = colors();
@@ -55,23 +50,14 @@ export function ConversationMembers(props: {
             },
           )}
         </Label>
-        <View style={{ ...row }}>
-          <If when={props.group}>
-            <Button
-              label={uiText("invite2")}
-              tone="ghost"
-              disabled={props.info?.archived}
-              onPress={props.onInvite}
-            />
-          </If>
-          <ConversationActionsMenu
-            info={props.info}
-            captain={props.captain}
-            roomy={props.tablet}
-            triggerStyle={{ minWidth: 24, height: 24, paddingHorizontal: 3 }}
-            onOpen={props.onActions}
+        <If when={props.group}>
+          <Button
+            label={uiText("invite2")}
+            tone="ghost"
+            disabled={props.info?.archived}
+            onPress={props.onInvite}
           />
-        </View>
+        </If>
       </View>
       <Each of={props.members} key={(entry) => entry.agentId}>
         {(entry) => (
@@ -186,12 +172,7 @@ export function ConversationMembers(props: {
                       disabled={
                         props.members.length <= 1 || props.info?.archived
                       }
-                      onSelect={() =>
-                        props.onActions({
-                          section: "Remove member",
-                          agentId: entry().agentId,
-                        })
-                      }
+                      onSelect={() => props.onRemove(entry().agentId)}
                     />
                   </If>
                   <If when={entry().sessionId}>
