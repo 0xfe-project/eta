@@ -29,6 +29,7 @@ import {
   cleanup,
   computed,
   effect,
+  keyboardFrame,
   keymap,
   Scroll,
   signal,
@@ -648,7 +649,8 @@ export function Composer(props: {
             style={{
               lineHeight: props.phone ? 20 : 22,
               height: Math.min(
-                windowSize().height * 0.4,
+                // Of the screen above the keyboard while it is up.
+                (windowSize().height - keyboardFrame().height) * 0.4,
                 Math.max(props.phone ? 20 : 22, textHeight()) +
                   (props.phone ? 22 : 26),
               ),

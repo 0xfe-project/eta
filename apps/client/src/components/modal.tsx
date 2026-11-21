@@ -1,16 +1,9 @@
 import type { JSX, ViewStyle } from "nsh";
-import {
-  cleanup,
-  keymap,
-  Overlay,
-  platform,
-  safeAreaInsets,
-  View,
-  windowSize,
-} from "nsh";
+import { cleanup, keymap, Overlay, platform, View, windowSize } from "nsh";
 import { Dialog } from "nsh/base";
 import { Header } from "./header";
 import { CloseButton } from "./navigation-buttons";
+import { screenInsets } from "./safe-area";
 import { Label } from "./text";
 import { colors, fill, row } from "./theme";
 
@@ -59,7 +52,8 @@ export function Modal(props: {
     if (position >= 0) modalStack.splice(position, 1);
   });
   keymap.bind("escape", closeTopModal, { when: "always" });
-  const insets = safeAreaInsets();
+  // Read here, outside the `Overlay`: the screen's safe area and keyboard.
+  const insets = screenInsets();
   const focused = props.modalFocus && !props.phone;
   // The app's tablet width range (App.tsx): dialogs there use the 16% scrim without blur.
   const tablet = () => !props.phone && windowSize().width < 1200;
@@ -214,17 +208,18 @@ export function Modal(props: {
         {panel()}
       </Dialog>
     );
-  const dialog = () => (
+  // A dialog over the whole screen (an `Overlay`) keeps its panel in the safe
+  // part of it and above the keyboard, as the app's root does for the pages;
+  // its backdrop, absolute, still covers the system UI. A phone sheet drawn
+  // in the page is inside the root's safe area already.
+  const dialog = (overlay: boolean) => (
     <View
       style={{
         ...fill,
-        paddingTop: props.phone && props.overPhoneNavigation ? insets().top : 0,
-        paddingBottom:
-          props.phone && props.overPhoneNavigation ? insets().bottom : 0,
-        paddingLeft:
-          props.phone && props.overPhoneNavigation ? insets().left : 0,
-        paddingRight:
-          props.phone && props.overPhoneNavigation ? insets().right : 0,
+        paddingTop: overlay ? insets().top : 0,
+        paddingBottom: overlay ? insets().bottom : 0,
+        paddingLeft: overlay ? insets().left : 0,
+        paddingRight: overlay ? insets().right : 0,
         zIndex: 100,
         alignItems: props.side ? "flex-end" : "center",
         justifyContent: props.phone ? "flex-end" : "center",
@@ -238,7 +233,11 @@ export function Modal(props: {
     // phone only those that ask to cover the tab bar do.
     <Each of={[Boolean(props.overPhoneNavigation) || !props.phone]}>
       {(overlay) =>
-        overlay() ? <Overlay style={fill}>{dialog()}</Overlay> : dialog()
+        overlay() ? (
+          <Overlay style={fill}>{dialog(true)}</Overlay>
+        ) : (
+          dialog(false)
+        )
       }
     </Each>
   );

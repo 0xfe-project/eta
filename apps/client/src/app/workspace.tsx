@@ -17,7 +17,7 @@ import {
   View,
   windowSize,
 } from "nsh";
-import { fill, grow, row, sizes } from "../components";
+import { fill, grow, keyboardShown, row, sizes } from "../components";
 import { useModels } from "../components/model-select";
 import { ChatList } from "../navigation/chat-list";
 import { link, workspaceLocation } from "../navigation/location";
@@ -103,6 +103,7 @@ export function Workspace(props: {
   let checkedSetup = false;
   const models = useModels();
   const phone = () => props.layout === "phone";
+  const phoneTabs = () => phone() && !keyboardShown();
   const waitingForHost = () =>
     phone() &&
     start.page === "chat" &&
@@ -415,7 +416,9 @@ export function Workspace(props: {
           </If>
         </View>
       </View>
-      <If when={phone()}>
+      {/* The keyboard covers the tab bar, as a native tab bar is: the space
+          above it goes to the page and its input. */}
+      <If when={phoneTabs()}>
         <PhoneNavigation
           page={settings() ? "settings" : page()}
           onNavigate={navigate}
@@ -437,7 +440,7 @@ export function Workspace(props: {
               ...fill,
               zIndex: 30,
               left: props.layout === "tablet" ? sizes.rail : 0,
-              bottom: phone() ? sizes.phoneNav : 0,
+              bottom: phoneTabs() ? sizes.phoneNav : 0,
             }}
           >
             <Settings
