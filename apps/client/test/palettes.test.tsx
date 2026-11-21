@@ -12,7 +12,16 @@ test("a shared theme's palette takes its colors from the shared table, light and
     for (const mode of ["light", "dark"] as const) {
       const c = palette(mode, id);
       const t = themes[id][mode];
-      expect([c.canvas, c.surface, c.ink, c.muted, c.red, c.green, c.blue, c.button]).toEqual([
+      expect([
+        c.canvas,
+        c.surface,
+        c.ink,
+        c.muted,
+        c.red,
+        c.green,
+        c.blue,
+        c.button,
+      ]).toEqual([
         t.base,
         t.mantle,
         t.text,
@@ -27,5 +36,6 @@ test("a shared theme's palette takes its colors from the shared table, light and
 });
 
 test("a shared theme differs between light and dark", () => {
-  for (const id of themeIds) expect(palette("light", id).canvas).not.toBe(palette("dark", id).canvas);
+  for (const id of themeIds)
+    expect(palette("light", id).canvas).not.toBe(palette("dark", id).canvas);
 });

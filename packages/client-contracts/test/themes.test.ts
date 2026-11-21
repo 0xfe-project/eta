@@ -24,13 +24,22 @@ const roles = [
 ];
 
 const luminance = (hex: string) => {
-  const [r, g, b] = [1, 3, 5].map((at) => Number.parseInt(hex.slice(at, at + 2), 16));
+  const [r, g, b] = [1, 3, 5].map((at) =>
+    Number.parseInt(hex.slice(at, at + 2), 16),
+  );
   return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
 };
 
 describe("shared themes", () => {
   it("lists the themes the client and the TUI offer", () => {
-    expect([...themeIds]).toEqual(["dracula", "nord", "gruvbox", "tokyoNight", "solarized", "rosePine"]);
+    expect([...themeIds]).toEqual([
+      "dracula",
+      "nord",
+      "gruvbox",
+      "tokyoNight",
+      "solarized",
+      "rosePine",
+    ]);
     expect(Object.keys(themes).sort()).toEqual([...themeIds].sort());
   });
 
@@ -39,7 +48,8 @@ describe("shared themes", () => {
       it(`gives ${id} ${mode} every role as #rrggbb`, () => {
         const colors = themes[id][mode];
         expect(Object.keys(colors).sort()).toEqual([...roles].sort());
-        for (const value of Object.values(colors)) expect(value).toMatch(/^#[0-9a-f]{6}$/);
+        for (const value of Object.values(colors))
+          expect(value).toMatch(/^#[0-9a-f]{6}$/);
       });
 
       it(`keeps ${id} ${mode} text apart from its canvas in the right direction`, () => {
