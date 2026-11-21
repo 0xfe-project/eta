@@ -7,7 +7,13 @@ import type {
   ViewCore,
 } from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
-import { logBlocks, savedSteps, savedTools } from "@eta/client-contracts";
+import {
+  displayContext,
+  displaySpend,
+  logBlocks,
+  savedSteps,
+  savedTools,
+} from "@eta/client-contracts";
 import { cleanup, computed, effect, Scroll, signal, View } from "nsh";
 import { Button, colors, grow, Icon, Label, row } from "../../../components";
 import { AgentFace } from "../../../components/agent-face";
@@ -79,6 +85,7 @@ export function MemberRun(props: {
   session?: string | null;
   agentId: string;
   phone: boolean;
+  memberContext?: boolean;
   reply?: MessageView;
   taskRun?: TaskRunView;
   nextRunAt?: number;
@@ -98,6 +105,24 @@ export function MemberRun(props: {
   followSession(() => props.session ?? undefined);
   const transcript = () =>
     host.section<TranscriptSection>(target, "transcript");
+  const memberDetails = () => {
+    const id = props.session;
+    const target = `sessions.${id}`;
+    const current = displayContext(
+      host.section<SessionViewSections["context"]>(target, "context"),
+      id,
+      formatLocale(),
+    );
+    const spend = host.section<SessionViewSections["spend"]>(target, "spend");
+    return `${uiText("contextRing", { detail: current.detail })} · ${uiText(
+      "memberUsage",
+      {
+        input: displaySpend(spend?.input, formatLocale()),
+        output: displaySpend(spend?.output, formatLocale()),
+        cache: displaySpend(spend?.cache, formatLocale()),
+      },
+    )}`;
+  };
   const core = () => host.section<ViewCore>(target, "core");
   const systems = () =>
     host.section<SessionViewSections["systems"]>(target, "systems");
@@ -258,6 +283,11 @@ export function MemberRun(props: {
           borderColor: c().border,
         }}
       >
+        <If when={props.memberContext}>
+          <Label size={12} line={16} tone="muted">
+            {memberDetails()}
+          </Label>
+        </If>
         <View style={{ ...row, height: props.phone ? 24 : 28, gap: 8 }}>
           <AgentFace id={props.agentId} size={18} />
           <Label

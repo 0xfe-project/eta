@@ -227,7 +227,9 @@ function MemberRow(props: {
   const detail = () => {
     const status = memberStatus(props.member.status);
     const current = usage();
-    return current ? `${status} · ${current.percent}%` : status;
+    return current
+      ? `${status} · ${current.label === "N/A" ? current.detail : current.label}`
+      : status;
   };
   return (
     <InfoRow

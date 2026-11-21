@@ -241,10 +241,7 @@ export const chatMessages = {
     "输入 {{input}} · 输出 {{output}} · 缓存 {{cache}}",
   ],
   memberTools: ["tools {{count}}", "工具 {{count}}"],
-  contextRing: [
-    "Context {{percent}}%: {{used}} used of a {{window}}k window",
-    "上下文 {{percent}}%：已用 {{used}}，窗口 {{window}}k",
-  ],
+  contextRing: ["Context {{detail}}", "上下文 {{detail}}"],
   waitingForYouCaption: ["Waiting for you", "等你处理"],
   confirmationRequestFrom: [
     "{{name}} · Confirmation request",

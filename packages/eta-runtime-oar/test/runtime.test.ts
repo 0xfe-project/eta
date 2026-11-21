@@ -26,7 +26,7 @@ import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";
 import { createRuntimeRegistry } from "@botiverse/oar";
 import { scriptedRuntime } from "@botiverse/oar/testing";
-import { kernelOn } from "@eta/core";
+import { kernelEmit, kernelOn } from "@eta/core";
 import { listenServed, listServed } from "@eta/runtime-kit/testing";
 import { MemorySessionStore, SessionManager } from "@eta/server";
 import { describe, expect, it } from "vitest";
@@ -66,6 +66,7 @@ const tick = async (ms = 20) =>
 function setup(
   turn: (turn: ScriptedTurn) => void | Promise<void>,
   options: Partial<SessionManagerOptions> & {
+    runtimeId?: "codex" | "claude";
     refuses?: boolean;
     /** Replaces members of every session the runtime opens. */
     patch?: (session: Session) => Partial<Session>;
@@ -74,6 +75,7 @@ function setup(
   } = {},
 ) {
   const {
+    runtimeId = "claude",
     refuses = false,
     patch,
     manualCompaction,
@@ -86,7 +88,7 @@ function setup(
     session: Session;
   }[] = [];
   const scripted = scriptedRuntime({
-    id: "claude",
+    id: runtimeId,
     turn: async (scriptedTurn) => {
       turns.push(scriptedTurn);
       await turn(scriptedTurn);
@@ -926,26 +928,198 @@ describe("a session on an external runtime", () => {
     const observers = new Set<EventObserver>();
     const prompts: { input: string; id: string }[] = [];
     const steers: { input: string; id: string }[] = [];
+    let native = "";
+    let sequence = 0;
     const say = (event: Record<string, unknown>) => {
+      const envelope = {
+        sessionId: native,
+        seq: ++sequence,
+        receivedAt: Date.now(),
+        agentPath: [],
+      };
       for (const observer of observers)
-        observer({ agentPath: [], ...event } as unknown as Event);
+        observer({ ...envelope, ...event } as unknown as Event);
     };
-    const patch = (): Partial<Session> => ({
-      events: (observer) => {
-        observers.add(observer);
-        return () => observers.delete(observer);
-      },
-      prompt: async (input, options) => {
-        prompts.push({ input, id: options?.inputId ?? "" });
-        return acceptance;
-      },
-      steer: async (input, options) => {
-        steers.push({ input, id: options?.inputId ?? "" });
-        return acceptance;
-      },
-    });
+    const patch = (session: Session): Partial<Session> => {
+      native = session.id;
+      return {
+        events: (observer) => {
+          observers.add(observer);
+          return () => observers.delete(observer);
+        },
+        prompt: async (input, options) => {
+          prompts.push({ input, id: options?.inputId ?? "" });
+          return acceptance;
+        },
+        steer: async (input, options) => {
+          steers.push({ input, id: options?.inputId ?? "" });
+          return acceptance;
+        },
+      };
+    };
     return { prompts, steers, say, patch };
   };
+
+  it("publishes an OAR root context without a billing report and invalidates it on a native model change", async () => {
+    const { prompts, say, patch } = handDriven();
+    const { manager } = setup(() => undefined, { patch });
+    const member = await manager.create({ cwd: "/work", runtime: "claude" });
+    try {
+      const running = run(member, "context");
+      await expect.poll(() => prompts.length).toBe(1);
+      say({
+        kind: "usage",
+        usage: {
+          context: { tokens: 64000, contextWindow: 128000, percent: 50 },
+        },
+      });
+      const view = () => member.session.view.snapshot().sections;
+      expect(view().context).toMatchObject({
+        source: "oar",
+        used: 64000,
+        window: 128000,
+        reason: null,
+      });
+      say({
+        kind: "usage",
+        usage: {
+          context: { tokens: 64000, contextWindow: 128000, percent: 99 },
+        },
+      });
+      expect(view().context).toMatchObject({ reason: "inconsistent" });
+      say({ kind: "turn_ended", outcome: { kind: "completed" } });
+      await running;
+      say({ kind: "model", model: "new-model" });
+      expect(view().context).toMatchObject({
+        model: "claude:new-model",
+        reason: "model",
+        used: null,
+      });
+      expect(view().spend).toEqual({ input: null, output: null, cache: null });
+    } finally {
+      await manager.closeAll();
+    }
+  });
+
+  it("keeps Codex last-call occupancy apart from cumulative input and rejects stale or child samples", async () => {
+    const { prompts, say, patch } = handDriven();
+    const { manager } = setup(() => undefined, { patch, runtimeId: "codex" });
+    const member = await manager.create({
+      cwd: "/work",
+      runtime: "codex",
+      model: "codex:first",
+    });
+    const other = await manager.create({ cwd: "/work", runtime: "codex" });
+    const view = () => member.session.view.snapshot().sections;
+    try {
+      const running = run(member, "context");
+      await expect.poll(() => prompts.length).toBe(1);
+      say({ kind: "turn_active", spanId: "native-turn" });
+      say({ kind: "text_delta", text: "ok" });
+      const sample = (
+        used: number | null,
+        window: number | null,
+        envelope: Record<string, unknown> = {},
+      ) =>
+        say({
+          kind: "usage",
+          spanId: "native-turn",
+          usage: {
+            context: { tokens: used, contextWindow: window, percent: null },
+            tokens: { input: 240000, output: 0 },
+          },
+          ...envelope,
+        });
+      // Feed a synthetic thread/tokenUsage/updated through the installed Codex adapter.
+      // This also pins the sentinel OAR emits for older Codex builds without last.
+      const decoder = new URL(
+        "./token-usage.js",
+        import.meta.resolve("@botiverse/oar/runtimes/codex"),
+      );
+      const { codexUsageViews } = await import(decoder.href);
+      const report = (last?: number) => {
+        const tokenUsage = {
+          total: { inputTokens: 240000, outputTokens: 0 },
+          ...(last === undefined ? {} : { last: { totalTokens: last } }),
+          modelContextWindow: 128000,
+        };
+        for (const event of codexUsageViews(
+          { tokenUsage },
+          { input: 0, output: 0 },
+        ))
+          say({ ...event, spanId: "native-turn" });
+      };
+      report();
+      expect(view().context).toMatchObject({ reason: "codexLast" });
+      sample(0, 128000);
+      expect(view().context).toMatchObject({ used: 0, reason: null });
+      sample(128000, 128000);
+      expect(view().context).toMatchObject({ used: 128000, reason: null });
+      sample(152081, 128000);
+      expect(view().context).toMatchObject({ reason: "inconsistent" });
+      sample(42, 0);
+      expect(view().context).toMatchObject({ reason: "window" });
+      report(32000);
+      sample(123, 128000, { agentPath: ["child"] });
+      sample(124, 128000, { sessionId: "another-thread" });
+      sample(125, 128000, { spanId: "an-old-turn" });
+      expect(view().context).toMatchObject({
+        source: "codex-last",
+        used: 32000,
+        window: 128000,
+        reason: null,
+      });
+      const { runId, observedAt } = view().context as {
+        runId: string;
+        observedAt: number;
+      };
+      say({ kind: "compaction_started" });
+      expect(view().context).toMatchObject({
+        reason: "compacted",
+        compactedAt: null,
+      });
+      say({ kind: "compaction_ended", outcome: "completed" });
+      expect(view().context).toMatchObject({ compactedAt: expect.any(Number) });
+      kernelEmit(member.session.kernel.ctx)("context:observed", {
+        runId,
+        model: "first",
+        observedAt: observedAt - 1,
+        used: 128000,
+        window: 128000,
+      });
+      expect(view().context).toMatchObject({ reason: "compacted", used: null });
+      sample(null, 128000);
+      expect(view().context).toMatchObject({ reason: "compacted" });
+      say({ kind: "turn_ended", outcome: { kind: "completed" } });
+      await running;
+      expect(view().spend).toMatchObject({
+        input: { value: 240000, coverage: "complete" },
+        output: { value: 0, coverage: "complete" },
+        cache: null,
+      });
+      member.session.kernel.config.update({
+        model: { provider: "codex", modelId: "second" },
+      });
+      kernelEmit(member.session.kernel.ctx)("context:observed", {
+        runId,
+        model: "first",
+        observedAt: Date.now(),
+        used: 128000,
+        window: 128000,
+      });
+      expect(view().context).toMatchObject({
+        model: "codex:second",
+        used: null,
+        reason: "model",
+      });
+      expect(other.session.view.snapshot().sections.context).toMatchObject({
+        session: other.meta.id,
+        reason: "missing",
+      });
+    } finally {
+      await manager.closeAll();
+    }
+  });
 
   it("lasts through the turn a steer taken too late opens of its own", async () => {
     const { prompts, steers, say, patch } = handDriven();

@@ -123,6 +123,8 @@ const FORWARDED_EVENTS = [
   "tool:update",
   "tool:end",
   "usage:recorded",
+  "context:observed",
+  "context:invalidated",
   "goal:changed",
   "goal:cleared",
   "task:created",

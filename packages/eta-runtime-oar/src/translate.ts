@@ -32,7 +32,7 @@ import type {
   Usage,
 } from "@eta/core";
 import type { HostCalls } from "./host-calls";
-import { unreportedUsage } from "@eta/core";
+import { unreportedUsage, withUsageEvidence } from "@eta/core";
 
 type Block = AssistantMessage["content"][number];
 
@@ -150,15 +150,20 @@ export function usageBetween(
   // oar counts cache reads and writes as part of input; eta counts them beside it.
   const input = Math.max(0, grew("input") - cacheRead - cacheWrite);
   const output = grew("output");
-  return {
-    ...emptyUsage(),
-    input,
-    output,
-    cacheRead,
-    cacheWrite,
-    ...(after.reasoning === undefined ? {} : { reasoning: grew("reasoning") }),
-    totalTokens: input + output + cacheRead + cacheWrite,
-  };
+  return withUsageEvidence(
+    {
+      ...emptyUsage(),
+      input,
+      output,
+      cacheRead,
+      cacheWrite,
+      ...(after.reasoning === undefined
+        ? {}
+        : { reasoning: grew("reasoning") }),
+      totalTokens: input + output + cacheRead + cacheWrite,
+    },
+    after,
+  );
 }
 
 /** A call's arguments as an object: JSON when the runtime gave JSON, its words otherwise. */
@@ -200,6 +205,7 @@ export class Translator {
   readonly #identity: TranslatorIdentity;
   readonly #calls: HostCalls;
   #open: OpenMessage | undefined;
+  #hadMessage = false;
   readonly #pending = new Map<string, PendingCall>();
   /** The root call each runtime task belongs to, until that call's result is written. */
   readonly #tasks = new Map<string, string>();
@@ -222,7 +228,6 @@ export class Translator {
     this.#calls = calls;
     this.#model = identity.model;
     this.#charged = charged;
-    this.#reported = charged;
   }
 
   /** The total charged so far, for the next run of the same runtime session to start from. */
@@ -275,16 +280,72 @@ export class Translator {
       case "tool_call_progress":
         this.#progress(event.callId, event);
         break;
+      case "compaction_started":
+      case "compaction_ended":
+        this.#observe(event, null, null, "compacted");
+        break;
       case "usage":
+        if (event.usage.context) {
+          const { tokens, contextWindow, percent } = event.usage.context;
+          // Without last, OAR leaves the Codex window null and only has cumulative input.
+          const used =
+            this.#identity.provider === "codex" && contextWindow === null
+              ? null
+              : tokens;
+          const inconsistent =
+            percent !== null &&
+            used !== null &&
+            contextWindow !== null &&
+            contextWindow > 0 &&
+            Math.round(percent) !== Math.round((100 * used) / contextWindow);
+          this.#observe(
+            event,
+            used,
+            contextWindow,
+            inconsistent ? "inconsistent" : undefined,
+          );
+        }
         if (event.usage.tokens !== undefined)
           this.#reported = event.usage.tokens;
         break;
       case "model":
-        this.#model = event.model;
+        if (this.#model !== event.model) {
+          this.#model = event.model;
+          this.#observe(event, null, null, "model");
+        }
         break;
       default:
         break;
     }
+  }
+
+  #takeUsage(): Usage {
+    const report = this.#reported;
+    if (!report) return unreportedUsage();
+    const usage = usageBetween(this.#charged, report);
+    // Optional counters may disappear temporarily. Keep their last charged baseline.
+    this.#charged = { ...this.#charged, ...report };
+    this.#reported = undefined;
+    return usage;
+  }
+
+  #observe(
+    event: Event,
+    used: number | null,
+    window: number | null,
+    reason?: "compacted" | "model" | "inconsistent",
+  ): void {
+    this.#target.emit("context:observed", {
+      runId: this.#target.runId,
+      model: this.#model,
+      observedAt: event.receivedAt,
+      ...(event.kind === "compaction_ended" && event.outcome === "completed"
+        ? { compactedAt: event.receivedAt }
+        : {}),
+      used,
+      window,
+      ...(reason ? { reason } : {}),
+    });
   }
 
   /**
@@ -292,6 +353,9 @@ export class Translator {
    * gets a result that says so, or the transcript would hold a call nobody answered.
    */
   finish(outcome: "completed" | "aborted" | "failed", error?: string): void {
+    if (!this.#open && (this.#reported || !this.#hadMessage))
+      this.#target.emit("usage:detached", { usage: this.#takeUsage() });
+    this.#hadMessage = false;
     this.#close(
       outcome === "aborted"
         ? "aborted"
@@ -332,6 +396,7 @@ export class Translator {
       }
       this.#close("stop");
     }
+    this.#hadMessage = true;
     this.#target.noteTurn();
     const turnId = crypto.randomUUID();
     const message: AssistantMessage = {
@@ -720,8 +785,7 @@ export class Translator {
         ? "toolUse"
         : stopReason;
     if (errorMessage !== undefined) message.errorMessage = errorMessage;
-    message.usage = usageBetween(this.#charged, this.#reported);
-    this.#charged = this.#reported;
+    message.usage = this.#takeUsage();
     this.#update(
       message.stopReason === "error" || message.stopReason === "aborted"
         ? { type: "error", reason: message.stopReason, error: message }

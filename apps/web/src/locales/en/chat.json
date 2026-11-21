@@ -452,7 +452,7 @@
     "assistant": "Assistant",
     "tooldefs": "Tool definitions",
     "tool": "Tool results",
-    "ring": "Context {{percent}}%: {{used}} used of a {{window}}k window"
+    "ring": "Context {{detail}}"
   },
   "sections": {
     "groups": "Groups",

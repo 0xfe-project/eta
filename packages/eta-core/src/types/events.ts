@@ -266,6 +266,24 @@ export interface EntryEvents {
 }
 
 export interface UsageEvents {
+  "context:invalidated": {
+    reason: "compacted" | "model";
+    at: number;
+    compactedAt?: number;
+    model?: string;
+  };
+  /** A root runtime observation, bound to the run that subscribed to the native stream. */
+  "context:observed": {
+    runId: string;
+    model: string;
+    observedAt: number;
+    compactedAt?: number;
+    used: number | null;
+    window: number | null;
+    reason?: "compacted" | "model" | "inconsistent";
+  };
+  /** A runtime reported the prompt's bill after its last assistant message was closed. */
+  "usage:detached": { usage: Usage };
   /** One usage measurement landed; totals are the session aggregate after it. */
   "usage:recorded": { row: UsageRow; totals: Usage };
 }

@@ -169,6 +169,10 @@ export class JournalingService extends Service {
         this.record(event.message, event.terminate === true);
         void this.enqueueCommit();
       }),
+      on("usage:detached", ({ usage }) => {
+        this.log?.recordUsage({ id: usageId(), usage, adjustment: false });
+        void this.enqueueCommit();
+      }),
       on("turn:end", (event) => {
         // The usage row rides in the commit of the message it was spent on.
         this.recordUsageFor(event.message, event.usage);

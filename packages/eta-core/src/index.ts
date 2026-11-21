@@ -157,8 +157,10 @@ export * from "./types/tasks";
 export {
   addUsage,
   emptyUsage,
+  reportedField,
   sessionTokenTotal,
   subtractUsage,
   tokensReported,
   unreportedUsage,
+  withUsageEvidence,
 } from "./types/usage";

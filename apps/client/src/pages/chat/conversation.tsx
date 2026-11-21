@@ -573,6 +573,7 @@ export function Conversation(props: {
           onClose={() => member.set(undefined)}
         >
           <MemberRun
+            memberContext
             session={member()!.session}
             agentId={member()!.id}
             phone={phone()}
