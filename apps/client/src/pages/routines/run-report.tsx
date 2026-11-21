@@ -14,9 +14,17 @@ import {
   Modal,
   row,
 } from "../../components";
+import { UserFace } from "../../components/agent-face";
+import { StatusDot } from "../../components/status-dot";
 import { formatLocale, localizedText, uiText } from "../../i18n";
-import { RoutineHistory } from "./history";
-import { mobileSchedule, routineTime, runAgo } from "./schedule";
+import { reportBody, RoutineHistory } from "./history";
+import {
+  clockTime,
+  feedTime,
+  routineTime,
+  runAgo,
+  scheduleLabel,
+} from "./schedule";
 
 interface RoutineReportProps {
   routine: RoutineInfo;
@@ -93,7 +101,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
         ));
   const schedule = () =>
     [
-      mobileSchedule(props.routine.schedule),
+      scheduleLabel(props.routine.schedule),
       props.run.status === "skipped"
         ? undefined
         : localizedText("run by Captain", "由 Captain 运行"),
@@ -273,89 +281,193 @@ export function RoutineReport(props: RoutineReportProps) {
   const c = colors();
   const failed = () =>
     props.run.status === "failed" || props.run.status === "skipped";
+  const sendable = () => !!props.feedback.trim() && !props.routine.revising;
+  // A finished run also says how long it took.
   const date = () =>
-    new Date(props.run.startedAt).toLocaleString(
-      formatLocale() === "zh-CN" ? "zh-CN" : "en-GB",
-      {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      },
-    );
+    [feedTime(props.run.startedAt), recordedDuration(props.run)]
+      .filter(Boolean)
+      .join(" · ");
+  const inset = () => (props.phone ? 16 : 32);
+  const column = { width: "100%", maxWidth: 640 } as const;
+  const move = (label: string, enabled: boolean, by: number) => (
+    <View
+      role="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !enabled }}
+      onPress={() => {
+        if (enabled) props.onMove(by);
+      }}
+      focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+      style={{ cursor: enabled ? "pointer" : "default" }}
+    >
+      <Label
+        size={12}
+        line={16}
+        tone={enabled ? "ink" : props.phone ? "muted" : "faint"}
+      >
+        {label}
+      </Label>
+    </View>
+  );
   const content = () => (
     <View style={grow}>
       <View
         style={{
           ...row,
-          paddingHorizontal: 16,
-          gap: 8,
-          height: 40,
+          paddingHorizontal: inset(),
+          gap: props.phone ? 12 : 16,
+          height: props.phone ? 40 : 48,
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
       >
+        <View style={{ ...row, gap: 8, flex: 1, minWidth: 0 }}>
+          <If
+            when={!props.phone}
+            else={
+              <Label size={12} line={16} tone="muted">
+                {`${uiText("reports")}${uiText("reportPosition", {
+                  index: props.index + 1,
+                  count: props.count,
+                })}`}
+              </Label>
+            }
+          >
+            <View
+              role="button"
+              accessibilityLabel={props.routine.name}
+              onPress={props.onBack}
+              focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+              style={{ ...row, gap: 8, minWidth: 0, cursor: "pointer" }}
+            >
+              <Icon name="arrowLeft" size={12} />
+              <Label size={12} line={16} lines={1}>
+                {props.routine.name}
+              </Label>
+            </View>
+            <Label size={12} line={16} tone="muted">
+              {uiText("reportsTrail")}
+            </Label>
+          </If>
+        </View>
         <If when={!props.phone}>
-          <Button
-            label={props.routine.name}
-            icon="back"
-            tone="ghost"
-            onPress={props.onBack}
-          />
+          <Label size={12} line={16} tone="muted">
+            {uiText("reportPosition", {
+              index: props.index + 1,
+              count: props.count,
+            })}
+          </Label>
         </If>
-        <Label size={12} tone="muted" style={{ flex: 1 }}>
-          {props.phone ? uiText("reports") : uiText("reports2")}
-          {`${props.index + 1} ${uiText("of")} ${props.count}`}
-        </Label>
-        <Button
-          label={uiText("newer")}
-          disabled={props.index < 1}
-          onPress={() => props.onMove(-1)}
-        />
-        <Button
-          label={uiText("older")}
-          disabled={props.index + 1 >= props.count}
-          onPress={() => props.onMove(1)}
-        />
+        {move(uiText("newer"), props.index > 0, -1)}
+        {move(uiText("older"), props.index + 1 < props.count, 1)}
       </View>
       <Scroll style={grow}>
-        <View style={{ padding: 16, gap: 14 }}>
-          <Label size={12} tone="muted">
-            {date()}
-          </Label>
-          <If
-            when={failed()}
-            else={
-              <>
-                <Label size={18} weight={600}>
-                  {props.run.title ?? uiText("report")}
-                </Label>
-                <Markdown
-                  value={
-                    props.run.report ??
-                    (props.run.status === "running"
-                      ? "Routine running…"
-                      : "No report")
+        <View
+          style={{
+            alignItems: "center",
+            paddingTop: props.phone ? 16 : 20,
+            paddingBottom: 16,
+            paddingHorizontal: inset(),
+          }}
+        >
+          <View
+            style={{
+              ...column,
+              gap: props.phone ? 8 : 6,
+              // On the phone a missed run sits in a card.
+              ...(props.phone && failed()
+                ? {
+                    gap: 6,
+                    padding: 12,
+                    borderWidth: 1,
+                    borderColor: c().border,
                   }
-                  line={22}
-                />
-                <Each of={props.run.feedback} key={(entry) => entry.id}>
-                  {(entry) => (
-                    <View
-                      style={{
-                        borderTopWidth: 1,
-                        borderColor: c().border,
-                        paddingTop: 10,
-                        gap: 4,
-                      }}
-                    >
-                      <Label size={12} weight={500}>
-                        {uiText("me")}
-                      </Label>
-                      <Label>{entry().text}</Label>
+                : undefined),
+            }}
+          >
+            <Label size={12} line={16} tone="muted">
+              {date()}
+            </Label>
+            <View style={{ gap: props.phone && failed() ? 6 : 8 }}>
+              <If
+                when={failed()}
+                else={
+                  <>
+                    <Label size={16} line={22} weight={600}>
+                      {props.run.title ?? uiText("report")}
+                    </Label>
+                    <Markdown
+                      value={
+                        props.run.report
+                          ? reportBody(props.run)
+                          : props.run.status === "running"
+                            ? "Routine running…"
+                            : "No report"
+                      }
+                      line={22}
+                    />
+                  </>
+                }
+              >
+                <View style={{ ...row, gap: 8 }}>
+                  <StatusDot color={c().red} />
+                  <Label
+                    size={props.phone ? 14 : 16}
+                    line={props.phone ? 20 : 22}
+                    weight={600}
+                    tone={props.phone ? "muted" : "mutedInk"}
+                  >
+                    {uiText("noReport")}
+                  </Label>
+                </View>
+                <Label line={22} tone={props.phone ? "muted" : "mutedInk"}>
+                  {props.run.error ?? uiText("theRoutineWasSkipped")}
+                </Label>
+                <View style={{ ...row, paddingTop: props.phone ? 4 : 0 }}>
+                  <Button
+                    label={uiText("retry")}
+                    disabled={!props.canRetry}
+                    onPress={props.onRetry}
+                    size={props.phone ? 30 : undefined}
+                    style={props.phone ? { paddingHorizontal: 12 } : undefined}
+                  />
+                </View>
+              </If>
+            </View>
+          </View>
+        </View>
+        <If
+          when={
+            props.run.status !== "running" && (failed() || props.run.report)
+          }
+        >
+          <View
+            style={{
+              alignItems: "center",
+              paddingVertical: 16,
+              paddingHorizontal: inset(),
+              borderTopWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <View style={{ ...column, gap: 12 }}>
+              <Each of={props.run.feedback} key={(entry) => entry.id}>
+                {(entry) => (
+                  <View style={{ ...row, alignItems: "flex-start", gap: 10 }}>
+                    <UserFace size={20} />
+                    <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
+                      <View style={{ ...row, alignItems: "baseline", gap: 8 }}>
+                        <Label size={12} line={16} weight={600}>
+                          {uiText("me")}
+                        </Label>
+                        <Label size={12} line={16} tone="muted">
+                          {`${runDay(entry().createdAt)} ${clockTime(entry().createdAt)}`}
+                        </Label>
+                      </View>
+                      <Label line={20}>{entry().text}</Label>
                       <Label
                         size={12}
+                        line={16}
                         tone={entry().revisionFailed ? "red" : "muted"}
                       >
                         {entry().revisionFailed
@@ -367,51 +479,53 @@ export function RoutineReport(props: RoutineReportProps) {
                             : uiText("updatingTheBrief")}
                       </Label>
                     </View>
-                  )}
-                </Each>
-              </>
-            }
-          >
-            <Label size={18} weight={600}>
-              {uiText("noReport")}
-            </Label>
-            <Label tone="muted">
-              {props.run.error ?? uiText("theRoutineWasSkipped")}
-            </Label>
-            <Button
-              label={uiText("retry")}
-              disabled={!props.canRetry}
-              onPress={props.onRetry}
-              style={{ alignSelf: "flex-start" }}
-            />
-          </If>
-        </View>
+                  </View>
+                )}
+              </Each>
+              <View
+                style={{
+                  ...row,
+                  height: 38,
+                  gap: 8,
+                  paddingHorizontal: 10,
+                  borderWidth: 1,
+                  borderColor: c().border,
+                }}
+              >
+                <Field
+                  label={uiText("feedback")}
+                  placeholder={uiText("feedbackEGSkipFundingNews")}
+                  value={props.feedback}
+                  onChange={props.onFeedback}
+                  onSubmit={() => {
+                    if (sendable()) props.onSend();
+                  }}
+                  style={{
+                    flex: 1,
+                    height: 36,
+                    fontSize: 12,
+                    lineHeight: 16,
+                    paddingHorizontal: 0,
+                    borderWidth: 0,
+                  }}
+                />
+                <Button
+                  label={uiText("sendFeedback")}
+                  icon="send"
+                  iconSize={14}
+                  labelTone="muted"
+                  iconOnly
+                  tone="ghost"
+                  // The glyph sits on the box's 10px inset.
+                  style={{ marginRight: -5 }}
+                  disabled={!sendable()}
+                  onPress={props.onSend}
+                />
+              </View>
+            </View>
+          </View>
+        </If>
       </Scroll>
-      <If when={!failed() && props.run.report}>
-        <View
-          style={{
-            ...row,
-            gap: 8,
-            padding: 12,
-            borderTopWidth: 1,
-            borderColor: c().border,
-          }}
-        >
-          <Field
-            label={uiText("feedback")}
-            placeholder={uiText("feedbackEGSkipFundingNews")}
-            value={props.feedback}
-            onChange={props.onFeedback}
-            style={{ flex: 1 }}
-          />
-          <Button
-            label={uiText("sendFeedback")}
-            tone="primary"
-            disabled={!props.feedback.trim() || props.routine.revising}
-            onPress={props.onSend}
-          />
-        </View>
-      </If>
     </View>
   );
   return (

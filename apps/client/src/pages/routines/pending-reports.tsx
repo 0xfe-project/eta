@@ -1,6 +1,7 @@
 import type { RoutineSummary } from "@eta/client-contracts";
 import { Scroll, View } from "nsh";
-import { Button, colors, grow, Label, Modal } from "../../components";
+import { colors, grow, Label, Modal, row } from "../../components";
+import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { routineTime } from "./schedule";
 
@@ -38,34 +39,59 @@ export function PendingReports(props: {
             {(entry) => (
               <View
                 style={{
-                  padding: 12,
-                  gap: 5,
+                  paddingVertical: 10,
+                  paddingHorizontal: 12,
+                  gap: 6,
                   borderWidth: 1,
-                  borderColor: c().border,
+                  borderColor: c().strong,
                 }}
               >
-                <Label size={11} tone="muted">
-                  {uiText("routine", {
-                    value1:
-                      entry().run.status === "sent" ? "report" : "failure",
-                    routineTime: routineTime(entry().run.startedAt),
-                  })}
-                </Label>
+                <View style={{ ...row, gap: 6 }}>
+                  <StatusDot
+                    color={entry().run.status === "sent" ? c().blue : c().red}
+                  />
+                  <Label size={11} line={14} tone="muted">
+                    {uiText("routine", {
+                      value1:
+                        entry().run.status === "sent" ? "report" : "failure",
+                      routineTime: routineTime(entry().run.startedAt),
+                    })}
+                  </Label>
+                </View>
                 <Label
                   size={13}
+                  line={18}
                 >{`${entry().routine.name}: ${entry().run.title ?? "No report"}`}</Label>
-                <Button
-                  label={
+                <View
+                  role="button"
+                  accessibilityLabel={
                     entry().run.status === "sent"
                       ? uiText("openReport")
                       : uiText("viewRun")
                   }
-                  tone="ghost"
-                  style={{ alignSelf: "flex-start" }}
                   onPress={() => {
                     props.onOpen(entry().routine.id, entry().run.id);
                   }}
-                />
+                  focusVisibleStyle={{
+                    outlineWidth: 1,
+                    outlineColor: c().blue,
+                  }}
+                  style={{ alignSelf: "flex-start", cursor: "pointer" }}
+                >
+                  <Label
+                    size={11}
+                    line={14}
+                    tone="mutedInk"
+                    style={{
+                      textDecorationLine: "underline",
+                      textDecorationThickness: 1,
+                    }}
+                  >
+                    {entry().run.status === "sent"
+                      ? uiText("openReport")
+                      : uiText("viewRun")}
+                  </Label>
+                </View>
               </View>
             )}
           </Each>
