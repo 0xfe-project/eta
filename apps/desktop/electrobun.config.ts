@@ -55,8 +55,7 @@ export default {
     },
     mac: {
       bundleCEF: false,
-      // Nine PNGs; hutch runs `iconutil` over the folder and lands `AppIcon.icns` in the bundle's
-      // Resources. Without it the app wears the runtime's generic icon in the Dock.
+      // Hutch packs the five 1x/2x pairs into Contents/Resources/AppIcon.icns for the Dock.
       icons: "icon.iconset",
     },
     linux: { bundleCEF: false },

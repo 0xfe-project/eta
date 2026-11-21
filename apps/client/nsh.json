@@ -4,6 +4,12 @@
   "version": "0.1.0",
   "build": 1,
   "schemes": ["eta"],
+  "icon": {
+    "macos": "assets/icon.png",
+    "windows": "assets/icon.png",
+    "linux": "assets/icon.png",
+    "web": "assets/icon.png"
+  },
   "web": {
     "base": "/"
   },
