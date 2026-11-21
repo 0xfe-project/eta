@@ -36,9 +36,10 @@ on:
       - apps/eta/src/upgrade/**
       # Of the client, what "a person presses the button on the page" goes through: the route to
       # Settings → Update, that page, its confirm dialog, the restart screen, the connection that
-      # reloads after it, and the components, fonts and copy they draw with. The rest of the client
-      # does not take part in an upgrade, and its own tests run in CI. A file the scenario starts
-      # to use belongs here.
+      # reloads after it, and the components, fonts and copy they draw with, with everything those
+      # import (apps/eta/test/upgrade-e2e.test.ts checks it). Left out: the other settings sections
+      # and message catalogs, and the workspace behind the dialog, which is the rest of the client;
+      # its own tests run in CI. A file the scenario starts to use belongs here.
       - apps/client/App.tsx
       - apps/client/package.json
       - apps/client/nsh.json
@@ -47,10 +48,16 @@ on:
       - apps/client/src/app/workspace.tsx
       - apps/client/src/navigation/location.ts
       - apps/client/src/navigation/routes.ts
+      - apps/client/src/navigation/phone-tabs.tsx
+      - apps/client/src/navigation/captain.tsx
+      - apps/client/src/navigation/captain-context-ring.tsx
+      - apps/client/src/pages/chat/message-time.ts
+      - apps/client/src/pages/tasks/status.tsx
       - apps/client/src/pages/settings/settings.tsx
       - apps/client/src/pages/settings/navigation.tsx
       - apps/client/src/pages/settings/overview.ts
       - apps/client/src/pages/settings/section.tsx
+      - apps/client/src/pages/settings/models/logos.ts
       - apps/client/src/pages/settings/updates/**
       - apps/client/src/pages/connection/**
       - apps/client/src/services/**

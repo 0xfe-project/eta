@@ -256,6 +256,46 @@ describe("upgrade-e2e.yml's paths", () => {
     expect(using.filter((file) => !runsFor(file))).toEqual([]);
   });
 
+  // What the update section, the connection and restart screens and the settings frame import,
+  // all the way down. Two kinds are left out on purpose: the message catalogs the scenario's copy
+  // is not in (the test above catches its labels moving into one), and packages outside the
+  // client, which the cache key and their own paths take care of.
+  it("cover everything the pages the scenario goes through import", () => {
+    const transpiler = new Bun.Transpiler({ loader: "tsx" });
+    const resolveFrom = (from: string, spec: string): string | undefined => {
+      if (!spec.startsWith(".")) return undefined;
+      const base = join(from, "..", spec);
+      return ["", ".ts", ".tsx", "/index.ts", "/index.tsx"]
+        .map((ext) => base + ext)
+        .find((file) => clientFiles.includes(file));
+    };
+    const pending = clientFiles.filter((file) =>
+      [
+        "apps/client/src/pages/settings/updates/",
+        "apps/client/src/pages/connection/",
+        "apps/client/src/pages/settings/navigation.tsx",
+        "apps/client/src/pages/settings/section.tsx",
+        "apps/client/src/pages/settings/overview.ts",
+      ].some((entry) => file.startsWith(entry)),
+    );
+    const seen = new Set<string>();
+    while (pending.length > 0) {
+      const file = pending.pop()!;
+      if (seen.has(file)) continue;
+      seen.add(file);
+      const source = readFileSync(join(repo, file), "utf8");
+      for (const { path } of transpiler.scanImports(source)) {
+        const found = resolveFrom(file, path);
+        if (found !== undefined) pending.push(found);
+      }
+    }
+    const catalog = /^apps\/client\/src\/i18n\/messages\/(?!index\.ts$)/;
+    expect(seen.size).toBeGreaterThan(40);
+    expect(
+      [...seen].filter((file) => !runsFor(file) && !catalog.test(file)),
+    ).toEqual([]);
+  });
+
   it("leave out the client pages an upgrade does not go through", () => {
     expect(runsFor("apps/client/src/pages/chat/conversation.tsx")).toBe(false);
     expect(runsFor("apps/client/src/pages/tasks/task-detail.tsx")).toBe(false);
