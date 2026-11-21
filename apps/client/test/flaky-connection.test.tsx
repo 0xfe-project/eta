@@ -54,6 +54,21 @@ test("coming back to the foreground reconnects at once, not after the pause", as
   expect(app.shows("text:Attempts 6")).toBe(true);
 });
 
+test("coming back to the foreground starts again after the retries gave up", async () => {
+  const app = await connected();
+  await app.press("Drop");
+  // Five failed attempts in a row: the app stops retrying and says the host is lost.
+  for (const pause of [500, 1_000, 2_000, 4_000, 8_000]) {
+    await app.clock!.runFor(pause);
+    await app.press("Drop");
+  }
+  await app.clock!.runFor(30_000);
+  expect(app.shows("text:Attempts 6")).toBe(true);
+  await app.setLifecycle("background");
+  await app.setLifecycle("active");
+  expect(app.shows("text:Attempts 7")).toBe(true);
+});
+
 test("a host that stops answering pings counts as gone", async () => {
   const app = await open(fixture, {
     width: 390,

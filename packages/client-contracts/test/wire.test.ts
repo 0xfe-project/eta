@@ -329,6 +329,25 @@ describe("the heartbeat", () => {
   });
 });
 
+describe("an attempt that never hears hello", () => {
+  it("is given up on and retried", () => {
+    const { sockets, last, state, seen } = setup({ heartbeatTimeoutMs: 500 });
+    const stuck = last();
+    stuck.events.open();
+    vi.advanceTimersByTime(499);
+    expect(sockets).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(stuck.closed).toBe(true);
+    expect(state().status).toBe("reconnecting");
+    expect(seen).toEqual(["failed"]);
+    vi.advanceTimersByTime(100);
+    expect(sockets).toHaveLength(2);
+    last().receive(hello());
+    vi.advanceTimersByTime(60_000);
+    expect(state().status).toBe("open");
+  });
+});
+
 describe("waking", () => {
   it("reconnects at once instead of waiting out a long pause", () => {
     const { wire, sockets, last } = setup();

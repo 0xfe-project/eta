@@ -186,11 +186,17 @@ export function createHost(options: HostOptions = {}) {
   cleanup(() => clearTimeout(grace));
 
   // Back in the foreground (the system may have cut the connection meanwhile, and the retries
-  // have slowed to their longest pause): reconnect now, or check the one that looks open.
+  // have slowed to their longest pause, or given up): reconnect now, or check the one that looks
+  // open.
   let active = untracked(lifecycle) === "active";
   effect(() => {
     const now = lifecycle() === "active";
-    if (now && !active) wire?.wake();
+    if (now && !active)
+      untracked(() => {
+        const at = address();
+        if (paused() && at) start(at);
+        else wire?.wake();
+      });
     active = now;
   });
 
