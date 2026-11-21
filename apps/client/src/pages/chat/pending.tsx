@@ -1,6 +1,7 @@
 import type {
   BoardTaskStatus,
   CaptainOperationView,
+  InteractionView,
   RoutineSummary,
 } from "@eta/client-contracts";
 import type { JSX } from "nsh";
@@ -26,6 +27,53 @@ import { CaptainFace } from "../../navigation/captain";
 import { follow, relativeTime, useHost } from "../../services/host";
 import { TaskGlyph, taskNeedsAttention } from "../tasks/status";
 import { Proposal, Question } from "./approvals";
+
+/** The dialog a question is answered in, wherever the question was opened from. */
+export function QuestionDialog(props: {
+  item: InteractionView;
+  phone: boolean;
+  onClose: () => void;
+  onConversation?: () => void;
+  onSource?: () => void;
+}) {
+  const host = useHost();
+  const name = () => host.agent(props.item.agentId)?.name ?? "Agent";
+  return (
+    <Modal
+      title={uiText("questionFromWithCount", { value1: name() })}
+      height={474}
+      phone={props.phone}
+      sheet={props.phone}
+      hideHeader
+      overPhoneNavigation
+      onClose={props.onClose}
+    >
+      <View
+        style={{
+          ...row,
+          height: 44,
+          paddingLeft: 16,
+          paddingRight: 8,
+          gap: 8,
+          flexShrink: 0,
+        }}
+      >
+        <AgentFace id={props.item.agentId} size={20} />
+        <Label weight={600} style={{ flex: 1 }}>
+          {uiText("questionFromWithCount", { value1: name() })}
+        </Label>
+        <CloseButton size={32} iconSize={16} onPress={props.onClose} />
+      </View>
+      <Question
+        item={props.item}
+        sheet
+        onDone={props.onClose}
+        onConversation={props.onConversation}
+        onSource={props.onSource}
+      />
+    </Modal>
+  );
+}
 
 export function Pending(props: {
   conversationId?: string;
@@ -587,50 +635,16 @@ export function Pending(props: {
       </If>
       <If when={chosen()}>
         {(entry) => (
-          <Modal
-            title={uiText("questionFromWithCount", {
-              value1: host.agent(entry().agentId)?.name ?? "Agent",
-            })}
-            height={474}
+          <QuestionDialog
+            item={entry()}
             phone={phone()}
-            sheet={phone()}
-            hideHeader
-            overPhoneNavigation
             onClose={() => chosenId.set("")}
-          >
-            <View
-              style={{
-                ...row,
-                height: 44,
-                paddingLeft: 16,
-                paddingRight: 8,
-                gap: 8,
-                flexShrink: 0,
-              }}
-            >
-              <AgentFace id={entry().agentId} size={20} />
-              <Label weight={600} style={{ flex: 1 }}>
-                {uiText("questionFromWithCount", {
-                  value1: host.agent(entry().agentId)?.name ?? "Agent",
-                })}
-              </Label>
-              <CloseButton
-                size={32}
-                iconSize={16}
-                onPress={() => chosenId.set("")}
-              />
-            </View>
-            <Question
-              item={entry()}
-              sheet
-              onDone={() => chosenId.set("")}
-              onConversation={
-                entry().conversationId && props.onConversation
-                  ? () => props.onConversation!(entry().conversationId!)
-                  : undefined
-              }
-            />
-          </Modal>
+            onConversation={
+              entry().conversationId && props.onConversation
+                ? () => props.onConversation!(entry().conversationId!)
+                : undefined
+            }
+          />
         )}
       </If>
       <If when={proposal()}>

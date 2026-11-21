@@ -1,8 +1,10 @@
 import type {
   ArtifactView,
+  BoardTaskDetail,
   CaptainOperationView,
   ConversationInfo,
   HistoryResult,
+  InteractionView,
   MemberView,
   MessageView,
   TimelineSection,
@@ -28,6 +30,7 @@ import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { CaptainFace } from "../../navigation/captain";
 import { follow, useHost } from "../../services/host";
+import { isActiveRunStatus } from "../tasks/run-log";
 import { PendingStrip } from "./approvals";
 import { defaultFilters } from "./artifacts/filter";
 import { ArtifactPreview } from "./artifacts/preview";
@@ -37,9 +40,16 @@ import { ConversationPanel, panelAttention } from "./conversation-panel";
 import { ConversationTimeline } from "./conversation-timeline";
 import { indexInserts, InsertMessage } from "./insert-message";
 import { InviteAgents, StewardMenu } from "./members";
+import { QuestionDialog } from "./pending";
+import { questionSource } from "./question-row";
 import { RemoveMember } from "./remove-member";
 import { MemberRun } from "./run/member-run";
 import { RunPanel } from "./run/run-panel";
+
+function FollowTask(props: { id: string }) {
+  follow(() => `tasks.${props.id}`);
+  return null;
+}
 
 export function Conversation(props: {
   id: string;
@@ -112,6 +122,19 @@ export function Conversation(props: {
   let reveal: ((replyId: string | null) => void) | undefined;
   const asking = () =>
     host.pending().filter((entry) => entry.conversationId === props.id);
+  const questionId = signal("");
+  const question = () => asking().find((entry) => entry.id === questionId());
+  // The board list does not carry a task's runs, so the tasks that could have asked (running, in
+  // this conversation) are followed while the dialog is open and matched by session.
+  const askingTasks = (item: InteractionView) =>
+    host
+      .tasks()
+      .filter(
+        (task) =>
+          task.conversationId === item.conversationId &&
+          task.runStatus !== null &&
+          isActiveRunStatus(task.runStatus),
+      );
   const messages = () => [
     ...new Map(
       [...older(), ...(timeline()?.messages ?? [])].map((message) => [
@@ -121,6 +144,18 @@ export function Conversation(props: {
     ).values(),
   ];
   const indexed = computed(() => indexInserts(messages()));
+  const questionSourceOf = (item: InteractionView) =>
+    questionSource(
+      item,
+      indexed().rows,
+      askingTasks(item).flatMap((task) => {
+        const detail = host.section<BoardTaskDetail>(
+          `tasks.${task.id}`,
+          "task",
+        );
+        return detail ? [{ id: task.id, runs: detail.runs }] : [];
+      }),
+    );
   const inserting = signal<
     { message: MessageView; recipients: string[] } | undefined
   >(undefined);
@@ -166,6 +201,17 @@ export function Conversation(props: {
       hasOlder.set(page.hasMore);
     }
     paging.set(false);
+  }
+  function openTask(id: string) {
+    props.onTask(id);
+    if (!phone()) drawer.set(true);
+  }
+  function jumpToSource(item: InteractionView) {
+    const source = questionSourceOf(item);
+    if (!source) return;
+    questionId.set("");
+    if (source.kind === "row") reveal?.(item.replyId);
+    else openTask(source.taskId);
   }
   function closeDrawer() {
     drawer.set(false);
@@ -362,7 +408,7 @@ export function Conversation(props: {
             <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
               <PendingStrip
                 items={asking()}
-                onOpen={(item) => reveal?.(item.replyId)}
+                onOpen={(item) => questionId.set(item.id)}
               />
             </View>
           </If>
@@ -421,10 +467,7 @@ export function Conversation(props: {
                   )}
                 </If>
               )}
-              onTask={(id) => {
-                props.onTask(id);
-                if (!phone()) drawer.set(true);
-              }}
+              onTask={openTask}
               onArtifact={openArtifact}
               onWidgetDraft={(conversationId, text) =>
                 widgetDraft.set({ conversationId, text })
@@ -544,6 +587,25 @@ export function Conversation(props: {
             />
           </If>
         </Modal>
+      </If>
+      <If when={question()}>
+        {(item) => (
+          <>
+            <Each of={askingTasks(item())} key={(task) => task.id}>
+              {(task) => <FollowTask id={task().id} />}
+            </Each>
+            <QuestionDialog
+              item={item()}
+              phone={phone()}
+              onClose={() => questionId.set("")}
+              onSource={
+                questionSourceOf(item())
+                  ? () => jumpToSource(item())
+                  : undefined
+              }
+            />
+          </>
+        )}
       </If>
       <If when={projectInfo() && project()}>
         <Modal

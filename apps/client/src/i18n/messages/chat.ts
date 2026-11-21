@@ -127,6 +127,7 @@ export const chatMessages = {
   message: ["Message", "消息"],
   messageWithCount: ["Message {{name}}…", "发消息给 {{name}}…"],
   newReport: ["{{unseenReports}} new report", "{{unseenReports}} 份新报告"],
+  jumpToSource: ["Jump to source", "跳转到来源"],
   noMessagesYet: ["No messages yet", "暂无消息"],
   noSteward: ["No steward", "没有主理人"],
   nothingIsWaitingForYou: ["Nothing is waiting for you.", "暂无待处理事项。"],

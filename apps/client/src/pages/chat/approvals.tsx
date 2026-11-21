@@ -24,6 +24,8 @@ function SheetQuestion(props: {
   item: InteractionView;
   onDone?: () => void;
   onConversation?: () => void;
+  /** Takes the user to where the question came from; absent when there is no such place. */
+  onSource?: () => void;
   sheet?: boolean;
 }) {
   const host = useHost();
@@ -162,19 +164,30 @@ function SheetQuestion(props: {
         }}
       >
         <If when={props.sheet}>
-          <View
-            role={props.onConversation ? "button" : undefined}
-            accessibilityLabel={uiText("openConversation")}
-            onPress={() => props.onConversation?.()}
-            style={{
-              flex: 1,
-              cursor: props.onConversation ? "pointer" : "default",
-            }}
-          >
+          <View style={{ ...row, flex: 1, gap: 16 }}>
             <If when={props.onConversation}>
-              <Label variant="small" tone="muted">
-                {uiText("openConversation")}
-              </Label>
+              <View
+                role="button"
+                accessibilityLabel={uiText("openConversation")}
+                onPress={() => props.onConversation?.()}
+                style={{ cursor: "pointer" }}
+              >
+                <Label variant="small" tone="muted">
+                  {uiText("openConversation")}
+                </Label>
+              </View>
+            </If>
+            <If when={props.onSource}>
+              <View
+                role="button"
+                accessibilityLabel={uiText("jumpToSource")}
+                onPress={() => props.onSource?.()}
+                style={{ cursor: "pointer" }}
+              >
+                <Label variant="small" tone="muted">
+                  {uiText("jumpToSource")}
+                </Label>
+              </View>
             </If>
           </View>
         </If>
@@ -366,6 +379,7 @@ export function Question(props: {
   item: InteractionView;
   onDone?: () => void;
   onConversation?: () => void;
+  onSource?: () => void;
   sheet?: boolean;
 }) {
   return (
