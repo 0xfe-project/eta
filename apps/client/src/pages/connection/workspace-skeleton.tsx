@@ -1,5 +1,6 @@
 import type { Layout } from "../../components";
 import { View } from "nsh";
+import { paneWidth } from "../../app/pane-width";
 import { colors, fill, grow, row, sizes } from "../../components";
 import { uiText } from "../../i18n";
 import { PhoneTabItem, phoneTabs } from "../../navigation/phone-tabs";
@@ -83,7 +84,7 @@ export function WorkspaceSkeleton(props: {
       <If when={!phone()}>
         <View
           style={{
-            width: desktop() ? sizes.sidebar : sizes.rail,
+            width: desktop() ? paneWidth("sidebar") : sizes.rail,
             backgroundColor: c().surface,
             borderRightWidth: 1,
             borderColor: c().border,
@@ -294,7 +295,7 @@ export function WorkspaceSkeleton(props: {
       <If when={desktop()}>
         <View
           style={{
-            width: sizes.panel,
+            width: paneWidth("panel"),
             backgroundColor: c().surface,
             borderLeftWidth: 1,
             borderColor: c().border,
