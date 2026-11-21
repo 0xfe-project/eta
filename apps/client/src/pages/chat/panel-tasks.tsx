@@ -4,7 +4,7 @@ import { Caption, colors, Icon, Label, row } from "../../components";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-import { runAgo } from "../routines/schedule";
+import { taskTime } from "../tasks/facts";
 import {
   statusName,
   SubtaskSegments,
@@ -273,8 +273,10 @@ function TaskRow(props: { task: BoardTaskView; onPress: () => void }) {
   const task = () => props.task;
   const executor = () =>
     host.agent(task().assigneeAgentId ?? task().createdBy.agentId)?.name;
+  // `taskTime`, not the routines' `runAgo`: that one needs `Intl.RelativeTimeFormat`, which the
+  // native runtime (macOS, Linux, Windows, phones) does not have, and its throw took the line.
   const meta = () =>
-    [`#${task().number}`, executor(), runAgo(task().updatedAt)]
+    [`#${task().number}`, executor(), taskTime(task())]
       .filter(Boolean)
       .join(" · ");
   const waitingFor = () =>
