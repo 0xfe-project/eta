@@ -6,13 +6,15 @@
  * here — no `prompt`, no `session.pin`, no "built-in" anything. What can be called is
  * whatever the running server registered, and `hello` says exactly that.
  *
- * The whole protocol is four frames in and five out:
+ * The whole protocol is five frames in and six out:
  *
  * ```
  * in : call { target, action, args?, requestId? }   subscribe | unsubscribe { target }   native
- * out: hello { ops, mounted, state }                reply { requestId, ok, result|error }
+ *      ping                                         (is anybody there?)
+ * out: hello { ops, mounted, state, heartbeat? }    reply { requestId, ok, result|error }
  *      state { target, version, snapshot|patch }    event { target, name, data }
  *      error { message }                            (a frame that cannot be read at all)
+ *      pong                                         (the answer to a ping, at once)
  * ```
  *
  * Three things that used to be special are now the same thing as everything else:
@@ -65,11 +67,22 @@ export type NativeFrame =
   | { op: "native"; kind: "menu" | "tray"; action: string; data?: unknown }
   | { op: "native"; kind: "update"; action: string; data?: unknown };
 
+/**
+ * Is the connection still there? A socket whose peer vanished without a close (the network went
+ * away quietly, the computer slept) looks open until TCP gives up, which can take minutes; a
+ * `pong` coming back is the proof it is not. Only sent to a host whose `hello` says `heartbeat`:
+ * an older one does not know the frame and would never answer.
+ */
+export interface PingFrame {
+  op: "ping";
+}
+
 export type ClientFrame =
   | CallFrame
   | SubscribeFrame
   | UnsubscribeFrame
-  | NativeFrame;
+  | NativeFrame
+  | PingFrame;
 
 // ------------------------------------------------------------------- the server's side
 
@@ -108,6 +121,8 @@ export interface HelloFrame<Mounted = unknown, Diagnostics = unknown> {
   state: Record<string, StateSnapshot>;
   /** What the prompt layer last reported, when the server has one (a panel reads it). */
   diagnostics?: Diagnostics | undefined;
+  /** The server answers `ping` with `pong`. Absent from an older one, which a client must not ping. */
+  heartbeat?: true | undefined;
 }
 
 export interface ReplyFrame {
@@ -170,19 +185,26 @@ export interface ErrorFrame {
   message: string;
 }
 
+/** The answer to a `ping`, sent at once, ahead of anything the connection is still working on. */
+export interface PongFrame {
+  type: "pong";
+}
+
 export type ServerFrame =
   | HelloFrame
   | ReplyFrame
   | ReplyErrorFrame
   | StateFrame
   | EventFrame
-  | ErrorFrame;
+  | ErrorFrame
+  | PongFrame;
 
 /** The frame types this side of the pipe has. Pinned for the same reason as the op names. */
 export const SERVER_FRAME_TYPES = [
   "error",
   "event",
   "hello",
+  "pong",
   "reply",
   "state",
 ] as const;

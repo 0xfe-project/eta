@@ -130,7 +130,7 @@ export function Conversation(props: {
     return () => clearTimeout(timer);
   });
   const phone = () => props.layout === "phone";
-  const offline = () => phone() && host.state().status === "reconnecting";
+  const offline = () => phone() && host.disconnected();
   const noCachedMessages = () => offline() && !messages().length;
   let previousRead = 0;
   effect(() => {

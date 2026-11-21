@@ -7,6 +7,7 @@ import {
   fromWebSocket,
   initialWireState,
   Wire as SharedWire,
+  wakeOnPageEvents,
 } from "@eta/client-contracts/wire";
 import { createStore } from "zustand/vanilla";
 
@@ -49,18 +50,25 @@ export function wireUrl(location: Pick<Location, "host" | "protocol">): string {
 }
 
 let shared: Wire | undefined;
+let stopWaking: (() => void) | undefined;
 
-/** The page's one connection, opened on first use. */
+/**
+ * The page's one connection, opened on first use. Coming back to the tab, or the browser going
+ * online, retries at once (or checks the connection that looks open).
+ */
 export function getWire(): Wire {
   if (shared === undefined) {
     shared = new Wire({ url: wireUrl(window.location) });
     shared.connect();
+    stopWaking = wakeOnPageEvents(shared, { window, document });
   }
   return shared;
 }
 
 /** Replace the page's connection; a test installs a fake, `undefined` forgets it. */
 export function setWire(wire: Wire | undefined): void {
+  stopWaking?.();
+  stopWaking = undefined;
   shared?.close();
   shared = wire;
 }

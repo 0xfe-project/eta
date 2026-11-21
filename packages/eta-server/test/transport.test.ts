@@ -80,7 +80,27 @@ describe("hello", () => {
       ],
       mounted: [{ name: "git", source: "bundled" }],
       state: { sessions: SESSIONS_STATE },
+      heartbeat: true,
     });
+  });
+});
+
+describe("ping", () => {
+  it("is answered at once, ahead of a call still running", async () => {
+    const { connection, frames, order } = harness();
+    const slow = connection.handle(
+      JSON.stringify({
+        op: "call",
+        target: "sessions",
+        action: "prompt",
+        requestId: "r1",
+      }),
+    );
+    await connection.handle(JSON.stringify({ op: "ping" }));
+    expect(frames.at(-1)).toEqual({ type: "pong" });
+    expect(order).toEqual(["start:prompt"]);
+    await slow;
+    expect(frames.at(-1)).toMatchObject({ type: "reply", requestId: "r1" });
   });
 });
 

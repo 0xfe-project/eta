@@ -46,7 +46,10 @@ test("a phone that lost the host before any message shows the error in the messa
     height: 844,
     locale: "en-US",
     urlScheme: "eta://fixture/offline",
+    clock: {},
   });
+  // Said only once the connection has been gone for the grace period.
+  await app.clock!.runFor(2_000);
   expect(
     app.shows(`${messages} >> text:Lost the connection to the host.`),
   ).toBe(true);
