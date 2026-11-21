@@ -315,6 +315,41 @@ export function follow(target: () => string | undefined) {
   };
 }
 
+/** Sessions a host has been asked to open, per host. */
+const openedSessions = new WeakMap<object, Set<string>>();
+
+/**
+ * Follow a session's view (`sessions.<id>`). A session the host has not opened since it started
+ * (a member not woken since a restart) is not a target yet and answers `target:missing`, so it is
+ * opened first with `sessions.resync`, which is cheap for one already open, as the web app does.
+ */
+export function followSession(session: () => string | undefined) {
+  const host = useHost();
+  const opened = openedSessions.get(host) ?? new Set<string>();
+  openedSessions.set(host, opened);
+  const ready = signal<string | undefined>(undefined);
+  effect(() => {
+    const id = session();
+    if (!id || opened.has(id)) {
+      ready.set(id);
+      return;
+    }
+    void host
+      .call("sessions", "resync", { session: id })
+      .then(
+        () => opened.add(id),
+        () => {},
+      )
+      .finally(() => {
+        if (untracked(session) === id) ready.set(id);
+      });
+  });
+  follow(() => {
+    const id = ready();
+    return id ? `sessions.${id}` : undefined;
+  });
+}
+
 export function clock(at: number) {
   return new Date(at).toLocaleTimeString(formatLocale(), {
     hour: "numeric",

@@ -97,18 +97,9 @@ export function RailCaptain(props: { selected: boolean; onPress: () => void }) {
           cursor: "pointer",
         }}
       >
-        <View
-          style={{
-            width: 44,
-            height: 44,
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
-          <CaptainContextRing />
+        <CaptainContextRing>
           <CaptainFace size={36} />
-        </View>
+        </CaptainContextRing>
         <Label size={10} line={14}>
           {text("captain")}
         </Label>
