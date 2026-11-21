@@ -214,7 +214,7 @@ export function Message(props: {
               paddingHorizontal: 12,
             }}
           >
-            <Label line={props.phone ? 20 : 23}>{item().text}</Label>
+            <Label>{item().text}</Label>
             <Each of={props.additions} key={(addition) => addition.id}>
               {(addition) => (
                 <View
@@ -226,7 +226,7 @@ export function Message(props: {
                     borderColor: c().border,
                   }}
                 >
-                  <Label size={10} tone="muted">
+                  <Label variant="caption" tone="muted">
                     {uiText("inserted", { clock: clock(addition().createdAt) })}
                   </Label>
                   <Label>{addition().text}</Label>
@@ -235,7 +235,7 @@ export function Message(props: {
             </Each>
             <Each of={attached()} key={(file) => file.id}>
               {(file) => (
-                <Label line={props.phone ? 20 : 23}>
+                <Label>
                   {`[${file().name} · ${(file().size / 1024).toFixed(1)} KB]`}
                 </Label>
               )}
@@ -243,8 +243,7 @@ export function Message(props: {
           </View>
           <View style={{ ...row, gap: 8 }}>
             <Label
-              size={10}
-              line={props.phone ? 12 : 14}
+              variant="caption"
               tone={props.phone ? "muted" : "faint"}
               style={{
                 textTransform: props.phone ? "none" : "uppercase",
@@ -283,8 +282,7 @@ export function Message(props: {
                     }}
                   >
                     <Label
-                      size={10}
-                      line={12}
+                      variant="caption"
                       tone={props.inserting ? "ink" : "muted"}
                       style={{ letterSpacing: 1, textTransform: "uppercase" }}
                     >
@@ -361,8 +359,7 @@ export function Message(props: {
                 />
               </If>
               <Label
-                size={10}
-                line={14}
+                variant="caption"
                 tone="faint"
                 style={{
                   flexShrink: 0,
@@ -373,8 +370,7 @@ export function Message(props: {
                 {uiText("taskDraft")}
               </Label>
               <Label
-                size={12}
-                line={16}
+                variant="small"
                 weight={500}
                 lines={1}
                 style={{ flex: 1, minWidth: props.phone ? 200 : 0 }}
@@ -389,7 +385,7 @@ export function Message(props: {
                   borderColor: c().warning,
                 }}
               >
-                <Label size={10} line={14} tone="warningInk">
+                <Label variant="caption" tone="warningInk">
                   {uiText("draftNeedsConfirming")}
                 </Label>
               </View>
@@ -399,7 +395,6 @@ export function Message(props: {
               <Button
                 label={uiText("editAndConfirm")}
                 size={22}
-                labelSize={12}
                 controlRef={(node) => {
                   action = node;
                 }}
@@ -414,7 +409,7 @@ export function Message(props: {
                   borderColor: c().border,
                 }}
               >
-                <Markdown value={draftDescription()} line={20} />
+                <Markdown value={draftDescription()} />
               </View>
             </If>
           </View>
@@ -442,7 +437,7 @@ export function Message(props: {
               id={item().agentId}
               size={props.phone ? (active() ? 18 : 16) : 14}
             />
-            <Label size={12} line={16} weight={600}>
+            <Label variant="small" weight={600}>
               {host.agent(item().agentId)?.name ??
                 (item().author === "captain" ? "Captain" : uiText("agent"))}
             </Label>
@@ -509,7 +504,7 @@ export function Message(props: {
                 borderColor: c().border,
               }}
             >
-              <Label size={10} line={12} tone="muted">
+              <Label variant="caption" tone="muted">
                 {stepCount()
                   ? stepCount() === 1
                     ? uiText("processOneStep")
@@ -523,7 +518,7 @@ export function Message(props: {
               <Button
                 label={uiText("stop")}
                 size={18}
-                labelSize={10}
+                labelVariant="caption"
                 labelWeight={600}
                 style={{ paddingHorizontal: 7 }}
                 disabled={item().status === "stopping"}
@@ -562,7 +557,7 @@ export function Message(props: {
               focusVisibleStyle={focusRing(c())}
               style={{ cursor: stepCount() ? "pointer" : undefined }}
             >
-              <Label size={11} line={14} tone="muted">
+              <Label variant="caption" tone="muted">
                 {uiText("processViewMore")}
               </Label>
             </View>
@@ -572,16 +567,13 @@ export function Message(props: {
           {/* A failed reply is its time, then why, as a warning line. */}
           <View style={{ gap: 8 }}>
             <Label
-              size={10}
-              line={12}
+              variant="caption"
               tone="muted"
               style={{ letterSpacing: 1, textTransform: "uppercase" }}
             >
               {messageTime(item().createdAt, false)}
             </Label>
-            <Label size={14} line={18} tone="warning">
-              {`⚠ ${failure()}`}
-            </Label>
+            <Label tone="warning">{`⚠ ${failure()}`}</Label>
           </View>
         </If>
         <If
@@ -590,7 +582,7 @@ export function Message(props: {
             <If when={answer()}>
               {(text) => (
                 <View testID="reply-answer" style={{ paddingHorizontal: 2 }}>
-                  <Markdown value={text()} line={props.phone ? 22 : 24} />
+                  <Markdown value={text()} />
                 </View>
               )}
             </If>
@@ -605,7 +597,7 @@ export function Message(props: {
           )}
         </If>
         <If when={item().status === "stopped"}>
-          <Label size={12} line={16} tone="muted">
+          <Label variant="small" tone="muted">
             {uiText("replyStopped")}
           </Label>
         </If>
@@ -628,8 +620,7 @@ export function Message(props: {
         <If when={question()}>{(entry) => <Question item={entry()} />}</If>
         <If when={!review() && item().status !== "failed"}>
           <Label
-            size={10}
-            line={props.phone ? 12 : 14}
+            variant="caption"
             tone={props.phone ? "muted" : "faint"}
             style={{
               letterSpacing: props.phone ? 0 : 0.4,

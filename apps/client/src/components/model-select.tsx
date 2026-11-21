@@ -4,7 +4,7 @@ import { Select } from "nsh/base";
 import { uiText } from "../i18n";
 import { useHost } from "../services/host";
 import { Icon, Label } from "./text";
-import { colors, row } from "./theme";
+import { colors, row, textFaces, textStyle } from "./theme";
 
 export function useModels() {
   const host = useHost();
@@ -39,6 +39,7 @@ export function ModelSelect(props: {
   onChange: (value: string) => void;
 }) {
   const c = colors();
+  const type = textFaces();
   const models = useModels();
   const items = () => {
     const all = models().map((model) => ({
@@ -75,8 +76,7 @@ export function ModelSelect(props: {
       searchStyle={{
         color: c().ink,
         placeholderColor: c().muted,
-        fontSize: 12,
-        lineHeight: 16,
+        ...textStyle(type("small")),
         paddingHorizontal: 10,
         height: 34,
         backgroundColor: "transparent",
@@ -88,7 +88,7 @@ export function ModelSelect(props: {
         minHeight: 28,
         paddingHorizontal: 0,
         color: c().ink,
-        fontSize: 12,
+        fontSize: type("small").size,
       }}
       empty={
         <View
@@ -98,7 +98,7 @@ export function ModelSelect(props: {
             paddingHorizontal: 10,
           }}
         >
-          <Label size={12} line={16} tone="muted">
+          <Label variant="small" tone="muted">
             {uiText("noModelsMatch")}
           </Label>
         </View>
@@ -116,8 +116,7 @@ export function ModelSelect(props: {
           }}
         >
           <Label
-            size={12}
-            line={16}
+            variant="small"
             lines={1}
             tone={item.disabled ? "faint" : "ink"}
             style={{ flex: 1 }}
@@ -144,7 +143,7 @@ export function ModelSelect(props: {
             cursor: "pointer",
           }}
         >
-          <Label size={12} line={16} lines={1} style={{ flex: 1 }}>
+          <Label variant="small" lines={1} style={{ flex: 1 }}>
             {items().find((item) => item.value === props.value)?.title ??
               props.placeholder ??
               uiText("selectModel")}

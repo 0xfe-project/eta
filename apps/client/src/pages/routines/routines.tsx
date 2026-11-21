@@ -187,7 +187,7 @@ export function Routines(props: {
           }}
         >
           <Icon name="folder" size={12} tone="muted" />
-          <Label size={12} line={16} tone="muted" lines={1}>
+          <Label variant="small" tone="muted" lines={1}>
             Captain
           </Label>
         </View>
@@ -197,7 +197,7 @@ export function Routines(props: {
             label={uiText("panel")}
             icon="sidebar"
             iconSize={14}
-            labelSize={11}
+            labelVariant="caption"
             style={{ gap: 6 }}
             onPress={() => drawer.set(true)}
           />
@@ -247,16 +247,11 @@ export function Routines(props: {
             ...(props.layout === "desktop" ? { flex: 1, minWidth: 0 } : {}),
           }}
         >
-          <Label
-            size={tablet() ? 13 : 14}
-            line={tablet() ? 18 : phone() ? 20 : undefined}
-            weight={props.layout === "desktop" ? 500 : 600}
-          >
+          <Label weight={props.layout === "desktop" ? 500 : 600}>
             {uiText("captainIsOffSoRoutinesAre")}
           </Label>
           <Label
-            size={tablet() ? 11 : 12}
-            line={phone() ? 18 : 16}
+            variant="small"
             tone={props.layout === "desktop" ? "muted" : "mutedInk"}
           >
             {status()?.reason === "no_model"
@@ -277,7 +272,6 @@ export function Routines(props: {
             <Button
               label={uiText("turnCaptainOn")}
               size={phone() ? 36 : 28}
-              labelSize={phone() ? 14 : undefined}
               style={{ paddingHorizontal: phone() ? 14 : 12 }}
               onPress={() =>
                 void host.action(() =>
@@ -349,11 +343,9 @@ export function Routines(props: {
                   icon="routines"
                   iconSize={24}
                   iconTone="ink"
-                  titleSize={tablet() ? 13 : 14}
-                  titleLine={tablet() ? 18 : 20}
+                  titleVariant="body"
                   titleWeight={tablet() ? 400 : 500}
-                  descriptionSize={tablet() ? 11 : 12}
-                  descriptionLine={phone() ? 18 : 16}
+                  descriptionVariant="small"
                   descriptionWidth={400}
                   // The list's empty state sits at the top of the column.
                   style={{
@@ -372,7 +364,6 @@ export function Routines(props: {
                         tone="primary"
                         size={phone() ? 36 : tablet() ? 28 : 24}
                         iconSize={phone() ? 14 : 12}
-                        labelSize={phone() ? 14 : 12}
                         style={{
                           paddingHorizontal: phone() ? 14 : tablet() ? 12 : 8,
                           gap: phone() ? 6 : 4,
@@ -445,11 +436,7 @@ export function Routines(props: {
                       icon="routines"
                       iconSize={selected() ? undefined : 24}
                       iconTone={selected() ? undefined : "ink"}
-                      titleSize={tablet() ? 13 : undefined}
-                      titleLine={tablet() ? undefined : 20}
                       titleWeight={tablet() ? 400 : undefined}
-                      descriptionSize={tablet() ? 11 : undefined}
-                      descriptionLine={16}
                       // Two lines on the desktop; tablet runs it across the pane.
                       descriptionWidth={tablet() ? 560 : 230}
                       style={

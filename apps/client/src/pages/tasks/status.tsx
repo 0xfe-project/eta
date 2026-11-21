@@ -145,8 +145,7 @@ export function TaskStatus(props: { task: BoardTaskView }) {
         <Icon name="lock" size={12} tone="mutedInk" />
       </If>
       <Label
-        size={12}
-        line={waiting() ? 18 : 20}
+        variant="small"
         lines={1}
         tone={waiting() ? "mutedInk" : tones[props.task.status]}
       >
@@ -239,8 +238,7 @@ function TaskCardStatus(props: { task: BoardTaskView }) {
         <TaskGlyph status={task().status} size={10} />
       </If>
       <Label
-        size={12}
-        line={waitingFor() ? 18 : 20}
+        variant="small"
         lines={1}
         tone={
           waitingFor() ? "mutedInk" : blocked() ? "ink" : tones[task().status]
@@ -350,12 +348,11 @@ export function TaskSummary(props: {
           focusVisibleStyle={focusRing(c())}
           style={{ ...row, gap: 8, flex: 1, minWidth: 50, cursor: "pointer" }}
         >
-          <Label size={12} line={16} tone="muted">
+          <Label variant="small" tone="muted">
             {`#${props.task.number}`}
           </Label>
           <Label
-            size={12}
-            line={16}
+            variant="small"
             weight={500}
             lines={1}
             style={{ flex: 1, minWidth: 0 }}
@@ -380,8 +377,7 @@ export function TaskSummary(props: {
             when={subtasks().length}
             else={
               <Label
-                size={12}
-                line={16}
+                variant="small"
                 tone="muted"
                 style={{ paddingVertical: 8, paddingHorizontal: 10 }}
               >
@@ -392,7 +388,7 @@ export function TaskSummary(props: {
             <View style={{ paddingVertical: 8, paddingHorizontal: 10, gap: 6 }}>
               <SubtaskSegments subtasks={subtasks()} width={44} gap={4} />
               <If when={plan()}>
-                <Label size={10} line={12} tone="muted">
+                <Label variant="caption" tone="muted">
                   {plan()}
                 </Label>
               </If>

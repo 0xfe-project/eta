@@ -98,7 +98,6 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
           <Button
             label={offerLabel()}
             size={props.phone ? 40 : undefined}
-            labelSize={props.phone ? 14 : undefined}
             style={
               props.phone ? { marginTop: 8, alignSelf: "stretch" } : undefined
             }
@@ -150,19 +149,17 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
         </If>
         <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
           <View testID="host-version">
-            <Label size={14} line={20} weight={500}>
-              {version()}
-            </Label>
+            <Label weight={500}>{version()}</Label>
           </View>
           <If when={props.phone}>
             <View style={{ ...row, gap: 5 }}>
               <StatusDot color={c()[statusTone()]} />
-              <Label size={12} line={16} tone="mutedInk">
+              <Label variant="small" tone="mutedInk">
                 {statusLabel()}
               </Label>
             </View>
           </If>
-          <Label size={12} line={17} tone="muted">
+          <Label variant="small" tone="muted">
             {desktopTitle()}
           </Label>
           <If when={offer() && note() && !active()}>
@@ -177,7 +174,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
                 cursor: "pointer",
               }}
             >
-              <Label size={12} line={17} tone="mutedInk">
+              <Label variant="small" tone="mutedInk">
                 {uiText("whatsNew")}
               </Label>
               <Icon name={notes() ? "down" : "right"} size={12} tone="muted" />
@@ -190,7 +187,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
             <View style={{ width: 146, alignItems: "flex-start", gap: 7 }}>
               <View style={{ ...row, gap: 6 }}>
                 <StatusDot color={c()[statusTone()]} />
-                <Label size={12} line={18} tone="mutedInk">
+                <Label variant="small" tone="mutedInk">
                   {statusLabel()}
                 </Label>
               </View>
@@ -268,7 +265,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
               check()?.error
             }
           >
-            <Label size={12} tone="red">
+            <Label variant="small" tone="red">
               {(error() && !editor() && !confirm() ? error() : "") ||
                 (failed() ? status()?.error : "") ||
                 check()?.error}
@@ -276,7 +273,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
           </If>
           <If when={check()?.blocked}>
             {(blocked) => (
-              <Label size={12} tone="muted">
+              <Label variant="small" tone="muted">
                 {uiText(blockedExplanation[blocked()])}
               </Label>
             )}

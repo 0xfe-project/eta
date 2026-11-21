@@ -129,10 +129,8 @@ export function TaskDetailDialogs(props: {
                       <TaskGlyph status={entry()} size={12} />
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
-                      <Label size={14} line={20}>
-                        {statusName(entry())}
-                      </Label>
-                      <Label size={12} line={16} tone="muted">
+                      <Label>{statusName(entry())}</Label>
+                      <Label variant="small" tone="muted">
                         {statusHint(entry(), task()?.dependents?.length ?? 0)}
                       </Label>
                     </View>
@@ -155,8 +153,7 @@ export function TaskDetailDialogs(props: {
             <If when={statusError()}>
               {(message) => (
                 <Label
-                  size={12}
-                  line={16}
+                  variant="small"
                   tone="red"
                   style={{ paddingTop: 8, paddingHorizontal: 16 }}
                 >
@@ -326,7 +323,7 @@ export function TaskDetailDialogs(props: {
             when={phone()}
             else={
               <View style={{ paddingTop: 6 }}>
-                <Label size={12} line={18} tone="muted">
+                <Label variant="small" tone="muted">
                   {archiveBody()}
                 </Label>
                 <View
@@ -366,8 +363,6 @@ export function TaskDetailDialogs(props: {
               }}
             >
               <Label
-                size={14}
-                line={20}
                 weight={600}
                 style={{ flex: 1, minWidth: 0, paddingTop: 6 }}
               >
@@ -380,9 +375,7 @@ export function TaskDetailDialogs(props: {
               />
             </View>
             <View style={{ padding: 16 }}>
-              <Label size={14} line={20}>
-                {archiveBody()}
-              </Label>
+              <Label>{archiveBody()}</Label>
             </View>
             <View
               style={{
@@ -399,7 +392,7 @@ export function TaskDetailDialogs(props: {
                 label={uiText("keepIt")}
                 tone="ghost"
                 size={32}
-                labelSize={13}
+                labelVariant="small"
                 style={{ paddingHorizontal: 12 }}
                 onPress={() => archive.set(false)}
               />
@@ -407,7 +400,7 @@ export function TaskDetailDialogs(props: {
                 label={archiveLabel()}
                 tone="primary"
                 size={32}
-                labelSize={13}
+                labelVariant="small"
                 style={{ paddingHorizontal: 14 }}
                 disabled={submitting()}
                 onPress={archiveTask}
@@ -504,15 +497,13 @@ function TaskContextPanel(props: {
             }}
           >
             <Icon name="context" size={12} />
-            <Label size={11} line={16}>
-              {uiText("taskContext")}
-            </Label>
+            <Label variant="small">{uiText("taskContext")}</Label>
           </View>
         </View>
         <CloseButton onPress={props.onClose} />
       </View>
       <View style={{ padding: 12, gap: 12 }}>
-        <Label size={10} line={12} tone="muted" style={caption}>
+        <Label variant="caption" tone="muted" style={caption}>
           {uiText("members")}
         </Label>
         <View style={{ borderTopWidth: 1, borderColor: c().border }}>
@@ -527,10 +518,8 @@ function TaskContextPanel(props: {
                   borderColor: c().border,
                 }}
               >
-                <Label size={12} line={16}>
-                  {member()[0]}
-                </Label>
-                <Label size={12} line={16} tone="muted">
+                <Label variant="small">{member()[0]}</Label>
+                <Label variant="small" tone="muted">
                   {member()[1]}
                 </Label>
               </View>
@@ -539,16 +528,13 @@ function TaskContextPanel(props: {
         </View>
         <If when={group()}>
           <Label
-            size={10}
-            line={12}
+            variant="caption"
             tone="muted"
             style={{ ...caption, paddingTop: 8 }}
           >
             {uiText("taskGroup")}
           </Label>
-          <Label size={12} line={16}>
-            {group()}
-          </Label>
+          <Label variant="small">{group()}</Label>
         </If>
       </View>
     </View>

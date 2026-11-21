@@ -1,5 +1,6 @@
 import type { ArtifactView, MemberView } from "@eta/client-contracts";
 import type { JSX, Signal } from "nsh";
+import type { TextVariant } from "../../components";
 import type { ArtifactFilters } from "./artifacts/filter";
 import { Scroll, signal, View } from "nsh";
 import {
@@ -63,11 +64,11 @@ export function PhoneConversationInfo(props: {
           }}
         >
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Label size={14} line={18} weight={600} lines={1}>
+            <Label weight={600} lines={1}>
               {props.name}
             </Label>
             <If when={props.project}>
-              <Label size={10} line={12} tone="muted" lines={1}>
+              <Label variant="caption" tone="muted" lines={1}>
                 {props.project}
               </Label>
             </If>
@@ -133,10 +134,8 @@ export function PhoneConversationInfo(props: {
               icon="appWindow"
               iconSize={24}
               title={uiText("noArtifactsYet")}
-              titleLine={20}
               description={uiText("artifactsEmptyHelp")}
-              descriptionSize={10}
-              descriptionLine={16}
+              descriptionVariant="caption"
               style={{ flex: 0, paddingVertical: 32 }}
             />
           </If>
@@ -165,10 +164,10 @@ export function PhoneConversationInfo(props: {
             iconSize={16}
             onPress={() => allArtifacts.set(false)}
           />
-          <Label size={14} line={18} weight={600} lines={1}>
+          <Label weight={600} lines={1}>
             {uiText("chatArtifacts")}
           </Label>
-          <Label size={12} line={18} tone="muted" style={{ flex: 1 }}>
+          <Label variant="small" tone="muted" style={{ flex: 1 }}>
             {artifacts().length}
           </Label>
           <CloseButton size={32} iconSize={16} onPress={props.onClose} />
@@ -205,7 +204,7 @@ export function PhoneConversationInfo(props: {
         }}
       >
         <Caption text={section.label} phone />
-        <Label size={10} line={12} tone="muted">
+        <Label variant="caption" tone="muted">
           {section.count}
         </Label>
         {section.children}
@@ -233,7 +232,7 @@ function MemberRow(props: {
     <InfoRow
       height={52}
       title={host.agent(props.member.agentId)?.name ?? uiText("agent")}
-      titleSize={14}
+      titleVariant="body"
       detail={detail()}
       onPress={
         props.member.sessionId
@@ -268,7 +267,7 @@ function MemberRow(props: {
 function InfoRow(props: {
   height: number;
   title: string;
-  titleSize?: number;
+  titleVariant?: TextVariant;
   detail?: string;
   children: JSX.Element;
   onPress?: () => void;
@@ -294,11 +293,11 @@ function InfoRow(props: {
     >
       {props.children}
       <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-        <Label size={props.titleSize ?? 13} line={18} lines={1}>
+        <Label variant={props.titleVariant ?? "small"} lines={1}>
           {props.title}
         </Label>
         <If when={props.detail}>
-          <Label size={11} line={14} tone="muted" lines={1}>
+          <Label variant="caption" tone="muted" lines={1}>
             {props.detail}
           </Label>
         </If>

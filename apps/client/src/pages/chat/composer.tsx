@@ -46,6 +46,7 @@ import {
   Icon,
   Label,
   row,
+  textFaces,
 } from "../../components";
 
 import { uiText } from "../../i18n";
@@ -76,6 +77,7 @@ export function Composer(props: {
 }) {
   const host = useHost();
   const c = colors();
+  const type = textFaces();
   const showHeld = signal(false);
   const conversationId = props.id;
   const origin = host.address()!.origin;
@@ -408,7 +410,7 @@ export function Composer(props: {
       />
       <If when={props.blocked}>
         <View style={{ ...row, gap: 6 }}>
-          <Label size={12}>
+          <Label variant="small">
             {uiText(
               props.blocked === "archived"
                 ? "archivedComposer"
@@ -464,7 +466,7 @@ export function Composer(props: {
         />
       </If>
       <If when={tooLong()}>
-        <Label tone="amber" size={12}>
+        <Label tone="amber" variant="small">
           {uiText("composerTooLong")}
         </Label>
       </If>
@@ -541,8 +543,7 @@ export function Composer(props: {
                     }}
                   >
                     <Label
-                      size={12}
-                      line={16}
+                      variant="small"
                       weight={600}
                       lines={1}
                       tone={selected() === i() ? "canvas" : "ink"}
@@ -550,8 +551,7 @@ export function Composer(props: {
                       {entry().value.trim()}
                     </Label>
                     <Label
-                      size={11}
-                      line={16}
+                      variant="small"
                       lines={1}
                       tone={selected() === i() ? "canvas" : "muted"}
                       style={{ opacity: selected() === i() ? 0.75 : 1 }}
@@ -647,11 +647,11 @@ export function Composer(props: {
             pasteBehavior="report"
             onPaste={paste}
             style={{
-              lineHeight: props.phone ? 20 : 22,
+              lineHeight: type("body").prose,
               height: Math.min(
                 // Of the screen above the keyboard while it is up.
                 (windowSize().height - keyboardFrame().height) * 0.4,
-                Math.max(props.phone ? 20 : 22, textHeight()) +
+                Math.max(type("body").prose, textHeight()) +
                   (props.phone ? 22 : 26),
               ),
               flex: props.phone ? 1 : undefined,
@@ -720,7 +720,7 @@ export function Composer(props: {
               end={props.phone ? undefined : "return"}
               size={props.phone ? 32 : 28}
               iconSize={props.phone ? 16 : undefined}
-              labelSize={11}
+              labelVariant="caption"
               labelWeight={500}
               style={
                 props.phone ? undefined : { paddingHorizontal: 10, gap: 8 }

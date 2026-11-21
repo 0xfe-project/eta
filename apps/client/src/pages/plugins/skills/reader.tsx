@@ -9,6 +9,8 @@ import {
   Fonts,
   Label,
   monoFontFamily,
+  textFaces,
+  textStyle,
 } from "../../../components";
 import { uiText } from "../../../i18n";
 
@@ -237,7 +239,7 @@ function SkillMarkdownImage(props: {
     <If
       when={image()}
       else={
-        <Label size={12} tone="muted">
+        <Label variant="small" tone="muted">
           {props.alt || uiText("imageUnavailable")}
         </Label>
       }
@@ -267,6 +269,7 @@ export function SkillFile(props: {
   read: (path: string) => Promise<SkillFileContent>;
 }) {
   const c = colors();
+  const type = textFaces();
   const fonts = Fonts();
   const text = () =>
     props.content.kind === "text"
@@ -315,7 +318,7 @@ export function SkillFile(props: {
       <If
         when={image()}
         else={
-          <If when={markdown()} else={<Label line={22}>{text()}</Label>}>
+          <If when={markdown()} else={<Label>{text()}</Label>}>
             <TextView
               document={markdown()?.document}
               renderCustom={(node) => {
@@ -344,7 +347,7 @@ export function SkillFile(props: {
                 return path ? (
                   <SkillMarkdownImage path={path} alt={alt} read={props.read} />
                 ) : (
-                  <Label size={12} tone="muted">
+                  <Label variant="small" tone="muted">
                     {alt || uiText("imageUnavailable")}
                   </Label>
                 );
@@ -352,15 +355,14 @@ export function SkillFile(props: {
               styles={{
                 root: {
                   fontFamily: fontFamily(fonts().interface),
-                  fontSize: 14,
-                  lineHeight: 20,
+                  ...textStyle(type("body")),
                   color: c().ink,
                   gap: 12,
                 },
                 heading: { marginTop: 0, marginBottom: 0 },
-                heading1: { fontSize: 20, lineHeight: 28 },
-                heading2: { fontSize: 16, lineHeight: 24 },
-                heading3: { fontSize: 14, lineHeight: 20 },
+                heading1: textStyle(type("title"), "prose"),
+                heading2: textStyle(type("subtitle"), "prose"),
+                heading3: textStyle(type("body")),
                 paragraph: { marginTop: 0, marginBottom: 0 },
                 list: { gap: 6 },
                 listMarker: { color: c().ink },

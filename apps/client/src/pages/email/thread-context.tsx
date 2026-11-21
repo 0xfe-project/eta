@@ -18,6 +18,7 @@ import {
   Markdown,
   Modal,
   row,
+  textFaces,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { uiText } from "../../i18n";
@@ -43,15 +44,18 @@ export function EmailInfo(props: {
           borderColor: c().border,
         }}
       >
-        <Label size={12} tone="muted" style={{ width: 88, flexShrink: 0 }}>
+        <Label
+          variant="small"
+          tone="muted"
+          style={{ width: 88, flexShrink: 0 }}
+        >
           {props.label}
         </Label>
         <If when={props.agentId && props.phoneRow}>
           <AgentFace id={props.agentId} size={20} />
         </If>
         <Label
-          size={props.phoneRow && !props.compact ? 14 : 12}
-          line={props.phoneRow && props.compact ? 16 : undefined}
+          variant="small"
           tone={props.phoneRow && props.compact ? "mutedInk" : "ink"}
           weight={props.phoneRow && props.agentId ? 600 : undefined}
           style={{ flex: 1, minWidth: 0 }}
@@ -102,19 +106,13 @@ function MetaStat(props: {
       }}
     >
       <Label
-        size={10}
-        line={16}
+        variant="caption"
         tone="muted"
         style={{ letterSpacing: 0.5, textTransform: "uppercase" }}
       >
         {props.label}
       </Label>
-      <Label
-        size={12}
-        line={16}
-        tone={props.verified ? "green" : "ink"}
-        lines={1}
-      >
+      <Label variant="small" tone={props.verified ? "green" : "ink"} lines={1}>
         {props.value}
       </Label>
     </View>
@@ -177,14 +175,13 @@ function ContextRow(props: {
       }}
     >
       <Label
-        size={10}
-        line={16}
+        variant="caption"
         tone="muted"
         style={{ width: props.labelWidth, flexShrink: 0 }}
       >
         {props.label}
       </Label>
-      <Label size={11} line={16} style={{ flex: 1, minWidth: 0 }}>
+      <Label variant="small" style={{ flex: 1, minWidth: 0 }}>
         {props.value}
       </Label>
     </View>
@@ -204,11 +201,11 @@ function ContextBand(props: { label: string; count?: string }) {
         paddingHorizontal: 12,
       }}
     >
-      <Label size={10} line={16} tone="muted">
+      <Label variant="caption" tone="muted">
         {props.label}
       </Label>
       <If when={props.count}>
-        <Label size={10} line={16} tone="muted">
+        <Label variant="caption" tone="muted">
           {props.count}
         </Label>
       </If>
@@ -273,23 +270,21 @@ export function EmailMetaCard(props: {
             borderColor: c().border,
           }}
         >
-          <Label size={10} line={16} weight={600}>
+          <Label variant="caption" weight={600}>
             ETA
           </Label>
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
           <View style={{ ...row, gap: 8 }}>
             <Label
-              size={12}
-              line={16}
+              variant="small"
               weight={600}
               style={{ flexShrink: 1, minWidth: 0 }}
             >
               {uiText("agentCommunicationContext")}
             </Label>
             <Label
-              size={10}
-              line={16}
+              variant="caption"
               tone="muted"
               style={{
                 backgroundColor: c().canvas,
@@ -303,7 +298,7 @@ export function EmailMetaCard(props: {
               {dataPoints(props.meta.packetCount)}
             </Label>
           </View>
-          <Label size={11} line={16} tone="muted" lines={1}>
+          <Label variant="small" tone="muted" lines={1}>
             {[
               props.meta.agentName ?? "—",
               props.meta.protocol ?? "—",
@@ -327,7 +322,7 @@ export function EmailMetaCard(props: {
             borderColor: c().border,
           }}
         >
-          <Label size={11} line={16} tone="muted">
+          <Label variant="small" tone="muted">
             {uiText("contextHint")}
           </Label>
           <View
@@ -378,10 +373,10 @@ export function EmailMetaCard(props: {
                 borderColor: c().border,
               }}
             >
-              <Label size={12} line={16} weight={600}>
+              <Label variant="small" weight={600}>
                 {uiText("context")}
               </Label>
-              <Label size={10} line={16} tone="muted">
+              <Label variant="caption" tone="muted">
                 {entries(total())}
               </Label>
             </View>
@@ -405,10 +400,8 @@ export function EmailMetaCard(props: {
                 <View
                   style={{ gap: 2, paddingVertical: 8, paddingHorizontal: 12 }}
                 >
-                  <Label size={11} line={16}>
-                    {uiText("noExtraContext")}
-                  </Label>
-                  <Label size={10} line={16} tone="muted">
+                  <Label variant="small">{uiText("noExtraContext")}</Label>
+                  <Label variant="caption" tone="muted">
                     {uiText("noExtraContextHint")}
                   </Label>
                 </View>
@@ -453,9 +446,7 @@ export function EmailMetaCard(props: {
               >
                 <Icon name="down" size={12} tone="muted" />
               </View>
-              <Label size={12} line={16}>
-                {uiText("technicalDetails")}
-              </Label>
+              <Label variant="small">{uiText("technicalDetails")}</Label>
             </View>
             <If when={technical()}>
               <View style={{ borderTopWidth: 1, borderColor: c().border }}>
@@ -510,7 +501,7 @@ export function EmailContext(props: {
             {(value) => <EmailMetaCard meta={value()} drawer />}
           </If>
           <If when={meta()?.decodeError}>
-            <Label size={12} tone="red">
+            <Label variant="small" tone="red">
               {meta()?.decodeError}
             </Label>
           </If>
@@ -651,7 +642,6 @@ export function AssignEmail(props: {
             label={uiText("startProcessing")}
             tone="primary"
             size={props.phone ? 40 : 28}
-            labelSize={props.phone ? 13 : undefined}
             disabled={!agent() || !project() || busy()}
             onPress={() =>
               void (async () => {
@@ -688,9 +678,10 @@ function AssignField(props: {
   onChange: (value: string) => void;
 }) {
   const c = colors();
+  const type = textFaces();
   return (
     <View style={{ gap: 4 }}>
-      <Label size={12} line={16} tone="muted">
+      <Label variant="small" tone="muted">
         {props.label}
       </Label>
       <Select
@@ -708,7 +699,7 @@ function AssignField(props: {
           minHeight: 28,
           paddingHorizontal: 8,
           color: c().ink,
-          fontSize: 12,
+          fontSize: type("small").size,
         }}
         trigger={
           <View
@@ -723,7 +714,7 @@ function AssignField(props: {
               cursor: "pointer",
             }}
           >
-            <Label size={12} line={16} lines={1} style={{ flex: 1 }}>
+            <Label variant="small" lines={1} style={{ flex: 1 }}>
               {props.items.find((item) => item.value === props.value)?.title ??
                 ""}
             </Label>

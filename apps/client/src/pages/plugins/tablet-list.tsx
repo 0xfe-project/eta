@@ -38,7 +38,7 @@ export function PluginTablet(props: {
           <Button
             label={uiText("addFromGit")}
             icon="plus"
-            labelSize={11}
+            labelVariant="caption"
             onPress={props.onAdd}
           />
         </Header>
@@ -71,10 +71,10 @@ export function PluginTablet(props: {
               >
                 <PluginGlyph size={28} />
                 <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                  <Label size={13} line={18} lines={1}>
+                  <Label variant="small" lines={1}>
                     {item().name}
                   </Label>
-                  <Label size={10} line={14} tone="muted" lines={1}>
+                  <Label variant="caption" tone="muted" lines={1}>
                     {[
                       item().version,
                       uiText("skillsMcpServers", {
@@ -102,7 +102,7 @@ export function PluginTablet(props: {
             paddingVertical: 12,
           }}
         >
-          <Label size={10} line={14} tone="muted">
+          <Label variant="caption" tone="muted">
             {uiText("pluginsIntroShort")}
           </Label>
         </View>

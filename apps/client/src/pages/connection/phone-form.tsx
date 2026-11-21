@@ -38,19 +38,15 @@ export function PhoneConnectionForm(props: {
           when={props.remoteFailure}
           else={
             <>
-              <Label size={64} line={64} style={{ letterSpacing: -1.28 }}>
+              <Label variant="display" style={{ letterSpacing: -1.28 }}>
                 ETA
               </Label>
               <ConnectionIntro phone />
             </>
           }
         >
-          <Label size={24} line={30}>
-            {uiText("cantReachThisHost")}
-          </Label>
-          <Label size={14} tone="mutedInk">
-            {props.remoteReason}
-          </Label>
+          <Label variant="title">{uiText("cantReachThisHost")}</Label>
+          <Label tone="mutedInk">{props.remoteReason}</Label>
         </If>
       </View>
       <View>
@@ -75,7 +71,7 @@ export function PhoneConnectionForm(props: {
               }
               tone="primary"
               size={52}
-              labelSize={14}
+              labelVariant="body"
               dimDisabled={props.connecting}
               disabled={props.busy || !props.address.trim()}
               onPress={props.onConnect}
@@ -96,12 +92,7 @@ export function PhoneConnectionForm(props: {
                   backgroundColor: c().button,
                 }}
               >
-                <Label
-                  size={14}
-                  line={18}
-                  tone="buttonInk"
-                  style={{ flex: 1, minWidth: 0 }}
-                >
+                <Label tone="buttonInk" style={{ flex: 1, minWidth: 0 }}>
                   {props.scanNotice}
                 </Label>
               </View>
@@ -111,7 +102,7 @@ export function PhoneConnectionForm(props: {
             <Button
               label={props.scanLabel}
               size={52}
-              labelSize={14}
+              labelVariant="body"
               disabled={props.busy}
               onPress={props.onScan}
             />

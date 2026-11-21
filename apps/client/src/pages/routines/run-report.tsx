@@ -13,6 +13,8 @@ import {
   Markdown,
   Modal,
   row,
+  textFaces,
+  textStyle,
 } from "../../components";
 import { UserFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
@@ -152,30 +154,29 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
                 }}
               >
                 <Label
-                  size={10}
+                  variant="caption"
                   tone="buttonInk"
                   style={{ textTransform: "uppercase", letterSpacing: 0.4 }}
                 >
                   {status()}
                 </Label>
               </View>
-              <Label size={11} tone="muted">
+              <Label variant="caption" tone="muted">
                 {[`${runDay(props.run.startedAt)} ${time()}`, duration()]
                   .filter(Boolean)
                   .join(" · ")}
               </Label>
             </View>
-            <Label size={11} tone="muted">
+            <Label variant="caption" tone="muted">
               {schedule()}
             </Label>
           </View>
           <View style={{ gap: 6 }}>
             <Caption text={uiText("report")} />
-            <Label line={22}>{error()}</Label>
+            <Label>{error()}</Label>
             <If when={previous()}>
               {(run) => (
                 <Markdown
-                  line={22}
                   value={localizedText(
                     `Last good run (${runAgo(run().startedAt)}): ${
                       run()
@@ -217,11 +218,11 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
                 >
                   <Icon name="panel" size={14} tone="muted" />
                   <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                    <Label size={13} lines={1}>
+                    <Label variant="small" lines={1}>
                       {run().title ?? uiText("report")}
                     </Label>
                     <Label
-                      size={11}
+                      variant="caption"
                       tone="muted"
                     >{`${uiText("report")} · ${routineTime(run().startedAt)}`}</Label>
                   </View>
@@ -234,10 +235,10 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
             <Caption text={localizedText("Last 7 runs", "最近 7 次运行")} />
             <RoutineHistory runs={recent()} full />
             <View style={{ ...row, justifyContent: "space-between" }}>
-              <Label size={10} tone="muted">
+              <Label variant="caption" tone="muted">
                 {runDay(recent().at(-1)?.startedAt ?? props.run.startedAt)}
               </Label>
-              <Label size={10} tone="muted">
+              <Label variant="caption" tone="muted">
                 {runDay(recent()[0]?.startedAt ?? props.run.startedAt)}
               </Label>
             </View>
@@ -279,6 +280,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
 
 export function RoutineReport(props: RoutineReportProps) {
   const c = colors();
+  const type = textFaces();
   const failed = () =>
     props.run.status === "failed" || props.run.status === "skipped";
   const sendable = () => !!props.feedback.trim() && !props.routine.revising;
@@ -301,8 +303,7 @@ export function RoutineReport(props: RoutineReportProps) {
       style={{ cursor: enabled ? "pointer" : "default" }}
     >
       <Label
-        size={12}
-        line={16}
+        variant="small"
         tone={enabled ? "ink" : props.phone ? "muted" : "faint"}
       >
         {label}
@@ -325,7 +326,7 @@ export function RoutineReport(props: RoutineReportProps) {
           <If
             when={!props.phone}
             else={
-              <Label size={12} line={16} tone="muted">
+              <Label variant="small" tone="muted">
                 {`${uiText("reports")}${uiText("reportPosition", {
                   index: props.index + 1,
                   count: props.count,
@@ -341,17 +342,17 @@ export function RoutineReport(props: RoutineReportProps) {
               style={{ ...row, gap: 8, minWidth: 0, cursor: "pointer" }}
             >
               <Icon name="arrowLeft" size={12} />
-              <Label size={12} line={16} lines={1}>
+              <Label variant="small" lines={1}>
                 {props.routine.name}
               </Label>
             </View>
-            <Label size={12} line={16} tone="muted">
+            <Label variant="small" tone="muted">
               {uiText("reportsTrail")}
             </Label>
           </If>
         </View>
         <If when={!props.phone}>
-          <Label size={12} line={16} tone="muted">
+          <Label variant="small" tone="muted">
             {uiText("reportPosition", {
               index: props.index + 1,
               count: props.count,
@@ -385,7 +386,7 @@ export function RoutineReport(props: RoutineReportProps) {
                 : undefined),
             }}
           >
-            <Label size={12} line={16} tone="muted">
+            <Label variant="small" tone="muted">
               {date()}
             </Label>
             <View style={{ gap: props.phone && failed() ? 6 : 8 }}>
@@ -393,7 +394,7 @@ export function RoutineReport(props: RoutineReportProps) {
                 when={failed()}
                 else={
                   <>
-                    <Label size={16} line={22} weight={600}>
+                    <Label variant="subtitle" weight={600}>
                       {props.run.title ?? uiText("report")}
                     </Label>
                     <Markdown
@@ -404,7 +405,6 @@ export function RoutineReport(props: RoutineReportProps) {
                             ? "Routine running…"
                             : "No report"
                       }
-                      line={22}
                     />
                   </>
                 }
@@ -412,15 +412,14 @@ export function RoutineReport(props: RoutineReportProps) {
                 <View style={{ ...row, gap: 8 }}>
                   <StatusDot color={c().red} />
                   <Label
-                    size={props.phone ? 14 : 16}
-                    line={props.phone ? 20 : 22}
+                    variant="subtitle"
                     weight={600}
                     tone={props.phone ? "muted" : "mutedInk"}
                   >
                     {uiText("noReport")}
                   </Label>
                 </View>
-                <Label line={22} tone={props.phone ? "muted" : "mutedInk"}>
+                <Label tone={props.phone ? "muted" : "mutedInk"}>
                   {props.run.error ?? uiText("theRoutineWasSkipped")}
                 </Label>
                 <View style={{ ...row, paddingTop: props.phone ? 4 : 0 }}>
@@ -457,17 +456,16 @@ export function RoutineReport(props: RoutineReportProps) {
                     <UserFace size={20} />
                     <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
                       <View style={{ ...row, alignItems: "baseline", gap: 8 }}>
-                        <Label size={12} line={16} weight={600}>
+                        <Label variant="small" weight={600}>
                           {uiText("me")}
                         </Label>
-                        <Label size={12} line={16} tone="muted">
+                        <Label variant="small" tone="muted">
                           {`${runDay(entry().createdAt)} ${clockTime(entry().createdAt)}`}
                         </Label>
                       </View>
-                      <Label line={20}>{entry().text}</Label>
+                      <Label>{entry().text}</Label>
                       <Label
-                        size={12}
-                        line={16}
+                        variant="small"
                         tone={entry().revisionFailed ? "red" : "muted"}
                       >
                         {entry().revisionFailed
@@ -503,8 +501,7 @@ export function RoutineReport(props: RoutineReportProps) {
                   style={{
                     flex: 1,
                     height: 36,
-                    fontSize: 12,
-                    lineHeight: 16,
+                    ...textStyle(type("small")),
                     paddingHorizontal: 0,
                     borderWidth: 0,
                   }}

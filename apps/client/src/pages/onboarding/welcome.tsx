@@ -26,8 +26,7 @@ export function WelcomeStep(props: { phone: boolean }) {
           }}
         />
         <Label
-          size={10}
-          line={14}
+          variant="caption"
           style={{
             position: "absolute",
             right: 12,
@@ -40,25 +39,20 @@ export function WelcomeStep(props: { phone: boolean }) {
       </View>
       <View style={{ paddingHorizontal: 16, paddingVertical: 24, gap: 16 }}>
         <View style={{ gap: 6 }}>
-          <Label
-            size={20}
-            line={28}
-            weight={600}
-            style={{ letterSpacing: -0.2 }}
-          >
+          <Label variant="title" weight={600} style={{ letterSpacing: -0.2 }}>
             {uiText("welcomeToEta")}
           </Label>
           <Label tone="mutedInk">{uiText("twoShortStepsThenYourAgents")}</Label>
         </View>
         <View style={{ gap: 6 }}>
           <View style={{ ...row, gap: 10 }}>
-            <Label size={12} line={16} tone="muted" style={{ width: 16 }}>
+            <Label variant="small" tone="muted" style={{ width: 16 }}>
               1
             </Label>
             <Label>{uiText("connectAModel")}</Label>
           </View>
           <View style={{ ...row, gap: 10 }}>
-            <Label size={12} line={16} tone="muted" style={{ width: 16 }}>
+            <Label variant="small" tone="muted" style={{ width: 16 }}>
               2
             </Label>
             <Label>{uiText("installAgents")}</Label>

@@ -26,6 +26,7 @@ import {
   Palette,
   row,
   SafeArea,
+  Screen,
 } from "./src/components";
 import {
   createElementPicker,
@@ -202,126 +203,128 @@ function App() {
         <Host.Provider value={host}>
           <Palette.Provider value={c}>
             <Fonts.Provider value={fonts}>
-              <SafeArea
-                testID="app-safe-area"
-                style={{ backgroundColor: c().canvas }}
-              >
-                <If
-                  when={
-                    host.hasConnected() && !host.paused() && !forcedConnect()
-                  }
-                  else={
-                    <If
-                      when={loadingWebWorkspace()}
-                      else={
-                        <Connection
-                          initial={offeredAddress() ?? host.address()}
-                          layout={layout()}
-                          resuming={startingLocal()}
-                          openingWeb={openingWeb()}
-                          onConnect={connect}
-                        />
-                      }
+              <Screen.Provider value={layout}>
+                <SafeArea
+                  testID="app-safe-area"
+                  style={{ backgroundColor: c().canvas }}
+                >
+                  <If
+                    when={
+                      host.hasConnected() && !host.paused() && !forcedConnect()
+                    }
+                    else={
+                      <If
+                        when={loadingWebWorkspace()}
+                        else={
+                          <Connection
+                            initial={offeredAddress() ?? host.address()}
+                            layout={layout()}
+                            resuming={startingLocal()}
+                            openingWeb={openingWeb()}
+                            onConnect={connect}
+                          />
+                        }
+                      >
+                        <WorkspaceSkeleton layout={layout()} />
+                      </If>
+                    }
+                  >
+                    <Workspace
+                      layout={layout()}
+                      theme={theme()}
+                      onTheme={changeTheme}
+                      chatWidth={chatWidth()}
+                      onChatWidth={changeChatWidth}
+                      chatRail={chatRail()}
+                      onChatRail={changeChatRail}
+                      onFonts={changeFonts}
+                      onConnect={() => {
+                        forcedConnect.set(true);
+                        host.start(null);
+                      }}
+                    />
+                  </If>
+                  <If
+                    when={
+                      !forcedConnect() &&
+                      (isHostRestart(host.upgrade()) ||
+                        (host.upgrade()?.state === "running" &&
+                          host.upgradeUnreachable() &&
+                          host.state().status !== "open"))
+                    }
+                  >
+                    <HostRestartScreen />
+                  </If>
+                  <If
+                    when={
+                      canStartHost &&
+                      host.hasConnected() &&
+                      !dismissCompatibility() &&
+                      desktopTooOld(applicationVersion)
+                    }
+                  >
+                    <View
+                      role="alert"
+                      style={{
+                        ...row,
+                        flexShrink: 0,
+                        minHeight: 40,
+                        paddingLeft: 16,
+                        paddingRight: 4,
+                        borderTopWidth: 1,
+                        borderColor: c().border,
+                        backgroundColor: c().canvas,
+                        gap: 8,
+                      }}
                     >
-                      <WorkspaceSkeleton layout={layout()} />
-                    </If>
-                  }
-                >
-                  <Workspace
-                    layout={layout()}
-                    theme={theme()}
-                    onTheme={changeTheme}
-                    chatWidth={chatWidth()}
-                    onChatWidth={changeChatWidth}
-                    chatRail={chatRail()}
-                    onChatRail={changeChatRail}
-                    onFonts={changeFonts}
-                    onConnect={() => {
-                      forcedConnect.set(true);
-                      host.start(null);
-                    }}
-                  />
-                </If>
-                <If
-                  when={
-                    !forcedConnect() &&
-                    (isHostRestart(host.upgrade()) ||
-                      (host.upgrade()?.state === "running" &&
-                        host.upgradeUnreachable() &&
-                        host.state().status !== "open"))
-                  }
-                >
-                  <HostRestartScreen />
-                </If>
-                <If
-                  when={
-                    canStartHost &&
-                    host.hasConnected() &&
-                    !dismissCompatibility() &&
-                    desktopTooOld(applicationVersion)
-                  }
-                >
-                  <View
-                    role="alert"
-                    style={{
-                      ...row,
-                      flexShrink: 0,
-                      minHeight: 40,
-                      paddingLeft: 16,
-                      paddingRight: 4,
-                      borderTopWidth: 1,
-                      borderColor: c().border,
-                      backgroundColor: c().canvas,
-                      gap: 8,
-                    }}
-                  >
-                    <Label size={14} line={18} style={{ flex: 1 }}>
-                      {uiText("thisHostNeedsTheEtaDesktop", {
-                        MIN_DESKTOP,
-                        applicationVersion,
-                      })}
-                    </Label>
-                    <Button
-                      label={uiText("dismissCompatibilityWarning")}
-                      icon="close"
-                      iconOnly
-                      size={32}
-                      iconSize={16}
-                      tone="ghost"
-                      onPress={() => dismissCompatibility.set(true)}
-                    />
-                  </View>
-                </If>
-                <If when={host.error()}>
-                  <View
-                    style={{
-                      ...row,
-                      position: "absolute",
-                      zIndex: 1000,
-                      bottom: 16,
-                      right: 16,
-                      left: 16,
-                      padding: 8,
-                      gap: 8,
-                      backgroundColor: c().redFill,
-                      borderWidth: 1,
-                      borderColor: c().red,
-                    }}
-                  >
-                    <Label size={12} tone="red" style={{ flex: 1 }}>
-                      {host.error()}
-                    </Label>
-                    <Button
-                      label={uiText("dismissError")}
-                      icon="close"
-                      iconOnly
-                      tone="ghost"
-                      onPress={() => host.error.set("")}
-                    />
-                  </View>
-                </If>
-              </SafeArea>
-              <ElementPickerOverlay />
+                      <Label style={{ flex: 1 }}>
+                        {uiText("thisHostNeedsTheEtaDesktop", {
+                          MIN_DESKTOP,
+                          applicationVersion,
+                        })}
+                      </Label>
+                      <Button
+                        label={uiText("dismissCompatibilityWarning")}
+                        icon="close"
+                        iconOnly
+                        size={32}
+                        iconSize={16}
+                        tone="ghost"
+                        onPress={() => dismissCompatibility.set(true)}
+                      />
+                    </View>
+                  </If>
+                  <If when={host.error()}>
+                    <View
+                      style={{
+                        ...row,
+                        position: "absolute",
+                        zIndex: 1000,
+                        bottom: 16,
+                        right: 16,
+                        left: 16,
+                        padding: 8,
+                        gap: 8,
+                        backgroundColor: c().redFill,
+                        borderWidth: 1,
+                        borderColor: c().red,
+                      }}
+                    >
+                      <Label variant="small" tone="red" style={{ flex: 1 }}>
+                        {host.error()}
+                      </Label>
+                      <Button
+                        label={uiText("dismissError")}
+                        icon="close"
+                        iconOnly
+                        tone="ghost"
+                        onPress={() => host.error.set("")}
+                      />
+                    </View>
+                  </If>
+                </SafeArea>
+                <ElementPickerOverlay />
+              </Screen.Provider>
             </Fonts.Provider>
           </Palette.Provider>
         </Host.Provider>

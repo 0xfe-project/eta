@@ -17,6 +17,8 @@ import {
   Label,
   Modal,
   row,
+  textFaces,
+  textStyle,
 } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -31,10 +33,10 @@ export function draftTitle(message: MessageView) {
 function Detail(props: { label: string; value: string }) {
   return (
     <View style={{ ...row, alignItems: "flex-start", gap: 8 }}>
-      <Label size={12} tone="muted" style={{ width: 84 }}>
+      <Label variant="small" tone="muted" style={{ width: 84 }}>
         {props.label}
       </Label>
-      <Label size={13} style={{ flex: 1 }}>
+      <Label variant="small" style={{ flex: 1 }}>
         {props.value}
       </Label>
     </View>
@@ -44,7 +46,7 @@ function Detail(props: { label: string; value: string }) {
 function FormRow(props: { label: string; children: JSX.Element }) {
   return (
     <View style={{ gap: 6 }}>
-      <Label size={12} line={16} tone="mutedInk">
+      <Label variant="small" tone="mutedInk">
         {props.label}
       </Label>
       {props.children}
@@ -65,6 +67,7 @@ export function TaskDraftDetail(props: {
 }) {
   const host = useHost();
   const color = colors();
+  const type = textFaces();
   const data = () => props.message.data as unknown as Partial<TaskDraftData>;
   const initialTitle =
     typeof props.message.data.title === "string"
@@ -133,8 +136,7 @@ export function TaskDraftDetail(props: {
   };
   const input = {
     paddingHorizontal: 10,
-    fontSize: 12,
-    lineHeight: 16,
+    ...textStyle(type("small")),
     borderColor: color().strong,
   };
   return (
@@ -172,7 +174,7 @@ export function TaskDraftDetail(props: {
               </View>
             }
           >
-            <Label size={12} line={16} tone="muted">
+            <Label variant="small" tone="muted">
               {uiText("draftConfirmHint")}
             </Label>
             <FormRow label={uiText("title")}>
@@ -211,7 +213,7 @@ export function TaskDraftDetail(props: {
                   onChange={status.set}
                 />
               </View>
-              <Label size={12} line={16} tone="muted">
+              <Label variant="small" tone="muted">
                 {uiText(
                   status() === "backlog" ? "draftToBacklog" : "draftToDo",
                 )}
@@ -232,7 +234,7 @@ export function TaskDraftDetail(props: {
                 <Caption text={uiText("dependencies")} />
                 <Each of={data().dependsOn ?? []} key={(edge) => edge.taskId}>
                   {(edge) => (
-                    <Label size={13}>
+                    <Label variant="small">
                       {taskName(edge().taskId)} ·{" "}
                       {uiText(
                         edge().requireDone

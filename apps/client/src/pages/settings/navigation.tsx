@@ -61,7 +61,6 @@ export function SettingsNavigation(props: {
                 }
               />
               <Label
-                line={20}
                 tone={
                   props.phone || props.current === item()[0]
                     ? "ink"
@@ -79,7 +78,7 @@ export function SettingsNavigation(props: {
                       size={6}
                     />
                   </If>
-                  <Label size={12} line={16} tone={summaryTone(item()[0])}>
+                  <Label variant="small" tone={summaryTone(item()[0])}>
                     {props.summary(item()[0]).text}
                   </Label>
                 </View>

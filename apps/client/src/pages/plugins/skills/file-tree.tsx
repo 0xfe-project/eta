@@ -76,11 +76,7 @@ export function SkillFileTree(props: {
                 <If when={item().kind === "directory"}>
                   <Icon name="folder" size={12} />
                 </If>
-                <Label
-                  size={phone() ? 13 : 12}
-                  line={phone() ? 18 : undefined}
-                  lines={1}
-                >
+                <Label variant="small" lines={1}>
                   {item().path}
                 </Label>
               </View>

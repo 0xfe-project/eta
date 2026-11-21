@@ -71,7 +71,7 @@ export function PhonePairing(props: {
     >
       <If when={popover()}>
         <View style={{ ...row, justifyContent: "space-between" }}>
-          <Label size={12} line={16} weight={600}>
+          <Label variant="small" weight={600}>
             {uiText("scanWithYourPhone")}
           </Label>
           <CloseButton size={16} onPress={props.onClose} />
@@ -79,7 +79,7 @@ export function PhonePairing(props: {
       </If>
       <If when={qr()}>
         <If when={loopback()}>
-          <Label size={10} line={16} tone="mutedInk">
+          <Label variant="caption" tone="mutedInk">
             {uiText("phoneCantReachThisAddress")}
           </Label>
         </If>
@@ -118,7 +118,7 @@ export function PhonePairing(props: {
           />
         </View>
         <If when={!loopback() || copied()}>
-          <Label size={props.phone ? 12 : 10} line={16} tone="mutedInk">
+          <Label variant="caption" tone="mutedInk">
             {copied()
               ? uiText("connectLinkCopiedItContainsYour")
               : uiText("inEtaOnYourPhoneTap")}
@@ -126,7 +126,7 @@ export function PhonePairing(props: {
         </If>
       </If>
       <If when={!qr()}>
-        <Label size={12} line={16} tone={error() ? "red" : "muted"}>
+        <Label variant="small" tone={error() ? "red" : "muted"}>
           {error() || uiText("generatingTheCode")}
         </Label>
         <If when={error()}>

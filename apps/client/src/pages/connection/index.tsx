@@ -278,7 +278,6 @@ export function Connection(props: {
                 title={uiText("whereShouldEtaRun")}
                 layout={props.layout}
                 inset={16}
-                titleLine={24}
                 dialog
               />
             </If>
@@ -291,7 +290,6 @@ export function Connection(props: {
                 }
                 layout={props.layout}
                 inset={16}
-                titleLine={24}
                 dialog
               />
             </If>
@@ -325,7 +323,7 @@ export function Connection(props: {
                 <If
                   when={desktop()}
                   else={
-                    <Label size={14} line={20} tone="mutedInk">
+                    <Label tone="mutedInk">
                       {remoteFailure()
                         ? remoteReason()
                         : uiText("thePhoneIsOnlyAScreen")}
@@ -393,7 +391,7 @@ export function Connection(props: {
                   <Button
                     label={scanLabel}
                     size={44}
-                    labelSize={14}
+                    labelVariant="body"
                     style={{ flex: 1, paddingHorizontal: 12 }}
                     onPress={scan}
                     disabled={busy()}
@@ -401,7 +399,7 @@ export function Connection(props: {
                   />
                 </If>
                 <If when={desktop()}>
-                  <Label size={12} line={16} tone="muted" style={{ flex: 1 }}>
+                  <Label variant="small" tone="muted" style={{ flex: 1 }}>
                     {uiText("theTwoKeepSeparateDataSwitching")}
                   </Label>
                 </If>
@@ -419,7 +417,6 @@ export function Connection(props: {
                     }
                     tone="primary"
                     size={tablet() ? 44 : undefined}
-                    labelSize={tablet() ? 14 : undefined}
                     style={
                       tablet()
                         ? {

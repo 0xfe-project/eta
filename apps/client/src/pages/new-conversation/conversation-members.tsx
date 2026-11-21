@@ -30,13 +30,12 @@ export function ConversationMembers(props: {
       >
         <Icon name="folder" size={14} />
         <Label
-          size={12}
+          variant="small"
           lines={1}
         >{`${props.directory.name ?? host.projects().find((project) => project.id === props.directory.projectId)?.name ?? props.directory.display} · ${props.machineName}`}</Label>
       </View>
       <Label
         tone="muted"
-        size={14}
         style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 }}
       >
         {localizedText(
@@ -83,7 +82,7 @@ export function ConversationMembers(props: {
                 <Label style={grow} lines={1}>
                   {agent().name}
                 </Label>
-                <Label size={11} tone="muted">
+                <Label variant="caption" tone="muted">
                   {agent().runtime === "claude"
                     ? "Claude Code"
                     : agent().runtime === "codex"

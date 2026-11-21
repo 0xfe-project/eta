@@ -208,20 +208,19 @@ export function TaskActivity(props: {
     const run = () => runOf(line.entry);
     return (
       <View style={{ ...row, gap: 4, flexWrap: "wrap" }}>
-        <Label size={10} line={14} tone="muted">
+        <Label variant="caption" tone="muted">
           {name(lineActor(line.entry))}
         </Label>
         <If when={mark()}>
           {(icon) => <Icon name={icon().name} size={10} tone={icon().tone} />}
         </If>
         <Label
-          size={10}
-          line={14}
+          variant="caption"
           tone={line.entry.kind === "run_failed" ? "red" : "muted"}
         >
           {taskActivitySentence(line.entry)}
         </Label>
-        <Label size={10} line={14} tone="muted">
+        <Label variant="caption" tone="muted">
           {taskMoment(line.entry.createdAt)}
         </Label>
         <If when={props.onLog && run()}>
@@ -232,9 +231,7 @@ export function TaskActivity(props: {
               onPress={() => props.onLog?.(item())}
               style={{ cursor: "pointer" }}
             >
-              <Label size={10} line={14}>
-                {uiText("executionLog")}
-              </Label>
+              <Label variant="caption">{uiText("executionLog")}</Label>
             </View>
           )}
         </If>
@@ -261,7 +258,7 @@ export function TaskActivity(props: {
             size={10}
             tone={open() ? "ink" : "muted"}
           />
-          <Label size={10} line={14} tone={open() ? "ink" : "muted"}>
+          <Label variant="caption" tone={open() ? "ink" : "muted"}>
             {label()}
           </Label>
         </View>
@@ -299,10 +296,10 @@ export function TaskActivity(props: {
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <If when={message.head}>
             <View style={{ ...row, gap: 8, alignItems: "baseline" }}>
-              <Label size={12} line={16} weight={600}>
+              <Label variant="small" weight={600}>
                 {name(message.entry.actor)}
               </Label>
-              <Label size={10} line={14} tone="muted">
+              <Label variant="caption" tone="muted">
                 {taskMoment(message.entry.createdAt)}
               </Label>
             </View>
@@ -311,8 +308,7 @@ export function TaskActivity(props: {
             value={
               full() || !long() ? body() : `${body().slice(0, commentPreview)}…`
             }
-            size={12}
-            line={18}
+            variant="small"
           />
           <If when={long()}>
             <View
@@ -320,7 +316,7 @@ export function TaskActivity(props: {
               onPress={() => full.set(!full())}
               style={{ alignSelf: "flex-start", cursor: "pointer" }}
             >
-              <Label size={10} line={14} tone="muted">
+              <Label variant="caption" tone="muted">
                 {full() ? uiText("collapseFullText") : uiText("expandFullText")}
               </Label>
             </View>
@@ -336,8 +332,6 @@ export function TaskActivity(props: {
       </If>
       <If when={props.heading === "desktop" || props.heading === "tablet"}>
         <Label
-          size={props.heading === "tablet" ? 13 : 14}
-          line={props.heading === "tablet" ? 16 : 18}
           weight={props.heading === "tablet" ? 600 : 700}
           style={{ paddingBottom: 4 }}
         >

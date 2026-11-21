@@ -83,16 +83,10 @@ export function ArtifactRow(props: {
       >
         <Icon name="artifact" size={16} tone="muted" />
         <View style={{ ...row, ...grow }}>
-          <Label size={14} line={20} lines={1} style={{ flexShrink: 1 }}>
+          <Label lines={1} style={{ flexShrink: 1 }}>
             {props.artifact.title}
           </Label>
-          <Label
-            size={14}
-            line={20}
-            lines={1}
-            tone="muted"
-            style={{ flexShrink: 0 }}
-          >
+          <Label lines={1} tone="muted" style={{ flexShrink: 0 }}>
             {title().slice(props.artifact.title.length)}
           </Label>
         </View>
@@ -145,8 +139,7 @@ export function ArtifactRow(props: {
           style={{ ...grow, gap: list() ? 2 : 0, pointerEvents: "box-none" }}
         >
           <Label
-            size={12}
-            line={list() ? 18 : 16}
+            variant="small"
             lines={list() ? 2 : 1}
             style={{ pointerEvents: "none" }}
           >
@@ -162,8 +155,7 @@ export function ArtifactRow(props: {
           </Label>
           <View style={{ ...row, gap: 6, pointerEvents: "box-none" }}>
             <Label
-              size={10}
-              line={14}
+              variant="caption"
               tone="muted"
               lines={1}
               style={{ minWidth: 0, flexShrink: 1, pointerEvents: "none" }}
@@ -200,8 +192,7 @@ export function ArtifactRow(props: {
                   onPress={() => props.onTask?.(task().id)}
                 >
                   <Label
-                    size={10}
-                    line={14}
+                    variant="caption"
                     tone="muted"
                   >{`#${task().number}`}</Label>
                 </View>

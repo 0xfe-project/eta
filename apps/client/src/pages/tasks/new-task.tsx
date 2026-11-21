@@ -10,6 +10,8 @@ import {
   Label,
   Modal,
   row,
+  textFaces,
+  textStyle,
 } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -23,6 +25,7 @@ export function NewTask(props: {
 }) {
   const host = useHost();
   const c = colors();
+  const type = textFaces();
   const title = signal("");
   const description = signal("");
   const agent = signal("");
@@ -88,8 +91,7 @@ export function NewTask(props: {
             style={{
               height: 30,
               paddingHorizontal: 10,
-              fontSize: 12,
-              lineHeight: 16,
+              ...textStyle(type("small")),
               borderColor: c().strong,
             }}
           />
@@ -103,8 +105,7 @@ export function NewTask(props: {
               height: 72,
               paddingHorizontal: 10,
               paddingVertical: 8,
-              fontSize: 12,
-              lineHeight: 16,
+              ...textStyle(type("small")),
               borderColor: c().strong,
             }}
           />
@@ -237,7 +238,7 @@ export function NewTask(props: {
 function NewTaskRow(props: { label: string; children: JSX.Element }) {
   return (
     <View style={{ ...row, gap: 14 }}>
-      <Label size={12} line={16} tone="mutedInk" style={{ width: 62 }}>
+      <Label variant="small" tone="mutedInk" style={{ width: 62 }}>
         {props.label}
       </Label>
       {props.children}

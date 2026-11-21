@@ -86,7 +86,7 @@ export function DesktopAppUpdate(props: { work: UpgradeCheckView["busy"] }) {
         <Label weight={600} style={{ flex: 1 }}>
           {uiText("desktopApp")}
         </Label>
-        <Label size={12} tone="muted">
+        <Label variant="small" tone="muted">
           {appInfo().version ?? "dev"}
         </Label>
         <Button
@@ -102,14 +102,14 @@ export function DesktopAppUpdate(props: { work: UpgradeCheckView["busy"] }) {
         />
       </View>
       <If when={checked() && !update()}>
-        <Label size={12} tone="muted">
+        <Label variant="small" tone="muted">
           {uiText("noDesktopAppUpdateAvailable")}
         </Label>
       </If>
       <If when={update()}>
         {(next) => (
           <View style={{ ...row, gap: 8 }}>
-            <Label size={12} style={{ flex: 1 }}>
+            <Label variant="small" style={{ flex: 1 }}>
               {uiText("versionAvailable", { version: next().version })}
             </Label>
             <Button
@@ -133,7 +133,7 @@ export function DesktopAppUpdate(props: { work: UpgradeCheckView["busy"] }) {
         )}
       </If>
       <If when={failure()}>
-        <Label size={12} tone="red">
+        <Label variant="small" tone="red">
           {failure()}
         </Label>
       </If>
@@ -151,12 +151,12 @@ export function DesktopAppUpdate(props: { work: UpgradeCheckView["busy"] }) {
           onClose={() => confirm.set(false)}
         >
           <View style={{ ...grow, padding: 20, gap: 10 }}>
-            <Label size={14} line={20} weight={500}>
+            <Label weight={500}>
               {uiText("updateTheDesktopAppTo", { version: update()!.version })}
             </Label>
             <Scroll style={grow}>
               <View style={{ gap: 10 }}>
-                <Label size={12} line={18} tone="mutedInk">
+                <Label variant="small" tone="mutedInk">
                   {host.address()?.local
                     ? uiText("etaQuitsSwapsInTheNew")
                     : uiText("etaQuitsSwapsInTheNewVersion")}

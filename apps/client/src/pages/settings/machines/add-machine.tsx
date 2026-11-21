@@ -11,6 +11,8 @@ import {
   Label,
   Modal,
   row,
+  textFaces,
+  textStyle,
 } from "../../../components";
 import { ToggleSwitch } from "../../../components/toggle-switch";
 import { formatLocale, uiText } from "../../../i18n";
@@ -20,6 +22,7 @@ import { PaneBack } from "../section";
 export function AddMachine(props: { phone: boolean; onClose: () => void }) {
   const host = useHost();
   const c = colors();
+  const type = textFaces();
   const mode = signal<"command" | "ssh">("command");
   const name = signal("");
   const address = signal("");
@@ -104,7 +107,6 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
         label={uiText(command() ? "machineGenerateCommand" : "sshInstall")}
         tone="primary"
         size={props.phone ? 40 : 24}
-        labelSize={props.phone ? 14 : undefined}
         style={{ paddingHorizontal: 12 }}
         disabled={busy() || installing() || (!command() && !sshReady())}
         onPress={() => void create()}
@@ -124,9 +126,9 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
         else={
           <View style={preference()}>
             <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-              <Label line={20}>{row_.label}</Label>
+              <Label>{row_.label}</Label>
               <If when={row_.hint}>
-                <Label size={12} line={16} tone="muted">
+                <Label variant="small" tone="muted">
                   {row_.hint}
                 </Label>
               </If>
@@ -134,8 +136,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
             {row_.field({
               width: 240,
               height: 24,
-              fontSize: 12,
-              lineHeight: 16,
+              ...textStyle(type("small")),
               paddingHorizontal: 10,
               paddingVertical: 3,
               borderColor: c().strong,
@@ -152,16 +153,15 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
             borderColor: c().border,
           }}
         >
-          <Label line={20}>{row_.label}</Label>
+          <Label>{row_.label}</Label>
           {row_.field({
             height: 40,
-            fontSize: 14,
-            lineHeight: 18,
+            ...textStyle(type("body")),
             paddingHorizontal: 12,
             borderColor: c().strong,
           })}
           <If when={row_.hint}>
-            <Label size={12} line={16} tone="mutedInk">
+            <Label variant="small" tone="mutedInk">
               {row_.hint}
             </Label>
           </If>
@@ -192,9 +192,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
           paddingVertical: props.phone ? 12 : 8,
         }}
       >
-        <Label line={20} style={{ flex: 1, minWidth: 0 }}>
-          {uiText("sshKeyless")}
-        </Label>
+        <Label style={{ flex: 1, minWidth: 0 }}>{uiText("sshKeyless")}</Label>
         <ToggleSwitch
           label={uiText("sshKeyless")}
           checked={keyless()}
@@ -222,7 +220,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
             {uiText(stages[install()?.step ?? "connect"])}
           </Label>
           <If when={install()?.error}>
-            <Label size={12} tone="red">
+            <Label variant="small" tone="red">
               {install()?.error}
             </Label>
           </If>
@@ -278,9 +276,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
                 borderColor: c().border,
               }}
             >
-              <Label size={12} line={19}>
-                {item().command}
-              </Label>
+              <Label variant="small">{item().command}</Label>
               <Button
                 label={uiText(copied() ? "copied" : "copyInstallCommand")}
                 size={props.phone ? 32 : 24}
@@ -292,14 +288,14 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
                 }
               />
             </View>
-            <Label size={12} tone="muted">
+            <Label variant="small" tone="muted">
               {uiText("thisOneTimeCommandIsValid", {
                 toLocaleString: new Date(item().expiresAt).toLocaleString(
                   formatLocale(),
                 ),
               })}
             </Label>
-            <Label size={12} tone="muted">
+            <Label variant="small" tone="muted">
               {uiText("machineWaitingForCommand")}
             </Label>
             <If when={!props.phone}>
@@ -353,11 +349,9 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
           >
             <View style={{ ...row, gap: 10, height: 22 }}>
               <PaneBack label={uiText("machineBack")} onPress={props.onClose} />
-              <Label size={14} line={20} weight={600}>
-                {title()}
-              </Label>
+              <Label weight={600}>{title()}</Label>
             </View>
-            <Label size={12} line={16} tone="muted">
+            <Label variant="small" tone="muted">
               {warning()}
             </Label>
           </View>
@@ -443,8 +437,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
                 }}
               >
                 <Label
-                  size={12}
-                  line={16}
+                  variant="small"
                   weight={mode() === item() ? 600 : 400}
                   tone={mode() === item() ? "ink" : "mutedInk"}
                 >

@@ -8,6 +8,7 @@
     "package:web": "bun ../../scripts/nsh-client.ts package App.tsx --target web --out dist",
     "client:check": "bun ../../scripts/nsh-client.ts check",
     "client:test": "bun ../../scripts/nsh-client.ts test",
+    "lint": "bun scripts/check-type-scale.ts",
     "package": "bun ../../scripts/nsh-client.ts package App.tsx",
     "publish:ios": "bun ../../scripts/nsh-client.ts publish ios",
     "publish:android": "bun ../../scripts/nsh-client.ts publish android"

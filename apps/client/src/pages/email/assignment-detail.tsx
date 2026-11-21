@@ -159,7 +159,7 @@ export function AssignmentInline(props: {
               backgroundColor: c().ink,
             }}
           />
-          <Label size={12} line={16} tone="muted">
+          <Label variant="small" tone="muted">
             {running() ? uiText("processing") : uiText("processingFinished")}
           </Label>
         </View>
@@ -173,12 +173,10 @@ export function AssignmentInline(props: {
             borderColor: c().ink,
           }}
         >
-          <Label size={12} line={16} weight={500}>
+          <Label variant="small" weight={500}>
             {uiText("result")}
           </Label>
-          <Label size={12} line={18}>
-            {result()}
-          </Label>
+          <Label variant="small">{result()}</Label>
         </View>
       </If>
       <View style={{ borderWidth: 1, borderColor: c().border }}>
@@ -197,9 +195,7 @@ export function AssignmentInline(props: {
           }}
         >
           <Icon name={logOpen() ? "down" : "right"} size={10} tone="muted" />
-          <Label size={12} line={16}>
-            {uiText("processingLog")}
-          </Label>
+          <Label variant="small">{uiText("processingLog")}</Label>
         </View>
         <If when={logOpen()}>
           <View
@@ -213,7 +209,7 @@ export function AssignmentInline(props: {
             <If
               when={steps().length || props.proposals.length}
               else={
-                <Label size={12} line={16} tone="muted">
+                <Label variant="small" tone="muted">
                   {host.state().missing[target()]
                     ? uiText("sessionUnavailable")
                     : transcript()
@@ -225,8 +221,7 @@ export function AssignmentInline(props: {
               <Each of={steps()} key={(step) => step.id}>
                 {(step) => (
                   <Label
-                    size={12}
-                    line={18}
+                    variant="small"
                     tone={"text" in step() ? undefined : "mutedInk"}
                   >
                     {"text" in step()

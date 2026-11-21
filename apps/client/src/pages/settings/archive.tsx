@@ -97,10 +97,8 @@ export function ArchiveSettings(props: { phone?: boolean }) {
               }}
             >
               <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                <Label line={20}>
-                  {uiText("archiveFinishedTasksAfterTheyAre")}
-                </Label>
-                <Label size={12} line={16} tone="muted">
+                <Label>{uiText("archiveFinishedTasksAfterTheyAre")}</Label>
+                <Label variant="small" tone="muted">
                   {uiText("autoArchiveHint")}
                 </Label>
               </View>
@@ -122,11 +120,9 @@ export function ArchiveSettings(props: { phone?: boolean }) {
               borderColor: c().border,
             }}
           >
-            <Label line={20}>
-              {uiText("archiveFinishedTasksAfterTheyAre")}
-            </Label>
+            <Label>{uiText("archiveFinishedTasksAfterTheyAre")}</Label>
             {quietPeriod({ height: 32, paddingHorizontal: 10 })}
-            <Label size={12} line={16} tone="muted">
+            <Label variant="small" tone="muted">
               {uiText("autoArchivePhoneHint")}
             </Label>
           </View>
@@ -149,7 +145,7 @@ export function ArchiveSettings(props: { phone?: boolean }) {
                 borderColor: c().border,
               }}
             >
-              <Label size={12} line={16} tone="muted">
+              <Label variant="small" tone="muted">
                 {uiText("archivedConversationsEmpty")}
               </Label>
             </View>
@@ -169,7 +165,7 @@ export function ArchiveSettings(props: { phone?: boolean }) {
                 }
                 meta={
                   props.phone ? (
-                    <Label size={12} line={16} tone="muted" lines={2}>
+                    <Label variant="small" tone="muted" lines={2}>
                       {[
                         messageTime(
                           item().lastMessageAt ?? item().updatedAt,
@@ -213,8 +209,6 @@ export function ArchiveSettings(props: { phone?: boolean }) {
               title={uiText("archivedTasksEmpty")}
               titleWeight={500}
               description={uiText("archivedTasksEmptyHint")}
-              titleLine={20}
-              descriptionLine={16}
               descriptionWidth={360}
               style={emptyStyle}
             />
@@ -276,24 +270,16 @@ function ArchivedTaskRow(props: {
       >
         <TaskGlyph status={props.task.status} size={14} />
       </View>
-      <Label
-        size={12}
-        line={16}
-        tone="muted"
-        style={{ width: 32, flexShrink: 0 }}
-      >
+      <Label variant="small" tone="muted" style={{ width: 32, flexShrink: 0 }}>
         {`#${props.task.number}`}
       </Label>
-      <Label line={20} style={{ flex: 1, minWidth: 0 }}>
-        {props.task.title}
-      </Label>
-      <Label size={12} line={16} tone="muted" style={{ flexShrink: 0 }}>
+      <Label style={{ flex: 1, minWidth: 0 }}>{props.task.title}</Label>
+      <Label variant="small" tone="muted" style={{ flexShrink: 0 }}>
         {`${by()} · ${when()}`}
       </Label>
       <Button
         label={uiText("restore")}
         size={24}
-        labelSize={12}
         style={{ flexShrink: 0, paddingHorizontal: 8 }}
         onPress={props.onRestore}
       />

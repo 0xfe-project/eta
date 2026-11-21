@@ -96,14 +96,13 @@ export function ThreadRow(props: {
               <EmailBadge />
             </If>
             <Label
-              line={20}
               lines={1}
               weight={props.thread.unread ? 600 : 400}
               style={{ flex: 1 }}
             >
               {mailSubject(props.thread.subject)}
             </Label>
-            <Label size={11} line={props.phone ? 20 : 16} tone="muted">
+            <Label variant="caption" tone="muted">
               {mailDay(props.thread.lastMessageAt)}
             </Label>
           </View>
@@ -112,27 +111,26 @@ export function ThreadRow(props: {
             else={
               <View style={{ flexDirection: "row", gap: 8 }}>
                 <Label
-                  size={12}
-                  line={16}
+                  variant="small"
                   tone="muted"
                   lines={1}
                   style={{ flex: 1, minWidth: 0 }}
                 >
                   {props.thread.peer}
                 </Label>
-                <Label size={12} line={16} tone="muted">
+                <Label variant="small" tone="muted">
                   {props.thread.messageCount}
                 </Label>
               </View>
             }
           >
-            <Label size={12} line={16} tone="mutedInk" lines={1}>
+            <Label variant="small" tone="mutedInk" lines={1}>
               {props.thread.messageCount > 1
                 ? `${props.thread.peer} · ${props.thread.messageCount}`
                 : props.thread.peer}
             </Label>
           </If>
-          <Label size={12} line={16} tone="muted" lines={1}>
+          <Label variant="small" tone="muted" lines={1}>
             {props.thread.lastMessage}
           </Label>
         </View>

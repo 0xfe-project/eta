@@ -74,8 +74,7 @@ export function StatusSelect(props: {
           <TaskGlyph status={props.item.status} size={14} />
         </If>
         <Label
-          size={plain() ? 11 : 12}
-          line={plain() ? 14 : 16}
+          variant={plain() ? "caption" : "small"}
           weight={plain() ? 600 : 400}
           tone={ink()}
           lines={1}
@@ -115,8 +114,7 @@ export function StatusSelect(props: {
       <If when={statusError()}>
         {(message) => (
           <Label
-            size={11}
-            line={14}
+            variant="caption"
             tone="red"
             lines={2}
             style={{ maxWidth: 264 }}

@@ -1,6 +1,6 @@
 import { View } from "nsh";
 import { Select } from "nsh/base";
-import { colors, Icon, Label, row } from "../../components";
+import { colors, Icon, Label, row, textFaces } from "../../components";
 import { formatLocale } from "../../i18n";
 
 const pluginConfigCopy = {
@@ -42,6 +42,7 @@ export function PluginSelect(props: {
   onChange: (value: string) => void;
 }) {
   const c = colors();
+  const type = textFaces();
   return (
     <Select
       accessibilityLabel={props.label}
@@ -59,7 +60,7 @@ export function PluginSelect(props: {
         minHeight: 28,
         paddingHorizontal: 8,
         color: c().ink,
-        fontSize: 12,
+        fontSize: type("small").size,
       }}
       trigger={
         <View
@@ -81,8 +82,7 @@ export function PluginSelect(props: {
           }}
         >
           <Label
-            size={props.compact ? 11 : props.phone ? 13 : 12}
-            line={props.phone ? (props.compact ? 14 : 18) : undefined}
+            variant={props.compact ? "caption" : "small"}
             lines={1}
             style={props.compact && props.phone ? undefined : { flex: 1 }}
           >

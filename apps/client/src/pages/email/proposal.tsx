@@ -1,7 +1,16 @@
 import type { EmailProposalView } from "@eta/client-contracts";
 import type { JSX } from "nsh";
 import { signal, View } from "nsh";
-import { Button, colors, Field, Icon, Label, row } from "../../components";
+import {
+  Button,
+  colors,
+  Field,
+  Icon,
+  Label,
+  row,
+  textFaces,
+  textStyle,
+} from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -10,6 +19,7 @@ import { useHost } from "../../services/host";
 export function EmailProposal(props: { item: EmailProposalView }) {
   const host = useHost();
   const c = colors();
+  const type = textFaces();
   const subject = signal(props.item.subject);
   const body = signal(props.item.markdown);
   const to = signal(props.item.to);
@@ -45,8 +55,7 @@ export function EmailProposal(props: { item: EmailProposalView }) {
     flex: 1,
     height: 28,
     paddingHorizontal: 10,
-    fontSize: 12,
-    lineHeight: 16,
+    ...textStyle(type("small")),
     borderColor: c().strong,
   };
   return (
@@ -61,7 +70,7 @@ export function EmailProposal(props: { item: EmailProposalView }) {
         style={{ ...row, gap: 8, cursor: "pointer" }}
       >
         <Icon name="send" size={14} />
-        <Label size={14} line={18} weight={600} style={{ flex: 1 }}>
+        <Label weight={600} style={{ flex: 1 }}>
           {props.item.kind === "reply" ? uiText("reply") : uiText("newEmail")}
         </Label>
         <View style={{ ...row, gap: 6 }}>
@@ -74,7 +83,7 @@ export function EmailProposal(props: { item: EmailProposalView }) {
               }}
             />
           </If>
-          <Label size={12} line={16} tone="muted">
+          <Label variant="small" tone="muted">
             {status()}
           </Label>
         </View>
@@ -101,14 +110,14 @@ export function EmailProposal(props: { item: EmailProposalView }) {
               cursor: "pointer",
             }}
           >
-            <Label size={12} line={16} tone="muted" style={{ flex: 1 }}>
+            <Label variant="small" tone="muted" style={{ flex: 1 }}>
               {props.item.status === "accepted"
                 ? uiText("proposalSentHint")
                 : props.item.status === "sending"
                   ? uiText("proposalSendingHint")
                   : uiText("proposalNotSentHint")}
             </Label>
-            <Label size={12} line={16} tone="muted">
+            <Label variant="small" tone="muted">
               {uiText("expand")}
             </Label>
           </View>
@@ -158,13 +167,13 @@ export function EmailProposal(props: { item: EmailProposalView }) {
                   height: undefined,
                   minHeight: 48,
                   paddingVertical: 6,
-                  lineHeight: 18,
+                  lineHeight: type("small").prose,
                 }}
               />
             </ProposalRow>
           </View>
           <If when={props.item.error}>
-            <Label size={12} line={16} tone="red">
+            <Label variant="small" tone="red">
               {props.item.error}
             </Label>
           </If>
@@ -208,8 +217,7 @@ function ProposalRow(props: {
       }}
     >
       <Label
-        size={12}
-        line={16}
+        variant="small"
         tone="mutedInk"
         style={{
           width: 56,
@@ -241,9 +249,7 @@ function ProposalValue(props: { value: string; body?: boolean }) {
         borderColor: c().strong,
       }}
     >
-      <Label size={12} line={props.body ? 18 : 16}>
-        {props.value}
-      </Label>
+      <Label variant="small">{props.value}</Label>
     </View>
   );
 }

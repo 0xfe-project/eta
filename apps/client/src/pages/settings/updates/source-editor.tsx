@@ -36,7 +36,10 @@ export function UpdateSourceEditor(props: {
           onClose={closeEditor}
         >
           <View style={{ padding: 16, gap: 12 }}>
-            <Label size={12} tone={mode() === "upstream" ? "amber" : "muted"}>
+            <Label
+              variant="small"
+              tone={mode() === "upstream" ? "amber" : "muted"}
+            >
               {mode() === "upstream"
                 ? uiText("theHostInstallsAndRunsCode")
                 : uiText("theTokenIsStoredOnThe", { host: token()?.host })}
@@ -55,7 +58,7 @@ export function UpdateSourceEditor(props: {
               onChange={draft.set}
             />
             <If when={error()}>
-              <Label size={12} tone="red">
+              <Label variant="small" tone="red">
                 {error()}
               </Label>
             </If>

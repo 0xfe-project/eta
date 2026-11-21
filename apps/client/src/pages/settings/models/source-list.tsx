@@ -118,7 +118,7 @@ export function ModelSourceList(props: {
             }
             meta={
               <View style={{ ...row, gap: 10 }}>
-                <Label size={12} line={16} tone="muted">
+                <Label variant="small" tone="muted">
                   {modelCount(item())}
                 </Label>
                 <If when={!props.phone && used(item()) !== undefined}>

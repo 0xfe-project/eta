@@ -120,12 +120,11 @@ export function CaptainReview(props: {
       <View
         style={{ ...row, gap: 8, paddingVertical: 5, paddingHorizontal: 10 }}
       >
-        <Label size={12} line={16} weight={500} style={{ flexShrink: 0 }}>
+        <Label variant="small" weight={500} style={{ flexShrink: 0 }}>
           {uiText("captainReviewTitle")}
         </Label>
         <Label
-          size={10}
-          line={12}
+          variant="caption"
           tone="faint"
           lines={1}
           style={{ flex: 1, letterSpacing: 0.8, textTransform: "uppercase" }}
@@ -133,8 +132,7 @@ export function CaptainReview(props: {
           {uiText("captainObservations", { count: props.items.length })}
         </Label>
         <Label
-          size={10}
-          line={12}
+          variant="caption"
           tone="faint"
           style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
         >
@@ -188,21 +186,18 @@ function Observation(props: {
         <View style={{ ...row, flex: 1, gap: 6 }}>
           <StatusDot color={c()[marks[tone()]]} />
           <Label
-            size={10}
-            line={12}
+            variant="caption"
             tone={ordinary() ? "muted" : "ink"}
             style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
           >
             {uiText(kind()?.label ?? "reviewOther")}
           </Label>
         </View>
-        <Label size={10} line={12} tone="faint">
+        <Label variant="caption" tone="faint">
           {props.item.kind}
         </Label>
       </View>
-      <Label size={13} line={21} tone={ordinary() ? "muted" : "ink"}>
-        {props.item.body}
-      </Label>
+      <Label tone={ordinary() ? "muted" : "ink"}>{props.item.body}</Label>
       <If when={context().length}>
         <View style={{ ...row, gap: 5, paddingTop: 2 }}>
           <Each of={context()}>
@@ -218,7 +213,7 @@ function Observation(props: {
                   borderColor: c().border,
                 }}
               >
-                <Label size={10} line={14} tone="muted">
+                <Label variant="caption" tone="muted">
                   {value().label}
                 </Label>
               </View>
@@ -237,8 +232,7 @@ function Observation(props: {
           >
             <Icon name={raw() ? "down" : "right"} size={8} tone="faint" />
             <Label
-              size={10}
-              line={12}
+              variant="caption"
               tone="faint"
               style={{ letterSpacing: 0.6, textTransform: "uppercase" }}
             >
@@ -248,8 +242,7 @@ function Observation(props: {
         </View>
         <If when={raw()}>
           <Label
-            size={11}
-            line={16}
+            variant="small"
             tone="muted"
             style={{
               padding: 8,

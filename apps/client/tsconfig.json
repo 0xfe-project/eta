@@ -1,4 +1,6 @@
 {
   "extends": "./.nsh/tsconfig.json",
-  "include": ["**/*.ts", "**/*.tsx"]
+  "include": ["**/*.ts", "**/*.tsx"],
+  // Bun scripts run at check time, not in the app.
+  "exclude": ["scripts"]
 }

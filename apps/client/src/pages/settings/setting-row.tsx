@@ -43,7 +43,7 @@ export function SettingRow(props: {
       <Icon name={props.icon} />
       <View style={{ flex: 1, minWidth: 0 }}>
         <Label weight={500}>{props.title}</Label>
-        <Label size={12} tone="muted" lines={2}>
+        <Label variant="small" tone="muted" lines={2}>
           {props.detail}
         </Label>
       </View>
@@ -99,7 +99,7 @@ export function AgentSetting(props: {
         <If
           when={missing()}
           else={
-            <Label size={12} line={16} tone="muted" lines={1}>
+            <Label variant="small" tone="muted" lines={1}>
               {meta()}
             </Label>
           }

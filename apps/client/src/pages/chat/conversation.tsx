@@ -216,7 +216,7 @@ export function Conversation(props: {
           }
         >
           <If when={phone() && props.captain}>
-            <Label size={11} line={14} tone="muted">
+            <Label variant="caption" tone="muted">
               {uiText(
                 host.captain()?.status === "working" ? "working" : "idle",
               )}
@@ -244,7 +244,7 @@ export function Conversation(props: {
               }}
             >
               <Icon name="folder" size={12} tone="muted" />
-              <Label size={12} line={16} tone="muted" lines={1}>
+              <Label variant="small" tone="muted" lines={1}>
                 {project()?.name ?? ""}
               </Label>
             </View>
@@ -275,7 +275,7 @@ export function Conversation(props: {
                 tone={phone() ? "ghost" : "plain"}
                 size={phone() ? 40 : undefined}
                 iconSize={phone() ? 16 : undefined}
-                labelSize={11}
+                labelVariant="caption"
                 style={{ gap: 6 }}
                 onPress={() => drawer.set(true)}
               />
@@ -313,14 +313,14 @@ export function Conversation(props: {
             }}
           >
             <StatusDot color={c().amber} />
-            <Label size={12} line={16} lines={1} style={{ flex: 1 }}>
+            <Label variant="small" lines={1} style={{ flex: 1 }}>
               {approvals().length === 1
                 ? uiText("proposalWaitingForApproval")
                 : uiText("proposalsWaitingForApproval", {
                     count: approvals().length,
                   })}
             </Label>
-            <Label size={12} line={16} weight={600}>
+            <Label variant="small" weight={600}>
               {uiText("reviewProposals")}
             </Label>
             <View style={{ opacity: 0.45 }}>
@@ -343,7 +343,7 @@ export function Conversation(props: {
             }}
           >
             <Icon name="warning" tone="warningInk" size={14} />
-            <Label size={12} line={16} tone="warningInk" style={{ flex: 1 }}>
+            <Label variant="small" tone="warningInk" style={{ flex: 1 }}>
               {uiText("connectionLostReconnectingWhatYouSee")}
             </Label>
           </View>
@@ -447,7 +447,7 @@ export function Conversation(props: {
                   cursor: "pointer",
                 }}
               >
-                <Label size={12} line={16} style={{ flex: 1 }}>
+                <Label variant="small" style={{ flex: 1 }}>
                   {uiText("insertEnded")}
                 </Label>
               </View>

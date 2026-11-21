@@ -32,8 +32,7 @@ export function Status(props: { item: PluginView; phone?: boolean }) {
   const missing = () => props.item.state === "needs_config";
   return (
     <Label
-      size={10}
-      line={14}
+      variant="caption"
       lines={1}
       tone={missing() ? "warningInk" : "muted"}
       style={{

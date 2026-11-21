@@ -58,9 +58,7 @@ export function McpPhoneHeader(props: { title: string; onBack: () => void }) {
       }}
     >
       <BackButton size={40} iconSize={16} onPress={props.onBack} />
-      <Label size={14} line={20} weight={600}>
-        {props.title}
-      </Label>
+      <Label weight={600}>{props.title}</Label>
     </View>
   );
 }

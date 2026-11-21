@@ -101,17 +101,15 @@ export function TaskWorkspaceBoard(props: {
                         tone={tablet() ? "mutedInk" : "muted"}
                       />
                       <If when={!tablet()}>
-                        <Label size={12} line={16} tone="muted">
+                        <Label variant="small" tone="muted">
                           {column(status()).length}
                         </Label>
                       </If>
                     </>
                   }
                 >
-                  <Label size={12} line={16}>
-                    {statusName(status())}
-                  </Label>
-                  <Label size={12} line={16} tone="muted">
+                  <Label variant="small">{statusName(status())}</Label>
+                  <Label variant="small" tone="muted">
                     {column(status()).length}
                   </Label>
                 </If>
@@ -152,8 +150,7 @@ function SideLabel(props: { text: string; tone: "muted" | "mutedInk" }) {
   return (
     <View style={{ width: 16, height: length() }}>
       <Label
-        size={12}
-        line={16}
+        variant="small"
         tone={props.tone}
         lines={1}
         style={{

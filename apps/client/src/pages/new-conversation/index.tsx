@@ -179,14 +179,18 @@ export function NewConversation(props: {
           }}
         >
           <View style={{ ...row, ...grow, gap: 8 }}>
-            <Label size={10} tone="muted" style={{ letterSpacing: 0.8 }}>
+            <Label
+              variant="caption"
+              tone="muted"
+              style={{ letterSpacing: 0.8 }}
+            >
               {directory() ? "2/2" : "1/2"}
             </Label>
-            <Label size={12} weight={600}>
+            <Label variant="small" weight={600}>
               {directory() ? uiText("members") : uiText("directory")}
             </Label>
           </View>
-          <Label size={12} tone="muted">
+          <Label variant="small" tone="muted">
             {directory()
               ? localizedText("Last step", "最后一步")
               : localizedText("Next: Members", "下一步：成员")}
@@ -239,7 +243,7 @@ export function NewConversation(props: {
             <View role="alert" style={{ padding: 16, gap: 4 }}>
               <Label tone="red">{failureText(failure())}</Label>
               <If when={failure().detail && failure().code !== "other"}>
-                <Label tone="muted" size={12}>
+                <Label tone="muted" variant="small">
                   {failure().detail}
                 </Label>
               </If>
@@ -249,7 +253,7 @@ export function NewConversation(props: {
       </Scroll>
       <If when={!phone() && !directory()}>
         <Label
-          size={10}
+          variant="caption"
           tone="muted"
           style={{
             paddingHorizontal: 14,
