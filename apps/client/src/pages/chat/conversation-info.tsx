@@ -126,11 +126,7 @@ export function PhoneConversationInfo(props: {
             )}
           </Each>
           <If when={artifacts().length > RECENT}>
-            <ViewAllRow
-              total={artifacts().length}
-              phone
-              onViewAll={() => allArtifacts.set(true)}
-            />
+            <ViewAllRow phone onViewAll={() => allArtifacts.set(true)} />
           </If>
           <If when={!artifacts().length}>
             <Empty
