@@ -1,6 +1,6 @@
 /**
- * The two tools an agent has because it is in a conversation: reaching the other members, and
- * looking at the room it is in. They are registered on each (agent x conversation) session when
+ * The tools an agent has because it is in a conversation: reaching the other members,
+ * looking at the room it is in, and looking at the images the user attached. They are registered on each (agent x conversation) session when
  * it opens (`sessionTools`), so they know which conversation and which agent they speak for
  * without being told.
  */
@@ -51,8 +51,39 @@ export function conversationTools(
     },
   });
 
+  const readImage = defineTool({
+    name: "read_image",
+    description:
+      "Look at an image the user attached in this conversation. Name it by the attachment id or by " +
+      "the path you were told for it. Only this conversation's attachments can be read; the answer " +
+      "is the image itself, or an error when your model does not support images.",
+    parameters: Type.Object({
+      file: Type.String({ description: "The attachment id or its path" }),
+    }),
+    async execute(args) {
+      try {
+        const image = await engine.image(conversationId, agentId, args.file);
+        return {
+          content: [
+            {
+              type: "image" as const,
+              data: image.dataBase64,
+              mimeType: image.mime,
+            },
+          ],
+          details: undefined,
+        };
+      } catch (error) {
+        return toolError(
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    },
+  });
+
   return [
     toKernelTool(mention, () => undefined),
     toKernelTool(info, () => undefined),
+    toKernelTool(readImage, () => undefined),
   ] as KernelTool[];
 }
