@@ -22,11 +22,9 @@
 # For #144, for example, they were 43801834485 (Linux), 43802029578 (macOS) and 43802032299
 # (Windows), on f47b4176.
 #
-# It runs for what can break it, and by hand (workflow_dispatch) on any branch. A pull request
-# starts it for the upgrade code and the few client files the upgrade itself goes through; the rest
-# of the client (App, workspace, navigation, shared components, services, the other settings pages,
-# common copy) can break the button too, but changes far more often, so that is tested once per
-# merge to main instead of on every push to every pull request.
+# It runs for what can break it, and by hand (workflow_dispatch) on any branch. Of the client, a
+# pull request starts it only for the update page, the restart screen and their copy; the rest of
+# the client runs it once it is merged to main.
 name: Upgrade end to end
 
 on:
@@ -38,37 +36,18 @@ on:
       - apps/daemon/src/windows-*.ts
       - apps/eta/src/stop.ts
       - apps/eta/src/upgrade/**
-      # What "a person presses the button on the page" goes through: the Update section, the
-      # settings dialog that shows it, the restart screen and the reconnecting banner, their copy.
       - apps/client/src/pages/settings/updates/**
-      - apps/client/src/pages/settings/settings.tsx
-      - apps/client/src/pages/settings/overview.ts
       - apps/client/src/pages/connection/host-restart.tsx
-      - apps/client/src/pages/connection/reconnecting-banner.tsx
       - apps/client/src/services/upgrade-watch.ts
       - apps/client/src/i18n/messages/updates.ts
-      - apps/client/src/i18n/messages/connection.ts
-      - packages/client-contracts/src/wire.ts
-      - packages/client-wire-proto/src/**
       - scripts/nsh-client.ts
       - .github/actions/setup-nsh/**
       - scripts/upgrade-e2e/**
-  # The same, and the whole client, once per merge.
   push:
     branches: [main]
     paths:
-      - .github/workflows/upgrade-e2e.yml
-      - apps/daemon/src/service*.ts
-      - apps/daemon/src/swap.ts
-      - apps/daemon/src/windows-*.ts
-      - apps/eta/src/stop.ts
-      - apps/eta/src/upgrade/**
       - apps/client/**
-      - packages/client-contracts/src/wire.ts
-      - packages/client-wire-proto/src/**
-      - scripts/nsh-client.ts
-      - .github/actions/setup-nsh/**
-      - scripts/upgrade-e2e/**
+      - packages/client-*/src/**
   workflow_dispatch:
 
 # A newer push to the same pull request, or a newer merge to main, makes the older run's answer

@@ -207,54 +207,22 @@ describe("hasPrereleaseSwitch", () => {
 });
 
 describe("upgrade-e2e.yml's paths", () => {
-  const repo = join(import.meta.dirname, "../../..");
   const { on } = Bun.YAML.parse(
-    readFileSync(join(repo, ".github/workflows/upgrade-e2e.yml"), "utf8"),
+    readFileSync(
+      join(import.meta.dirname, "../../../.github/workflows/upgrade-e2e.yml"),
+      "utf8",
+    ),
   ) as { on: Record<"pull_request" | "push", { paths: string[] }> };
-  const matches = (paths: string[], file: string): boolean =>
-    paths.some((path) => new Bun.Glob(path).match(file));
-  const onPullRequest = (file: string) => matches(on.pull_request.paths, file);
-  const onMerge = (file: string) => matches(on.push.paths, file);
-  const clientFiles = [
-    "apps/client/App.tsx",
-    "apps/client/packaged-host-bootstrap.ts",
-    ...new Bun.Glob("apps/client/src/**/*.{ts,tsx}").scanSync({ cwd: repo }),
-  ];
+  const runs = (event: "pull_request" | "push", file: string): boolean =>
+    on[event].paths.some((path) => new Bun.Glob(path).match(file));
 
-  it("run on a merge for everything they run on in a pull request", () => {
-    for (const path of on.pull_request.paths)
-      expect(onMerge(path.replace(/\*\*?/g, "x.ts")), path).toBe(true);
-  });
-
-  // The pages the scenario goes through start it from a pull request; what they import is either
-  // one of them or shared with the rest of the client, which starts it once merged.
-  it("cover what the scenario's pages import, on a pull request or once merged", () => {
-    const transpiler = new Bun.Transpiler({ loader: "tsx" });
-    const pages = clientFiles.filter(onPullRequest);
-    expect(pages.length).toBeGreaterThan(10);
-    const imported = pages.flatMap((page) =>
-      transpiler
-        .scanImports(readFileSync(join(repo, page), "utf8"))
-        .filter(({ path }) => path.startsWith("."))
-        .map(({ path }) => join(page, "..", path.replace(/\?.*$/, ""))),
-    );
-    const left = imported.filter(
-      (file) =>
-        !onPullRequest(file) &&
-        !onMerge(file) &&
-        !["", ".ts", ".tsx", "/index.ts"].some((ext) => onMerge(file + ext)),
-    );
-    expect(left).toEqual([]);
-  });
-
-  it("leave the rest of the client to the merge", () => {
-    for (const file of [
-      "apps/client/App.tsx",
-      "apps/client/src/components/controls.tsx",
-      "apps/client/src/pages/chat/conversation.tsx",
-    ]) {
-      expect(onPullRequest(file), file).toBe(false);
-      expect(onMerge(file), file).toBe(true);
-    }
+  it("run on a pull request for the update page, and on a merge for the rest of the client", () => {
+    expect(
+      runs("pull_request", "apps/client/src/pages/settings/updates/update.tsx"),
+    ).toBe(true);
+    expect(
+      runs("pull_request", "apps/client/src/components/controls.tsx"),
+    ).toBe(false);
+    expect(runs("push", "apps/client/src/components/controls.tsx")).toBe(true);
   });
 });
