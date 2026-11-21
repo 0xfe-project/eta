@@ -1,18 +1,19 @@
 import type {
   EmailAssignmentView,
   EmailMessageView,
+  EmailMetaView,
   EmailResults,
   TranscriptSection,
   ViewCore,
 } from "@eta/client-contracts";
-import type { Layout } from "../../components";
 import { runBlocks } from "@eta/client-contracts";
 import { Scroll, signal, View } from "nsh";
+import { Select } from "nsh/base";
 import {
   Button,
-  Caption,
   colors,
   grow,
+  Icon,
   Label,
   Markdown,
   Modal,
@@ -50,6 +51,8 @@ export function EmailInfo(props: {
         </If>
         <Label
           size={props.phoneRow && !props.compact ? 14 : 12}
+          line={props.phoneRow && props.compact ? 16 : undefined}
+          tone={props.phoneRow && props.compact ? "mutedInk" : "ink"}
           weight={props.phoneRow && props.agentId ? 600 : undefined}
           style={{ flex: 1, minWidth: 0 }}
         >
@@ -60,74 +63,456 @@ export function EmailInfo(props: {
   );
 }
 
-export function EmailContext(props: {
-  message: EmailMessageView;
-  layout: Layout;
-  onClose: () => void;
+function signatureText(meta: EmailMetaView) {
+  return meta.signatureValid === true
+    ? uiText("signatureVerified")
+    : meta.signatureValid === false
+      ? uiText("signatureInvalid")
+      : meta.signaturePresent
+        ? uiText("signatureUnchecked")
+        : uiText("unsigned");
+}
+
+function dataPoints(count: number) {
+  return uiText(count === 1 ? "dataPoint" : "dataPointCount", { count });
+}
+
+function entries(count: number) {
+  return uiText(count === 1 ? "entry" : "entries", { count });
+}
+
+function MetaStat(props: {
+  label: string;
+  value: string;
+  verified?: boolean;
+  half?: boolean;
 }) {
   const c = colors();
+  return (
+    <View
+      style={{
+        ...(props.half ? { width: "50%" } : { flex: 1 }),
+        minWidth: 0,
+        gap: 2,
+        paddingVertical: 8,
+        paddingHorizontal: 10,
+        borderBottomWidth: 1,
+        borderRightWidth: 1,
+        borderColor: c().border,
+      }}
+    >
+      <Label
+        size={10}
+        line={16}
+        tone="muted"
+        style={{ letterSpacing: 0.5, textTransform: "uppercase" }}
+      >
+        {props.label}
+      </Label>
+      <Label
+        size={12}
+        line={16}
+        tone={props.verified ? "green" : "ink"}
+        lines={1}
+      >
+        {props.value}
+      </Label>
+    </View>
+  );
+}
+
+function shown(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "boolean") return value ? "✓" : "—";
+  if (typeof value === "string") return value || "—";
+  if (typeof value === "number") return String(value);
+  return "";
+}
+
+/** One line for a payload value: a short list, an object's keys, or text. */
+function summarize(value: unknown): string {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "—";
+    if (value.every((item) => typeof item !== "object" || item === null)) {
+      const visible = value.slice(0, 5).map(shown).join(" · ");
+      return value.length > 5 ? `${visible} …` : visible;
+    }
+    return `${value.length} ×`;
+  }
+  if (typeof value === "object" && value !== null) {
+    const keys = Object.keys(value);
+    return keys.length === 0 ? "—" : keys.slice(0, 5).join(" · ");
+  }
+  const text = shown(value).replace(/\s+/g, " ").trim();
+  return text.length > 180 ? `${text.slice(0, 177)}…` : text;
+}
+
+/** The payload's top-level entries, the card's additional business context. */
+function payloadEntries(value: unknown): [string, string][] {
+  const entries: [string, unknown][] = Array.isArray(value)
+    ? value.map((item, index) => [String(index + 1), item])
+    : typeof value === "object" && value !== null
+      ? Object.entries(value)
+      : [];
+  return entries.map(([key, item]) => [key, summarize(item)]);
+}
+
+/** A labelled row in the context table: 10pt muted name, 11pt value. */
+function ContextRow(props: {
+  label: string;
+  value: string;
+  labelWidth: number;
+  last?: boolean;
+}) {
+  const c = colors();
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        gap: 12,
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderBottomWidth: props.last ? 0 : 1,
+        borderColor: c().border,
+      }}
+    >
+      <Label
+        size={10}
+        line={16}
+        tone="muted"
+        style={{ width: props.labelWidth, flexShrink: 0 }}
+      >
+        {props.label}
+      </Label>
+      <Label size={11} line={16} style={{ flex: 1, minWidth: 0 }}>
+        {props.value}
+      </Label>
+    </View>
+  );
+}
+
+/** A 10pt muted band that heads a group of context rows. */
+function ContextBand(props: { label: string; count?: string }) {
+  const c = colors();
+  return (
+    <View
+      style={{
+        ...row,
+        justifyContent: "space-between",
+        backgroundColor: c().selected,
+        paddingVertical: 4,
+        paddingHorizontal: 12,
+      }}
+    >
+      <Label size={10} line={16} tone="muted">
+        {props.label}
+      </Label>
+      <If when={props.count}>
+        <Label size={10} line={16} tone="muted">
+          {props.count}
+        </Label>
+      </If>
+    </View>
+  );
+}
+
+/**
+ * The agent part of a message: inline under it and folded on desktop and
+ * phones, open in the thread context drawer on tablet. Its facts sit two to a
+ * row in the drawer and on a phone.
+ */
+export function EmailMetaCard(props: {
+  meta: EmailMetaView;
+  drawer?: boolean;
+  phone?: boolean;
+}) {
+  const c = colors();
+  const open = signal(props.drawer ?? false);
+  const technical = signal(false);
+  const half = () => Boolean(props.drawer || props.phone);
+  const labelWidth = () => (props.phone ? 96 : 140);
+  const route = () =>
+    [
+      [uiText("metaAgentId"), props.meta.agentId],
+      [uiText("metaSessionId"), props.meta.sessionId],
+      [uiText("mailThread"), props.meta.mailThreadId],
+      [uiText("metaTask"), props.meta.taskId],
+      [uiText("metaCarrier"), props.meta.carrier],
+    ].filter((entry): entry is [string, string] => !!entry[1]);
+  const extra = () => payloadEntries(props.meta.payload);
+  const total = () => route().length + extra().length;
+  return (
+    <View
+      style={{
+        backgroundColor: c().selected,
+        borderWidth: 1,
+        borderColor: c().border,
+      }}
+    >
+      <View
+        role="button"
+        accessibilityLabel={uiText("agentCommunicationContext")}
+        accessibilityState={{ expanded: open() }}
+        onPress={() => open.set(!open())}
+        style={{
+          ...row,
+          gap: 12,
+          paddingVertical: 10,
+          paddingHorizontal: 12,
+          cursor: "pointer",
+        }}
+      >
+        <View
+          style={{
+            width: 32,
+            height: 32,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: c().canvas,
+            borderWidth: 1,
+            borderColor: c().border,
+          }}
+        >
+          <Label size={10} line={16} weight={600}>
+            ETA
+          </Label>
+        </View>
+        <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+          <View style={{ ...row, gap: 8 }}>
+            <Label
+              size={12}
+              line={16}
+              weight={600}
+              style={{ flexShrink: 1, minWidth: 0 }}
+            >
+              {uiText("agentCommunicationContext")}
+            </Label>
+            <Label
+              size={10}
+              line={16}
+              tone="muted"
+              style={{
+                backgroundColor: c().canvas,
+                borderWidth: 1,
+                borderColor: c().border,
+                paddingVertical: 2,
+                paddingHorizontal: 6,
+                flexShrink: 0,
+              }}
+            >
+              {dataPoints(props.meta.packetCount)}
+            </Label>
+          </View>
+          <Label size={11} line={16} tone="muted" lines={1}>
+            {[
+              props.meta.agentName ?? "—",
+              props.meta.protocol ?? "—",
+              entries(total()),
+            ].join(" · ")}
+          </Label>
+        </View>
+        <View
+          style={{ transform: open() ? [{ rotate: "180deg" }] : undefined }}
+        >
+          <Icon name="down" size={14} tone="muted" />
+        </View>
+      </View>
+      <If when={open()}>
+        <View
+          style={{
+            gap: 10,
+            paddingVertical: 10,
+            paddingHorizontal: 12,
+            borderTopWidth: 1,
+            borderColor: c().border,
+          }}
+        >
+          <Label size={11} line={16} tone="muted">
+            {uiText("contextHint")}
+          </Label>
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: half() ? "wrap" : "nowrap",
+              borderLeftWidth: 1,
+              borderTopWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <MetaStat
+              half={half()}
+              label={uiText("agent")}
+              value={props.meta.agentName ?? "—"}
+            />
+            <MetaStat
+              half={half()}
+              label={uiText("protocol")}
+              value={props.meta.protocol ?? "—"}
+            />
+            <MetaStat
+              half={half()}
+              label={uiText("dataPoints")}
+              value={dataPoints(props.meta.packetCount)}
+            />
+            <MetaStat
+              half={half()}
+              label={uiText("signature")}
+              value={signatureText(props.meta)}
+              verified={props.meta.signatureValid === true}
+            />
+          </View>
+          <View
+            style={{
+              backgroundColor: c().canvas,
+              borderWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <View
+              style={{
+                ...row,
+                justifyContent: "space-between",
+                paddingVertical: 6,
+                paddingHorizontal: 12,
+                borderBottomWidth: 1,
+                borderColor: c().border,
+              }}
+            >
+              <Label size={12} line={16} weight={600}>
+                {uiText("context")}
+              </Label>
+              <Label size={10} line={16} tone="muted">
+                {entries(total())}
+              </Label>
+            </View>
+            <ContextBand label={uiText("communicationRoute")} />
+            <Each of={route()} key={(entry) => entry[0]}>
+              {(entry) => (
+                <ContextRow
+                  label={entry()[0]}
+                  value={entry()[1]}
+                  labelWidth={labelWidth()}
+                />
+              )}
+            </Each>
+            <ContextBand
+              label={uiText("additionalContext")}
+              count={entries(extra().length)}
+            />
+            <If
+              when={extra().length}
+              else={
+                <View
+                  style={{ gap: 2, paddingVertical: 8, paddingHorizontal: 12 }}
+                >
+                  <Label size={11} line={16}>
+                    {uiText("noExtraContext")}
+                  </Label>
+                  <Label size={10} line={16} tone="muted">
+                    {uiText("noExtraContextHint")}
+                  </Label>
+                </View>
+              }
+            >
+              <Each of={extra().slice(0, 6)} key={(entry) => entry[0]}>
+                {(entry) => (
+                  <ContextRow
+                    label={entry()[0]}
+                    value={entry()[1]}
+                    labelWidth={labelWidth()}
+                    last={entry()[0] === extra().slice(0, 6).at(-1)?.[0]}
+                  />
+                )}
+              </Each>
+            </If>
+          </View>
+          <View
+            style={{
+              backgroundColor: c().canvas,
+              borderWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <View
+              role="button"
+              accessibilityLabel={uiText("technicalDetails")}
+              accessibilityState={{ expanded: technical() }}
+              onPress={() => technical.set(!technical())}
+              style={{
+                ...row,
+                gap: 8,
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+                cursor: "pointer",
+              }}
+            >
+              <View
+                style={{
+                  transform: technical() ? [{ rotate: "180deg" }] : undefined,
+                }}
+              >
+                <Icon name="down" size={12} tone="muted" />
+              </View>
+              <Label size={12} line={16}>
+                {uiText("technicalDetails")}
+              </Label>
+            </View>
+            <If when={technical()}>
+              <View style={{ borderTopWidth: 1, borderColor: c().border }}>
+                <ContextRow
+                  label={uiText("protocol")}
+                  value={props.meta.protocol ?? "—"}
+                  labelWidth={labelWidth()}
+                />
+                <ContextRow
+                  label={uiText("dataPoints")}
+                  value={dataPoints(props.meta.packetCount)}
+                  labelWidth={labelWidth()}
+                />
+                <ContextRow
+                  label={uiText("signature")}
+                  value={signatureText(props.meta)}
+                  labelWidth={labelWidth()}
+                />
+                <ContextRow
+                  label={uiText("decode")}
+                  value={props.meta.decodeError ?? uiText("decodeSucceeded")}
+                  labelWidth={labelWidth()}
+                  last
+                />
+              </View>
+            </If>
+          </View>
+        </View>
+      </If>
+    </View>
+  );
+}
+
+/** Tablet: the thread's agent context in a side drawer, opened from the pane
+ * header. Desktop and phones fold the same card under the message. */
+export function EmailContext(props: {
+  message: EmailMessageView;
+  onClose: () => void;
+}) {
   const meta = () => props.message.meta;
-  const phone = () => props.layout === "phone";
   return (
     <Modal
       title={uiText("threadContext")}
       width={360}
-      height={phone() ? "74%" : "100%"}
-      side={!phone()}
-      phone={phone()}
+      height="100%"
+      side
       onClose={props.onClose}
     >
       <Scroll style={grow} scrollbar={false}>
         <View style={{ padding: 12, gap: 12 }}>
-          <If when={meta() && meta()!.carrier !== "none"}>
-            <View
-              style={{
-                padding: 12,
-                backgroundColor: c().surface,
-                borderWidth: 1,
-                borderColor: c().border,
-              }}
-            >
-              <Label weight={600}>{uiText("agentCommunicationContext")}</Label>
-              <EmailInfo
-                label={uiText("agent")}
-                value={meta()?.agentName ?? meta()?.agentId}
-              />
-              <EmailInfo label={uiText("protocol")} value={meta()?.protocol} />
-              <EmailInfo
-                label={uiText("dataPoints")}
-                value={String(meta()?.packetCount ?? 0)}
-              />
-              <EmailInfo
-                label={uiText("signature")}
-                value={
-                  meta()?.signatureValid === true
-                    ? "Verified"
-                    : meta()?.signaturePresent
-                      ? "Unverified"
-                      : "Not signed"
-                }
-              />
-              <EmailInfo
-                label={uiText("mailThread")}
-                value={meta()?.mailThreadId}
-              />
-              <EmailInfo label={uiText("session")} value={meta()?.sessionId} />
-              <EmailInfo label="Task" value={meta()?.taskId} />
-              <EmailInfo
-                label={uiText("currentWork")}
-                value={meta()?.payload?.work.doing}
-              />
-              <EmailInfo
-                label={uiText("question")}
-                value={meta()?.payload?.ask.question}
-              />
-              <If when={meta()?.decodeError}>
-                <Label size={12} tone="red">
-                  {meta()?.decodeError}
-                </Label>
-              </If>
-            </View>
+          <If when={meta()?.carrier !== "none" ? meta() : undefined}>
+            {(value) => <EmailMetaCard meta={value()} drawer />}
+          </If>
+          <If when={meta()?.decodeError}>
+            <Label size={12} tone="red">
+              {meta()?.decodeError}
+            </Label>
           </If>
         </View>
       </Scroll>
@@ -206,64 +591,149 @@ export function AssignEmail(props: {
   const busy = signal(false);
   return (
     <Modal
-      title={uiText("assignEmail")}
+      title={
+        props.ids.length > 1
+          ? uiText("handCountToAnAgent", { count: props.ids.length })
+          : uiText("handToAnAgent")
+      }
       phone={props.phone}
+      sheet={props.phone}
+      plainSheetHeader={props.phone}
+      overPhoneNavigation={props.phone}
+      compact={!props.phone}
+      titleWeight={500}
       onClose={props.onClose}
     >
-      <View style={{ padding: 16, gap: 8 }}>
-        <Caption text={uiText("agent")} />
-        <View style={{ ...row, flexWrap: "wrap", gap: 5 }}>
-          <Each of={host.people()} key={(item) => item.id}>
-            {(item) => (
-              <Button
-                label={item().name}
-                selected={agent() === item().id}
-                onPress={() => agent.set(item().id)}
-              />
-            )}
-          </Each>
-        </View>
-        <Caption text={uiText("project2")} />
-        <View style={{ ...row, flexWrap: "wrap", gap: 5 }}>
-          <Each
-            of={host
-              .projects()
-              .filter((item) => item.kind === "project" && !item.archived)}
-            key={(item) => item.id}
-          >
-            {(item) => (
-              <Button
-                label={item().name}
-                selected={project() === item().id}
-                onPress={() => project.set(item().id)}
-              />
-            )}
-          </Each>
-        </View>
-        <Button
-          label={uiText("assign2")}
-          tone="primary"
-          disabled={!agent() || !project() || busy()}
-          onPress={() =>
-            void (async () => {
-              if (busy()) return;
-              busy.set(true);
-              const result = await host.action(() =>
-                host.call<EmailResults["assign"]>("email", "assign", {
-                  threadIds: props.ids,
-                  agentId: agent(),
-                  projectId: project(),
-                }),
-              );
-              busy.set(false);
-              if (result) {
-                props.onClose();
-                props.onAssigned(result.conversationId);
-              }
-            })()
+      <View style={props.phone ? undefined : { paddingTop: 14 }}>
+        <View
+          style={
+            props.phone
+              ? {
+                  gap: 16,
+                  paddingHorizontal: 16,
+                  paddingTop: 4,
+                  paddingBottom: 8,
+                }
+              : { gap: 12 }
           }
-        />
+        >
+          <AssignField
+            phone={props.phone}
+            label={uiText("agent")}
+            value={agent()}
+            items={host
+              .people()
+              .map((item) => ({ value: item.id, title: item.name }))}
+            onChange={(value) => agent.set(value)}
+          />
+          <AssignField
+            phone={props.phone}
+            label={uiText("project2")}
+            value={project()}
+            items={host
+              .projects()
+              .filter((item) => item.kind === "project" && !item.archived)
+              .map((item) => ({
+                value: item.id,
+                title: `${item.name} · ${item.path}`,
+              }))}
+            onChange={(value) => project.set(value)}
+          />
+        </View>
+        <View
+          style={
+            props.phone
+              ? { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 24 }
+              : { ...row, justifyContent: "flex-end", paddingTop: 20 }
+          }
+        >
+          <Button
+            label={uiText("startProcessing")}
+            tone="primary"
+            size={props.phone ? 40 : 28}
+            labelSize={props.phone ? 13 : undefined}
+            disabled={!agent() || !project() || busy()}
+            onPress={() =>
+              void (async () => {
+                if (busy()) return;
+                busy.set(true);
+                const result = await host.action(() =>
+                  host.call<EmailResults["assign"]>("email", "assign", {
+                    threadIds: props.ids,
+                    agentId: agent(),
+                    projectId: project(),
+                  }),
+                );
+                busy.set(false);
+                if (result) {
+                  props.onClose();
+                  props.onAssigned(result.conversationId);
+                }
+              })()
+            }
+          />
+        </View>
       </View>
     </Modal>
+  );
+}
+
+/** A labelled select, the design's Agent and Project fields: 28pt, 40pt on
+ * a phone. */
+function AssignField(props: {
+  phone: boolean;
+  label: string;
+  value: string;
+  items: { value: string; title: string }[];
+  onChange: (value: string) => void;
+}) {
+  const c = colors();
+  return (
+    <View style={{ gap: 4 }}>
+      <Label size={12} line={16} tone="muted">
+        {props.label}
+      </Label>
+      <Select
+        accessibilityLabel={props.label}
+        items={props.items}
+        value={props.value || null}
+        cover={false}
+        offset={2}
+        popupStyle={{
+          borderWidth: 1,
+          borderColor: c().strong,
+          backgroundColor: c().canvas,
+        }}
+        itemStyle={{
+          minHeight: 28,
+          paddingHorizontal: 8,
+          color: c().ink,
+          fontSize: 12,
+        }}
+        trigger={
+          <View
+            style={{
+              ...row,
+              gap: 8,
+              height: props.phone ? 40 : 28,
+              paddingHorizontal: props.phone ? 12 : 8,
+              borderWidth: 1,
+              borderColor: c().border,
+              backgroundColor: c().canvas,
+              cursor: "pointer",
+            }}
+          >
+            <Label size={12} line={16} lines={1} style={{ flex: 1 }}>
+              {props.items.find((item) => item.value === props.value)?.title ??
+                ""}
+            </Label>
+            <Icon name="down" size={props.phone ? 14 : 10} tone="muted" />
+          </View>
+        }
+        onChange={({ value }) => {
+          if (value !== null) props.onChange(value);
+        }}
+      />
+    </View>
   );
 }

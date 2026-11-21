@@ -3,8 +3,7 @@ import { View } from "nsh";
 import { colors, Icon, Label, row } from "../../components";
 import { CheckControl } from "../../components/check-control";
 import { uiText } from "../../i18n";
-import { relativeTime } from "../../services/host";
-import { EmailBadge, isAgentMail, mailSubject } from "./message";
+import { EmailBadge, isAgentMail, mailDay, mailSubject } from "./message";
 
 export function ThreadRow(props: {
   thread: EmailThreadView;
@@ -16,14 +15,28 @@ export function ThreadRow(props: {
   onOpen: () => void;
 }) {
   const c = colors();
+  // A checked row reads like the open one: tinted, with the ink edge.
+  const marked = () => props.selected || (!props.phone && props.checked);
   return (
     <View
+      hoverStyle={
+        props.phone || marked() ? undefined : { backgroundColor: c().selected }
+      }
       style={{
         ...row,
-        minHeight: props.phone ? 76 : 81,
+        ...(props.phone
+          ? { minHeight: 76, gap: 8, paddingLeft: 10 }
+          : {
+              alignItems: "flex-start",
+              gap: 8,
+              paddingVertical: 10,
+              paddingHorizontal: 8,
+              borderLeftWidth: marked() ? 2 : 0,
+              borderLeftColor: c().ink,
+            }),
         borderBottomWidth: 1,
-        borderColor: c().border,
-        backgroundColor: props.selected ? c().selected : c().canvas,
+        borderBottomColor: c().border,
+        backgroundColor: marked() ? c().selected : c().canvas,
       }}
     >
       <If when={!props.phone || props.selecting}>
@@ -33,22 +46,23 @@ export function ThreadRow(props: {
           })}
           checked={props.checked}
           onChange={props.onCheck}
-          size={15}
-          outlineOnly
-          style={{ marginLeft: 8, flexShrink: 0 }}
+          size={14}
+          indicatorStyle={
+            props.checked ? { borderColor: c().button } : undefined
+          }
+          style={{ marginTop: 4, flexShrink: 0 }}
         />
       </If>
-      <If when={props.phone && !props.selecting}>
-        <View
-          style={{
-            width: 7,
-            height: 7,
-            marginLeft: 16,
-            alignSelf: "flex-start",
-            marginTop: 18,
-            backgroundColor: props.thread.unread ? c().blue : "transparent",
-          }}
-        />
+      <If when={props.phone}>
+        <View style={{ width: 16, alignItems: "center", flexShrink: 0 }}>
+          <View
+            style={{
+              width: 6,
+              height: 6,
+              backgroundColor: props.thread.unread ? c().blue : "transparent",
+            }}
+          />
+        </View>
       </If>
       <View
         role="button"
@@ -58,42 +72,73 @@ export function ThreadRow(props: {
             ? props.onCheck(!props.checked)
             : props.onOpen()
         }
-        hoverStyle={{ backgroundColor: c().selected }}
+        hoverStyle={props.phone ? { backgroundColor: c().selected } : undefined}
         style={{
           flex: 1,
           minWidth: 0,
-          gap: 2,
-          paddingHorizontal: props.phone ? 11 : 8,
-          paddingVertical: 8,
           cursor: "pointer",
+          ...(props.phone
+            ? {
+                ...row,
+                alignSelf: "stretch",
+                gap: 8,
+                paddingRight: 12,
+                paddingVertical: 8,
+              }
+            : { gap: 4 }),
         }}
       >
-        <View style={{ ...row, gap: 8 }}>
-          <If when={isAgentMail(props.thread.subject)}>
-            <EmailBadge />
-          </If>
-          <Label
-            lines={1}
-            weight={props.thread.unread ? 600 : 400}
-            style={{ flex: 1 }}
+        <View
+          style={props.phone ? { flex: 1, minWidth: 0, gap: 2 } : { gap: 4 }}
+        >
+          <View style={{ ...row, gap: 8, alignItems: "baseline" }}>
+            <If when={isAgentMail(props.thread.subject)}>
+              <EmailBadge />
+            </If>
+            <Label
+              line={20}
+              lines={1}
+              weight={props.thread.unread ? 600 : 400}
+              style={{ flex: 1 }}
+            >
+              {mailSubject(props.thread.subject)}
+            </Label>
+            <Label size={11} line={props.phone ? 20 : 16} tone="muted">
+              {mailDay(props.thread.lastMessageAt)}
+            </Label>
+          </View>
+          <If
+            when={props.phone}
+            else={
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <Label
+                  size={12}
+                  line={16}
+                  tone="muted"
+                  lines={1}
+                  style={{ flex: 1, minWidth: 0 }}
+                >
+                  {props.thread.peer}
+                </Label>
+                <Label size={12} line={16} tone="muted">
+                  {props.thread.messageCount}
+                </Label>
+              </View>
+            }
           >
-            {mailSubject(props.thread.subject)}
-          </Label>
-          <Label size={10} tone="muted">
-            {relativeTime(props.thread.lastMessageAt)}
-          </Label>
-          <If when={props.phone}>
-            <Icon name="right" size={10} tone="muted" />
+            <Label size={12} line={16} tone="mutedInk" lines={1}>
+              {props.thread.messageCount > 1
+                ? `${props.thread.peer} · ${props.thread.messageCount}`
+                : props.thread.peer}
+            </Label>
           </If>
+          <Label size={12} line={16} tone="muted" lines={1}>
+            {props.thread.lastMessage}
+          </Label>
         </View>
-        <Label size={12} tone="muted" lines={1}>
-          {props.thread.messageCount > 1
-            ? `${props.thread.peer} · ${props.thread.messageCount}`
-            : props.thread.peer}
-        </Label>
-        <Label size={12} tone="muted" lines={1}>
-          {props.thread.lastMessage}
-        </Label>
+        <If when={props.phone}>
+          <Icon name="right" size={14} />
+        </If>
       </View>
     </View>
   );

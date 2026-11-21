@@ -1,11 +1,16 @@
 import type {
   EmailAssignmentView,
   EmailMessageView,
+  EmailProposalView,
+  TranscriptSection,
+  ViewCore,
 } from "@eta/client-contracts";
-import { Scroll, View } from "nsh";
-import { Button, Modal } from "../../components";
+import { runBlocks, splitReply } from "@eta/client-contracts";
+import { Scroll, signal, View } from "nsh";
+import { Button, colors, Icon, Label, Modal, row } from "../../components";
 import { formatLocale, uiText } from "../../i18n";
-import { useHost } from "../../services/host";
+import { follow, useHost } from "../../services/host";
+import { EmailProposal } from "./proposal";
 import { EmailInfo } from "./thread-context";
 
 export function AssignmentDetail(props: {
@@ -22,6 +27,7 @@ export function AssignmentDetail(props: {
       title={uiText("processingAgent2")}
       phone={props.phone}
       sheet={props.phone}
+      plainSheetHeader={props.phone}
       overPhoneNavigation={props.phone}
       side={!props.phone}
       width={360}
@@ -88,5 +94,156 @@ export function AssignmentDetail(props: {
         />
       </View>
     </Modal>
+  );
+}
+
+/** Off phones: the processing row opened in place, with the run's state, its
+ * answer once it finished, and the steps it took folded under a log row with
+ * the emails it proposed. The log starts open while one waits for the user. */
+export function AssignmentInline(props: {
+  assignment: EmailAssignmentView;
+  proposals: EmailProposalView[];
+  onOpenSession: () => void;
+}) {
+  const host = useHost();
+  const c = colors();
+  const logOpen = signal(
+    props.proposals.some(
+      (item) => item.status === "pending" || item.status === "failed",
+    ),
+  );
+  const target = () => `sessions.${props.assignment.sessionId}`;
+  follow(target);
+  const core = () => host.section<ViewCore>(target(), "core");
+  const transcript = () =>
+    host.section<TranscriptSection>(target(), "transcript");
+  const blocks = () =>
+    runBlocks(
+      transcript()?.messages.filter(
+        (message) => message.at >= props.assignment.createdAt - 1,
+      ) ?? [],
+      core()?.streaming,
+    );
+  const running = () => core()?.running ?? false;
+  const reply = () => splitReply(blocks());
+  const result = () =>
+    running()
+      ? ""
+      : reply()
+          .answer.map((block) => ("text" in block ? block.text : ""))
+          .join("\n\n")
+          .trim();
+  const steps = () => (running() ? blocks() : reply().steps);
+  return (
+    <View
+      style={{
+        gap: 12,
+        paddingBottom: 12,
+        borderBottomWidth: 1,
+        borderColor: c().border,
+      }}
+    >
+      <View style={row}>
+        <Button
+          label={uiText("openProcessingSession")}
+          onPress={props.onOpenSession}
+        />
+      </View>
+      <If when={transcript()}>
+        <View style={{ ...row, gap: 8 }}>
+          <View
+            style={{
+              width: 6,
+              height: 6,
+              flexShrink: 0,
+              backgroundColor: c().ink,
+            }}
+          />
+          <Label size={12} line={16} tone="muted">
+            {running() ? uiText("processing") : uiText("processingFinished")}
+          </Label>
+        </View>
+      </If>
+      <If when={result()}>
+        <View
+          style={{
+            gap: 4,
+            paddingLeft: 12,
+            borderLeftWidth: 2,
+            borderColor: c().ink,
+          }}
+        >
+          <Label size={12} line={16} weight={500}>
+            {uiText("result")}
+          </Label>
+          <Label size={12} line={18}>
+            {result()}
+          </Label>
+        </View>
+      </If>
+      <View style={{ borderWidth: 1, borderColor: c().border }}>
+        <View
+          role="button"
+          accessibilityLabel={uiText("processingLog")}
+          accessibilityState={{ expanded: logOpen() }}
+          onPress={() => logOpen.set(!logOpen())}
+          hoverStyle={{ backgroundColor: c().selected }}
+          style={{
+            ...row,
+            gap: 8,
+            height: 28,
+            paddingHorizontal: 8,
+            cursor: "pointer",
+          }}
+        >
+          <Icon name={logOpen() ? "down" : "right"} size={10} tone="muted" />
+          <Label size={12} line={16}>
+            {uiText("processingLog")}
+          </Label>
+        </View>
+        <If when={logOpen()}>
+          <View
+            style={{
+              gap: 8,
+              padding: 12,
+              borderTopWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <If
+              when={steps().length || props.proposals.length}
+              else={
+                <Label size={12} line={16} tone="muted">
+                  {host.state().missing[target()]
+                    ? uiText("sessionUnavailable")
+                    : transcript()
+                      ? uiText("noProcessingActivityYet")
+                      : uiText("loadingSession")}
+                </Label>
+              }
+            >
+              <Each of={steps()} key={(step) => step.id}>
+                {(step) => (
+                  <Label
+                    size={12}
+                    line={18}
+                    tone={"text" in step() ? undefined : "mutedInk"}
+                  >
+                    {"text" in step()
+                      ? (step() as { text: string }).text
+                      : "name" in step()
+                        ? (step() as { name: string }).name
+                        : ""}
+                  </Label>
+                )}
+              </Each>
+              <Each of={props.proposals} key={(item) => item.id}>
+                {(item) => <EmailProposal item={item()} />}
+              </Each>
+            </If>
+          </View>
+        </If>
+      </View>
+    </View>
   );
 }
