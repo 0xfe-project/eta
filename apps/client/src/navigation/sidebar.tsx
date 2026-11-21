@@ -3,7 +3,16 @@ import type { Layout } from "../components";
 import type { ChatListProps } from "./chat-list";
 import type { Destination, Navigation } from "./routes";
 import { View } from "nsh";
-import { colors, focusRing, Icon, Label, row, sizes } from "../components";
+import { paneWidth } from "../app/pane-width";
+import {
+  colors,
+  focusRing,
+  Icon,
+  Label,
+  PaneHandle,
+  row,
+  sizes,
+} from "../components";
 import { pickerTarget } from "../components/element-picker";
 import { useText } from "../i18n";
 import { useHost } from "../services/host";
@@ -111,7 +120,7 @@ export function DesktopSidebar(
   return (
     <View
       style={{
-        width: props.collapsed ? sizes.rail : sizes.sidebar,
+        width: props.collapsed ? sizes.rail : paneWidth("sidebar"),
         height: "100%",
         flexShrink: 0,
         borderRightWidth: 1,
@@ -252,6 +261,9 @@ export function DesktopSidebar(
           />
         </If>
       </View>
+      <If when={!props.collapsed}>
+        <PaneHandle pane="sidebar" />
+      </If>
     </View>
   );
 }

@@ -7,6 +7,7 @@ export {
   MessagesSkeleton,
 } from "./loading-skeleton";
 export { Modal } from "./modal";
+export { PaneHandle } from "./pane-handle";
 export { keyboardShown, SafeArea } from "./safe-area";
 export { Caption, Icon, Label, Markdown, RowChevron } from "./text";
 export type { Layout, TextVariant } from "./theme";
