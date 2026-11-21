@@ -173,7 +173,13 @@ export function TabletOverview(props: {
               </View>
             </View>
           </If>
-          <TaskActivity phone={false} tablet entries={activity()} />
+          <TaskActivity
+            heading="tablet"
+            entries={activity()}
+            runs={item().runs}
+            createdBy={item().createdBy}
+            onLog={(run) => props.state.log.set(run)}
+          />
         </View>
       </Scroll>
       <View style={{ paddingHorizontal: 20, paddingBottom: 14, gap: 12 }}>
