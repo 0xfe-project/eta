@@ -11,6 +11,7 @@ import type { Layout } from "../../components";
 import type { ArtifactFilters } from "./artifacts/filter";
 import type { PanelTab } from "./conversation-panel";
 import { computed, effect, signal, View, windowSize } from "nsh";
+import { paneWidth } from "../../app/pane-width";
 import {
   Button,
   colors,
@@ -19,8 +20,8 @@ import {
   Icon,
   Label,
   Modal,
+  PaneHandle,
   row,
-  sizes,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
@@ -494,13 +495,14 @@ export function Conversation(props: {
       <If when={props.layout === "desktop"}>
         <View
           style={{
-            width: sizes.panel,
+            width: paneWidth("panel"),
             borderLeftWidth: 1,
             borderColor: c().border,
             flexShrink: 0,
           }}
         >
           <Panel />
+          <PaneHandle pane="panel" />
         </View>
       </If>
       <If

@@ -40,6 +40,8 @@ const messages = {
   noConversations: ["No conversations yet.", "暂无对话。"],
   expandSidebar: ["Expand sidebar", "展开侧栏"],
   collapseSidebar: ["Collapse sidebar", "收起侧栏"],
+  resizeSidebar: ["Resize sidebar", "调整侧栏宽度"],
+  resizePanel: ["Resize panel", "调整面板宽度"],
   back: ["Back", "返回"],
   close: ["Close", "关闭"],
   colorMode: ["Color mode", "颜色模式"],
