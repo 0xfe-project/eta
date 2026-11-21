@@ -25,6 +25,7 @@ import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 import { TaskActivity } from "./activity";
+import { actorLabel, CreatorChip } from "./creator";
 import {
   NeighbourStrip,
   Prerequisites,
@@ -289,16 +290,12 @@ function DesktopOverview(props: {
               {parent()
                 ? uiText("parentCreatedBy", {
                     number: item().number,
-                    name:
-                      host.agent(item().createdBy.agentId)?.name ??
-                      uiText("taskMe"),
+                    name: actorLabel(item().createdBy, host.agent),
                   })
                 : uiText("createdBy", {
                     number: item().number,
                     value2: "",
-                    value3:
-                      host.agent(item().createdBy.agentId)?.name ??
-                      uiText("taskMe"),
+                    value3: actorLabel(item().createdBy, host.agent),
                     relativeTime: taskMoment(item().createdAt),
                     value5: item().ancestors?.at(-1)
                       ? ` · Part of #${item().ancestors!.at(-1)!.number}`
@@ -348,6 +345,7 @@ function DesktopOverview(props: {
               </If>
             </View>
           </View>
+          <CreatorChip creator={item().createdBy} />
           <Prerequisites
             item={item()}
             compact
@@ -565,9 +563,7 @@ export function TaskOverview(props: {
                   {uiText("createdBy", {
                     number: item().number,
                     value2: item().subtasks?.total ? " · Parent" : "",
-                    value3:
-                      host.agent(item().createdBy.agentId)?.name ??
-                      uiText("taskMe"),
+                    value3: actorLabel(item().createdBy, host.agent),
                     relativeTime: phone()
                       ? taskWhen(item().createdAt)
                       : relativeTime(item().createdAt),
@@ -607,6 +603,7 @@ export function TaskOverview(props: {
                   </View>
                 </If>
               </View>
+              <CreatorChip creator={item().createdBy} />
               <If when={phone()}>
                 <RunSummary item={item()} state={props.state} />
               </If>

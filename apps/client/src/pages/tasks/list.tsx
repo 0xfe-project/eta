@@ -4,6 +4,7 @@ import { Scroll, signal, View } from "nsh";
 import { colors, grow, Icon, Label, row } from "../../components";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
+import { ownerLine } from "./creator";
 import {
   isWaiting,
   runningFor,
@@ -112,10 +113,7 @@ export function PhoneTaskList(props: {
               <If when={open()}>
                 <Each of={entries()} key={(entry) => entry.id}>
                   {(entry) => {
-                    const owner = () =>
-                      host.agent(
-                        entry().assigneeAgentId ?? entry().createdBy.agentId,
-                      )?.name;
+                    const owner = () => ownerLine(entry(), host.agent);
                     const state = () => {
                       const task = entry();
                       if (task.status === "in_review")
@@ -250,9 +248,7 @@ export function TabletTaskList(props: {
   const host = useHost();
   const c = colors();
   const meta = (task: BoardTaskView) => {
-    const owner = host.agent(
-      task.assigneeAgentId ?? task.createdBy.agentId,
-    )?.name;
+    const owner = ownerLine(task, host.agent);
     if (task.subtasks?.total)
       return [
         `#${task.number}`,
@@ -432,11 +428,9 @@ export function TaskTableRow(props: {
           variant="caption"
           tone="mutedInk"
           lines={1}
-          style={{ width: desktop() ? 100 : 50 }}
+          style={{ width: desktop() ? 150 : 90 }}
         >
-          {host.agent(
-            props.item.assigneeAgentId ?? props.item.createdBy.agentId,
-          )?.name ?? uiText("unassigned")}
+          {ownerLine(props.item, host.agent)}
         </Label>
         <Label
           variant="caption"
