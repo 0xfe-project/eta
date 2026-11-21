@@ -24,11 +24,11 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { rm, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import process from "node:process";
 import { DAEMON_DOWNLOAD_PATH } from "@eta/client-contracts";
-import { previousPath, stagedPath, swapIn, tryBuild } from "./swap";
+import { dropStaged, previousPath, stagedPath, swapIn, tryBuild } from "./swap";
 
 /** The exit that asks the service manager for a restart: EX_TEMPFAIL. */
 export const RESTART_EXIT = 75;
@@ -152,7 +152,7 @@ export async function upgrade(
       );
     await swapIn(execPath);
   } catch (error) {
-    await rm(staged, { force: true });
+    await dropStaged(execPath);
     return {
       ok: false,
       reason: error instanceof Error ? error.message : String(error),

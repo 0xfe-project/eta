@@ -35,6 +35,7 @@ import { join } from "node:path";
 import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
+  dropStaged,
   previousPath,
   stagedPath,
   swapBack,
@@ -426,7 +427,11 @@ export async function upgradeHost(options: UpgradeOptions): Promise<void> {
   sweepPrevious(execPath);
   // Giving up is free until the service is stopped; nothing is left behind.
   let freeSignals = onSignals(() => {
-    rmSync(staged, { force: true });
+    try {
+      rmSync(staged, { force: true });
+    } catch {
+      // Held for a moment after a trial run on Windows: the next download replaces it.
+    }
     unlock();
     options.report?.cancelled();
     process.exit(130);
@@ -455,7 +460,9 @@ export async function upgradeHost(options: UpgradeOptions): Promise<void> {
     log(`The old build is ${previousPath(execPath)}.`);
   } finally {
     freeSignals();
-    rmSync(staged, { force: true });
+    // Not `rmSync`: on Windows the trial run that just exited can still hold the file, and its
+    // EBUSY would replace what actually happened (#257).
+    await dropStaged(execPath);
     unlock();
   }
 }

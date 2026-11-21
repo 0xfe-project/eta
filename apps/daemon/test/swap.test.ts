@@ -4,7 +4,13 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { swapBack, swapIn, sweepPrevious } from "../src/swap";
+import {
+  dropStaged,
+  stagedPath,
+  swapBack,
+  swapIn,
+  sweepPrevious,
+} from "../src/swap";
 
 /** Names `rm` cannot delete, as Windows cannot delete the file of a running program. */
 const running = vi.hoisted(() => new Set<string>());
@@ -98,5 +104,22 @@ describe("swapIn on Windows", () => {
     await writeFile(`${exe}.prev`, "older");
     running.add(`${exe}.prev`);
     await expect(swapIn(exe, false)).rejects.toThrow("EBUSY");
+  });
+});
+
+describe("dropStaged", () => {
+  it("deletes the staged build", async () => {
+    const exe = await setting();
+    await writeFile(stagedPath(exe), "new");
+    expect(await dropStaged(exe)).toBe(true);
+    expect(existsSync(stagedPath(exe))).toBe(false);
+  });
+
+  it("leaves one that is still held, without throwing over what went wrong before", async () => {
+    const exe = await setting();
+    await writeFile(stagedPath(exe), "new");
+    running.add(stagedPath(exe));
+    expect(await dropStaged(exe)).toBe(false);
+    expect(await readFile(stagedPath(exe), "utf8")).toBe("new");
   });
 });

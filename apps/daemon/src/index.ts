@@ -74,6 +74,7 @@ export {
 export { detachedRunner, serviceManager } from "./service-manager";
 export type { WindowsOptions } from "./service-windows";
 export {
+  dropStaged,
   previousPath,
   stagedPath,
   swapBack,

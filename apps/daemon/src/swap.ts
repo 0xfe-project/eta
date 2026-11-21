@@ -48,6 +48,24 @@ async function move(from: string, to: string): Promise<void> {
 export const stagedPath = (execPath: string): string => `${execPath}.next`;
 export const previousPath = (execPath: string): string => `${execPath}.prev`;
 
+/**
+ * Deletes a staged build that is not going in; whether it is gone. Never throws: what failed before
+ * this is what the caller has to say. On Windows a program that has just exited is still held for a
+ * moment (its process object, a console, an antivirus or a crash reporter reading it), and a
+ * delete is refused meanwhile; one still held after that is left for the next download to replace.
+ */
+export async function dropStaged(execPath: string): Promise<boolean> {
+  for (let tries = 1; ; tries += 1) {
+    try {
+      await rm(stagedPath(execPath), { force: true });
+      return true;
+    } catch {
+      if (tries >= RENAME_TRIES) return false;
+      await sleep(RENAME_RETRY_MS);
+    }
+  }
+}
+
 /** Run a staged build once; what it printed. A build that cannot start is an error here. */
 export async function tryBuild(
   staged: string,
