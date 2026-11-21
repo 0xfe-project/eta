@@ -38,7 +38,7 @@ const kinds: Record<
 
 const marks: Record<Tone, keyof typeof light> = {
   danger: "red",
-  attention: "amber",
+  attention: "warning",
   neutral: "faint",
 };
 
@@ -105,6 +105,7 @@ export function reviewItemsOf(message: MessageView): CaptainReviewItem[] {
 export function CaptainReview(props: {
   items: CaptainReviewItem[];
   time: string;
+  onPending?: () => void;
 }) {
   const c = colors();
   return (
@@ -134,13 +135,16 @@ export function CaptainReview(props: {
         </Label>
       </View>
       <Each of={props.items} key={(item) => item.id}>
-        {(item) => <Observation item={item()} />}
+        {(item) => <Observation item={item()} onPending={props.onPending} />}
       </Each>
     </View>
   );
 }
 
-function Observation(props: { item: CaptainReviewItem }) {
+function Observation(props: {
+  item: CaptainReviewItem;
+  onPending?: () => void;
+}) {
   const c = colors();
   const host = useHost();
   const raw = signal(false);
@@ -149,15 +153,17 @@ function Observation(props: { item: CaptainReviewItem }) {
   const ordinary = () => tone() === "neutral";
   const context = () => {
     const data = props.item.data;
-    const values: string[] = [];
+    const values: { label: string; open?: () => void }[] = [];
     if (typeof data.agentId === "string") {
       const name = host.agent(data.agentId)?.name;
-      if (name) values.push(name);
+      if (name) values.push({ label: name });
     }
     if (typeof data.taskNumber === "number")
-      values.push(uiText("reviewTaskNumber", { number: data.taskNumber }));
+      values.push({
+        label: uiText("reviewTaskNumber", { number: data.taskNumber }),
+      });
     if (typeof data.interactionId === "string")
-      values.push(uiText("reviewInboxChip"));
+      values.push({ label: uiText("reviewInboxChip"), open: props.onPending });
     return values;
   };
   return (
@@ -194,14 +200,18 @@ function Observation(props: { item: CaptainReviewItem }) {
           <Each of={context()}>
             {(value) => (
               <View
+                role={value().open ? "button" : undefined}
+                accessibilityLabel={value().open ? value().label : undefined}
+                onPress={value().open}
                 style={{
+                  cursor: value().open ? "pointer" : undefined,
                   paddingHorizontal: 5,
                   borderWidth: 1,
                   borderColor: c().border,
                 }}
               >
                 <Label size={10} line={14} tone="muted">
-                  {value()}
+                  {value().label}
                 </Label>
               </View>
             )}
@@ -212,6 +222,7 @@ function Observation(props: { item: CaptainReviewItem }) {
         <View style={{ paddingTop: 2, alignItems: "flex-start" }}>
           <View
             role="button"
+            accessibilityLabel={uiText("reviewRawDetails")}
             accessibilityState={{ expanded: raw() }}
             onPress={() => raw.set(!raw())}
             style={{ ...row, gap: 4, cursor: "pointer" }}

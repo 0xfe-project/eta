@@ -32,12 +32,12 @@ export function membersOf(
   deps: ViewDeps,
   conversationId: string,
 ): MemberView[] {
-  const statuses = deps.timeline.memberStatuses(conversationId);
+  const activity = deps.timeline.memberActivity(conversationId);
   return deps.conversations.participants(conversationId).map((member) => ({
     agentId: member.agentId,
     sessionId: member.sessionId,
     lastSeq: member.lastSeq,
-    status: statuses.get(member.agentId) ?? "idle",
+    ...(activity.get(member.agentId) ?? { status: "idle" }),
   }));
 }
 

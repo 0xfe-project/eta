@@ -145,6 +145,8 @@ export interface MemberView {
   /** The newest timeline `seq` this member has been told about (or written itself). */
   lastSeq: number;
   status: MemberStatus;
+  /** The one reply currently running in this conversation, when it can be stopped individually. */
+  activeReplyId?: string;
 }
 
 /** One row of the conversation list. */

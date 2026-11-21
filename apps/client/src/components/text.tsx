@@ -1,4 +1,5 @@
 import type { JSX, TextStyle } from "nsh";
+import type { TextViewDocument } from "nsh/base";
 import type { IconName } from "./icons";
 import type { light } from "./theme";
 import { Image, Text, View } from "nsh";
@@ -60,7 +61,8 @@ export function Icon(props: {
 }
 
 export function Markdown(props: {
-  value: string;
+  value?: string;
+  document?: TextViewDocument;
   line?: number;
   streaming?: boolean;
   compactHeadings?: boolean;
@@ -98,6 +100,7 @@ export function Markdown(props: {
   return (
     <TextView
       markdown={props.value}
+      document={props.document}
       options={{ html: false, streaming: props.streaming }}
       selectable
       links="open"

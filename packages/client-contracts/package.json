@@ -7,6 +7,9 @@
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
+    "./composer-draft": "./src/composer-draft.ts",
+    "./composer-menu": "./src/composer-menu.ts",
+    "./composer-target": "./src/composer-target.ts",
     "./connect-link": "./src/connect-link.ts",
     "./desktop": "./src/desktop.ts",
     "./plugin-fields": "./src/plugin-fields.ts",

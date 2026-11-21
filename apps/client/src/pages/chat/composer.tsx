@@ -1,15 +1,42 @@
 import type {
-  AttachmentView,
-  ConversationResults,
   MemberView,
   MessageView,
+  ProjectResults,
 } from "@eta/client-contracts";
+import type { MenuItem } from "@eta/client-contracts/composer-menu";
+import type { InputRef, PasteEvent, ScrollRef, ViewRef } from "nsh";
+import type { Outgoing } from "./composer-draft";
+import { MAX_ATTACHMENTS } from "@eta/client-contracts";
 import {
-  ATTACH_CHUNK_BYTES,
-  MAX_ATTACHMENT_BYTES,
-  MAX_ATTACHMENTS,
-} from "@eta/client-contracts";
-import { effect, keymap, Picker, signal, View } from "nsh";
+  draftText,
+  draftWithBlocks,
+  fileSize,
+  isLongPaste,
+  MAX_MESSAGE_CHARS,
+  plainDraft,
+  withTextAbove,
+} from "@eta/client-contracts/composer-draft";
+import {
+  applyItem,
+  buildMenu,
+  mentionAt,
+} from "@eta/client-contracts/composer-menu";
+import {
+  composerTarget,
+  mentionLabel,
+} from "@eta/client-contracts/composer-target";
+import {
+  cleanup,
+  computed,
+  effect,
+  keymap,
+  Scroll,
+  signal,
+  untracked,
+  View,
+  windowSize,
+} from "nsh";
+
 import {
   Button,
   Caption,
@@ -19,8 +46,13 @@ import {
   Label,
   row,
 } from "../../components";
+
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { composerAttachments } from "./composer-attachments";
+import { HeldRows, OutboxRows } from "./composer-delivery";
+import { drainOutbox, openComposerDraft } from "./composer-draft";
+
 import { ComposerRecipients } from "./composer-recipients";
 
 import { activeReply } from "./member-status";
@@ -31,190 +63,318 @@ export function Composer(props: {
   members: MemberView[];
   steward?: string | null;
   group: boolean;
+  projectId?: string;
+  tablet: boolean;
+  writing: boolean;
+  blocked?: "archived" | "empty";
+  onResolveBlock?: () => void;
   phone: boolean;
-  /** Tablet: the mention menu spans the whole message box. */
-  tablet?: boolean;
   alignWithContent?: boolean;
   held: MessageView[];
   widgetDraft?: { conversationId: string; text: string } | undefined;
-  onStopMember: (agentId: string) => void;
 }) {
   const host = useHost();
   const c = colors();
-  const draft = signal("");
-  const mentions = signal<string[] | null>(null);
-  const attachments = signal<AttachmentView[]>([]);
-  const busy = signal(false);
+  const showHeld = signal(false);
+  const conversationId = props.id;
+  const origin = host.address()!.origin;
+  const store = openComposerDraft(origin, conversationId);
+  const flush = () => void drainOutbox(store, host, origin, conversationId);
+  const { ready, uploading, failedUploads, edit } = store;
+  const { attach, AttachmentChips } = composerAttachments(
+    store,
+    conversationId,
+    () => !!props.blocked,
+  );
+  const draft = () => store.value().text;
+  const prefix = () => store.value().prefix;
+  const parts = () => [...prefix(), ...plainDraft(draft())];
+  const fullText = computed(() => draftText(parts()));
+  let selection = { start: 0, end: 0 };
+  const attachments = () => store.value().attachments;
+  const focused = signal(false);
+  const textHeight = signal(0);
+  const composing = signal(false);
+  const dismissed = signal(false);
+  const index = signal(0);
+  let compositionEnded = -Infinity;
+  let input: InputRef | undefined;
+  const list = signal<ViewRef>();
+  const activeOption = signal<ViewRef>();
+  const heldRows = new Map<string, ViewRef>();
+  let mounted = true;
+  cleanup(() => {
+    mounted = false;
+  });
+  const focusEditor = () => {
+    if (mounted) input?.focus();
+  };
+  let restoredFocus = false;
+  effect(() => {
+    if (ready() && !restoredFocus) {
+      restoredFocus = true;
+      if (untracked(fullText) && !props.blocked) queueMicrotask(focusEditor);
+    }
+  });
+  function prepend(text: string) {
+    if (prefix().length) edit({ prefix: withTextAbove(prefix(), text) });
+    else edit({ text: [text, draft()].filter(Boolean).join("\n\n") });
+  }
   let appliedWidgetDraft: typeof props.widgetDraft;
   effect(() => {
     const suggestion = props.widgetDraft;
     if (
-      busy() ||
+      !ready() ||
       !suggestion ||
       suggestion === appliedWidgetDraft ||
-      suggestion.conversationId !== props.id
+      suggestion.conversationId !== conversationId
     )
       return;
     appliedWidgetDraft = suggestion;
-    draft.update((text) =>
-      text ? `${text}\n${suggestion.text}` : suggestion.text,
-    );
+    prepend(suggestion.text);
+    focusEditor();
   });
-  const uploading = signal(false);
-  const showHeld = signal(false);
-  const activeMention = signal(0);
-  let attempt: { id: string; content: string } | undefined;
-  const runningIds = () =>
-    props.members
-      .filter((member) => activeReply(member.status))
-      .map((member) => member.agentId);
-  const recipients = () =>
-    mentions() ??
-    (props.steward
-      ? [props.steward]
-      : props.members.length === 1
-        ? [props.members[0]!.agentId]
-        : []);
+  const members = computed(() =>
+    props.members.map((member) => ({
+      id: member.agentId,
+      name: host.agent(member.agentId)?.name ?? member.agentId,
+      busy: activeReply(member.status),
+    })),
+  );
+  const target = computed(() =>
+    composerTarget({
+      text: fullText(),
+      members: members(),
+      sticky: store.value().sticky,
+      steward: props.steward
+        ? {
+            id: props.steward,
+            name: host.agent(props.steward)?.name ?? props.steward,
+          }
+        : undefined,
+    }),
+  );
   const names = () =>
-    recipients()
-      .map((id) => host.agent(id)?.name)
-      .filter(Boolean)
+    target()
+      .ids.map((id) => host.agent(id)?.name ?? id)
       .join(", ");
-  // A message to someone still replying waits until that turn ends.
   const waitsFor = () =>
-    recipients()
-      .filter((id) => runningIds().includes(id))
-      .map((id) => host.agent(id)?.name)
-      .filter(Boolean)
+    members()
+      .filter((member) => member.busy && target().ids.includes(member.id))
+      .map((member) => member.name)
       .join(", ");
-  const mentionQuery = () =>
-    props.group ? /(?:^|\s)@([^\s@]*)$/.exec(draft())?.[1] : undefined;
-  const choices = () => {
-    const query = mentionQuery()?.toLowerCase();
-    return query === undefined
-      ? []
-      : props.members
-          .flatMap((member) => {
-            const agent = host.agent(member.agentId);
-            return agent && agent.name.toLowerCase().includes(query)
-              ? [agent]
-              : [];
-          })
-          .slice(0, 5);
-  };
-  function chooseMention(id: string, name: string) {
-    draft.update((value) => value.replace(/@[^\s@]*$/, `@${name} `));
-    mentions.update((current) => [...new Set([...(current ?? []), id])]);
-    activeMention.set(0);
+  const offline = () => props.phone && host.state().status === "reconnecting";
+  const files = signal<string[]>([]);
+  const wanted = computed(() =>
+    mentionAt(draft()) !== null ? props.projectId : undefined,
+  );
+  effect(() => {
+    const projectId = wanted();
+    files.set([]);
+    if (!projectId) return;
+    let active = true;
+    void host
+      .call<ProjectResults["files"]>("projects", "files", { projectId })
+      .then((result) => {
+        if (active) files.set(result.files);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  });
+  const menu = computed(() =>
+    buildMenu({
+      text: draft(),
+      members: members().map((member) => ({
+        ...member,
+        name: mentionLabel(member, members()),
+      })),
+      files: files(),
+      tasks: host.tasks(),
+      groupId: conversationId,
+      dismissed: dismissed() || !!props.blocked || composing(),
+    }),
+  );
+  const choices = () => menu()?.items ?? [];
+  const selected = () => Math.min(index(), choices().length - 1);
+  let scroll: ScrollRef | undefined;
+  const options = new Map<string, ViewRef>();
+  effect(() => {
+    const active = choices()[selected()];
+    const ref = active && options.get(active.value);
+    if (ref) activeOption.set(ref);
+    scroll?.scrollTo({ y: Math.max(0, selected() - 3) * 28 });
+  });
+  function description(item: MenuItem) {
+    if (item.kind === "task") return item.label;
+    if (item.kind === "file") return uiText("projectFile");
+    return uiText(item.hint ? "memberWorking" : "askForAReply");
   }
-  const active = () =>
-    choices()[Math.min(activeMention(), choices().length - 1)];
+  function change(value: string) {
+    if (!ready() || props.blocked || value === draft()) return;
+    selection = { start: value.length, end: value.length };
+    edit({ text: value });
+    dismissed.set(false);
+    index.set(0);
+  }
+  function choose(item: MenuItem) {
+    const current = menu();
+    if (!current) return;
+    change(applyItem(draft(), current, item).text);
+    dismissed.set(true);
+    focusEditor();
+  }
+  const imeOwnsKey = () => composing() || Date.now() - compositionEnded < 120;
   function submit() {
-    const chosen = active();
-    if (chosen) chooseMention(chosen.id, chosen.name);
+    if (imeOwnsKey()) return;
+    const item = choices()[selected()];
+    if (item) choose(item);
     else void send();
   }
-  function moveMention(step: 1 | -1) {
-    const count = choices().length;
-    if (!count) return;
-    activeMention.set(
-      (Math.min(activeMention(), count - 1) + step + count) % count,
+  function stopConversation() {
+    void host.action(() =>
+      host.call("conversations", "stop", { conversationId }),
     );
   }
-  const offline = () => props.phone && host.state().status === "reconnecting";
-  const sendable = () =>
-    (draft().trim() || attachments().length) &&
-    !busy() &&
-    !uploading() &&
-    host.state().status === "open";
-  async function send() {
-    if (!sendable()) return;
-    busy.set(true);
-    const outgoing = {
-      conversationId: props.id,
-      text: draft().trim(),
-      mentions: mentions() ?? undefined,
-      mode: "queue" as const,
-      attachments: attachments().map((file) => file.id),
-    };
-    const content = JSON.stringify(outgoing);
-    if (attempt?.content !== content)
-      attempt = { id: crypto.randomUUID(), content };
-    const clientId = attempt.id;
-    const result = await host.action(() =>
-      host.call<ConversationResults["send"]>("conversations", "send", {
-        ...outgoing,
-        clientId,
-      }),
-    );
-    busy.set(false);
-    if (result) {
-      draft.set("");
-      attachments.set([]);
-      mentions.set(null);
-      attempt = undefined;
-    }
-  }
-  async function attach() {
-    if (uploading() || busy()) return;
-    uploading.set(true);
-    await host.action(async () => {
-      const chosen = await Picker.pickFiles({
-        multiple: true,
-        maxSize: MAX_ATTACHMENT_BYTES,
+  const menuOpen = computed(() => choices().length > 0);
+  effect(() => {
+    if (!focused() || composing()) return;
+    const bindings: Record<string, () => void> = { "alt+enter": submit };
+    if (menuOpen()) {
+      const move = (step: number) => {
+        if (!imeOwnsKey())
+          index.set((selected() + step + choices().length) % choices().length);
+      };
+      Object.assign(bindings, {
+        up: () => move(-1),
+        down: () => move(1),
+        tab: submit,
+        escape: () => {
+          if (!imeOwnsKey()) dismissed.set(true);
+        },
       });
-      if (chosen.length + attachments().length > MAX_ATTACHMENTS)
-        throw new Error(
-          `A message can carry up to ${MAX_ATTACHMENTS} attachments.`,
-        );
-      for (const file of chosen) {
-        if (!file.file)
-          throw new Error(`${file.name} exceeds the attachment size limit.`);
-        const bytes = new Uint8Array(await file.file.arrayBuffer());
-        const id = crypto.randomUUID();
-        try {
-          for (
-            let offset = 0, index = 0;
-            offset < bytes.length || index === 0;
-            offset += ATTACH_CHUNK_BYTES, index++
-          ) {
-            const result = await host.call<ConversationResults["attach"]>(
-              "conversations",
-              "attach",
-              {
-                conversationId: props.id,
-                uploadId: id,
-                name: file.name,
-                contentType: file.type ?? undefined,
-                index,
-                last: offset + ATTACH_CHUNK_BYTES >= bytes.length,
-                data: Buffer.from(
-                  bytes.subarray(offset, offset + ATTACH_CHUNK_BYTES),
-                ).toString("base64"),
-              },
-            );
-            if (result.attachment)
-              attachments.update((list) => [...list, result.attachment!]);
-          }
-        } catch (error) {
-          await host
-            .call("conversations", "unattach", {
-              conversationId: props.id,
-              attachmentId: id,
-            })
-            .catch(() => {});
-          throw error;
-        }
-      }
+    } else if (props.writing && !fullText().trim() && !attachments().length) {
+      bindings.escape = () => {
+        if (!imeOwnsKey()) stopConversation();
+      };
+    }
+    return keymap.bind(bindings, { when: "always" });
+  });
+  const tooLong = () =>
+    fullText().length > MAX_MESSAGE_CHARS &&
+    Array.from(fullText()).length > MAX_MESSAGE_CHARS;
+  const sendable = () =>
+    ready() &&
+    !tooLong() &&
+    !offline() &&
+    (fullText().trim() || attachments().length) &&
+    !uploading() &&
+    !failedUploads().length &&
+    !props.blocked &&
+    attachments().length <= MAX_ATTACHMENTS;
+  const outgoing = () => store.value().outgoing;
+  function removeOutgoing(id: string) {
+    return outgoing().filter((item) => item.id !== id);
+  }
+  function send() {
+    if (!sendable()) return;
+    const targetAtSend = target();
+    const sent = draftWithBlocks(parts());
+    edit({
+      text: "",
+      prefix: [],
+      attachments: [],
+      sticky: props.group ? targetAtSend.sticky : undefined,
+      outgoing: [
+        ...outgoing(),
+        {
+          id: crypto.randomUUID(),
+          text: sent.text,
+          blocks: sent.blocks,
+          mentions: props.group ? targetAtSend.mentions : undefined,
+          attachments: attachments(),
+        },
+      ],
     });
-    uploading.set(false);
+    flush();
+    dismissed.set(true);
+    focusEditor();
+  }
+  function restore(message: Outgoing) {
+    const restored = [];
+    let end = 0;
+    for (const [start, stop] of message.blocks ?? []) {
+      restored.push(...plainDraft(message.text.slice(end, start)), {
+        type: "paste" as const,
+        id: crypto.randomUUID(),
+        text: message.text.slice(start, stop),
+      });
+      end = stop;
+    }
+    const tail = message.text.slice(end);
+    const separator = message.text && fullText() ? "\n" : "";
+    if (prefix().length)
+      restored.push(...plainDraft(tail + separator), ...prefix());
+    edit({
+      outgoing: removeOutgoing(message.id),
+      prefix: restored,
+      text: prefix().length ? draft() : tail + separator + draft(),
+      attachments: [...message.attachments, ...attachments()],
+    });
+    focusEditor();
   }
   function toggle(id: string) {
-    const selected = recipients();
+    const selected = target().ids;
     const next = selected.includes(id)
       ? selected.filter((entry) => entry !== id)
       : [...selected, id];
-    mentions.set(next.length ? next : null);
+    edit({ sticky: next.length ? next : undefined });
+  }
+  function unfold(index: number) {
+    const tail = draftText(prefix().slice(index));
+    edit({ prefix: prefix().slice(0, index), text: tail + draft() });
+    focusEditor();
+    queueMicrotask(() => input?.setSelection(tail.length));
+  }
+  function removePaste(index: number) {
+    const remaining = prefix().filter((_, i) => i !== index);
+    const last = remaining.at(-1);
+    if (last?.type === "text")
+      edit({ prefix: remaining.slice(0, -1), text: last.text + draft() });
+    else edit({ prefix: remaining });
+    focusEditor();
+  }
+  function paste(event: PasteEvent) {
+    const text = event.text.replace(/\r\n?/g, "\n");
+    if (
+      event.files.length &&
+      !(
+        event.html &&
+        text.trim() &&
+        event.files.every((file) => file.type.startsWith("image/"))
+      )
+    ) {
+      void attach(event.files);
+    } else if (text.length > MAX_MESSAGE_CHARS) {
+      void attach([
+        new File([text], uiText("pastedFile"), {
+          type: "text/plain;charset=utf-8",
+        }),
+      ]);
+    } else if (isLongPaste(text)) {
+      const { start, end } = selection;
+      edit({
+        prefix: [
+          ...prefix(),
+          ...plainDraft(draft().slice(0, start)),
+          { type: "paste", id: crypto.randomUUID(), text },
+        ],
+        text: draft().slice(end),
+      });
+      selection = { start: 0, end: 0 };
+      queueMicrotask(() => input?.setSelection(0));
+    } else if (text) input?.insertText(text);
   }
   return (
     <View
@@ -231,85 +391,80 @@ export function Composer(props: {
         backgroundColor: c().canvas,
       }}
     >
-      <Each
-        of={showHeld() || !props.group ? props.held : []}
-        key={(message) => message.id}
-      >
-        {(message) => (
-          <View style={{ ...row, gap: 6 }}>
-            <Label size={12} tone="muted" style={{ flex: 1 }} lines={1}>
-              {uiText("queuedWithCount", { text: message().text })}
-            </Label>
-            <Button
-              label={uiText("steer")}
-              onPress={() =>
-                void host.action(() =>
-                  host.call("conversations", "steerHeld", {
-                    conversationId: props.id,
-                    messageId: message().id,
-                  }),
-                )
-              }
-            />
-            <Button
-              label={uiText("recall")}
-              onPress={() =>
-                void host.action(async () => {
-                  const result = await host.call<ConversationResults["recall"]>(
-                    "conversations",
-                    "recall",
-                    { conversationId: props.id, messageId: message().id },
-                  );
-                  if (result.recalled)
-                    draft.update((text) =>
-                      [text, message().text].filter(Boolean).join("\n"),
-                    );
-                })
-              }
-            />
-          </View>
-        )}
-      </Each>
-      <If when={props.group && props.members.length > 1}>
+      <OutboxRows
+        messages={outgoing()}
+        onRetry={(id) => {
+          edit({
+            outgoing: outgoing().map((item) =>
+              item.id === id ? { ...item, failure: undefined } : item,
+            ),
+          });
+          flush();
+        }}
+        onEdit={restore}
+        onDiscard={(id) => edit({ outgoing: removeOutgoing(id) })}
+      />
+      <If when={props.blocked}>
+        <View style={{ ...row, gap: 6 }}>
+          <Label size={12}>
+            {uiText(
+              props.blocked === "archived"
+                ? "archivedComposer"
+                : "emptyComposer",
+            )}
+          </Label>
+          <Button
+            label={uiText(
+              props.blocked === "archived" ? "unarchive" : "members",
+            )}
+            onPress={() => props.onResolveBlock?.()}
+          />
+        </View>
+      </If>
+      <HeldRows
+        messages={showHeld() || !props.group ? props.held : []}
+        conversationId={conversationId}
+        onRecall={(text) => {
+          prepend(text);
+          focusEditor();
+        }}
+        rows={heldRows}
+      />
+      <If when={props.group}>
         <ComposerRecipients
+          conversationId={props.id}
           phone={props.phone}
           members={props.members}
           steward={props.steward}
-          mentions={mentions()}
-          recipients={recipients()}
-          running={runningIds()}
+          tablet={props.tablet}
+          mentions={
+            target().kind === "everyone"
+              ? props.members.map((member) => member.agentId)
+              : null
+          }
+          recipients={target().ids}
+          running={members()
+            .filter((member) => member.busy)
+            .map((member) => member.id)}
           held={props.held.length}
           names={names()}
           waitsFor={waitsFor()}
-          onChangeMentions={mentions.set}
+          onChangeMentions={(mentions) =>
+            edit({ sticky: mentions ? "everyone" : undefined })
+          }
+          onToggleHeld={() => {
+            showHeld.set(!showHeld());
+            const first = props.held[0];
+            if (first && showHeld())
+              queueMicrotask(() => heldRows.get(first.id)?.focus());
+          }}
           onToggleRecipient={toggle}
-          onToggleHeld={() => showHeld.set(!showHeld())}
-          onStop={props.onStopMember}
         />
       </If>
-      <If when={attachments().length}>
-        <View style={{ ...row, flexWrap: "wrap", gap: 5 }}>
-          <Each of={attachments()} key={(file) => file.id}>
-            {(file) => (
-              <Button
-                label={file().name}
-                end="close"
-                disabled={busy()}
-                onPress={() =>
-                  void host.action(async () => {
-                    await host.call("conversations", "unattach", {
-                      conversationId: props.id,
-                      attachmentId: file().id,
-                    });
-                    attachments.update((list) =>
-                      list.filter((entry) => entry.id !== file().id),
-                    );
-                  })
-                }
-              />
-            )}
-          </Each>
-        </View>
+      <If when={tooLong()}>
+        <Label tone="amber" size={12}>
+          {uiText("composerTooLong")}
+        </Label>
       </If>
       <View
         accessibilityState={{ disabled: offline() }}
@@ -317,16 +472,13 @@ export function Composer(props: {
           position: "relative",
           borderWidth: 1,
           borderColor: c().ink,
-          flexDirection: props.phone ? "row" : "column",
-          alignItems: props.phone ? "center" : "stretch",
-          // A phone draws the composer disabled while the host is away.
           opacity: offline() ? 0.45 : 1,
           pointerEvents: offline() ? "none" : undefined,
         }}
       >
-        <If when={choices().length && !busy()}>
-          <MentionKeys onMove={moveMention} />
+        <If when={menuOpen()}>
           <View
+            ref={list.set}
             role="listbox"
             accessibilityLabel={uiText("mentionAnAgent")}
             style={{
@@ -346,137 +498,238 @@ export function Composer(props: {
             }}
           >
             <Caption
-              text={uiText("mentions")}
+              text={uiText(menu()?.kind === "hash" ? "tasks" : "mentions")}
               style={{ paddingHorizontal: 10, paddingTop: 6, paddingBottom: 4 }}
             />
-            <Each of={choices()} key={(entry) => entry.id}>
-              {(entry) => (
-                <View
-                  role="option"
-                  accessibilityLabel={uiText("mention", { name: entry().name })}
-                  accessibilityState={{ selected: active() === entry() }}
-                  onPress={() => chooseMention(entry().id, entry().name)}
-                  hoverStyle={
-                    active() === entry()
-                      ? undefined
-                      : { backgroundColor: c().selected }
-                  }
-                  style={{
-                    ...row,
-                    height: 28,
-                    paddingHorizontal: 10,
-                    gap: 8,
-                    cursor: "pointer",
-                    backgroundColor:
-                      active() === entry() ? c().ink : "transparent",
+            <Scroll
+              ref={(ref) => {
+                scroll = ref;
+              }}
+              style={{ maxHeight: 224, flexShrink: 1 }}
+            >
+              <Each of={choices()} key={(entry) => entry.kind + entry.value}>
+                {(entry, i) => (
+                  <View
+                    ref={(ref) => {
+                      options.set(entry().value, ref);
+                      if (selected() === i()) activeOption.set(ref);
+                    }}
+                    onMouseEnter={() => index.set(i())}
+                    role="option"
+                    accessibilityLabel={
+                      entry().kind === "member"
+                        ? uiText("mention", { name: entry().label })
+                        : entry().value.trim()
+                    }
+                    accessibilityState={{ selected: selected() === i() }}
+                    onPress={() => choose(entry())}
+                    hoverStyle={
+                      selected() === i()
+                        ? undefined
+                        : { backgroundColor: c().selected }
+                    }
+                    style={{
+                      ...row,
+                      height: 28,
+                      paddingHorizontal: 10,
+                      gap: 8,
+                      cursor: "pointer",
+                      backgroundColor:
+                        selected() === i() ? c().ink : "transparent",
+                    }}
+                  >
+                    <Label
+                      size={12}
+                      line={16}
+                      weight={600}
+                      lines={1}
+                      tone={selected() === i() ? "canvas" : "ink"}
+                    >
+                      {entry().value.trim()}
+                    </Label>
+                    <Label
+                      size={11}
+                      line={16}
+                      lines={1}
+                      tone={selected() === i() ? "canvas" : "muted"}
+                      style={{ opacity: selected() === i() ? 0.75 : 1 }}
+                    >
+                      {description(entry())}
+                    </Label>
+                  </View>
+                )}
+              </Each>
+            </Scroll>
+          </View>
+        </If>
+        <If when={prefix().length}>
+          <View style={{ ...row, flexWrap: "wrap", gap: 4 }}>
+            <Each of={prefix()}>
+              {(part, i) => (
+                <If when={part().type !== "file"}>
+                  {() => {
+                    const contents = () => draftText([part()]);
+                    return (
+                      <View style={{ ...row, maxWidth: "100%" }}>
+                        <Button
+                          label={
+                            part().type === "paste"
+                              ? uiText("pastedBlock", {
+                                  size: fileSize(
+                                    new TextEncoder().encode(contents()).length,
+                                  ),
+                                })
+                              : contents()
+                          }
+                          size={24}
+                          onPress={() => unfold(i())}
+                        />
+                        <If when={part().type === "paste"}>
+                          <Button
+                            label={uiText("removePaste")}
+                            icon="close"
+                            iconOnly
+                            size={24}
+                            onPress={() => removePaste(i())}
+                          />
+                        </If>
+                      </View>
+                    );
                   }}
-                >
-                  <Label
-                    size={12}
-                    line={16}
-                    weight={600}
-                    lines={1}
-                    tone={active() === entry() ? "canvas" : "ink"}
-                  >
-                    {`@${entry().name}`}
-                  </Label>
-                  <Label
-                    size={11}
-                    line={16}
-                    lines={1}
-                    tone={active() === entry() ? "canvas" : "muted"}
-                    style={{ opacity: active() === entry() ? 0.75 : 1 }}
-                  >
-                    {uiText("askForAReply")}
-                  </Label>
-                </View>
+                </If>
               )}
             </Each>
           </View>
         </If>
-        <Field
-          label={uiText("message")}
-          placeholder={uiText("messageWithCount", { name: props.name })}
-          multiline={!props.phone}
-          value={draft()}
-          onChange={(value) => {
-            if (busy()) return;
-            draft.set(value);
-            activeMention.set(0);
-          }}
-          onSubmit={submit}
-          style={{
-            height: props.phone ? 42 : 48,
-            flex: props.phone ? 1 : undefined,
-            borderWidth: 0,
-            paddingVertical: props.phone ? 7 : 12,
-            paddingHorizontal: 12,
-          }}
-        />
+        <AttachmentChips />
         <View
           style={{
-            ...row,
-            height: 40,
-            paddingLeft: props.phone ? 0 : 12,
-            paddingRight: 6,
-            gap: props.phone ? 6 : 12,
-            backgroundColor: props.phone ? c().canvas : c().surface,
-            borderTopWidth: props.phone ? 0 : 1,
-            borderColor: c().border,
+            flexDirection: props.phone ? "row" : "column",
+            alignItems: props.phone ? "center" : "stretch",
           }}
         >
+          <Field
+            inputRef={(ref) => {
+              input = ref;
+            }}
+            role="combobox"
+            label={uiText("message")}
+            accessibilityState={{
+              expanded: menuOpen(),
+              disabled: !ready() || !!props.blocked || offline(),
+            }}
+            accessibilityControls={menuOpen() ? list() : undefined}
+            accessibilityActiveDescendant={
+              menuOpen() ? activeOption() : undefined
+            }
+            placeholder={
+              prefix().length
+                ? ""
+                : uiText("messageWithCount", { name: props.name })
+            }
+            multiline
+            readonly={!ready() || !!props.blocked || offline()}
+            value={draft()}
+            onChange={change}
+            onSubmit={submit}
+            onContentSizeChange={({ size }) => textHeight.set(size.height)}
+            onSelectionChange={(range) => {
+              selection = range;
+            }}
+            onFocus={() => focused.set(true)}
+            onBlur={() => focused.set(false)}
+            onCompositionChange={({ composing: active }) => {
+              if (!active && composing()) compositionEnded = Date.now();
+              composing.set(active);
+            }}
+            pasteBehavior="report"
+            onPaste={paste}
+            style={{
+              lineHeight: props.phone ? 20 : 22,
+              height: Math.min(
+                windowSize().height * 0.4,
+                Math.max(props.phone ? 20 : 22, textHeight()) +
+                  (props.phone ? 22 : 26),
+              ),
+              flex: props.phone ? 1 : undefined,
+              borderWidth: 0,
+              paddingTop: props.phone ? 11 : 12,
+              paddingBottom: props.phone ? 11 : 14,
+              paddingLeft: 12,
+              paddingRight: props.phone ? 6 : 12,
+            }}
+          />
           <View
-            role="button"
-            accessibilityLabel={uiText("attachFiles")}
-            accessibilityState={{ disabled: uploading() || busy() }}
-            onPress={() => {
-              if (!uploading() && !busy()) void attach();
-            }}
-            hoverStyle={{ opacity: 0.7 }}
-            focusVisibleStyle={{
-              outlineWidth: 1,
-              outlineColor: c().blue,
-              outlineOffset: 1,
-            }}
             style={{
               ...row,
-              justifyContent: "center",
-              width: props.phone ? 32 : 14,
-              height: props.phone ? 32 : 14,
-              flexShrink: 0,
-              opacity: uploading() || busy() ? 0.45 : 1,
-              cursor: uploading() || busy() ? "default" : "pointer",
+              height: 40,
+              paddingLeft: props.phone ? 0 : 12,
+              paddingRight: 6,
+              gap: props.phone ? 6 : 12,
+              backgroundColor: props.phone ? c().canvas : c().surface,
+              borderTopWidth: props.phone ? 0 : 1,
+              borderColor: c().border,
             }}
           >
-            <Icon name="clip" size={props.phone ? 16 : 14} tone="muted" />
+            <View
+              role="button"
+              accessibilityLabel={uiText("attachFiles")}
+              accessibilityState={{
+                disabled: !ready() || uploading() || !!props.blocked,
+              }}
+              onPress={() => {
+                if (ready() && !uploading() && !props.blocked) void attach();
+              }}
+              hoverStyle={{ opacity: 0.7 }}
+              focusVisibleStyle={{
+                outlineWidth: 1,
+                outlineColor: c().blue,
+                outlineOffset: 1,
+              }}
+              style={{
+                ...row,
+                justifyContent: "center",
+                width: props.phone ? 32 : 14,
+                height: props.phone ? 32 : 14,
+                flexShrink: 0,
+                opacity: !ready() || uploading() || !!props.blocked ? 0.45 : 1,
+                cursor:
+                  !ready() || uploading() || !!props.blocked
+                    ? "default"
+                    : "pointer",
+              }}
+            >
+              <Icon name="clip" size={props.phone ? 16 : 14} tone="muted" />
+            </View>
+            <View style={{ flex: props.phone ? 0 : 1 }} />
+            <If when={props.writing && !props.phone}>
+              <Button
+                icon="stop"
+                label={uiText("stop")}
+                size={28}
+                onPress={stopConversation}
+              />
+            </If>
+            <Button
+              label={uiText("send")}
+              icon={props.phone ? "arrowUp" : undefined}
+              iconOnly={props.phone}
+              end={props.phone ? undefined : "return"}
+              size={props.phone ? 32 : 28}
+              iconSize={props.phone ? 16 : undefined}
+              labelSize={11}
+              labelWeight={500}
+              style={
+                props.phone ? undefined : { paddingHorizontal: 10, gap: 8 }
+              }
+              tone="primary"
+              dimDisabled={uploading() || !!props.blocked}
+              disabled={!sendable()}
+              onPress={() => void send()}
+            />
           </View>
-          <View style={{ flex: props.phone ? 0 : 1 }} />
-          <Button
-            label={uiText("send")}
-            icon={props.phone ? "arrowUp" : undefined}
-            iconOnly={props.phone}
-            end={props.phone ? undefined : "return"}
-            size={props.phone ? 32 : 28}
-            iconSize={props.phone ? 16 : undefined}
-            labelSize={11}
-            labelWeight={500}
-            style={props.phone ? undefined : { paddingHorizontal: 10, gap: 8 }}
-            tone="primary"
-            dimDisabled={busy() || uploading()}
-            disabled={!sendable()}
-            onPress={() => void send()}
-          />
         </View>
       </View>
     </View>
   );
-}
-
-/** Up and Down move through the mention list while it is open, even in the message field. */
-function MentionKeys(props: { onMove: (step: 1 | -1) => void }) {
-  keymap.bind(
-    { up: () => props.onMove(-1), down: () => props.onMove(1) },
-    { when: "always" },
-  );
-  return null;
 }

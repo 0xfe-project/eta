@@ -183,6 +183,23 @@ export function Workspace(props: {
     navigate("routines");
   }
   const activeId = () => (page() === "captain" ? captain() : conversation());
+  function leaveUnavailableChat() {
+    const next = host
+      .conversations()
+      .find(
+        (item) =>
+          item.kind === "group" &&
+          !item.archived &&
+          item.id !== activeId() &&
+          !host.state().missing[`conversations.${item.id}`],
+      );
+    if (!phone() && next) {
+      open(next.id);
+      return;
+    }
+    conversation.set("");
+    navigate(phone() ? "chat" : "tasks");
+  }
   const conversationVisible = () =>
     Boolean(activeId()) && (page() === "captain" || !phone() || mobileOpen());
   effect(() => {
@@ -204,7 +221,12 @@ export function Workspace(props: {
     }
     const all = host.conversations();
     if (!phone() && !conversation()) {
-      const first = all.find((item) => item.kind === "group" && !item.archived);
+      const first = all.find(
+        (item) =>
+          item.kind === "group" &&
+          !item.archived &&
+          !host.state().missing[`conversations.${item.id}`],
+      );
       if (first) conversation.set(first.id);
     }
     if (
@@ -309,6 +331,7 @@ export function Workspace(props: {
                     captain
                     onPending={() => navigate("pending")}
                     onTask={openTask}
+                    onAccessLost={leaveUnavailableChat}
                     onRelatedTask={openRelatedTask}
                     onRoutines={showRoutine}
                     contentWidth={conversationWidth()}
@@ -324,10 +347,12 @@ export function Workspace(props: {
                 {(id) => (
                   <Conversation
                     id={id()}
+                    onReadDraft={() => mobileOpen.set(true)}
                     captain={page() === "captain"}
                     layout={props.layout}
                     onPending={() => navigate("pending")}
                     onTask={openTask}
+                    onAccessLost={leaveUnavailableChat}
                     onRelatedTask={openRelatedTask}
                     onRoutines={showRoutine}
                     contentWidth={conversationWidth()}

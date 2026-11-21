@@ -28,6 +28,7 @@ export const pluginsMessages = {
     "仓库内的路径（默认根目录）",
   ],
   localDirectory: ["Local directory", "本地目录"],
+  noPluginsInstalled: ["No plugins installed", "尚未安装插件"],
   noPluginsYet: ["No plugins yet", "还没有插件"],
   noPluginsHint: [
     "Put a plugin in ~/.eta/plugins/<name>/, or add one from a git repository.",

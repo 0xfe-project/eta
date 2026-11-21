@@ -35,7 +35,6 @@ import { PhoneConversationInfo } from "./conversation-info";
 import { ConversationPanel, panelAttention } from "./conversation-panel";
 import { ConversationTimeline } from "./conversation-timeline";
 import { indexInserts, InsertMessage } from "./insert-message";
-import { activeReply } from "./member-status";
 import { InviteAgents, StewardMenu } from "./members";
 import { MemberRun } from "./run/member-run";
 
@@ -46,6 +45,8 @@ export function Conversation(props: {
   onBack?: () => void;
   onTask: (id: string) => void;
   onRelatedTask: (id: string) => void;
+  onReadDraft?: () => void;
+  onAccessLost: () => void;
   onRoutines: (id?: string) => void;
   /** Opens the Pending tab, from Captain's approvals strip on a phone. */
   onPending?: () => void;
@@ -354,6 +355,13 @@ export function Conversation(props: {
             </View>
           </If>
           <ConversationTimeline
+            onAccessLost={props.onAccessLost}
+            title={title()}
+            projectName={
+              host.state().missing.projects ? undefined : project()?.name
+            }
+            accessible={!host.state().missing[target()] && Boolean(summary())}
+            onReadDraft={props.onReadDraft}
             rows={indexed().rows}
             additions={indexed().additions}
             recipients={indexed().recipients}
@@ -367,6 +375,7 @@ export function Conversation(props: {
             compact={props.layout === "tablet" || props.alignComposer}
             captain={props.captain}
             rail={props.rail}
+            onPending={props.onPending}
             onPageOlder={() => void history()}
             onInsert={(message) => {
               lateInsert.set(false);
@@ -438,23 +447,35 @@ export function Conversation(props: {
             members={members()}
             steward={stewardId()}
             group={group()}
+            projectId={project()?.id}
+            blocked={
+              (info()?.archived ?? summary()?.archived)
+                ? "archived"
+                : (info() || summary()) && !members().length
+                  ? "empty"
+                  : undefined
+            }
+            onResolveBlock={() => {
+              if (info()?.archived ?? summary()?.archived)
+                void host.action(() =>
+                  host.call("conversations", "update", {
+                    conversationId: props.id,
+                    archived: false,
+                  }),
+                );
+              else invite.set(true);
+            }}
+            writing={messages().some(
+              (message) =>
+                message.author === "agent" &&
+                (message.status === "working" ||
+                  message.status === "waiting_for_input"),
+            )}
             phone={phone()}
             tablet={props.layout === "tablet"}
             alignWithContent={props.alignComposer}
             held={timeline()?.held ?? []}
             widgetDraft={widgetDraft()}
-            onStopMember={(agentId) => {
-              const reply = messages().findLast(
-                (message) =>
-                  message.agentId === agentId && activeReply(message.status),
-              );
-              void host.action(() =>
-                host.call("conversations", "stop", {
-                  conversationId: props.id,
-                  messageId: reply?.id,
-                }),
-              );
-            }}
           />
         </View>
       </View>
