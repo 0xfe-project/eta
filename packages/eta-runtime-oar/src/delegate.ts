@@ -41,11 +41,13 @@ import type {
   InputImage,
   McpServer,
   RefusedSessionOptions,
+  Runtime,
   Session,
   SessionOptions,
   TokenTotals,
   TurnOutcome,
-} from "@botiverse/oar";
+} from "@botiverse/oar/browser";
+import type { AgentRuntimeCapabilities } from "@eta/client-contracts";
 import type {
   AgentMessage,
   DelegatedRunResult,
@@ -59,8 +61,9 @@ import { Buffer } from "node:buffer";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { installedSessionCapabilities } from "@botiverse/oar";
+import { installedSessionCapabilities } from "@botiverse/oar/capabilities";
 import { hostResultOf, HostTools, NO_RUN } from "@eta/runtime-kit";
+import { capabilitiesOf } from "./catalog";
 import { HostCalls } from "./host-calls";
 import { effortFor } from "./models";
 import { Translator } from "./translate";
@@ -421,6 +424,29 @@ export class OarDelegate implements RunDelegate {
       this.#tasks.delete(event.taskId);
   }
 
+  /**
+   * What this session takes. Once the runtime's session is open, that session's own answer (a
+   * steer it has a method for, the images its handshake took); before, oar's declaration for the
+   * installation the catalog knows, where a part it leaves out is unknown.
+   */
+  async capabilities(): Promise<AgentRuntimeCapabilities | undefined> {
+    const { runtime, catalog } = this.#options;
+    // The catalog's first answer for this runtime may still be on its way (`createOarRuntimes`).
+    if (catalog.peek(runtime) === undefined)
+      await catalog.info(runtime).catch(() => undefined);
+    const declared = catalog.peekCapabilities(runtime);
+    const before =
+      declared === undefined ? undefined : capabilitiesOf(declared);
+    const session = this.#opened?.session;
+    if (session === undefined) return before;
+    return {
+      ...before,
+      steer: session.steer !== undefined,
+      images: session.capabilities.images,
+      compact: session.compact !== undefined,
+    };
+  }
+
   /** Whether a runtime process is up for this session, and when the session last did anything. */
   residency(): { resident: boolean; lastActive: number } {
     return {
@@ -471,7 +497,7 @@ export class OarDelegate implements RunDelegate {
     const report = (
       result: Pick<RuntimeCompaction, "outcome" | "reason">,
     ): RuntimeCompaction => ({ runtime: catalog.label(id), ...result });
-    const declared = catalog.runtime(id).manualCompaction;
+    const declared = (await catalog.runtime(id)).manualCompaction;
     const opened = this.#opened;
     if (
       declared?.kind === "unsupported" ||
@@ -528,18 +554,17 @@ export class OarDelegate implements RunDelegate {
   /** The conversation on this delegate's runtime, for a compaction and nothing after it. */
   async #openForCompaction(config: KernelConfig): Promise<Session> {
     const { runtime: id, catalog } = this.#options;
+    const runtime = await catalog.runtime(id);
     const installation = await catalog.installation(id);
-    return await catalog
-      .runtime(id)
-      .session(
-        installation,
-        this.#sessionOptions(
-          this.#settings(config),
-          this.#resume,
-          [],
-          this.#refused(installation),
-        ),
-      );
+    return await runtime.session(
+      installation,
+      this.#sessionOptions(
+        this.#settings(config),
+        this.#resume,
+        [],
+        this.#refused(runtime, installation),
+      ),
+    );
   }
 
   async dispose(): Promise<void> {
@@ -609,10 +634,12 @@ export class OarDelegate implements RunDelegate {
    * The options this installation of the runtime refuses: what every version refuses, and what
    * this version does (OpenCode v2 takes an appended prompt only from a given release on).
    */
-  #refused(installation: AvailableInstallation): RefusedSessionOptions {
-    const { runtime, catalog } = this.#options;
+  #refused(
+    runtime: Runtime,
+    installation: AvailableInstallation,
+  ): RefusedSessionOptions {
     return (
-      installedSessionCapabilities(catalog.runtime(runtime), installation)
+      installedSessionCapabilities(runtime, installation)
         .refusedSessionOptions ?? {}
     );
   }
@@ -655,9 +682,9 @@ export class OarDelegate implements RunDelegate {
     settings: Settings,
   ): Promise<Opened> {
     const { runtime: id, catalog } = this.#options;
-    const runtime = catalog.runtime(id);
+    const runtime = await catalog.runtime(id);
     const installation = await catalog.installation(id);
-    const refusals = this.#refused(installation);
+    const refusals = this.#refused(runtime, installation);
     // The host's server carries its bearer token: a runtime that refuses credentials takes none.
     const refused =
       refusals.mcpServers !== undefined ||

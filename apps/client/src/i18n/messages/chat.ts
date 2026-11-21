@@ -111,6 +111,10 @@ export const chatMessages = {
   removePaste: ["Remove pasted text", "移除粘贴文本"],
   pastedBlock: ["Pasted text · {{size}}", "粘贴文本 · {{size}}"],
   pastedFile: ["Pasted text.txt", "粘贴文本.txt"],
+  imagesAsPaths: [
+    "{{names}} cannot see images: it gets each image's file path.",
+    "{{names}} 看不到图片，只会收到图片的文件路径。",
+  ],
   attachmentCountLimit: [
     "A message can carry up to {{count}} attachments.",
     "每条消息最多可带 {{count}} 个附件。",

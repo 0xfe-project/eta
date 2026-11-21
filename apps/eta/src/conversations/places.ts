@@ -10,6 +10,7 @@
  * chains, steering, stopping and recovery are the same for both.
  */
 import type {
+  AgentRuntimeCapabilities,
   DaemonRunEvent,
   PromptImage,
   RunOutcome,
@@ -34,6 +35,11 @@ export interface SessionHandle {
   steer: (text: string, images?: PromptImage[]) => Promise<void>;
   /** The model the session runs on now, as `provider:modelId`; undefined when it cannot say. */
   model: () => Promise<string | undefined>;
+  /**
+   * What the session's external runtime takes (images, steering, compaction), by its open
+   * session's own answer once it has one; undefined on eta's own loop, or where it cannot say.
+   */
+  capabilities: () => Promise<AgentRuntimeCapabilities | undefined>;
   /** How far the session's journal has got: what its next run writes comes after this. */
   lastSeq: () => Promise<number>;
   /**
@@ -143,6 +149,10 @@ class LocalHandle implements SessionHandle {
     return Promise.resolve(
       formatModelId(this.#managed.session.kernel.config.read("model")),
     );
+  }
+
+  capabilities(): Promise<AgentRuntimeCapabilities | undefined> {
+    return this.#sessions.runtimeCapabilities(this.id);
   }
 
   lastSeq(): Promise<number> {

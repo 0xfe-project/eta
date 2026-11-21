@@ -3,6 +3,7 @@ import type { PromptImage } from "./operations";
 import type { MachinePlaceOp, MachinePlaceReply } from "./places/types";
 import type {
   AgentRuntimeAccount,
+  AgentRuntimeCapabilities,
   AgentRuntimeInfo,
   ProcessStep,
   ToolActivity,
@@ -171,7 +172,15 @@ export interface MachineActionResults {
   info: MachineFacts;
   open: { session: string };
   catalog: Record<string, never>;
-  config: { model: string | undefined; thinkingLevel: string };
+  config: {
+    model: string | undefined;
+    thinkingLevel: string;
+    /**
+     * What the session's external runtime takes, by its open session's own answer once it has
+     * one; absent for a session on eta's own loop, and from an older daemon.
+     */
+    capabilities?: AgentRuntimeCapabilities;
+  };
   lastSeq: { seq: number };
   which: { found: string[] };
   pluginHave: { missing: string[] };
@@ -199,7 +208,7 @@ export interface DaemonServiceParams {
    */
   upgrade: { version: string; sha256: string };
   /** The external agent runtimes this machine has, with their models; `fresh` asks them again. */
-  runtimes: { fresh?: boolean };
+  runtimes: { fresh?: boolean; runtimes?: string[] };
   /** One of this machine's runtimes' sign-in and plan usage, as it reports them. */
   runtimeAccount: { runtime: string };
   /**

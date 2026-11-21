@@ -25,7 +25,6 @@ import type {
   ServedMcpTools,
 } from "@botiverse/oar";
 import type { KernelTool, RunDelegateContext } from "@eta/core";
-import { serveMcpTools } from "@botiverse/oar";
 import { toToolResultMessage } from "@eta/core";
 
 export type { HostToolResult };
@@ -142,6 +141,9 @@ export class HostTools {
       return this.#served.server;
     }
     if (tools.length === 0) return undefined;
+    // oar has the server only in its root entry, which loads every runtime it has: loaded when a
+    // session first serves tools, not when the host starts.
+    const { serveMcpTools } = await import("@botiverse/oar");
     this.#served = await serveMcpTools({ name: HOST_SERVER, tools });
     this.#signature = signature;
     this.#names = new Set(tools.map((tool) => tool.name));

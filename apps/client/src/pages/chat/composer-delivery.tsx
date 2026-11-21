@@ -55,6 +55,11 @@ export function OutboxRows(props: {
 export function HeldRows(props: {
   messages: MessageView[];
   conversationId: string;
+  /**
+   * Whether a held message can go into the turns it waits for: not when every agent it waits for
+   * says its runtime takes nothing mid-turn (the words would wait for the turn's end anyway).
+   */
+  canSteer: (message: MessageView) => boolean;
   onRecall: (text: string) => void;
   rows: Map<string, ViewRef>;
 }) {
@@ -99,7 +104,9 @@ export function HeldRows(props: {
           if (!focused()) return;
           return keymap.bind(
             {
-              "mod+enter": () => void act("steer"),
+              ...(props.canSteer(message())
+                ? { "mod+enter": () => void act("steer") }
+                : {}),
               e: () => void act("edit"),
               delete: () => void act("discard"),
             },
@@ -121,11 +128,13 @@ export function HeldRows(props: {
             <Label variant="small" tone="muted" style={{ flex: 1 }} lines={1}>
               {uiText("queuedWithCount", { text: message().text })}
             </Label>
-            <Button
-              label={uiText("steer")}
-              disabled={pending()}
-              onPress={() => void act("steer")}
-            />
+            <If when={props.canSteer(message())}>
+              <Button
+                label={uiText("steer")}
+                disabled={pending()}
+                onPress={() => void act("steer")}
+              />
+            </If>
             <Button
               label={uiText("recall")}
               disabled={pending()}

@@ -1,15 +1,22 @@
 /**
- * Which runtimes this machine has, and which models each can run.
+ * Which runtimes this machine has, which models each can run, and what a session on each would
+ * take.
  *
  * Asking costs something (a binary on PATH, sometimes a process that answers its model list), so
  * the answer is kept and asked again only when it is old. `peek` is the synchronous read a model
  * lookup needs; `list` is the fresh-enough read a settings screen needs.
+ *
+ * A runtime's adapter is loaded the first time it is asked about (`runtime`), one runtime at a
+ * time: oar's root entry would load every runtime it has at once.
  */
+import type { RuntimeRegistry } from "@botiverse/oar/browser";
 import type {
   AvailableInstallation,
   Runtime,
-  RuntimeRegistry,
-} from "@botiverse/oar";
+  SessionCapabilityDeclaration,
+} from "@botiverse/oar/capabilities";
+import type { AgentRuntimeCapabilities } from "@eta/client-contracts";
+import { installedSessionCapabilities } from "@botiverse/oar/capabilities";
 
 /** The runtimes eta offers, in the order a picker shows them. */
 export const RUNTIME_IDS = ["claude", "codex", "opencode", "pi"] as const;
@@ -25,6 +32,45 @@ const LABELS: Record<RuntimeId, string> = {
 
 export function isRuntimeId(value: string): value is RuntimeId {
   return (RUNTIME_IDS as readonly string[]).includes(value);
+}
+
+/**
+ * Each runtime's adapter, from its own entry: loading one does not load the others. The
+ * specifiers are literal so a compiled host carries them.
+ */
+const LOADERS: Record<RuntimeId, () => Promise<Runtime>> = {
+  claude: async () =>
+    (await import("@botiverse/oar/runtimes/claude")).claudeRuntime,
+  codex: async () =>
+    (await import("@botiverse/oar/runtimes/codex")).codexRuntime,
+  opencode: async () =>
+    (await import("@botiverse/oar/runtimes/opencode")).opencodeRuntime,
+  pi: async () => (await import("@botiverse/oar/runtimes/pi")).piRuntime,
+};
+
+/**
+ * What a session on this installation would take, as a client is told it: oar's declaration in
+ * eta's words. A part oar leaves out is left out here too: unknown, not "no".
+ */
+export function capabilitiesOf(
+  declared: SessionCapabilityDeclaration,
+): AgentRuntimeCapabilities {
+  const refused = declared.refusedSessionOptions;
+  const compact = declared.manualCompaction?.kind;
+  return {
+    ...(declared.steer === undefined ? {} : { steer: declared.steer }),
+    ...(declared.images === undefined ? {} : { images: declared.images }),
+    ...(refused === undefined ? {} : { refused: { ...refused } }),
+    ...(compact === undefined ? {} : { compact: compact === "supported" }),
+    ...(declared.compactionEvents === undefined
+      ? {}
+      : {
+          compactionEvents: {
+            started: declared.compactionEvents.started,
+            ended: declared.compactionEvents.ended,
+          },
+        }),
+  };
 }
 
 export interface RuntimeModel {
@@ -48,6 +94,8 @@ export interface RuntimeInfo {
   version?: string;
   detail?: string;
   models: RuntimeModel[];
+  /** What a session on this installation would take; absent when there is no installation. */
+  capabilities?: AgentRuntimeCapabilities;
 }
 
 /** Who a runtime is signed in as and how much of its plan is used; a part it cannot say is absent. */
@@ -75,11 +123,14 @@ const messageOf = (error: unknown) =>
 interface Entry {
   info: RuntimeInfo;
   installation: AvailableInstallation | undefined;
+  /** oar's answer for that installation, before any session is open. */
+  declared: SessionCapabilityDeclaration | undefined;
   at: number;
 }
 
 export interface RuntimeCatalogOptions {
-  registry: RuntimeRegistry;
+  /** The runtimes to reach (a test hands in scripted ones); each from its own entry without one. */
+  registry?: RuntimeRegistry;
   /** How long an answer is good for. Default five minutes. */
   ttlMs?: number;
   /** How long one runtime may take to list its models. Default thirty seconds. */
@@ -87,20 +138,30 @@ export interface RuntimeCatalogOptions {
 }
 
 export class RuntimeCatalog {
-  readonly #registry: RuntimeRegistry;
+  readonly #registry: RuntimeRegistry | undefined;
+  readonly #loaded = new Map<RuntimeId, Promise<Runtime>>();
   readonly #ttlMs: number;
   readonly #timeoutMs: number;
   readonly #entries = new Map<RuntimeId, Entry>();
   readonly #inflight = new Map<RuntimeId, Promise<Entry>>();
 
-  constructor(options: RuntimeCatalogOptions) {
+  constructor(options: RuntimeCatalogOptions = {}) {
     this.#registry = options.registry;
     this.#ttlMs = options.ttlMs ?? 5 * 60_000;
     this.#timeoutMs = options.timeoutMs ?? 30_000;
   }
 
-  runtime(id: RuntimeId): Runtime {
-    return this.#registry.require(id);
+  /** A runtime's adapter, loaded the first time it is wanted. */
+  async runtime(id: RuntimeId): Promise<Runtime> {
+    if (this.#registry !== undefined) return this.#registry.require(id);
+    let loading = this.#loaded.get(id);
+    if (loading === undefined) {
+      loading = LOADERS[id]();
+      // A load that failed is tried again next time rather than kept.
+      loading.catch(() => this.#loaded.delete(id));
+      this.#loaded.set(id, loading);
+    }
+    return await loading;
   }
 
   /** What the user calls a runtime. */
@@ -113,10 +174,28 @@ export class RuntimeCatalog {
     return this.#entries.get(id)?.info;
   }
 
-  /** Every runtime, asked again where the answer is old (`fresh` asks again regardless). */
-  async list(fresh = false): Promise<RuntimeInfo[]> {
+  /**
+   * oar's answer, before any session is open, for the installation known now; undefined before
+   * the first answer or without an installation. An open session's own answer comes first.
+   */
+  peekCapabilities(id: RuntimeId): SessionCapabilityDeclaration | undefined {
+    return this.#entries.get(id)?.declared;
+  }
+
+  /** One runtime, asked where the answer is old: what a session on it needs, and no other. */
+  async info(id: RuntimeId, fresh = false): Promise<RuntimeInfo> {
+    return (await this.#entry(id, fresh)).info;
+  }
+
+  /**
+   * Every runtime, or only the ones `only` names, asked again where the answer is old (`fresh`
+   * asks again regardless). A runtime not asked about is not loaded.
+   */
+  async list(fresh = false, only?: readonly string[]): Promise<RuntimeInfo[]> {
     return await Promise.all(
-      RUNTIME_IDS.map(async (id) => (await this.#entry(id, fresh)).info),
+      RUNTIME_IDS.filter((id) => only === undefined || only.includes(id)).map(
+        async (id) => (await this.#entry(id, fresh)).info,
+      ),
     );
   }
 
@@ -139,7 +218,7 @@ export class RuntimeCatalog {
    */
   async account(id: string): Promise<RuntimeAccount | undefined> {
     if (!isRuntimeId(id)) return undefined;
-    const runtime = this.#registry.require(id);
+    const runtime = await this.runtime(id);
     if (runtime.authStatus === undefined && runtime.accountUsage === undefined)
       return {};
     const installation = await this.installation(id);
@@ -234,7 +313,7 @@ export class RuntimeCatalog {
     const at = Date.now();
     const base = { id, label: LABELS[id], models: [] as RuntimeModel[] };
     try {
-      const runtime = this.#registry.require(id);
+      const runtime = await this.runtime(id);
       const snapshot = await runtime.installation?.();
       if (snapshot === undefined || snapshot.kind !== "available") {
         // Installed but not usable here (a version oar does not run, say): say why, not "missing".
@@ -245,6 +324,7 @@ export class RuntimeCatalog {
         return {
           info: { ...base, status: "missing", detail },
           installation: undefined,
+          declared: undefined,
           at,
         };
       }
@@ -253,6 +333,7 @@ export class RuntimeCatalog {
       const listed = await runtime.listModels?.(snapshot, {
         timeoutMs: this.#timeoutMs,
       });
+      const declared = installedSessionCapabilities(runtime, snapshot);
       const info: RuntimeInfo = {
         ...base,
         status:
@@ -274,8 +355,9 @@ export class RuntimeCatalog {
                   efforts: [...(model.effortLevels ?? [])],
                 }))
             : [],
+        capabilities: capabilitiesOf(declared),
       };
-      return { info, installation: snapshot, at };
+      return { info, installation: snapshot, declared, at };
     } catch (error) {
       return {
         info: {
@@ -284,6 +366,7 @@ export class RuntimeCatalog {
           detail: messageOf(error),
         },
         installation: undefined,
+        declared: undefined,
         at,
       };
     }

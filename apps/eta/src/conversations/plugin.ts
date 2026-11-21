@@ -40,7 +40,11 @@ export function conversationsPlugin(
   applied: () => void,
 ) {
   const { agents, conversations, timeline, engine } = deps;
-  const views = { conversations, timeline };
+  const views = {
+    conversations,
+    timeline,
+    capabilities: (sessionId: string) => engine.capabilitiesOf(sessionId),
+  };
 
   const existing = (id: string): ConversationRecord => {
     const conversation = conversations.get(id);

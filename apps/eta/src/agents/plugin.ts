@@ -57,10 +57,19 @@ export interface AgentsDeps {
   /** A conversation exists now: its target has to be published. */
   created: (conversationId: string) => void;
   /** The external runtimes this host has, with their models; absent when it runs none. */
-  runtimes?: ((fresh: boolean) => Promise<AgentRuntimeInfo[]>) | undefined;
+  runtimes?:
+    | ((
+        fresh: boolean,
+        only?: readonly string[],
+      ) => Promise<AgentRuntimeInfo[]>)
+    | undefined;
   /** The external runtimes of a daemon machine, asked over its link (which has to be up). */
   machineRuntimes?:
-    | ((machineId: string, fresh: boolean) => Promise<AgentRuntimeInfo[]>)
+    | ((
+        machineId: string,
+        fresh: boolean,
+        only?: readonly string[],
+      ) => Promise<AgentRuntimeInfo[]>)
     | undefined;
   /** A runtime's sign-in and plan usage on this host; undefined for a runtime it does not have. */
   runtimeAccount?:
@@ -219,7 +228,10 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
         wire.handle("agents", "runtimes", async (call) => {
           const fresh =
             (call.args as { fresh?: unknown } | undefined)?.fresh === true;
-          const machineId = new Args(call).optionalString("machineId");
+          const args = new Args(call);
+          const machineId = args.optionalString("machineId");
+          // Only the runtimes named: the rest are neither asked nor loaded.
+          const only = args.optionalStrings("runtimes");
           const machine =
             machineId === undefined ? undefined : machines.get(machineId);
           if (machineId !== undefined && machine === undefined)
@@ -227,13 +239,15 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
           // The primary's own, unless another machine is asked about.
           if (machine === undefined || machine.kind === "primary")
             return {
-              result: { runtimes: (await deps.runtimes?.(fresh)) ?? [] },
+              result: {
+                runtimes: (await deps.runtimes?.(fresh, only)) ?? [],
+              },
             };
           if (machine.status !== "online" || deps.machineRuntimes === undefined)
             throw new Error(`${machine.name} is not online`);
           return {
             result: {
-              runtimes: await deps.machineRuntimes(machine.id, fresh),
+              runtimes: await deps.machineRuntimes(machine.id, fresh, only),
             },
           };
         }),
