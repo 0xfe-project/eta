@@ -9,8 +9,16 @@ export const machinesMessages = {
   machineLastSeen: ["Last seen {{time}}", "最后在线 {{time}}"],
   machineCapacity: ["Task runs at once: {{count}}", "并发任务数：{{count}}"],
   machineActions: ["Actions for {{name}}", "{{name}} 的操作"],
-  machineDetails: ["Machine details", "机器详情"],
-  machineRename: ["Rename machine", "重命名机器"],
+  machineMenuRename: ["Rename", "重命名"],
+  machineMenuRuns: ["Runs at once", "并发数"],
+  machineMenuUpdate: ["Update now", "立即更新"],
+  machineMenuRevoke: ["Revoke", "吊销"],
+  machineRenameTitle: ["Rename {{name}}", "重命名 {{name}}"],
+  machineRunsTitle: [
+    "Task runs at once on {{name}}",
+    "{{name}} 同时运行的任务数",
+  ],
+  machineRunsField: ["Task runs at once (1–20)", "同时运行的任务数（1–20）"],
   machineSystem: ["System", "操作系统"],
   machineFolder: ["Folder", "目录"],
   machineBuild: ["Build", "版本"],
@@ -37,10 +45,6 @@ export const machinesMessages = {
   agentsRunOnThatMachineWith: [
     "Agents run on that machine with full permissions. Only connect machines meant for work.",
     "智能体会在那台机器上以完全权限运行，请只接入专门用来干活的机器。",
-  ],
-  chooseHowManyTaskRunsCan: [
-    "Choose how many task runs can work on this machine at once, from 1 to 20.",
-    "设置这台机器同时运行的任务数，可填 1 到 20。",
   ],
   connectLinkCopied: ["Connect link copied", "已复制连接链接"],
   connectLinkCopiedItContainsYour: [
@@ -70,10 +74,6 @@ export const machinesMessages = {
   machineName: ["Machine name", "机器名称"],
   maximumTaskRuns: ["Maximum task runs", "最大并发任务数"],
   nameOptional: ["Name (optional)", "名称（选填）"],
-  optionalWhenSshUsesAPassword: [
-    "Optional, when SSH uses a password",
-    "选填，在 SSH 使用密码时填写",
-  ],
   pasteTheFingerprintFromTheTerminal: [
     "Paste the fingerprint from the terminal",
     "粘贴终端里打印的指纹",
@@ -87,18 +87,27 @@ export const machinesMessages = {
     "Run the command in that machine’s terminal. It installs the Eta daemon as a background service.",
     "在目标机器的终端运行此命令，将 Eta daemon 安装为后台服务。",
   ],
-  saveLimit: ["Save limit", "保存上限"],
   scanWithYourPhone: ["Scan with your phone", "用手机扫一下"],
-  sshDestination: ["SSH destination", "SSH 目标"],
-  sshPassword: ["SSH password", "SSH 密码"],
-  startSshInstall: ["Start SSH install", "开始 SSH 安装"],
+  sshTarget: ["Target", "目标"],
+  sshKeyless: [
+    "Logs in without a password (SSH key or Tailscale SSH)",
+    "无需密码即可登录（SSH 密钥或 Tailscale SSH）",
+  ],
+  sshPassword: ["Password", "密码"],
+  sshPasswordPromise: [
+    "Used for this install only. It is never saved and never written to a log.",
+    "只在这次安装中使用，不会保存，也不会写进日志。",
+  ],
+  sshInstall: ["Install", "安装"],
   taskRunsAtOnce: ["Task runs at once", "同时运行的任务"],
   thisOneTimeCommandIsValid: [
     "This one-time command is valid until {{toLocaleString}}.",
     "此一次性命令的有效期至 {{toLocaleString}}。",
   ],
   updateMachine: ["Update machine", "更新机器"],
-  userHostOrSshAlias: ["user@host or SSH alias", "user@host 或 SSH 别名"],
+  machineRunWorking: ["Working", "运行中"],
+  updateMachineTo: ["Update to {{version}}", "更新到 {{version}}"],
+  userHostOrSshAlias: ["user@host", "user@host"],
   wantsToConnectPasteTheFingerprint: [
     "{{name}} wants to connect. Paste the fingerprint from its terminal.",
     "{{name}} 请求连接。请粘贴它的终端中显示的指纹。",

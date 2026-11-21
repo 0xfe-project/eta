@@ -13,6 +13,12 @@ export function SettingsNavigation(props: {
 }) {
   const c = colors();
   const text = useText();
+  // The design writes warnings in the warning ink and errors in muted ink
+  // next to a red square: red is only for the mark.
+  const summaryTone = (section: SettingsSection) => {
+    const tone = props.summary(section).tone;
+    return tone === "red" ? "mutedInk" : (tone ?? "muted");
+  };
   return (
     <Scroll
       style={
@@ -27,7 +33,7 @@ export function SettingsNavigation(props: {
       }
       scrollbar={false}
     >
-      <View style={{ padding: props.phone ? 0 : 6 }}>
+      <View style={{ padding: props.phone ? 0 : 6, gap: props.phone ? 0 : 2 }}>
         <Each of={sections}>
           {(item) => (
             <View
@@ -37,9 +43,9 @@ export function SettingsNavigation(props: {
               hoverStyle={{ backgroundColor: c().selected }}
               style={{
                 ...row,
-                height: props.phone ? 48 : 32,
+                height: props.phone ? 48 : 30,
                 paddingHorizontal: props.phone ? 16 : 10,
-                gap: 10,
+                gap: props.phone ? 12 : 10,
                 borderBottomWidth: props.phone ? 1 : 0,
                 borderColor: c().border,
                 backgroundColor:
@@ -47,23 +53,37 @@ export function SettingsNavigation(props: {
                 cursor: "pointer",
               }}
             >
-              <Icon name={item()[1]} />
-              <Label>{text(item()[2])}</Label>
+              <Icon
+                name={item()[1]}
+                size={16}
+                tone={
+                  !props.phone && props.current === item()[0] ? "ink" : "muted"
+                }
+              />
+              <Label
+                line={20}
+                tone={
+                  props.phone || props.current === item()[0]
+                    ? "ink"
+                    : "mutedInk"
+                }
+              >
+                {text(item()[2])}
+              </Label>
               <If when={props.phone}>
                 <View style={{ flex: 1 }} />
-                <If when={props.summary(item()[0]).tone}>
-                  <StatusDot
-                    color={c()[props.summary(item()[0]).tone!]}
-                    size={5}
-                  />
-                </If>
-                <Label
-                  size={11}
-                  tone={props.summary(item()[0]).tone ?? "muted"}
-                >
-                  {props.summary(item()[0]).text}
-                </Label>
-                <Icon name="right" tone="faint" size={10} />
+                <View style={{ ...row, gap: 6 }}>
+                  <If when={props.summary(item()[0]).tone}>
+                    <StatusDot
+                      color={c()[props.summary(item()[0]).tone!]}
+                      size={6}
+                    />
+                  </If>
+                  <Label size={12} line={16} tone={summaryTone(item()[0])}>
+                    {props.summary(item()[0]).text}
+                  </Label>
+                </View>
+                <Icon name="right" tone="muted" size={16} />
               </If>
             </View>
           )}

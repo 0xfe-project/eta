@@ -1,3 +1,4 @@
+import type { ViewRef } from "nsh";
 import { Clipboard, Image, Overlay, signal, View, windowSize } from "nsh";
 import qrCode from "qrcode-generator";
 import { Button, colors, Field, Label, Modal, row } from "../../../components";
@@ -5,7 +6,15 @@ import { CloseButton } from "../../../components/navigation-buttons";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 
-export function PhonePairing(props: { phone: boolean; onClose: () => void }) {
+/**
+ * The pairing code. Beside the wide settings dialog it is a popover to its right; on a tablet it
+ * drops from the Connect phone button (`anchor`); on a phone it is a sheet.
+ */
+export function PhonePairing(props: {
+  phone: boolean;
+  anchor?: ViewRef;
+  onClose: () => void;
+}) {
   const host = useHost();
   const c = colors();
   const qr = signal<{ link: string; url: string; image: string } | undefined>(
@@ -18,6 +27,7 @@ export function PhonePairing(props: { phone: boolean; onClose: () => void }) {
   const busy = signal(false);
   const copied = signal(false);
   const wide = () => windowSize().width >= 1380 && !props.phone;
+  const popover = () => wide() || (!props.phone && !!props.anchor);
 
   async function generate(url?: string) {
     busy.set(true);
@@ -52,8 +62,14 @@ export function PhonePairing(props: { phone: boolean; onClose: () => void }) {
 
   void generate();
   const body = () => (
-    <View style={{ gap: 12, padding: 14 }}>
-      <If when={wide()}>
+    <View
+      style={
+        props.phone
+          ? { gap: 12, paddingHorizontal: 16, paddingBottom: 16 }
+          : { gap: 12, padding: 14 }
+      }
+    >
+      <If when={popover()}>
         <View style={{ ...row, justifyContent: "space-between" }}>
           <Label size={12} line={16} weight={600}>
             {uiText("scanWithYourPhone")}
@@ -92,13 +108,17 @@ export function PhonePairing(props: { phone: boolean; onClose: () => void }) {
         >
           <Image
             src={qr()!.image}
-            style={{ width: 140, height: 140 }}
+            style={
+              props.phone
+                ? { width: 180, height: 180 }
+                : { width: 140, height: 140 }
+            }
             fadeDuration={0}
             accessibilityLabel={uiText("etaPairingCode")}
           />
         </View>
         <If when={!loopback() || copied()}>
-          <Label size={10} line={16} tone="mutedInk">
+          <Label size={props.phone ? 12 : 10} line={16} tone="mutedInk">
             {copied()
               ? uiText("connectLinkCopiedItContainsYour")
               : uiText("inEtaOnYourPhoneTap")}
@@ -129,11 +149,14 @@ export function PhonePairing(props: { phone: boolean; onClose: () => void }) {
 
   return (
     <If
-      when={wide()}
+      when={popover()}
       else={
         <Modal
           title={uiText("scanWithYourPhone")}
           phone={props.phone}
+          sheet={props.phone}
+          plainSheetHeader={props.phone}
+          overPhoneNavigation={props.phone}
           width={280}
           onClose={props.onClose}
         >
@@ -142,12 +165,17 @@ export function PhonePairing(props: { phone: boolean; onClose: () => void }) {
       }
     >
       <Overlay
-        anchor={{
-          x: (windowSize().width + 770) / 2 + 25,
-          y: Math.max(0, (windowSize().height - 578) / 2),
-        }}
-        placement="right"
-        align="start"
+        anchor={
+          wide()
+            ? {
+                x: (windowSize().width + 770) / 2 + 25,
+                y: Math.max(0, (windowSize().height - 578) / 2),
+              }
+            : props.anchor
+        }
+        placement={wide() ? "right" : "bottom"}
+        align={wide() ? "start" : "end"}
+        offset={wide() ? 0 : 8}
         onCancel={props.onClose}
         onPressOutside={props.onClose}
         style={{ width: 280 }}

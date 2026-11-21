@@ -5,9 +5,11 @@ import type {
 } from "@eta/client-contracts";
 import { signal, View } from "nsh";
 import { Button, colors, grow, Label, Modal, row } from "../../components";
+import { BackButton } from "../../components/navigation-buttons";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { LetterBox } from "./section";
 
 export const acpStatus = {
   available: "externalAgentAvailable",
@@ -67,28 +69,57 @@ export function ExternalAgentDetail(props: {
       title={props.agent.label}
       phone={props.phone}
       phonePage={props.phone}
+      hideHeader={props.phone}
       height={props.phone ? "100%" : undefined}
       onClose={props.onClose}
     >
+      <If when={props.phone}>
+        <View
+          style={{
+            ...row,
+            height: 48,
+            flexShrink: 0,
+            gap: 4,
+            paddingHorizontal: 8,
+            borderBottomWidth: 1,
+            borderColor: c().border,
+          }}
+        >
+          <BackButton size={40} iconSize={16} onPress={props.onClose} />
+          <View style={{ ...row, flex: 1, minWidth: 0, gap: 4 }}>
+            <LetterBox name={props.agent.label} />
+            <Label line={20} weight={600} lines={1} style={{ flex: 1 }}>
+              {props.agent.label}
+            </Label>
+          </View>
+          <View style={{ width: 40, height: 40, flexShrink: 0 }} />
+        </View>
+      </If>
       <View style={{ ...grow, minHeight: props.phone ? undefined : 240 }}>
         <View
           style={{
             ...row,
             minHeight: 44,
             paddingHorizontal: 16,
+            paddingVertical: 8,
             borderBottomWidth: 1,
             borderColor: c().border,
             gap: 6,
           }}
         >
           <StatusDot color={status() === "available" ? c().green : c().amber} />
-          <Label size={12}>{uiText(acpStatus[status()])}</Label>
+          <Label size={12} line={16} tone="mutedInk">
+            {uiText(acpStatus[status()])}
+          </Label>
         </View>
         <Each
           of={[
-            ["Runtime", props.agent.runtime],
-            ["Machine", machineName()],
-            ["Command", [props.agent.command, ...props.agent.args].join(" ")],
+            [uiText("runtime"), props.agent.runtime],
+            [uiText("externalAgentMachine"), machineName()],
+            [
+              uiText("externalAgentCommand"),
+              [props.agent.command, ...props.agent.args].join(" "),
+            ],
           ]}
         >
           {(item) => (
@@ -96,13 +127,21 @@ export function ExternalAgentDetail(props: {
               style={{
                 ...row,
                 paddingHorizontal: 16,
+                paddingVertical: 8,
                 minHeight: 44,
                 borderBottomWidth: 1,
                 borderColor: c().border,
-                gap: 8,
+                gap: props.phone ? 16 : 8,
               }}
             >
-              <Label style={{ width: 82, flexShrink: 0 }}>{item()[0]}</Label>
+              <Label
+                line={20}
+                style={
+                  props.phone ? { flexShrink: 0 } : { width: 82, flexShrink: 0 }
+                }
+              >
+                {item()[0]}
+              </Label>
               <Label
                 size={12}
                 tone="muted"
@@ -131,6 +170,7 @@ export function ExternalAgentDetail(props: {
           >
             <Label
               size={12}
+              line={16}
               tone={status() === "available" ? "muted" : "amber"}
             >
               {result()?.detail ??
@@ -147,15 +187,20 @@ export function ExternalAgentDetail(props: {
             style={{
               ...row,
               minHeight: 44,
+              gap: 16,
               paddingHorizontal: 16,
+              paddingVertical: 8,
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
           >
-            <Label style={{ flex: 1 }}>{uiText("removeAgent")}</Label>
+            <Label line={20} style={{ flex: 1 }}>
+              {uiText("removeAgent")}
+            </Label>
             <Button
               label={uiText("remove2")}
               icon="archive"
+              style={{ gap: 6, paddingHorizontal: 10 }}
               disabled={testing()}
               onPress={() => confirm.set(true)}
             />
@@ -164,12 +209,17 @@ export function ExternalAgentDetail(props: {
         <View style={{ flex: 1 }} />
         <If when={host.can("acp.test")}>
           <View
-            style={{ padding: 16, borderTopWidth: 1, borderColor: c().border }}
+            style={{
+              paddingHorizontal: 16,
+              paddingVertical: props.phone ? 12 : 16,
+              borderTopWidth: 1,
+              borderColor: c().border,
+            }}
           >
             <Button
               label={testing() ? uiText("testing") : uiText("test")}
               tone="primary"
-              size={36}
+              size={props.phone ? 32 : 36}
               disabled={testing()}
               style={{ width: "100%", justifyContent: "center" }}
               onPress={() => void test()}
@@ -192,7 +242,6 @@ export function ExternalAgentDetail(props: {
             </Label>
             <Button
               label={removing() ? uiText("removing") : uiText("remove2")}
-              tone="danger"
               disabled={removing()}
               onPress={() => void remove()}
             />

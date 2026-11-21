@@ -15,10 +15,11 @@ import { localizedText, uiText } from "../../../i18n";
 import { EditorRow } from "./editor-row";
 
 export function MachineField(props: { form: AgentForm }) {
-  const { phoneEditor, machineId, machines, creating, stacked, controlHeight } =
+  const { phoneEditor, machineId, machines, creating, stacked, selectStyle } =
     props.form;
   const c = colors();
-  if (phoneEditor()) {
+  // The editor lists the choices as rows (the design's Runs on block); the creator keeps a select.
+  if (!creating) {
     const items = () => [
       {
         id: null,
@@ -94,24 +95,28 @@ export function MachineField(props: { form: AgentForm }) {
             );
           }}
         </Each>
+        <If when={!phoneEditor()}>
+          <View
+            style={{
+              paddingHorizontal: 16,
+              paddingVertical: 8,
+              borderBottomWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <Label size={12} line={16} tone="muted">
+              {localizedText(
+                "Runtimes are listed from the primary for now, and may differ if the project is on another machine.",
+                "运行时目前按主机器列出，项目在其他机器上时可能不同。",
+              )}
+            </Label>
+          </View>
+        </If>
       </View>
     );
   }
   return (
-    <EditorRow
-      label={uiText("runsOn")}
-      stack={stacked()}
-      hint={
-        !creating ? (
-          <Label size={10} line={14} tone="muted">
-            {localizedText(
-              "Uses the machine for the project when no machine is chosen here.",
-              "未设置时，使用项目所在的机器。",
-            )}
-          </Label>
-        ) : undefined
-      }
-    >
+    <EditorRow label={uiText("runsOn")} stack={stacked()}>
       <ActionMenu
         label={uiText("runsOn")}
         value={
@@ -120,7 +125,7 @@ export function MachineField(props: { form: AgentForm }) {
             ? localizedText("Unavailable machine", "机器不可用")
             : uiText("followProject"))
         }
-        triggerStyle={{ height: controlHeight() }}
+        triggerStyle={selectStyle()}
       >
         <ActionItem
           label={uiText("followProject")}

@@ -25,6 +25,10 @@ export function serverStatus(item: McpServerView) {
   );
 }
 
+export function transportName(item: McpServerView) {
+  return transports[item.transport];
+}
+
 export function transportDescription(item: McpServerView) {
   return `${transports[item.transport]} · ${uiText(lifecycleLabels[item.lifecycle])}`;
 }
@@ -53,7 +57,7 @@ export function McpPhoneHeader(props: { title: string; onBack: () => void }) {
         borderColor: c().border,
       }}
     >
-      <BackButton size={40} onPress={props.onBack} />
+      <BackButton size={40} iconSize={16} onPress={props.onBack} />
       <Label size={14} line={20} weight={600}>
         {props.title}
       </Label>

@@ -9,19 +9,20 @@ import type {
 import type { IconName } from "../../components/icons";
 import type { Message } from "../../i18n";
 import type { AppearanceProps } from "./appearance";
+import { effect } from "nsh";
 import { formatLocale, uiText, useText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 
 export const sections = [
-  ["Agents", "context", "agents"],
-  ["Model services", "plugins", "modelServices"],
-  ["Machines", "panel", "machines"],
-  ["MCP servers", "plugins", "mcpServers"],
-  ["External agents", "context", "externalAgents"],
+  ["Agents", "robot", "agents"],
+  ["Model services", "plugsConnected", "modelServices"],
+  ["Machines", "monitor", "machines"],
+  ["MCP servers", "plug", "mcpServers"],
+  ["External agents", "terminal", "externalAgents"],
   ["Email", "email", "email"],
   ["Archived", "archive", "archived"],
-  ["Appearance", "settings", "appearance"],
-  ["Update", "arrowUp", "update"],
+  ["Appearance", "palette", "appearance"],
+  ["Update", "arrowCircleUp", "update"],
 ] as const satisfies readonly (readonly [string, IconName, Message])[];
 
 export type SettingsSection = (typeof sections)[number][0];
@@ -42,6 +43,22 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
   follow(() => "mcp");
   follow(() => "acp");
   follow(() => "email");
+  // The Update row says which build runs, so read it once the host allows
+  // it rather than waiting for the Update pane to be opened.
+  let checking = false;
+  effect(() => {
+    if (
+      checking ||
+      host.upgradeCheck() ||
+      host.state().status !== "open" ||
+      !host.can("upgrade.check")
+    )
+      return;
+    checking = true;
+    void host.checkUpgrade().catch(() => {
+      checking = false;
+    });
+  });
   const summary = (
     name: SettingsSection,
   ): { text: string; tone?: "amber" | "red" } => {
@@ -105,12 +122,15 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
         };
       case "Update": {
         const check = host.upgradeCheck();
+        if (!check) return { text: "" };
         return {
-          text: check
-            ? check.available
-              ? `${check.latest ?? check.version} available`
-              : check.version
-            : "",
+          text:
+            check.available && check.latest
+              ? uiText("settingsUpdateAvailable", {
+                  version: check.version,
+                  latest: check.latest,
+                })
+              : uiText("settingsUpdateUpToDate", { version: check.version }),
         };
       }
     }

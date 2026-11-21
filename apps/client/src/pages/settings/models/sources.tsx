@@ -11,12 +11,16 @@ import {
   colors,
   Field,
   grow,
+  Header,
   Label,
   Modal,
   row,
 } from "../../../components";
+import { CloseButton } from "../../../components/navigation-buttons";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { EntityRow, LetterBox, SectionHeader } from "../section";
+import { logoKey, useSourceLogos } from "./logos";
 
 export interface SourceChoice {
   kind: ProviderKind;
@@ -30,6 +34,7 @@ const keySources: ProviderKind[] = [
   "zai",
   "opencode",
   "opencode-go",
+  "commandcode",
 ];
 
 export function ModelSources(props: {
@@ -40,6 +45,7 @@ export function ModelSources(props: {
   const host = useHost();
   const c = colors();
   const accounts = () => host.section<LlmAccounts>("llm", "accounts");
+  const logo = useSourceLogos();
   const login = signal<LlmLogin | undefined>(undefined);
   const apiKey = signal("");
   const busy = signal(false);
@@ -106,6 +112,10 @@ export function ModelSources(props: {
       clearTimeout(timer);
     });
   });
+  function choose(source: SourceChoice) {
+    props.onClose();
+    props.onCustom(source);
+  }
   function close() {
     const pending = login();
     if (pending?.status === "pending")
@@ -116,90 +126,124 @@ export function ModelSources(props: {
     <Modal
       title={uiText("addModelSource")}
       width={576}
-      height={login() ? 360 : 600}
+      height={props.phone ? 712 : login() ? 360 : undefined}
       phone={props.phone}
       sheet={props.phone}
+      hideHeader={!props.phone}
       overPhoneNavigation
+      blurBackdrop={false}
       dismissible={!busy()}
       onClose={close}
     >
-      <Scroll style={grow}>
-        <View style={{ padding: 16, gap: 8 }}>
+      <If when={!props.phone}>
+        {/* The design's dialog header: 16/500/24 title at 16, a bare 16px X ending 12 from the edge. */}
+        <Header
+          title={uiText("addModelSource")}
+          layout="desktop"
+          dialog
+          inset={16}
+          end={12}
+          titleLine={24}
+        >
+          <View style={grow} />
+          <CloseButton
+            size={16}
+            iconSize={16}
+            style={{ paddingHorizontal: 0 }}
+            disabled={busy()}
+            onPress={close}
+          />
+        </Header>
+      </If>
+      <Scroll style={props.phone || login() ? grow : { flexShrink: 1 }}>
+        <View style={login() ? { padding: 16, gap: 8 } : undefined}>
           <If
             when={login()}
             else={
               <>
-                <View style={{ gap: 3, paddingBottom: 8 }}>
-                  <Label weight={600}>{uiText("source")}</Label>
-                  <Label size={12} tone="muted">
-                    {uiText("pickWhereTheModelsComeFrom")}
-                  </Label>
-                </View>
-                <Button
-                  label="Eta Token Plan"
-                  end="right"
-                  size={40}
-                  style={{ justifyContent: "space-between" }}
-                  onPress={() => {
-                    props.onClose();
-                    props.onCustom({ kind: "eta" });
+                <If
+                  when={props.phone}
+                  else={
+                    <SectionHeader
+                      title={uiText("source")}
+                      count={uiText("sourceStep", { step: 1 })}
+                      description={uiText("pickWhereTheModelsComeFrom")}
+                    />
+                  }
+                >
+                  <SourceSteps />
+                </If>
+                <EntityRow
+                  title="Eta Token Plan"
+                  leading={
+                    <LetterBox name="Eta" logo={logo(logoKey.kind("eta"))} />
+                  }
+                  leadingSize={props.phone ? 28 : undefined}
+                  stacked={props.phone}
+                  meta={uiText("etasOwnGatewayOneKeyFor")}
+                  status={{
+                    label: uiText("sourceRecommended"),
+                    color: c().blue,
                   }}
+                  caret={!props.phone}
+                  onPress={() => choose({ kind: "eta" })}
                 />
-                <Label size={12} tone="muted">
-                  {uiText("etasOwnGatewayOneKeyFor")}
-                </Label>
-                <Caption text={uiText("providerApiKeys")} />
+                <SectionHeader
+                  title={uiText("providerApiKeys")}
+                  rowHeight={props.phone ? 20 : undefined}
+                />
                 <Each of={keySources}>
                   {(kind) => (
-                    <Button
-                      label={modelSource(kind())?.name ?? kind()}
-                      size={32}
-                      end="right"
-                      style={{ justifyContent: "space-between" }}
-                      onPress={() => {
-                        props.onClose();
-                        props.onCustom({ kind: kind() });
-                      }}
+                    <SourceRow
+                      phone={props.phone}
+                      title={modelSource(kind())?.name ?? kind()}
+                      logo={logo(logoKey.kind(kind()))}
+                      onPress={() => choose({ kind: kind() })}
                     />
                   )}
                 </Each>
                 <If when={accounts()?.connectors.length}>
-                  <Caption text={uiText("subscriptions")} />
+                  <SectionHeader
+                    title={uiText("subscriptions")}
+                    rowHeight={props.phone ? 20 : undefined}
+                  />
                   <Each
                     of={accounts()?.connectors ?? []}
                     key={(connector) => connector.id}
                   >
                     {(connector) => (
-                      <Button
-                        label={connector().name}
-                        end="right"
-                        disabled={busy()}
-                        style={{ justifyContent: "space-between" }}
-                        onPress={() => void start(connector().id)}
+                      <SourceRow
+                        phone={props.phone}
+                        title={connector().name}
+                        logo={logo(logoKey.connector(connector().id))}
+                        onPress={() => {
+                          if (!busy()) void start(connector().id);
+                        }}
                       />
                     )}
                   </Each>
                 </If>
-                <Caption text={uiText("custom")} />
-                <Button
-                  label={uiText("openaiCompatibleEndpoint")}
-                  end="right"
-                  size={32}
-                  style={{ justifyContent: "space-between" }}
-                  onPress={() => {
-                    props.onClose();
-                    props.onCustom({ kind: "openai-compatible" });
-                  }}
+                <SectionHeader
+                  title={uiText("custom")}
+                  rowHeight={props.phone ? 20 : undefined}
                 />
-                <Button
-                  label={uiText("localModels")}
-                  end="right"
-                  size={32}
-                  style={{ justifyContent: "space-between" }}
-                  onPress={() => {
-                    props.onClose();
-                    props.onCustom({ kind: "openai-compatible", local: true });
-                  }}
+                <SourceRow
+                  phone={props.phone}
+                  title={uiText("openaiCompatibleEndpoint")}
+                  letter="OpenAI"
+                  meta={
+                    props.phone ? undefined : uiText("openaiCompatibleHint")
+                  }
+                  onPress={() => choose({ kind: "openai-compatible" })}
+                />
+                <SourceRow
+                  phone={props.phone}
+                  title={uiText("localModels")}
+                  logo={logo(logoKey.local)}
+                  meta={uiText("localModelsHint")}
+                  onPress={() =>
+                    choose({ kind: "openai-compatible", local: true })
+                  }
                 />
               </>
             }
@@ -289,13 +333,134 @@ export function ModelSources(props: {
         style={{
           ...row,
           justifyContent: "flex-end",
-          padding: 12,
-          borderTopWidth: 1,
+          paddingHorizontal: 16,
+          paddingVertical: props.phone ? 8 : 12,
+          borderTopWidth: props.phone ? 1 : 0,
           borderColor: c().border,
         }}
       >
-        <Button label={uiText("cancel")} onPress={close} disabled={busy()} />
+        <Button
+          label={uiText("cancel")}
+          size={props.phone ? 32 : undefined}
+          style={{ paddingHorizontal: props.phone ? 14 : 12 }}
+          onPress={close}
+          disabled={busy()}
+        />
       </View>
     </Modal>
+  );
+}
+
+/** The phone's steps of adding a source; this sheet is the first. */
+function SourceSteps() {
+  const c = colors();
+  const steps = () => [
+    uiText("sourceStepSource"),
+    uiText("sourceStepConnect"),
+    uiText("sourceStepModels"),
+  ];
+  return (
+    <View
+      style={{
+        ...row,
+        height: 36,
+        flexShrink: 0,
+        alignItems: "stretch",
+        borderBottomWidth: 1,
+        borderColor: c().border,
+      }}
+    >
+      <Each of={steps()}>
+        {(label, index) => (
+          <View
+            style={{
+              flex: 1,
+              alignItems: "center",
+              justifyContent: "center",
+              borderBottomWidth: index() === 0 ? 2 : 0,
+              borderColor: c().ink,
+            }}
+          >
+            <Label
+              size={12}
+              line={16}
+              weight={index() === 0 ? 600 : 400}
+              tone={index() === 0 ? "ink" : "mutedInk"}
+            >
+              {`${index() + 1} ${label()}`}
+            </Label>
+          </View>
+        )}
+      </Each>
+    </View>
+  );
+}
+
+/** A source to pick: an entity row in the dialog, a bare 28px logo and name on the phone. */
+function SourceRow(props: {
+  phone: boolean;
+  title: string;
+  /** The name whose first letter stands in for a logo, when it is not the title's. */
+  letter?: string;
+  logo?: string | undefined;
+  meta?: string;
+  onPress: () => void;
+}) {
+  const c = colors();
+  return (
+    <If
+      when={props.phone}
+      else={
+        <EntityRow
+          title={props.title}
+          leading={
+            <LetterBox name={props.letter ?? props.title} logo={props.logo} />
+          }
+          meta={props.meta}
+          lane={false}
+          caret
+          onPress={props.onPress}
+        />
+      }
+    >
+      <View
+        role="button"
+        accessibilityLabel={props.title}
+        onPress={props.onPress}
+        style={{
+          ...row,
+          alignItems: props.meta ? "flex-start" : "center",
+          flexShrink: 0,
+          gap: 10,
+          paddingHorizontal: 16,
+          paddingVertical: 6,
+          borderBottomWidth: 1,
+          borderColor: c().border,
+          cursor: "pointer",
+        }}
+      >
+        <View
+          style={{
+            width: 28,
+            height: 28,
+            flexShrink: 0,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <LetterBox name={props.letter ?? props.title} logo={props.logo} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Label line={20} weight={500}>
+            {props.title}
+          </Label>
+          <If when={props.meta}>
+            <Label size={12} line={16} tone="muted">
+              {props.meta}
+            </Label>
+          </If>
+        </View>
+      </View>
+    </If>
   );
 }

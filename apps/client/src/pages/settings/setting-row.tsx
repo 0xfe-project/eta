@@ -1,9 +1,22 @@
-import type { AgentView } from "@eta/client-contracts";
+import type { AgentUsage, AgentView } from "@eta/client-contracts";
 import type { IconName } from "../../components/icons";
 import { View } from "nsh";
-import { colors, Icon, Label, row } from "../../components";
-import { StatusDot } from "../../components/status-dot";
-import { uiText } from "../../i18n";
+import { ActionItem, colors, Icon, Label, row } from "../../components";
+import { AgentFace } from "../../components/agent-face";
+import { useModels } from "../../components/model-select";
+import { formatLocale, uiText } from "../../i18n";
+import { follow, useHost } from "../../services/host";
+import { EntityRow, WarningLine } from "./section";
+
+/** 48,213 → "48k": a token count the way a row's meta line says it. */
+function tokens(count: number) {
+  return new Intl.NumberFormat(formatLocale(), {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  })
+    .format(count)
+    .toLowerCase();
+}
 
 export function SettingRow(props: {
   icon: IconName;
@@ -41,58 +54,73 @@ export function SettingRow(props: {
   );
 }
 
-export function AgentSetting(props: { agent: AgentView; onPress: () => void }) {
+export function AgentSetting(props: {
+  agent: AgentView;
+  /** The avatar's side: the tablet draws it at 28, the dialog at 24. */
+  avatar?: number;
+  /** The phone stacks the status under the name and says what the agent wears. */
+  phone?: boolean;
+  onPress: () => void;
+}) {
+  const host = useHost();
   const c = colors();
+  const models = useModels();
+  follow(() => "usage");
+  const model = () => models().find((entry) => entry.id === props.agent.model);
+  const missing = () =>
+    props.agent.runtime === "eta" && !!props.agent.model && !model();
+  const usage = () =>
+    host
+      .section<readonly AgentUsage[]>("usage", "agents")
+      ?.find((entry) => entry.agentId === props.agent.id)?.windows["7d"].total;
+  const brief = () =>
+    props.agent.persona ||
+    props.agent.instructions.split("\n")[0] ||
+    uiText("agentNoInstructions");
+  const meta = () =>
+    [
+      model()?.name ?? props.agent.model ?? props.agent.runtime,
+      props.phone
+        ? brief()
+        : usage()
+          ? uiText("agentModelUsage", { usage: tokens(usage()!) })
+          : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
   return (
-    <View
-      role="button"
-      onPress={() => props.onPress()}
-      hoverStyle={{ backgroundColor: c().selected }}
-      style={{
-        ...row,
-        minHeight: 55,
-        gap: 10,
-        alignItems: "flex-start",
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderBottomWidth: 1,
-        borderColor: c().border,
-        cursor: "pointer",
-      }}
-    >
-      <View
-        style={{
-          width: 24,
-          height: 24,
-          alignItems: "center",
-          justifyContent: "center",
-          borderWidth: 1,
-          borderColor: c().strong,
-        }}
-      >
-        <Label size={12} weight={600}>
-          {props.agent.name.slice(0, 1).toUpperCase()}
-        </Label>
-      </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Label weight={500}>{props.agent.name}</Label>
-        <Label size={12} tone="muted" lines={1}>
-          {props.agent.model ?? props.agent.runtime}
-        </Label>
-      </View>
-      <View style={{ ...row, width: 104, gap: 6 }}>
-        <StatusDot
-          color={props.agent.status === "working" ? c().blue : c().faint}
-        />
-        <Label size={12} tone="muted">
-          {props.agent.status === "idle"
+    <EntityRow
+      title={props.agent.name}
+      leading={<AgentFace id={props.agent.id} size={props.avatar ?? 24} />}
+      leadingSize={props.phone ? 28 : props.avatar}
+      stacked={props.phone}
+      caret={props.phone}
+      meta={
+        <If
+          when={missing()}
+          else={
+            <Label size={12} line={16} tone="muted" lines={1}>
+              {meta()}
+            </Label>
+          }
+        >
+          <WarningLine text={props.agent.model ?? ""} />
+        </If>
+      }
+      status={{
+        label:
+          props.agent.status === "idle"
             ? uiText("idle")
             : props.agent.status === "working"
               ? uiText("working2")
-              : uiText("waitingForInput")}
-        </Label>
-      </View>
-      <Icon name="more" size={12} tone="faint" />
-    </View>
+              : uiText("waitingForInput"),
+        color: props.agent.status === "working" ? c().blue : c().faint,
+      }}
+      menuLabel={props.agent.name}
+      menu={
+        <ActionItem label={uiText("settingsEdit")} onSelect={props.onPress} />
+      }
+      onPress={props.onPress}
+    />
   );
 }

@@ -1,17 +1,12 @@
 import type { ThinkingLevel } from "@eta/client-contracts";
 import type { AgentForm } from "./form";
 import { View } from "nsh";
-import {
-  ActionItem,
-  ActionMenu,
-  Button,
-  Field,
-  Label,
-} from "../../../components";
+import { ActionItem, ActionMenu, Field, Label, row } from "../../../components";
 import { ModelSelect } from "../../../components/model-select";
 import { localizedText, uiText } from "../../../i18n";
+import { WarningLine } from "../section";
 
-import { EditorRow } from "./editor-row";
+import { EditorRow, focusOnOpen } from "./editor-row";
 import { PersonaField } from "./instructions";
 import { MachineField } from "./machine-field";
 
@@ -35,7 +30,8 @@ export function AgentGeneral(props: {
     stacked,
     phoneEditor,
     name,
-    controlHeight,
+    selectStyle,
+    fieldStyle,
     showRunsOn,
     runtimeLabel,
     runtimeList,
@@ -48,33 +44,86 @@ export function AgentGeneral(props: {
     missingModel,
     noModels,
   } = props.form;
+  const goToModelServices = (
+    size: number,
+    line: number,
+    tone: "ink" | "mutedInk",
+  ) => (
+    <View
+      role="link"
+      accessibilityLabel={localizedText("Go to model services", "前往模型服务")}
+      onPress={props.onModelServices}
+      style={{ cursor: "pointer" }}
+    >
+      <Label
+        size={size}
+        line={line}
+        tone={tone}
+        style={
+          tone === "mutedInk" ? { textDecorationLine: "underline" } : undefined
+        }
+      >
+        {localizedText("Go to model services", "前往模型服务")}
+      </Label>
+    </View>
+  );
   function modelWarning() {
     return (
       <If when={missingModel() || noModels()}>
-        <View style={{ alignItems: "flex-start", gap: 2 }}>
-          <Label size={10} line={13} tone={missingModel() ? "amber" : "muted"}>
-            {missingModel()
-              ? localizedText(
+        <If
+          when={!creating}
+          else={
+            // The creator's hint is one 10px line: the muted reason, then the link in ink.
+            <View style={{ ...row, flexWrap: "wrap", columnGap: 6 }}>
+              <Label size={10} line={12} tone="muted">
+                {missingModel()
+                  ? localizedText(
+                      "This model is no longer available. Choose another one.",
+                      "该模型已不可用，请选择其他模型。",
+                    )
+                  : localizedText("No models available.", "暂无可用模型。")}
+              </Label>
+              {goToModelServices(10, 12, "ink")}
+            </View>
+          }
+        >
+          <View style={{ alignItems: "flex-start", gap: 2 }}>
+            <If
+              when={missingModel()}
+              else={
+                <Label size={12} line={16} tone="muted">
+                  {localizedText("No models available.", "暂无可用模型。")}
+                </Label>
+              }
+            >
+              <WarningLine
+                outline
+                text={localizedText(
                   "This model is no longer available. Choose another one.",
                   "该模型已不可用，请选择其他模型。",
-                )
-              : localizedText("No models available.", "暂无可用模型。")}
-          </Label>
-          <Button
-            label={localizedText("Go to model services", "前往模型服务")}
-            tone="ghost"
-            size={16}
-            labelSize={10}
-            style={{ paddingHorizontal: 0 }}
-            onPress={props.onModelServices}
-          />
-        </View>
+                )}
+              />
+            </If>
+            {goToModelServices(12, 16, "mutedInk")}
+          </View>
+        </If>
       </If>
     );
   }
   return (
-    <View style={creating ? { padding: 14, gap: 12 } : undefined}>
-      <EditorRow label={uiText("name")} stack={stacked()} phone={phoneEditor()}>
+    <View
+      style={
+        creating
+          ? { paddingVertical: 16, paddingHorizontal: 14, gap: 16 }
+          : undefined
+      }
+    >
+      <EditorRow
+        label={uiText("name")}
+        stack={stacked()}
+        phone={phoneEditor()}
+        width={200}
+      >
         <Field
           label={uiText("name")}
           value={name()}
@@ -85,7 +134,8 @@ export function AgentGeneral(props: {
               : undefined
           }
           maxLength={agentNameLimit}
-          style={{ height: controlHeight(), fontSize: 12 }}
+          inputRef={creating ? focusOnOpen : undefined}
+          style={fieldStyle()}
         />
       </EditorRow>
       <If when={showRunsOn()}>
@@ -99,7 +149,7 @@ export function AgentGeneral(props: {
         <ActionMenu
           label={uiText("runtime")}
           value={runtimeLabel(runtime())}
-          triggerStyle={{ height: controlHeight() }}
+          triggerStyle={selectStyle()}
         >
           <Each of={runtimeList()}>
             {(item) => (
@@ -129,7 +179,7 @@ export function AgentGeneral(props: {
                   placeholder={uiText("runtimeDefault")}
                   value={model()}
                   onChange={chooseModel}
-                  style={{ height: controlHeight(), fontSize: 12 }}
+                  style={fieldStyle()}
                 />
               }
             >
@@ -142,7 +192,7 @@ export function AgentGeneral(props: {
                   model() ||
                   uiText("runtimeDefault")
                 }
-                triggerStyle={{ height: controlHeight() }}
+                triggerStyle={selectStyle()}
               >
                 <ActionItem
                   label={uiText("runtimeDefault")}
@@ -173,7 +223,7 @@ export function AgentGeneral(props: {
         <ActionMenu
           label={uiText("thinkingLevel")}
           value={thinking() ?? uiText("modelDefault")}
-          triggerStyle={{ height: controlHeight() }}
+          triggerStyle={selectStyle()}
         >
           <ActionItem
             label={uiText("modelDefault")}
