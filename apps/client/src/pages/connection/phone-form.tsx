@@ -1,6 +1,6 @@
 import type { JSX } from "nsh";
 import { Scroll, View } from "nsh";
-import { Button, colors, fill, grow, Label, row } from "../../components";
+import { Button, colors, grow, Label, row } from "../../components";
 import { uiText } from "../../i18n";
 import { ConnectionIntro, ConnectionMessage, PhoneHero } from "./visuals";
 
@@ -45,7 +45,7 @@ export function PhoneConnectionForm(props: {
             </>
           }
         >
-          <Label size={24} line={31}>
+          <Label size={24} line={30}>
             {uiText("cantReachThisHost")}
           </Label>
           <Label size={14} tone="mutedInk">
@@ -85,14 +85,20 @@ export function PhoneConnectionForm(props: {
                 role="alert"
                 onPress={props.onDismissScan}
                 style={{
-                  ...fill,
                   ...row,
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  minHeight: 52,
+                  paddingVertical: 10,
                   paddingHorizontal: 12,
                   backgroundColor: c().button,
                 }}
               >
                 <Label
                   size={14}
+                  line={18}
                   tone="buttonInk"
                   style={{ flex: 1, minWidth: 0 }}
                 >

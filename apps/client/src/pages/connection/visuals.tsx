@@ -17,24 +17,12 @@ export function ConnectionIntro(props: { phone: boolean }) {
 }
 
 export function ConnectionMessage(props: { error: string; detail?: string }) {
-  const c = colors();
   return (
     <If when={props.error}>
-      <View
-        style={{
-          gap: 3,
-          paddingHorizontal: 12,
-          paddingVertical: 8,
-          borderLeftWidth: 2,
-          borderColor: c().red,
-          backgroundColor: c().redFill,
-        }}
-      >
-        <Label size={12} line={16} tone="red">
-          {props.error}
-        </Label>
+      <View style={{ gap: 2, paddingVertical: 4 }}>
+        <Label>{props.error}</Label>
         <If when={props.detail}>
-          <Label size={12} line={16} tone="mutedInk">
+          <Label size={12} line={16} tone="muted">
             {props.detail}
           </Label>
         </If>
@@ -64,12 +52,13 @@ export function LocationOption(props: {
       }}
       hoverStyle={props.disabled ? undefined : { backgroundColor: c().surface }}
       style={{
-        borderColor: props.selected && !props.disabled ? c().ink : c().strong,
+        borderColor: props.selected ? c().ink : c().strong,
         borderWidth: 1,
         paddingHorizontal: 12,
         paddingVertical: 8,
         gap: 2,
         cursor: props.disabled ? "default" : "pointer",
+        opacity: props.disabled ? 0.5 : 1,
       }}
     >
       <Label>{props.title}</Label>

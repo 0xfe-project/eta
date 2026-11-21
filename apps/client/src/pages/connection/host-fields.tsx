@@ -5,6 +5,7 @@ import { uiText } from "../../i18n";
 export function HostFields(props: {
   plain?: boolean;
   tablet?: boolean;
+  tokenWrong?: boolean;
   address: string;
   token: string;
   onAddress: (value: string) => void;
@@ -21,11 +22,15 @@ export function HostFields(props: {
           paddingHorizontal: 0,
           fontSize: 16,
         }
-      : {
-          flex: 1,
-          height: props.tablet ? 44 : 32,
-          fontSize: props.tablet ? 16 : 14,
-        };
+      : props.tablet
+        ? {
+            flex: 1,
+            height: 44,
+            paddingHorizontal: 12,
+            fontSize: 16,
+            lineHeight: 24,
+          }
+        : { flex: 1, height: 32, fontSize: 14 };
   const line = () =>
     props.plain
       ? {
@@ -48,6 +53,7 @@ export function HostFields(props: {
       <View style={line()}>
         <Label
           size={props.plain ? 11 : 14}
+          line={props.tablet ? 20 : undefined}
           tone="muted"
           style={{ width: props.plain ? 44 : 64 }}
         >
@@ -65,6 +71,7 @@ export function HostFields(props: {
       <View style={line()}>
         <Label
           size={props.plain ? 11 : 14}
+          line={props.tablet ? 20 : undefined}
           tone="muted"
           style={{ width: props.plain ? 44 : 64 }}
         >
@@ -77,7 +84,12 @@ export function HostFields(props: {
           masked
           onChange={props.onToken}
           onSubmit={props.onSubmit}
-          style={fieldStyle()}
+          style={{
+            ...fieldStyle(),
+            ...(props.tablet && props.token ? { letterSpacing: 2.24 } : {}),
+            ...(props.plain && props.token ? { letterSpacing: 1.6 } : {}),
+            ...(props.tokenWrong ? { borderColor: c().ink } : {}),
+          }}
         />
       </View>
     </View>

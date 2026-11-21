@@ -2,7 +2,7 @@ import type { Layout } from "../../components";
 import type { HostAddress } from "../../services/host";
 import type { ConnectionFailure } from "./diagnostics";
 import { parseConnectLink } from "@eta/client-contracts/connect-link";
-import { effect, platform, signal, View } from "nsh";
+import { cleanup, effect, platform, signal, View } from "nsh";
 import { Button, colors, grow, Header, Label, row } from "../../components";
 import { uiText } from "../../i18n";
 import { addressFrom, useHost } from "../../services/host";
@@ -31,6 +31,12 @@ const failureText = {
   lost: ["connectLostTitle", "connectAgentsContinue"],
 } as const;
 
+function shownAddress(origin?: string) {
+  if (!origin) return "";
+  const url = new URL(origin);
+  return url.protocol === "http:" ? url.host : origin;
+}
+
 export function Connection(props: {
   initial: HostAddress | null;
   layout: Layout;
@@ -40,7 +46,7 @@ export function Connection(props: {
 }) {
   const c = colors();
   const host = useHost();
-  const draft = signal(props.initial?.origin ?? "");
+  const draft = signal(shownAddress(props.initial?.origin));
   const token = signal(props.initial?.token ?? "");
   const remote = signal(Boolean(props.initial?.origin) || !canStartHost);
   const scanned = signal(false);
@@ -83,7 +89,7 @@ export function Connection(props: {
 
   effect(() => {
     if (props.initial) {
-      draft.set(props.initial.origin);
+      draft.set(shownAddress(props.initial.origin));
       token.set(props.initial.token ?? "");
       remote.set(true);
     }
@@ -103,6 +109,24 @@ export function Connection(props: {
       problem.set(reason);
       if (reason === "token") host.start(null);
     });
+  });
+
+  effect(() => {
+    const address = attempt();
+    if (problem() !== "lost" || !address) return;
+    let waiting = false;
+    const timer = setInterval(() => {
+      if (waiting) return;
+      waiting = true;
+      void diagnose(address)
+        .then((reason) => {
+          if (reason !== "address" && problem() === "lost") begin(address);
+        })
+        .finally(() => {
+          waiting = false;
+        });
+    }, 5000);
+    cleanup(() => clearInterval(timer));
   });
 
   function begin(address: HostAddress) {
@@ -211,12 +235,16 @@ export function Connection(props: {
         <If when={failure() && !phone() && !remoteFailure()}>
           <ConnectionError
             layout={props.layout}
+            tablet={tablet()}
             message={failure()!}
             problem={problem()}
             address={attempt()}
             error={error()}
+            lastOnline={host.lastOnline()}
             onRetry={retryConnection}
-            onChange={change}
+            onChange={
+              tablet() && problem() === "lost" ? useAnotherHost : change
+            }
           />
         </If>
         <If when={phone() && problem() === "lost"}>
@@ -250,6 +278,7 @@ export function Connection(props: {
                 title={uiText("whereShouldEtaRun")}
                 layout={props.layout}
                 inset={16}
+                titleLine={24}
                 dialog
               />
             </If>
@@ -262,6 +291,7 @@ export function Connection(props: {
                 }
                 layout={props.layout}
                 inset={16}
+                titleLine={24}
                 dialog
               />
             </If>
@@ -291,7 +321,7 @@ export function Connection(props: {
               </PhoneConnectionForm>
             </If>
             <If when={!phone()}>
-              <View style={{ padding: 16, gap: 12 }}>
+              <View style={{ padding: 16, gap: tablet() ? 16 : 12 }}>
                 <If
                   when={desktop()}
                   else={
@@ -310,7 +340,7 @@ export function Connection(props: {
                           : uiText("runOnThisComputer")
                       }
                       description={uiText("theHostAndItsDataStay")}
-                      selected={localBusy()}
+                      selected={false}
                       disabled={!canStartHost || busy()}
                       onPress={() => void launch()}
                     />
@@ -328,6 +358,7 @@ export function Connection(props: {
                     address={draft()}
                     token={token()}
                     tablet={tablet()}
+                    tokenWrong={tablet() && problem() === "token"}
                     onAddress={(value) => edit(draft.set, value)}
                     onToken={(value) => edit(token.set, value)}
                     onSubmit={connect}
@@ -353,7 +384,7 @@ export function Connection(props: {
                   justifyContent: "space-between",
                   borderTopWidth: 1,
                   borderColor: c().border,
-                  gap: 12,
+                  gap: tablet() ? 8 : 12,
                   padding: 12,
                   paddingHorizontal: 16,
                 }}
@@ -362,9 +393,11 @@ export function Connection(props: {
                   <Button
                     label={scanLabel}
                     size={44}
-                    style={{ flex: 1 }}
+                    labelSize={14}
+                    style={{ flex: 1, paddingHorizontal: 12 }}
                     onPress={scan}
                     disabled={busy()}
+                    dimDisabled={false}
                   />
                 </If>
                 <If when={desktop()}>
@@ -380,13 +413,21 @@ export function Connection(props: {
                     label={
                       connecting()
                         ? uiText("connecting")
-                        : remoteFailure() || problem() === "token"
+                        : remoteFailure()
                           ? uiText("retry")
                           : uiText("connect")
                     }
                     tone="primary"
                     size={tablet() ? 44 : undefined}
-                    style={tablet() ? { paddingHorizontal: 24 } : undefined}
+                    labelSize={tablet() ? 14 : undefined}
+                    style={
+                      tablet()
+                        ? {
+                            paddingHorizontal: 24,
+                            opacity: !draft().trim() || busy() ? 0.5 : 1,
+                          }
+                        : { paddingHorizontal: 12 }
+                    }
                     disabled={!draft().trim() || busy()}
                     onPress={connect}
                   />

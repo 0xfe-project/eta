@@ -36,8 +36,8 @@ export const commonMessages = {
   close: ["Close", "关闭"],
   connect: ["Connect", "连接"],
   connectionLostReconnecting: [
-    "Connection lost · Reconnecting…",
-    "连接已断开 · 正在重连…",
+    "Connection lost, reconnecting… Status may be out of date.",
+    "连接中断，正在重连…显示的状态可能不是最新的。",
   ],
   connectionLostReconnectingWhatYouSee: [
     "Connection lost, reconnecting… What you see may be out of date.",

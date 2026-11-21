@@ -34,27 +34,28 @@ export function HostRestartScreen() {
         paddingHorizontal: 24,
       }}
     >
-      <View style={{ width: 344, maxWidth: "100%", gap: 8 }}>
-        <Label size={18} weight={600}>
+      <View style={{ width: 448, maxWidth: "100%", gap: 12 }}>
+        <Label size={16} weight={500} line={24}>
           {update()?.to
             ? uiText("updatingTo", { to: update()?.to })
             : uiText("updatingTheHost")}
         </Label>
-        <Label size={13} tone="muted">
+        <Label size={14} line={20} tone="muted">
           {description()}
         </Label>
         <View
           style={{
-            height: 3,
+            height: 4,
             backgroundColor: c().border,
             flexDirection: "row",
             alignItems: "stretch",
+            overflow: "hidden",
           }}
         >
-          <View style={{ width: "20%" }} />
-          <View style={{ width: "38%", backgroundColor: c().ink }} />
-          <View style={{ width: "16%" }} />
-          <View style={{ width: "12%", backgroundColor: c().muted }} />
+          <View style={{ width: "21%" }} />
+          <View style={{ width: "37.5%", backgroundColor: c().button }} />
+          <View style={{ width: "17.5%" }} />
+          <View style={{ width: "12.5%", backgroundColor: c().button }} />
         </View>
       </View>
     </View>
