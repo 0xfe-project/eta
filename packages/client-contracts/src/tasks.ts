@@ -173,6 +173,35 @@ export interface BoardTaskView {
   archivedAt?: number | null;
   /** Who archived it: `auto` (the host, for a quiet done or cancelled task), `user`, or an agent's id. */
   archivedBy?: string | null;
+  /**
+   * What its own runs used, in brief: what a card or a row says. Null before its first run that
+   * got a session (it used nothing, and says nothing). Absent from a host older than this field.
+   * The whole breakdown is the task's `usage` section.
+   */
+  usage?: TaskUsageBrief | null;
+  /**
+   * The same with every task under it, at any depth, for a task that has subtasks: a parent does
+   * no work of its own, so its card says this. Null when none of them has run; absent for a task
+   * without subtasks (and from an older host).
+   */
+  usageWithSubtasks?: TaskUsageBrief | null;
+}
+
+/** A task's usage, as a card or a list row says it. */
+export interface TaskUsageBrief {
+  /** Null: not one of its runs reported tokens ("no token data", never 0). */
+  tokens: TaskTokenTotals | null;
+  /** The model that answered with the most tokens; null without data. */
+  model: string | null;
+  /** How many models answered: a card says the first, and `+N` for the rest. */
+  models: number;
+  runs: number;
+  runsWithoutData: number;
+  /**
+   * The session of a run going now, where its live rate is (`sessions.<id>.metrics`); null when
+   * none is. Only eta's own loop measures one.
+   */
+  liveSessionId: string | null;
 }
 
 /** Which tasks a list holds: those on the board (the default), only the archived ones, or both. */

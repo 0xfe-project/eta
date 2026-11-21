@@ -13,6 +13,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type {
   AcpAgentView,
   BoardTaskDetail,
+  BoardTaskView,
   TaskUsageView,
 } from "@eta/client-contracts";
 import type { Request } from "./support/models";
@@ -405,6 +406,70 @@ describe("a task's usage, on eta's own loop", () => {
         r.w.client.section<TaskUsageView>(`tasks.${stage.id}`, "usage")?.totals
           .tokens?.total === 132,
     );
+  });
+
+  it("is on the board in brief, a parent's with its subtasks, so a card needs no task of its own", async () => {
+    const r = await room((request) => {
+      const number = Number(
+        /task #(\d+)/.exec(request.transcript[0] ?? "")?.[1],
+      );
+      return billed(
+        request.lastRole === "toolResult"
+          ? say("done")
+          : call("finish_task", { summary: "ok" }),
+        number === 3
+          ? { provider: "quiet", model: "q1" }
+          : {
+              provider: "acme",
+              model: `m${number}`,
+              input: 1000 * number,
+              output: number,
+            },
+      );
+    });
+    r.w.client.subscribe("tasks");
+    const stage = r.make("Stage", { status: "backlog" });
+    const a = r.make("A", { parent: stage.id });
+    const quiet = r.make("Quiet", { parent: stage.id });
+    const idle = r.make("Idle", { status: "backlog" });
+    for (const id of [a.id, quiet.id]) await until(() => ended(r.w, id, 1));
+
+    const card = (id: string) =>
+      (r.w.client.section<BoardTaskView[]>("tasks", "list") ?? []).find(
+        (task) => task.id === id,
+      );
+    await until(() => card(quiet.id)?.usage?.runs === 1);
+    // #2 ran twice on m2 (2000 in, 2 out each): its card says the total and the model.
+    expect(card(a.id)?.usage).toMatchObject({
+      tokens: { total: 4004 },
+      model: "m2",
+      models: 1,
+      runs: 1,
+      runsWithoutData: 0,
+      liveSessionId: null,
+    });
+    // A run whose provider counted nothing is "no data", not 0.
+    expect(card(quiet.id)?.usage).toMatchObject({
+      tokens: null,
+      model: null,
+      runs: 1,
+      runsWithoutData: 1,
+    });
+    // Never ran: nothing. A parent ran nothing itself; with its subtasks it is theirs together.
+    expect(card(idle.id)?.usage).toBeNull();
+    expect(card(idle.id)?.usageWithSubtasks).toBeUndefined();
+    expect(card(stage.id)?.usage).toBeNull();
+    expect(card(stage.id)?.usageWithSubtasks).toMatchObject({
+      tokens: { total: 4004 },
+      model: "m2",
+      runs: 2,
+      runsWithoutData: 1,
+    });
+    // `tasks.list` says the same.
+    const listed = (
+      (await r.w.client.call("tasks", "list", {})) as { tasks: BoardTaskView[] }
+    ).tasks.find((task) => task.id === a.id);
+    expect(listed?.usage?.tokens?.total).toBe(4004);
   });
 
   it("refuses a task that is not there", async () => {
