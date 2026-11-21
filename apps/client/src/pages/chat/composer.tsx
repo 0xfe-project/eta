@@ -52,10 +52,11 @@ import {
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { composerAttachments } from "./composer-attachments";
-import { HeldRows, OutboxRows } from "./composer-delivery";
+import { OutboxRows } from "./composer-delivery";
 import { drainOutbox, openComposerDraft } from "./composer-draft";
-
 import { ComposerRecipients } from "./composer-recipients";
+
+import { HeldMessages } from "./held-messages";
 
 import { activeReply } from "./member-status";
 
@@ -78,7 +79,6 @@ export function Composer(props: {
   const host = useHost();
   const c = colors();
   const type = textFaces();
-  const showHeld = signal(false);
   const conversationId = props.id;
   const origin = host.address()!.origin;
   const store = openComposerDraft(origin, conversationId);
@@ -104,7 +104,6 @@ export function Composer(props: {
   let input: InputRef | undefined;
   const list = signal<ViewRef>();
   const activeOption = signal<ViewRef>();
-  const heldRows = new Map<string, ViewRef>();
   let mounted = true;
   cleanup(() => {
     mounted = false;
@@ -433,14 +432,14 @@ export function Composer(props: {
           />
         </View>
       </If>
-      <HeldRows
-        messages={showHeld() || !props.group ? props.held : []}
+      <HeldMessages
+        messages={props.held}
         conversationId={conversationId}
-        onRecall={(text) => {
+        phone={props.phone}
+        onPullBack={(text) => {
           prepend(text);
           focusEditor();
         }}
-        rows={heldRows}
       />
       <If when={props.group}>
         <ComposerRecipients
@@ -458,18 +457,11 @@ export function Composer(props: {
           running={members()
             .filter((member) => member.busy)
             .map((member) => member.id)}
-          held={props.held.length}
           names={names()}
           waitsFor={waitsFor()}
           onChangeMentions={(mentions) =>
             edit({ sticky: mentions ? "everyone" : undefined })
           }
-          onToggleHeld={() => {
-            showHeld.set(!showHeld());
-            const first = props.held[0];
-            if (first && showHeld())
-              queueMicrotask(() => heldRows.get(first.id)?.focus());
-          }}
           onToggleRecipient={toggle}
         />
       </If>
