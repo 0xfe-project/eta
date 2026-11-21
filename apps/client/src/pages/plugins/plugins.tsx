@@ -1,6 +1,6 @@
 import type { PluginResults, PluginView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   Button,
   Caption,
@@ -11,6 +11,7 @@ import {
   Label,
   Modal,
   row,
+  SmoothScroll,
 } from "../../components";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
@@ -141,7 +142,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
     </If>
   );
   const desktopList = () => (
-    <Scroll style={grow} scrollbar={false}>
+    <SmoothScroll style={grow} scrollbar={false}>
       <View
         style={{
           paddingHorizontal: 24,
@@ -178,7 +179,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
           </Each>
         </View>
       </View>
-    </Scroll>
+    </SmoothScroll>
   );
   return (
     <View style={grow}>
@@ -254,7 +255,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                   }
                 >
                   <If when={phone()} else={desktopList()}>
-                    <Scroll style={grow} scrollbar={false}>
+                    <SmoothScroll style={grow} scrollbar={false}>
                       <Label
                         variant="small"
                         tone="muted"
@@ -283,7 +284,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                           onSelect={selected.set}
                         />
                       </If>
-                    </Scroll>
+                    </SmoothScroll>
                   </If>
                 </If>
               </>

@@ -5,7 +5,7 @@ import type {
   PluginValue,
   PluginView,
 } from "@eta/client-contracts";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import { Dialog, Input } from "nsh/base";
 import {
   Button,
@@ -18,6 +18,7 @@ import {
   Label,
   Modal,
   row,
+  SmoothScroll,
   textFaces,
   textStyle,
 } from "../../components";
@@ -235,7 +236,7 @@ export function ConfigurePlugin(props: {
   });
   const form = () => (
     <>
-      <Scroll
+      <SmoothScroll
         // The dialog fits its fields and scrolls only once it reaches its height cap.
         style={props.phone ? grow : { flexShrink: 1, minHeight: 0 }}
       >
@@ -499,7 +500,7 @@ export function ConfigurePlugin(props: {
             {pluginConfigText("encrypted")}
           </Label>
         </View>
-      </Scroll>
+      </SmoothScroll>
       <View
         style={{
           ...row,

@@ -4,8 +4,15 @@ import type {
   LlmModel,
   LlmQuota,
 } from "@eta/client-contracts";
-import { Scroll, signal, View } from "nsh";
-import { Button, colors, grow, Label, row } from "../../../components";
+import { signal, View } from "nsh";
+import {
+  Button,
+  colors,
+  grow,
+  Label,
+  row,
+  SmoothScroll,
+} from "../../../components";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { LetterBox, PaneBack, SectionHeader } from "../section";
@@ -211,7 +218,7 @@ export function SubscriptionDetail(props: {
         }
         phone={props.phone}
       />
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <If when={!props.phone}>{summary()}</If>
         <View
           role="tablist"
@@ -294,7 +301,7 @@ export function SubscriptionDetail(props: {
             )}
           </Each>
         </If>
-      </Scroll>
+      </SmoothScroll>
     </View>
   );
 }

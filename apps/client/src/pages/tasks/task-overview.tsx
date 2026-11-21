@@ -5,7 +5,8 @@ import type {
 } from "@eta/client-contracts";
 import type { Layout, TextVariant } from "../../components";
 import type { TaskDetailState } from "./task-detail-state";
-import { Scroll, View } from "nsh";
+import { View } from "nsh";
+import { paneWidth } from "../../app/pane-width";
 import {
   Button,
   Caption,
@@ -19,10 +20,10 @@ import {
   monoFontFamily,
   PaneHandle,
   row,
+  SmoothScroll,
   textFaces,
   textStyle,
 } from "../../components";
-import { paneWidth } from "../../app/pane-width";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
@@ -282,7 +283,7 @@ function DesktopOverview(props: {
   const opensWithHeading = () => /^\s*#/.test(item().description);
   return (
     <View style={{ ...row, ...grow, alignItems: "stretch" }}>
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <View
           style={{
             paddingTop: parent() ? 16 : 14,
@@ -448,7 +449,7 @@ function DesktopOverview(props: {
           <RunLine item={item()} state={props.state} />
           <TaskCommentBox state={props.state} />
         </View>
-      </Scroll>
+      </SmoothScroll>
       <View
         style={{
           width: paneWidth("task"),
@@ -559,7 +560,7 @@ export function TaskOverview(props: {
         }
       >
         <View style={{ ...row, ...grow, alignItems: "stretch" }}>
-          <Scroll style={grow} scrollbar={false}>
+          <SmoothScroll style={grow} scrollbar={false}>
             <View
               style={{
                 paddingHorizontal: phone() ? 16 : 20,
@@ -822,7 +823,7 @@ export function TaskOverview(props: {
                 <TaskFields item={item()} state={props.state} />
               </If>
             </View>
-          </Scroll>
+          </SmoothScroll>
         </View>
       </If>
     </If>

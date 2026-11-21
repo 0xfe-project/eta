@@ -4,8 +4,16 @@ import type {
 } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import { back } from "@eta/client-contracts";
-import { Scroll, signal, View, windowSize } from "nsh";
-import { Button, colors, grow, Label, Modal, row } from "../../components";
+import { signal, View, windowSize } from "nsh";
+import {
+  Button,
+  colors,
+  grow,
+  Label,
+  Modal,
+  row,
+  SmoothScroll,
+} from "../../components";
 import { localizedText, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { ConversationMembers } from "./conversation-members";
@@ -215,7 +223,7 @@ export function NewConversation(props: {
           </View>
         </View>
       </If>
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <If
           when={directory()}
           else={
@@ -250,7 +258,7 @@ export function NewConversation(props: {
             </View>
           )}
         </If>
-      </Scroll>
+      </SmoothScroll>
       <If when={!phone() && !directory()}>
         <Label
           variant="caption"

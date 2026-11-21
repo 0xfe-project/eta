@@ -17,6 +17,7 @@ import {
   Label,
   Modal,
   row,
+  SmoothScroll,
 } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -652,7 +653,7 @@ export function TaskPlan(props: {
       ?.filter((task) => task.status !== "cancelled")
       .map((task) => task.id) ?? [];
   return (
-    <Scroll style={grow}>
+    <SmoothScroll style={grow}>
       <View
         style={
           props.tablet
@@ -702,7 +703,7 @@ export function TaskPlan(props: {
         </If>
       </View>
       <editing.Dialogs />
-    </Scroll>
+    </SmoothScroll>
   );
 }
 

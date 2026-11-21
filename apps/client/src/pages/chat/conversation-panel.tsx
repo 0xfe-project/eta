@@ -7,7 +7,7 @@ import type {
 import type { Signal } from "nsh";
 import type { Layout } from "../../components";
 import type { ArtifactFilters } from "./artifacts/filter";
-import { Scroll, View } from "nsh";
+import { View } from "nsh";
 import {
   Button,
   Caption,
@@ -17,6 +17,7 @@ import {
   Icon,
   Label,
   row,
+  SmoothScroll,
 } from "../../components";
 import { ModelSelect } from "../../components/model-select";
 import { CloseButton } from "../../components/navigation-buttons";
@@ -204,7 +205,7 @@ export function ConversationPanel(props: {
               <If
                 when={panel() === "Artifacts"}
                 else={
-                  <Scroll style={grow} scrollbar={false}>
+                  <SmoothScroll style={grow} scrollbar={false}>
                     <If when={props.captain && panel() === "Context"}>
                       <View
                         style={{
@@ -302,7 +303,7 @@ export function ConversationPanel(props: {
                         onRemove={props.onRemove}
                       />
                     </If>
-                  </Scroll>
+                  </SmoothScroll>
                 }
               >
                 {/* The Artifacts tab scrolls its list between the filters and the pages. */}

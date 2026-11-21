@@ -1,6 +1,6 @@
 import type { JSX } from "nsh";
 import type { Flavor, PaletteId } from "../../components/palettes";
-import { colorScheme, effect, Scroll, signal, View } from "nsh";
+import { colorScheme, effect, signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -11,6 +11,7 @@ import {
   Label,
   palette,
   row,
+  SmoothScroll,
   textFaces,
   textStyle,
 } from "../../components";
@@ -272,7 +273,7 @@ export function Appearance(props: AppearanceProps & { phone: boolean }) {
   const language = LanguageSettings();
   const picker = ElementPicking();
   return (
-    <Scroll style={grow} scrollbar={false}>
+    <SmoothScroll style={grow} scrollbar={false}>
       <ChoiceRow
         title={text("colorMode")}
         phone={props.phone}
@@ -352,6 +353,6 @@ export function Appearance(props: AppearanceProps & { phone: boolean }) {
           />
         )}
       </If>
-    </Scroll>
+    </SmoothScroll>
   );
 }

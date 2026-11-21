@@ -1,6 +1,6 @@
 import type { McpResults, McpServerView } from "@eta/client-contracts";
 import type { Layout } from "../../../components";
-import { Clipboard, openUrl, Scroll, signal, View } from "nsh";
+import { Clipboard, openUrl, signal, View } from "nsh";
 import {
   Button,
   colors,
@@ -10,6 +10,7 @@ import {
   Label,
   Modal,
   row,
+  SmoothScroll,
 } from "../../../components";
 import { StatusDot } from "../../../components/status-dot";
 import { uiText } from "../../../i18n";
@@ -93,7 +94,7 @@ export function McpDetail(props: {
       >
         <McpPhoneHeader title={server().server} onBack={props.onBack} />
       </If>
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <View
           style={{
             ...row,
@@ -192,7 +193,7 @@ export function McpDetail(props: {
             </View>
           )}
         </If>
-      </Scroll>
+      </SmoothScroll>
       <If when={operating()}>
         <View
           style={{

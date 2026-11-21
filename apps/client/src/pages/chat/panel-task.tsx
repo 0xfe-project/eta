@@ -1,7 +1,7 @@
 import type { TaskDependencyView } from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
 import type { Layout } from "../../components";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -13,6 +13,7 @@ import {
   Label,
   Markdown,
   row,
+  SmoothScroll,
   textFaces,
   textStyle,
 } from "../../components";
@@ -127,7 +128,7 @@ export function PanelTask(props: {
                 />
               </ActionMenu>
             </View>
-            <Scroll style={grow} scrollbar={false}>
+            <SmoothScroll style={grow} scrollbar={false}>
               <Label
                 variant="subtitle"
                 weight={700}
@@ -225,7 +226,7 @@ export function PanelTask(props: {
               </View>
               {/* A thread opens on its latest reply, next to the box to answer it, as on the web. */}
               <View ref={end} />
-            </Scroll>
+            </SmoothScroll>
             <If when={run()}>
               {(entry) => (
                 <View

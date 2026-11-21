@@ -1,5 +1,5 @@
 import type { Layout } from "../components";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   Button,
   Caption,
@@ -11,6 +11,7 @@ import {
   Label,
   row,
   sizes,
+  SmoothScroll,
 } from "../components";
 import { useText } from "../i18n";
 import { useHost } from "../services/host";
@@ -147,7 +148,7 @@ export function ChatList(
           </If>
         </If>
       </View>
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <If when={phone()}>
           <View
             style={{
@@ -200,7 +201,7 @@ export function ChatList(
             )}
           </Each>
         </If>
-      </Scroll>
+      </SmoothScroll>
       <If when={!phone()}>
         <View
           style={{
@@ -265,7 +266,10 @@ export function ChatList(
               flexShrink: props.collapsed ? 1 : 0,
             }}
           >
-            <Scroll scrollbar={false} style={{ flexGrow: 0, flexShrink: 1 }}>
+            <SmoothScroll
+              scrollbar={false}
+              style={{ flexGrow: 0, flexShrink: 1 }}
+            >
               <Each of={host.people()} key={(agent) => agent.id}>
                 {(agent) => (
                   <AgentRow
@@ -276,7 +280,7 @@ export function ChatList(
                   />
                 )}
               </Each>
-            </Scroll>
+            </SmoothScroll>
           </View>
         </If>
       </If>

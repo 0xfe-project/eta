@@ -8,8 +8,16 @@ import type {
 } from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
 import { logBlocks, savedSteps, savedTools } from "@eta/client-contracts";
-import { cleanup, computed, effect, Scroll, signal, View } from "nsh";
-import { Button, colors, grow, Icon, Label, row } from "../../../components";
+import { cleanup, computed, effect, signal, View } from "nsh";
+import {
+  Button,
+  colors,
+  grow,
+  Icon,
+  Label,
+  row,
+  SmoothScroll,
+} from "../../../components";
 import { AgentFace } from "../../../components/agent-face";
 import { CloseButton } from "../../../components/navigation-buttons";
 import { StatusDot } from "../../../components/status-dot";
@@ -477,7 +485,7 @@ export function MemberRun(props: {
           />
         </View>
       </If>
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <View style={{ padding: inset }}>
           <Each of={visible()} key={(block) => block.id}>
             {(block, index) => (
@@ -559,7 +567,7 @@ export function MemberRun(props: {
             </Label>
           </If>
         </View>
-      </Scroll>
+      </SmoothScroll>
     </View>
   );
 }

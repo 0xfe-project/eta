@@ -1,7 +1,15 @@
 import type { SkillFileEntry } from "@eta/client-contracts";
 import type { Layout } from "../../../components";
-import { Scroll, View } from "nsh";
-import { Button, colors, grow, Icon, Label, row } from "../../../components";
+import { View } from "nsh";
+import {
+  Button,
+  colors,
+  grow,
+  Icon,
+  Label,
+  row,
+  SmoothScroll,
+} from "../../../components";
 import { uiText } from "../../../i18n";
 
 export function SkillFileTree(props: {
@@ -15,7 +23,7 @@ export function SkillFileTree(props: {
   const c = colors();
   const phone = () => props.layout === "phone";
   return (
-    <Scroll
+    <SmoothScroll
       style={
         props.layout === "phone"
           ? grow
@@ -84,6 +92,6 @@ export function SkillFileTree(props: {
           }}
         </Each>
       </View>
-    </Scroll>
+    </SmoothScroll>
   );
 }

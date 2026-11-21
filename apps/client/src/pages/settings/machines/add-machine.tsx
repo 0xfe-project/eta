@@ -1,6 +1,6 @@
 import type { MachineInstallView, MachineResults } from "@eta/client-contracts";
 import type { JSX } from "nsh";
-import { Clipboard, Scroll, signal, View } from "nsh";
+import { Clipboard, signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -11,6 +11,7 @@ import {
   Label,
   Modal,
   row,
+  SmoothScroll,
   textFaces,
   textStyle,
 } from "../../../components";
@@ -233,7 +234,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
   );
 
   const content = () => (
-    <Scroll style={grow} scrollbar={false}>
+    <SmoothScroll style={grow} scrollbar={false}>
       <If when={props.phone}>
         <View
           style={{
@@ -310,7 +311,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
           </View>
         )}
       </If>
-    </Scroll>
+    </SmoothScroll>
   );
 
   /** Off phones the action sits in a footer; a phone keeps it under the form. */

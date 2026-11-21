@@ -1,7 +1,7 @@
 import type { MachineView } from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
 import type { Layout } from "../../../components";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -13,6 +13,7 @@ import {
   Label,
   Modal,
   row,
+  SmoothScroll,
 } from "../../../components";
 import { MenuRule } from "../../../components/menu";
 import { StatusDot } from "../../../components/status-dot";
@@ -351,7 +352,7 @@ export function Machines(props: {
             </If>
           </View>
         </SectionHeader>
-        <Scroll style={grow} scrollbar={false}>
+        <SmoothScroll style={grow} scrollbar={false}>
           <Each of={visible()} key={(item) => item.id}>
             {(item) => (
               <MachineRow
@@ -361,7 +362,7 @@ export function Machines(props: {
               />
             )}
           </Each>
-        </Scroll>
+        </SmoothScroll>
       </If>
       <If when={pairing()}>
         <PhonePairing

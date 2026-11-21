@@ -7,15 +7,7 @@ import type {
 import type { JSX } from "nsh";
 import type { Layout } from "../../../components";
 import type { SkillCall } from "./detail";
-import {
-  cleanup,
-  computed,
-  effect,
-  Scroll,
-  signal,
-  untracked,
-  View,
-} from "nsh";
+import { cleanup, computed, effect, signal, untracked, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -29,6 +21,7 @@ import {
   Label,
   ListSkeleton,
   row,
+  SmoothScroll,
   textFaces,
 } from "../../../components";
 import { uiText } from "../../../i18n";
@@ -442,7 +435,7 @@ export function Skills(props: {
     <>
       {controls()}
       <If when={visible().length} else={emptyState()}>
-        <Scroll style={grow} scrollbar={false}>
+        <SmoothScroll style={grow} scrollbar={false}>
           <View
             style={
               tablet()
@@ -541,7 +534,7 @@ export function Skills(props: {
               )}
             </Each>
           </View>
-        </Scroll>
+        </SmoothScroll>
       </If>
     </>
   );

@@ -1,6 +1,14 @@
 import type { AgentEditorProps } from "./form";
-import { Scroll, signal, View } from "nsh";
-import { Button, colors, grow, Label, Modal, row } from "../../../components";
+import { signal, View } from "nsh";
+import {
+  Button,
+  colors,
+  grow,
+  Label,
+  Modal,
+  row,
+  SmoothScroll,
+} from "../../../components";
 import { AgentFace } from "../../../components/agent-face";
 import {
   BackButton,
@@ -218,7 +226,7 @@ export function AgentEditor(props: AgentEditorProps) {
               </Each>
             </View>
             <View style={grow}>
-              <Scroll style={grow} scrollbar={false}>
+              <SmoothScroll style={grow} scrollbar={false}>
                 <If when={tab() === "general"}>
                   <AgentGeneral
                     form={form}
@@ -234,7 +242,7 @@ export function AgentEditor(props: AgentEditorProps) {
                   <AgentPlugins form={form} />
                 </If>
                 <If when={!pinned() && tab() !== "general"}>{deleteRow()}</If>
-              </Scroll>
+              </SmoothScroll>
               <If when={pinned()}>{deleteRow()}</If>
             </View>
           </View>
@@ -291,7 +299,7 @@ export function AgentEditor(props: AgentEditorProps) {
             />
           </View>
         </View>
-        <Scroll
+        <SmoothScroll
           style={props.phone ? grow : { flexShrink: 1 }}
           scrollbar={false}
         >
@@ -302,7 +310,7 @@ export function AgentEditor(props: AgentEditorProps) {
               onRuntimes={props.onRuntimes}
             />
           </If>
-        </Scroll>
+        </SmoothScroll>
       </If>
       <View
         style={{

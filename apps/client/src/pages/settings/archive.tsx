@@ -8,7 +8,7 @@ import {
   DEFAULT_TASK_ARCHIVE_DAYS,
   TASK_ARCHIVE_DAYS,
 } from "@eta/client-contracts";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -19,6 +19,7 @@ import {
   Icon,
   Label,
   row,
+  SmoothScroll,
 } from "../../components";
 import { formatLocale, uiText, useText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -128,7 +129,7 @@ export function ArchiveSettings(props: { phone?: boolean }) {
           </View>
         </If>
       </If>
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <SectionHeader
           title={text("archived")}
           count={conversations().length || undefined}
@@ -223,7 +224,7 @@ export function ArchiveSettings(props: { phone?: boolean }) {
             )}
           </Each>
         </If>
-      </Scroll>
+      </SmoothScroll>
     </View>
   );
 }
