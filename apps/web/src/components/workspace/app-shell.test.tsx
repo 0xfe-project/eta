@@ -408,6 +408,7 @@ describe("左栏的页眉", () => {
       "/tasks",
       "/email",
       "/routines",
+      "/runtimes",
       "/plugins",
     ]);
     expect(rowsAt(container).map((a) => a.textContent)).toEqual([
@@ -415,6 +416,7 @@ describe("左栏的页眉", () => {
       "任务",
       "邮箱",
       "定时",
+      "运行时",
       "插件",
     ]);
     // 对话 must not stay lit from another section: `to: "/"` prefixes every path, so the home row is
@@ -424,6 +426,7 @@ describe("左栏的页眉", () => {
     // 邮箱 lights the email row alone, not the home row beside it.
     expect(lit(await mountAt(<Sidebar />, "/email"))).toEqual(["/email"]);
     expect(lit(await mountAt(<Sidebar />, "/routines"))).toEqual(["/routines"]);
+    expect(lit(await mountAt(<Sidebar />, "/runtimes"))).toEqual(["/runtimes"]);
     expect(lit(await mountAt(<Sidebar />, "/plugins"))).toEqual(["/plugins"]);
     // Back on the home path, 对话 is the one row lit.
     expect(lit(await mountAt(<Sidebar />, "/"))).toEqual(["/"]);
@@ -462,10 +465,11 @@ describe("折叠成图标栏", () => {
       "任务",
       "邮箱",
       "定时",
+      "运行时",
       "插件",
     ]);
     // No text in the rail: the name a link lost is the name it has to carry for the reader.
-    expect(links.map((a) => a.textContent)).toEqual(["", "", "", "", ""]);
+    expect(links.map((a) => a.textContent)).toEqual(["", "", "", "", "", ""]);
     expect(links[0]?.querySelector("svg")).not.toBeNull();
   });
 
@@ -498,7 +502,14 @@ describe("折叠成图标栏", () => {
       });
     };
     const open = await render(<Sidebar />, { open: true });
-    expect(rows(open)).toEqual(["对话", "任务", "邮箱", "定时", "插件"]);
+    expect(rows(open)).toEqual([
+      "对话",
+      "任务",
+      "邮箱",
+      "定时",
+      "运行时",
+      "插件",
+    ]);
     const rail = await render(<Sidebar />, { open: false });
     expect(rows(rail)).toEqual([
       "折叠或展开侧栏",
@@ -506,6 +517,7 @@ describe("折叠成图标栏", () => {
       "任务",
       "邮箱",
       "定时",
+      "运行时",
       "插件",
     ]);
 

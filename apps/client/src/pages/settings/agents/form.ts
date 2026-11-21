@@ -12,6 +12,7 @@ import { colors, textFaces } from "../../../components";
 import { useModels } from "../../../components/model-select";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
+import { askRuntimes } from "../runtimes/status";
 
 export interface AgentEditorProps {
   id?: string;
@@ -19,6 +20,8 @@ export interface AgentEditorProps {
   tablet?: boolean;
   onClose: () => void;
   onModelServices: () => void;
+  /** Leave for Settings › Runtimes, where a runtime's sign-in is shown; no link without it. */
+  onRuntimes?: () => void;
 }
 
 export function createAgentForm(props: AgentEditorProps) {
@@ -34,7 +37,11 @@ export function createAgentForm(props: AgentEditorProps) {
   const thinking = signal<ThinkingLevel | null>(saved?.thinkingLevel ?? null);
   const busy = signal(false);
   const customPersona = signal(false);
-  const installed = signal<AgentRuntimeInfo[] | undefined>(undefined);
+  /** The machine's runtimes: undefined while it answers, null when it could not be asked. */
+  const installed = signal<AgentRuntimeInfo[] | null | undefined>(undefined);
+  /** A retry under way, and why the last one failed. */
+  const probing = signal(false);
+  const probeError = signal<string | undefined>(undefined);
   const models = useModels();
   const creating = !props.id;
   const phoneEditor = () => props.phone && !creating;
@@ -131,20 +138,39 @@ export function createAgentForm(props: AgentEditorProps) {
     if (!host.can("agents.runtimes")) return;
     let current = true;
     installed.set(undefined);
+    probeError.set(undefined);
     cleanup(() => {
       current = false;
     });
-    void host
-      .call<AgentResults["runtimes"]>(
-        "agents",
-        "runtimes",
-        machine ? { machineId: machine } : {},
-      )
-      .then((result) => {
-        if (current) installed.set(result.runtimes);
-      })
-      .catch(() => {});
+    void askRuntimes(host, machine).then(
+      (runtimes) => {
+        if (current) installed.set(runtimes);
+      },
+      () => {
+        if (current) installed.set(null);
+      },
+    );
   });
+  /** Ask the machine's runtimes again, past the host's cache (`agents.runtimes { fresh: true }`). */
+  async function reprobe() {
+    if (probing()) return;
+    const machine = machineId();
+    probing.set(true);
+    probeError.set(undefined);
+    try {
+      const runtimes = await askRuntimes(host, machine, true);
+      if (machineId() === machine) installed.set(runtimes);
+    } catch (error) {
+      probeError.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      probing.set(false);
+    }
+  }
+  /** The runtimes that cannot be picked and say why in their own words. */
+  const explained = () =>
+    (installed() ?? []).filter(
+      (item) => item.status !== "available" && item.detail,
+    );
 
   function close() {
     if (!busy()) props.onClose();
@@ -245,6 +271,11 @@ export function createAgentForm(props: AgentEditorProps) {
     runtimeList,
     runtimeLabel,
     external,
+    installed,
+    explained,
+    probing,
+    probeError,
+    reprobe,
     noModels,
     missingModel,
     chooseRuntime,

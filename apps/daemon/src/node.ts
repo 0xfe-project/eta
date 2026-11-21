@@ -420,6 +420,13 @@ export class DaemonNode {
       const { fresh } = (raw ?? {}) as DaemonServiceParams["runtimes"];
       return { runtimes: await this.#runtimes.catalog.list(fresh === true) };
     });
+    peer.handle("runtimeAccount", async (raw) => {
+      const { runtime } = raw as DaemonServiceParams["runtimeAccount"];
+      const account = await this.#runtimes.catalog.account?.(runtime);
+      if (account === undefined)
+        throw new Error(`no such runtime here: ${runtime}`);
+      return account;
+    });
     // The settings page's ACP agents, this machine's own. Agents (and so who still runs on an id)
     // are the primary's: it checks that before it asks for a rename or a delete.
     peer.handle("skillFiles", (raw) =>

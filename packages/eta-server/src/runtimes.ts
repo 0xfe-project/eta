@@ -10,6 +10,7 @@
  * host that supplies none simply cannot open such a session, and says so.
  */
 import type {
+  AgentRuntimeAccount,
   AgentRuntimeInfo,
   RuntimeCompaction,
   SessionMcpServer,
@@ -105,6 +106,8 @@ export interface SessionRuntimes {
 /** Which runtimes a set has on this machine, and their models: what a settings screen reads. */
 export interface RuntimeListing {
   list: (fresh?: boolean) => Promise<AgentRuntimeInfo[]>;
+  /** A runtime's sign-in and plan usage; undefined when the runtime is not this set's. */
+  account?: (runtime: string) => Promise<AgentRuntimeAccount | undefined>;
 }
 
 /** Runtimes that can also say what they are: what a host and a daemon are given. */
@@ -139,6 +142,13 @@ export function composeRuntimes(
             ),
           )
         ).flat(),
+      account: async (runtime) => {
+        for (const part of parts) {
+          const account = await part.catalog?.account?.(runtime);
+          if (account !== undefined) return account;
+        }
+        return undefined;
+      },
     },
   };
 }

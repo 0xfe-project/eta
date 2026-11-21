@@ -416,6 +416,29 @@ describe("the sums", () => {
     });
   });
 
+  it("sum each provider over the windows, an external runtime under its own id", () => {
+    const { store } = open();
+    store.record(entry(NOW - 1 * HOUR, { provider: "claude", total: 40 }));
+    store.record(
+      entry(NOW - 2 * 24 * HOUR, {
+        provider: "claude",
+        agentId: null,
+        routineId: "r1",
+        total: 60,
+      }),
+    );
+    store.record(
+      entry(NOW - 8 * 24 * HOUR, { provider: "claude", total: 900 }),
+    );
+    store.record(entry(NOW - 1 * HOUR, { provider: "p", total: 5 }));
+    const [claude, other] = store.providers();
+    expect(claude!.provider).toBe("claude");
+    // Agents and routines together; the week leaves out what is older.
+    expect(claude!.windows["7d"]).toMatchObject({ requests: 2, total: 100 });
+    expect(claude!.windows["30d"]).toMatchObject({ requests: 3, total: 1000 });
+    expect(other!.windows["7d"]).toMatchObject({ requests: 1, total: 5 });
+  });
+
   it("group days in UTC, oldest first, with none for a quiet day", () => {
     const { store } = open();
     store.record(entry(Date.UTC(2026, 9, 18, 23, 59, 59)));

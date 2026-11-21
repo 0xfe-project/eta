@@ -495,6 +495,10 @@ export function Workspace(props: {
             newAgent.set(false);
             showSettings("Model services");
           }}
+          onRuntimes={() => {
+            newAgent.set(false);
+            showSettings("Runtimes");
+          }}
         />
       </If>
       <If when={newTask()}>

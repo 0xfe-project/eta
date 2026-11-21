@@ -2,9 +2,10 @@ import type { AgentRuntimeInfo } from "@eta/client-contracts";
 import type { UseFormReturn } from "react-hook-form";
 import type { AgentForm } from "./agent-form";
 import type { Model } from "@/queries/providers";
+import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useFormState, useWatch } from "react-hook-form";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,8 +13,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatLocale } from "@/lib/i18n";
 import { FALLBACK_LEVELS, levelSupport } from "@/lib/thinking";
 import { usePersonas } from "@/queries/personas";
+import { wireErrorMessage } from "@/queries/wire";
 import { DESCRIPTION_MAX } from "./agent-form";
 import { ModelSelect } from "./model-select";
+import { LOGIN_COMMANDS, runtimeReason } from "./runtime-status";
 import { Select, SelectOption } from "./select-field";
 
 type Form = UseFormReturn<AgentForm>;
@@ -71,6 +74,8 @@ export function RuntimeField({
   runtimes,
   note,
   onChange,
+  refresh,
+  onOpenRuntimes,
 }: {
   form: Form;
   /** Undefined while the host looks; null when the machine could not be asked. */
@@ -78,14 +83,28 @@ export function RuntimeField({
   /** Why the runtime is not the one that was chosen. */
   note?: string | undefined;
   onChange?: (() => void) | undefined;
+  /** Ask the machine's runtimes again, past the host's cache. */
+  refresh?: { run: () => void; pending: boolean; error: Error | null };
+  /** Leave for the runtimes page, where a runtime's sign-in is shown; the link is not shown without it. */
+  onOpenRuntimes?: (() => void) | undefined;
 }) {
   const { t: translateText } = useTranslation(["agents", "common"] as const);
   const value = useWatch({ control: form.control, name: "runtime" });
   const listed =
     value === "eta" || (runtimes ?? []).some((runtime) => runtime.id === value);
+  // The runtimes that cannot be picked and said why in their own words.
+  const explained = (runtimes ?? []).filter(
+    (runtime) => runtime.status !== "available" && runtime.detail,
+  );
+  const chosen = (runtimes ?? []).find((runtime) => runtime.id === value);
+  const signIn =
+    chosen?.status === "unauthenticated"
+      ? LOGIN_COMMANDS[chosen.id]
+      : undefined;
   const hints = [
     runtimes === null ? "agent-runtime-hint" : null,
     note ? "agent-runtime-note" : null,
+    signIn === undefined ? null : "agent-runtime-sign-in",
   ].filter(Boolean);
   return (
     <div className="space-y-1.5">
@@ -130,15 +149,11 @@ export function RuntimeField({
                 }
               >
                 {runtime.label}
-                {runtime.status === "available"
+                {runtimeReason(runtime) === undefined
                   ? ""
-                  : translateText(`agents:runtime.status.${runtime.status}`)}
-                {/* Why it cannot be picked, in the runtime's own words: a sign-in, a path. */}
-                {runtime.status !== "available" && runtime.detail ? (
-                  <span className="block text-xs text-muted-foreground">
-                    {runtime.detail}
-                  </span>
-                ) : null}
+                  : translateText(
+                      `agents:runtime.status.${runtimeReason(runtime)!}`,
+                    )}
               </SelectOption>
             ))}
           </>
@@ -147,6 +162,80 @@ export function RuntimeField({
       {runtimes === null ? (
         <p id="agent-runtime-hint" className="text-xs text-muted-foreground">
           {translateText("agents:runtime.unreachable")}
+        </p>
+      ) : null}
+      {signIn === undefined ? null : (
+        <p id="agent-runtime-sign-in" className="text-xs text-state-warning">
+          <Trans
+            t={translateText}
+            i18nKey="agents:runtime.signIn"
+            values={{ runtime: chosen!.label, command: signIn }}
+            components={{ code: <code className="font-mono" /> }}
+          />
+          {onOpenRuntimes === undefined ? null : (
+            <>
+              {" "}
+              <Link
+                to="/runtimes"
+                className="underline underline-offset-2"
+                onClick={(event) => {
+                  if (
+                    !event.defaultPrevented &&
+                    !event.metaKey &&
+                    !event.ctrlKey &&
+                    !event.shiftKey &&
+                    !event.altKey &&
+                    event.button === 0
+                  )
+                    onOpenRuntimes();
+                }}
+              >
+                {translateText("agents:runtime.openRuntimes")}
+              </Link>
+            </>
+          )}
+        </p>
+      )}
+      {explained.length === 0 && runtimes !== null ? null : (
+        <div className="flex items-start gap-2 text-xs text-muted-foreground">
+          {explained.length === 0 ? (
+            <span className="flex-1" />
+          ) : (
+            <details className="min-w-0 flex-1">
+              <summary className="cursor-default select-none">
+                {translateText("agents:runtime.details")}
+              </summary>
+              <dl className="mt-1 space-y-1">
+                {explained.map((runtime) => (
+                  <div key={runtime.id}>
+                    <dt className="font-medium">{runtime.label}</dt>
+                    <dd className="font-mono break-words whitespace-pre-wrap">
+                      {runtime.detail}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
+          )}
+          {refresh === undefined ? null : (
+            <Button
+              type="button"
+              variant="link"
+              size="xs"
+              className="h-auto px-0"
+              disabled={refresh.pending}
+              onClick={refresh.run}
+            >
+              {refresh.pending
+                ? translateText("agents:runtime.retrying")
+                : translateText("common:actions.retry")}
+            </Button>
+          )}
+        </div>
+      )}
+      {refresh?.error ? (
+        <p role="alert" className="text-xs text-destructive">
+          {wireErrorMessage(refresh.error)}
         </p>
       ) : null}
       {note ? (

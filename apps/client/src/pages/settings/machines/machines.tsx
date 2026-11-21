@@ -2,7 +2,6 @@ import type { MachineView } from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
 import type { Layout } from "../../../components";
 import { Scroll, signal, View } from "nsh";
-import { MenuSeparator } from "nsh/base";
 import {
   ActionItem,
   ActionMenu,
@@ -15,6 +14,7 @@ import {
   Modal,
   row,
 } from "../../../components";
+import { MenuRule } from "../../../components/menu";
 import { StatusDot } from "../../../components/status-dot";
 import { uiText, useText } from "../../../i18n";
 import { relativeTime, useHost } from "../../../services/host";
@@ -204,7 +204,7 @@ function MachineRow(props: {
                 />
               </If>
               <If when={props.item.kind !== "primary"}>
-                <MenuSeparator
+                <MenuRule
                   style={{
                     height: 1,
                     marginVertical: 4,

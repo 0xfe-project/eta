@@ -1,5 +1,6 @@
 import type {
   AgentRuntime,
+  AgentRuntimeAccount,
   AgentRuntimeInfo,
   AgentView,
   ThinkingLevel,
@@ -60,6 +61,14 @@ export interface AgentsDeps {
   /** The external runtimes of a daemon machine, asked over its link (which has to be up). */
   machineRuntimes?:
     | ((machineId: string, fresh: boolean) => Promise<AgentRuntimeInfo[]>)
+    | undefined;
+  /** A runtime's sign-in and plan usage on this host; undefined for a runtime it does not have. */
+  runtimeAccount?:
+    | ((runtime: string) => Promise<AgentRuntimeAccount | undefined>)
+    | undefined;
+  /** The same on a daemon machine, asked over its link. */
+  machineRuntimeAccount?:
+    | ((machineId: string, runtime: string) => Promise<AgentRuntimeAccount>)
     | undefined;
   /** Append prompt history for user edits as well as Captain edits. */
   capturePrompt?: AgentCreateDeps["capturePrompt"];
@@ -225,6 +234,32 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
           return {
             result: {
               runtimes: await deps.machineRuntimes(machine.id, fresh),
+            },
+          };
+        }),
+
+        wire.handle("agents", "runtimeAccount", async (call) => {
+          const args = new Args(call);
+          const runtime = args.string("runtime");
+          const machineId = args.optionalString("machineId");
+          const machine =
+            machineId === undefined ? undefined : machines.get(machineId);
+          if (machineId !== undefined && machine === undefined)
+            throw new Error(`no such machine: ${machineId}`);
+          if (machine === undefined || machine.kind === "primary") {
+            const account = await deps.runtimeAccount?.(runtime);
+            if (account === undefined)
+              throw new Error(`no such runtime here: ${runtime}`);
+            return { result: { account } };
+          }
+          if (
+            machine.status !== "online" ||
+            deps.machineRuntimeAccount === undefined
+          )
+            throw new Error(`${machine.name} is not online`);
+          return {
+            result: {
+              account: await deps.machineRuntimeAccount(machine.id, runtime),
             },
           };
         }),

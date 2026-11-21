@@ -29,10 +29,6 @@ import { Message } from "./message";
 import { questionRowIndex } from "./question-row";
 import {
   animateFollow,
-  atBottom,
-  bottomThreshold,
-  distanceFromEnd,
-  followNewRows,
   wheelDistance,
   wheelIsNotch,
   wheelTarget,
@@ -91,9 +87,6 @@ export function ConversationTimeline(props: {
       : undefined;
   };
   const actions = new Map<string, () => void>();
-  // Whether the reader is at the end of the transcript, from its scroll events.
-  let pinned = true;
-  let seen: string[] = [];
   // On Windows the wheel scrolls the list itself, so mouse notches can glide;
   // elsewhere the system already scrolls smoothly and the list keeps it.
   // No scroll event yet: the end is not known, and the list clamps to it.
@@ -114,18 +107,6 @@ export function ConversationTimeline(props: {
     wheel = { aim: glide ? target : undefined, last: now };
     transcriptList?.scrollToOffset({ offset: target, animated: glide });
   }
-  // Elsewhere the list follows new rows on its own
-  // (`autoscrollToBottomThreshold`).
-  if (onWindows)
-    effect(() => {
-      const ids = props.rows.map((row) => row.id);
-      const previous = seen;
-      seen = ids;
-      if (followNewRows(previous, ids, pinned))
-        transcriptList?.scrollToEnd({
-          animated: animateFollow(reduceMotion()),
-        });
-    });
   props.revealer?.((replyId) => {
     const index = questionRowIndex(props.rows, replyId);
     if (index !== undefined)
@@ -258,15 +239,11 @@ export function ConversationTimeline(props: {
           keyExtractor={(message) => message.id}
           initialScrollAtEnd
           estimatedItemSize={134}
-          maintainVisibleContentPosition={{
-            autoscrollToBottomThreshold: bottomThreshold,
-          }}
           scrollbar={false}
           scrollEventThrottle={onWindows ? 16 : undefined}
           onScroll={
             onWindows
               ? (event) => {
-                  pinned = atBottom(distanceFromEnd(event));
                   scrolled = {
                     offset: event.offset.y,
                     max: event.contentSize.height - event.size.height,
