@@ -396,7 +396,8 @@ export function ActionItem(props: {
     >
       <Label
         variant={props.roomy ? "body" : "small"}
-        tone={props.tone}
+        // One that cannot be chosen reads as such, as a native menu draws it.
+        tone={props.disabled ? "muted" : props.tone}
         style={{ flex: 1 }}
       >
         {props.label}
