@@ -80,7 +80,7 @@ export function ConversationPanel(props: {
   onCloseTask: () => void;
   onCloseDrawer: () => void;
   onRoutines: (id?: string) => void;
-  onArtifact: (artifact: ArtifactView) => void;
+  onArtifact: (artifact: ArtifactView, version?: number) => void;
   reloadArtifacts: () => void;
 }) {
   const host = useHost();
@@ -194,6 +194,7 @@ export function ConversationPanel(props: {
               layout={props.layout}
               onClose={props.onCloseTask}
               onTask={props.onRelatedTask}
+              onArtifact={props.onArtifact}
             />
           )}
         </If>

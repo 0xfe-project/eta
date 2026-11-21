@@ -433,6 +433,10 @@ function DesktopOverview(props: {
             runs={item().runs}
             createdBy={item().createdBy}
             onLog={(run) => props.state.log.set(run)}
+            onTask={props.onTask}
+            onArtifact={(artifact, version) =>
+              props.state.artifact.set({ artifact, version })
+            }
           />
           <RunLine item={item()} state={props.state} />
           <TaskCommentBox state={props.state} />
@@ -798,6 +802,10 @@ export function TaskOverview(props: {
                 runs={item().runs}
                 createdBy={item().createdBy}
                 onLog={(run) => log.set(run)}
+                onTask={props.onTask}
+                onArtifact={(artifact, version) =>
+                  props.state.artifact.set({ artifact, version })
+                }
               />
               <If when={!phone()}>
                 <TaskCommentBox state={props.state} />

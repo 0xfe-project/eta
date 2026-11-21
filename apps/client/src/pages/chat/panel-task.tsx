@@ -1,4 +1,4 @@
-import type { TaskDependencyView } from "@eta/client-contracts";
+import type { ArtifactView, TaskDependencyView } from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
 import type { Layout } from "../../components";
 import { Scroll, signal, View } from "nsh";
@@ -42,6 +42,8 @@ export function PanelTask(props: {
   layout: Layout;
   onClose: () => void;
   onTask: (id: string) => void;
+  /** The conversation's preview, which the timeline's artifacts open in. */
+  onArtifact: (artifact: ArtifactView, version?: number) => void;
 }) {
   const c = colors();
   const type = textFaces();
@@ -221,6 +223,8 @@ export function PanelTask(props: {
                   createdBy={item().createdBy}
                   gap={15}
                   onLog={(entry) => log.set(entry)}
+                  onTask={props.onTask}
+                  onArtifact={props.onArtifact}
                 />
               </View>
               {/* A thread opens on its latest reply, next to the box to answer it, as on the web. */}

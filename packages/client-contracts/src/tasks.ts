@@ -315,6 +315,8 @@ export interface TaskDependencyEntry {
     | "unblocked";
   /** The task at the other end; absent for `unblocked`. */
   number: number | null;
+  /** Its id; null for `unblocked`, and for an entry written before the host kept it. */
+  taskId: string | null;
   title: string;
   requireDone: boolean;
 }
@@ -340,6 +342,7 @@ export function dependencyEntry(
   return {
     action: action as TaskDependencyEntry["action"],
     number,
+    taskId: typeof data.taskId === "string" ? data.taskId : null,
     title: typeof data.title === "string" ? data.title : "",
     requireDone: data.requireDone === true,
   };
@@ -348,14 +351,20 @@ export function dependencyEntry(
 /** A task at the other end of a graph entry, as the entry names it. */
 export interface TaskEntryRef {
   number: number;
+  /** Its id; null for an entry written before the host kept it, which only names the number. */
+  taskId: string | null;
   title: string;
 }
 
 const entryRef = (value: unknown): TaskEntryRef | null => {
   if (typeof value !== "object" || value === null) return null;
-  const { number, title } = value as Record<string, unknown>;
+  const { number, taskId, title } = value as Record<string, unknown>;
   return typeof number === "number"
-    ? { number, title: typeof title === "string" ? title : "" }
+    ? {
+        number,
+        taskId: typeof taskId === "string" ? taskId : null,
+        title: typeof title === "string" ? title : "",
+      }
     : null;
 };
 

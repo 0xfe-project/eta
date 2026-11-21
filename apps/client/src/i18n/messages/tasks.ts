@@ -191,6 +191,12 @@ export const tasksMessages = {
     "published artifact “{{title}}”",
     "发布了产物「{{title}}」",
   ],
+  activityOpenArtifact: ["Open artifact “{{title}}”", "打开产物「{{title}}」"],
+  activityOpenTask: [
+    "Open task #{{number}} “{{title}}”",
+    "打开任务 #{{number}}「{{title}}」",
+  ],
+  activityArtifactDeleted: ["(deleted)", "（已删除）"],
   activityConversation: ["linked a conversation", "关联了对话"],
   activityConversationRemoved: ["unlinked the conversation", "取消了对话关联"],
   activityDescription: ["edited the description", "编辑了描述"],
