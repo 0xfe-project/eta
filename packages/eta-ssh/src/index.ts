@@ -5,7 +5,14 @@
  * (see packages/TOBEREFR/TODO.md). Task worktrees, project files and remote machines still
  * use the transport to run `sh` on the right host.
  */
-export { LocalTransport, type LocalTransportOptions } from "./local-transport";
+export {
+  LocalTransport,
+  type LocalTransportOptions,
+  localWindowsProbe,
+  windowsChildEnv,
+  windowsShell,
+  type WindowsShellProbe,
+} from "./local-transport";
 export {
   hostKeyFingerprint,
   shellQuote,

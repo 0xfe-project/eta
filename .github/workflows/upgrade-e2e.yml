@@ -22,36 +22,57 @@
 # For #144, for example, they were 43801834485 (Linux), 43802029578 (macOS) and 43802032299
 # (Windows), on f47b4176.
 #
-# It runs for what can break it, and by hand (workflow_dispatch) on any branch.
+# It runs by hand (workflow_dispatch) on any branch, and otherwise when a changed file matches
+# `on_pr` (a pull request: the upgrade and the client files it goes through) or `on_main` (a merge
+# to main: the rest of the client).
 name: Upgrade end to end
 
 on:
   pull_request:
-    paths:
-      - .github/workflows/upgrade-e2e.yml
-      - apps/daemon/src/service*.ts
-      - apps/daemon/src/swap.ts
-      - apps/daemon/src/windows-*.ts
-      - apps/eta/src/stop.ts
-      - apps/eta/src/upgrade/**
-      - apps/client/**
-      - scripts/nsh-client.ts
-      - .github/actions/setup-nsh/**
-      - scripts/upgrade-e2e/**
+  push:
+    branches: [main]
   workflow_dispatch:
 
-# A newer push to the same pull request makes the older run's answer moot, and its macOS and
-# Windows legs take over ten minutes. A run started by hand gets a group of its own, so it neither
-# waits for nor cancels another.
+env:
+  on_pr: ^(\.github/(workflows/upgrade-e2e\.yml|actions/setup-nsh/)|apps/daemon/src/(service|swap|windows-)|apps/eta/src/(stop\.ts|upgrade/)|apps/client/src/(pages/settings/updates/|pages/connection/host-restart|services/upgrade-watch|i18n/messages/updates)|scripts/(nsh-client|upgrade-e2e/))
+  on_main: ^(apps/client/|packages/client-[^/]+/src/)
+
+# A newer push to the same pull request, or a newer merge to main, makes the older run's answer
+# moot, and its macOS and Windows legs take over ten minutes. A run started by hand gets a group of
+# its own, so it neither waits for nor cancels another.
 concurrency:
-  group: upgrade-e2e-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  group: upgrade-e2e-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
+  match:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.match.outputs.run }}
+    steps:
+      - id: match
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.number }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          case "$GITHUB_EVENT_NAME" in
+            pull_request) files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename'); pattern=$on_pr ;;
+            push) files=$(gh api "repos/$REPO/compare/$BEFORE...$SHA" --jq '.files[].filename'); pattern=$on_main ;;
+            *) files=; pattern= ;;
+          esac
+          if [ -z "$pattern" ] || grep -Eq "$pattern" <<<"$files"; then run=true; else run=false; fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
   upgrade:
+    needs: match
+    if: needs.match.outputs.run == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -87,7 +108,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: e2e-builds
-          key: upgrade-e2e-${{ matrix.platform }}-${{ hashFiles('bun.lock', 'apps/daemon/src/**', 'apps/eta/scripts/**', 'apps/eta/src/**', 'apps/client/**', 'scripts/nsh-client.ts', '.github/actions/setup-nsh/action.yml', 'scripts/upgrade-e2e/build.ts') }}
+          key: upgrade-e2e-${{ matrix.platform }}-${{ hashFiles('bun.lock', 'apps/daemon/src/**', 'apps/eta/scripts/**', 'apps/eta/src/**', 'apps/client/**', 'packages/client-contracts/src/**', 'packages/client-wire-proto/src/**', 'scripts/nsh-client.ts', '.github/actions/setup-nsh/action.yml', 'scripts/upgrade-e2e/build.ts') }}
 
       - uses: ./.github/actions/setup-nsh
         if: steps.builds.outputs.cache-hit != 'true'

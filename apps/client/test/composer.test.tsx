@@ -138,6 +138,17 @@ test("phone task completion accepts Enter and Shift+Enter keeps a second line in
   );
 });
 
+test("pasted short text is added to the draft and the caret follows it", async () => {
+  const app = await fixture();
+  // The test keyboard's arrow keys do not move the input's caret, so a paste in the middle of
+  // the draft cannot be set up here; this covers the caret after the pasted text.
+  await app.type(input, "ac");
+  await app.paste(input, { text: "xyz" });
+  expect(app.value(input)).toBe("acxyz");
+  await app.paste(input, { text: "!" });
+  expect(app.value(input)).toBe("acxyz!");
+});
+
 test("a paste beyond the message limit is attached as a text file", async () => {
   const app = await fixture();
   await app.paste(input, { text: "x".repeat(100001) });

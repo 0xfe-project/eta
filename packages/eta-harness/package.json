@@ -21,6 +21,7 @@
   "dependencies": {
     "@earendil-works/pi-ai": "0.85.1",
     "@eta/core": "*",
+    "@eta/ssh": "*",
     "cordis": "4.0.0-rc.10",
     "ignore": "7.0.10",
     "ripgrep": "^0.3.1",

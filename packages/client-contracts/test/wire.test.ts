@@ -6,7 +6,12 @@
 import type { ClientFrame } from "@eta/client-wire-proto";
 import type { WireSocketEvents, WireState } from "../src/wire";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { initialWireState, Wire, WireError } from "../src/wire";
+import {
+  initialWireState,
+  wakeOnPageEvents,
+  Wire,
+  WireError,
+} from "../src/wire";
 
 class Socket {
   readonly sent: ClientFrame[] = [];
@@ -31,11 +36,15 @@ class Socket {
   }
 }
 
-const hello = (state: Record<string, object> = {}) => ({
+const hello = (
+  state: Record<string, object> = {},
+  extra: { heartbeat?: true } = {},
+) => ({
   type: "hello",
   ops: [{ name: "a.go", target: "a", action: "go" }],
   mounted: [],
   state,
+  ...extra,
 });
 
 const snapshot = (value: unknown, revision = "1") => ({
@@ -43,7 +52,9 @@ const snapshot = (value: unknown, revision = "1") => ({
   revisions: { s: revision },
 });
 
-function setup() {
+function setup(
+  timing: { heartbeatMs?: number; heartbeatTimeoutMs?: number } = {},
+) {
   let state = initialWireState();
   const store = {
     getState: () => state,
@@ -62,6 +73,7 @@ function setup() {
     store,
     initialRetryMs: 100,
     maxRetryMs: 400,
+    ...timing,
     open: (events) => {
       const socket = new Socket(events);
       sockets.push(socket);
@@ -252,5 +264,144 @@ describe("hello", () => {
     last().receive(hello({ settings: snapshot("c", "3") }));
     expect(state().missing).toEqual({});
     expect(state().targets.settings?.sections.s).toBe("c");
+  });
+});
+
+const pings = (socket: Socket) =>
+  socket.sent.filter((frame) => frame.op === "ping").length;
+
+describe("the heartbeat", () => {
+  function greeted() {
+    const world = setup({ heartbeatMs: 1_000, heartbeatTimeoutMs: 500 });
+    world.last().events.open();
+    world.last().receive(hello({}, { heartbeat: true }));
+    return world;
+  }
+
+  it("pings a host that answers pings, and an answer keeps the connection", () => {
+    const { sockets, last, state } = greeted();
+    vi.advanceTimersByTime(1_000);
+    expect(pings(last())).toBe(1);
+    last().receive({ type: "pong" });
+    vi.advanceTimersByTime(1_000);
+    expect(pings(last())).toBe(2);
+    // Any frame is an answer, not only a pong.
+    vi.advanceTimersByTime(400);
+    last().receive({ type: "event", target: "a", name: "x", data: null });
+    vi.advanceTimersByTime(600);
+    expect(pings(last())).toBe(3);
+    expect(state().status).toBe("open");
+    expect(sockets).toHaveLength(1);
+  });
+
+  it("counts a connection that stops answering as dropped, and reconnects", async () => {
+    const { wire, sockets, last, state, seen } = greeted();
+    const socket = last();
+    const waiting = wire.call("a", "go").catch((error: unknown) => error);
+    vi.advanceTimersByTime(1_000);
+    expect(pings(socket)).toBe(1);
+    vi.advanceTimersByTime(499);
+    expect(state().status).toBe("open");
+    vi.advanceTimersByTime(1);
+    expect(state().status).toBe("reconnecting");
+    expect(socket.closed).toBe(true);
+    expect(seen.at(-1)).toBe("dropped");
+    // The call it was waiting on is rejected, not sent again.
+    expect(await waiting).toMatchObject({ code: "disconnected" });
+    // Its late close changes nothing.
+    socket.events.close();
+    vi.advanceTimersByTime(100);
+    expect(sockets).toHaveLength(2);
+    expect(last().sent.filter((frame) => frame.op === "call")).toEqual([]);
+  });
+
+  it("never pings a host whose hello does not offer it, so its silence is no drop", () => {
+    const { sockets, last, state } = setup({
+      heartbeatMs: 1_000,
+      heartbeatTimeoutMs: 500,
+    });
+    last().events.open();
+    last().receive(hello());
+    vi.advanceTimersByTime(60_000);
+    expect(pings(last())).toBe(0);
+    expect(state().status).toBe("open");
+    expect(sockets).toHaveLength(1);
+  });
+});
+
+describe("an attempt that never hears hello", () => {
+  it("is given up on and retried", () => {
+    const { sockets, last, state, seen } = setup({ heartbeatTimeoutMs: 500 });
+    const stuck = last();
+    stuck.events.open();
+    vi.advanceTimersByTime(499);
+    expect(sockets).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(stuck.closed).toBe(true);
+    expect(state().status).toBe("reconnecting");
+    expect(seen).toEqual(["failed"]);
+    vi.advanceTimersByTime(100);
+    expect(sockets).toHaveLength(2);
+    last().receive(hello());
+    vi.advanceTimersByTime(60_000);
+    expect(state().status).toBe("open");
+  });
+});
+
+describe("waking", () => {
+  it("reconnects at once instead of waiting out a long pause", () => {
+    const { wire, sockets, last } = setup();
+    // In the background: every attempt fails, and the pause grows to its cap.
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const before = sockets.length;
+      last().events.close();
+      while (sockets.length === before) vi.advanceTimersByTime(50);
+    }
+    last().events.close();
+    const before = sockets.length;
+    wire.wake();
+    expect(sockets).toHaveLength(before + 1);
+    // And the pause starts over from the first one.
+    last().events.close();
+    vi.advanceTimersByTime(100);
+    expect(sockets).toHaveLength(before + 2);
+  });
+
+  it("checks a connection that looks open at once, and replaces it when nobody answers", () => {
+    const { wire, sockets, last, state } = setup({
+      heartbeatMs: 15_000,
+      heartbeatTimeoutMs: 500,
+    });
+    last().events.open();
+    last().receive(hello({}, { heartbeat: true }));
+    wire.wake();
+    expect(pings(last())).toBe(1);
+    vi.advanceTimersByTime(500);
+    expect(state().status).toBe("reconnecting");
+    vi.advanceTimersByTime(100);
+    expect(sockets).toHaveLength(2);
+  });
+
+  it("follows a page: visible again, or online", () => {
+    const listeners = new Map<string, () => void>();
+    const source = {
+      addEventListener: (type: string, listener: () => void) =>
+        listeners.set(type, listener),
+      removeEventListener: (type: string) => listeners.delete(type),
+    };
+    const document = { ...source, visibilityState: "hidden" };
+    let woken = 0;
+    const stop = wakeOnPageEvents(
+      { wake: () => (woken += 1) },
+      { window: source, document },
+    );
+    listeners.get("visibilitychange")!();
+    expect(woken).toBe(0);
+    document.visibilityState = "visible";
+    listeners.get("visibilitychange")!();
+    listeners.get("online")!();
+    expect(woken).toBe(2);
+    stop();
+    expect(listeners.size).toBe(0);
   });
 });
