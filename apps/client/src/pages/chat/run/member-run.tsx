@@ -14,7 +14,7 @@ import { AgentFace } from "../../../components/agent-face";
 import { CloseButton } from "../../../components/navigation-buttons";
 import { StatusDot } from "../../../components/status-dot";
 import { formatLocale, uiText } from "../../../i18n";
-import { clock, follow, useHost } from "../../../services/host";
+import { clock, followSession, useHost } from "../../../services/host";
 import { activeReply } from "../member-status";
 import {
   replyRun,
@@ -95,7 +95,7 @@ export function MemberRun(props: {
   const now = signal(Date.now());
   const refs = new Map<string, ViewRef>();
   const target = props.session ? `sessions.${props.session}` : "";
-  follow(() => target || undefined);
+  followSession(() => props.session ?? undefined);
   const transcript = () =>
     host.section<TranscriptSection>(target, "transcript");
   const core = () => host.section<ViewCore>(target, "core");
