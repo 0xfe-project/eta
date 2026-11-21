@@ -56,6 +56,11 @@ export function ConversationTimeline(props: {
   rail?: boolean;
   onPageOlder: () => void;
   onInsert: (message: MessageView) => void;
+  /**
+   * Whether words put into these agents' turns reach them mid-turn: not when every one says its
+   * runtime cannot take them (they would only wait for the turn's end). Every turn can when absent.
+   */
+  canSteer?: (agentIds: string[]) => boolean;
   /** The user message whose insert popover is open. */
   insertingId?: string;
   onInsertClose: () => void;
@@ -288,7 +293,9 @@ export function ConversationTimeline(props: {
                 additions={props.additions.get(message().id) ?? []}
                 canInsert={
                   host.state().status === "open" &&
-                  props.recipients.has(message().id)
+                  props.recipients.has(message().id) &&
+                  (props.canSteer?.(props.recipients.get(message().id) ?? []) ??
+                    true)
                 }
                 onInsert={() => props.onInsert(message())}
                 inserting={props.insertingId === message().id}

@@ -28,6 +28,7 @@ import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { CaptainFace } from "../../navigation/captain";
 import { follow, useHost } from "../../services/host";
+import { capabilitiesOf, noneTakes } from "../../services/runtime-capabilities";
 import { PendingStrip } from "./approvals";
 import { defaultFilters } from "./artifacts/filter";
 import { ArtifactPreview } from "./artifacts/preview";
@@ -389,6 +390,19 @@ export function Conversation(props: {
               rail={props.rail}
               onPending={props.onPending}
               onPageOlder={() => void history()}
+              canSteer={(agentIds) =>
+                !noneTakes(
+                  agentIds.map((agentId) =>
+                    capabilitiesOf(host, agentId, {
+                      member: members().find(
+                        (member) => member.agentId === agentId,
+                      ),
+                      machineId: project()?.machineId,
+                    }),
+                  ),
+                  "steer",
+                )
+              }
               onInsert={(message) => {
                 lateInsert.set(false);
                 inserting.set({
@@ -461,6 +475,7 @@ export function Conversation(props: {
             steward={stewardId()}
             group={group()}
             projectId={project()?.id}
+            machineId={project()?.machineId}
             blocked={
               (info()?.archived ?? summary()?.archived)
                 ? "archived"

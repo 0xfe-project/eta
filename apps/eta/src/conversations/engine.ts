@@ -1,4 +1,5 @@
 import type {
+  AgentRuntimeCapabilities,
   MessageStatus,
   MessageView,
   PromptImage,
@@ -179,6 +180,8 @@ export class Engine {
   readonly #shell: EngineOptions["shell"];
   readonly #models: EngineOptions["models"];
   readonly #changed: EngineOptions["changed"];
+  /** What each session's external runtime takes, by session id (`capabilitiesOf`). */
+  readonly #capabilities = new Map<string, AgentRuntimeCapabilities>();
   readonly #warn: (message: string) => void;
   readonly #hooks: RunHooks;
   readonly #local: LocalPlace;
@@ -1298,6 +1301,7 @@ export class Engine {
     } catch (error) {
       return fail("unavailable", explainRunError(messageOf(error)));
     }
+    this.#learn(conversation.id, handle);
     // A stop that arrived while the session was being made.
     if (this.#timeline.get(replyId)?.status !== "queued") return;
     // A run whose reply was stopped without it may still be going on this session. It was told to
@@ -1420,6 +1424,8 @@ export class Engine {
       clearTimeout(running.deadline);
       if (this.#running.get(key) === running) this.#running.delete(key);
       this.#changed([conversationId]);
+      // The run opened the runtime's session: its own answer may say more than the declaration.
+      this.#learn(conversationId, handle);
       this.#afterRun(info);
     }
   }
@@ -1539,9 +1545,38 @@ export class Engine {
     return this.#shell(machine);
   }
 
+  /**
+   * What a session's external runtime takes, as last heard (`#learn`): what the conversation's
+   * members say to a client. Undefined before the session was in hand, and on eta's own loop.
+   */
+  capabilitiesOf(sessionId: string): AgentRuntimeCapabilities | undefined {
+    return this.#capabilities.get(sessionId);
+  }
+
+  /** Hear again what a session takes; a change is pushed to the conversation's members. */
+  #learn(conversationId: string, handle: SessionHandle): void {
+    void handle.capabilities().then(
+      (capabilities) => {
+        const known = this.#capabilities.get(handle.id);
+        if (JSON.stringify(known) === JSON.stringify(capabilities)) return;
+        if (capabilities === undefined) this.#capabilities.delete(handle.id);
+        else this.#capabilities.set(handle.id, capabilities);
+        this.#changed([conversationId]);
+      },
+      (error: unknown) =>
+        this.#warn(
+          `[eta] could not ask ${handle.id} what it takes: ${messageOf(error)}`,
+        ),
+    );
+  }
+
   /** Whether the session's model accepts images; when that cannot be told, no images are sent. */
   async #takesImages(handle: SessionHandle): Promise<boolean> {
     try {
+      // An external runtime says itself: its open session's answer, or before one is open, what
+      // the runtime declares for its installation. Its models are not in eta's table.
+      const images = (await handle.capabilities())?.images;
+      if (images !== undefined) return images;
       const id = await handle.model();
       if (id === undefined) return false;
       const { provider, modelId } = parseModelId(id);

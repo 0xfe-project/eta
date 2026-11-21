@@ -147,6 +147,12 @@ export interface MemberView {
   status: MemberStatus;
   /** The one reply currently running in this conversation, when it can be stopped individually. */
   activeReplyId?: string;
+  /**
+   * What the member's session takes, by its external runtime's own answer once the host has had
+   * the session in hand; absent before that, and for a session on eta's own loop. Comes before
+   * what the runtime declares for a session not open yet (`AgentRuntimeInfo.capabilities`).
+   */
+  capabilities?: AgentRuntimeCapabilities;
 }
 
 /** One row of the conversation list. */
@@ -377,6 +383,31 @@ export interface AgentRuntimeModel {
   efforts: string[];
 }
 
+/**
+ * What a session on a runtime would take, known before one is open: what a client lays its
+ * controls out by. A part that is absent is not known (only an open session could say), which is
+ * not the same as "no": a client hides a control only for an explicit `false` or refusal. Once a
+ * session is open, the host goes by that session's own answer.
+ */
+export interface AgentRuntimeCapabilities {
+  /**
+   * Words sent while a turn runs reach that turn (`true`), or wait for it to end and open the next
+   * one (`false`).
+   */
+  steer?: boolean;
+  /** Images reach the model as images; without, the agent is given their paths. */
+  images?: boolean;
+  /**
+   * Session options this runtime turns down, in oar's names (`mcpServers`, `appendSystemPrompt`,
+   * `launchArgs`, ...), each with the runtime's reason.
+   */
+  refused?: Partial<Record<string, string>>;
+  /** Whether it compacts its context on demand (`/compact`). */
+  compact?: boolean;
+  /** Whether its own automatic compaction says when it starts and ends. */
+  compactionEvents?: { started: boolean; ended: boolean };
+}
+
 /** An external runtime, as a machine has it. */
 export interface AgentRuntimeInfo {
   /** `claude`, `codex`, ... or `acp.<id>`. */
@@ -387,6 +418,8 @@ export interface AgentRuntimeInfo {
   version?: string;
   detail?: string;
   models: AgentRuntimeModel[];
+  /** What a session on it would take; absent when it is not installed, or from an older host. */
+  capabilities?: AgentRuntimeCapabilities;
 }
 
 /**
@@ -457,7 +490,15 @@ export interface AgentArgs {
    * The external runtimes a machine has, with their models: the primary's, or `machineId`'s (which
    * has to be online to be asked). `fresh` asks the runtimes again.
    */
-  runtimes: { fresh?: boolean; machineId?: string };
+  runtimes: {
+    fresh?: boolean;
+    machineId?: string;
+    /**
+     * Only these runtimes (`claude`, `acp.<id>`, ...): the others are neither asked nor loaded.
+     * Every one when absent.
+     */
+    runtimes?: string[];
+  };
   /** A built-in runtime's sign-in and plan usage on the primary or `machineId` (online). */
   runtimeAccount: { runtime: string; machineId?: string };
 }

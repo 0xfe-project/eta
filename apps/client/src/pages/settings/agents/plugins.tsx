@@ -15,7 +15,10 @@ import {
 } from "../section";
 
 export function AgentPlugins(props: { form: AgentForm }) {
-  const { plugins, phoneEditor } = props.form;
+  const { plugins, phoneEditor, external, runtimeLabel, runtime } = props.form;
+  /** The runtime says it takes no MCP servers: a plugin's servers never reach this agent. */
+  const noServers = () =>
+    external()?.capabilities?.refused?.mcpServers !== undefined;
   const host = useHost();
   const c = colors();
   const activePlugins = () => host.list<PluginView>("plugins");
@@ -67,6 +70,16 @@ export function AgentPlugins(props: { form: AgentForm }) {
           count={activePlugins().length}
           description={uiText("pluginsHint")}
         />
+      </If>
+      <If when={noServers()}>
+        <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+          <WarningLine
+            text={localizedText(
+              `${runtimeLabel(runtime())} takes no MCP servers, so this agent gets none of the plugins' servers.`,
+              `${runtimeLabel(runtime())} 不接受 MCP 服务器，这个智能体拿不到插件里的服务器。`,
+            )}
+          />
+        </View>
       </If>
       <If
         when={activePlugins().length}

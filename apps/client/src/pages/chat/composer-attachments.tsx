@@ -14,6 +14,11 @@ export function composerAttachments(
   store: ReturnType<typeof openComposerDraft>,
   conversationId: string,
   blocked: () => boolean,
+  /**
+   * The recipients that would get an image only as its file path (their runtime says it takes no
+   * images), when every recipient is one: said under the chips.
+   */
+  imagesAsPaths: () => string[] = () => [],
 ) {
   const host = useHost();
   const origin = host.address()?.origin;
@@ -156,6 +161,17 @@ export function composerAttachments(
               )}
             </Each>
           </View>
+        </If>
+        <If
+          when={
+            attachments().some((file) =>
+              file.contentType.startsWith("image/"),
+            ) && imagesAsPaths().length > 0
+          }
+        >
+          <Label variant="caption" tone="muted">
+            {uiText("imagesAsPaths", { names: imagesAsPaths().join(", ") })}
+          </Label>
         </If>
       </>
     );

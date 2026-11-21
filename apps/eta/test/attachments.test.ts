@@ -2,12 +2,17 @@
  * Files attached to a message: uploaded in chunks over the wire, claimed by the message that
  * carries them, and handed to the agent as files it can open, wherever its session runs.
  */
+import type { Runtime } from "@botiverse/oar";
+import type { ScriptedTurn } from "@botiverse/oar/testing";
 import type { AttachmentView, SendResult } from "@eta/client-contracts";
 import type { World } from "./support/world";
 import { Buffer } from "node:buffer";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { createRuntimeRegistry } from "@botiverse/oar";
+import { scriptedRuntime } from "@botiverse/oar/testing";
+import { createOarRuntimes } from "@eta/runtime-oar";
 import { afterEach, describe, expect, it } from "vitest";
 import { tempDir } from "./support/host";
 import { say, scriptedModels } from "./support/models";
@@ -294,6 +299,59 @@ describe("images", () => {
     await w.settled(group.id, sent.replies[0]!.id);
     expect(requests[0]!.images).toBe(0);
     expect(requests[0]!.transcript.join("\n")).toContain("pixel.png");
+  });
+});
+
+describe("images to an agent on an external runtime", () => {
+  /** A host whose Claude Code is a script that says whether it takes images. */
+  async function onClaude(images: boolean) {
+    const turns: ScriptedTurn[] = [];
+    const scripted = scriptedRuntime({
+      id: "claude",
+      turn: (turn) => {
+        turns.push(turn);
+        turn.say("seen");
+      },
+    });
+    const runtime: Runtime = {
+      ...scripted,
+      sessionCapabilities: () => ({ steer: true, images }),
+    };
+    const { models } = scriptedModels(() => {
+      throw new Error("an eta model was asked");
+    });
+    const w = await world({
+      models,
+      runtimes: createOarRuntimes({
+        registry: createRuntimeRegistry([runtime]),
+      }),
+    });
+    // Its model is nowhere in eta's own table: only the runtime can say.
+    const agent = await w.agent("Cody", {
+      runtime: "claude",
+      model: "claude:opus",
+    });
+    const project = await w.project();
+    const group = await w.group(project.id, [agent.id]);
+    await w.watch(group.id);
+    const file = await upload(w, group.id, PNG, "pixel.png", "image/png");
+    const sent = await w.send(group.id, "what is this", {
+      attachments: [file.id],
+    });
+    await w.settled(group.id, sent.replies[0]!.id);
+    return turns;
+  }
+
+  it("go as images when the runtime says it takes them", async () => {
+    const turns = await onClaude(true);
+    expect(turns[0]!.images).toHaveLength(1);
+    expect(turns[0]!.input).toContain("pixel.png");
+  });
+
+  it("stay a file when the runtime says it does not", async () => {
+    const turns = await onClaude(false);
+    expect(turns[0]!.images).toHaveLength(0);
+    expect(turns[0]!.input).toContain("pixel.png");
   });
 });
 

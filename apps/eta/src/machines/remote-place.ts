@@ -12,6 +12,7 @@
  * link that dies under any of them fails them as an unknown outcome. Nothing is replayed.
  */
 import type {
+  AgentRuntimeCapabilities,
   DaemonRunEvent,
   PromptImage,
   RunOutcome,
@@ -100,6 +101,11 @@ class RemoteHandle implements SessionHandle {
 
   async model(): Promise<string | undefined> {
     return (await this.#link.machine("config", { session: this.id })).model;
+  }
+
+  async capabilities(): Promise<AgentRuntimeCapabilities | undefined> {
+    return (await this.#link.machine("config", { session: this.id }))
+      .capabilities;
   }
 
   async lastSeq(): Promise<number> {

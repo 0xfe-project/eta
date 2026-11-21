@@ -51,6 +51,7 @@ import {
 
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { capabilitiesOf, noneTakes } from "../../services/runtime-capabilities";
 import { composerAttachments } from "./composer-attachments";
 import { HeldRows, OutboxRows } from "./composer-delivery";
 import { drainOutbox, openComposerDraft } from "./composer-draft";
@@ -66,6 +67,8 @@ export function Composer(props: {
   steward?: string | null;
   group: boolean;
   projectId?: string;
+  /** The machine the project is on: an agent not pinned elsewhere runs there. */
+  machineId?: string;
   tablet: boolean;
   writing: boolean;
   blocked?: "archived" | "empty";
@@ -84,11 +87,6 @@ export function Composer(props: {
   const store = openComposerDraft(origin, conversationId);
   const flush = () => void drainOutbox(store, host, origin, conversationId);
   const { ready, uploading, failedUploads, edit } = store;
-  const { attach, AttachmentChips } = composerAttachments(
-    store,
-    conversationId,
-    () => !!props.blocked,
-  );
   const draft = () => store.value().text;
   const prefix = () => store.value().prefix;
   const parts = () => [...prefix(), ...plainDraft(draft())];
@@ -156,6 +154,23 @@ export function Composer(props: {
           }
         : undefined,
     }),
+  );
+  /** What a member's session takes, as far as it is known. */
+  const capabilities = (agentId: string) =>
+    capabilitiesOf(host, agentId, {
+      member: props.members.find((member) => member.agentId === agentId),
+      machineId: props.machineId,
+    });
+  const { attach, AttachmentChips } = composerAttachments(
+    store,
+    conversationId,
+    () => !!props.blocked,
+    () => {
+      const ids = target().ids;
+      return noneTakes(ids.map(capabilities), "images")
+        ? ids.map((id) => host.agent(id)?.name ?? id)
+        : [];
+    },
   );
   const names = () =>
     target()
@@ -436,6 +451,15 @@ export function Composer(props: {
       <HeldRows
         messages={showHeld() || !props.group ? props.held : []}
         conversationId={conversationId}
+        canSteer={(message) =>
+          !noneTakes(
+            (Array.isArray(message.data.woke)
+              ? (message.data.woke as string[])
+              : []
+            ).map(capabilities),
+            "steer",
+          )
+        }
         onRecall={(text) => {
           prepend(text);
           focusEditor();

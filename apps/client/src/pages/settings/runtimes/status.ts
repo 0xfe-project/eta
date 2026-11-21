@@ -52,12 +52,14 @@ export const RUNTIMES_TIMEOUT_MS = 70_000;
 
 /**
  * A machine's runtimes (`machineId` undefined or null is the primary). `fresh` asks them again
- * past the host's cache, which keeps a failed answer as long as a good one.
+ * past the host's cache, which keeps a failed answer as long as a good one. `only` asks just
+ * those runtimes: the host loads no other.
  */
 export async function askRuntimes(
   host: ReturnType<typeof useHost>,
   machineId: string | null | undefined,
   fresh = false,
+  only?: readonly string[],
 ) {
   const result = await host.call<AgentResults["runtimes"]>(
     "agents",
@@ -65,6 +67,7 @@ export async function askRuntimes(
     {
       ...(fresh ? { fresh: true } : {}),
       ...(machineId ? { machineId } : {}),
+      ...(only ? { runtimes: [...only] } : {}),
     },
     { timeoutMs: RUNTIMES_TIMEOUT_MS },
   );

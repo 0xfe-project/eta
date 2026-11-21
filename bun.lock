@@ -362,6 +362,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@botiverse/oar": "0.128.1",
+        "@eta/client-contracts": "*",
         "@eta/core": "*",
         "@eta/runtime-kit": "*",
         "@eta/server": "*",

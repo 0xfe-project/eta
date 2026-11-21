@@ -13,6 +13,7 @@ import type {
   AgentRuntimeInfo,
   AgentView,
   ArtifactView,
+  MemberView,
   ToolActivity,
 } from "@eta/client-contracts";
 import type { World } from "./support/world";
@@ -143,6 +144,34 @@ describe("an agent's runtime", () => {
     expect(
       runtimes.slice(1).every((runtime) => runtime.status === "error"),
     ).toBe(true);
+  });
+
+  it("says what a session on each would take, and lists only the ones asked for", async () => {
+    const { w } = await onClaude(() => undefined);
+    const { runtimes } = (await w.client.call("agents", "runtimes", {
+      runtimes: ["claude"],
+    })) as { runtimes: AgentRuntimeInfo[] };
+    expect(runtimes).toHaveLength(1);
+    expect(runtimes[0]).toMatchObject({
+      id: "claude",
+      capabilities: { steer: true, images: true },
+    });
+  });
+
+  it("gives a member the capabilities of its session once there is one", async () => {
+    const { w } = await onClaude((turn) => turn.say("hi"));
+    const agent = await w.agent("Cody", { runtime: "claude" });
+    const id = await direct(w, agent);
+    const members = () =>
+      w.client.section<MemberView[]>(`conversations.${id}`, "members") ?? [];
+    expect(members()[0]?.capabilities).toBeUndefined();
+    const sent = await w.send(id, "hello");
+    await w.settled(id, sent.replies[0]!.id);
+    await until(() => members()[0]?.capabilities !== undefined);
+    expect(members()[0]?.capabilities).toMatchObject({
+      steer: true,
+      images: true,
+    });
   });
 });
 

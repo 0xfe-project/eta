@@ -50,6 +50,7 @@ export function AgentGeneral(props: {
     model,
     chooseModel,
     thinking,
+    efforts,
     missingModel,
     noModels,
   } = props.form;
@@ -117,6 +118,13 @@ export function AgentGeneral(props: {
       </If>
     );
   }
+  /** The levels to offer: every one, or the ones the model takes where its runtime says. */
+  const levels = () => {
+    const taken = efforts();
+    return taken === undefined
+      ? thinkingOptions
+      : thinkingOptions.filter((level) => taken.includes(level));
+  };
   /** Why a runtime cannot be picked, in a few words; its own words are under Details. */
   const reasonOf = (id: string) => {
     const info = installed()?.find((item) => item.id === id);
@@ -244,32 +252,35 @@ export function AgentGeneral(props: {
           <ModelSelect value={model()} onChange={chooseModel} />
         </If>
       </EditorRow>
-      <EditorRow
-        label={uiText("thinkingLevel")}
-        stack={stacked()}
-        phone={phoneEditor()}
-      >
-        <ActionMenu
+      {/* A model that takes no effort level has nothing to choose: the row goes. */}
+      <If when={levels().length > 0}>
+        <EditorRow
           label={uiText("thinkingLevel")}
-          value={thinking() ?? uiText("modelDefault")}
-          triggerStyle={selectStyle()}
+          stack={stacked()}
+          phone={phoneEditor()}
         >
-          <ActionItem
-            label={uiText("modelDefault")}
-            checked={!thinking()}
-            onSelect={() => thinking.set(null)}
-          />
-          <Each of={thinkingOptions}>
-            {(option) => (
-              <ActionItem
-                label={option()}
-                checked={thinking() === option()}
-                onSelect={() => thinking.set(option())}
-              />
-            )}
-          </Each>
-        </ActionMenu>
-      </EditorRow>
+          <ActionMenu
+            label={uiText("thinkingLevel")}
+            value={thinking() ?? uiText("modelDefault")}
+            triggerStyle={selectStyle()}
+          >
+            <ActionItem
+              label={uiText("modelDefault")}
+              checked={!thinking()}
+              onSelect={() => thinking.set(null)}
+            />
+            <Each of={levels()}>
+              {(option) => (
+                <ActionItem
+                  label={option()}
+                  checked={thinking() === option()}
+                  onSelect={() => thinking.set(option())}
+                />
+              )}
+            </Each>
+          </ActionMenu>
+        </EditorRow>
+      </If>
       <If when={!creating}>
         <PersonaField form={props.form} />
       </If>
