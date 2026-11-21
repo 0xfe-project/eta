@@ -975,7 +975,14 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
       const before = await hostPid();
       const refused = await eta(["upgrade", "0.9.1", "--wait", "0"]);
       want("exit", refused.code, 1);
+      // On Windows the staged build's trial run had only just exited when the refusal came, and
+      // deleting the file then failed with EBUSY, which was all the command said (#257).
       has("it names what is working", refused.out, "survives");
+      want(
+        "it took the staged build away",
+        readdirSync(DIR).filter((f) => f.includes(".next")),
+        [],
+      );
       want("the same process", await hostPid(), before);
 
       const waiting = eta(["upgrade", "0.9.1"]);
