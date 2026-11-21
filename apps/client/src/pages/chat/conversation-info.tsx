@@ -1,6 +1,7 @@
 import type { ArtifactView, MemberView } from "@eta/client-contracts";
-import type { JSX } from "nsh";
-import { Scroll, View } from "nsh";
+import type { JSX, Signal } from "nsh";
+import type { ArtifactFilters } from "./artifacts/filter";
+import { Scroll, signal, View } from "nsh";
 import {
   Caption,
   colors,
@@ -11,14 +12,22 @@ import {
   row,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
-import { CloseButton } from "../../components/navigation-buttons";
+import { BackButton, CloseButton } from "../../components/navigation-buttons";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskGlyph } from "../tasks/status";
+import {
+  ArtifactBrowser,
+  ViewAllRow,
+} from "./artifacts/conversation-artifacts";
+import { RECENT, recentArtifacts } from "./artifacts/filter";
 import { memberStatus } from "./member-status";
 import { messageTime } from "./message-time";
 
-/** A phone's conversation info sheet: members, tasks and artifacts in one list. */
+/**
+ * A phone's conversation info sheet: members, tasks and the latest artifacts in one list; "View
+ * all" turns the sheet into the group's whole Artifacts list (search, filter, pages).
+ */
 export function PhoneConversationInfo(props: {
   id: string;
   name: string;
@@ -28,9 +37,11 @@ export function PhoneConversationInfo(props: {
   onInspect: (value: { id: string; session: string }) => void;
   onTask: (id: string) => void;
   onArtifact: (artifact: ArtifactView) => void;
+  artifactFilters: Signal<ArtifactFilters>;
 }) {
   const host = useHost();
   const c = colors();
+  const allArtifacts = signal(false);
   const tasks = () =>
     host
       .tasks()
@@ -39,97 +50,153 @@ export function PhoneConversationInfo(props: {
   const artifacts = () =>
     host.artifacts().filter((artifact) => artifact.conversationId === props.id);
   return (
-    <View style={grow}>
-      <View
-        style={{
-          ...row,
-          height: 44,
-          paddingLeft: 16,
-          paddingRight: 8,
-          flexShrink: 0,
-        }}
-      >
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Label size={14} line={18} weight={600} lines={1}>
-            {props.name}
-          </Label>
-          <If when={props.project}>
-            <Label size={10} line={12} tone="muted" lines={1}>
-              {props.project}
+    <If when={!allArtifacts()} else={<AllArtifacts />}>
+      <View style={grow}>
+        <View
+          style={{
+            ...row,
+            height: 44,
+            paddingLeft: 16,
+            paddingRight: 8,
+            flexShrink: 0,
+          }}
+        >
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Label size={14} line={18} weight={600} lines={1}>
+              {props.name}
             </Label>
-          </If>
+            <If when={props.project}>
+              <Label size={10} line={12} tone="muted" lines={1}>
+                {props.project}
+              </Label>
+            </If>
+          </View>
+          <CloseButton size={32} iconSize={16} onPress={props.onClose} />
         </View>
-        <CloseButton size={32} iconSize={16} onPress={props.onClose} />
-      </View>
-      <Scroll style={grow} scrollbar={false}>
-        <Section label={uiText("members")} count={props.members.length} first />
-        <Each of={props.members} key={(member) => member.agentId}>
-          {(member) => (
-            <InfoRow
-              height={52}
-              title={host.agent(member().agentId)?.name ?? uiText("agent")}
-              titleSize={14}
-              detail={memberStatus(member().status)}
-              onPress={
-                member().sessionId
-                  ? () =>
-                      props.onInspect({
-                        id: member().agentId,
-                        session: member().sessionId!,
-                      })
-                  : undefined
-              }
-            >
-              <AgentFace id={member().agentId} size={24} />
-            </InfoRow>
-          )}
-        </Each>
-        <Section label={uiText("tasks2")} count={tasks().length} />
-        <Each of={tasks()} key={(task) => task.id}>
-          {(task) => (
-            <InfoRow
-              height={48}
-              title={`#${task().number} ${task().title}`}
-              onPress={() => props.onTask(task().id)}
-            >
-              <TaskGlyph status={task().status} size={14} />
-            </InfoRow>
-          )}
-        </Each>
-        <Section label={uiText("chatArtifacts")} count={artifacts().length} />
-        <Each of={artifacts()} key={(artifact) => artifact.id}>
-          {(artifact) => (
-            <InfoRow
-              height={52}
-              title={artifact().title}
-              detail={[
-                host.agent(artifact().publisherAgentId ?? "")?.name,
-                artifact().versions[0] && `v${artifact().versions[0]!.number}`,
-                messageTime(artifact().updatedAt, true),
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-              onPress={() => props.onArtifact(artifact())}
-            >
-              <Icon name="artifact" size={16} />
-            </InfoRow>
-          )}
-        </Each>
-        <If when={!artifacts().length}>
-          <Empty
-            icon="appWindow"
-            iconSize={24}
-            title={uiText("noArtifactsYet")}
-            titleLine={20}
-            description={uiText("artifactsEmptyHelp")}
-            descriptionSize={10}
-            descriptionLine={16}
-            style={{ flex: 0, paddingVertical: 32 }}
+        <Scroll style={grow} scrollbar={false}>
+          <Section
+            label={uiText("members")}
+            count={props.members.length}
+            first
           />
-        </If>
-      </Scroll>
-    </View>
+          <Each of={props.members} key={(member) => member.agentId}>
+            {(member) => (
+              <InfoRow
+                height={52}
+                title={host.agent(member().agentId)?.name ?? uiText("agent")}
+                titleSize={14}
+                detail={memberStatus(member().status)}
+                onPress={
+                  member().sessionId
+                    ? () =>
+                        props.onInspect({
+                          id: member().agentId,
+                          session: member().sessionId!,
+                        })
+                    : undefined
+                }
+              >
+                <AgentFace id={member().agentId} size={24} />
+              </InfoRow>
+            )}
+          </Each>
+          <Section label={uiText("tasks2")} count={tasks().length} />
+          <Each of={tasks()} key={(task) => task.id}>
+            {(task) => (
+              <InfoRow
+                height={48}
+                title={`#${task().number} ${task().title}`}
+                onPress={() => props.onTask(task().id)}
+              >
+                <TaskGlyph status={task().status} size={14} />
+              </InfoRow>
+            )}
+          </Each>
+          <Section label={uiText("chatArtifacts")} count={artifacts().length} />
+          <Each
+            of={recentArtifacts(artifacts())}
+            key={(artifact) => artifact.id}
+          >
+            {(artifact) => (
+              <InfoRow
+                height={52}
+                title={artifact().title}
+                detail={[
+                  host.agent(artifact().publisherAgentId ?? "")?.name,
+                  artifact().versions[0] &&
+                    `v${artifact().versions[0]!.number}`,
+                  messageTime(artifact().updatedAt, true),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                onPress={() => props.onArtifact(artifact())}
+              >
+                <Icon name="artifact" size={16} />
+              </InfoRow>
+            )}
+          </Each>
+          <If when={artifacts().length > RECENT}>
+            <ViewAllRow
+              total={artifacts().length}
+              phone
+              onViewAll={() => allArtifacts.set(true)}
+            />
+          </If>
+          <If when={!artifacts().length}>
+            <Empty
+              icon="appWindow"
+              iconSize={24}
+              title={uiText("noArtifactsYet")}
+              titleLine={20}
+              description={uiText("artifactsEmptyHelp")}
+              descriptionSize={10}
+              descriptionLine={16}
+              style={{ flex: 0, paddingVertical: 32 }}
+            />
+          </If>
+        </Scroll>
+      </View>
+    </If>
   );
+
+  function AllArtifacts() {
+    return (
+      <View style={grow}>
+        <View
+          style={{
+            ...row,
+            height: 44,
+            gap: 4,
+            paddingLeft: 4,
+            paddingRight: 8,
+            flexShrink: 0,
+            borderBottomWidth: 1,
+            borderColor: c().border,
+          }}
+        >
+          <BackButton
+            size={32}
+            iconSize={16}
+            onPress={() => allArtifacts.set(false)}
+          />
+          <Label size={14} line={18} weight={600} lines={1}>
+            {uiText("chatArtifacts")}
+          </Label>
+          <Label size={12} line={18} tone="muted" style={{ flex: 1 }}>
+            {artifacts().length}
+          </Label>
+          <CloseButton size={32} iconSize={16} onPress={props.onClose} />
+        </View>
+        <ArtifactBrowser
+          artifacts={artifacts()}
+          filters={props.artifactFilters}
+          phone
+          onOpen={props.onArtifact}
+          onTask={props.onTask}
+        />
+      </View>
+    );
+  }
 
   function Section(section: {
     label: string;

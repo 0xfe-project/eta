@@ -6,6 +6,7 @@ import type {
 } from "@eta/client-contracts";
 import type { Signal } from "nsh";
 import type { Layout } from "../../components";
+import type { ArtifactFilters } from "./artifacts/filter";
 import { Scroll, View } from "nsh";
 import {
   Button,
@@ -64,8 +65,7 @@ export function ConversationPanel(props: {
   taskId?: string;
   drawer: boolean;
   tab: Signal<PanelTab>;
-  artifactSearch: Signal<string>;
-  artifactOffset: Signal<number>;
+  artifactFilters: Signal<ArtifactFilters>;
   model: Signal<string>;
   info?: ConversationInfo;
   members: MemberView[];
@@ -280,8 +280,8 @@ export function ConversationPanel(props: {
                   <ConversationArtifacts
                     conversationId={props.id}
                     tab={panel()}
-                    search={props.artifactSearch}
-                    offset={props.artifactOffset}
+                    filters={props.artifactFilters}
+                    onViewAll={() => panel.set("Artifacts")}
                     phone={phone()}
                     onOpen={props.onArtifact}
                     onTask={props.onTask}

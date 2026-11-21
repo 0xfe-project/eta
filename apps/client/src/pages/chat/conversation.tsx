@@ -8,6 +8,7 @@ import type {
   TimelineSection,
 } from "@eta/client-contracts";
 import type { Layout } from "../../components";
+import type { ArtifactFilters } from "./artifacts/filter";
 import type { PanelTab } from "./conversation-panel";
 import { computed, effect, signal, View, windowSize } from "nsh";
 import {
@@ -27,6 +28,7 @@ import { uiText } from "../../i18n";
 import { CaptainFace } from "../../navigation/captain";
 import { follow, useHost } from "../../services/host";
 import { PendingStrip } from "./approvals";
+import { defaultFilters } from "./artifacts/filter";
 import { ArtifactPreview } from "./artifacts/preview";
 import { Composer } from "./composer";
 import { PhoneConversationInfo } from "./conversation-info";
@@ -64,8 +66,14 @@ export function Conversation(props: {
   const projectInfo = signal(false);
   const member = signal<{ id: string; session: string }>();
   const memberSteps = signal("");
-  const artifactSearch = signal("");
-  const artifactOffset = signal(0);
+  // The Artifacts tab's search, filters and page: kept across tabs, dropped for another group.
+  const artifactFilters = signal<ArtifactFilters>(defaultFilters);
+  let filtersFor = props.id;
+  effect(() => {
+    if (props.id === filtersFor) return;
+    filtersFor = props.id;
+    artifactFilters.set(defaultFilters);
+  });
   const preview = signal<{ artifact: ArtifactView; version?: number }>();
   const openArtifact = (artifact: ArtifactView, version?: number) =>
     preview.set({ artifact, version });
@@ -170,8 +178,7 @@ export function Conversation(props: {
         taskId={props.taskId}
         drawer={drawer()}
         tab={panel}
-        artifactSearch={artifactSearch}
-        artifactOffset={artifactOffset}
+        artifactFilters={artifactFilters}
         model={model}
         info={info()}
         members={members()}
@@ -523,6 +530,7 @@ export function Conversation(props: {
                 props.onTask(id);
               }}
               onArtifact={openArtifact}
+              artifactFilters={artifactFilters}
             />
           </If>
         </Modal>

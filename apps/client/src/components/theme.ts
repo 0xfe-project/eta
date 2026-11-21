@@ -34,6 +34,8 @@ export const light = {
   /** The foreground at 16%: the scrim of phone sheets, tablet drawers and
    * tablet dialogs. Desktop dialogs use `modalShade` (12%). */
   sheetShade: "#11111129",
+  /** The design's --color-highlight: what a search matched, marked. */
+  highlight: "#fae8a2",
 };
 
 const dark: typeof light = {
@@ -62,6 +64,7 @@ const dark: typeof light = {
   shade: "#00000080",
   modalShade: "#00000048",
   sheetShade: "#0a0a0a99",
+  highlight: "#635418",
 };
 
 export const Palette = context<() => typeof light>(() => light);
