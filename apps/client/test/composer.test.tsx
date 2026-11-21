@@ -120,7 +120,7 @@ test("an interrupted attachment can be retried in its original chat", async () =
   expect(app.shows("label:Retry")).toBe(false);
   await app.press("label:Switch");
   await app.press("label:Retry");
-  await app.waitFor("label:onboard.jpg");
+  await app.waitFor("label:View picture onboard.jpg · 0.0 KB");
   expect(app.value(input)).toBe("photo");
 });
 
@@ -209,4 +209,25 @@ test("a second pasted file waits for the first upload in the same draft", async 
   await app.press("label:Finish upload");
   await app.waitFor("label:composer-fixture.tsx");
   expect(app.shows("label:composer.test.tsx")).toBe(true);
+});
+
+test("a pasted picture opens from its chip, shows its own bytes, and comes out by its own button", async () => {
+  const app = await fixture();
+  await app.paste(input, { files: ["test/fixtures/pixel.png"] });
+  const chip = "label:View picture pixel.png · 0.0 KB";
+  await app.waitFor(chip);
+  await app.hover(chip);
+  await app.wait(300);
+  expect(app.shows("label:pixel.png · 0.0 KB")).toBe(true);
+  await app.press(chip);
+  await app.waitFor("text:pixel.png · 0.0 KB");
+  expect(app.shows("id:picture-stage")).toBe(true);
+  await app.keyboard.press("escape");
+  await app.waitUntil(() => !app.shows("id:picture-stage"));
+  // The draft's picture is the file it sent: the host is never asked for it.
+  expect(
+    app.requests().some((request) => request.url.includes("/attachments/")),
+  ).toBe(false);
+  await app.press("label:Remove pixel.png");
+  await app.waitUntil(() => !app.shows(chip));
 });

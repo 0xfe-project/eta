@@ -905,6 +905,25 @@ export interface AttachmentView {
   size: number;
 }
 
+/**
+ * The attachments the host gives back as pictures, at `attachmentPicturePath`: the image formats
+ * a browser draws as pictures and nothing that could run as a page (an SVG is a file like any other).
+ */
+const PICTURE_TYPES: ReadonlySet<string> = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+]);
+
+/** Whether the host shows an attachment of this type back as a picture. */
+export const isPictureType = (contentType: string | undefined) =>
+  PICTURE_TYPES.has(contentType ?? "");
+
+/** Where the host serves an attached picture's bytes (`GET`, behind the normal access). */
+export const attachmentPicturePath = (id: string) =>
+  `/attachments/${encodeURIComponent(id)}`;
+
 /** A file at most this large, and a message at most this many files. */
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 export const MAX_ATTACHMENTS = 10;
