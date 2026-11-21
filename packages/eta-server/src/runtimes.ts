@@ -11,6 +11,7 @@
  */
 import type {
   AgentRuntimeAccount,
+  AgentRuntimeCapabilities,
   AgentRuntimeInfo,
   RuntimeCompaction,
   SessionMcpServer,
@@ -76,6 +77,11 @@ export interface SessionRuntime {
    * runtime's, so this is the one way to it: eta's compaction is not installed on such a session.
    */
   compact?: (config: KernelConfig) => Promise<RuntimeCompaction>;
+  /**
+   * What the session takes (steering, images, compaction): the open runtime session's own answer
+   * once there is one, the runtime's declaration before. Undefined where nothing is known.
+   */
+  capabilities?: () => Promise<AgentRuntimeCapabilities | undefined>;
   /** Let the runtime go: its process, and anything it served for the session. */
   dispose: () => Promise<void>;
   /**
@@ -105,7 +111,11 @@ export interface SessionRuntimes {
 
 /** Which runtimes a set has on this machine, and their models: what a settings screen reads. */
 export interface RuntimeListing {
-  list: (fresh?: boolean) => Promise<AgentRuntimeInfo[]>;
+  /** Every runtime of the set, or only the ones `only` names (the others are not asked). */
+  list: (
+    fresh?: boolean,
+    only?: readonly string[],
+  ) => Promise<AgentRuntimeInfo[]>;
   /** A runtime's sign-in and plan usage; undefined when the runtime is not this set's. */
   account?: (runtime: string) => Promise<AgentRuntimeAccount | undefined>;
 }
@@ -133,15 +143,17 @@ export function composeRuntimes(
       return undefined;
     },
     catalog: {
-      list: async (fresh = false) =>
+      list: async (fresh = false, only) =>
         (
           await Promise.all(
             parts.map(
               async (part) =>
-                (await part.catalog?.list(fresh).catch(() => [])) ?? [],
+                (await part.catalog?.list(fresh, only).catch(() => [])) ?? [],
             ),
           )
-        ).flat(),
+        )
+          .flat()
+          .filter((info) => only === undefined || only.includes(info.id)),
       account: async (runtime) => {
         for (const part of parts) {
           const account = await part.catalog?.account?.(runtime);

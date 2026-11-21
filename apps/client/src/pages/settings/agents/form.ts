@@ -12,6 +12,7 @@ import { colors, textFaces } from "../../../components";
 import { useModels } from "../../../components/model-select";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
+import { rememberRuntimes } from "../../../services/runtime-capabilities";
 import { askRuntimes } from "../runtimes/status";
 
 export interface AgentEditorProps {
@@ -121,6 +122,20 @@ export function createAgentForm(props: AgentEditorProps) {
           } as Record<string, string>
         )[id] ??
         id);
+  /**
+   * The effort levels the agent's model takes, in the runtime's names: the chosen model's, or the
+   * default's while none is chosen. Undefined where that is not known (eta's own loop, whose
+   * models say at run time; a runtime that lists no models; a model typed by hand): every level
+   * is offered then.
+   */
+  const efforts = () => {
+    if (runtime() === "eta") return undefined;
+    const listed = external()?.models;
+    const chosen = model()
+      ? listed?.find((entry) => `${runtime()}:${entry.id}` === model())
+      : listed?.find((entry) => entry.default);
+    return chosen?.efforts;
+  };
   const noModels = () => runtime() === "eta" && models().length === 0;
   const missingModel = () =>
     Boolean(model().trim()) &&
@@ -144,6 +159,7 @@ export function createAgentForm(props: AgentEditorProps) {
     });
     void askRuntimes(host, machine).then(
       (runtimes) => {
+        rememberRuntimes(host, machine, runtimes);
         if (current) installed.set(runtimes);
       },
       () => {
@@ -159,6 +175,7 @@ export function createAgentForm(props: AgentEditorProps) {
     probeError.set(undefined);
     try {
       const runtimes = await askRuntimes(host, machine, true);
+      rememberRuntimes(host, machine, runtimes);
       if (machineId() === machine) installed.set(runtimes);
     } catch (error) {
       probeError.set(error instanceof Error ? error.message : String(error));
@@ -258,6 +275,7 @@ export function createAgentForm(props: AgentEditorProps) {
     plugins,
     machineId,
     thinking,
+    efforts,
     saved,
     customPersona,
     creating,

@@ -1,4 +1,7 @@
-import type { RuntimeCompaction } from "@eta/client-contracts";
+import type {
+  AgentRuntimeCapabilities,
+  RuntimeCompaction,
+} from "@eta/client-contracts";
 import type {
   CompactionSummarizer,
   KernelModels,
@@ -446,6 +449,17 @@ export class SessionManager {
         outcome: "unsupported",
       }
     );
+  }
+
+  /**
+   * What an open session's external runtime takes (steering, images, compaction), by the runtime
+   * session's own answer once it has one. Undefined for a session on eta's own loop, or one this
+   * manager does not have open.
+   */
+  async runtimeCapabilities(
+    id: string,
+  ): Promise<AgentRuntimeCapabilities | undefined> {
+    return await this.runtimeOf.get(id)?.capabilities?.();
   }
 
   /** The sessions that are open right now. */

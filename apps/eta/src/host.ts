@@ -228,7 +228,8 @@ export async function startHost(options: HostOptions): Promise<Host> {
       ...(runtimes === undefined
         ? {}
         : {
-            runtimes: async (fresh) => await runtimes.catalog.list(fresh),
+            runtimes: async (fresh, only) =>
+              await runtimes.catalog.list(fresh, only),
             runtimeAccount: async (runtime) =>
               await runtimes.catalog.account?.(runtime),
           }),

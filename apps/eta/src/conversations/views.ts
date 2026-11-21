@@ -3,6 +3,7 @@
  * members. Each is a read of the database at the moment it is asked for.
  */
 import type {
+  AgentRuntimeCapabilities,
   ConversationInfo,
   ConversationSummary,
   MemberView,
@@ -13,6 +14,8 @@ import type { Timeline } from "./timeline";
 export interface ViewDeps {
   conversations: ConversationStore;
   timeline: Timeline;
+  /** What a session's external runtime takes, as the engine last heard it (`Engine.capabilitiesOf`). */
+  capabilities?: (sessionId: string) => AgentRuntimeCapabilities | undefined;
 }
 
 /**
@@ -33,12 +36,19 @@ export function membersOf(
   conversationId: string,
 ): MemberView[] {
   const activity = deps.timeline.memberActivity(conversationId);
-  return deps.conversations.participants(conversationId).map((member) => ({
-    agentId: member.agentId,
-    sessionId: member.sessionId,
-    lastSeq: member.lastSeq,
-    ...(activity.get(member.agentId) ?? { status: "idle" }),
-  }));
+  return deps.conversations.participants(conversationId).map((member) => {
+    const capabilities =
+      member.sessionId === null
+        ? undefined
+        : deps.capabilities?.(member.sessionId);
+    return {
+      agentId: member.agentId,
+      sessionId: member.sessionId,
+      lastSeq: member.lastSeq,
+      ...(activity.get(member.agentId) ?? { status: "idle" }),
+      ...(capabilities === undefined ? {} : { capabilities }),
+    };
+  });
 }
 
 export function summaryOf(

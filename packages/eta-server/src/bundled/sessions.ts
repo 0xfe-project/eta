@@ -1,4 +1,5 @@
 import type {
+  AgentRuntimeCapabilities,
   CompactResult,
   PromptImage,
   PromptInput,
@@ -334,6 +335,16 @@ export class SessionsService extends Service implements SessionsApi {
     this.focusedId = forked.meta.id;
     await this.refresh();
     return forked.meta.id;
+  }
+
+  /**
+   * What an open session's external runtime takes (steering, images, compaction), by the runtime
+   * session's own answer once it has one; undefined for a session on eta's own loop.
+   */
+  async runtimeCapabilities(
+    id: string,
+  ): Promise<AgentRuntimeCapabilities | undefined> {
+    return await this.manager.runtimeCapabilities(id);
   }
 
   /**

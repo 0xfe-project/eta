@@ -417,8 +417,11 @@ export class DaemonNode {
       return await this.#options.upgrade(wanted);
     });
     peer.handle("runtimes", async (raw) => {
-      const { fresh } = (raw ?? {}) as DaemonServiceParams["runtimes"];
-      return { runtimes: await this.#runtimes.catalog.list(fresh === true) };
+      const { fresh, runtimes } = (raw ??
+        {}) as DaemonServiceParams["runtimes"];
+      return {
+        runtimes: await this.#runtimes.catalog.list(fresh === true, runtimes),
+      };
     });
     peer.handle("runtimeAccount", async (raw) => {
       const { runtime } = raw as DaemonServiceParams["runtimeAccount"];
@@ -573,11 +576,14 @@ export class DaemonNode {
         return {};
       },
       config: async ({ session }) => {
-        const { managed } = await this.#service().open(session);
+        const service = this.#service();
+        const { managed } = await service.open(session);
         const config = managed.session.kernel.config;
+        const capabilities = await service.runtimeCapabilities(managed.meta.id);
         return {
           model: formatModelId(config.read("model")),
           thinkingLevel: config.read("thinkingLevel"),
+          ...(capabilities === undefined ? {} : { capabilities }),
         };
       },
       lastSeq: async ({ session }) => {

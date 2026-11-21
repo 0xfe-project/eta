@@ -240,7 +240,12 @@ export function createProduct(options: {
    */
   web?: Omit<WebOptions, "warn"> | undefined;
   /** The external runtimes the primary machine has, with their models, for the agent editor. */
-  runtimes?: ((fresh: boolean) => Promise<AgentRuntimeInfo[]>) | undefined;
+  runtimes?:
+    | ((
+        fresh: boolean,
+        only?: readonly string[],
+      ) => Promise<AgentRuntimeInfo[]>)
+    | undefined;
   /** A runtime's sign-in and plan usage on the primary; undefined for one it does not have. */
   runtimeAccount?:
     | ((runtime: string) => Promise<AgentRuntimeAccount | undefined>)
@@ -572,7 +577,11 @@ export function createProduct(options: {
     warn,
   });
 
-  const targets = new ConversationTargets({ conversations, timeline });
+  const targets = new ConversationTargets({
+    conversations,
+    timeline,
+    capabilities: (sessionId) => made.engine?.capabilitiesOf(sessionId),
+  });
   const created = (id: string): void => targets.add(id);
 
   // The task board, and the artifacts its cards list.
@@ -1032,7 +1041,7 @@ export function createProduct(options: {
             changed,
             created,
             runtimes: options.runtimes,
-            machineRuntimes: async (machineId, fresh) => {
+            machineRuntimes: async (machineId, fresh, only) => {
               const link = hub.link(machineId);
               if (link === undefined)
                 throw new Error(
@@ -1040,7 +1049,10 @@ export function createProduct(options: {
                 );
               const { runtimes } = await link.daemon(
                 "runtimes",
-                { fresh },
+                {
+                  fresh,
+                  ...(only === undefined ? {} : { runtimes: [...only] }),
+                },
                 { timeoutMs: 60_000 },
               );
               return runtimes;
