@@ -1,6 +1,6 @@
 import type { RunBlock } from "@eta/client-contracts";
 import type { WebViewRef } from "nsh";
-import { cleanup, effect, signal, View, WebView } from "nsh";
+import { cleanup, colorScheme, effect, signal, View, WebView } from "nsh";
 import dwgFile from "../../../../assets/AKRDWGSCNFM-Regular.woff2?url";
 import {
   appFont,
@@ -9,7 +9,6 @@ import {
   Fonts,
   Label,
   monoFontFamily,
-  palette,
 } from "../../../components";
 import { uiText } from "../../../i18n";
 import { widgetDocument } from "./widget-document";
@@ -109,7 +108,7 @@ export function Widget(props: {
       themeSent = themeKey;
       post({
         kind: "theme",
-        mode: theme.canvas === palette("dark").canvas ? "dark" : "light",
+        mode: colorScheme(),
         colors: {
           "--color-text-primary": theme.ink,
           "--color-text-secondary": theme.muted,

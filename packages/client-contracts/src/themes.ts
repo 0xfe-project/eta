@@ -1,0 +1,308 @@
+/**
+ * Color tables of the common editor themes, one place for the apps that offer them: the client's
+ * Palette setting and the TUI's `theme.preset` both read these, so a theme has the same colors in
+ * both. The names follow Catppuccin's roles; a theme that lacks a role uses its nearest color
+ * (Rosé Pine has no green, so `green` is its foam). Dracula, Tokyo Night and Rosé Pine name their
+ * light themes Alucard, Day and Dawn. Nord has no light theme: its light is the Snow Storm with the
+ * accents darkened for text. A neutral step a theme does not define is a blend of its own colors.
+ */
+export interface ThemeColors {
+  base: string;
+  mantle: string;
+  surface0: string;
+  surface2: string;
+  overlay1: string;
+  overlay2: string;
+  subtext0: string;
+  subtext1: string;
+  text: string;
+  red: string;
+  peach: string;
+  yellow: string;
+  green: string;
+  teal: string;
+  sapphire: string;
+  blue: string;
+  mauve: string;
+  lavender: string;
+  pink: string;
+}
+
+export const themeIds = ["dracula", "nord", "gruvbox", "tokyoNight", "solarized", "rosePine"] as const;
+export type ThemeId = (typeof themeIds)[number];
+
+export const themes: Record<
+  ThemeId,
+  { dark: ThemeColors; light: ThemeColors }
+> = {
+  // https://draculatheme.com/contribute
+  dracula: {
+    dark: {
+      base: "#282a36",
+      mantle: "#21222c",
+      surface0: "#44475a",
+      surface2: "#6272a4",
+      overlay1: "#6272a4",
+      overlay2: "#8f9abb",
+      subtext0: "#bababa",
+      subtext1: "#d9d9d6",
+      text: "#f8f8f2",
+      red: "#ff5555",
+      peach: "#ffb86c",
+      yellow: "#f1fa8c",
+      green: "#50fa7b",
+      teal: "#6ef2bc",
+      sapphire: "#8be9fd",
+      blue: "#8be9fd",
+      mauve: "#bd93f9",
+      lavender: "#d5bbf6",
+      pink: "#ff79c6",
+    },
+    light: {
+      base: "#fffbeb",
+      mantle: "#eeece6",
+      surface0: "#cfcfde",
+      surface2: "#c4bfab",
+      overlay1: "#918b73",
+      overlay2: "#6c664b",
+      subtext0: "#62615c",
+      subtext1: "#41403e",
+      text: "#1f1f1f",
+      red: "#cb3a2a",
+      peach: "#a34d14",
+      yellow: "#846e15",
+      green: "#14710a",
+      teal: "#0c6e50",
+      sapphire: "#036a96",
+      blue: "#036a96",
+      mauve: "#644ac9",
+      lavender: "#937fd3",
+      pink: "#a3144d",
+    },
+  },
+  // https://www.nordtheme.com/docs/colors-and-palettes
+  nord: {
+    dark: {
+      base: "#2e3440",
+      mantle: "#272c36",
+      surface0: "#3b4252",
+      surface2: "#4c566a",
+      overlay1: "#616e88",
+      overlay2: "#848c9d",
+      subtext0: "#a5abb6",
+      subtext1: "#bfc5d0",
+      text: "#d8dee9",
+      red: "#bf616a",
+      peach: "#d08770",
+      yellow: "#ebcb8b",
+      green: "#a3be8c",
+      teal: "#8fbcbb",
+      sapphire: "#88c0d0",
+      blue: "#81a1c1",
+      mauve: "#b48ead",
+      lavender: "#5e81ac",
+      pink: "#b87c92",
+    },
+    light: {
+      base: "#eceff4",
+      mantle: "#e5e9f0",
+      surface0: "#d8dee9",
+      surface2: "#acb2bd",
+      overlay1: "#848c9a",
+      overlay2: "#4c566a",
+      subtext0: "#676c76",
+      subtext1: "#4b505b",
+      text: "#2e3440",
+      red: "#bf616a",
+      peach: "#92675e",
+      yellow: "#a3926f",
+      green: "#778a6f",
+      teal: "#6a888c",
+      sapphire: "#668b99",
+      blue: "#5e81ac",
+      mauve: "#b48ead",
+      lavender: "#81a1c1",
+      pink: "#b87c92",
+    },
+  },
+  // https://github.com/morhetz/gruvbox
+  gruvbox: {
+    dark: {
+      base: "#282828",
+      mantle: "#1d2021",
+      surface0: "#3c3836",
+      surface2: "#665c54",
+      overlay1: "#928374",
+      overlay2: "#a89984",
+      subtext0: "#bdae93",
+      subtext1: "#d5c4a1",
+      text: "#ebdbb2",
+      red: "#fb4934",
+      peach: "#fe8019",
+      yellow: "#fabd2f",
+      green: "#b8bb26",
+      teal: "#8ec07c",
+      sapphire: "#83a598",
+      blue: "#83a598",
+      mauve: "#d3869b",
+      lavender: "#8ec07c",
+      pink: "#d3869b",
+    },
+    light: {
+      base: "#fbf1c7",
+      mantle: "#f2e5bc",
+      surface0: "#ebdbb2",
+      surface2: "#bdae93",
+      overlay1: "#928374",
+      overlay2: "#7c6f64",
+      subtext0: "#665c54",
+      subtext1: "#504945",
+      text: "#3c3836",
+      red: "#9d0006",
+      peach: "#af3a03",
+      yellow: "#b57614",
+      green: "#79740e",
+      teal: "#427b58",
+      sapphire: "#076678",
+      blue: "#076678",
+      mauve: "#8f3f71",
+      lavender: "#427b58",
+      pink: "#8f3f71",
+    },
+  },
+  // https://github.com/folke/tokyonight.nvim
+  tokyoNight: {
+    dark: {
+      base: "#1a1b26",
+      mantle: "#16161e",
+      surface0: "#292e42",
+      surface2: "#414868",
+      overlay1: "#565f89",
+      overlay2: "#737aa2",
+      subtext0: "#9aa5ce",
+      subtext1: "#a9b1d6",
+      text: "#c0caf5",
+      red: "#f7768e",
+      peach: "#ff9e64",
+      yellow: "#e0af68",
+      green: "#9ece6a",
+      teal: "#1abc9c",
+      sapphire: "#7dcfff",
+      blue: "#7aa2f7",
+      mauve: "#bb9af7",
+      lavender: "#7aa2f7",
+      pink: "#ff9ec2",
+    },
+    light: {
+      base: "#e1e2e7",
+      mantle: "#d0d5e3",
+      surface0: "#c4c8da",
+      surface2: "#a1a6c5",
+      overlay1: "#8990b3",
+      overlay2: "#68709a",
+      subtext0: "#6172b0",
+      subtext1: "#4e6bb5",
+      text: "#3760bf",
+      red: "#f52a65",
+      peach: "#b15c00",
+      yellow: "#8c6c3e",
+      green: "#587539",
+      teal: "#118c74",
+      sapphire: "#007197",
+      blue: "#2e7de9",
+      mauve: "#9854f1",
+      lavender: "#2e7de9",
+      pink: "#d20065",
+    },
+  },
+  // https://ethanschoonover.com/solarized/
+  solarized: {
+    dark: {
+      base: "#002b36",
+      mantle: "#00212b",
+      surface0: "#073642",
+      surface2: "#586e75",
+      overlay1: "#586e75",
+      overlay2: "#657b83",
+      subtext0: "#657b83",
+      subtext1: "#839496",
+      text: "#93a1a1",
+      red: "#dc322f",
+      peach: "#cb4b16",
+      yellow: "#b58900",
+      green: "#859900",
+      teal: "#2aa198",
+      sapphire: "#2aa198",
+      blue: "#268bd2",
+      mauve: "#6c71c4",
+      lavender: "#268bd2",
+      pink: "#d33682",
+    },
+    light: {
+      base: "#fdf6e3",
+      mantle: "#f6efdc",
+      surface0: "#eee8d5",
+      surface2: "#93a1a1",
+      overlay1: "#93a1a1",
+      overlay2: "#839496",
+      subtext0: "#839496",
+      subtext1: "#657b83",
+      text: "#586e75",
+      red: "#dc322f",
+      peach: "#cb4b16",
+      yellow: "#b58900",
+      green: "#859900",
+      teal: "#2aa198",
+      sapphire: "#2aa198",
+      blue: "#268bd2",
+      mauve: "#6c71c4",
+      lavender: "#268bd2",
+      pink: "#d33682",
+    },
+  },
+  // https://rosepinetheme.com/palette
+  rosePine: {
+    dark: {
+      base: "#191724",
+      mantle: "#1f1d2e",
+      surface0: "#26233a",
+      surface2: "#524f67",
+      overlay1: "#6e6a86",
+      overlay2: "#908caa",
+      subtext0: "#aca9c4",
+      subtext1: "#c8c5de",
+      text: "#e0def4",
+      red: "#eb6f92",
+      peach: "#ebbcba",
+      yellow: "#f6c177",
+      green: "#9ccfd8",
+      teal: "#31748f",
+      sapphire: "#9ccfd8",
+      blue: "#3e8fb0",
+      mauve: "#c4a7e7",
+      lavender: "#ebbcba",
+      pink: "#ebbcba",
+    },
+    light: {
+      base: "#faf4ed",
+      mantle: "#fffaf3",
+      surface0: "#f2e9e1",
+      surface2: "#cecacd",
+      overlay1: "#9893a5",
+      overlay2: "#797593",
+      subtext0: "#6d698a",
+      subtext1: "#615d81",
+      text: "#575279",
+      red: "#b4637a",
+      peach: "#d7827e",
+      yellow: "#ea9d34",
+      green: "#56949f",
+      teal: "#286983",
+      sapphire: "#56949f",
+      blue: "#286983",
+      mauve: "#907aa9",
+      lavender: "#d7827e",
+      pink: "#d7827e",
+    },
+  },
+};

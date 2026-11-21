@@ -400,6 +400,10 @@ export function Settings(
                   phone={phone()}
                   theme={props.theme}
                   onTheme={props.onTheme}
+                  paletteId={props.paletteId}
+                  onPalette={props.onPalette}
+                  flavor={props.flavor}
+                  onFlavor={props.onFlavor}
                   chatWidth={props.chatWidth}
                   onChatWidth={props.onChatWidth}
                   chatRail={props.chatRail}

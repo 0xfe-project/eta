@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CONFIG } from "../../src/config/defaults";
 import { loadConfig, parseConfig } from "../../src/config/load";
+import { THEME_PRESETS } from "../../src/config/presets";
 import { tempDir } from "../support/temp";
 
 const FILE = "/conf/tui.json";
@@ -308,6 +309,58 @@ describe("parseConfig: theme", () => {
       config: defaults(),
       problems: [problem("theme", "wrong-type", '["red"]')],
     });
+  });
+});
+
+describe("parseConfig: theme.preset", () => {
+  const HEX = /^#[\da-f]{6}$/i;
+
+  it.each(Object.keys(THEME_PRESETS))("expands %s into a whole theme", (name) => {
+    const { config, problems } = parse({ theme: { preset: name } });
+    const preset = THEME_PRESETS[name as keyof typeof THEME_PRESETS];
+    const { agents, ...tokens } = preset;
+    expect(problems).toEqual([]);
+    expect(config).toEqual({ ...defaults(), theme: preset });
+    for (const colour of [...Object.values(tokens), ...agents])
+      expect(colour).toMatch(HEX);
+  });
+
+  it("keeps the defaults for `default` and when no preset is written", () => {
+    expect(parse({ theme: { preset: "default" } })).toEqual({
+      config: defaults(),
+      problems: [],
+    });
+    expect(parse({ theme: {} }).config).toEqual(defaults());
+  });
+
+  it("lets the tokens written override the preset, wherever the preset is in the file", () => {
+    const text = '{"theme":{"accent":"red","agents":["#112233"],"preset":"catppuccin-mocha"}}';
+    const { config, problems } = parseConfig(text, FILE);
+    expect(problems).toEqual([]);
+    expect(config.theme).toEqual({
+      ...THEME_PRESETS["catppuccin-mocha"],
+      accent: "red",
+      agents: ["#112233"],
+    });
+  });
+
+  it("reports an unknown preset and keeps the rest", () => {
+    const { config, problems } = parse({
+      theme: { preset: "catppuccin-dusk", accent: "red" },
+    });
+    expect(config.theme).toEqual({ ...defaults().theme, accent: "red" });
+    expect(problems).toEqual([
+      problem("theme.preset", "invalid-value", '"catppuccin-dusk"'),
+    ]);
+  });
+
+  it("reports a preset that is not a name, and one inherited from Object", () => {
+    expect(parse({ theme: { preset: 3 } }).problems).toEqual([
+      problem("theme.preset", "wrong-type", "3"),
+    ]);
+    expect(parse({ theme: { preset: "toString" } }).problems).toEqual([
+      problem("theme.preset", "invalid-value", '"toString"'),
+    ]);
   });
 });
 

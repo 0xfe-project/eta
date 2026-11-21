@@ -1,5 +1,6 @@
 import type { JSX } from "nsh";
-import { effect, Scroll, signal, View } from "nsh";
+import type { Flavor, PaletteId } from "../../components/palettes";
+import { colorScheme, effect, Scroll, signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -8,11 +9,13 @@ import {
   Fonts,
   grow,
   Label,
+  palette,
   row,
   textFaces,
   textStyle,
 } from "../../components";
 import { ElementPicking, pickerTarget } from "../../components/element-picker";
+import { flavors, paletteIds } from "../../components/palettes";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { languageChoices, LanguageSettings, useText } from "../../i18n";
 
@@ -29,10 +32,29 @@ const widthLabels = {
   wide: "full",
 } as const;
 export type ChatWidth = keyof typeof widthLabels;
+const paletteLabels = {
+  default: "paletteDefault",
+  catppuccin: "paletteCatppuccin",
+  dracula: "paletteDracula",
+  nord: "paletteNord",
+  gruvbox: "paletteGruvbox",
+  tokyoNight: "paletteTokyoNight",
+  solarized: "paletteSolarized",
+  rosePine: "paletteRosePine",
+} as const;
+const flavorNames = {
+  frappe: "Frappé",
+  macchiato: "Macchiato",
+  mocha: "Mocha",
+} as const;
 
 export interface AppearanceProps {
   theme: Theme;
   onTheme: (mode: Theme) => void;
+  paletteId: PaletteId;
+  onPalette: (id: PaletteId) => void;
+  flavor: Flavor;
+  onFlavor: (flavor: Flavor) => void;
   chatWidth: ChatWidth;
   onChatWidth: (width: ChatWidth) => void;
   chatRail: boolean;
@@ -84,6 +106,39 @@ function AppearanceRow(props: {
   );
 }
 
+/** A palette's ink, accents and canvas as small squares, to choose by sight. */
+function Swatches(props: { colors: ReturnType<typeof palette> }) {
+  return (
+    <View style={{ ...row, gap: 4 }}>
+      <Each
+        of={
+          [
+            props.colors.canvas,
+            props.colors.ink,
+            props.colors.blue,
+            props.colors.green,
+            props.colors.amber,
+            props.colors.red,
+          ] as const
+        }
+      >
+        {(color) => (
+          <View
+            style={{
+              width: 12,
+              height: 12,
+              borderRadius: 2,
+              borderWidth: 1,
+              borderColor: props.colors.strong,
+              backgroundColor: color(),
+            }}
+          />
+        )}
+      </Each>
+    </View>
+  );
+}
+
 function ChoiceRow<T extends string>(props: {
   title: string;
   hint?: string;
@@ -92,6 +147,7 @@ function ChoiceRow<T extends string>(props: {
   value: T;
   name: (choice: T) => string;
   displayValue?: string;
+  swatches?: ReturnType<typeof palette>;
   set: (choice: T) => void;
 }) {
   return (
@@ -101,26 +157,31 @@ function ChoiceRow<T extends string>(props: {
       phone={props.phone}
       stack={props.phone}
     >
-      <ActionMenu
-        label={props.title}
-        value={props.displayValue ?? props.name(props.value)}
-        triggerStyle={{
-          width: props.phone ? "100%" : 160,
-          height: props.phone ? 32 : 24,
-          paddingLeft: props.phone ? 12 : 10,
-          paddingRight: props.phone ? 12 : 8,
-        }}
-      >
-        <Each of={props.choices}>
-          {(option) => (
-            <ActionItem
-              label={props.name(option())}
-              checked={option() === props.value}
-              onSelect={() => props.set(option())}
-            />
-          )}
-        </Each>
-      </ActionMenu>
+      <View style={{ ...row, gap: 8 }}>
+        <If when={props.swatches}>
+          {(colors) => <Swatches colors={colors()} />}
+        </If>
+        <ActionMenu
+          label={props.title}
+          value={props.displayValue ?? props.name(props.value)}
+          triggerStyle={{
+            width: props.phone ? "100%" : 160,
+            height: props.phone ? 32 : 24,
+            paddingLeft: props.phone ? 12 : 10,
+            paddingRight: props.phone ? 12 : 8,
+          }}
+        >
+          <Each of={props.choices}>
+            {(option) => (
+              <ActionItem
+                label={props.name(option())}
+                checked={option() === props.value}
+                onSelect={() => props.set(option())}
+              />
+            )}
+          </Each>
+        </ActionMenu>
+      </View>
     </AppearanceRow>
   );
 }
@@ -220,6 +281,27 @@ export function Appearance(props: AppearanceProps & { phone: boolean }) {
         name={(mode) => text(themeLabels[mode])}
         set={props.onTheme}
       />
+      <ChoiceRow
+        title={text("palette")}
+        phone={props.phone}
+        choices={paletteIds}
+        value={props.paletteId}
+        name={(id) => text(paletteLabels[id])}
+        swatches={palette(colorScheme(), props.paletteId, props.flavor)}
+        set={props.onPalette}
+      />
+      <If when={props.paletteId === "catppuccin"}>
+        <ChoiceRow
+          title={text("flavor")}
+          hint={text("flavorHint")}
+          phone={props.phone}
+          choices={flavors}
+          value={props.flavor}
+          name={(name) => flavorNames[name]}
+          swatches={palette("dark", props.paletteId, props.flavor)}
+          set={props.onFlavor}
+        />
+      </If>
       <If when={language}>
         {(setting) => (
           <ChoiceRow

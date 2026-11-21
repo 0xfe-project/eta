@@ -103,7 +103,11 @@ function Fixture() {
           theme="light"
           chatWidth="standard"
           chatRail
+          paletteId="default"
+          flavor="mocha"
           onTheme={noop}
+          onPalette={noop}
+          onFlavor={noop}
           onChatWidth={noop}
           onChatRail={noop}
           onFonts={noop}
