@@ -40,7 +40,10 @@ export function parsePaneWidth(
  * edge, so dragging right widens it; the panel's is on its left edge, so dragging left does.
  */
 export function draggedPaneWidth(pane: Pane, start: number, delta: number) {
-  return clampPaneWidth(pane, pane === "sidebar" ? start + delta : start - delta);
+  return clampPaneWidth(
+    pane,
+    pane === "sidebar" ? start + delta : start - delta,
+  );
 }
 
 const widths = {
