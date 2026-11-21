@@ -332,6 +332,10 @@ export const tasksMessages = {
   overview: ["Overview", "概览"],
   ownGitWorktree: ["· Own git worktree", "· 独立 Git 工作树"],
   partOf: ["Part of: {{value1}}", "属于：{{value1}}"],
+  parentCommentHint: [
+    "Discuss here; to change a step, say so on that subtask",
+    "在这里讨论；要改某一步，请在那个子任务里说",
+  ],
   plan: ["Plan", "计划"],
   prerequisite: ["Prerequisite", "前置任务"],
   progress: ["Progress", "推进情况"],

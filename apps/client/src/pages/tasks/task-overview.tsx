@@ -260,7 +260,6 @@ function DesktopOverview(props: {
   const c = colors();
   const {
     activity,
-    canComment,
     cancelling,
     describing,
     editDescription,
@@ -456,9 +455,7 @@ function DesktopOverview(props: {
             onLog={(run) => props.state.log.set(run)}
           />
           <RunLine item={item()} state={props.state} />
-          <If when={canComment(item())}>
-            <TaskCommentBox state={props.state} />
-          </If>
+          <TaskCommentBox state={props.state} />
         </View>
       </Scroll>
       <View
@@ -488,7 +485,6 @@ export function TaskOverview(props: {
   const c = colors();
   const {
     activity,
-    canComment,
     cancelling,
     describing,
     editDescription,
@@ -836,7 +832,7 @@ export function TaskOverview(props: {
                 createdBy={item().createdBy}
                 onLog={(run) => log.set(run)}
               />
-              <If when={!phone() && canComment(item())}>
+              <If when={!phone()}>
                 <TaskCommentBox state={props.state} />
               </If>
               <If when={!phone() && !side() && props.docked}>
