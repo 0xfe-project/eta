@@ -15,21 +15,35 @@ const probe = (
 describe("windowsShell", () => {
   it("prefers ETA_LOCAL_SHELL", () => {
     expect(
-      windowsShell(probe([], { ETA_LOCAL_SHELL: "E:\\sh.exe" }, `${SCOOP}\\mingw64\\libexec\\git-core`)),
+      windowsShell(
+        probe(
+          [],
+          { ETA_LOCAL_SHELL: "E:\\sh.exe" },
+          `${SCOOP}\\mingw64\\libexec\\git-core`,
+        ),
+      ),
     ).toBe("E:\\sh.exe");
   });
 
   it("derives the root from git --exec-path (scoop shim)", () => {
     const sh = `${SCOOP}\\usr\\bin\\sh.exe`;
     expect(
-      windowsShell(probe([sh], { PATH: "D:\\Library\\scoop\\shims" }, `${SCOOP.replaceAll("\\", "/")}/mingw64/libexec/git-core\n`)),
+      windowsShell(
+        probe(
+          [sh],
+          { PATH: "D:\\Library\\scoop\\shims" },
+          `${SCOOP.replaceAll("\\", "/")}/mingw64/libexec/git-core\n`,
+        ),
+      ),
     ).toBe(sh.replaceAll("\\", "/").replaceAll("/", "\\"));
   });
 
   it("derives the root from git.exe on PATH", () => {
     const sh = "E:\\Git\\usr\\bin\\sh.exe";
     expect(
-      windowsShell(probe([sh, "E:\\Git\\cmd\\git.exe"], { PATH: "C:\\x;E:\\Git\\cmd" })),
+      windowsShell(
+        probe([sh, "E:\\Git\\cmd\\git.exe"], { PATH: "C:\\x;E:\\Git\\cmd" }),
+      ),
     ).toBe(sh);
   });
 
