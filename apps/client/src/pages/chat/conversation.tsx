@@ -38,6 +38,7 @@ import { indexInserts, InsertMessage } from "./insert-message";
 import { InviteAgents, StewardMenu } from "./members";
 import { RemoveMember } from "./remove-member";
 import { MemberRun } from "./run/member-run";
+import { RunPanel } from "./run/run-panel";
 
 export function Conversation(props: {
   id: string;
@@ -566,26 +567,9 @@ export function Conversation(props: {
         />
       </If>
       <If when={member()}>
-        <Modal
+        <RunPanel
           title={uiText("runTranscript")}
-          width={
-            props.layout === "desktop"
-              ? 960
-              : Math.max(0, windowSize().width - 144)
-          }
-          height={
-            phone()
-              ? "100%"
-              : Math.max(
-                  0,
-                  windowSize().height - (props.layout === "desktop" ? 100 : 48),
-                )
-          }
           phone={phone()}
-          phonePage={phone()}
-          hideHeader={!phone()}
-          blurBackdrop={props.layout === "desktop"}
-          overPhoneNavigation
           onClose={() => member.set(undefined)}
         >
           <MemberRun
@@ -598,7 +582,7 @@ export function Conversation(props: {
             )}
             onClose={() => member.set(undefined)}
           />
-        </Modal>
+        </RunPanel>
       </If>
       <If when={preview()}>
         {(selection) => (

@@ -69,8 +69,12 @@ const activity = [
   },
 ];
 
-/** What the host keeps on the row once the run is over, per ending. */
+/** What the host keeps on the row once the run is over, per ending: it is saved after the run's last row. */
 function saved(ending: Ending): Partial<MessageView> {
+  return { updatedAt: at + 100, ...kept(ending) };
+}
+
+function kept(ending: Ending): Partial<MessageView> {
   const process = [
     { type: "thinking", text: thought },
     { type: "text", text: note },
@@ -105,12 +109,16 @@ function Fixture() {
   host.address.set({ origin: "http://example.invalid" });
   const ending = signal<Ending>("working");
   const plainSession = signal(false);
+  /** Rows the run wrote after the fixture's own. */
+  const later = signal<ViewMessageRow[]>([]);
   const reloaded = signal(false);
   const sessionTarget = () => ({
     version: 1,
     revisions: {},
     sections: {
-      transcript: { messages: plainSession() ? plainRun : working },
+      transcript: {
+        messages: [...(plainSession() ? plainRun : working), ...later()],
+      },
       core: { session: "s-ada", running: true },
     },
   });
@@ -179,6 +187,27 @@ function Fixture() {
               targets: { ...state.targets, "sessions.s-ada": sessionTarget() },
             }));
           }}
+        />
+        <Button
+          label="Write more"
+          // The run writes on a moment later, while the reader has the panel open.
+          onPress={() =>
+            setTimeout(() => {
+              later.set([
+                row(6, {
+                  role: "assistant",
+                  content: [{ type: "text", text: "Checking the key next." }],
+                }),
+              ]);
+              host.state.update((state) => ({
+                ...state,
+                targets: {
+                  ...state.targets,
+                  "sessions.s-ada": sessionTarget(),
+                },
+              }));
+            }, 500)
+          }
         />
         <Button
           label="Finish"

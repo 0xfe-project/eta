@@ -1,10 +1,11 @@
 import type { MachineView, TaskRunView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
-import { View, windowSize } from "nsh";
-import { Button, colors, grow, Label, Modal, row } from "../../components";
+import { View } from "nsh";
+import { Button, colors, grow, Label, row } from "../../components";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { MemberRun } from "../chat/run/member-run";
+import { RunPanel } from "../chat/run/run-panel";
 
 export function isActiveRunStatus(status: TaskRunView["status"]): boolean {
   return status === "queued" || status === "starting" || status === "running";
@@ -76,7 +77,7 @@ export function TaskRunLog(props: {
       .filter(Boolean)
       .join(" · ");
   return (
-    <Modal
+    <RunPanel
       title={
         phone()
           ? uiText("taskRunExecutor", {
@@ -85,22 +86,8 @@ export function TaskRunLog(props: {
             })
           : `${runCaption(props.run, props.index)} · ${props.executor}`
       }
-      width={
-        props.layout === "desktop" ? 960 : Math.max(0, windowSize().width - 144)
-      }
-      height={
-        phone()
-          ? "100%"
-          : Math.max(
-              0,
-              windowSize().height - (props.layout === "desktop" ? 100 : 48),
-            )
-      }
       phone={phone()}
-      phonePage={phone()}
       hideHeader={!phone() && !!props.run.sessionId}
-      modalFocus
-      overPhoneNavigation
       onClose={props.onClose}
     >
       <If
@@ -150,6 +137,6 @@ export function TaskRunLog(props: {
           />
         </View>
       </If>
-    </Modal>
+    </RunPanel>
   );
 }
