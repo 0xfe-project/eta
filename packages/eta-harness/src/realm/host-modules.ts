@@ -1,15 +1,17 @@
+import type { WindowsShellProbe } from "@eta/ssh";
 import type * as vm from "node:vm";
 import type { Linker, Realm } from "./realm";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
 import { createRequire } from "node:module";
+
 import * as path from "node:path";
-
 import process from "node:process";
-import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { $ } from "zx";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { localWindowsProbe, windowsChildEnv, windowsShell } from "@eta/ssh";
+import { $, quote } from "zx";
 
 /**
  * The `node:*` half of a realm's surface, in two layers with different rules.
@@ -313,6 +315,7 @@ export function mountNodeGlobals(realm: Realm): void {
  * and nothing about what was inside it — the gap ESMMODE §1 already names.
  */
 export function mountShell(realm: Realm, cwd?: string): void {
+  if (process.platform === "win32") selectGitBash();
   // Commands run in the session's working directory; `$.cwd` is not changed for the host.
   const shell = cwd === undefined ? $ : $({ cwd });
   const tag = realm.wrap(
@@ -327,6 +330,32 @@ export function mountShell(realm: Realm, cwd?: string): void {
       tag[key] = realm.wrap(value as (...args: unknown[]) => unknown);
   }
   realm.global("$", tag as unknown as (...args: unknown[]) => unknown);
+}
+
+/**
+ * Git Bash for `$` on Windows, and the PATH its Unix tools need.
+ *
+ * zx runs `bash` from PATH, and on Windows that is `System32\bash.exe`: WSL, which has none of the
+ * host's programs, eats backslashes in paths and does not see the Windows environment. The probe is
+ * the one `LocalTransport` uses, so there is a single answer to "where is Git's shell". It throws when
+ * there is none; falling back to WSL would make every command quietly run on another machine.
+ */
+export function gitBashSetup(probe: WindowsShellProbe): {
+  shell: string;
+  env: { PATH: string };
+} {
+  const sh = windowsShell(probe);
+  const bash = sh.replace(/[\\/]sh\.exe$/i, (sep) => `${sep[0]}bash.exe`);
+  const shell = bash !== sh && probe.exists(bash) ? bash : sh;
+  return { shell, env: windowsChildEnv(shell, probe.env.PATH) };
+}
+
+function selectGitBash(): void {
+  const bash = gitBashSetup(localWindowsProbe);
+  $.shell = bash.shell;
+  $.prefix = "set -euo pipefail;";
+  $.quote = quote;
+  $.env = { ...process.env, ...bash.env };
 }
 
 /**
