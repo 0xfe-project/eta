@@ -105,6 +105,9 @@ export const tasksMessages = {
   taskIsWorking: ["{{name}} is working", "{{name}} 正在工作"],
   taskDeliveredTurn: ["{{name}} delivered this turn", "{{name}} 交付了这一轮"],
   taskMe: ["Me", "我"],
+  taskCreator: ["Creator", "创建者"],
+  taskCreatorValue: ["Creator: {{name}}", "创建者:{{name}}"],
+  taskDeletedAgent: ["Deleted agent", "已删除的智能体"],
   taskAgo: ["{{time}} ago", "{{time}}前"],
   activityParent: ["made it part of “{{title}}”", "把它归入「{{title}}」"],
   activityParentRemoved: [
@@ -225,6 +228,7 @@ export const tasksMessages = {
     "Goes to To do when confirmed and starts when ready",
     "确认后进入待办，满足执行条件后开始",
   ],
+  draftDiscarded: ["Discarded", "已丢弃"],
   draftCreated: [
     "This draft has been created as a task",
     "这份草案已创建为任务",

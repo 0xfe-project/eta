@@ -16,7 +16,7 @@ The agent calls `draft_task` in a conversation: title, goal, decisions made, acc
 
 ### A draft belongs to the turn that wrote it
 
-`task_draft`'s `data` carries `turnMessageId`: the id of the reply row that wrote it. The host already has to find this row (to compute the origin's "items N–M"), so it records its id along the way—**attribution relies on data, not on guessing order**; two drafts in one turn, or two turns interleaved, will not be misaligned. On confirmation the same row becomes `task_card`, and this field is carried over; the card therefore stays in the turn that proposed it and refreshes with the task. `MessageView.data` is JSON, with no migration; old rows missing this field are rendered independently as-is on the timeline.
+`task_draft`'s `data` carries `turnMessageId`: the id of the reply row that wrote it. The host already has to find this row (to compute the origin's "items N–M"), so it records its id along the way—**attribution relies on data, not on guessing order**; two drafts in one turn, or two turns interleaved, will not be misaligned. On confirmation the same row becomes `task_card`, and this field is carried over; the card therefore stays in the turn that proposed it and refreshes with the task. The user can also discard a waiting draft (`tasks.discardDraft`): the row stays a `task_draft` with `data.discarded = true`, no task is made, and confirming it afterwards is refused (and discarding a confirmed or discarded draft is refused). `draft_task` does not wait for the user, so nothing is blocked by a discard. `MessageView.data` is JSON, with no migration; old rows missing this field are rendered independently as-is on the timeline.
 
 The page draws rows with this field inside that reply's frame (`Turn` → `.turn-tasks` in `chat-panel.tsx`): same author, same footer time, with indentation and a hairline indicating which turn it comes from. It does **not** go into the collapsed execution process (`ProcessBox`): a draft asks the user for a decision, not a step the agent took; once the turn settles, it is at the same level as the answer.
 
@@ -76,12 +76,14 @@ What a task's runs used, in tokens and by model (no money: the cost fields of th
 - **"No data" is not 0.** A message whose runtime reported nothing (`unreportedUsage`), or a request a provider answered with zero tokens counted, is a row with NULL tokens. A run with no reported row is counted in `runsWithoutData`. A daemon too old to send `RunOutcome.usage` leaves its external-runtime runs without data.
 - **Runs from before 0057** are filled in once at startup (`usage_counted = 'backfill'`): from the 30-day `usage` table for a session on eta's own loop, else from the session's journal on this machine, split between a session's runs by time. A run whose old messages are all zeros, or whose journal is on a daemon, has no data.
 - **Reading it.** `tasks.usage { taskId, includeSubtasks? }` returns totals, per model (with how many runs used it) and per run (agent, times, tokens, models). With `includeSubtasks`, every task under it at any depth is included; each run belongs to exactly one task, so nothing is counted twice. `tasks.<id>` carries the same as a `usage` section (subtasks included), pushed when a request is counted or a run's transcript is recorded, to the task and every task above it.
+- **On the board.** Every `BoardTaskView` of the `tasks` list (and `tasks.list`) carries `usage`, a brief of its own runs (total tokens, the main model and how many models, runs, runs without data, and the session of a run going now, where the client reads the live `metrics.tokensPerSec`), and for a task with subtasks `usageWithSubtasks`, its tree's. `TaskUsageStore.briefs` reads them for the whole board in one pass, so a card needs no `tasks.<id>`; the list is pushed again (paced) when a run's tokens are counted. Null is a task none of whose runs got a session.
 
 ## Actions on the wire
 
 | action                | Meaning                                                                  |
 | --------------------- | ------------------------------------------------------------------------ |
 | `confirmDraft`        | Confirm draft, create task and enqueue                                   |
+| `discardDraft`        | Discard a waiting draft: no task, the row stays marked `discarded`       |
 | `update`              | Change title, description, status (drag between columns too)             |
 | `comment`             | Comment; deliver into the running run, or wake a continuation run        |
 | `interrupt` / `rerun` | Stop a run / start a new run                                             |

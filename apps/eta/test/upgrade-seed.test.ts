@@ -24,6 +24,7 @@ import {
   readManifest,
   restoreSeed,
 } from "../../../scripts/upgrade-e2e/seed";
+import { AgentStore } from "../src/agents/store";
 import {
   applyMigrations,
   databasePath,
@@ -134,7 +135,8 @@ describe("the seeds a release upgrades", () => {
       "0055-steward-only-in-groups",
       "0056-places",
       "0057-task-usage",
-      "0058-interaction-context",
+      "0058-agent-avatar",
+      "0059-interaction-context",
     ]);
   });
 
@@ -174,5 +176,15 @@ describe("the seeds a release upgrades", () => {
           )
           .get()!.n,
       ).toBe(0);
+    });
+
+  // No agent from before had a face of its own: each still draws it from its id.
+  for (const version of seeds)
+    it(`${version}: leaves every agent the face its id draws`, async () => {
+      const { db } = await upgraded(version);
+      const agents = new AgentStore(db).list();
+      expect(agents.length).toBeGreaterThan(0);
+      for (const agent of agents)
+        expect(agent).toMatchObject({ avatarSeed: null, avatarSeeds: [] });
     });
 });

@@ -54,6 +54,10 @@ export interface AgentView {
   skippedPlugins: string[];
   /** `captain` for the one El Capitan agent; null for every ordinary agent. */
   systemRole: "captain" | null;
+  /** The seed its avatar is drawn from; null draws it from `id`, the face every agent starts with. */
+  avatarSeed: string | null;
+  /** The last few seeds it wore, newest first: the current one, then the ones it can go back to. */
+  avatarSeeds: string[];
   /** The agent's workspace directory (on the primary machine). */
   home: string;
   homeProjectId: string;
@@ -338,8 +342,8 @@ export type AgentAction = (typeof AGENT_ACTIONS)[number];
 
 /**
  * What can answer for an agent. `eta` is eta's own loop on eta's models; the others are agent
- * runtimes installed on the machine (Claude Code, Codex, OpenCode, Pi), each with its own tools,
- * context and models, that the agent's sessions hand their runs to.
+ * runtimes installed on the machine (Claude Code, Codex, OpenCode, Pi, Grok Build), each
+ * with its own tools, context and models, that the agent's sessions hand their runs to.
  */
 export const AGENT_RUNTIMES = [
   "eta",
@@ -347,8 +351,9 @@ export const AGENT_RUNTIMES = [
   "codex",
   "opencode",
   "pi",
+  "grok",
 ] as const;
-/** The built-in runtimes: eta's own loop and the four reached through oar. */
+/** The built-in runtimes: eta's own loop and the ones reached through oar. */
 export type BuiltinAgentRuntime = (typeof AGENT_RUNTIMES)[number];
 /**
  * A runtime id. Beyond the built-in ones, every ACP agent the host's `acp.json` lists is a
@@ -448,7 +453,8 @@ export interface AgentFields {
 export interface AgentArgs {
   /** Makes the agent, its workspace directory and its home project. */
   create: AgentFields;
-  update: { agentId: string } & Partial<AgentFields>;
+  /** `avatarSeed` draws its avatar from that seed and puts it at the front of `avatarSeeds`. */
+  update: { agentId: string; avatarSeed?: string } & Partial<AgentFields>;
   /** Clears it as steward, archives the chats it was alone in, and leaves its directory on disk. */
   delete: { agentId: string };
   /** The private chat with the agent, made the first time and found every time after. */

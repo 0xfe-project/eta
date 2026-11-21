@@ -8,6 +8,7 @@ import { useHost } from "../../services/host";
 import { TaskTableRow } from "./list";
 import { TaskPlanBoard } from "./plan";
 import { progressColor, statusName, TaskGlyph } from "./status";
+import { UsageLine } from "./usage";
 import { visibleStatuses } from "./workspace-board";
 
 export function TaskWorkspaceList(props: {
@@ -141,6 +142,11 @@ export function TaskWorkspaceList(props: {
                           value4: group().parent.subtasks?.total ?? 0,
                         })}
                       </Label>
+                      <UsageLine
+                        task={group().parent}
+                        variant="caption"
+                        style={{ flexShrink: 0, marginRight: 8 }}
+                      />
                       <View
                         style={{
                           ...row,

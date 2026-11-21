@@ -1,20 +1,33 @@
 import { blobatar } from "blobatar";
 import { computed, Image, View } from "nsh";
+import { Host } from "../services/host";
+import { faceFrame } from "./face-frame";
 
-export function AgentFace(props: { id?: string | null; size?: number }) {
+/**
+ * The agent's face, drawn from its avatar seed, or from its id when it never drew one, so a rename
+ * keeps it; the web and the phone app draw the same seed. `seed` draws that face instead: the
+ * editor's, while a draw passes over faces or a new one is being saved.
+ */
+export function AgentFace(props: {
+  id?: string | null;
+  seed?: string;
+  size?: number;
+}) {
+  const host = Host();
   const size = () => props.size ?? 20;
-  // Seed by ID as in the legacy clients so renames preserve an agent's face.
-  // Blobatar draws inside the middle of a 100x100 box; crop to the blob so the
-  // face fills the avatar like the design's solid circle.
-  const src = computed(
-    () =>
-      `data:image/svg+xml;utf8,${encodeURIComponent(
-        blobatar(props.id ?? "agent").replace(
-          'viewBox="0 0 100 100"',
-          'viewBox="16 16 68 68"',
-        ),
-      )}`,
-  );
+  const seed = () =>
+    props.seed ?? host?.agent(props.id)?.avatarSeed ?? props.id ?? "agent";
+  // Blobatar draws somewhere inside a 100x100 box; show the square around this
+  // face so it fills the avatar like the design's solid circle, whole.
+  const src = computed(() => {
+    const frame = faceFrame(seed());
+    return `data:image/svg+xml;utf8,${encodeURIComponent(
+      blobatar(seed()).replace(
+        'viewBox="0 0 100 100"',
+        `viewBox="${frame.x} ${frame.y} ${frame.size} ${frame.size}"`,
+      ),
+    )}`;
+  });
   return (
     <Image
       src={src()}

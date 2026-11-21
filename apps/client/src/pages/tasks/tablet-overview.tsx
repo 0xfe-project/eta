@@ -5,6 +5,7 @@ import { colors, grow, Icon, Label, Markdown, row } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "./activity";
+import { actorLabel, CreatorChip } from "./creator";
 import { NeighbourStrip, Prerequisites, Subtasks } from "./dependencies";
 import { taskMoment } from "./facts";
 import { activeTaskRun } from "./run-log";
@@ -18,6 +19,7 @@ import {
   RunLine,
   TitleInPlace,
 } from "./task-overview";
+import { TaskUsageSection } from "./usage-section";
 
 /** A task's page on tablet: its properties under the title, the run line and the reply box pinned below. */
 export function TabletOverview(props: {
@@ -40,8 +42,7 @@ export function TabletOverview(props: {
   } = props.state;
   const item = () => props.item;
   const parent = () => !!item().children?.length;
-  const creator = () =>
-    host.agent(item().createdBy.agentId)?.name ?? uiText("taskMe");
+  const creator = () => actorLabel(item().createdBy, host.agent);
   return (
     <View style={grow}>
       <Scroll style={grow} scrollbar={false}>
@@ -109,6 +110,7 @@ export function TabletOverview(props: {
               />
             </If>
           </View>
+          <CreatorChip creator={item().createdBy} />
           <Prerequisites
             item={item()}
             compact
@@ -174,6 +176,7 @@ export function TabletOverview(props: {
               </View>
             </View>
           </If>
+          <TaskUsageSection item={item()} layout="tablet" />
           <TaskActivity
             heading="tablet"
             entries={activity()}

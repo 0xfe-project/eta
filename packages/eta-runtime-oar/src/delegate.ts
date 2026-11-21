@@ -35,10 +35,12 @@
  *   and the host's tools have a run to serve them, as for a turn eta prompted.
  */
 import type {
+  AvailableInstallation,
   CompactionOutcome,
   Event,
   InputImage,
   McpServer,
+  RefusedSessionOptions,
   Session,
   SessionOptions,
   TokenTotals,
@@ -57,6 +59,7 @@ import { Buffer } from "node:buffer";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { installedSessionCapabilities } from "@botiverse/oar";
 import { hostResultOf, HostTools, NO_RUN } from "@eta/runtime-kit";
 import { HostCalls } from "./host-calls";
 import { effortFor } from "./models";
@@ -109,6 +112,15 @@ interface Input {
   text: string;
   images: { data: string; mimeType: string }[];
 }
+
+/**
+ * The runtimes that keep a conversation's appended prompt across a resume, through compaction
+ * too, and refuse it given again alone (Grok Build 1.0.89 through oar 0.128: "Omit
+ * appendSystemPrompt to retain the saved append"). oar says so only when the session opens, not
+ * in `resumedSessionOptions`, so it is named here. A resumed conversation keeps the words it
+ * started with.
+ */
+const KEEPS_APPEND_ON_RESUME: ReadonlySet<RuntimeId> = new Set(["grok"]);
 
 function inputOf(messages: readonly AgentMessage[]): Input {
   const texts: string[] = [];
@@ -269,7 +281,9 @@ export class OarDelegate implements RunDelegate {
       await until(this.#compacting, context.signal);
       if (context.signal.aborted) return { status: "aborted" };
       const settings = this.#settings(context.config());
-      const opened = await this.#ensure(context, settings);
+      let opened = await this.#ensure(context, settings);
+      /** Whether the runtime's session was reopened for a prompt it no longer had a session for. */
+      let reopened = false;
       // The effort the runtime session was opened with is what this run hands it.
       context.recordThinking(opened.effort);
       // The host's tools as they are now: a set that changed since the last run is served anew.
@@ -302,13 +316,29 @@ export class OarDelegate implements RunDelegate {
           start = { prompt: this.#introduced(opened, input) };
           input = { text: "", images: [] };
         }
-        const outcome = await this.#turn(
+        const turn = await this.#turn(
           opened.session,
           translator,
           start,
           context,
         );
         this.#charged = translator.charged;
+        if (turn === "gone" && !reopened && !context.signal.aborted) {
+          // The runtime lost the session under its process (Codex: `thread not found`) and the
+          // prompt came back: resume the conversation in a new process and prompt it again.
+          reopened = true;
+          opened = await this.#ensure(context, settings);
+          input = joined([...this.#undelivered.splice(0), input]);
+          continue;
+        }
+        const outcome: TurnOutcome =
+          turn === "gone"
+            ? {
+                kind: "failed",
+                failure: "unknown",
+                reason: `${this.#options.runtime} no longer has this session`,
+              }
+            : turn;
         if (outcome.kind !== "completed") {
           // What was not prompted yet waits for the next run.
           if (!isEmpty(input)) this.#undelivered.unshift(input);
@@ -372,7 +402,13 @@ export class OarDelegate implements RunDelegate {
         if (!this.#following) this.#lost(session);
         return;
       }
-      if (this.#following || this.#adopted !== undefined) return;
+      // A compaction is a turn of the runtime's too (`turn_active` for its request): not one to follow.
+      if (
+        this.#following ||
+        this.#adopted !== undefined ||
+        this.#compacting !== undefined
+      )
+        return;
       if (event.sessionId !== session.id || event.agentPath.length > 0) return;
       if (!TURN_SIGNS.has(event.kind)) return;
       this.#adopted = event.seq;
@@ -501,11 +537,17 @@ export class OarDelegate implements RunDelegate {
   /** The conversation on this delegate's runtime, for a compaction and nothing after it. */
   async #openForCompaction(config: KernelConfig): Promise<Session> {
     const { runtime: id, catalog } = this.#options;
+    const installation = await catalog.installation(id);
     return await catalog
       .runtime(id)
       .session(
-        await catalog.installation(id),
-        this.#sessionOptions(this.#settings(config), this.#resume, []),
+        installation,
+        this.#sessionOptions(
+          this.#settings(config),
+          this.#resume,
+          [],
+          this.#refused(installation),
+        ),
       );
   }
 
@@ -572,12 +614,22 @@ export class OarDelegate implements RunDelegate {
     }
   }
 
+  /**
+   * The options this installation of the runtime refuses: what every version refuses, and what
+   * this version does (OpenCode v2 takes an appended prompt only from a given release on).
+   */
+  #refused(installation: AvailableInstallation): RefusedSessionOptions {
+    const { runtime, catalog } = this.#options;
+    return (
+      installedSessionCapabilities(catalog.runtime(runtime), installation)
+        .refusedSessionOptions ?? {}
+    );
+  }
+
   /** The agent's words as a system prompt, on a runtime that takes one. */
-  #systemPrompt(): string | undefined {
-    const { runtime, catalog, agentPrompt } = this.#options;
-    return catalog.runtime(runtime).refusedSessionOptions
-      ?.appendSystemPrompt === undefined
-      ? agentPrompt()
+  #systemPrompt(refused: RefusedSessionOptions): string | undefined {
+    return refused.appendSystemPrompt === undefined
+      ? this.#options.agentPrompt()
       : undefined;
   }
 
@@ -586,9 +638,13 @@ export class OarDelegate implements RunDelegate {
     { model, effort }: Settings,
     resume: string | undefined,
     mcpServers: readonly McpServer[],
+    refused: RefusedSessionOptions,
   ): SessionOptions {
     const { launchArgs } = this.#options;
-    const systemPrompt = this.#systemPrompt();
+    const systemPrompt =
+      resume !== undefined && KEEPS_APPEND_ON_RESUME.has(this.#options.runtime)
+        ? undefined
+        : this.#systemPrompt(refused);
     return {
       cwd: this.#options.cwd,
       ...(model === undefined ? {} : { model }),
@@ -596,6 +652,7 @@ export class OarDelegate implements RunDelegate {
       ...(resume === undefined ? {} : { resume }),
       // Told on every open, resumed or not: a resumed conversation that was not told keeps the
       // prompt only until its next compaction (`resumedSessionOptions`), and then forgets it.
+      // Not on a runtime that keeps it itself and refuses it again (`KEEPS_APPEND_ON_RESUME`).
       ...(systemPrompt === undefined
         ? {}
         : { appendSystemPrompt: systemPrompt }),
@@ -613,7 +670,11 @@ export class OarDelegate implements RunDelegate {
     const { runtime: id, catalog } = this.#options;
     const runtime = catalog.runtime(id);
     const installation = await catalog.installation(id);
-    const refused = runtime.refusedSessionOptions?.mcpServers !== undefined;
+    const refusals = this.#refused(installation);
+    // The host's server carries its bearer token: a runtime that refuses credentials takes none.
+    const refused =
+      refusals.mcpServers !== undefined ||
+      refusals.mcpServerCredentials !== undefined;
     const served = refused ? undefined : await this.#host.serve(context);
     const plugins = this.#options.mcpServers ?? [];
     if (refused && plugins.length > 0)
@@ -624,7 +685,7 @@ export class OarDelegate implements RunDelegate {
       ? []
       : [...(served === undefined ? [] : [served]), ...plugins];
     const options = (resume: string | undefined): SessionOptions =>
-      this.#sessionOptions(settings, resume, mcpServers);
+      this.#sessionOptions(settings, resume, mcpServers, refusals);
     let session: Session;
     try {
       session = await runtime.session(installation, options(this.#resume));
@@ -649,7 +710,7 @@ export class OarDelegate implements RunDelegate {
       session,
       ...settings,
       // A resumed conversation already heard who it is.
-      prompted: this.#systemPrompt() !== undefined || resumed,
+      prompted: this.#systemPrompt(refusals) !== undefined || resumed,
     };
   }
 
@@ -700,13 +761,15 @@ export class OarDelegate implements RunDelegate {
     translator: Translator,
     start: TurnStart,
     context: RunDelegateContext,
-  ): Promise<TurnOutcome> {
+  ): Promise<TurnOutcome | "gone"> {
     const prompt =
       "prompt" in start
         ? await this.#deliverable(session, start.prompt)
         : undefined;
     // The steers in flight, one after another; each ends when its fate is known.
     let steering: Promise<void> = Promise.resolve();
+    /** The runtime no longer has the session: the prompt was handed back. */
+    let gone = false;
     this.#following = true;
     const outcome = await new Promise<TurnOutcome>((resolve) => {
       let settled = false;
@@ -759,7 +822,14 @@ export class OarDelegate implements RunDelegate {
                 failure: "runtime_exited",
                 reason: `${this.#options.runtime} exited${event.code === null ? "" : ` with code ${event.code}`}${event.reason === undefined ? "" : `: ${event.reason}`}`,
               });
+            } else if (event.kind === "input_handled") {
+              // The runtime handled the prompt itself (a Pi extension's input handler) and began
+              // no turn for it: there is no end to wait for. A run it started is a turn of its own.
+              if (event.inputId === inputId)
+                setTimeout(settle, 0, { kind: "completed" });
             } else if (event.kind === "input_dropped") {
+              // Every input here is given an id; one named only by its request is someone else's.
+              if (event.inputId === undefined) return;
               const dropped = accepted.get(event.inputId);
               if (dropped !== undefined) {
                 // It comes back to us, and may have been all a finished turn was waiting for.
@@ -855,6 +925,17 @@ export class OarDelegate implements RunDelegate {
               this.#undelivered.unshift(input);
               return;
             }
+            if (result.code === "session_not_found") {
+              gone = true;
+              this.#undelivered.unshift(input);
+              this.#lost(session);
+              settle({
+                kind: "failed",
+                failure: "unknown",
+                reason: result.reason,
+              });
+              return;
+            }
             settle({
               kind: "failed",
               failure: "invalid_request",
@@ -871,7 +952,7 @@ export class OarDelegate implements RunDelegate {
     });
     // A steer still on its way may yet come back: the caller reads what did.
     await steering;
-    return outcome;
+    return gone ? "gone" : outcome;
   }
 
   /** The runtime process is gone: the next run opens it again, resuming the conversation. */

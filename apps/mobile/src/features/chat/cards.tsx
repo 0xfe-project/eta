@@ -41,6 +41,8 @@ const RUN_STATUS: Partial<Record<TaskRunStatus, TextKey>> = {
 export function DraftCard(props: { message: MessageView; chat: Chat }) {
   const draft = () => props.message.data as unknown as TaskDraftData;
   const expanded = () => props.chat.folds()[props.message.id] === true;
+  // Discarded by the user (on another client): it waits for nothing, so it offers no confirm.
+  const discarded = () => draft().discarded === true;
   return (
     <View class="border border-border-strong">
       <View
@@ -57,11 +59,15 @@ export function DraftCard(props: { message: MessageView; chat: Chat }) {
         <Text class="line-clamp-1 grow basis-0 text-base leading-[18px] text-foreground">
           {draft().title}
         </Text>
-        <Text class="text-sm leading-4 text-foreground">
+        <Text
+          class={`text-sm leading-4 ${discarded() ? "text-muted-foreground" : "text-foreground"}`}
+        >
           {t(
-            draftStatus(draft()) === "backlog"
-              ? "chat.draft.waitingBacklog"
-              : "chat.draft.waiting",
+            discarded()
+              ? "chat.draft.discarded"
+              : draftStatus(draft()) === "backlog"
+                ? "chat.draft.waitingBacklog"
+                : "chat.draft.waiting",
           )}
         </Text>
       </View>
@@ -85,23 +91,25 @@ export function DraftCard(props: { message: MessageView; chat: Chat }) {
           </If>
         </View>
       </If>
-      <View class="flex-row px-[10px] pb-[10px]">
-        <View
-          role="button"
-          accessibilityLabel={t("chat.draft.confirm")}
-          onPress={() => {
-            const message = props.message;
-            open(`draft:${message.id}`, () => (
-              <DraftScreen message={message} />
-            ));
-          }}
-          class="h-9 grow basis-0 items-center justify-center bg-primary active:opacity-80"
-        >
-          <Text class="text-md leading-4 text-primary-foreground">
-            {t("chat.draft.confirm")}
-          </Text>
+      <If when={!discarded()}>
+        <View class="flex-row px-[10px] pb-[10px]">
+          <View
+            role="button"
+            accessibilityLabel={t("chat.draft.confirm")}
+            onPress={() => {
+              const message = props.message;
+              open(`draft:${message.id}`, () => (
+                <DraftScreen message={message} />
+              ));
+            }}
+            class="h-9 grow basis-0 items-center justify-center bg-primary active:opacity-80"
+          >
+            <Text class="text-md leading-4 text-primary-foreground">
+              {t("chat.draft.confirm")}
+            </Text>
+          </View>
         </View>
-      </View>
+      </If>
     </View>
   );
 }

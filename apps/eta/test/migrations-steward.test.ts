@@ -341,6 +341,8 @@ describe("0055-steward-only-in-groups", () => {
     expect([...projectMachinesOf({ projects, conversations }, "ada")]).toEqual([
       "m2",
     ]);
+    // The current store reads the current schema: bring the rest of the migrations in first.
+    applyMigrations(db, loadMigrations());
     const memory = new CaptainMemory({
       db,
       dataDir: await tempDir("eta-other-data-"),
