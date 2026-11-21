@@ -203,105 +203,121 @@ export function ConversationPanel(props: {
           when={!props.taskId && panel() === "Pending"}
           else={
             <If when={!props.taskId}>
-              <Scroll style={grow} scrollbar={false}>
-                <If when={props.captain && panel() === "Context"}>
-                  <View
-                    style={{
-                      padding: 12,
-                      gap: 6,
-                      borderBottomWidth: 1,
-                      borderColor: c().border,
-                    }}
-                  >
-                    <Caption text={uiText("captainModel")} />
-                    <View style={{ ...row, gap: 8 }}>
-                      <View style={{ flex: 1 }}>
-                        <ModelSelect
-                          value={model() || host.captain()?.model || ""}
-                          onChange={model.set}
-                        />
-                      </View>
-                      <Button
-                        label={uiText("saveModel")}
-                        tone="primary"
-                        disabled={!model()}
-                        onPress={() =>
-                          void host.action(async () => {
-                            await host.call("captain", "setModel", {
-                              model: model(),
-                            });
-                            model.set("");
-                          })
-                        }
-                      />
-                    </View>
-                    <Label size={10} line={12} tone="muted">
-                      {uiText("chooseTheModelUsedForCaptains")}
-                    </Label>
-                  </View>
-                  <View
-                    style={{
-                      padding: 12,
-                      gap: 6,
-                      borderBottomWidth: 1,
-                      borderColor: c().border,
-                    }}
-                  >
-                    <Caption
-                      text={uiText("pendingApprovals", {
-                        count: approvals().length,
-                      })}
-                    />
-                    <If
-                      when={approvals().length}
-                      else={
-                        <Label size={12} line={16}>
-                          {uiText("nothingIsWaitingForApproval")}
+              <If
+                when={panel() === "Artifacts"}
+                else={
+                  <Scroll style={grow} scrollbar={false}>
+                    <If when={props.captain && panel() === "Context"}>
+                      <View
+                        style={{
+                          padding: 12,
+                          gap: 6,
+                          borderBottomWidth: 1,
+                          borderColor: c().border,
+                        }}
+                      >
+                        <Caption text={uiText("captainModel")} />
+                        <View style={{ ...row, gap: 8 }}>
+                          <View style={{ flex: 1 }}>
+                            <ModelSelect
+                              value={model() || host.captain()?.model || ""}
+                              onChange={model.set}
+                            />
+                          </View>
+                          <Button
+                            label={uiText("saveModel")}
+                            tone="primary"
+                            disabled={!model()}
+                            onPress={() =>
+                              void host.action(async () => {
+                                await host.call("captain", "setModel", {
+                                  model: model(),
+                                });
+                                model.set("");
+                              })
+                            }
+                          />
+                        </View>
+                        <Label size={10} line={12} tone="muted">
+                          {uiText("chooseTheModelUsedForCaptains")}
                         </Label>
-                      }
-                    >
-                      <Each of={approvals()} key={(op) => op.id}>
-                        {(op) => <Proposal operation={op()} />}
-                      </Each>
+                      </View>
+                      <View
+                        style={{
+                          padding: 12,
+                          gap: 6,
+                          borderBottomWidth: 1,
+                          borderColor: c().border,
+                        }}
+                      >
+                        <Caption
+                          text={uiText("pendingApprovals", {
+                            count: approvals().length,
+                          })}
+                        />
+                        <If
+                          when={approvals().length}
+                          else={
+                            <Label size={12} line={16}>
+                              {uiText("nothingIsWaitingForApproval")}
+                            </Label>
+                          }
+                        >
+                          <Each of={approvals()} key={(op) => op.id}>
+                            {(op) => <Proposal operation={op()} />}
+                          </Each>
+                        </If>
+                      </View>
                     </If>
-                  </View>
-                </If>
-                <If when={panel() === "Context" && !props.captain}>
-                  <ContextTasks tasks={tasks()} onTask={props.onTask} />
-                </If>
-                <If when={panel() === "Tasks"}>
-                  <TasksTab
-                    conversationId={props.id}
-                    conversationName={props.info?.name ?? ""}
-                    onTask={props.onTask}
-                  />
-                </If>
-                <If when={panel() === "Context" || panel() === "Artifacts"}>
-                  <ConversationArtifacts
-                    conversationId={props.id}
-                    tab={panel()}
-                    filters={props.artifactFilters}
-                    onViewAll={() => panel.set("Artifacts")}
-                    phone={phone()}
-                    onOpen={props.onArtifact}
-                    onTask={props.onTask}
-                    reload={props.reloadArtifacts}
-                  />
-                </If>
-                <If when={panel() === "Context"}>
-                  <ConversationMembers
-                    members={props.members}
-                    group={props.group}
-                    info={props.info}
-                    phone={phone()}
-                    expandedSession={props.memberSteps}
-                    onToggleSteps={props.onToggleSteps}
-                    onInspect={props.onInspect}
-                    onInvite={props.onInvite}
-                    onRemove={props.onRemove}
-                  />
-                </If>
-              </Scroll>
+                    <If when={panel() === "Context" && !props.captain}>
+                      <ContextTasks tasks={tasks()} onTask={props.onTask} />
+                    </If>
+                    <If when={panel() === "Tasks"}>
+                      <TasksTab
+                        conversationId={props.id}
+                        conversationName={props.info?.name ?? ""}
+                        onTask={props.onTask}
+                      />
+                    </If>
+                    <If when={panel() === "Context"}>
+                      <ConversationArtifacts
+                        conversationId={props.id}
+                        tab={panel()}
+                        filters={props.artifactFilters}
+                        onViewAll={() => panel.set("Artifacts")}
+                        phone={phone()}
+                        onOpen={props.onArtifact}
+                        onTask={props.onTask}
+                        reload={props.reloadArtifacts}
+                      />
+                    </If>
+                    <If when={panel() === "Context"}>
+                      <ConversationMembers
+                        members={props.members}
+                        group={props.group}
+                        info={props.info}
+                        phone={phone()}
+                        expandedSession={props.memberSteps}
+                        onToggleSteps={props.onToggleSteps}
+                        onInspect={props.onInspect}
+                        onInvite={props.onInvite}
+                        onRemove={props.onRemove}
+                      />
+                    </If>
+                  </Scroll>
+                }
+              >
+                {/* The Artifacts tab scrolls its list between the filters and the pages. */}
+                <ConversationArtifacts
+                  conversationId={props.id}
+                  tab={panel()}
+                  filters={props.artifactFilters}
+                  phone={phone()}
+                  onOpen={props.onArtifact}
+                  onTask={props.onTask}
+                  reload={props.reloadArtifacts}
+                />
+              </If>
             </If>
           }
         >

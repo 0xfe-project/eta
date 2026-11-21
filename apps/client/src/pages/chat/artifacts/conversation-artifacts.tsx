@@ -1,7 +1,7 @@
 import type { ArtifactView } from "@eta/client-contracts";
-import type { Signal, ViewRef } from "nsh";
+import type { ScrollRef, Signal, ViewRef } from "nsh";
 import type { ArtifactFilters, ArtifactSort } from "./filter";
-import { keymap, View } from "nsh";
+import { keymap, Scroll, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -10,6 +10,7 @@ import {
   colors,
   Empty,
   Field,
+  grow,
   Icon,
   Label,
   ListSkeleton,
@@ -81,7 +82,7 @@ export function ConversationArtifacts(props: {
         />
       }
     >
-      <View style={{ paddingTop: 12 }}>
+      <View style={grow}>
         <If
           when={artifacts().length}
           else={
@@ -98,7 +99,7 @@ export function ConversationArtifacts(props: {
                 titleLine={20}
                 descriptionSize={10}
                 descriptionLine={16}
-                style={{ flex: 0, marginTop: 4, paddingVertical: 48 }}
+                style={{ flex: 0, marginTop: 16, paddingVertical: 48 }}
                 title={
                   host.state().missing.artifacts
                     ? uiText("artifactLoadError")
@@ -252,9 +253,15 @@ export function ArtifactBrowser(props: {
       ? uiText("artifactPublisherUnavailable")
       : (host.agent(id)?.name ?? uiText("artifactPublisherUnavailable"));
   let searchInput: ViewRef | undefined;
+  let list: ScrollRef | undefined;
   keymap.bind("/", () => searchInput?.focus(), { when: "notEditing" });
+  // A new page starts at its top, as the web's tab does.
+  const goTo = (page: number) => {
+    update({ page });
+    list?.scrollTo({ y: 0, animated: false });
+  };
   return (
-    <View>
+    <View style={grow}>
       <View
         style={{
           gap: 6,
@@ -353,73 +360,89 @@ export function ArtifactBrowser(props: {
           </View>
         </If>
       </View>
-      <If
-        when={shown().length}
-        else={
-          <View
-            style={{
-              alignItems: "center",
-              gap: 12,
-              paddingHorizontal: 20,
-              paddingVertical: 40,
-            }}
-          >
-            <Label
-              size={12}
-              line={16}
-              tone="muted"
-              style={{ textAlign: "center" }}
-            >
-              {filters().query.trim()
-                ? uiText("artifactsNoMatch", { query: filters().query.trim() })
-                : uiText("artifactsNoFilterMatch")}
-            </Label>
-            <Button
-              label={uiText("artifactsClearFilters")}
-              size={props.phone ? 32 : 24}
-              labelSize={11}
-              onPress={clear}
-            />
-          </View>
-        }
+      <Scroll
+        ref={(node) => {
+          list = node;
+        }}
+        style={grow}
+        scrollbar={false}
       >
-        <Each of={view().rows} key={(entry) => entry.artifact.id}>
-          {(entry) => (
-            <>
-              <If when={entry().heading ? entry().group : null}>
-                {(group) => (
-                  <Label
-                    size={11}
-                    line={16}
-                    tone="muted"
-                    style={{
-                      paddingHorizontal: 10,
-                      paddingTop: 14,
-                      paddingBottom: 6,
-                    }}
-                  >
-                    {uiText(groupLabels[group()])}
-                  </Label>
-                )}
-              </If>
-              <ArtifactRow
-                artifact={entry().artifact}
-                placement="list"
-                phone={props.phone}
-                query={filters().query}
-                group={entry().group}
-                at={timeOf(entry().artifact, filters().sort)}
-                onPress={() => props.onOpen(entry().artifact)}
-                onTask={props.onTask}
+        <If
+          when={shown().length}
+          else={
+            <View
+              style={{
+                alignItems: "center",
+                gap: 12,
+                paddingHorizontal: 20,
+                paddingVertical: 40,
+              }}
+            >
+              <Label
+                size={12}
+                line={16}
+                tone="muted"
+                style={{ textAlign: "center" }}
+              >
+                {filters().query.trim()
+                  ? uiText("artifactsNoMatch", {
+                      query: filters().query.trim(),
+                    })
+                  : uiText("artifactsNoFilterMatch")}
+              </Label>
+              <Button
+                label={uiText("artifactsClearFilters")}
+                size={props.phone ? 32 : 24}
+                labelSize={11}
+                onPress={clear}
               />
-            </>
-          )}
-        </Each>
+            </View>
+          }
+        >
+          <Each of={view().rows} key={(entry) => entry.artifact.id}>
+            {(entry) => (
+              <>
+                <If when={entry().heading ? entry().group : null}>
+                  {(group) => (
+                    <Label
+                      size={11}
+                      line={16}
+                      tone="muted"
+                      style={{
+                        paddingHorizontal: 10,
+                        paddingTop: 14,
+                        paddingBottom: 6,
+                      }}
+                    >
+                      {uiText(groupLabels[group()])}
+                    </Label>
+                  )}
+                </If>
+                <ArtifactRow
+                  artifact={entry().artifact}
+                  placement="list"
+                  phone={props.phone}
+                  query={filters().query}
+                  group={entry().group}
+                  at={timeOf(entry().artifact, filters().sort)}
+                  onPress={() => props.onOpen(entry().artifact)}
+                  onTask={props.onTask}
+                />
+              </>
+            )}
+          </Each>
+        </If>
+      </Scroll>
+      <If when={shown().length}>
         <View
           role="navigation"
           style={{
             ...row,
+            flexShrink: 0,
             height: 40,
+            borderTopWidth: 1,
+            borderColor: c().border,
+            backgroundColor: c().surface,
             justifyContent: "space-between",
             paddingHorizontal: 10,
           }}
@@ -438,7 +461,7 @@ export function ArtifactBrowser(props: {
                 phone={props.phone}
                 accessibilityLabel={uiText("artifactsPreviousPage")}
                 disabled={view().page === 1}
-                onPress={() => update({ page: view().page - 1 })}
+                onPress={() => goTo(view().page - 1)}
               />
               <Each of={pageWindow(view().page, view().pages)}>
                 {(number) => (
@@ -457,7 +480,7 @@ export function ArtifactBrowser(props: {
                         page: number(),
                       })}
                       selected={number() === view().page}
-                      onPress={() => update({ page: number()! })}
+                      onPress={() => goTo(number()!)}
                     />
                   </If>
                 )}
@@ -467,7 +490,7 @@ export function ArtifactBrowser(props: {
                 phone={props.phone}
                 accessibilityLabel={uiText("artifactsNextPage")}
                 disabled={view().page === view().pages}
-                onPress={() => update({ page: view().page + 1 })}
+                onPress={() => goTo(view().page + 1)}
               />
             </View>
           </If>
