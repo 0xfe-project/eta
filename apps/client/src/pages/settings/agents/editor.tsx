@@ -114,7 +114,7 @@ export function AgentEditor(props: AgentEditorProps) {
           style={{ ...row, flex: 1, minWidth: 0, gap: phoneEditor() ? 8 : 10 }}
         >
           <If when={!creating}>
-            <AgentFace id={props.id} size={24} />
+            <AgentFace id={props.id} seed={form.avatar?.worn()} size={24} />
           </If>
           <If
             when={phoneEditor()}
