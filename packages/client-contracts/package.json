@@ -13,6 +13,7 @@
     "./connect-link": "./src/connect-link.ts",
     "./desktop": "./src/desktop.ts",
     "./plugin-fields": "./src/plugin-fields.ts",
+    "./themes": "./src/themes.ts",
     "./tool-shape": "./src/tool-shape.ts",
     "./wire": "./src/wire.ts"
   },

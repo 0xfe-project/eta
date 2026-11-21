@@ -139,9 +139,13 @@ function Fixture() {
           initial="Model services"
           layout={width < 600 ? "phone" : width < 1200 ? "tablet" : "desktop"}
           theme="light"
+          paletteId="default"
+          flavor="mocha"
           chatWidth="standard"
           chatRail
           onTheme={noop}
+          onPalette={noop}
+          onFlavor={noop}
           onChatWidth={noop}
           onChatRail={noop}
           onFonts={noop}

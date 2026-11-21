@@ -1,7 +1,9 @@
 import type { ViewStyle } from "nsh";
+import type { Flavor, PaletteId } from "./palettes";
 import { context } from "nsh";
 import dwg from "../../assets/AKRDWGSCNFM-Regular.woff2";
 import inter from "../../assets/InterVariable.woff2";
+import { catppuccin, shared } from "./palettes";
 
 export const light = {
   canvas: "#ffffff",
@@ -69,8 +71,22 @@ const dark: typeof light = {
 
 export const Palette = context<() => typeof light>(() => light);
 
-export const palette = (mode: "light" | "dark") =>
-  mode === "dark" ? dark : light;
+/** The colors of `mode` in a palette: `default` is the app's own; Catppuccin is Latte in light and
+ * the chosen `flavor` in dark; the other palettes have one light and one dark. */
+export const palette = (
+  mode: "light" | "dark",
+  paletteId: PaletteId = "default",
+  flavor: Flavor = "mocha",
+) =>
+  paletteId === "catppuccin"
+    ? mode === "dark"
+      ? catppuccin.dark[flavor]
+      : catppuccin.light
+    : paletteId === "default"
+      ? mode === "dark"
+        ? dark
+        : light
+      : shared[paletteId][mode];
 
 export function colors() {
   return Palette();

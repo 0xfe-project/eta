@@ -4,6 +4,7 @@ import type {
   ProvidersView,
 } from "@eta/client-contracts";
 import type { Layout } from "../components";
+import type { Flavor, PaletteId } from "../components/palettes";
 import type { Page } from "../navigation/routes";
 import type { ChatWidth, Theme } from "../pages/settings/appearance";
 import type { SettingsSection } from "../pages/settings/overview";
@@ -46,6 +47,10 @@ export function Workspace(props: {
   layout: Layout;
   theme: Theme;
   onTheme: (mode: Theme) => void;
+  paletteId: PaletteId;
+  onPalette: (id: PaletteId) => void;
+  flavor: Flavor;
+  onFlavor: (flavor: Flavor) => void;
   chatWidth: ChatWidth;
   onChatWidth: (width: ChatWidth) => void;
   chatRail: boolean;
@@ -448,6 +453,10 @@ export function Workspace(props: {
               layout={props.layout}
               theme={props.theme}
               onTheme={props.onTheme}
+              paletteId={props.paletteId}
+              onPalette={props.onPalette}
+              flavor={props.flavor}
+              onFlavor={props.onFlavor}
               chatWidth={props.chatWidth}
               onChatWidth={props.onChatWidth}
               chatRail={props.chatRail}

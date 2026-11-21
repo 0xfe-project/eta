@@ -1,5 +1,7 @@
+import type { Flavor, PaletteId } from "../components/palettes";
 import type { ChatWidth, Theme } from "../pages/settings/appearance";
 import { setColorScheme, signal, Storage } from "nsh";
+import { flavors, paletteIds } from "../components/palettes";
 const themeKey = "eta.appearance";
 
 const chatWidthKey = "eta.chat.width";
@@ -8,9 +10,35 @@ const chatRailKey = "eta.chat.rail";
 
 const fontsKey = "eta.appearance.fonts";
 
+const paletteKey = "eta.appearance.palette";
+
+const flavorKey = "eta.appearance.flavor";
+
 export function createAppearancePreferences() {
   const theme = signal<Theme>("system");
   const chatRail = signal(false);
+  const paletteId = signal<PaletteId>("default");
+  const flavor = signal<Flavor>("mocha");
+  void Storage.getItem(paletteKey)
+    .then((stored) => {
+      const id = paletteIds.find((candidate) => candidate === stored);
+      if (id) paletteId.set(id);
+    })
+    .catch(() => {});
+  void Storage.getItem(flavorKey)
+    .then((stored) => {
+      const name = flavors.find((candidate) => candidate === stored);
+      if (name) flavor.set(name);
+    })
+    .catch(() => {});
+  function changePalette(next: PaletteId) {
+    paletteId.set(next);
+    void Storage.setItem(paletteKey, next).catch(() => {});
+  }
+  function changeFlavor(next: Flavor) {
+    flavor.set(next);
+    void Storage.setItem(flavorKey, next).catch(() => {});
+  }
   const fonts = signal({ interface: "", mono: "" });
   void Storage.getItem(chatRailKey)
     .then((value) => chatRail.set(value === "true"))
@@ -72,7 +100,11 @@ export function createAppearancePreferences() {
     fonts,
     chatWidth,
     chatRail,
+    paletteId,
+    flavor,
     changeTheme,
+    changePalette,
+    changeFlavor,
     changeFonts,
     changeChatWidth,
     changeChatRail,

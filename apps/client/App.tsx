@@ -75,7 +75,11 @@ function App() {
     fonts,
     chatWidth,
     chatRail,
+    paletteId,
+    flavor,
     changeTheme,
+    changePalette,
+    changeFlavor,
     changeFonts,
     changeChatWidth,
     changeChatRail,
@@ -196,7 +200,7 @@ function App() {
         () => {},
       );
   });
-  const c = () => palette(colorScheme());
+  const c = () => palette(colorScheme(), paletteId(), flavor());
   return (
     <LanguageSettings.Provider value={language}>
       <ElementPicking.Provider value={elementPicker}>
@@ -233,6 +237,10 @@ function App() {
                       layout={layout()}
                       theme={theme()}
                       onTheme={changeTheme}
+                      paletteId={paletteId()}
+                      onPalette={changePalette}
+                      flavor={flavor()}
+                      onFlavor={changeFlavor}
                       chatWidth={chatWidth()}
                       onChatWidth={changeChatWidth}
                       chatRail={chatRail()}

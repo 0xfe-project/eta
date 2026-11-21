@@ -16,6 +16,7 @@ import { readFile } from "node:fs/promises";
 import { normalizeAddress } from "../connection/address";
 import { DEFAULT_CONFIG } from "./defaults";
 import { parseKeyBinding } from "./keys";
+import { THEME_PRESETS } from "./presets";
 import { ACTION_NAMES, THEME_TOKENS } from "./types";
 
 const DETAIL_LIMIT = 80;
@@ -23,6 +24,8 @@ const QUIT_ACTION: ActionName = "app.quit";
 const PREVIEW_LINES_MIN = 1;
 const PREVIEW_LINES_MAX = 500;
 const AGENT_COLOURS_KEY = "agents";
+const PRESET_KEY = "preset";
+const DEFAULT_PRESET = "default";
 
 const BASIC_COLOURS = [
   "black",
@@ -251,14 +254,33 @@ function readTheme(
   problems: Problems,
 ): void {
   if (!isObject(value)) return problems.value("theme", "wrong-type", value);
+  // The preset goes first whatever the order in the file: the tokens written next override it.
+  if (PRESET_KEY in value) readThemePreset(value[PRESET_KEY], config, problems);
   for (const [name, item] of Object.entries(value)) {
     const key = `theme.${name}`;
+    if (name === PRESET_KEY) continue;
     if (name === AGENT_COLOURS_KEY) readAgentColours(item, config, problems);
     else if (!isThemeToken(name)) problems.add(key, "unknown-key");
     else if (typeof item !== "string") problems.value(key, "wrong-type", item);
     else if (!isColour(item)) problems.value(key, "invalid-value", item);
     else config.theme[name] = item;
   }
+}
+
+/** `theme.preset`: `default`, or the name of a whole theme in `THEME_PRESETS`. */
+function readThemePreset(
+  value: unknown,
+  config: TuiConfig,
+  problems: Problems,
+): void {
+  const key = `theme.${PRESET_KEY}`;
+  if (typeof value !== "string") return problems.value(key, "wrong-type", value);
+  if (value === DEFAULT_PRESET) return;
+  if (!Object.hasOwn(THEME_PRESETS, value))
+    return problems.value(key, "invalid-value", value);
+  config.theme = structuredClone(
+    THEME_PRESETS[value as keyof typeof THEME_PRESETS],
+  );
 }
 
 /** `theme.agents`: a list of at least one colour, taken whole or not at all. */
