@@ -1,5 +1,6 @@
 import type { ViewStyle } from "nsh";
 import { context } from "nsh";
+import dwg from "../../assets/AKRDWGSCNFM-Regular.woff2";
 import inter from "../../assets/InterVariable.woff2";
 
 export const light = {
@@ -90,7 +91,15 @@ export const fill: ViewStyle = {
   left: 0,
 };
 
-const defaultFont = `${inter}, system-ui, sans-serif`;
+/** The face the app ships, AKR DWG SC NFM (THIRD_PARTY_NOTICES.md), first in both stacks as
+ * in the web app: interface text and monospace text alike. A font chosen in Appearance goes in
+ * front of it (`fontFamily`). */
+export const appFont = dwg;
+
+const defaultFont = `${dwg}, ${inter}, system-ui, sans-serif`;
+
+/** The fallback of every monospace surface: the shipped face, then the system's monospace. */
+const defaultMonoFont = `${dwg}, ui-monospace, monospace`;
 
 export const Fonts = context<() => { interface: string; mono: string }>(() => ({
   interface: "",
@@ -100,6 +109,13 @@ export const Fonts = context<() => { interface: string; mono: string }>(() => ({
 export function fontFamily(family: string, fallback = defaultFont) {
   if (!family.trim()) return fallback;
   return `${JSON.stringify(family.trim())}, ${fallback}`;
+}
+
+/** A monospace surface's stack: the monospace font chosen in Appearance, then the interface font
+ * (an empty monospace setting follows it, as Settings says and as the web app does), then
+ * `defaultMonoFont`. */
+export function monoFontFamily(fonts: { interface: string; mono: string }) {
+  return fontFamily(fonts.mono, fontFamily(fonts.interface, defaultMonoFont));
 }
 
 export const sizes = {

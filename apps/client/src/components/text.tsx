@@ -5,7 +5,7 @@ import type { light } from "./theme";
 import { Image, Text, View } from "nsh";
 import { TextView } from "nsh/base";
 import { iconPaths } from "./icons";
-import { colors, fontFamily, Fonts } from "./theme";
+import { colors, fontFamily, Fonts, monoFontFamily } from "./theme";
 
 export function Label(props: {
   children?: JSX.Element | string | number;
@@ -82,10 +82,7 @@ export function Markdown(props: {
 }) {
   const c = colors();
   const fonts = Fonts();
-  const code = () =>
-    fonts().mono
-      ? { fontFamily: fontFamily(fonts().mono, "monospace") }
-      : undefined;
+  const code = () => ({ fontFamily: monoFontFamily(fonts()) });
   const base = props.dense
     ? { size: 16, line: 22, weight: 600, space: 0, after: 0 }
     : { size: 15, line: 20, weight: undefined, space: 16, after: 6 };
@@ -112,7 +109,7 @@ export function Markdown(props: {
           color: c().ink,
         },
         paragraph: { marginTop: 0, marginBottom: 0 },
-        codeBlock: code(),
+        codeBlockCode: code(),
         code: code(),
         heading1: headings ? heading() : undefined,
         heading2: headings ? heading() : undefined,

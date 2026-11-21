@@ -8,6 +8,7 @@ import {
   Icon,
   Label,
   Markdown,
+  monoFontFamily,
   row,
 } from "../../components";
 import { formatLocale, uiText } from "../../i18n";
@@ -96,7 +97,7 @@ function RfcLine(props: { label: string; value?: string | null }) {
         style={{
           flex: 1,
           minWidth: 0,
-          fontFamily: fontFamily(fonts().mono),
+          fontFamily: monoFontFamily(fonts()),
         }}
       >
         {props.value || "—"}
@@ -152,6 +153,10 @@ function MailBody(props: {
                   color: c().ink,
                 },
                 paragraph: { marginTop: 0, marginBottom: 0 },
+                code: { fontFamily: monoFontFamily(fonts()) },
+                codeBlockCode: {
+                  fontFamily: monoFontFamily(fonts()),
+                },
                 link: { color: c().blue },
               }}
             />
@@ -183,6 +188,8 @@ function MailBody(props: {
             marginTop: 0,
             marginBottom: blockMargin(),
           },
+          code: { fontFamily: monoFontFamily(fonts()) },
+          codeBlockCode: { fontFamily: monoFontFamily(fonts()) },
           link: { color: c().blue },
         }}
         renderImage={(image) => (

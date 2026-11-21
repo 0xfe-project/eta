@@ -3,7 +3,13 @@ import type { ViewRef } from "nsh";
 import type { TextViewBlock, TextViewInline } from "nsh/base";
 import { cleanup, computed, effect, Image, signal, View } from "nsh";
 import { TextView } from "nsh/base";
-import { colors, fontFamily, Fonts, Label } from "../../../components";
+import {
+  colors,
+  fontFamily,
+  Fonts,
+  Label,
+  monoFontFamily,
+} from "../../../components";
 import { uiText } from "../../../i18n";
 
 export type SkillReadingPosition =
@@ -358,6 +364,10 @@ export function SkillFile(props: {
                 paragraph: { marginTop: 0, marginBottom: 0 },
                 list: { gap: 6 },
                 listMarker: { color: c().ink },
+                code: { fontFamily: monoFontFamily(fonts()) },
+                codeBlockCode: {
+                  fontFamily: monoFontFamily(fonts()),
+                },
                 link: { color: c().blue },
               }}
               codeBlockActions={[{ id: "copy" }]}

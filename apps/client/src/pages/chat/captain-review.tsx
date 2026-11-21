@@ -1,7 +1,14 @@
 import type { MessageView } from "@eta/client-contracts";
 import type { light } from "../../components/theme";
 import { signal, View } from "nsh";
-import { colors, Icon, Label, row } from "../../components";
+import {
+  colors,
+  Fonts,
+  Icon,
+  Label,
+  monoFontFamily,
+  row,
+} from "../../components";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -146,6 +153,7 @@ function Observation(props: {
   onPending?: () => void;
 }) {
   const c = colors();
+  const fonts = Fonts();
   const host = useHost();
   const raw = signal(false);
   const kind = () => kinds[props.item.kind];
@@ -246,7 +254,7 @@ function Observation(props: {
             style={{
               padding: 8,
               backgroundColor: c().surface,
-              fontFamily: "monospace",
+              fontFamily: monoFontFamily(fonts()),
             }}
           >
             {props.item.detail}
