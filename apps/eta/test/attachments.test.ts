@@ -187,6 +187,31 @@ describe("uploading", () => {
     await w.settled(group.id, sent.replies[0]!.id);
     expect(await unattach(kept.id)).toBe(false);
   });
+
+  it("reads a sent image back for the transcript, and nothing else", async () => {
+    const w = await world();
+    const { group } = await ada(w);
+    const read = (id: string, conversationId = group.id) =>
+      w.client.call("conversations", "attachment", {
+        conversationId,
+        attachmentId: id,
+      }) as Promise<{ contentType: string; data: string }>;
+    const image = await upload(w, group.id, PNG, "x.bmp", "image/bmp");
+    const text = await upload(w, group.id, Buffer.from("hi"));
+    await expect(read(image.id)).rejects.toThrow(/no such attachment/);
+    const sent = await w.send(group.id, "", {
+      attachments: [image.id, text.id],
+    });
+    await w.settled(group.id, sent.replies[0]!.id);
+    expect(await read(image.id)).toEqual({
+      contentType: "image/bmp",
+      data: PNG.toString("base64"),
+    });
+    await expect(read(text.id)).rejects.toThrow(/not an image/);
+    await expect(read(crypto.randomUUID())).rejects.toThrow(
+      /no such attachment/,
+    );
+  });
 });
 
 describe("sending with files", () => {
