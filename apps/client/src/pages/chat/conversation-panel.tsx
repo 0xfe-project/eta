@@ -189,13 +189,18 @@ export function ConversationPanel(props: {
         </View>
         <If when={props.taskId}>
           {(id) => (
-            <PanelTask
-              id={id()}
-              layout={props.layout}
-              onClose={props.onCloseTask}
-              onTask={props.onRelatedTask}
-              onArtifact={props.onArtifact}
-            />
+            // Keyed by the task: a related task opened from this one is a new detail, not this one renamed.
+            <Each of={[id()]}>
+              {(task) => (
+                <PanelTask
+                  id={task()}
+                  layout={props.layout}
+                  onClose={props.onCloseTask}
+                  onTask={props.onRelatedTask}
+                  onArtifact={props.onArtifact}
+                />
+              )}
+            </Each>
           )}
         </If>
         <If
