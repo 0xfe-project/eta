@@ -13,29 +13,78 @@
 
 import type { SshResult, SshRunOptions, SshTransport } from "./transport";
 import { Buffer } from "node:buffer";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import process from "node:process";
 
-const WINDOWS_SHELL = "C:\\Program Files\\Git\\usr\\bin\\sh.exe";
+const PROGRAM_FILES_SHELL = "C:\\Program Files\\Git\\usr\\bin\\sh.exe";
+
+export interface WindowsShellProbe {
+  env: Record<string, string | undefined>;
+  exists: (path: string) => boolean;
+  /** Output of `git --exec-path`, when git runs; scoop shims report the real install here. */
+  gitExecPath: () => string | undefined;
+}
+
+const parentDir = (path: string, levels = 1): string =>
+  path.split(/[\\/]+/).slice(0, -levels).join("\\");
 
 /**
  * Bun on Windows cannot execute the POSIX literal `/bin/sh`. Git for Windows ships the same
- * shell the scripts are written for; use it when present, while retaining an explicit override
- * for a machine whose installation lives elsewhere.
+ * shell the scripts are written for. Order: `ETA_LOCAL_SHELL`, the Git that `git.exe` on PATH
+ * belongs to (scoop shims included), then the default Program Files install.
  */
+export function windowsShell(probe: WindowsShellProbe): string {
+  const override = probe.env.ETA_LOCAL_SHELL;
+  if (override) return override;
+  const roots: string[] = [];
+  const execPath = probe.gitExecPath();
+  // <root>\mingw64\libexec\git-core
+  if (execPath) roots.push(parentDir(execPath.trim(), 3));
+  for (const dir of (probe.env.PATH ?? "").split(";")) {
+    if (dir && probe.exists(`${dir}\\git.exe`)) roots.push(parentDir(dir));
+  }
+  const candidates = [
+    ...roots.map((root) => `${root}\\usr\\bin\\sh.exe`),
+    PROGRAM_FILES_SHELL,
+  ];
+  const found = candidates.find((path) => probe.exists(path));
+  if (found) return found;
+  throw new Error(
+    "Cannot find Git's sh.exe. Install Git for Windows, or set ETA_LOCAL_SHELL to the full path of its usr\\bin\\sh.exe.",
+  );
+}
+
+/** PATH for the child: the chosen shell's Unix tools first, so the scripts find `mktemp`, `git`, ... */
+export function windowsChildEnv(
+  shell: string,
+  path: string | undefined,
+): { PATH: string } {
+  const usrBin = parentDir(shell);
+  const bin = `${parentDir(usrBin, 2)}\\bin`;
+  return { PATH: `${usrBin};${bin};${path ?? ""}` };
+}
+
+function gitExecPath(): string | undefined {
+  try {
+    return execFileSync("git", ["--exec-path"], {
+      encoding: "utf8",
+      timeout: 5000,
+    });
+  } catch {
+    return undefined;
+  }
+}
+
 const shellCommand =
   process.platform === "win32"
-    ? (process.env.ETA_LOCAL_SHELL ??
-      (existsSync(WINDOWS_SHELL) ? WINDOWS_SHELL : "/bin/sh"))
+    ? windowsShell({ env: process.env, exists: existsSync, gitExecPath })
     : "/bin/sh";
 
 const childEnv =
-  process.platform === "win32" && existsSync("C:\\Program Files\\Git\\usr\\bin")
-    ? {
-        PATH: `C:\\Program Files\\Git\\usr\\bin;C:\\Program Files\\Git\\bin;${process.env.PATH ?? ""}`,
-      }
+  process.platform === "win32"
+    ? windowsChildEnv(shellCommand, process.env.PATH)
     : {};
 
 /** Git Bash accepts drive paths with forward slashes; scripts receive shell-quoted paths. */
