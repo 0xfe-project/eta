@@ -12,6 +12,7 @@ import { colors, textFaces } from "../../../components";
 import { useModels } from "../../../components/model-select";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
+import { createAvatarDraw } from "./avatar";
 
 export interface AgentEditorProps {
   id?: string;
@@ -37,6 +38,8 @@ export function createAgentForm(props: AgentEditorProps) {
   const installed = signal<AgentRuntimeInfo[] | undefined>(undefined);
   const models = useModels();
   const creating = !props.id;
+  /** An agent's face is drawn and saved apart from the form: it needs no Save. */
+  const avatar = props.id ? createAvatarDraw(props.id) : undefined;
   const phoneEditor = () => props.phone && !creating;
   const stacked = () => creating || props.phone;
   const controlHeight = () => (phoneEditor() ? 32 : creating ? 28 : 24);
@@ -233,6 +236,7 @@ export function createAgentForm(props: AgentEditorProps) {
     machineId,
     thinking,
     saved,
+    avatar,
     customPersona,
     creating,
     phoneEditor,
