@@ -62,11 +62,16 @@ export function createTaskDetailState(props: {
       return false;
     });
   };
-  const canComment = (item: BoardTaskDetail) =>
-    !item.archivedAt &&
-    !item.children?.length &&
-    !item.waitingOn?.length &&
-    ["todo", "in_progress", "blocked"].includes(item.status);
+  /**
+   * Over a parent's comment box, as on the web: a task with subtasks does not run itself, so its
+   * comment starts no run. Not while a run of its executor is going (one splitting the task), since
+   * that run does read it. Every task takes comments, whatever its status (the host's rule).
+   */
+  const parentHint = (item: BoardTaskDetail) =>
+    item.subtasks != null &&
+    !item.runs.some(
+      (run) => run.agentId === null && isActiveRunStatus(run.status),
+    );
   const cancelledEdges = () =>
     (task()?.waitingOn ?? []).filter(
       (edge) => edge.state === "cancelled" && edge.via === null,
@@ -227,7 +232,7 @@ export function createTaskDetailState(props: {
     search,
     executor,
     activeArchiveTargets,
-    canComment,
+    parentHint,
     phone,
     side,
     post,
