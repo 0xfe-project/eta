@@ -166,7 +166,7 @@ export function Composer(props: {
       .filter((member) => member.busy && target().ids.includes(member.id))
       .map((member) => member.name)
       .join(", ");
-  const offline = () => props.phone && host.state().status === "reconnecting";
+  const offline = () => props.phone && host.disconnected();
   const files = signal<string[]>([]);
   const wanted = computed(() =>
     mentionAt(draft()) !== null ? props.projectId : undefined,
@@ -377,7 +377,15 @@ export function Composer(props: {
       });
       selection = { start: 0, end: 0 };
       queueMicrotask(() => input?.setSelection(0));
-    } else if (text) input?.insertText(text);
+    } else if (text) {
+      // Not `input.insertText`: the native (GPUI) target does not carry it out, so the text was
+      // dropped; the draft is the field's value on every target.
+      const { start, end } = selection;
+      const caret = start + text.length;
+      change(draft().slice(0, start) + text + draft().slice(end));
+      selection = { start: caret, end: caret };
+      queueMicrotask(() => input?.setSelection(caret));
+    }
   }
   return (
     <View

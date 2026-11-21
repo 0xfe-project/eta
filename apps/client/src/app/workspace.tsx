@@ -249,7 +249,7 @@ export function Workspace(props: {
     <View style={grow}>
       <If
         when={
-          host.state().status === "reconnecting" &&
+          host.disconnected() &&
           (!phone() ||
             (!(page() === "captain" && captain()) &&
               !(page() === "chat" && mobileOpen() && conversation())))

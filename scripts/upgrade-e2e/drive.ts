@@ -353,10 +353,46 @@ const write = (query: string): void => {
   sql(query);
 };
 
-/** Nothing installed. An uninstall has to leave these free to delete, so this does not wait. */
+/** What runs from a file under `dir`, by the system's own process list. */
+async function runningFrom(dir: string): Promise<string[]> {
+  if (WINDOWS) {
+    const { out } = await run("powershell.exe", [
+      "-NoProfile",
+      "-Command",
+      'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId) $($_.ExecutablePath)" }',
+    ]);
+    const under = `${dir.toLowerCase()}\\`;
+    return out
+      .split(/\r?\n/)
+      .filter((line) => line.toLowerCase().includes(under));
+  }
+  const { out } = await run("ps", ["-axwwo", "pid=,command="]);
+  return out.split("\n").filter((line) => line.includes(`${dir}/`));
+}
+
+/**
+ * Nothing installed. An uninstall has to stop everything that ran from these: when the folder
+ * cannot be deleted at once, nothing may be running from it. On Windows the file of a program that
+ * has just exited (here the `uninstall-service` that just ran from it, or a service process that
+ * has just ended) can still be held for a moment with nothing running, and a delete in that moment
+ * fails with EBUSY: that is waited out, and said (#257).
+ */
 async function clean(): Promise<void> {
   await uninstall();
-  rmSync(DIR, { recursive: true, force: true });
+  try {
+    rmSync(DIR, { recursive: true, force: true });
+  } catch (error) {
+    const held = Date.now();
+    const running = await runningFrom(DIR);
+    if (running.length > 0) {
+      want("the uninstall left nothing running from its folder", running, []);
+      throw error;
+    }
+    await removeHeld(DIR);
+    console.log(
+      `    | ${DIR} was held with nothing running from it (${String(error)}); let go after ${Date.now() - held} ms`,
+    );
+  }
   rmSync(DATA, { recursive: true, force: true });
 }
 
@@ -975,7 +1011,14 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
       const before = await hostPid();
       const refused = await eta(["upgrade", "0.9.1", "--wait", "0"]);
       want("exit", refused.code, 1);
+      // On Windows the staged build's trial run had only just exited when the refusal came, and
+      // deleting the file then failed with EBUSY, which was all the command said (#257).
       has("it names what is working", refused.out, "survives");
+      want(
+        "it took the staged build away",
+        readdirSync(DIR).filter((f) => f.includes(".next")),
+        [],
+      );
       want("the same process", await hostPid(), before);
 
       const waiting = eta(["upgrade", "0.9.1"]);

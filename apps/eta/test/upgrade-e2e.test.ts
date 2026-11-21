@@ -1,8 +1,9 @@
 /**
  * The parts of `scripts/upgrade-e2e` that decide something without a service: what the seed check
  * leaves out on a host that has since started (the Captain a later build makes for itself, and
- * nothing else), and how the button's driver reads the pre-release switch. The views are over the
- * real schema, so a migration that renames what they read breaks this, not a release.
+ * nothing else), how the button's driver reads the pre-release switch, and whether the workflow
+ * still runs for the client files the browser scenario presses. The views are over the real schema,
+ * so a migration that renames what they read breaks this, not a release.
  *
  * The real runs are `upgrade-cross.yml` (between releases, over `test/upgrade-seed`) and
  * `upgrade-e2e.yml`.
@@ -11,6 +12,8 @@ import type { Database } from "bun:sqlite";
 import type { Check } from "../../../scripts/upgrade-e2e/button";
 import type { Manifest } from "../../../scripts/upgrade-e2e/seed";
 import { Buffer } from "node:buffer";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { hasPrereleaseSwitch } from "../../../scripts/upgrade-e2e/button";
 import {
@@ -200,5 +203,26 @@ describe("hasPrereleaseSwitch", () => {
   it("is not there when the field is missing or null", () => {
     expect(hasPrereleaseSwitch(check(undefined))).toBe(false);
     expect(hasPrereleaseSwitch(check(null))).toBe(false);
+  });
+});
+
+describe("upgrade-e2e.yml's patterns", () => {
+  const { env } = Bun.YAML.parse(
+    readFileSync(
+      join(import.meta.dirname, "../../../.github/workflows/upgrade-e2e.yml"),
+      "utf8",
+    ),
+  ) as { env: Record<"on_pr" | "on_main", string> };
+  const onPr = new RegExp(env.on_pr);
+  const onMain = new RegExp(env.on_main);
+
+  it("run on a pull request for the upgrade, and on a merge for the rest of the client", () => {
+    expect(onPr.test("apps/client/src/pages/settings/updates/update.tsx")).toBe(
+      true,
+    );
+    expect(onPr.test("apps/eta/src/upgrade/upgrade.ts")).toBe(true);
+    expect(onPr.test("apps/daemon/src/swap.ts")).toBe(true);
+    expect(onPr.test("apps/client/src/components/controls.tsx")).toBe(false);
+    expect(onMain.test("apps/client/src/components/controls.tsx")).toBe(true);
   });
 });
