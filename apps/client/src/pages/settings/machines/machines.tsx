@@ -125,28 +125,24 @@ function MachineRow(props: {
   }
   return (
     <>
+      {/* The hover is the whole row's and the button fills it, padding inside, up to the rule;
+          the menu sits over the button's right padding, beside it rather than inside it. */}
       <View
-        style={{
-          ...row,
-          alignItems: "flex-start",
-          paddingHorizontal: 16,
-          paddingVertical: 8,
-          gap: 10,
-          borderBottomWidth: 1,
-          borderColor: c().border,
-        }}
+        hoverStyle={{ backgroundColor: c().selected }}
+        style={{ borderBottomWidth: 1, borderColor: c().border }}
       >
         <View
           role="button"
           accessibilityLabel={props.item.name}
           onPress={props.open}
-          hoverStyle={{ backgroundColor: c().selected }}
           style={{
             ...row,
             alignItems: "flex-start",
-            flex: 1,
-            minWidth: 0,
             gap: 10,
+            paddingLeft: 16,
+            // Room for the menu: its trigger is 24 wide, the phone's button 28 (its minWidth wins).
+            paddingRight: 16 + (props.phone ? 28 : 24) + 10,
+            paddingVertical: 8,
             cursor: "pointer",
           }}
         >
@@ -174,61 +170,65 @@ function MachineRow(props: {
           </View>
           <If when={!props.phone}>{status()}</If>
         </View>
-        <If
-          when={props.phone}
-          else={
-            <ActionMenu
+        <View style={{ position: "absolute", top: 8, right: 16 }}>
+          <If
+            when={props.phone}
+            else={
+              <ActionMenu
+                label={uiText("machineActions", { name: props.item.name })}
+                triggerStyle={{
+                  minWidth: 24,
+                  width: 24,
+                  height: props.phone ? 28 : 24,
+                  paddingHorizontal: 0,
+                }}
+                // The row under it is already highlighted: a step darker, so the menu reads as its own target.
+                triggerHoverStyle={{ backgroundColor: c().border }}
+              >
+                <If when={host.can("machines.rename")}>
+                  <ActionItem
+                    label={uiText("machineMenuRename")}
+                    onSelect={() => dialog.set("rename")}
+                  />
+                </If>
+                <ActionItem
+                  label={uiText("machineMenuRuns")}
+                  onSelect={() => dialog.set("runs")}
+                />
+                <If when={updatable()}>
+                  <ActionItem
+                    label={uiText("machineMenuUpdate")}
+                    disabled={updating()}
+                    onSelect={() => void update()}
+                  />
+                </If>
+                <If when={props.item.kind !== "primary"}>
+                  <MenuRule
+                    style={{
+                      height: 1,
+                      marginVertical: 4,
+                      backgroundColor: c().border,
+                    }}
+                  />
+                  <ActionItem
+                    label={uiText("machineMenuRevoke")}
+                    onSelect={() => dialog.set("revoke")}
+                  />
+                </If>
+              </ActionMenu>
+            }
+          >
+            <Button
               label={uiText("machineActions", { name: props.item.name })}
-              triggerStyle={{
-                minWidth: 24,
-                width: 24,
-                height: props.phone ? 28 : 24,
-                paddingHorizontal: 0,
-              }}
-            >
-              <If when={host.can("machines.rename")}>
-                <ActionItem
-                  label={uiText("machineMenuRename")}
-                  onSelect={() => dialog.set("rename")}
-                />
-              </If>
-              <ActionItem
-                label={uiText("machineMenuRuns")}
-                onSelect={() => dialog.set("runs")}
-              />
-              <If when={updatable()}>
-                <ActionItem
-                  label={uiText("machineMenuUpdate")}
-                  disabled={updating()}
-                  onSelect={() => void update()}
-                />
-              </If>
-              <If when={props.item.kind !== "primary"}>
-                <MenuRule
-                  style={{
-                    height: 1,
-                    marginVertical: 4,
-                    backgroundColor: c().border,
-                  }}
-                />
-                <ActionItem
-                  label={uiText("machineMenuRevoke")}
-                  onSelect={() => dialog.set("revoke")}
-                />
-              </If>
-            </ActionMenu>
-          }
-        >
-          <Button
-            label={uiText("machineActions", { name: props.item.name })}
-            icon="more"
-            iconOnly
-            tone="ghost"
-            size={28}
-            style={{ width: 24, paddingHorizontal: 0 }}
-            onPress={() => dialog.set("menu")}
-          />
-        </If>
+              icon="more"
+              iconOnly
+              tone="ghost"
+              size={28}
+              style={{ width: 24, paddingHorizontal: 0 }}
+              onPress={() => dialog.set("menu")}
+            />
+          </If>
+        </View>
       </View>
       <If when={dialog() === "menu"}>
         <Modal

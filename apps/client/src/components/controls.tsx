@@ -239,6 +239,8 @@ export function ActionMenu(props: {
   valueTone?: keyof typeof light;
   truncateValue?: boolean;
   triggerStyle?: ViewStyle;
+  /** The trigger's hover, for a trigger on a row whose own hover is the default one. */
+  triggerHoverStyle?: ViewStyle;
   /** The size of the "more" glyph of a menu without a value. */
   iconSize?: number;
   /** As a sheet: a title row with a close button under the grabber. */
@@ -303,7 +305,11 @@ export function ActionMenu(props: {
           accessibilityLabel={props.label}
           // A finger's tap area, without changing the 30pt trigger.
           hitSlop={touchScreen ? 7 : undefined}
-          hoverStyle={canHover ? { backgroundColor: c().selected } : undefined}
+          hoverStyle={
+            canHover
+              ? (props.triggerHoverStyle ?? { backgroundColor: c().selected })
+              : undefined
+          }
           style={{
             ...row,
             justifyContent: props.value ? "space-between" : "center",
