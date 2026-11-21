@@ -57,6 +57,14 @@ export const machinesMessages = {
     "In Eta on your phone, tap “Scan the code on your computer”. The code holds your access token, so keep it to yourself.",
     "在手机的 Eta 里点「扫电脑上的二维码」。二维码里有访问令牌，别给别人看。",
   ],
+  phoneCantReachThisAddress: [
+    "A phone can't reach this address. Have the host listen on your LAN or Tailscale address, then open this page from there.",
+    "这个地址手机连不到。让 host 监听局域网或 Tailscale 地址，再从那个地址打开这个页面。",
+  ],
+  phoneCodeFailed: [
+    "The code couldn't be generated. Check the host address and retry.",
+    "配对码没能生成。检查主机地址后重试。",
+  ],
   installOverSsh: ["Install over SSH", "通过 SSH 安装"],
   machineFingerprint: ["Machine fingerprint", "机器指纹"],
   machineName: ["Machine name", "机器名称"],

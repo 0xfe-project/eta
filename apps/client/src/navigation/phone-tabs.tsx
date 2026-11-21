@@ -5,10 +5,11 @@ import { colors, Label, row, sizes } from "../components";
 import { pickerTarget } from "../components/element-picker";
 import { phoneTabPaths } from "../components/icons";
 import { useText } from "../i18n";
+import { taskNeedsAttention } from "../pages/tasks/status";
 import { useHost } from "../services/host";
 import { CaptainFace } from "./captain";
 
-const phoneTabs = [
+export const phoneTabs = [
   ["chat", "chat"],
   ["pending", "pending"],
   ["captain", "captain"],
@@ -18,7 +19,7 @@ const phoneTabs = [
 
 type PhoneTab = (typeof phoneTabs)[number];
 
-function PhoneTabItem(props: {
+export function PhoneTabItem(props: {
   tab: PhoneTab;
   selected: boolean;
   count: number;
@@ -86,7 +87,8 @@ function PhoneTabItem(props: {
           style={{
             position: "absolute",
             top: 8,
-            left: "55%",
+            left: "50%",
+            marginLeft: 4,
             height: 14,
             minWidth: 14,
             paddingHorizontal: 3,
@@ -109,7 +111,7 @@ export function PhoneNavigation(props: Navigation) {
   const host = useHost();
   const waiting = () =>
     host.pending().length +
-    host.tasks().filter((task) => task.status === "in_review").length +
+    host.tasks().filter(taskNeedsAttention).length +
     host
       .list<CaptainOperationView>("captain", "operations")
       .filter((op) => op.requiresApproval && op.status === "pending").length;

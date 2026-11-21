@@ -1,7 +1,9 @@
+import type { CaptainIdentityView } from "@eta/client-contracts";
 import { View } from "nsh";
-import { colors, Label, row } from "../components";
+import { colors, focusRing, Label, row } from "../components";
 import { AgentFace } from "../components/agent-face";
-import { useText } from "../i18n";
+import { uiText, useText } from "../i18n";
+import { messageTime } from "../pages/chat/message-time";
 import { useHost } from "../services/host";
 import { CaptainContextRing } from "./captain-context-ring";
 
@@ -14,6 +16,15 @@ export function CaptainCard(props: { onPress: () => void }) {
   const text = useText();
   const host = useHost();
   const c = colors();
+  const lastReply = () => {
+    const id = host.section<CaptainIdentityView>(
+      "captain",
+      "identity",
+    )?.conversationId;
+    return id
+      ? host.conversations().find((item) => item.id === id)?.lastMessageAt
+      : undefined;
+  };
   return (
     <View style={{ flexShrink: 0, padding: 14 }}>
       <View
@@ -21,6 +32,7 @@ export function CaptainCard(props: { onPress: () => void }) {
         accessibilityLabel={text("captain")}
         onPress={() => props.onPress()}
         hoverStyle={{ backgroundColor: c().selected }}
+        focusVisibleStyle={focusRing(c())}
         style={{
           ...row,
           alignItems: "flex-start",
@@ -43,7 +55,11 @@ export function CaptainCard(props: { onPress: () => void }) {
             </Label>
           </View>
           <Label size={10} line={15} tone="muted" lines={1}>
-            {text("captainNoConversation")}
+            {lastReply()
+              ? uiText("captainLastReply", {
+                  time: messageTime(lastReply()!, false),
+                })
+              : text("captainNoConversation")}
           </Label>
         </View>
       </View>
@@ -71,7 +87,7 @@ export function RailCaptain(props: { selected: boolean; onPress: () => void }) {
         accessibilityState={{ selected: props.selected }}
         onPress={props.onPress}
         hoverStyle={{ backgroundColor: c().selected }}
-        focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+        focusVisibleStyle={focusRing(c())}
         style={{
           width: 48,
           height: 64,

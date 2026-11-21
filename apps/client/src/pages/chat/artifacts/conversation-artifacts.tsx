@@ -1,19 +1,22 @@
 import type { ArtifactView } from "@eta/client-contracts";
-import type { Signal } from "nsh";
-import { View } from "nsh";
+import type { Signal, ViewRef } from "nsh";
+import { keymap, View } from "nsh";
 import {
   Button,
   Caption,
   colors,
   Empty,
   Field,
+  Icon,
   Label,
+  ListSkeleton,
   row,
 } from "../../../components";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
-import { messageDate } from "../message-time";
 import { ArtifactRow } from "./row";
+
+const pageSize = 15;
 
 export function ConversationArtifacts(props: {
   conversationId: string;
@@ -39,17 +42,25 @@ export function ConversationArtifacts(props: {
     );
   const artifactsInPanel = () =>
     props.tab === "Artifacts"
-      ? matchingArtifacts().slice(artifactOffset(), artifactOffset() + 10)
+      ? matchingArtifacts().slice(artifactOffset(), artifactOffset() + pageSize)
       : artifacts().slice(0, 4);
   const newArtifactDay = (entry: ArtifactView, index: number) => {
     if (props.tab !== "Artifacts") return false;
     const previous = artifactsInPanel()[index - 1];
     return (
-      !previous ||
-      new Date(previous.updatedAt).toDateString() !==
-        new Date(entry.updatedAt).toDateString()
+      !previous || dayGroup(previous.updatedAt) !== dayGroup(entry.updatedAt)
     );
   };
+  const pages = () => Math.ceil(matchingArtifacts().length / pageSize);
+  const page = () => Math.floor(artifactOffset() / pageSize);
+  let searchInput: ViewRef | undefined;
+  keymap.bind(
+    "/",
+    () => {
+      if (props.tab === "Artifacts") searchInput?.focus();
+    },
+    { when: "notEditing" },
+  );
   return (
     <View
       style={{
@@ -58,21 +69,66 @@ export function ConversationArtifacts(props: {
         borderColor: c().border,
       }}
     >
-      <Caption
-        text={uiText("artifacts", { length: artifacts().length })}
-        style={{ marginHorizontal: 12, marginBottom: 4 }}
-      />
-      <If when={props.tab === "Artifacts" && artifacts().length}>
-        <Field
-          label={uiText("searchArtifacts")}
-          placeholder={uiText("searchByTitle")}
-          style={{ marginHorizontal: 12 }}
-          value={artifactSearch()}
-          onChange={(value) => {
-            artifactSearch.set(value);
-            artifactOffset.set(0);
-          }}
+      <If when={props.tab !== "Artifacts"}>
+        <Caption
+          text={uiText("artifacts", { length: artifacts().length })}
+          style={{ marginHorizontal: 12, marginBottom: 4 }}
         />
+      </If>
+      <If when={props.tab === "Artifacts" && artifacts().length}>
+        <View
+          style={{
+            padding: 10,
+            borderBottomWidth: 1,
+            borderColor: c().border,
+          }}
+        >
+          <View
+            style={{
+              ...row,
+              height: 26,
+              gap: 8,
+              paddingHorizontal: 8,
+              borderWidth: 1,
+              borderColor: c().border,
+              backgroundColor: c().canvas,
+            }}
+          >
+            <Icon name="search" size={12} tone="muted" />
+            <Field
+              label={uiText("searchArtifacts")}
+              placeholder={uiText("searchTitles")}
+              inputRef={(node) => {
+                searchInput = node;
+              }}
+              style={{
+                flex: 1,
+                height: 24,
+                paddingHorizontal: 0,
+                paddingVertical: 4,
+                borderWidth: 0,
+                fontSize: 11,
+                lineHeight: 16,
+              }}
+              value={artifactSearch()}
+              onChange={(value) => {
+                artifactSearch.set(value);
+                artifactOffset.set(0);
+              }}
+            />
+            <View
+              style={{
+                paddingHorizontal: 4,
+                borderWidth: 1,
+                borderColor: c().border,
+              }}
+            >
+              <Label size={10} line={14} tone="muted">
+                /
+              </Label>
+            </View>
+          </View>
+        </View>
         <If when={!matchingArtifacts().length}>
           <Label
             size={12}
@@ -96,31 +152,42 @@ export function ConversationArtifacts(props: {
             </Label>
           }
         >
-          <Empty
-            icon="panel"
-            title={
-              host.state().missing.artifacts
-                ? uiText("artifactLoadError")
-                : host.state().targets.artifacts
-                  ? uiText("noArtifactsYet")
-                  : uiText("artifactsLoading")
+          <If
+            when={
+              host.state().targets.artifacts || host.state().missing.artifacts
             }
-            description={
-              host.state().missing.artifacts
-                ? uiText("theHostDidNotRespondIn")
-                : host.state().targets.artifacts
-                  ? uiText("artifactsEmptyHelp")
-                  : undefined
-            }
+            else={<ListSkeleton label={uiText("artifactsLoading")} />}
           >
-            <If when={host.state().missing.artifacts}>
-              <Button
-                label={uiText("retry")}
-                icon="refresh"
-                onPress={props.reload}
-              />
-            </If>
-          </Empty>
+            <Empty
+              icon={host.state().missing.artifacts ? "warning" : "appWindow"}
+              iconSize={24}
+              iconTone={host.state().missing.artifacts ? "red" : "muted"}
+              titleLine={20}
+              descriptionSize={10}
+              descriptionLine={16}
+              style={{ flex: 0, marginTop: 4, paddingVertical: 48 }}
+              title={
+                host.state().missing.artifacts
+                  ? uiText("artifactLoadError")
+                  : uiText("noArtifactsYet")
+              }
+              description={
+                host.state().missing.artifacts
+                  ? uiText("theHostDidNotRespondIn")
+                  : uiText("artifactsEmptyHelp")
+              }
+            >
+              <If when={host.state().missing.artifacts}>
+                <Button
+                  label={uiText("retry")}
+                  icon="refresh"
+                  size={28}
+                  style={{ marginTop: 4 }}
+                  onPress={props.reload}
+                />
+              </If>
+            </Empty>
+          </If>
         </If>
       </If>
       <Each of={artifactsInPanel()} key={(artifact) => artifact.id}>
@@ -129,10 +196,15 @@ export function ConversationArtifacts(props: {
             <If when={newArtifactDay(artifact(), index())}>
               <Label
                 size={11}
+                line={16}
                 tone="muted"
-                style={{ paddingHorizontal: 10, paddingTop: 9 }}
+                style={{
+                  paddingHorizontal: 10,
+                  paddingTop: 14,
+                  paddingBottom: 6,
+                }}
               >
-                {messageDate(artifact().updatedAt)}
+                {uiText(dayGroup(artifact().updatedAt))}
               </Label>
             </If>
             <ArtifactRow
@@ -145,29 +217,113 @@ export function ConversationArtifacts(props: {
           </>
         )}
       </Each>
-      <If when={props.tab === "Artifacts" && matchingArtifacts().length > 10}>
+      <If when={props.tab === "Artifacts" && pages() > 1}>
         <View
           style={{
             ...row,
-            justifyContent: "flex-end",
-            gap: 6,
-            padding: 12,
+            height: 40,
+            justifyContent: "space-between",
+            paddingHorizontal: 10,
           }}
         >
-          <Button
-            label={uiText("previous")}
-            disabled={!artifactOffset()}
-            onPress={() =>
-              artifactOffset.update((value) => Math.max(0, value - 10))
-            }
-          />
-          <Button
-            label={uiText("next")}
-            disabled={artifactOffset() + 10 >= matchingArtifacts().length}
-            onPress={() => artifactOffset.update((value) => value + 10)}
-          />
+          <Label size={10} line={14} tone="muted">
+            {`${artifactOffset() + 1}-${Math.min(
+              artifactOffset() + pageSize,
+              matchingArtifacts().length,
+            )} / ${matchingArtifacts().length}`}
+          </Label>
+          <View style={{ ...row, gap: 10 }}>
+            <PageButton
+              label="‹"
+              accessibilityLabel={uiText("previous")}
+              disabled={!page()}
+              onPress={() => artifactOffset.set((page() - 1) * pageSize)}
+            />
+            <Each of={pageNumbers(page(), pages())}>
+              {(number) => (
+                <If
+                  when={number() >= 0}
+                  else={
+                    <Label size={10} line={14} tone="muted">
+                      …
+                    </Label>
+                  }
+                >
+                  <PageButton
+                    label={String(number() + 1)}
+                    selected={number() === page()}
+                    onPress={() => artifactOffset.set(number() * pageSize)}
+                  />
+                </If>
+              )}
+            </Each>
+            <PageButton
+              label="›"
+              accessibilityLabel={uiText("next")}
+              disabled={page() >= pages() - 1}
+              onPress={() => artifactOffset.set((page() + 1) * pageSize)}
+            />
+          </View>
         </View>
       </If>
+    </View>
+  );
+}
+
+/** Today, Yesterday or Earlier: the Artifacts tab's date groups. */
+function dayGroup(at: number) {
+  const day = new Date(at).toDateString();
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (day === new Date().toDateString()) return "todayDate" as const;
+  if (day === yesterday.toDateString()) return "yesterdayDate" as const;
+  return "earlierDate" as const;
+}
+
+/** Page indexes to show, with -1 for a gap: all of up to seven, else the ends and the current. */
+function pageNumbers(current: number, count: number) {
+  if (count <= 7) return Array.from({ length: count }, (_, index) => index);
+  const shown = [...new Set([0, current - 1, current, current + 1, count - 1])]
+    .filter((index) => index >= 0 && index < count)
+    .sort((a, b) => a - b);
+  return shown.flatMap((index, position) =>
+    position && index - shown[position - 1]! > 1 ? [-1, index] : [index],
+  );
+}
+
+function PageButton(props: {
+  label: string;
+  accessibilityLabel?: string;
+  selected?: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  const c = colors();
+  return (
+    <View
+      role="button"
+      accessibilityLabel={props.accessibilityLabel ?? props.label}
+      accessibilityState={{
+        selected: props.selected,
+        disabled: props.disabled ?? false,
+      }}
+      onPress={() => {
+        if (!props.disabled) props.onPress();
+      }}
+      style={{
+        ...row,
+        justifyContent: "center",
+        height: props.selected ? 22 : undefined,
+        width: props.selected ? 20 : undefined,
+        borderWidth: props.selected ? 1 : 0,
+        borderColor: c().ink,
+        opacity: props.disabled ? 0.45 : 1,
+        cursor: props.disabled ? "default" : "pointer",
+      }}
+    >
+      <Label size={10} line={14} tone={props.selected ? "ink" : "muted"}>
+        {props.label}
+      </Label>
     </View>
   );
 }

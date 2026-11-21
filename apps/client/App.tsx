@@ -292,6 +292,7 @@ function App() {
                       icon="close"
                       iconOnly
                       size={32}
+                      iconSize={16}
                       tone="ghost"
                       onPress={() => dismissCompatibility.set(true)}
                     />

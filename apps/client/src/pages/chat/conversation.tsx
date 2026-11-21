@@ -1,5 +1,6 @@
 import type {
   ArtifactView,
+  CaptainOperationView,
   ConversationInfo,
   HistoryResult,
   MemberView,
@@ -7,6 +8,7 @@ import type {
   TimelineSection,
 } from "@eta/client-contracts";
 import type { Layout } from "../../components";
+import type { ConversationAction } from "./conversation-actions";
 import type { PanelTab } from "./conversation-panel";
 import { computed, effect, signal, View, windowSize } from "nsh";
 import {
@@ -21,14 +23,19 @@ import {
   sizes,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
+import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
+import { CaptainFace } from "../../navigation/captain";
 import { follow, useHost } from "../../services/host";
+import { PendingStrip } from "./approvals";
 import { ArtifactPreview } from "./artifacts/preview";
 import { Composer } from "./composer";
 import { ConversationActions } from "./conversation-actions";
-import { ConversationPanel } from "./conversation-panel";
+import { PhoneConversationInfo } from "./conversation-info";
+import { ConversationPanel, panelAttention } from "./conversation-panel";
 import { ConversationTimeline } from "./conversation-timeline";
 import { indexInserts, InsertMessage } from "./insert-message";
+import { activeReply } from "./member-status";
 import { InviteAgents, StewardMenu } from "./members";
 import { MemberRun } from "./run/member-run";
 
@@ -40,6 +47,8 @@ export function Conversation(props: {
   onTask: (id: string) => void;
   onRelatedTask: (id: string) => void;
   onRoutines: (id?: string) => void;
+  /** Opens the Pending tab, from Captain's approvals strip on a phone. */
+  onPending?: () => void;
   contentWidth?: number;
   alignComposer?: boolean;
   rail?: boolean;
@@ -51,7 +60,7 @@ export function Conversation(props: {
   const panel = signal<PanelTab>("Context");
   const drawer = signal(false);
   const invite = signal(false);
-  const actions = signal(false);
+  const actions = signal<ConversationAction | undefined>(undefined);
   const projectInfo = signal(false);
   const member = signal<{ id: string; session: string }>();
   const memberSteps = signal("");
@@ -86,6 +95,12 @@ export function Conversation(props: {
       .find((item) => item.id === (info()?.projectId ?? summary()?.projectId));
   const stewardId = () => (info() ? info()!.stewardId : summary()?.stewardId);
   const timeline = () => host.section<TimelineSection>(target(), "timeline");
+  const approvals = () =>
+    host
+      .list<CaptainOperationView>("captain", "operations")
+      .filter((op) => op.requiresApproval && op.status === "pending");
+  const asking = () =>
+    host.pending().filter((entry) => entry.conversationId === props.id);
   const messages = () => [
     ...new Map(
       [...older(), ...(timeline()?.messages ?? [])].map((message) => [
@@ -99,6 +114,12 @@ export function Conversation(props: {
     { message: MessageView; recipients: string[] } | undefined
   >(undefined);
   const lateInsert = signal(false);
+  // The late-insert toast goes by itself, as a toast does.
+  effect(() => {
+    if (!lateInsert()) return;
+    const timer = setTimeout(() => lateInsert.set(false), 6000);
+    return () => clearTimeout(timer);
+  });
   const phone = () => props.layout === "phone";
   const offline = () => phone() && host.state().status === "reconnecting";
   const noCachedMessages = () => offline() && !messages().length;
@@ -135,6 +156,11 @@ export function Conversation(props: {
     }
     paging.set(false);
   }
+  function closeDrawer() {
+    drawer.set(false);
+    member.set(undefined);
+    props.onCloseTask();
+  }
   function Panel() {
     return (
       <ConversationPanel
@@ -156,7 +182,7 @@ export function Conversation(props: {
         }
         onInspect={member.set}
         onInvite={() => invite.set(true)}
-        onActions={() => actions.set(true)}
+        onActions={actions.set}
         onTask={props.onTask}
         onRelatedTask={props.onRelatedTask}
         onCloseTask={props.onCloseTask}
@@ -174,19 +200,46 @@ export function Conversation(props: {
           title={title()}
           layout={props.layout}
           onBack={props.onBack}
-          inset={10}
+          inset={phone() ? (props.captain ? 16 : undefined) : 10}
+          end={phone() && !props.captain ? 4 : undefined}
+          compact={phone() && !props.captain}
+          leading={
+            phone() && props.captain ? <CaptainFace size={24} /> : undefined
+          }
         >
+          <If when={phone() && props.captain}>
+            <Label size={11} line={14} tone="muted">
+              {uiText(
+                host.captain()?.status === "working" ? "working" : "idle",
+              )}
+            </Label>
+          </If>
           <If when={!phone() && project() && group()}>
-            <Button
-              label={project()?.name ?? ""}
-              icon="folder"
-              tone="ghost"
+            <View
+              role="button"
+              accessibilityLabel={project()?.name ?? ""}
               onPress={() => {
                 panel.set("Context");
                 if (props.layout === "desktop") projectInfo.set(true);
                 else drawer.set(true);
               }}
-            />
+              hoverStyle={{ backgroundColor: c().selected }}
+              style={{
+                ...row,
+                gap: 4,
+                paddingVertical: 2,
+                paddingHorizontal: 6,
+                borderWidth: 1,
+                borderColor: c().border,
+                flexShrink: 0,
+                cursor: "pointer",
+              }}
+            >
+              <Icon name="folder" size={12} tone="muted" />
+              <Label size={12} line={16} tone="muted" lines={1}>
+                {project()?.name ?? ""}
+              </Label>
+            </View>
           </If>
           <If when={!phone() && group()}>
             <StewardMenu
@@ -195,39 +248,94 @@ export function Conversation(props: {
               current={stewardId()}
             />
           </If>
-          <If when={!phone()}>
-            <View style={{ ...row, gap: 8 }}>
+          <If when={!phone() && members().length > 1}>
+            <View style={{ ...row, gap: 8, marginLeft: 4 }}>
               <Each of={members()} key={(entry) => entry.agentId}>
                 {(entry) => <AgentFace id={entry().agentId} size={12} />}
               </Each>
             </View>
           </If>
-          <View style={{ flex: 1 }} />
-          <If when={props.layout !== "desktop"}>
-            <Button
-              label={phone() ? uiText("conversationInfo") : uiText("panel")}
-              icon={phone() ? "info" : "sidebar"}
-              iconOnly={phone()}
-              tone={phone() ? "ghost" : "plain"}
-              onPress={() => drawer.set(true)}
-            />
+          <If when={!phone()}>
+            <View style={{ flex: 1 }} />
+          </If>
+          <If when={props.layout === "tablet" || (phone() && !props.captain)}>
+            <View>
+              <Button
+                label={phone() ? uiText("conversationInfo") : uiText("panel")}
+                icon={phone() ? "info" : "sidebar"}
+                iconOnly={phone()}
+                tone={phone() ? "ghost" : "plain"}
+                size={phone() ? 40 : undefined}
+                iconSize={phone() ? 16 : undefined}
+                labelSize={11}
+                style={{ gap: 6 }}
+                onPress={() => drawer.set(true)}
+              />
+              <If when={!phone() && panelAttention(host, props.id)}>
+                <View
+                  style={{
+                    position: "absolute",
+                    top: -3,
+                    right: -3,
+                    width: 6,
+                    height: 6,
+                    backgroundColor: c().blue,
+                  }}
+                />
+              </If>
+            </View>
           </If>
         </Header>
+        <If when={phone() && props.captain && approvals().length}>
+          <View
+            role="button"
+            accessibilityLabel={uiText("reviewProposals")}
+            onPress={() => props.onPending?.()}
+            style={{
+              ...row,
+              height: 44,
+              flexShrink: 0,
+              gap: 8,
+              paddingLeft: 16,
+              paddingRight: 12,
+              backgroundColor: c().selected,
+              borderBottomWidth: 1,
+              borderColor: c().border,
+              cursor: "pointer",
+            }}
+          >
+            <StatusDot color={c().amber} />
+            <Label size={12} line={16} lines={1} style={{ flex: 1 }}>
+              {approvals().length === 1
+                ? uiText("proposalWaitingForApproval")
+                : uiText("proposalsWaitingForApproval", {
+                    count: approvals().length,
+                  })}
+            </Label>
+            <Label size={12} line={16} weight={600}>
+              {uiText("reviewProposals")}
+            </Label>
+            <View style={{ opacity: 0.45 }}>
+              <Icon name="right" size={14} />
+            </View>
+          </View>
+        </If>
         <If when={offline()}>
           <View
             role="alert"
             style={{
               ...row,
               paddingVertical: 8,
-              paddingHorizontal: 14,
+              paddingHorizontal: 16,
               gap: 8,
-              backgroundColor: c().amberFill,
+              // The design's state-warning at 12%.
+              backgroundColor: `${c().warning}1f`,
               borderBottomWidth: 1,
-              borderColor: c().border,
+              borderColor: c().warning,
             }}
           >
-            <Icon name="info" tone="amber" size={13} />
-            <Label size={12} line={15} tone="amber" style={{ flex: 1 }}>
+            <Icon name="warning" tone="warningInk" size={14} />
+            <Label size={12} line={16} tone="warningInk" style={{ flex: 1 }}>
               {uiText("connectionLostReconnectingWhatYouSee")}
             </Label>
           </View>
@@ -240,6 +348,11 @@ export function Conversation(props: {
             alignSelf: "center",
           }}
         >
+          <If when={!phone() && asking().length}>
+            <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+              <PendingStrip items={asking()} />
+            </View>
+          </If>
           <ConversationTimeline
             rows={indexed().rows}
             additions={indexed().additions}
@@ -252,6 +365,7 @@ export function Conversation(props: {
             paging={paging()}
             phone={phone()}
             compact={props.layout === "tablet" || props.alignComposer}
+            captain={props.captain}
             rail={props.rail}
             onPageOlder={() => void history()}
             onInsert={(message) => {
@@ -261,6 +375,24 @@ export function Conversation(props: {
                 recipients: indexed().recipients.get(message.id) ?? [],
               });
             }}
+            insertingId={inserting()?.message.id}
+            onInsertClose={() => inserting.set(undefined)}
+            insertPanel={() => (
+              <If when={inserting()}>
+                {(entry) => (
+                  <InsertMessage
+                    message={entry().message}
+                    initialRecipients={entry().recipients}
+                    recipients={() =>
+                      indexed().recipients.get(entry().message.id) ?? []
+                    }
+                    phone={phone()}
+                    onLate={() => lateInsert.set(true)}
+                    onClose={() => inserting.set(undefined)}
+                  />
+                )}
+              </If>
+            )}
             onTask={(id) => {
               props.onTask(id);
               if (!phone()) drawer.set(true);
@@ -271,15 +403,33 @@ export function Conversation(props: {
             }
           />
           <If when={lateInsert()}>
-            <View style={{ ...row, paddingHorizontal: 12, gap: 8 }}>
-              <Label size={12} tone="muted" style={{ flex: 1 }}>
-                {uiText("theTurnEndedYourAdditionWas")}
-              </Label>
-              <Button
-                label={uiText("dismiss")}
-                tone="ghost"
+            {/* A toast over the end of the transcript, just above the composer. */}
+            <View style={{ height: 0, zIndex: 10 }}>
+              <View
+                role="button"
+                accessibilityLabel={uiText("dismiss")}
                 onPress={() => lateInsert.set(false)}
-              />
+                style={{
+                  ...row,
+                  position: "absolute",
+                  bottom: 12,
+                  right: 16,
+                  left: phone() ? 16 : undefined,
+                  width: phone() ? undefined : 356,
+                  gap: 8,
+                  paddingVertical: 12,
+                  paddingHorizontal: 14,
+                  borderWidth: 1,
+                  borderColor: c().border,
+                  backgroundColor: c().canvas,
+                  boxShadow: [{ x: 0, y: 4, blur: 16, color: "#0a0a0a14" }],
+                  cursor: "pointer",
+                }}
+              >
+                <Label size={12} line={16} style={{ flex: 1 }}>
+                  {uiText("insertEnded")}
+                </Label>
+              </View>
             </View>
           </If>
           <Composer
@@ -289,9 +439,22 @@ export function Conversation(props: {
             steward={stewardId()}
             group={group()}
             phone={phone()}
+            tablet={props.layout === "tablet"}
             alignWithContent={props.alignComposer}
             held={timeline()?.held ?? []}
             widgetDraft={widgetDraft()}
+            onStopMember={(agentId) => {
+              const reply = messages().findLast(
+                (message) =>
+                  message.agentId === agentId && activeReply(message.status),
+              );
+              void host.action(() =>
+                host.call("conversations", "stop", {
+                  conversationId: props.id,
+                  messageId: reply?.id,
+                }),
+              );
+            }}
           />
         </View>
       </View>
@@ -314,33 +477,33 @@ export function Conversation(props: {
           title={phone() ? uiText("conversationInfo") : uiText("panel")}
           width={360}
           side={!phone()}
-          hideHeader={!phone()}
+          hideHeader
+          sheet={phone()}
           blurBackdrop={false}
-          overPhoneNavigation={!phone()}
-          height={phone() ? "70%" : "100%"}
+          overPhoneNavigation
+          height={phone() ? Math.max(0, windowSize().height - 104) : "100%"}
           phone={phone()}
-          onClose={() => {
-            drawer.set(false);
-            member.set(undefined);
-            props.onCloseTask();
-          }}
+          onClose={closeDrawer}
         >
-          <Panel />
+          <If when={phone()} else={<Panel />}>
+            <PhoneConversationInfo
+              id={props.id}
+              name={title()}
+              project={project()?.display ?? project()?.path}
+              members={members()}
+              info={info()}
+              captain={props.captain}
+              onActions={actions.set}
+              onClose={closeDrawer}
+              onInspect={member.set}
+              onTask={(id) => {
+                drawer.set(false);
+                props.onTask(id);
+              }}
+              onArtifact={openArtifact}
+            />
+          </If>
         </Modal>
-      </If>
-      <If when={inserting()}>
-        {(entry) => (
-          <InsertMessage
-            message={entry().message}
-            initialRecipients={entry().recipients}
-            recipients={() =>
-              indexed().recipients.get(entry().message.id) ?? []
-            }
-            phone={phone()}
-            onLate={() => lateInsert.set(true)}
-            onClose={() => inserting.set(undefined)}
-          />
-        )}
       </If>
       <If when={projectInfo() && project()}>
         <Modal
@@ -353,14 +516,14 @@ export function Conversation(props: {
           </Label>
         </Modal>
       </If>
-      <If when={actions() ? info() : undefined}>
-        {(active) => (
+      <If when={actions() && info() ? actions() : undefined}>
+        {(action) => (
           <ConversationActions
-            info={active()}
+            info={info()!}
             members={members()}
-            captain={props.captain}
+            action={action()}
             phone={phone()}
-            onClose={() => actions.set(false)}
+            onClose={() => actions.set(undefined)}
           />
         )}
       </If>

@@ -1,6 +1,6 @@
 import type { Navigation } from "./routes";
 import { View } from "nsh";
-import { colors, sizes } from "../components";
+import { colors, focusRing, sizes } from "../components";
 import { useText } from "../i18n";
 import { useHost } from "../services/host";
 import { CaptainFace } from "./captain";
@@ -32,6 +32,7 @@ export function TabletRail(props: Navigation) {
         accessibilityLabel={text("captain")}
         onPress={() => props.onNavigate("captain")}
         hoverStyle={{ backgroundColor: c().selected }}
+        focusVisibleStyle={focusRing(c())}
         style={{
           height: 56,
           alignItems: "center",
@@ -46,7 +47,11 @@ export function TabletRail(props: Navigation) {
           <NavItem
             item={item()}
             layout="tablet"
-            selected={props.page === item()[0]}
+            // Captain is a conversation: the Chat page stays the one selected.
+            selected={
+              props.page === item()[0] ||
+              (props.page === "captain" && item()[0] === "chat")
+            }
             count={item()[0] === "tasks" ? check() : 0}
             onPress={() => props.onNavigate(item()[0])}
           />

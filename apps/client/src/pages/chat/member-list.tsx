@@ -1,10 +1,19 @@
 import type { ConversationInfo, MemberView } from "@eta/client-contracts";
+import type { ConversationAction } from "./conversation-actions";
 import { View } from "nsh";
-import { Button, colors, Label, row } from "../../components";
+import {
+  ActionItem,
+  ActionMenu,
+  Button,
+  colors,
+  Label,
+  row,
+} from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
-import { useHost } from "../../services/host";
+import { follow, useHost } from "../../services/host";
+import { ConversationActionsMenu } from "./conversation-actions";
 import { activeReply, memberStatus } from "./member-status";
 import { MemberStepsLedger, MemberStepsToggle } from "./member-steps";
 
@@ -17,7 +26,10 @@ export function ConversationMembers(props: {
   onToggleSteps: (session: string) => void;
   onInspect: (member: { id: string; session: string }) => void;
   onInvite: () => void;
-  onActions: () => void;
+  captain?: boolean;
+  /** The tablet's roomier menu. */
+  tablet?: boolean;
+  onActions: (action: ConversationAction) => void;
 }) {
   const host = useHost();
   const c = colors();
@@ -52,13 +64,12 @@ export function ConversationMembers(props: {
               onPress={props.onInvite}
             />
           </If>
-          <Button
-            label={uiText("conversationActions")}
-            icon="more"
-            iconOnly
-            tone="ghost"
-            disabled={!props.info}
-            onPress={props.onActions}
+          <ConversationActionsMenu
+            info={props.info}
+            captain={props.captain}
+            roomy={props.tablet}
+            triggerStyle={{ minWidth: 24, height: 24, paddingHorizontal: 3 }}
+            onOpen={props.onActions}
           />
         </View>
       </View>
@@ -69,60 +80,135 @@ export function ConversationMembers(props: {
               style={{
                 ...row,
                 alignItems: "flex-start",
-                padding: 12,
+                paddingVertical: 14,
+                paddingHorizontal: 12,
                 gap: 12,
-                minHeight: 76,
               }}
             >
-              <View
-                style={{
-                  padding: 5,
-                  borderWidth: 1,
-                  borderColor: c().border,
-                  borderRadius: 20,
-                }}
+              <If
+                when={entry().sessionId}
+                else={<AgentFace id={entry().agentId} size={28} />}
               >
-                <AgentFace id={entry().agentId} size={26} />
-              </View>
-              <View style={{ flex: 1, gap: 2 }}>
-                <View style={{ ...row, gap: 7 }}>
-                  <Label>
+                <View
+                  style={{
+                    ...row,
+                    justifyContent: "center",
+                    width: 40,
+                    height: 40,
+                    flexShrink: 0,
+                    borderWidth: 3,
+                    borderColor: c().selected,
+                    borderRadius: 20,
+                  }}
+                >
+                  <AgentFace id={entry().agentId} size={26} />
+                </View>
+              </If>
+              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <View style={{ ...row, gap: entry().sessionId ? 6 : 8 }}>
+                  <Label line={18} lines={1}>
                     {host.agent(entry().agentId)?.name ?? uiText("agent")}
                   </Label>
                   <StatusDot
-                    color={activeReply(entry().status) ? c().blue : c().strong}
+                    color={activeReply(entry().status) ? c().blue : c().muted}
+                    opacity={activeReply(entry().status) ? 1 : 0.4}
                   />
-                  <Label size={10} tone="muted">
+                  <Label size={10} line={12} tone="muted">
                     {memberStatus(entry().status)}
                   </Label>
                 </View>
-                <Label size={10} tone="muted">
-                  {host.agent(entry().agentId)?.model ??
-                    (entry().sessionId
-                      ? uiText("defaultModel")
-                      : uiText("noConversationYet"))}
-                </Label>
-              </View>
-              <If when={entry().sessionId}>
-                {(session) => (
-                  <View style={{ ...row, gap: 6 }}>
-                    <MemberStepsToggle
+                <If
+                  when={entry().sessionId}
+                  else={
+                    <Label size={10} line={14} tone="muted">
+                      {uiText("memberNoConversation")}
+                    </Label>
+                  }
+                >
+                  {(session) => (
+                    <MemberStats
                       session={session()}
-                      open={props.expandedSession === session()}
-                      onToggle={() => props.onToggleSteps(session())}
+                      model={host.agent(entry().agentId)?.model}
                     />
-                    <Button
-                      label={uiText("inspectRun")}
-                      onPress={() =>
-                        props.onInspect({
-                          id: entry().agentId,
-                          session: session(),
+                  )}
+                </If>
+              </View>
+              <View style={{ ...row, gap: 6, flexShrink: 0 }}>
+                <If when={entry().sessionId}>
+                  {(session) => (
+                    <>
+                      <MemberStepsToggle
+                        session={session()}
+                        open={props.expandedSession === session()}
+                        onToggle={() => props.onToggleSteps(session())}
+                      />
+                      <Button
+                        label={uiText("inspectRun")}
+                        onPress={() =>
+                          props.onInspect({
+                            id: entry().agentId,
+                            session: session(),
+                          })
+                        }
+                      />
+                    </>
+                  )}
+                </If>
+                <ActionMenu
+                  label={uiText("memberActions", {
+                    name: host.agent(entry().agentId)?.name ?? uiText("agent"),
+                  })}
+                  triggerStyle={{
+                    minWidth: 14,
+                    width: 14,
+                    height: 24,
+                    paddingHorizontal: 0,
+                  }}
+                >
+                  <If when={props.group && props.info}>
+                    <ActionItem
+                      label={uiText("makeSteward")}
+                      disabled={
+                        props.info?.stewardId === entry().agentId ||
+                        props.info?.archived
+                      }
+                      onSelect={() =>
+                        void host.action(() =>
+                          host.call("conversations", "setSteward", {
+                            conversationId: props.info!.id,
+                            agentId: entry().agentId,
+                          }),
+                        )
+                      }
+                    />
+                    <ActionItem
+                      label={uiText("removeMember")}
+                      disabled={
+                        props.members.length <= 1 || props.info?.archived
+                      }
+                      onSelect={() =>
+                        props.onActions({
+                          section: "Remove member",
+                          agentId: entry().agentId,
                         })
                       }
                     />
-                  </View>
-                )}
-              </If>
+                  </If>
+                  <If when={entry().sessionId}>
+                    {(session) => (
+                      <ActionItem
+                        label={uiText("inspectRun")}
+                        onSelect={() =>
+                          props.onInspect({
+                            id: entry().agentId,
+                            session: session(),
+                          })
+                        }
+                      />
+                    )}
+                  </If>
+                </ActionMenu>
+              </View>
             </View>
             <If
               when={
@@ -137,6 +223,55 @@ export function ConversationMembers(props: {
           </View>
         )}
       </Each>
+    </>
+  );
+}
+
+const tokens = (count: number | undefined) =>
+  count === undefined
+    ? "—"
+    : count >= 1_000_000
+      ? `${(count / 1_000_000).toFixed(1)}M`
+      : count >= 1_000
+        ? `${(count / 1_000).toFixed(1)}k`
+        : String(count);
+
+/** What one member's session has spent: model, tokens, tools. */
+function MemberStats(props: { session: string; model?: string | null }) {
+  const host = useHost();
+  const target = () => `sessions.${props.session}`;
+  follow(target);
+  const usage = () =>
+    host.section<{
+      input: number;
+      output: number;
+      cacheRead: number;
+      cacheWrite: number;
+    }>(target(), "usage");
+  const tools = () => host.section<unknown[]>(target(), "tools");
+  const model = () =>
+    host.section<{ id: string }>(target(), "model")?.id ??
+    props.model ??
+    uiText("defaultModel");
+  return (
+    <>
+      <Label size={10} line={14} tone="muted" lines={1}>
+        {model()}
+      </Label>
+      <Label size={10} line={14} tone="muted" lines={1}>
+        {uiText("memberUsage", {
+          input: tokens(usage()?.input),
+          output: tokens(usage()?.output),
+          cache: tokens(
+            usage() ? usage()!.cacheRead + usage()!.cacheWrite : undefined,
+          ),
+        })}
+      </Label>
+      <Label size={10} line={14} tone="muted">
+        {uiText("memberTools", {
+          count: tools() ? String(tools()!.length) : "—",
+        })}
+      </Label>
     </>
   );
 }

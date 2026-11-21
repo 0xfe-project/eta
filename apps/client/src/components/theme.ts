@@ -20,16 +20,25 @@ export const light = {
   greenFill: "#e8f2eb",
   amber: "#a46700",
   amberFill: "#f7efdf",
+  /** The design's state-warning: a warning's border or mark. */
+  warning: "#c37000",
+  /** The design's state-warning-ink: text on or beside a warning. */
+  warningInk: "#955a00",
   red: "#c61623",
   redFill: "#fce9eb",
+  /** The design's --color-ring: the keyboard focus ring. */
+  ring: "#737373",
   shade: "#00000020",
   modalShade: "#0000001e",
+  /** The foreground at 16%: the scrim of phone sheets, tablet drawers and
+   * tablet dialogs. Desktop dialogs use `modalShade` (12%). */
+  sheetShade: "#11111129",
 };
 
 const dark: typeof light = {
   canvas: "#0a0a0a",
   surface: "#090909",
-  selected: "#232323",
+  selected: "#161616",
   ink: "#fafafa",
   muted: "#a3a3a3",
   mutedInk: "#c5c5c5",
@@ -44,10 +53,14 @@ const dark: typeof light = {
   greenFill: "#16291e",
   amber: "#e0aa53",
   amberFill: "#302618",
+  warning: "#de9300",
+  warningInk: "#de9300",
   red: "#ff6874",
   redFill: "#3a1d21",
+  ring: "#a1a1a1",
   shade: "#00000080",
   modalShade: "#00000048",
+  sheetShade: "#0a0a0a99",
 };
 
 export const Palette = context<() => typeof light>(() => light);
@@ -57,6 +70,12 @@ export const palette = (mode: "light" | "dark") =>
 
 export function colors() {
   return Palette();
+}
+
+/** The design's keyboard focus: a 2px ring in `ring`, 2px outside the view.
+ * Only keyboard focus shows it (`focusVisibleStyle`); a press shows none. */
+export function focusRing(c: typeof light): ViewStyle {
+  return { outlineWidth: 2, outlineColor: c.ring, outlineOffset: 2 };
 }
 
 export const row: ViewStyle = { flexDirection: "row", alignItems: "center" };

@@ -1,4 +1,5 @@
 import type { JSX } from "nsh";
+import type { IconName } from "./icons";
 import type { Layout } from "./theme";
 import { View } from "nsh";
 import { pickerTarget } from "./element-picker";
@@ -10,11 +11,32 @@ import { colors, row, sizes } from "./theme";
 export function Header(props: {
   title: string;
   count?: number;
+  /** The count's type size; 14 draws it at 14/18, 6pt after the title. */
+  countSize?: number;
   subtitle?: string;
   subtitleTone?: "green" | "amber" | "muted";
   layout?: Layout;
   inset?: number;
+  /** Right padding when the trailing control carries its own inset (a phone's 40pt button). */
+  end?: number;
+  /** A phone conversation's 44pt bar with a 15/18 title. */
+  compact?: boolean;
+  /** Drawn before the title, such as an avatar. */
+  leading?: JSX.Element;
   dialog?: boolean;
+  /** Bar fill; defaults to canvas on phones and dialogs, surface elsewhere. */
+  background?: "canvas" | "surface" | "none";
+  /** Bar height; defaults to 48 on phones (44 compact) and 40 elsewhere. */
+  height?: number;
+  /** The bottom border; on by default. */
+  divider?: boolean;
+  titleSize?: number;
+  titleWeight?: number;
+  titleLine?: number;
+  /** Gap between the bar's items; defaults to 4 on phones and 8 elsewhere. */
+  gap?: number;
+  backIcon?: IconName;
+  backIconSize?: number;
   children?: JSX.Element;
   onBack?: () => void;
 }) {
@@ -23,6 +45,31 @@ export function Header(props: {
     "Header",
     "apps/client/src/components/header.tsx",
   );
+  const phone = () => props.layout === "phone";
+  const back = () => props.onBack !== undefined;
+  // A phone top bar: 8pt insets around 40pt buttons, a 14/20 semibold title.
+  const phoneBar = () => phone() && !props.compact && !props.dialog;
+  const fallbackInset = () => (phone() ? (back() ? 8 : 16) : 22);
+  const paddingLeft = () => {
+    if (phone() && back()) return props.compact ? 0 : 8;
+    return props.inset ?? fallbackInset();
+  };
+  const titleSize = () =>
+    props.titleSize ??
+    (phone() && props.compact
+      ? 15
+      : phoneBar()
+        ? 14
+        : phone() || props.dialog
+          ? 16
+          : 14);
+  const titleLine = () =>
+    props.titleLine ??
+    (props.subtitle || (phone() && props.compact)
+      ? 18
+      : props.dialog && !phone()
+        ? 22
+        : 20);
   return (
     <View
       {...picker}
@@ -30,26 +77,44 @@ export function Header(props: {
       style={{
         ...row,
         flexShrink: 0,
-        height: props.layout === "phone" ? 46 : sizes.header,
-        paddingHorizontal: props.inset ?? (props.layout === "phone" ? 16 : 22),
-        borderBottomWidth: 1,
+        height:
+          props.height ?? (phone() ? (props.compact ? 44 : 48) : sizes.header),
+        paddingLeft: paddingLeft(),
+        paddingRight: props.end ?? props.inset ?? fallbackInset(),
+        borderBottomWidth: props.divider === false ? 0 : 1,
         borderColor: color().border,
         backgroundColor:
-          props.layout === "phone" || props.dialog
-            ? color().canvas
-            : color().surface,
-        gap: 8,
+          props.background === "none"
+            ? undefined
+            : props.background === "canvas"
+              ? color().canvas
+              : props.background === "surface"
+                ? color().surface
+                : phone() || props.dialog
+                  ? color().canvas
+                  : color().surface,
+        gap: props.gap ?? (phoneBar() ? 4 : 8),
         zIndex: 1,
       }}
     >
-      <If when={props.onBack !== undefined}>
-        <BackButton onPress={() => props.onBack?.()} />
+      <If when={back()}>
+        <BackButton
+          icon={props.backIcon}
+          size={phone() ? 40 : undefined}
+          iconSize={
+            props.backIconSize ??
+            (phone() ? (props.compact ? 16 : 20) : undefined)
+          }
+          style={phone() && props.compact ? { marginRight: -8 } : undefined}
+          onPress={() => props.onBack?.()}
+        />
       </If>
+      {props.leading}
       <View style={{ minWidth: 0, flexShrink: 1 }}>
         <Label
-          weight={props.dialog ? 500 : 600}
-          size={props.layout === "phone" || props.dialog ? 16 : 14}
-          line={props.subtitle ? 18 : undefined}
+          weight={props.titleWeight ?? (props.dialog ? 500 : 600)}
+          size={titleSize()}
+          line={titleLine()}
           lines={1}
         >
           {props.title}
@@ -66,7 +131,16 @@ export function Header(props: {
         </If>
       </View>
       <If when={props.count !== undefined}>
-        <Label size={12} tone="muted">
+        <Label
+          size={props.countSize ?? 12}
+          line={props.countSize ? props.countSize + 4 : undefined}
+          tone="muted"
+          style={
+            props.countSize
+              ? { marginLeft: 6 - (props.gap ?? (phoneBar() ? 4 : 8)) }
+              : undefined
+          }
+        >
           {props.count}
         </Label>
       </If>
@@ -74,6 +148,10 @@ export function Header(props: {
         <View style={{ flex: 1 }} />
       </If>
       {props.children}
+      <If when={phoneBar() && back() && props.children === undefined}>
+        {/* Keeps the title's lane the same as a bar with a trailing button. */}
+        <View style={{ width: 40, flexShrink: 0 }} />
+      </If>
     </View>
   );
 }

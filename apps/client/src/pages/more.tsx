@@ -53,6 +53,7 @@ function MoreRow(props: {
       accessibilityLabel={props.title}
       onPress={props.onPress}
       hoverStyle={{ backgroundColor: c().selected }}
+      activeStyle={{ backgroundColor: c().selected }}
       style={{
         ...row,
         height: 56,
@@ -64,19 +65,30 @@ function MoreRow(props: {
         cursor: "pointer",
       }}
     >
-      <View style={{ width: 20, alignItems: "center" }}>
-        <Icon name={props.icon} size={16} />
+      <View
+        style={{
+          width: 20,
+          height: 20,
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+        }}
+      >
+        <Icon name={props.icon} size={18} />
       </View>
-      <Label style={{ flex: 1 }}>{props.title}</Label>
+      <Label line={20} style={{ flex: 1 }}>
+        {props.title}
+      </Label>
       <If when={props.count}>
         <View
           style={{
             height: 14,
             minWidth: 14,
             paddingHorizontal: 3,
+            backgroundColor: c().blue,
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: c().blue,
+            flexShrink: 0,
           }}
         >
           <Label size={10} line={12} style={{ color: "#ffffff" }}>
@@ -84,7 +96,7 @@ function MoreRow(props: {
           </Label>
         </View>
       </If>
-      <Icon name="right" size={14} tone="muted" />
+      <Icon name="right" size={14} />
     </View>
   );
 }

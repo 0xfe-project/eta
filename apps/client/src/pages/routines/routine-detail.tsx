@@ -28,6 +28,7 @@ export function RoutineDetail(props: {
 }) {
   const c = colors();
   const latest = () => props.runs.find((run) => run.status === "sent");
+  const older = () => props.runs.find((run) => run.id !== latest()?.id);
   return (
     <View style={grow}>
       <If when={props.layout !== "phone"}>
@@ -103,12 +104,14 @@ export function RoutineDetail(props: {
               ? uiText("noUpcomingRun")
               : uiText("paused")}
         </Label>
-        <Button
-          label={uiText("runNow")}
-          tone="ghost"
-          disabled={!props.canRun}
-          onPress={props.onRun}
-        />
+        <If when={props.layout !== "phone"}>
+          <Button
+            label={uiText("runNow")}
+            tone="ghost"
+            disabled={!props.canRun}
+            onPress={props.onRun}
+          />
+        </If>
       </View>
       <Scroll style={grow} scrollbar={false}>
         <View style={{ padding: props.layout === "phone" ? 16 : 24, gap: 10 }}>
@@ -161,6 +164,42 @@ export function RoutineDetail(props: {
           </If>
         </View>
       </Scroll>
+      <If when={props.layout === "phone"}>
+        <View
+          style={{
+            ...row,
+            height: 64,
+            flexShrink: 0,
+            gap: 8,
+            paddingHorizontal: 16,
+            borderTopWidth: 1,
+            borderColor: c().border,
+          }}
+        >
+          <View
+            role="button"
+            accessibilityLabel={uiText("olderReports")}
+            onPress={() => {
+              if (older()) props.onReport(older()!.id);
+            }}
+            style={{ flex: 1, cursor: older() ? "pointer" : "default" }}
+          >
+            <Label size={12} line={16} tone="muted">
+              {uiText("olderReports")}
+            </Label>
+          </View>
+          <Button
+            label={uiText("runNow")}
+            icon="play"
+            tone="primary"
+            size={36}
+            labelWeight={600}
+            style={{ paddingHorizontal: 16, gap: 6 }}
+            disabled={!props.canRun}
+            onPress={props.onRun}
+          />
+        </View>
+      </If>
     </View>
   );
 }

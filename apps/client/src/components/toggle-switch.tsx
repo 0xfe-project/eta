@@ -25,18 +25,24 @@ export function ToggleSwitch(props: {
       }}
       trackStyle={{
         ...row,
-        width: props.compact ? 30 : 36,
+        width: props.compact ? 28 : 36,
         height: props.compact ? 16 : 20,
         paddingHorizontal: 2,
         justifyContent: props.checked ? "flex-end" : "flex-start",
         borderWidth: 1,
-        borderColor: c().strong,
+        borderColor: props.checked ? c().button : c().strong,
         backgroundColor: props.checked ? c().button : c().canvas,
       }}
       thumbStyle={{
         width: thumbSize(),
         height: thumbSize(),
-        backgroundColor: props.checked ? c().buttonInk : c().faint,
+        // The design's off thumb: muted on the 28px toggle, border-strong on
+        // the wide one.
+        backgroundColor: props.checked
+          ? c().buttonInk
+          : props.compact
+            ? c().muted
+            : c().strong,
       }}
     />
   );

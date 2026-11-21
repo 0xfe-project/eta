@@ -1,15 +1,6 @@
 import type { DirectoryChoice } from "./use-place-flow";
 import { View } from "nsh";
-import {
-  ActionItem,
-  ActionMenu,
-  colors,
-  Field,
-  grow,
-  Icon,
-  Label,
-  row,
-} from "../../components";
+import { Button, colors, grow, Icon, Label, row } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { CheckControl } from "../../components/check-control";
 import { localizedText, uiText } from "../../i18n";
@@ -20,19 +11,23 @@ export function ConversationMembers(props: {
   machineName: string;
   phone: boolean;
   agentIds: string[];
-  advanced: boolean;
-  name: string;
   stewardId: string | null | undefined;
   onToggleAgent: (id: string) => void;
-  onName: (name: string) => void;
   onSteward: (id: string | null) => void;
-  onStart: () => void;
 }) {
   const host = useHost();
   const c = colors();
   return (
     <>
-      <View style={{ ...row, gap: 8, marginHorizontal: 16, marginTop: 10 }}>
+      <View
+        style={{
+          ...row,
+          gap: 8,
+          marginHorizontal: 16,
+          marginTop: props.phone ? 12 : 10,
+          height: props.phone ? 32 : undefined,
+        }}
+      >
         <Icon name="folder" size={14} />
         <Label
           size={12}
@@ -42,7 +37,7 @@ export function ConversationMembers(props: {
       <Label
         tone="muted"
         size={14}
-        style={{ paddingHorizontal: 16, paddingVertical: 7 }}
+        style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 }}
       >
         {localizedText(
           "Who should work in this conversation?",
@@ -50,39 +45,80 @@ export function ConversationMembers(props: {
         )}
       </Label>
       <Each of={host.agents()} key={(agent) => agent.id}>
-        {(agent) => {
+        {(agent, index) => {
           const checked = () => props.agentIds.includes(agent().id);
+          const steward = () => props.stewardId === agent().id;
           return (
-            <CheckControl
-              label={agent().name}
-              checked={checked()}
-              onChange={() => props.onToggleAgent(agent().id)}
-              hoverStyle={{ backgroundColor: c().selected }}
-              size={13}
-              indicatorStyle={{ borderColor: checked() ? c().ink : c().strong }}
+            <View
               style={{
                 ...row,
                 height: props.phone ? 52 : 34,
                 gap: 12,
                 marginHorizontal: 16,
-                paddingHorizontal: 4,
+                paddingRight: 4,
+                borderTopWidth: index() === 0 ? 1 : 0,
                 borderBottomWidth: 1,
                 borderColor: c().border,
-                cursor: "pointer",
               }}
             >
-              <AgentFace id={agent().id} size={24} />
-              <Label style={grow}>{agent().name}</Label>
-              <Label size={11} tone="muted">
-                {agent().runtime === "claude"
-                  ? "Claude Code"
-                  : agent().runtime === "codex"
-                    ? "Codex"
-                    : agent().runtime === "eta" || !agent().runtime
-                      ? localizedText("eta (built-in)", "eta（内置）")
-                      : agent().runtime}
-              </Label>
-            </CheckControl>
+              <CheckControl
+                label={agent().name}
+                checked={checked()}
+                onChange={() => props.onToggleAgent(agent().id)}
+                hoverStyle={{ backgroundColor: c().selected }}
+                size={14}
+                indicatorStyle={{
+                  borderColor: checked() ? c().ink : c().strong,
+                }}
+                style={{
+                  ...row,
+                  ...grow,
+                  alignSelf: "stretch",
+                  gap: 12,
+                  paddingHorizontal: 4,
+                  cursor: "pointer",
+                }}
+              >
+                <AgentFace id={agent().id} size={24} />
+                <Label style={grow} lines={1}>
+                  {agent().name}
+                </Label>
+                <Label size={11} tone="muted">
+                  {agent().runtime === "claude"
+                    ? "Claude Code"
+                    : agent().runtime === "codex"
+                      ? "Codex"
+                      : agent().runtime === "eta" || !agent().runtime
+                        ? localizedText("eta (built-in)", "eta（内置）")
+                        : agent().runtime}
+                </Label>
+              </CheckControl>
+              {/* The steward is chosen on its own row; pressed again, the
+                  group has none. Unticked rows keep the slot so the columns
+                  line up. */}
+              <View
+                style={{
+                  ...row,
+                  justifyContent: "flex-end",
+                  width: 104,
+                  flexShrink: 0,
+                }}
+              >
+                <If when={checked()}>
+                  <Button
+                    label={uiText(steward() ? "steward2" : "makeSteward")}
+                    tone={steward() ? "primary" : "ghost"}
+                    selected={steward()}
+                    labelWeight={400}
+                    size={props.phone ? 28 : 24}
+                    style={{ paddingHorizontal: 10 }}
+                    onPress={() =>
+                      props.onSteward(steward() ? null : agent().id)
+                    }
+                  />
+                </If>
+              </View>
+            </View>
           );
         }}
       </Each>
@@ -90,45 +126,6 @@ export function ConversationMembers(props: {
         <Label tone="muted" style={{ padding: 16 }}>
           {uiText("createAnAgentFirstInSettings")}
         </Label>
-      </If>
-      <If when={props.advanced}>
-        <View style={{ marginHorizontal: 16, marginTop: 14, gap: 10 }}>
-          <Field
-            label={uiText("conversationName")}
-            placeholder={uiText("conversationNameOptional")}
-            value={props.name}
-            onChange={props.onName}
-            onSubmit={props.onStart}
-          />
-          <View style={{ ...row, gap: 8 }}>
-            <Label size={12} tone="muted">
-              {uiText("steward2")}
-            </Label>
-            <ActionMenu
-              label={uiText("steward2")}
-              value={
-                props.stewardId
-                  ? host.agent(props.stewardId)?.name
-                  : uiText("noSteward")
-              }
-            >
-              <Each of={props.agentIds}>
-                {(id) => (
-                  <ActionItem
-                    label={host.agent(id())?.name ?? id()}
-                    checked={props.stewardId === id()}
-                    onSelect={() => props.onSteward(id())}
-                  />
-                )}
-              </Each>
-              <ActionItem
-                label={uiText("noSteward")}
-                checked={props.stewardId === null}
-                onSelect={() => props.onSteward(null)}
-              />
-            </ActionMenu>
-          </View>
-        </View>
       </If>
     </>
   );

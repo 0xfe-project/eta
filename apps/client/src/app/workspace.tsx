@@ -234,7 +234,8 @@ export function Workspace(props: {
           <DesktopSidebar
             page={desktopRail() && settings() ? "settings" : page()}
             onNavigate={navigate}
-            selected={conversation()}
+            // A group reads as current only while its conversation is open.
+            selected={page() === "chat" && !settings() ? conversation() : ""}
             onConversation={open}
             onAgent={(id) => void direct(id)}
             onCreate={() => newGroup.set(true)}
@@ -269,8 +270,9 @@ export function Workspace(props: {
         >
           <If
             when={
-              page() === "chat" &&
-              (props.layout === "tablet" || (phone() && !mobileOpen()))
+              (page() === "chat" &&
+                (props.layout === "tablet" || (phone() && !mobileOpen()))) ||
+              (page() === "captain" && props.layout === "tablet")
             }
           >
             <ChatList
@@ -305,6 +307,7 @@ export function Workspace(props: {
                     id={captain()}
                     layout={props.layout}
                     captain
+                    onPending={() => navigate("pending")}
                     onTask={openTask}
                     onRelatedTask={openRelatedTask}
                     onRoutines={showRoutine}
@@ -323,6 +326,7 @@ export function Workspace(props: {
                     id={id()}
                     captain={page() === "captain"}
                     layout={props.layout}
+                    onPending={() => navigate("pending")}
                     onTask={openTask}
                     onRelatedTask={openRelatedTask}
                     onRoutines={showRoutine}
@@ -464,9 +468,7 @@ export function Workspace(props: {
       <If
         when={task() && page() !== "tasks" && (phone() || page() === "pending")}
       >
-        <View
-          style={{ ...fill, bottom: phone() ? sizes.phoneNav : 0, zIndex: 10 }}
-        >
+        <View style={{ ...fill, zIndex: 10 }}>
           <Each of={[task()]}>
             {(id) => (
               <TaskDetail

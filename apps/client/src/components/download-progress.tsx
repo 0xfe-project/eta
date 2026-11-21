@@ -15,14 +15,14 @@ export function DownloadProgressBar(props: {
         accessibilityValue={{ min: 0, max: 100, now: props.value }}
         style={{
           height: 4,
-          backgroundColor: props.monochrome ? c().border : c().selected,
+          backgroundColor: c().selected,
         }}
       >
         <View
           style={{
             height: 4,
             width: `${props.value ?? 0}%`,
-            backgroundColor: props.monochrome ? c().ink : c().blue,
+            backgroundColor: props.monochrome ? c().button : c().blue,
           }}
         />
       </View>

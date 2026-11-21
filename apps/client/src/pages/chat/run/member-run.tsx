@@ -8,7 +8,7 @@ import type {
 import type { ViewRef } from "nsh";
 import { logBlocks, runFromOf } from "@eta/client-contracts";
 import { cleanup, computed, effect, Scroll, signal, View } from "nsh";
-import { Button, colors, grow, Label, row } from "../../../components";
+import { Button, colors, grow, Icon, Label, row } from "../../../components";
 import { AgentFace } from "../../../components/agent-face";
 import { CloseButton } from "../../../components/navigation-buttons";
 import { StatusDot } from "../../../components/status-dot";
@@ -32,6 +32,20 @@ function runDate(at: number) {
   return `${day} ${hour % 12 || 12}:${minutes} ${hour < 12 ? "AM" : "PM"}`;
 }
 
+/** A finished run's length, "13m 47s"; a running one's clock, "1:04:17". */
+function runLength(ms: number, clockFace: boolean) {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (clockFace)
+    return h
+      ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+      : `${m}:${String(s).padStart(2, "0")}`;
+  if (h) return `${h}h ${m}m`;
+  return m ? `${m}m ${s}s` : `${s}s`;
+}
+
 export function MemberRun(props: {
   session: string;
   agentId: string;
@@ -40,6 +54,8 @@ export function MemberRun(props: {
   taskRun?: TaskRunView;
   nextRunAt?: number;
   executorName?: string;
+  /** Replaces the date and thinking level after the name, such as a task run's caption. */
+  meta?: string;
   onClose: () => void;
 }) {
   const host = useHost();
@@ -112,6 +128,54 @@ export function MemberRun(props: {
     ),
   );
 
+  /** A task run's state: a small mark, its word, and how long it took. */
+  const runState = () => {
+    const run = props.taskRun;
+    if (!run) return undefined;
+    const start = run.startedAt ?? run.createdAt;
+    const active =
+      run.status === "running" ||
+      run.status === "starting" ||
+      run.status === "queued";
+    const color =
+      run.status === "failed"
+        ? c().red
+        : run.status === "completed"
+          ? c().green
+          : active
+            ? c().blue
+            : c().muted;
+    const word = uiText(
+      run.status === "completed"
+        ? "done"
+        : run.status === "interrupted"
+          ? "runStatusStopped"
+          : run.status,
+    );
+    if (run.status === "running")
+      return {
+        color,
+        word: `${word} ${runLength(now() - start, true)}`,
+        took: "",
+      };
+    return {
+      color,
+      word,
+      took:
+        run.finishedAt && run.startedAt
+          ? uiText("runTook", {
+              duration: runLength(run.finishedAt - run.startedAt, false),
+            })
+          : "",
+    };
+  };
+  const details = () => [
+    running() ? uiText("running") : "",
+    thinking()
+      ? uiText("runThinkingLevel", { level: thinking() })
+      : uiText("defaultThinking"),
+  ];
+
   function toggleAll() {
     const next = !expanded();
     expanded.set(next);
@@ -140,47 +204,103 @@ export function MemberRun(props: {
       <View
         style={{
           paddingHorizontal: inset,
-          paddingTop: props.phone ? 8 : 10,
-          paddingBottom: 8,
+          paddingTop: props.phone ? 12 : 10,
+          paddingBottom: props.phone ? 12 : 8,
           flexShrink: 0,
-          gap: 6,
+          gap: props.phone ? 8 : 6,
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
       >
         <View style={{ ...row, height: props.phone ? 24 : 28, gap: 8 }}>
           <AgentFace id={props.agentId} size={18} />
-          <Label size={12} lines={1}>
+          <Label
+            size={props.phone ? 14 : 12}
+            line={props.phone ? 18 : 16}
+            weight={props.phone ? 400 : 500}
+            lines={1}
+          >
             {props.executorName ??
               host.agent(props.agentId)?.name ??
               uiText("agent")}
           </Label>
-          <Label
-            size={11}
-            tone="muted"
-            lines={1}
-            style={{ flex: 1, minWidth: 0 }}
-          >
-            {[
-              stamp() ? runDate(stamp()!) : "",
-              running() ? uiText("running") : "",
-              thinking()
-                ? uiText("runThinkingLevel", { level: thinking() })
-                : uiText("defaultThinking"),
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </Label>
+          <If when={runState()}>
+            {(state) => (
+              <View style={{ ...row, flex: 1, minWidth: 0, gap: 8 }}>
+                <StatusDot color={state().color} />
+                <Label size={12} line={16} lines={1}>
+                  {state().word}
+                </Label>
+                <If when={state().took}>
+                  <Label
+                    size={12}
+                    line={16}
+                    tone="muted"
+                    lines={1}
+                    style={{ flex: 1, minWidth: 0 }}
+                  >
+                    {`· ${state().took}`}
+                  </Label>
+                </If>
+              </View>
+            )}
+          </If>
+          <If when={props.phone && !runState()}>
+            <Label
+              size={12}
+              line={16}
+              tone="muted"
+              lines={1}
+              style={{ flex: 1, minWidth: 0 }}
+            >
+              {props.meta ??
+                [stamp() ? runDate(stamp()!) : "", ...details()]
+                  .filter(Boolean)
+                  .join(" · ")}
+            </Label>
+          </If>
           <If when={!props.phone}>
-            <Button
-              label={uiText(expanded() ? "collapseDetails" : "expandDetails")}
-              end="down"
-              tone="ghost"
-              size={24}
-              labelSize={10}
+            <If when={!runState() && !props.meta && stamp()}>
+              <Label size={10} line={12} tone="muted" lines={1}>
+                {runDate(stamp()!)}
+              </Label>
+            </If>
+            <If when={!runState()}>
+              <Label
+                size={12}
+                line={16}
+                tone="muted"
+                lines={1}
+                style={{ flex: 1, minWidth: 0 }}
+              >
+                {props.meta ??
+                  (stamp() ? "· " : "") + details().filter(Boolean).join(" · ")}
+              </Label>
+            </If>
+            <View
+              role="button"
+              accessibilityLabel={uiText(
+                expanded() ? "collapseDetails" : "expandDetails",
+              )}
               onPress={toggleAll}
+              focusVisibleStyle={{
+                outlineWidth: 1,
+                outlineColor: c().blue,
+                outlineOffset: 1,
+              }}
+              style={{ ...row, gap: 4, flexShrink: 0, cursor: "pointer" }}
+            >
+              <Label size={10} line={12} tone="muted">
+                {uiText(expanded() ? "collapseDetails" : "expandDetails")}
+              </Label>
+              <Icon name="down" size={12} tone="muted" />
+            </View>
+            <CloseButton
+              size={24}
+              iconSize={16}
+              style={{ marginRight: -4 }}
+              onPress={props.onClose}
             />
-            <CloseButton size={18} onPress={props.onClose} />
           </If>
           <If
             when={
@@ -234,7 +354,12 @@ export function MemberRun(props: {
                 </Each>
               </View>
               <View
-                style={{ ...row, flexWrap: "wrap", columnGap: 12, rowGap: 1 }}
+                style={{
+                  ...row,
+                  flexWrap: "wrap",
+                  columnGap: 12,
+                  rowGap: props.phone ? 4 : 1,
+                }}
               >
                 <Each
                   of={Object.keys(runKinds) as (keyof typeof runKinds)[]}
@@ -258,15 +383,39 @@ export function MemberRun(props: {
                           style={{
                             ...row,
                             gap: 4,
-                            minHeight: props.phone ? 28 : 18,
+                            minHeight: props.phone ? 14 : 18,
                             cursor: "pointer",
                           }}
                         >
-                          <StatusDot color={runKinds[kind()].color} size={8} />
-                          <Label size={11} line={16} tone="muted">
+                          <If
+                            when={props.phone}
+                            else={
+                              <StatusDot
+                                color={runKinds[kind()].color}
+                                size={8}
+                              />
+                            }
+                          >
+                            <Label
+                              size={11}
+                              line={14}
+                              style={{ color: runKinds[kind()].color }}
+                            >
+                              ■
+                            </Label>
+                          </If>
+                          <Label
+                            size={11}
+                            line={props.phone ? 14 : 16}
+                            tone="muted"
+                          >
                             {uiText(runKinds[kind()].label)}
                           </Label>
-                          <Label size={11} line={16} weight={500}>
+                          <Label
+                            size={11}
+                            line={props.phone ? 14 : 16}
+                            weight={500}
+                          >
                             {runDuration(duration())}
                           </Label>
                         </View>
@@ -330,14 +479,46 @@ export function MemberRun(props: {
               </View>
             )}
           </Each>
-          <If when={failure()}>
+          {/* A task run says it failed in its header; the reason is the
+              body's last line, in plain ink. */}
+          <If when={!props.taskRun && failure()}>
             {(reason) => (
               <Label size={12} tone="red" style={{ marginTop: 8 }}>
                 {`${uiText("runFailed")} · ${reason()}`}
               </Label>
             )}
           </If>
-          <If when={!visible().length && !failure()}>
+          <If
+            when={
+              props.taskRun && !visible().length && transcript() && online()
+            }
+          >
+            <Label
+              tone="muted"
+              size={props.phone ? 14 : 12}
+              line={props.phone ? 20 : 16}
+            >
+              {uiText("noRunRecords")}
+            </Label>
+          </If>
+          <If when={props.taskRun ? failure() : undefined}>
+            {(reason) => (
+              <Label
+                size={12}
+                tone="mutedInk"
+                style={{ marginTop: visible().length ? 8 : 4 }}
+              >
+                {reason()}
+              </Label>
+            )}
+          </If>
+          <If
+            when={
+              !visible().length &&
+              !failure() &&
+              !(props.taskRun && transcript() && online())
+            }
+          >
             <Label tone="muted" size={12}>
               {host.state().missing[target]
                 ? uiText("sessionUnavailable")

@@ -6,7 +6,7 @@ import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 import { statusKeys, statusName } from "./status";
 
-function taskActivityLabel(entry: TaskActivityView): string {
+export function taskActivityLabel(entry: TaskActivityView): string {
   if (entry.kind === "status") {
     const next = entry.data.to as BoardTaskStatus;
     if (Object.hasOwn(statusKeys, next)) return `moved to ${statusName(next)}`;

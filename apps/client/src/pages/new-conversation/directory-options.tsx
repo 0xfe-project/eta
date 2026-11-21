@@ -127,25 +127,51 @@ export function DirectoryOptions(props: {
         <View
           style={{
             ...row,
-            gap: 6,
-            minHeight: 29,
-            paddingHorizontal: 16,
-            borderBottomWidth: 1,
+            gap: 8,
+            minHeight: phone() ? 32 : 24,
+            marginTop: phone() ? 12 : 0,
+            paddingHorizontal: phone() ? 16 : 14,
+            borderBottomWidth: phone() ? 0 : 1,
             borderColor: c().border,
           }}
         >
           <If when={phone()}>
-            <Icon name="panel" size={14} />
+            <Icon name="monitor" size={14} />
           </If>
-          <Label size={13}>{machineName()}</Label>
+          <Label size={12}>{machineName()}</Label>
         </View>
-        <Label
-          tone="muted"
-          size={14}
-          style={{ paddingHorizontal: 16, paddingVertical: 7 }}
+        <If
+          when={!phone()}
+          else={
+            <Label
+              tone="muted"
+              size={14}
+              style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 }}
+            >
+              {localizedText(
+                "How do you want to add it?",
+                "你想怎样添加目录？",
+              )}
+            </Label>
+          }
         >
-          {localizedText("How do you want to add it?", "你想怎样添加目录？")}
-        </Label>
+          <View
+            style={{
+              height: 40,
+              justifyContent: "center",
+              paddingHorizontal: 14,
+              borderBottomWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <Label tone="muted" size={14} line={18}>
+              {localizedText(
+                "How do you want to add it?",
+                "你想怎样添加目录？",
+              )}
+            </Label>
+          </View>
+        </If>
       </If>
       <If when={kind() === "browse" && listing()}>
         <View
@@ -187,9 +213,11 @@ export function DirectoryOptions(props: {
           tone="muted"
           style={{
             paddingHorizontal: 16,
-            paddingVertical: 6,
+            // 16pt below the field, whose own margin gives the first 8.
+            paddingTop: phone() ? 8 : 6,
+            paddingBottom: phone() ? 8 : 6,
             letterSpacing: 0.8,
-            borderBottomWidth: 1,
+            borderBottomWidth: phone() ? 0 : 1,
             borderColor: c().border,
           }}
         >
@@ -218,9 +246,10 @@ export function DirectoryOptions(props: {
             style={{
               ...row,
               minHeight: phone() ? 56 : 29,
-              marginHorizontal: props.layout === "desktop" ? 12 : 16,
-              paddingHorizontal: phone() ? 6 : 0,
-              gap: 10,
+              marginHorizontal: phone() ? 16 : 0,
+              paddingHorizontal: phone() ? 4 : 14,
+              gap: phone() ? 12 : 10,
+              borderTopWidth: phone() && index() === 0 ? 1 : 0,
               borderBottomWidth: phone() ? 1 : 0,
               borderColor: c().border,
               backgroundColor:
@@ -230,7 +259,7 @@ export function DirectoryOptions(props: {
             }}
           >
             <If when={phone()}>
-              <Icon name={entry().icon} size={16} />
+              <Icon name={entry().icon} size={18} />
             </If>
             <View
               style={{
@@ -243,7 +272,7 @@ export function DirectoryOptions(props: {
             >
               <Label
                 size={phone() ? 14 : 12}
-                weight={500}
+                line={phone() ? 18 : undefined}
                 lines={1}
                 style={phone() ? undefined : { flexShrink: 1 }}
               >
@@ -261,7 +290,9 @@ export function DirectoryOptions(props: {
               </If>
             </View>
             <If when={phone()}>
-              <Icon name="right" size={11} tone="faint" />
+              <View style={{ opacity: 0.5 }}>
+                <Icon name="right" size={14} />
+              </View>
             </If>
           </View>
         )}

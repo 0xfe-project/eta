@@ -72,40 +72,42 @@ export function TaskGlyph(props: { status: BoardTaskStatus; size?: number }) {
   );
 }
 
+export const fills = {
+  backlog: "selected",
+  todo: "selected",
+  in_progress: "blueFill",
+  in_review: "amberFill",
+  blocked: "redFill",
+  done: "greenFill",
+  cancelled: "selected",
+} as const;
+
 export function TaskStatus(props: { task: BoardTaskView }) {
   const c = colors();
   const waiting = () =>
     props.task.waitingOn?.length && props.task.status === "todo";
-  const fill = () =>
-    props.task.status === "in_progress"
-      ? c().blueFill
-      : props.task.status === "in_review"
-        ? c().amberFill
-        : props.task.status === "done"
-          ? c().greenFill
-          : props.task.status === "blocked"
-            ? c().redFill
-            : c().selected;
   return (
     <View
       style={{
         ...row,
-        height: 22,
-        paddingHorizontal: 5,
+        paddingVertical: 1,
+        paddingLeft: waiting() ? 4 : 6,
+        paddingRight: 6,
         gap: 4,
         flexShrink: 0,
-        backgroundColor: waiting() ? c().canvas : fill(),
+        backgroundColor: waiting() ? c().canvas : c()[fills[props.task.status]],
         borderWidth: waiting() ? 1 : 0,
         borderColor: c().strong,
       }}
     >
       <If when={waiting()}>
-        <Icon name="lock" size={11} tone="muted" />
+        <Icon name="lock" size={12} tone="mutedInk" />
       </If>
       <Label
         size={12}
-        line={16}
-        tone={waiting() ? "muted" : tones[props.task.status]}
+        line={waiting() ? 18 : 20}
+        lines={1}
+        tone={waiting() ? "mutedInk" : tones[props.task.status]}
       >
         {waiting()
           ? uiText("waitingForPrerequisites")
@@ -115,11 +117,140 @@ export function TaskStatus(props: { task: BoardTaskView }) {
   );
 }
 
+/** A parent's subtasks, oldest first, each as one coloured segment. */
+export function subtasksOf(tasks: BoardTaskView[], parent: BoardTaskView) {
+  return tasks
+    .filter(
+      (task) => task.parentId === parent.id && task.status !== "cancelled",
+    )
+    .sort((a, b) => a.number - b.number);
+}
+
+const segmentTones = {
+  backlog: "border",
+  todo: "border",
+  in_progress: "blue",
+  in_review: "amber",
+  blocked: "red",
+  done: "green",
+  cancelled: "border",
+} as const;
+
+export function SubtaskSegments(props: {
+  subtasks: BoardTaskView[];
+  width?: number;
+  gap?: number;
+}) {
+  const c = colors();
+  return (
+    <View style={{ ...row, gap: props.gap ?? 1, flexShrink: 0 }}>
+      <Each of={props.subtasks} key={(task) => task.id}>
+        {(task) => (
+          <View
+            style={{
+              width: props.width ?? 5,
+              height: 5,
+              backgroundColor: c()[segmentTones[task().status]],
+            }}
+          />
+        )}
+      </Each>
+    </View>
+  );
+}
+
+/** The status pill of a task card in the transcript: glyph, then what it waits on. */
+function TaskCardStatus(props: { task: BoardTaskView }) {
+  const c = colors();
+  const task = () => props.task;
+  const waitingFor = () =>
+    task().status === "todo" ? task().waitingOn?.[0] : undefined;
+  const blocked = () => task().status === "blocked";
+  const label = () => {
+    const wait = waitingFor();
+    if (wait) return uiText("taskWaitingForTitle", { title: wait.title });
+    if (blocked()) return uiText("taskBlockedNeedsDecision");
+    const total = task().subtasks?.total;
+    return total
+      ? `${statusName(task().status)} · ${task().subtasks?.done ?? 0}/${total}`
+      : statusName(task().status);
+  };
+  return (
+    <View
+      style={{
+        ...row,
+        paddingVertical: 1,
+        paddingLeft: 4,
+        paddingRight: 6,
+        gap: 4,
+        flexShrink: 1,
+        minWidth: 0,
+        backgroundColor: waitingFor()
+          ? c().canvas
+          : blocked()
+            ? c().selected
+            : c()[fills[task().status]],
+        borderWidth: waitingFor() ? 1 : 0,
+        borderColor: c().strong,
+      }}
+    >
+      <If when={!waitingFor()}>
+        <TaskGlyph status={task().status} size={10} />
+      </If>
+      <Label
+        size={12}
+        line={waitingFor() ? 18 : 20}
+        lines={1}
+        tone={
+          waitingFor() ? "mutedInk" : blocked() ? "ink" : tones[task().status]
+        }
+        style={{ flexShrink: 1, minWidth: 0 }}
+      >
+        {label()}
+      </Label>
+    </View>
+  );
+}
+
+function runText(task: BoardTaskView) {
+  if (task.status === "done") return uiText("taskRunDone");
+  switch (task.runStatus) {
+    case "completed":
+      return uiText("taskRunDone");
+    case "failed":
+    case "interrupted":
+      return uiText("taskRunStopped");
+    case "running":
+    case "starting":
+      return uiText("taskRunRunning");
+    case "queued":
+      return uiText("taskRunQueued");
+    default:
+      return statusName(task.status);
+  }
+}
+
 export function TaskSummary(props: {
   task: BoardTaskView;
+  subtasks?: BoardTaskView[];
+  /** The phone transcript's folded card: a right caret and the kind "Task". */
+  phone?: boolean;
   onPress: () => void;
 }) {
   const c = colors();
+  const subtasks = () => props.subtasks ?? [];
+  const now = () => subtasks().find((task) => task.status === "in_progress");
+  const then = () =>
+    subtasks().find(
+      (task) => task.status === "todo" || task.status === "backlog",
+    );
+  const plan = () =>
+    [
+      now() && uiText("taskNow", { title: now()!.title }),
+      then() && uiText("taskThen", { title: then()!.title }),
+    ]
+      .filter(Boolean)
+      .join(" · ");
   return (
     <View
       role="button"
@@ -131,29 +262,58 @@ export function TaskSummary(props: {
         style={{
           ...row,
           paddingHorizontal: 10,
-          minHeight: 36,
+          paddingVertical: 6,
           gap: 8,
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
       >
-        <Icon name="right" size={8} tone="faint" />
+        <Icon
+          name={props.phone ? "right" : "down"}
+          size={props.phone ? 10 : 8}
+          tone={props.phone ? "faint" : "muted"}
+        />
         <TaskGlyph status={props.task.status} size={12} />
-        <Caption text={uiText("taskCard")} />
-        <Label size={12} tone="muted">
+        <Caption
+          text={uiText(props.phone ? "taskKind" : "taskCard")}
+          style={{ letterSpacing: 1.4, color: c().faint, flexShrink: 0 }}
+        />
+        <Label size={12} line={16} tone="muted">
           {`#${props.task.number}`}
         </Label>
-        <Label size={12} weight={500} lines={1} style={{ flex: 1 }}>
+        <Label
+          size={12}
+          line={16}
+          weight={500}
+          lines={1}
+          style={{ flex: 1, minWidth: 50 }}
+        >
           {props.task.title}
         </Label>
-        <TaskStatus task={props.task} />
+        <TaskCardStatus task={props.task} />
       </View>
-      <Label size={12} tone="muted" style={{ padding: 10 }}>
-        {(props.task.runStatus ?? statusName(props.task.status)).replaceAll(
-          "_",
-          " ",
-        )}
-      </Label>
+      <If
+        when={subtasks().length}
+        else={
+          <Label
+            size={12}
+            line={16}
+            tone="muted"
+            style={{ paddingVertical: 8, paddingHorizontal: 10 }}
+          >
+            {runText(props.task)}
+          </Label>
+        }
+      >
+        <View style={{ paddingVertical: 8, paddingHorizontal: 10, gap: 6 }}>
+          <SubtaskSegments subtasks={subtasks()} width={44} gap={4} />
+          <If when={plan()}>
+            <Label size={10} line={12} tone="muted">
+              {plan()}
+            </Label>
+          </If>
+        </View>
+      </If>
     </View>
   );
 }

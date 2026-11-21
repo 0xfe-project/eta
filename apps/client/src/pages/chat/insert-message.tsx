@@ -1,6 +1,6 @@
 import type { ConversationResults, MessageView } from "@eta/client-contracts";
 import { effect, signal, View } from "nsh";
-import { Button, Field, Label, Modal, row } from "../../components";
+import { Button, Field, Label, row } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -43,6 +43,11 @@ interface Draft {
 }
 const drafts = new Map<string, Draft>();
 
+/**
+ * The words to add to a turn that is still running, in the popover under the
+ * user message it answers: a 72-high field, who it goes to and the Insert
+ * button.
+ */
 export function InsertMessage(props: {
   message: MessageView;
   recipients: () => string[];
@@ -100,53 +105,60 @@ export function InsertMessage(props: {
       sending.set(false);
     }
   }
+  const names = () =>
+    targets()
+      .map((id) => host.agent(id)?.name ?? id)
+      .join(", ");
+  const ready = () =>
+    Boolean(draft().trim()) && !sending() && host.state().status === "open";
   return (
-    <Modal
-      title={uiText("insertMessage")}
-      width={360}
-      phone={props.phone}
-      sheet={props.phone}
-      modalFocus
-      overPhoneNavigation
-      dismissible={!sending()}
-      onClose={props.onClose}
-    >
-      <View style={{ padding: 12, gap: 8 }}>
-        <Label size={12} tone="muted">
-          {uiText("to", {
-            join: targets()
-              .map((id) => host.agent(id)?.name ?? id)
-              .join(", "),
-          })}
-        </Label>
+    <View style={{ width: 288 }}>
+      <View style={{ padding: 8 }}>
         <Field
-          label={uiText("additionalMessage")}
-          placeholder={uiText("addToThisMessage")}
+          label={uiText("insertMessage")}
+          placeholder={uiText("addToThisTurn")}
           multiline
           value={draft()}
+          inputRef={(node) => queueMicrotask(() => node.focus())}
           onChange={edit}
           onSubmit={props.phone ? undefined : () => void send()}
-          style={{ height: 72 }}
+          style={{ height: 72, paddingVertical: 6 }}
         />
-        <If when={error()}>
-          <Label tone="red">{error()}</Label>
-        </If>
-        <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>
-          <Button
-            label={uiText("cancel")}
-            disabled={sending()}
-            onPress={props.onClose}
-          />
-          <Button
-            label={uiText("sendInsert")}
-            tone="primary"
-            disabled={
-              !draft().trim() || sending() || host.state().status !== "open"
-            }
-            onPress={() => void send()}
-          />
-        </View>
       </View>
-    </Modal>
+      <If when={error()}>
+        <Label
+          size={11}
+          line={14}
+          tone="red"
+          style={{ paddingHorizontal: 8, paddingBottom: 8 }}
+        >
+          {error()}
+        </Label>
+      </If>
+      <View
+        style={{
+          ...row,
+          justifyContent: "space-between",
+          gap: 8,
+          paddingHorizontal: 8,
+          paddingBottom: 8,
+        }}
+      >
+        <Label size={11} line={14} tone="faint" lines={1} style={{ flex: 1 }}>
+          {props.phone
+            ? uiText("to", { join: names() })
+            : uiText("insertHint", { names: names() })}
+        </Label>
+        <Button
+          label={uiText("insert")}
+          size={22}
+          labelSize={12}
+          labelTone={ready() ? "ink" : "faint"}
+          dimDisabled={false}
+          disabled={!ready()}
+          onPress={() => void send()}
+        />
+      </View>
+    </View>
   );
 }

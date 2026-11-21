@@ -113,6 +113,7 @@ export function Routines(props: {
             : uiText("routines2")
       }
       layout={props.layout}
+      end={phone() && info() && !current() ? 4 : undefined}
       onBack={
         phone() && current()
           ? () => openReport("")
@@ -130,21 +131,16 @@ export function Routines(props: {
         />
       </If>
       <If when={phone() && !selected()}>
-        <Label size={11} tone="muted">
+        <Label size={11} line={14} tone="muted">
           {uiText("pending")}
         </Label>
-        <ActionMenu
-          label={uiText("routineActions")}
-          triggerStyle={{ minWidth: 24, paddingHorizontal: 3 }}
-        >
-          <ActionItem
-            label={uiText("newRoutine")}
-            onSelect={() => editing.set("new")}
-          />
-        </ActionMenu>
       </If>
       <If when={phone() && info() && !current()}>
-        <ActionMenu label={uiText("routineActions")}>
+        <ActionMenu
+          label={uiText("routineActions")}
+          iconSize={18}
+          triggerStyle={{ width: 40, height: 40 }}
+        >
           <ActionItem
             label={info()?.enabled ? uiText("pause") : uiText("resume")}
             onSelect={() => {

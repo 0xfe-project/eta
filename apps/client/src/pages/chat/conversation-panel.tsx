@@ -6,11 +6,13 @@ import type {
 } from "@eta/client-contracts";
 import type { Signal } from "nsh";
 import type { Layout } from "../../components";
+import type { ConversationAction } from "./conversation-actions";
 import { Scroll, View } from "nsh";
 import {
   Button,
   Caption,
   colors,
+  focusRing,
   grow,
   Icon,
   Label,
@@ -20,10 +22,12 @@ import { ModelSelect } from "../../components/model-select";
 import { CloseButton } from "../../components/navigation-buttons";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-import { TaskGlyph, taskNeedsAttention, TaskStatus } from "../tasks/status";
-import { TaskDetail } from "../tasks/task-detail";
+import { taskNeedsAttention } from "../tasks/status";
+import { Proposal } from "./approvals";
 import { ConversationArtifacts } from "./artifacts/conversation-artifacts";
 import { ConversationMembers } from "./member-list";
+import { PanelTask } from "./panel-task";
+import { ContextTasks, TasksTab } from "./panel-tasks";
 import { Pending } from "./pending";
 
 export type PanelTab = "Context" | "Tasks" | "Pending" | "Artifacts";
@@ -34,6 +38,25 @@ const panelTabs = [
   ["Pending", "bell", "pending"],
   ["Artifacts", "panel", "chatArtifacts"],
 ] as const;
+
+/** How many things in a conversation wait for the user: the Pending tab count. */
+export function panelAttention(host: ReturnType<typeof useHost>, id: string) {
+  return (
+    host.pending().filter((entry) => entry.conversationId === id).length +
+    host
+      .tasks()
+      .filter((entry) => entry.conversationId === id)
+      .filter(taskNeedsAttention).length +
+    host
+      .list<CaptainOperationView>("captain", "operations")
+      .filter(
+        (op) =>
+          op.status === "pending" &&
+          op.requiresApproval &&
+          op.payload.originConversationId === id,
+      ).length
+  );
+}
 
 export function ConversationPanel(props: {
   id: string;
@@ -52,7 +75,7 @@ export function ConversationPanel(props: {
   onToggleSteps: (session: string) => void;
   onInspect: (value: { id: string; session: string }) => void;
   onInvite: () => void;
-  onActions: () => void;
+  onActions: (action: ConversationAction) => void;
   onTask: (id: string) => void;
   onRelatedTask: (id: string) => void;
   onCloseTask: () => void;
@@ -66,36 +89,19 @@ export function ConversationPanel(props: {
   const panel = props.tab;
   const model = props.model;
   const phone = () => props.layout === "phone";
-  const pending = () =>
-    host.pending().filter((entry) => entry.conversationId === props.id);
   const tasks = () =>
     host.tasks().filter((entry) => entry.conversationId === props.id);
-  const needsAttention = () =>
-    pending().length +
-    tasks().filter(taskNeedsAttention).length +
+  const needsAttention = () => panelAttention(host, props.id);
+  const artifactCount = () =>
+    host.artifacts().filter((entry) => entry.conversationId === props.id)
+      .length;
+  /** The tablet drawer: tabs start at the left, the close button sits at the right. */
+  const docked = () => props.drawer && !phone();
+  const approvals = () =>
     host
       .list<CaptainOperationView>("captain", "operations")
-      .filter(
-        (op) =>
-          op.status === "pending" &&
-          op.requiresApproval &&
-          op.payload.originConversationId === props.id,
-      ).length;
-  return (
-    <If when={props.taskId} else={<PanelTabs />}>
-      <Each of={props.taskId ? [props.taskId] : []}>
-        {(id) => (
-          <TaskDetail
-            id={id()}
-            layout={props.layout}
-            docked
-            onClose={props.onCloseTask}
-            onTask={props.onRelatedTask}
-          />
-        )}
-      </Each>
-    </If>
-  );
+      .filter((op) => op.status === "pending" && op.requiresApproval);
+  return <PanelTabs />;
 
   function PanelTabs() {
     return (
@@ -103,8 +109,10 @@ export function ConversationPanel(props: {
         <View
           style={{
             ...row,
-            justifyContent: "center",
+            justifyContent: docked() ? "space-between" : "center",
             gap: 2,
+            paddingLeft: docked() ? 10 : 0,
+            paddingRight: docked() ? 8 : 0,
             height: 40,
             flexShrink: 0,
             borderBottomWidth: 1,
@@ -121,14 +129,19 @@ export function ConversationPanel(props: {
           >
             <Each of={panelTabs}>
               {(tab) => {
-                const selected = () => panel() === tab()[0];
+                const selected = () =>
+                  props.taskId ? tab()[0] === "Tasks" : panel() === tab()[0];
                 return (
                   <View
                     role="button"
                     accessibilityLabel={uiText(tab()[2])}
                     accessibilityState={{ selected: selected() }}
-                    onPress={() => panel.set(tab()[0])}
+                    onPress={() => {
+                      panel.set(tab()[0]);
+                      if (props.taskId) props.onCloseTask();
+                    }}
                     hoverStyle={{ backgroundColor: c().canvas }}
+                    focusVisibleStyle={focusRing(c())}
                     style={{
                       ...row,
                       gap: 6,
@@ -153,135 +166,146 @@ export function ConversationPanel(props: {
                         {needsAttention()}
                       </Label>
                     </If>
+                    <If
+                      when={
+                        tab()[0] === "Artifacts" &&
+                        selected() &&
+                        artifactCount()
+                      }
+                    >
+                      <Label size={11} line={16} tone="muted">
+                        {artifactCount()}
+                      </Label>
+                    </If>
                   </View>
                 );
               }}
             </Each>
           </View>
-          <If when={props.drawer && !phone()}>
+          <If when={docked()}>
             <CloseButton
+              iconSize={14}
+              style={{ backgroundColor: "transparent" }}
               onPress={props.onCloseDrawer}
-              style={{ position: "absolute", right: 8 }}
             />
           </If>
         </View>
+        <If when={props.taskId}>
+          {(id) => (
+            <PanelTask
+              id={id()}
+              layout={props.layout}
+              onClose={props.onCloseTask}
+              onTask={props.onRelatedTask}
+            />
+          )}
+        </If>
         <If
-          when={panel() === "Pending"}
+          when={!props.taskId && panel() === "Pending"}
           else={
-            <Scroll style={grow} scrollbar={false}>
-              <If when={props.captain && panel() === "Context"}>
-                <View style={{ padding: 12, gap: 5 }}>
-                  <Caption text={uiText("captainModel")} />
-                  <View style={{ ...row, gap: 8 }}>
-                    <View style={{ flex: 1 }}>
-                      <ModelSelect
-                        value={model() || host.captain()?.model || ""}
-                        onChange={model.set}
+            <If when={!props.taskId}>
+              <Scroll style={grow} scrollbar={false}>
+                <If when={props.captain && panel() === "Context"}>
+                  <View
+                    style={{
+                      padding: 12,
+                      gap: 6,
+                      borderBottomWidth: 1,
+                      borderColor: c().border,
+                    }}
+                  >
+                    <Caption text={uiText("captainModel")} />
+                    <View style={{ ...row, gap: 8 }}>
+                      <View style={{ flex: 1 }}>
+                        <ModelSelect
+                          value={model() || host.captain()?.model || ""}
+                          onChange={model.set}
+                        />
+                      </View>
+                      <Button
+                        label={uiText("saveModel")}
+                        tone="primary"
+                        disabled={!model()}
+                        onPress={() =>
+                          void host.action(async () => {
+                            await host.call("captain", "setModel", {
+                              model: model(),
+                            });
+                            model.set("");
+                          })
+                        }
                       />
                     </View>
-                    <Button
-                      label={uiText("saveModel")}
-                      tone="primary"
-                      disabled={!model()}
-                      onPress={() =>
-                        void host.action(async () => {
-                          await host.call("captain", "setModel", {
-                            model: model(),
-                          });
-                          model.set("");
-                        })
-                      }
-                    />
+                    <Label size={10} line={12} tone="muted">
+                      {uiText("chooseTheModelUsedForCaptains")}
+                    </Label>
                   </View>
-                  <Label size={10} tone="muted">
-                    {uiText("chooseTheModelUsedForCaptains")}
-                  </Label>
-                </View>
-              </If>
-              <If
-                when={
-                  panel() === "Tasks" ||
-                  (panel() === "Context" && !props.captain)
-                }
-              >
-                <View
-                  style={{
-                    paddingTop: 9,
-                    paddingBottom: 3,
-                    paddingHorizontal: 12,
-                  }}
-                >
-                  <Caption
-                    text={uiText("tasksWithCount", { length: tasks().length })}
-                  />
-                </View>
-                <Each
-                  of={panel() === "Context" ? tasks().slice(0, 6) : tasks()}
-                  key={(task) => task.id}
-                >
-                  {(task) => (
-                    <View
-                      role="button"
-                      onPress={() => props.onTask(task().id)}
-                      hoverStyle={{ backgroundColor: c().selected }}
-                      style={{
-                        ...row,
-                        height: 30,
-                        paddingHorizontal: 12,
-                        gap: 8,
-                        borderBottomWidth: 1,
-                        borderColor: c().border,
-                        cursor: "pointer",
-                      }}
-                    >
-                      <TaskGlyph status={task().status} size={12} />
-                      <Label size={10} tone="muted">
-                        {`#${task().number}`}
-                      </Label>
-                      <Label size={12} lines={1} style={{ flex: 1 }}>
-                        {task().title}
-                      </Label>
-                      <TaskStatus task={task()} />
-                      <Icon name="right" size={8} tone="faint" />
-                    </View>
-                  )}
-                </Each>
-                <If when={!tasks().length}>
-                  <Label
-                    size={12}
-                    tone="muted"
-                    style={{ paddingHorizontal: 12, paddingBottom: 8 }}
+                  <View
+                    style={{
+                      padding: 12,
+                      gap: 6,
+                      borderBottomWidth: 1,
+                      borderColor: c().border,
+                    }}
                   >
-                    {uiText("noTasksYet")}
-                  </Label>
+                    <Caption
+                      text={uiText("pendingApprovals", {
+                        count: approvals().length,
+                      })}
+                    />
+                    <If
+                      when={approvals().length}
+                      else={
+                        <Label size={12} line={16}>
+                          {uiText("nothingIsWaitingForApproval")}
+                        </Label>
+                      }
+                    >
+                      <Each of={approvals()} key={(op) => op.id}>
+                        {(op) => <Proposal operation={op()} />}
+                      </Each>
+                    </If>
+                  </View>
                 </If>
-              </If>
-              <If when={panel() === "Context" || panel() === "Artifacts"}>
-                <ConversationArtifacts
-                  conversationId={props.id}
-                  tab={panel()}
-                  search={props.artifactSearch}
-                  offset={props.artifactOffset}
-                  phone={phone()}
-                  onOpen={props.onArtifact}
-                  onTask={props.onTask}
-                  reload={props.reloadArtifacts}
-                />
-              </If>
-              <If when={panel() === "Context"}>
-                <ConversationMembers
-                  members={props.members}
-                  group={props.group}
-                  info={props.info}
-                  phone={phone()}
-                  expandedSession={props.memberSteps}
-                  onToggleSteps={props.onToggleSteps}
-                  onInspect={props.onInspect}
-                  onInvite={props.onInvite}
-                  onActions={props.onActions}
-                />
-              </If>
-            </Scroll>
+                <If when={panel() === "Context" && !props.captain}>
+                  <ContextTasks tasks={tasks()} onTask={props.onTask} />
+                </If>
+                <If when={panel() === "Tasks"}>
+                  <TasksTab
+                    conversationId={props.id}
+                    conversationName={props.info?.name ?? ""}
+                    onTask={props.onTask}
+                  />
+                </If>
+                <If when={panel() === "Context" || panel() === "Artifacts"}>
+                  <ConversationArtifacts
+                    conversationId={props.id}
+                    tab={panel()}
+                    search={props.artifactSearch}
+                    offset={props.artifactOffset}
+                    phone={phone()}
+                    onOpen={props.onArtifact}
+                    onTask={props.onTask}
+                    reload={props.reloadArtifacts}
+                  />
+                </If>
+                <If when={panel() === "Context"}>
+                  <ConversationMembers
+                    members={props.members}
+                    group={props.group}
+                    info={props.info}
+                    phone={phone()}
+                    expandedSession={props.memberSteps}
+                    onToggleSteps={props.onToggleSteps}
+                    onInspect={props.onInspect}
+                    onInvite={props.onInvite}
+                    captain={props.captain}
+                    tablet={props.layout === "tablet"}
+                    onActions={props.onActions}
+                  />
+                </If>
+              </Scroll>
+            </If>
           }
         >
           <Pending

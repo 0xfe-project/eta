@@ -9,9 +9,16 @@ import {
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS,
 } from "@eta/client-contracts";
-import { effect, Picker, signal, View } from "nsh";
-import { Button, Caption, colors, Field, Label, row } from "../../components";
-import { AgentFace } from "../../components/agent-face";
+import { effect, keymap, Picker, signal, View } from "nsh";
+import {
+  Button,
+  Caption,
+  colors,
+  Field,
+  Icon,
+  Label,
+  row,
+} from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { ComposerRecipients } from "./composer-recipients";
@@ -25,9 +32,12 @@ export function Composer(props: {
   steward?: string | null;
   group: boolean;
   phone: boolean;
+  /** Tablet: the mention menu spans the whole message box. */
+  tablet?: boolean;
   alignWithContent?: boolean;
   held: MessageView[];
   widgetDraft?: { conversationId: string; text: string } | undefined;
+  onStopMember: (agentId: string) => void;
 }) {
   const host = useHost();
   const c = colors();
@@ -51,10 +61,13 @@ export function Composer(props: {
     );
   });
   const uploading = signal(false);
-  const mode = signal<"queue" | "steer">("queue");
+  const showHeld = signal(false);
+  const activeMention = signal(0);
   let attempt: { id: string; content: string } | undefined;
-  const running = () =>
-    props.members.some((member) => activeReply(member.status));
+  const runningIds = () =>
+    props.members
+      .filter((member) => activeReply(member.status))
+      .map((member) => member.agentId);
   const recipients = () =>
     mentions() ??
     (props.steward
@@ -64,6 +77,13 @@ export function Composer(props: {
         : []);
   const names = () =>
     recipients()
+      .map((id) => host.agent(id)?.name)
+      .filter(Boolean)
+      .join(", ");
+  // A message to someone still replying waits until that turn ends.
+  const waitsFor = () =>
+    recipients()
+      .filter((id) => runningIds().includes(id))
       .map((id) => host.agent(id)?.name)
       .filter(Boolean)
       .join(", ");
@@ -85,12 +105,23 @@ export function Composer(props: {
   function chooseMention(id: string, name: string) {
     draft.update((value) => value.replace(/@[^\s@]*$/, `@${name} `));
     mentions.update((current) => [...new Set([...(current ?? []), id])]);
+    activeMention.set(0);
   }
+  const active = () =>
+    choices()[Math.min(activeMention(), choices().length - 1)];
   function submit() {
-    const first = choices()[0];
-    if (first) chooseMention(first.id, first.name);
+    const chosen = active();
+    if (chosen) chooseMention(chosen.id, chosen.name);
     else void send();
   }
+  function moveMention(step: 1 | -1) {
+    const count = choices().length;
+    if (!count) return;
+    activeMention.set(
+      (Math.min(activeMention(), count - 1) + step + count) % count,
+    );
+  }
+  const offline = () => props.phone && host.state().status === "reconnecting";
   const sendable = () =>
     (draft().trim() || attachments().length) &&
     !busy() &&
@@ -103,7 +134,7 @@ export function Composer(props: {
       conversationId: props.id,
       text: draft().trim(),
       mentions: mentions() ?? undefined,
-      mode: mode(),
+      mode: "queue" as const,
       attachments: attachments().map((file) => file.id),
     };
     const content = JSON.stringify(outgoing);
@@ -121,7 +152,6 @@ export function Composer(props: {
       draft.set("");
       attachments.set([]);
       mentions.set(null);
-      mode.set("queue");
       attempt = undefined;
     }
   }
@@ -201,50 +231,10 @@ export function Composer(props: {
         backgroundColor: c().canvas,
       }}
     >
-      <If when={choices().length && !busy()}>
-        <View
-          role="group"
-          accessibilityLabel={uiText("mentionAnAgent")}
-          style={{
-            position: "absolute",
-            bottom: "100%",
-            left: props.phone ? 12 : 16,
-            zIndex: 3,
-            minWidth: 180,
-            borderWidth: 1,
-            borderColor: c().strong,
-            backgroundColor: c().canvas,
-            padding: 4,
-            gap: 2,
-          }}
-        >
-          <Caption
-            text={uiText("mentionAnAgent")}
-            style={{ paddingHorizontal: 8, paddingVertical: 3 }}
-          />
-          <Each of={choices()} key={(entry) => entry.id}>
-            {(entry) => (
-              <View
-                role="button"
-                accessibilityLabel={uiText("mention", { name: entry().name })}
-                onPress={() => chooseMention(entry().id, entry().name)}
-                hoverStyle={{ backgroundColor: c().selected }}
-                style={{
-                  ...row,
-                  minHeight: 28,
-                  paddingHorizontal: 8,
-                  gap: 8,
-                  cursor: "pointer",
-                }}
-              >
-                <AgentFace id={entry().id} size={16} />
-                <Label size={12}>{entry().name}</Label>
-              </View>
-            )}
-          </Each>
-        </View>
-      </If>
-      <Each of={props.held} key={(message) => message.id}>
+      <Each
+        of={showHeld() || !props.group ? props.held : []}
+        key={(message) => message.id}
+      >
         {(message) => (
           <View style={{ ...row, gap: 6 }}>
             <Label size={12} tone="muted" style={{ flex: 1 }} lines={1}>
@@ -280,18 +270,21 @@ export function Composer(props: {
           </View>
         )}
       </Each>
-      <If when={props.group}>
+      <If when={props.group && props.members.length > 1}>
         <ComposerRecipients
           phone={props.phone}
           members={props.members}
           steward={props.steward}
           mentions={mentions()}
           recipients={recipients()}
-          running={running()}
+          running={runningIds()}
+          held={props.held.length}
           names={names()}
-          mode={mode()}
+          waitsFor={waitsFor()}
           onChangeMentions={mentions.set}
           onToggleRecipient={toggle}
+          onToggleHeld={() => showHeld.set(!showHeld())}
+          onStop={props.onStopMember}
         />
       </If>
       <If when={attachments().length}>
@@ -319,20 +312,97 @@ export function Composer(props: {
         </View>
       </If>
       <View
+        accessibilityState={{ disabled: offline() }}
         style={{
+          position: "relative",
           borderWidth: 1,
           borderColor: c().ink,
           flexDirection: props.phone ? "row" : "column",
           alignItems: props.phone ? "center" : "stretch",
+          // A phone draws the composer disabled while the host is away.
+          opacity: offline() ? 0.45 : 1,
+          pointerEvents: offline() ? "none" : undefined,
         }}
       >
+        <If when={choices().length && !busy()}>
+          <MentionKeys onMove={moveMention} />
+          <View
+            role="listbox"
+            accessibilityLabel={uiText("mentionAnAgent")}
+            style={{
+              position: "absolute",
+              bottom: "100%",
+              left: -1,
+              right: props.tablet ? -1 : undefined,
+              zIndex: 3,
+              width: props.tablet ? undefined : 300,
+              maxWidth: props.tablet ? undefined : "100%",
+              borderWidth: 1,
+              borderColor: c().strong,
+              backgroundColor: c().canvas,
+              boxShadow: props.tablet
+                ? undefined
+                : [{ x: 0, y: 4, blur: 12, color: `${c().ink}1f` }],
+            }}
+          >
+            <Caption
+              text={uiText("mentions")}
+              style={{ paddingHorizontal: 10, paddingTop: 6, paddingBottom: 4 }}
+            />
+            <Each of={choices()} key={(entry) => entry.id}>
+              {(entry) => (
+                <View
+                  role="option"
+                  accessibilityLabel={uiText("mention", { name: entry().name })}
+                  accessibilityState={{ selected: active() === entry() }}
+                  onPress={() => chooseMention(entry().id, entry().name)}
+                  hoverStyle={
+                    active() === entry()
+                      ? undefined
+                      : { backgroundColor: c().selected }
+                  }
+                  style={{
+                    ...row,
+                    height: 28,
+                    paddingHorizontal: 10,
+                    gap: 8,
+                    cursor: "pointer",
+                    backgroundColor:
+                      active() === entry() ? c().ink : "transparent",
+                  }}
+                >
+                  <Label
+                    size={12}
+                    line={16}
+                    weight={600}
+                    lines={1}
+                    tone={active() === entry() ? "canvas" : "ink"}
+                  >
+                    {`@${entry().name}`}
+                  </Label>
+                  <Label
+                    size={11}
+                    line={16}
+                    lines={1}
+                    tone={active() === entry() ? "canvas" : "muted"}
+                    style={{ opacity: active() === entry() ? 0.75 : 1 }}
+                  >
+                    {uiText("askForAReply")}
+                  </Label>
+                </View>
+              )}
+            </Each>
+          </View>
+        </If>
         <Field
           label={uiText("message")}
           placeholder={uiText("messageWithCount", { name: props.name })}
           multiline={!props.phone}
           value={draft()}
           onChange={(value) => {
-            if (!busy()) draft.set(value);
+            if (busy()) return;
+            draft.set(value);
+            activeMention.set(0);
           }}
           onSubmit={submit}
           style={{
@@ -347,46 +417,50 @@ export function Composer(props: {
           style={{
             ...row,
             height: 40,
-            paddingLeft: props.phone ? 0 : 7,
+            paddingLeft: props.phone ? 0 : 12,
             paddingRight: 6,
-            gap: 6,
+            gap: props.phone ? 6 : 12,
             backgroundColor: props.phone ? c().canvas : c().surface,
             borderTopWidth: props.phone ? 0 : 1,
             borderColor: c().border,
           }}
         >
-          <Button
-            label={uiText("attachFiles")}
-            icon="clip"
-            iconOnly
-            tone="ghost"
-            disabled={uploading() || busy()}
-            onPress={() => void attach()}
-          />
+          <View
+            role="button"
+            accessibilityLabel={uiText("attachFiles")}
+            accessibilityState={{ disabled: uploading() || busy() }}
+            onPress={() => {
+              if (!uploading() && !busy()) void attach();
+            }}
+            hoverStyle={{ opacity: 0.7 }}
+            focusVisibleStyle={{
+              outlineWidth: 1,
+              outlineColor: c().blue,
+              outlineOffset: 1,
+            }}
+            style={{
+              ...row,
+              justifyContent: "center",
+              width: props.phone ? 32 : 14,
+              height: props.phone ? 32 : 14,
+              flexShrink: 0,
+              opacity: uploading() || busy() ? 0.45 : 1,
+              cursor: uploading() || busy() ? "default" : "pointer",
+            }}
+          >
+            <Icon name="clip" size={props.phone ? 16 : 14} tone="muted" />
+          </View>
           <View style={{ flex: props.phone ? 0 : 1 }} />
-          <If when={running() && !props.phone}>
-            <Button
-              label={mode() === "queue" ? uiText("queue") : uiText("steer")}
-              onPress={() => mode.set(mode() === "queue" ? "steer" : "queue")}
-            />
-            <Button
-              label={uiText("stop")}
-              onPress={() =>
-                void host.action(() =>
-                  host.call("conversations", "stop", {
-                    conversationId: props.id,
-                  }),
-                )
-              }
-            />
-          </If>
           <Button
             label={uiText("send")}
             icon={props.phone ? "arrowUp" : undefined}
             iconOnly={props.phone}
             end={props.phone ? undefined : "return"}
             size={props.phone ? 32 : 28}
+            iconSize={props.phone ? 16 : undefined}
             labelSize={11}
+            labelWeight={500}
+            style={props.phone ? undefined : { paddingHorizontal: 10, gap: 8 }}
             tone="primary"
             dimDisabled={busy() || uploading()}
             disabled={!sendable()}
@@ -396,4 +470,13 @@ export function Composer(props: {
       </View>
     </View>
   );
+}
+
+/** Up and Down move through the mention list while it is open, even in the message field. */
+function MentionKeys(props: { onMove: (step: 1 | -1) => void }) {
+  keymap.bind(
+    { up: () => props.onMove(-1), down: () => props.onMove(1) },
+    { when: "always" },
+  );
+  return null;
 }

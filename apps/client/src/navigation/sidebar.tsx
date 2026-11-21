@@ -3,7 +3,7 @@ import type { Layout } from "../components";
 import type { ChatListProps } from "./chat-list";
 import type { Destination, Navigation } from "./routes";
 import { View } from "nsh";
-import { colors, Icon, Label, row, sizes } from "../components";
+import { colors, focusRing, Icon, Label, row, sizes } from "../components";
 import { pickerTarget } from "../components/element-picker";
 import { useText } from "../i18n";
 import { useHost } from "../services/host";
@@ -35,6 +35,7 @@ export function NavItem(props: {
       accessibilityState={{ selected: props.selected }}
       onPress={() => props.onPress()}
       hoverStyle={{ backgroundColor: c().selected }}
+      focusVisibleStyle={focusRing(c())}
       style={{
         ...(wide() ? row : { alignItems: "center", justifyContent: "center" }),
         height: wide() ? 28 : phone() ? 63 : 48,
@@ -190,7 +191,11 @@ export function DesktopSidebar(
                 <NavItem
                   item={item()}
                   layout="desktop"
-                  selected={props.page === item()[0]}
+                  // Captain is a conversation: the Chat page stays the one selected.
+                  selected={
+                    props.page === item()[0] ||
+                    (props.page === "captain" && item()[0] === "chat")
+                  }
                   count={item()[0] === "tasks" ? check() : 0}
                   onPress={() => props.onNavigate(item()[0])}
                 />
