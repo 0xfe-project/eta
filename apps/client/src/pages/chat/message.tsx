@@ -45,6 +45,9 @@ import { Widget, widgetFrom } from "./widgets/widget";
  * sits this far from the next, on every screen size. */
 const replyBlockGap = 8;
 
+/** A reply at work keeps this height, however much it writes. */
+const processWindowHeight = 176;
+
 /** How each code the host fails a reply with is said. */
 const failureReasons: Record<string, Parameters<typeof uiText>[0]> = {
   restart: "replyRestart",
@@ -113,20 +116,30 @@ export function Message(props: {
       runFromOf(item().data),
     );
   };
+  /** The steps a count says: a trace of an insert is not one. */
+  const stepCount = () =>
+    steps().filter((step) => step.type !== "steer").length;
+  /** The text after the last thought or call, once the run is over (`savedSteps`
+   * keeps the process without it); a failed reply says why instead. */
+  const answer = () =>
+    active() || item().status === "failed" || !item().text
+      ? undefined
+      : item().text;
   const attached = () =>
     Array.isArray(item().data.attachments)
       ? (item().data.attachments as AttachmentView[])
       : [];
   const stamp = () => messageTime(item().createdAt, props.phone);
   const artifacts = () =>
-    publishedRefs(steps()).flatMap((ref) => {
+    publishedRefs(active() ? [] : steps()).flatMap((ref) => {
       const artifact = host
         .artifacts()
         .find((entry) => entry.id === ref.artifactId);
       return artifact ? [{ ref, artifact }] : [];
     });
+  // While it works, everything is in the window and nothing outside it.
   const widgets = () =>
-    steps().flatMap((step) => {
+    (active() ? [] : steps()).flatMap((step) => {
       const widget = widgetFrom(step);
       return widget ? [widget] : [];
     });
@@ -442,7 +455,7 @@ export function Message(props: {
         <If
           when={active()}
           else={
-            <If when={steps().length}>
+            <If when={stepCount()}>
               <View>
                 <View
                   role="button"
@@ -473,12 +486,8 @@ export function Message(props: {
                   <Caption
                     style={{ letterSpacing: 0.8, color: c().faint }}
                     text={`${props.phone ? "· " : ""}${uiText(
-                      steps().length === 1
-                        ? "oneProcessStep"
-                        : "processStepCount",
-                      {
-                        count: steps().length,
-                      },
+                      stepCount() === 1 ? "oneProcessStep" : "processStepCount",
+                      { count: stepCount() },
                     )}`}
                   />
                 </View>
@@ -499,7 +508,15 @@ export function Message(props: {
             </If>
           }
         >
-          <View style={{ borderWidth: 1, borderColor: c().border }}>
+          {/* A reply at work is one window of a fixed height: everything it
+           * thought, said and did, in order, scrolling inside itself and
+           * following the newest step unless the reader scrolled up. Nothing
+           * is drawn outside it, so replies written at once never push each
+           * other; the answer comes out when the run is over. */}
+          <View
+            testID="process-window"
+            style={{ borderWidth: 1, borderColor: c().border }}
+          >
             <View
               style={{
                 ...row,
@@ -512,8 +529,10 @@ export function Message(props: {
               }}
             >
               <Label size={10} line={12} tone="muted">
-                {steps().length
-                  ? uiText("processSteps", { length: steps().length })
+                {stepCount()
+                  ? stepCount() === 1
+                    ? uiText("processOneStep")
+                    : uiText("processSteps", { length: stepCount() })
                   : item().status === "queued"
                     ? uiText("queued")
                     : item().status === "stopping"
@@ -537,45 +556,19 @@ export function Message(props: {
                 }
               />
             </View>
-            <If
-              when={!details() && steps().length > 5}
-              else={
-                <Each of={steps()} key={(step) => step.id}>
-                  {(step) => <ProcessStep value={step()} />}
-                </Each>
-              }
+            <List
+              style={{ height: processWindowHeight, flexShrink: 0 }}
+              each={steps()}
+              keyExtractor={(step) => step.id}
+              initialScrollAtEnd
+              estimatedItemSize={33}
+              maintainVisibleContentPosition={{
+                autoscrollToBottomThreshold: 16,
+              }}
             >
-              {/* A fixed window on the newest steps; older ones scroll up. */}
-              <List
-                style={{ height: 176, flexShrink: 0 }}
-                each={steps()}
-                keyExtractor={(step) => step.id}
-                initialScrollAtEnd
-                estimatedItemSize={33}
-                maintainVisibleContentPosition={{
-                  autoscrollToBottomThreshold: 40,
-                }}
-              >
-                {(step) => <ProcessStep value={step()} />}
-              </List>
-            </If>
+              {(step) => <ProcessStep value={step()} />}
+            </List>
           </View>
-          <If when={steps().length > 5}>
-            <View style={{ alignItems: "flex-end", paddingRight: 8 }}>
-              <View
-                role="button"
-                accessibilityLabel={
-                  details() ? uiText("viewLess") : uiText("viewMore")
-                }
-                onPress={() => details.set(!details())}
-                style={{ cursor: "pointer" }}
-              >
-                <Label size={11} line={14} tone="muted">
-                  {details() ? uiText("viewLess") : uiText("viewMore")}
-                </Label>
-              </View>
-            </View>
-          </If>
         </If>
         <If when={item().status === "failed" && !review()}>
           {/* A failed reply is its time, then why, as a warning line. */}
@@ -596,12 +589,12 @@ export function Message(props: {
         <If
           when={review()}
           else={
-            <If when={item().text}>
-              <If when={item().status !== "failed"}>
-                <View style={{ paddingHorizontal: 2 }}>
-                  <Markdown value={item().text} line={props.phone ? 22 : 24} />
+            <If when={answer()}>
+              {(text) => (
+                <View testID="reply-answer" style={{ paddingHorizontal: 2 }}>
+                  <Markdown value={text()} line={props.phone ? 22 : 24} />
                 </View>
-              </If>
+              )}
             </If>
           }
         >
@@ -612,6 +605,11 @@ export function Message(props: {
               onPending={props.onPending}
             />
           )}
+        </If>
+        <If when={item().status === "stopped"}>
+          <Label size={12} line={16} tone="muted">
+            {uiText("replyStopped")}
+          </Label>
         </If>
         <Each of={widgets()} key={(widget) => widget.id}>
           {(widget) => (

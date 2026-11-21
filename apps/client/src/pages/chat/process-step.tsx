@@ -1,7 +1,7 @@
 import type { EmailProposalView, RunBlock } from "@eta/client-contracts";
 import { commandOf } from "@eta/client-contracts";
 import { signal, View } from "nsh";
-import { Caption, colors, Label, Markdown, row } from "../../components";
+import { Caption, colors, Icon, Label, Markdown, row } from "../../components";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { EmailProposal } from "../email/proposal";
@@ -10,7 +10,11 @@ export function ProcessStep(props: { value: RunBlock }) {
   const host = useHost();
   const c = colors();
   const tool = () => (props.value.type === "tool" ? props.value : undefined);
-  const expanded = signal(false);
+  // A list recycles a step's view for another step: what was opened is kept
+  // for the step it was opened on.
+  const opened = signal<string | undefined>(undefined);
+  const expanded = () => opened() === props.value.id;
+  const toggle = () => opened.set(expanded() ? undefined : props.value.id);
   const emailProposalId = () => {
     const step = tool();
     const details = step?.details;
@@ -56,39 +60,43 @@ export function ProcessStep(props: { value: RunBlock }) {
         <If
           when={tool()}
           else={
-            <View
-              style={{
-                padding: 8,
-                borderBottomWidth: 1,
-                borderColor: c().border,
-              }}
-            >
-              <If
-                when={props.value.type === "text"}
-                else={
-                  <Label size={12} tone="muted">
-                    {props.value.type === "thinking"
+            <If
+              when={props.value.type === "steer"}
+              else={
+                <TextStep
+                  id={props.value.id}
+                  kind={props.value.type === "thinking" ? "thinking" : "note"}
+                  text={
+                    props.value.type === "thinking" ||
+                    props.value.type === "text"
                       ? props.value.text
-                      : uiText("messageJoinedThisRun")}
-                  </Label>
-                }
-              >
-                <Markdown
-                  value={props.value.type === "text" ? props.value.text : ""}
-                  line={22}
-                  streaming
+                      : ""
+                  }
                 />
-              </If>
-            </View>
+              }
+            >
+              {/* Where the run took words inserted into it: a trace, not the words again. */}
+              <View
+                style={{
+                  paddingVertical: 3,
+                  paddingHorizontal: 10,
+                  borderBottomWidth: 1,
+                  borderColor: c().border,
+                  alignItems: "center",
+                }}
+              >
+                <Label size={10} line={14} tone="faint">
+                  {uiText("insertReceived")}
+                </Label>
+              </View>
+            </If>
           }
         >
           {(step) => (
             <View>
               <View
                 role={step().output ? "button" : undefined}
-                onPress={
-                  step().output ? () => expanded.set(!expanded()) : undefined
-                }
+                onPress={step().output ? toggle : undefined}
                 style={{
                   ...row,
                   minHeight: 33,
@@ -138,5 +146,65 @@ export function ProcessStep(props: { value: RunBlock }) {
     >
       {(proposal) => <EmailProposal item={proposal()} />}
     </If>
+  );
+}
+
+/**
+ * A thought or something the agent said on the way: a small title that opens
+ * to it. A thought starts folded, words start open, in small type.
+ */
+function TextStep(props: {
+  id: string;
+  kind: "thinking" | "note";
+  text: string;
+}) {
+  const c = colors();
+  // Toggled away from how it starts, for the step it was toggled on.
+  const toggled = signal<string | undefined>(undefined);
+  const open = () => (props.kind === "note") !== (toggled() === props.id);
+  const label = () =>
+    uiText(props.kind === "thinking" ? "runThinking" : "processNote");
+  return (
+    <View style={{ borderBottomWidth: 1, borderColor: c().border }}>
+      <View
+        role="button"
+        accessibilityLabel={label()}
+        accessibilityState={{ expanded: open() }}
+        onPress={() =>
+          toggled.set(toggled() === props.id ? undefined : props.id)
+        }
+        style={{
+          ...row,
+          gap: 6,
+          paddingVertical: 4,
+          paddingHorizontal: 10,
+          cursor: "pointer",
+        }}
+      >
+        <Icon name={open() ? "down" : "right"} size={8} tone="faint" />
+        <Caption text={label()} style={{ color: c().faint }} />
+      </View>
+      <If when={open()}>
+        <View style={{ paddingHorizontal: 10, paddingBottom: 6 }}>
+          <If
+            when={props.kind === "note"}
+            else={
+              <Label size={12} line={18} tone="muted">
+                {props.text}
+              </Label>
+            }
+          >
+            <Markdown
+              value={props.text}
+              size={12}
+              line={18}
+              dense
+              heading={{ size: 12, line: 18, weight: 600, space: 4, after: 2 }}
+              streaming
+            />
+          </If>
+        </View>
+      </If>
+    </View>
   );
 }
