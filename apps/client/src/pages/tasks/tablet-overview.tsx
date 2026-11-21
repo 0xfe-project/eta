@@ -28,7 +28,6 @@ export function TabletOverview(props: {
   const host = useHost();
   const {
     activity,
-    canComment,
     cancelling,
     describing,
     editDescription,
@@ -189,9 +188,7 @@ export function TabletOverview(props: {
       </Scroll>
       <View style={{ paddingHorizontal: 20, paddingBottom: 14, gap: 12 }}>
         <RunLine item={item()} state={props.state} tablet />
-        <If when={canComment(item())}>
-          <TaskCommentBox state={props.state} tablet />
-        </If>
+        <TaskCommentBox state={props.state} tablet />
       </View>
     </View>
   );

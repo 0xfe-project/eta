@@ -24,6 +24,7 @@ import { statusName, TaskGlyph } from "../tasks/status";
 import { StatusSelect } from "../tasks/status-select";
 import { TaskDetailDialogs } from "../tasks/task-detail-dialogs";
 import { createTaskDetailState } from "../tasks/task-detail-state";
+import { TaskCommentHint } from "../tasks/task-fields";
 import { messageTime } from "./message-time";
 
 /** How long a goal shows before "Expand full text". */
@@ -39,7 +40,7 @@ export function PanelTask(props: {
   const c = colors();
   const host = useHost();
   const state = createTaskDetailState({ ...props, docked: true });
-  const { task, activity, canComment, comment, post, posting, log } = state;
+  const { task, activity, comment, post, posting, log } = state;
   const fullGoal = signal(false);
   // Once, when the task and its timeline first show: later replies do not pull the reader down.
   let opened = false;
@@ -236,46 +237,45 @@ export function PanelTask(props: {
                 </View>
               )}
             </If>
-            <If when={canComment(item())}>
-              <View
+            <TaskCommentHint state={state} />
+            <View
+              style={{
+                ...row,
+                height: 38,
+                gap: 8,
+                paddingHorizontal: 10,
+                flexShrink: 0,
+                borderWidth: 1,
+                borderColor: c().border,
+              }}
+            >
+              <Field
+                label={uiText("comment")}
+                placeholder={uiText("replyARunningTaskReadsIt")}
+                value={comment()}
+                onChange={state.updateComment}
+                onSubmit={() => void post()}
                 style={{
-                  ...row,
-                  height: 38,
-                  gap: 8,
-                  paddingHorizontal: 10,
-                  flexShrink: 0,
-                  borderWidth: 1,
-                  borderColor: c().border,
+                  flex: 1,
+                  height: 36,
+                  paddingHorizontal: 0,
+                  borderWidth: 0,
+                  fontSize: 12,
+                  lineHeight: 16,
+                }}
+              />
+              <View
+                role="button"
+                accessibilityLabel={uiText("sendComment")}
+                onPress={() => void post()}
+                style={{
+                  opacity: posting() || !comment().trim() ? 0.45 : 1,
+                  cursor: "pointer",
                 }}
               >
-                <Field
-                  label={uiText("comment")}
-                  placeholder={uiText("replyARunningTaskReadsIt")}
-                  value={comment()}
-                  onChange={state.updateComment}
-                  onSubmit={() => void post()}
-                  style={{
-                    flex: 1,
-                    height: 36,
-                    paddingHorizontal: 0,
-                    borderWidth: 0,
-                    fontSize: 12,
-                    lineHeight: 16,
-                  }}
-                />
-                <View
-                  role="button"
-                  accessibilityLabel={uiText("sendComment")}
-                  onPress={() => void post()}
-                  style={{
-                    opacity: posting() || !comment().trim() ? 0.45 : 1,
-                    cursor: "pointer",
-                  }}
-                >
-                  <Icon name="send" size={14} tone="muted" />
-                </View>
+                <Icon name="send" size={14} tone="muted" />
               </View>
-            </If>
+            </View>
             <TaskDetailDialogs
               id={props.id}
               layout={props.layout}

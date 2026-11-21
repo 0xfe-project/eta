@@ -1,5 +1,5 @@
 import type { BoardTaskDetail } from "@eta/client-contracts";
-import type { JSX } from "nsh";
+import type { JSX, TextStyle } from "nsh";
 import type { TaskDetailState } from "./task-detail-state";
 import { View } from "nsh";
 import { Button, colors, Field, Icon, Label, row } from "../../components";
@@ -20,63 +20,85 @@ export function TaskCommentBox(props: {
   const c = colors();
   const { comment, phone, post, posting, updateComment } = props.state;
   return (
-    <If when={!phone()} else={<PhoneCommentBox state={props.state} />}>
-      <View
-        style={{
-          ...row,
-          gap: 6,
-          borderWidth: 1,
-          borderColor: c().strong,
-          height: props.tablet ? 36 : 37,
-          paddingLeft: props.tablet ? 10 : 9,
-          paddingRight: props.tablet ? 10 : 4,
-        }}
-      >
-        <Field
-          label={uiText("comment")}
-          placeholder={uiText("replyARunningTaskReadsIt")}
-          value={comment()}
-          onChange={updateComment}
-          onSubmit={() => void post()}
+    <>
+      <If when={!phone()}>
+        <TaskCommentHint state={props.state} />
+      </If>
+      <If when={!phone()} else={<PhoneCommentBox state={props.state} />}>
+        <View
           style={{
-            flex: 1,
-            borderWidth: 0,
-            height: props.tablet ? 34 : 35,
-            paddingHorizontal: 0,
-            paddingVertical: 0,
-            fontSize: 12,
-            lineHeight: 16,
+            ...row,
+            gap: 6,
+            borderWidth: 1,
+            borderColor: c().strong,
+            height: props.tablet ? 36 : 37,
+            paddingLeft: props.tablet ? 10 : 9,
+            paddingRight: props.tablet ? 10 : 4,
           }}
-        />
-        <If
-          when={!props.tablet}
-          else={
-            <View
-              role="button"
-              accessibilityLabel={uiText("sendComment")}
-              accessibilityState={{ disabled: posting() || !comment().trim() }}
-              onPress={() => {
-                if (!posting() && comment().trim()) void post();
-              }}
-              style={{ cursor: "pointer" }}
-            >
-              <Icon name="send" size={14} tone="muted" />
-            </View>
-          }
         >
-          <Button
-            label={uiText("sendComment")}
-            icon="send"
-            iconOnly
-            iconSize={14}
-            labelTone="muted"
-            tone="ghost"
-            size={28}
-            disabled={posting() || !comment().trim()}
-            onPress={() => void post()}
+          <Field
+            label={uiText("comment")}
+            placeholder={uiText("replyARunningTaskReadsIt")}
+            value={comment()}
+            onChange={updateComment}
+            onSubmit={() => void post()}
+            style={{
+              flex: 1,
+              borderWidth: 0,
+              height: props.tablet ? 34 : 35,
+              paddingHorizontal: 0,
+              paddingVertical: 0,
+              fontSize: 12,
+              lineHeight: 16,
+            }}
           />
-        </If>
-      </View>
+          <If
+            when={!props.tablet}
+            else={
+              <View
+                role="button"
+                accessibilityLabel={uiText("sendComment")}
+                accessibilityState={{
+                  disabled: posting() || !comment().trim(),
+                }}
+                onPress={() => {
+                  if (!posting() && comment().trim()) void post();
+                }}
+                style={{ cursor: "pointer" }}
+              >
+                <Icon name="send" size={14} tone="muted" />
+              </View>
+            }
+          >
+            <Button
+              label={uiText("sendComment")}
+              icon="send"
+              iconOnly
+              iconSize={14}
+              labelTone="muted"
+              tone="ghost"
+              size={28}
+              disabled={posting() || !comment().trim()}
+              onPress={() => void post()}
+            />
+          </If>
+        </View>
+      </If>
+    </>
+  );
+}
+
+/** What a comment does where it is not obvious: over a parent's box, that it starts no run. */
+export function TaskCommentHint(props: {
+  state: TaskDetailState;
+  style?: TextStyle;
+}) {
+  const { parentHint, task } = props.state;
+  return (
+    <If when={task() && parentHint(task()!)}>
+      <Label size={11} line={14} tone="muted" style={props.style}>
+        {uiText("parentCommentHint")}
+      </Label>
     </If>
   );
 }
@@ -93,6 +115,10 @@ function PhoneCommentBox(props: { state: TaskDetailState }) {
         borderColor: c().border,
       }}
     >
+      <TaskCommentHint
+        state={props.state}
+        style={{ paddingTop: 10, paddingHorizontal: 16 }}
+      />
       <View style={{ ...row, height: 48, paddingHorizontal: 16 }}>
         <Field
           label={uiText("comment")}

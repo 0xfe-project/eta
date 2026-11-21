@@ -39,7 +39,6 @@ export function TaskDetail(props: {
   const paned = () => props.layout === "tablet" && !props.docked;
   const {
     archive,
-    canComment,
     editing,
     editDescription,
     editTitle,
@@ -274,10 +273,14 @@ export function TaskDetail(props: {
                 <TaskReviewActions state={state} />
               </View>
             </If>
-            <If
-              when={phone() && !item().archivedAt && !item().children?.length}
-            >
-              <If when={item().status === "in_review"}>
+            <If when={phone()}>
+              <If
+                when={
+                  item().status === "in_review" &&
+                  !item().archivedAt &&
+                  !item().children?.length
+                }
+              >
                 <View
                   style={{
                     paddingVertical: 12,
@@ -293,9 +296,7 @@ export function TaskDetail(props: {
                   <TaskReviewActions state={state} />
                 </View>
               </If>
-              <If when={canComment(item())}>
-                <TaskCommentBox state={state} />
-              </If>
+              <TaskCommentBox state={state} />
             </If>
           </>
         )}
