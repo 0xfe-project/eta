@@ -1,7 +1,16 @@
-import type { PluginView } from "@eta/client-contracts";
-import { View } from "nsh";
-import { colors, Icon, Label, Modal, row, SmoothScroll } from "../../components";
+import type { PluginTestResult, PluginView } from "@eta/client-contracts";
+import { signal, View } from "nsh";
+import {
+  Button,
+  colors,
+  Icon,
+  Label,
+  Modal,
+  row,
+  SmoothScroll,
+} from "../../components";
 import { uiText } from "../../i18n";
+import { useHost } from "../../services/host";
 import { HeadersEditor } from "./headers-editor";
 import { pluginText as text } from "./labels";
 
@@ -9,6 +18,94 @@ import { pluginText as text } from "./labels";
 export const hostKnowsHeaders = (item: PluginView): boolean =>
   Array.isArray(item.headers) &&
   item.servers.every((server) => Array.isArray(server.headers));
+
+const testLabel = (result: PluginTestResult): string =>
+  result.status === "ok"
+    ? uiText("testOk")
+    : result.status === "needs_login"
+      ? uiText("testNeedsLogin")
+      : result.status === "needs_setup"
+        ? uiText("serverNeedsSetup")
+        : result.status === "off"
+          ? uiText("testOff")
+          : uiText("testFailed");
+
+/** One click connects to the server, lists what it offers, and closes; it never runs by itself. */
+function TestConnection(props: { item: PluginView; server: string; stdio: boolean }) {
+  const host = useHost();
+  const busy = signal(false);
+  const result = signal<PluginTestResult | undefined>(undefined);
+  function run() {
+    busy.set(true);
+    void host.action(async () => {
+      try {
+        result.set(
+          await host.call<PluginTestResult>("plugins", "testServer", {
+            name: props.item.name,
+            server: props.server,
+          }),
+        );
+      } finally {
+        busy.set(false);
+      }
+    });
+  }
+  return (
+    <View style={{ gap: 8 }}>
+      <View style={{ ...row, gap: 12, flexWrap: "wrap" }}>
+        <Button
+          label={busy() ? uiText("testing") : uiText("testConnection")}
+          tone="ghost"
+          labelVariant="small"
+          disabled={busy()}
+          onPress={run}
+        />
+        <If when={props.stdio}>
+          <Label variant="small" tone="muted">
+            {uiText("testStdioHint")}
+          </Label>
+        </If>
+      </View>
+      <If when={result()}>
+        <View style={{ gap: 4 }}>
+          <Label variant="small" weight={600}>
+            {testLabel(result()!) + ` · ${result()!.ms} ms`}
+          </Label>
+          <If when={result()!.message}>
+            <Label variant="small" tone="muted">
+              {result()!.message}
+            </Label>
+          </If>
+          <If when={result()!.status === "ok"}>
+            <Label variant="small" tone="muted">
+              {[
+                result()!.serverName
+                  ? `${result()!.serverName} ${result()!.serverVersion ?? ""}`.trim()
+                  : "",
+                uiText("testCounts", {
+                  tools: String(result()!.toolCount),
+                  resources: String(result()!.resourceCount ?? "–"),
+                  prompts: String(result()!.promptCount ?? "–"),
+                }),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </Label>
+            <Each of={result()!.tools} key={(tool) => tool.name}>
+              {(tool) => (
+                <Label variant="small" tone="muted">
+                  {tool().params.length
+                    ? `${tool().name}(${tool().params.join(", ")})`
+                    : tool().name}
+                </Label>
+              )}
+            </Each>
+          </If>
+        </View>
+      </If>
+    </View>
+  );
+}
 
 /** A plugin's MCP servers: what each is, its state, and for a remote one its request headers. */
 export function ServerRows(props: { item: PluginView; phone?: boolean }) {
@@ -69,6 +166,11 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
                 >{`${text("headers")}: ${(server().headers ?? []).join(", ")}`}</Label>
               </If>
             </View>
+            <TestConnection
+              item={props.item}
+              server={server().name}
+              stdio={server().transport === "stdio"}
+            />
             <If when={server().transport !== "stdio" && hostKnowsHeaders(props.item)}>
               <HeadersEditor
                 item={props.item}

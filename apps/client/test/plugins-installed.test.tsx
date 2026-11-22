@@ -32,3 +32,11 @@ test("a host too old to send headers says so instead of hiding the editor", asyn
   await app.press("label:old-host-plugin");
   expect(app.shows("This host is too old for request headers. Update the host to set them.")).toBe(true);
 });
+
+test("each server offers a Test connection button, and nothing is tested until it is pressed", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 800 });
+  await app.press("label:remote-plugin");
+  expect(app.shows("Test connection")).toBe(true);
+  expect(app.shows("Connected")).toBe(false);
+  expect(app.shows("Failed")).toBe(false);
+});
