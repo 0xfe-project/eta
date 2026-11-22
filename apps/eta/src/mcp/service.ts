@@ -292,7 +292,10 @@ export class McpService {
     };
   }
 
-  async completeLogin(pendingId: string, callbackUrl: string): Promise<void> {
+  async completeLogin(
+    pendingId: string,
+    callbackUrl: string,
+  ): Promise<string | undefined> {
     const held = this.#pending.get(pendingId);
     if (held === undefined)
       throw new LoginError(
@@ -300,13 +303,14 @@ export class McpService {
         "No pending login with that id (it may have been cancelled, replaced or already completed)",
       );
     try {
-      const { serverKey } = await held.logins.completeLogin(
+      const { serverKey, note } = await held.logins.completeLogin(
         pendingId,
         callbackUrl,
       );
       this.#pending.delete(pendingId);
       this.#options.changed();
       void this.#retry(serverKey);
+      return note;
     } catch (error) {
       if (!(error instanceof LoginError && error.code === "state_mismatch"))
         this.#pending.delete(pendingId);
@@ -423,8 +427,9 @@ export class McpService {
         "Sign-in not found",
         "No sign-in is waiting for this address. Start it again from eta's settings.",
       );
+    let note: string | undefined;
     try {
-      await this.completeLogin(state, `${held.redirectUrl}${url.search}`);
+      note = await this.completeLogin(state, `${held.redirectUrl}${url.search}`);
     } catch (error) {
       return page(
         400,
@@ -432,7 +437,11 @@ export class McpService {
         error instanceof LoginError ? error.message : messageOf(error),
       );
     }
-    return page(200, "Signed in", "You can close this tab and go back to eta.");
+    return page(
+      200,
+      "Signed in",
+      note ?? "You can close this tab and go back to eta.",
+    );
   }
 
   async close(): Promise<void> {

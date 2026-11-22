@@ -70,7 +70,7 @@ export interface OAuthLogins {
   completeLogin: (
     pendingId: string,
     callbackUrl: string,
-  ) => Promise<{ serverKey: string }>;
+  ) => Promise<{ serverKey: string; note?: string }>;
   cancelLogin: (pendingId: string) => Promise<void>;
   /** Unexpired pending logins. */
   pending: () => PendingLogin[];
@@ -263,8 +263,17 @@ export function createOAuthLogins(options: OAuthLoginsOptions): OAuthLogins {
 
     // The code is single use: take the login before the first await.
     logins.delete(pendingId);
+    let note: string | undefined;
     try {
-      const iss = params.get("iss");
+      let iss = params.get("iss");
+      if (iss !== null) {
+        const lenient = await issuerOfSameLogin(store, login, iss);
+        if (lenient) {
+          // See issuerOfSameLogin: only this login, only this once; the SDK check stays on for any other case.
+          note = lenient;
+          iss = null;
+        }
+      }
       await auth(login.provider, {
         serverUrl: login.serverUrl,
         authorizationCode: code,
@@ -289,7 +298,7 @@ export function createOAuthLogins(options: OAuthLoginsOptions): OAuthLogins {
     } finally {
       await store.delete(login.serverKey, "codeVerifier");
     }
-    return { serverKey: login.serverKey };
+    return { serverKey: login.serverKey, ...(note ? { note } : {}) };
   };
 
   return {
@@ -310,6 +319,43 @@ export function createOAuthLogins(options: OAuthLoginsOptions): OAuthLogins {
       for (const kind of KINDS) await store.delete(serverKey, kind);
     },
   };
+}
+
+/**
+ * RFC 9207 `iss` that differs from the metadata's `issuer`, accepted for this one login only when
+ * all hold: the metadata does not promise `iss` (`authorization_response_iss_parameter_supported`
+ * is not true), and `iss` is an https origin whose host is the very host eta sent the user to.
+ * That is a proxy that publishes its own issuer while a real provider signs the user in (Cursor's
+ * rest-mcp proxies do). A `iss` from any other host still reaches the SDK check and is refused.
+ * Returns a note for the user, or undefined when the SDK check should run as it is.
+ */
+async function issuerOfSameLogin(
+  store: CredentialStore,
+  login: Pending,
+  iss: string,
+): Promise<string | undefined> {
+  const state = (await store.get(login.serverKey, "discoveryState")) as
+    | {
+        authorizationServerMetadata?: {
+          issuer?: string;
+          authorization_response_iss_parameter_supported?: unknown;
+        };
+      }
+    | undefined;
+  const metadata = state?.authorizationServerMetadata;
+  if (!metadata?.issuer || iss === metadata.issuer) return undefined;
+  if (metadata.authorization_response_iss_parameter_supported === true)
+    return undefined;
+  try {
+    const got = new URL(iss);
+    const went = new URL(login.authorizationUrl);
+    if (got.protocol !== "https:" || got.host !== went.host) return undefined;
+    if (got.pathname !== "/" || got.search !== "" || got.hash !== "")
+      return undefined;
+    return `The sign-in came back from ${got.host}, where eta sent you, not from the issuer the server's metadata names (${metadata.issuer}). It was accepted for this sign-in only.`;
+  } catch {
+    return undefined;
+  }
 }
 
 function toPublic(login: Pending): PendingLogin {
