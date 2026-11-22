@@ -1,5 +1,6 @@
 import type { Layout } from "../../components";
 import { View } from "nsh";
+import { desktopPanelOpen } from "../../app/desktop-panel";
 import { paneWidth } from "../../app/pane-width";
 import { colors, fill, grow, row, sizes } from "../../components";
 import { uiText } from "../../i18n";
@@ -292,7 +293,7 @@ export function WorkspaceSkeleton(props: {
           />
         </If>
       </View>
-      <If when={desktop()}>
+      <If when={desktop() && desktopPanelOpen()}>
         <View
           style={{
             width: paneWidth("panel"),

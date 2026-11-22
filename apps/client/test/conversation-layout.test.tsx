@@ -77,3 +77,54 @@ for (const [name, width, height] of sizes)
     await app.waitFor(`${messages} >> text:Queued words`);
     expect(app.shows("label:Queued message: Queued words")).toBe(false);
   });
+
+test("the desktop panel remembers both positions and keeps pending work visible when folded", async () => {
+  const options = {
+    width: 1440,
+    height: 900,
+    locale: "en-US",
+    urlScheme: "eta://fixture/pending",
+  };
+  const app = await open(fixture, options);
+  expect(app.shows("label:Resize panel")).toBe(true);
+  await app.press("label:Panel");
+  expect(app.shows("label:Context")).toBe(false);
+  expect(app.shows("label:Resize panel")).toBe(false);
+  expect(app.shows("id:panel-attention")).toBe(true);
+  const folded = app.storage();
+  app.dispose();
+
+  const again = await open(fixture, { ...options, storage: folded });
+  await again.waitUntil(() => !again.shows("label:Resize panel"));
+  await again.press("label:Panel");
+  expect(again.shows("label:Context")).toBe(true);
+  const expanded = again.storage();
+  expect(expanded["eta.panel.open"]).toBe("true");
+  again.dispose();
+  const last = await open(fixture, {
+    ...options,
+    urlScheme: "eta://fixture/short",
+    storage: expanded,
+  });
+  expect(last.shows("label:Resize panel")).toBe(true);
+  expect(last.shows("id:panel-attention")).toBe(false);
+});
+
+for (const [width, button] of [
+  [834, "Panel"],
+  [390, "Conversation info"],
+] as const)
+  test(`the ${width}px chat keeps its own panel entry`, async () => {
+    const app = await open(fixture, {
+      width,
+      height: 900,
+      locale: "en-US",
+      storage: { "eta.panel.open": "false" },
+    });
+    await app.press(`label:${button}`);
+    expect(app.shows(width === 834 ? "label:Context" : "label:Close")).toBe(
+      true,
+    );
+    expect(app.shows("label:Resize panel")).toBe(false);
+    expect(app.storage()["eta.panel.open"]).toBe("false");
+  });
