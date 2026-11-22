@@ -58,3 +58,8 @@ test("a refused install says why in the detail", async () => {
   await app.press("label:Install");
   expect(app.shows("the plugin name is taken by a local plugin")).toBe(true);
 });
+
+test("the kept catalog shows at once, while the read that asks the servers has not answered", async () => {
+  const app = await open("./fixtures/market-cached.tsx", { width: 900, height: 700 });
+  expect(app.shows("kept-entry")).toBe(true);
+});
