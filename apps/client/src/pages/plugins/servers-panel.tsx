@@ -148,6 +148,85 @@ function LoginButton(props: { item: PluginView; server: PluginServerView; test: 
   );
 }
 
+const MAX_CHIPS = 12;
+const LONG_TOOL_TEXT = 140;
+
+/** One tool: its name, its description (long ones fold), and its parameter names as chips. */
+function ToolCard(props: { tool: PluginTestResult["tools"][number] }) {
+  const c = colors();
+  const open = signal(false);
+  const long = () => props.tool.description.length > LONG_TOOL_TEXT;
+  const params = () => props.tool.params;
+  return (
+    <View
+      testID={"tool-card:" + props.tool.name}
+      style={{
+        gap: 8,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: c().border,
+      }}
+    >
+      <Label variant="body" weight={600} lines={1}>
+        {props.tool.name}
+      </Label>
+      <If when={props.tool.description}>
+        <Label variant="small" tone="muted" lines={open() || !long() ? undefined : 2}>
+          {open() || !long()
+            ? props.tool.description
+            : props.tool.description.slice(0, LONG_TOOL_TEXT) + "…"}
+        </Label>
+        <If when={long()}>
+          <Button
+            label={open() ? uiText("toolCollapse") : uiText("toolExpand")}
+            tone="plain"
+            labelVariant="small"
+            size={24}
+            onPress={() => open.set(!open())}
+          />
+        </If>
+      </If>
+      <If when={params().length}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+          <Each of={params().slice(0, MAX_CHIPS)} key={(name) => name}>
+            {(name) => (
+              <View
+                testID={"tool-param:" + name()}
+                style={{ paddingVertical: 2, paddingHorizontal: 8, borderWidth: 1, borderColor: c().border }}
+              >
+                <Label variant="small" tone="muted">{name()}</Label>
+              </View>
+            )}
+          </Each>
+          <If when={params().length > MAX_CHIPS}>
+            <Label variant="small" tone="muted">{"+" + (params().length - MAX_CHIPS)}</Label>
+          </If>
+        </View>
+      </If>
+    </View>
+  );
+}
+
+/** The listed tools as cards, in a region that scrolls when there are many. */
+export function ToolCards(props: { tools: PluginTestResult["tools"]; total: number }) {
+  return (
+    <If when={props.tools.length}>
+      <View style={{ gap: 8 }}>
+        <Label variant="small" weight={600}>
+          {uiText("toolsHeading", { count: String(props.total) })}
+        </Label>
+        <SmoothScroll style={{ maxHeight: 420 }} scrollbar={false}>
+          <View style={{ gap: 8 }}>
+            <Each of={props.tools} key={(tool) => tool.name}>
+              {(tool) => <ToolCard tool={tool()} />}
+            </Each>
+          </View>
+        </SmoothScroll>
+      </View>
+    </If>
+  );
+}
+
 function TestResultView(props: { test: Test; stdio: boolean }) {
   const result = props.test.result;
   return (
@@ -182,15 +261,7 @@ function TestResultView(props: { test: Test; stdio: boolean }) {
                 .filter(Boolean)
                 .join(" · ")}
             </Label>
-            <Each of={result()!.tools} key={(tool) => tool.name}>
-              {(tool) => (
-                <Label variant="small" tone="muted">
-                  {tool().params.length
-                    ? `${tool().name}(${tool().params.join(", ")})`
-                    : tool().name}
-                </Label>
-              )}
-            </Each>
+            <ToolCards tools={result()!.tools} total={result()!.toolCount} />
           </If>
         </View>
       </If>

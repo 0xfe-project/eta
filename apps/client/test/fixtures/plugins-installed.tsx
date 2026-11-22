@@ -71,6 +71,25 @@ function Fixture() {
   const stub = Object.assign(host, {
     call: async (_target: string, method: string, args: unknown) => {
       (globalThis as { __calls?: unknown[] }).__calls?.push([method, args]);
+      if (method === "testServer") {
+        // A variant fixture sets this before importing this one, to ask for many tools.
+        const count = (globalThis as { __toolCount?: number }).__toolCount ?? 3;
+        return {
+          status: "ok",
+          message: "",
+          ms: 12,
+          serverName: "fake",
+          serverVersion: "1.0",
+          tools: Array.from({ length: count }, (_, i) => ({
+            name: "tool_" + i,
+            description: i === 0 ? "long ".repeat(60) : "short " + i,
+            params: i === 0 ? Array.from({ length: 15 }, (_, k) => "p" + k) : ["a"],
+          })),
+          toolCount: count,
+          resourceCount: 2,
+          promptCount: 1,
+        };
+      }
       return undefined;
     },
     action: async <T,>(run: () => Promise<T>) => await run(),

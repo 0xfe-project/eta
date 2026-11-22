@@ -81,3 +81,26 @@ test("a server's badge shows only what has evidence, and never says ready", asyn
   expect(setup.shows("Needs setup")).toBe(true);
   expect(setup.shows("Ready")).toBe(false);
 });
+
+test("test results list each tool as a card with chips, fold long text, and count prompts as a number", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 900 });
+  await app.press("label:remote-plugin");
+  await app.press("label:Test connection");
+  expect(app.shows("Tools (3)")).toBe(true);
+  expect(app.count("id:tool-card:tool_0")).toBe(1);
+  expect(app.count("id:tool-card:tool_2")).toBe(1);
+  expect(app.shows("fake 1.0 · 3 tools · 2 resources · 1 prompts")).toBe(true);
+  expect(app.shows("+3")).toBe(true);
+  expect(app.count("id:tool-param:p0")).toBe(1);
+  expect(app.shows("Show more")).toBe(true);
+  await app.press("label:Show more");
+  expect(app.shows("Show less")).toBe(true);
+});
+
+test("sixty tools still list inside one scrolling region with a count header", async () => {
+  const app = await open("./fixtures/plugins-many-tools.tsx", { width: 1100, height: 900 });
+  await app.press("label:remote-plugin");
+  await app.press("label:Test connection");
+  expect(app.shows("Tools (60)")).toBe(true);
+  expect(app.count("id:tool-card:tool_0")).toBe(1);
+});
