@@ -569,6 +569,11 @@
   "detail": {
     "parent": "Parent"
   },
+  "asks": {
+    "settingTitle": "Questions in tasks",
+    "settingLabel": "Let the task's maker answer first",
+    "settingHint": "When on, an agent's question in a task goes first to the agent that made the task. It answers if it can, and sends the rest to you. Each answer it gives is written on the task's timeline."
+  },
   "archive": {
     "archive": "Archive",
     "unarchive": "Restore",

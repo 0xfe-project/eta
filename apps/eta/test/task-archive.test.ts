@@ -348,6 +348,8 @@ describe("the setting", () => {
       }>;
     expect((await settings()).settings).toEqual({
       archiveAfterDays: 7,
+      reactToResults: false,
+      autoAnswerAsks: false,
       draftTimeout: { enabled: false, minutes: 10, action: "discard" },
     });
     expect(
@@ -355,6 +357,8 @@ describe("the setting", () => {
     ).toEqual({
       settings: {
         archiveAfterDays: 30,
+        reactToResults: false,
+        autoAnswerAsks: false,
         draftTimeout: { enabled: false, minutes: 10, action: "discard" },
       },
     });
@@ -363,6 +367,8 @@ describe("the setting", () => {
     ).toEqual({
       settings: {
         archiveAfterDays: null,
+        reactToResults: false,
+        autoAnswerAsks: false,
         draftTimeout: { enabled: false, minutes: 10, action: "discard" },
       },
     });

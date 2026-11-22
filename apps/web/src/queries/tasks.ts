@@ -67,7 +67,11 @@ export function useAllTasks() {
 export const isArchived = (task: Pick<BoardTaskView, "archivedAt">): boolean =>
   task.archivedAt !== null && task.archivedAt !== undefined;
 
-const DEFAULT_SETTINGS: TaskBoardSettings = { archiveAfterDays: 7 };
+const DEFAULT_SETTINGS: TaskBoardSettings = {
+  archiveAfterDays: 7,
+  reactToResults: false,
+  autoAnswerAsks: false,
+};
 
 /** The board's settings: how soon a quiet done task is archived. */
 export function useBoardSettings(): TaskBoardSettings {
