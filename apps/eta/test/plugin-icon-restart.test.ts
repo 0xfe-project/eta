@@ -95,4 +95,29 @@ describe("a restart keeps the homepage fallback of an entry too", () => {
     expect(await run()).toBeNull();
     expect(seen.length).toBe(n);
   });
+  it("does not keep a homepage that could not be asked as a miss", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "eta-icon-restart-"));
+    dirs.push(dir);
+    const file = join(dir, "eta.sqlite");
+    const rawBase = await listen((_req, res) => void res.writeHead(404).end());
+    let broken = true;
+    const home = await listen((req, res) => {
+      if (broken) return void res.writeHead(503).end();
+      if (req.url === "/") res.end('<link rel="icon" href="/i.png"/>');
+      else if (req.url === "/i.png") res.end(PNG);
+      else res.writeHead(404).end();
+    });
+    const clock = { at: 5_000_000 };
+    const db = openDatabase(file);
+    applyMigrations(db, loadMigrations());
+    const logos = new Logos({ allowPrivate: true, rawBase, timeoutMs: 500, now: () => clock.at, store: new IconCache(db) });
+    const repo = "https://github.com/acme/plugins.git";
+    expect(await logos.forEntry(repo, "HEAD", "p", home + "/")).toBeNull();
+    const rows = db.query("select count(*) n from plugin_icon where path like '#site:%'").get() as { n: number };
+    expect(rows.n).toBe(0);
+    broken = false;
+    clock.at += 3 * 60 * 1000;
+    expect((await logos.forEntry(repo, "HEAD", "p", home + "/"))?.type).toBe("image/png");
+    db.close();
+  });
 });

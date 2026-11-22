@@ -150,6 +150,9 @@ function segments(path: string): string[] {
 }
 
 class Refused extends Error {}
+/** Whether an error is a failure to ask (network, timeout, 5xx), not an answer (a refusal, a 4xx). */
+const failure = (error: unknown): boolean =>
+  !(error instanceof Refused) && !/^HTTP 4\d\d$/.test(error instanceof Error ? error.message : "");
 /** The answer could not be had (network, timeout, 5xx): not a statement that there is no picture. */
 class Failed extends Error {}
 
@@ -303,7 +306,19 @@ export class Logos {
       if (kept !== undefined) return kept;
       this.#options.store?.delete(repo, ref, site);
     }
-    const logo = await this.find(null, homepage, null);
+    // A short wait after a failed ask; a failure is never kept as "no picture".
+    const waitKey = site + "\n" + repo + "\n" + ref;
+    if ((this.#repoBackoff.get(waitKey) ?? 0) > now) return null;
+    const seen = { failed: false };
+    const logo = await this.#fromHomepage(homepage, seen).catch((error) => {
+      if (failure(error)) seen.failed = true;
+      return null;
+    });
+    if (!logo && seen.failed) {
+      this.#repoBackoff.set(waitKey, now + RETRY_MS);
+      return null;
+    }
+    this.#repoBackoff.delete(waitKey);
     const keep = logo ? (COMMIT.test(ref) ? PINNED_MS : KEEP_MS) : MISS_MS;
     this.#options.store?.put(
       repo,
@@ -389,10 +404,13 @@ export class Logos {
     }
   }
 
-  async #fromHomepage(homepage: string): Promise<Logo | null> {
+  async #fromHomepage(homepage: string, seen?: { failed: boolean }): Promise<Logo | null> {
     const page = this.#address(homepage);
     if (SKIPPED.has(page.hostname.toLowerCase())) return null;
-    const html = await this.#get(page, MAX_PAGE).catch(() => null);
+    const html = await this.#get(page, MAX_PAGE).catch((error) => {
+      if (seen && failure(error)) seen.failed = true;
+      return null;
+    });
     const candidates: string[] = [];
     if (html) {
       const text = new TextDecoder().decode(html.body);
@@ -410,7 +428,10 @@ export class Logos {
     }
     candidates.push(new URL("/favicon.ico", page).href);
     for (const candidate of candidates.slice(0, 4)) {
-      const logo = await this.#picture(candidate).catch(() => null);
+      const logo = await this.#picture(candidate).catch((error) => {
+        if (seen && failure(error)) seen.failed = true;
+        return null;
+      });
       if (logo) return logo;
     }
     return null;
