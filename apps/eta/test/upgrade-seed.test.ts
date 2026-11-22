@@ -139,6 +139,7 @@ describe("the seeds a release upgrades", () => {
       "0059-pending-session-settings",
       "0060-interaction-context",
       "0061-plugin-disabled",
+      "0062-plugin-headers",
     ]);
   });
 

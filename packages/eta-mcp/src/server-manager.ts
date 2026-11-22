@@ -128,6 +128,31 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * A fetch that sends its request only to `origin`: a redirect to another origin is refused, so the
+ * headers a user attached never reach a host the server was not configured with. Same-origin
+ * redirects are followed by hand.
+ */
+export function sameOriginFetch(base: FetchLike, origin: string): FetchLike {
+  const MAX_HOPS = 5;
+  return async (input, init) => {
+    let target: string | URL = input;
+    for (let hop = 0; hop <= MAX_HOPS; hop++) {
+      const response = await base(target, { ...init, redirect: "manual" });
+      const location = response.headers.get("location");
+      if (response.status < 300 || response.status >= 400 || location === null)
+        return response;
+      const next = new URL(location, target);
+      if (next.origin !== origin)
+        throw new Error(
+          `the server redirected to another host (${next.host}); request headers are sent only to ${new URL(origin).host}, so it was refused`,
+        );
+      target = next;
+    }
+    throw new Error("too many redirects");
+  };
+}
+
 function isUnauthorized(error: unknown): boolean {
   return (
     error instanceof UnauthorizedError ||
@@ -544,7 +569,12 @@ export class ServerManager {
     const transportOptions = {
       ...(Object.keys(headers).length > 0 ? { requestInit: { headers } } : {}),
       ...(authProvider ? { authProvider } : {}),
-      ...(this.options.fetch ? { fetch: this.options.fetch } : {}),
+      // Headers configured for this server stay with it: no redirect may carry them elsewhere.
+      ...(Object.keys(headers).length > 0
+        ? { fetch: sameOriginFetch(this.options.fetch ?? fetch, url.origin) }
+        : this.options.fetch
+          ? { fetch: this.options.fetch }
+          : {}),
     };
 
     const kinds =
@@ -576,7 +606,9 @@ export class ServerManager {
           connection.authMessage =
             definition.auth === "oauth"
               ? "OAuth sign-in is required"
-              : 'the server rejected the credentials (HTTP 401); set auth to "oauth" or send a token';
+              : Object.keys(headers).length > 0
+                ? "credential rejected (HTTP 401): the server did not accept the headers sent to it"
+                : 'the server rejected the credentials (HTTP 401); set auth to "oauth" or send a token';
           return;
         }
         if (index < kinds.length - 1 && shouldFallBackToSse(error)) continue;

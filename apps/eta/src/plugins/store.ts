@@ -30,6 +30,16 @@ export interface AuditRow {
 
 export type PluginValues = Record<string, PluginValue>;
 
+/** A request header the user attached to one of a plugin's remote servers. */
+export interface UserHeader {
+  server: string;
+  name: string;
+  value: string;
+  secret: boolean;
+  /** The user confirmed sending it over plain http to a host that is not this machine. */
+  plainOk: boolean;
+}
+
 export class PluginRows {
   readonly #db: Database;
   readonly #key: Buffer;
@@ -71,6 +81,7 @@ export class PluginRows {
   removeSource(name: string): void {
     this.#db.query("DELETE FROM plugin_source WHERE name = ?").run(name);
     this.#db.query("DELETE FROM plugin_disabled WHERE plugin = ?").run(name);
+    this.#db.query("DELETE FROM plugin_header WHERE plugin = ?").run(name);
   }
 
   /* --------------------------------------------------------------- the switch */
@@ -107,15 +118,82 @@ export class PluginRows {
     return text === undefined ? {} : (JSON.parse(text) as PluginValues);
   }
 
-  /** Changes when the values do: what a session's stamp names, in place of the values. */
+  /** Changes when the values or the user's headers do: what a session's stamp names, in place of them. */
   configuredAt(plugin: string): number {
     return (
       this.#db
-        .query<{ updated_at: number }, [string]>(
-          "SELECT updated_at FROM plugin_config WHERE plugin = ?",
+        .query<{ at: number | null }, [string, string]>(
+          `SELECT MAX(
+             COALESCE((SELECT updated_at FROM plugin_config WHERE plugin = ?), 0),
+             COALESCE((SELECT MAX(updated_at) FROM plugin_header WHERE plugin = ?), 0)
+           ) AS at`,
         )
-        .get(plugin)?.updated_at ?? 0
+        .get(plugin, plugin)?.at ?? 0
     );
+  }
+
+  /* ---------------------------------------------------------------- headers */
+
+  /** The headers the user attached, by server then name; one whose blob does not open is left out. */
+  headers(plugin: string): UserHeader[] {
+    return this.#db
+      .query<
+        {
+          server: string;
+          name: string;
+          sealed: Uint8Array;
+          secret: number;
+          plain_ok: number;
+        },
+        [string]
+      >(
+        "SELECT server, name, sealed, secret, plain_ok FROM plugin_header WHERE plugin = ? ORDER BY server, name_lc",
+      )
+      .all(plugin)
+      .flatMap((row) => {
+        const value = unseal(this.#key, row.sealed);
+        return value === undefined
+          ? []
+          : [
+              {
+                server: row.server,
+                name: row.name,
+                value,
+                secret: row.secret === 1,
+                plainOk: row.plain_ok === 1,
+              },
+            ];
+      });
+  }
+
+  /** The whole set of one server's headers: what is not in `headers` is gone. */
+  saveHeaders(
+    plugin: string,
+    server: string,
+    headers: readonly UserHeader[],
+  ): void {
+    const now = Date.now();
+    this.#db.transaction(() => {
+      this.#db
+        .query("DELETE FROM plugin_header WHERE plugin = ? AND server = ?")
+        .run(plugin, server);
+      for (const header of headers)
+        this.#db
+          .query(
+            `INSERT INTO plugin_header (plugin, server, name_lc, name, sealed, secret, plain_ok, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            plugin,
+            server,
+            header.name.toLowerCase(),
+            header.name,
+            seal(this.#key, header.value),
+            header.secret ? 1 : 0,
+            header.plainOk ? 1 : 0,
+            now,
+          );
+    })();
   }
 
   saveValues(plugin: string, values: PluginValues): void {

@@ -1,6 +1,6 @@
 import type { PluginServerView } from "@eta/client-contracts";
 import type { PluginPackage } from "@eta/daemon";
-import { serverSupported } from "@eta/daemon";
+import { plainRemote, serverSupported } from "@eta/daemon";
 
 /** The MCP servers of a plugin as the user is shown them: what each runs, or where it connects. */
 export function serverViews(plugin: PluginPackage | undefined): PluginServerView[] {
@@ -14,7 +14,14 @@ export function serverViews(plugin: PluginPackage | undefined): PluginServerView
         ? { command: [config.command, ...config.args] }
         : { url: config.url }),
       env: Object.keys(binding?.env ?? {}),
-      headers: Object.keys(binding?.headers ?? {}),
+      // Names only, never values: the ones the plugin file sets, and the ones eta fills from fields.
+      headers: [
+        ...new Set([
+          ...(config.type === "stdio" ? [] : Object.keys(config.headers)),
+          ...Object.keys(binding?.headers ?? {}),
+        ]),
+      ],
+      plainHttp: config.type !== "stdio" && plainRemote(config.url),
       problem: serverSupported(server)
         ? null
         : "legacy HTTP+SSE: external runtimes skip it; eta's own loop takes it",

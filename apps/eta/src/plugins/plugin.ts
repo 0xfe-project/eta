@@ -73,6 +73,32 @@ export function pluginsPlugin(
           plugins.setEnabled(name, enabled);
           return { result: { name, enabled } };
         }),
+        wire.handle("plugins", "setHeaders", (call) => {
+          const args = new Args(call);
+          const name = args.string("name");
+          const server = args.string("server");
+          const { headers } = (call.args ?? {}) as { headers?: unknown };
+          if (!Array.isArray(headers))
+            throw new Error("plugins.setHeaders needs headers");
+          plugins.setHeaders(
+            name,
+            server,
+            headers.map((raw) => {
+              const header = (raw ?? {}) as Record<string, unknown>;
+              if (typeof header.name !== "string")
+                throw new Error("a header needs a name");
+              if (header.value !== null && typeof header.value !== "string")
+                throw new Error("a header value is text, or null to keep it");
+              return {
+                name: header.name,
+                value: header.value as string | null,
+                secret: header.secret === true,
+                plainOk: header.plainOk === true,
+              };
+            }),
+          );
+          return { result: { name, server } };
+        }),
         wire.handle("plugins", "add", async (call) => {
           const args = new Args(call);
           const name = await plugins.registry.add(

@@ -19,6 +19,7 @@ export const PLUGIN_ACTIONS = [
   "configure",
   "setLevel",
   "setEnabled",
+  "setHeaders",
   "add",
   "update",
   "remove",
@@ -62,8 +63,10 @@ export interface PluginServerView {
   url?: string;
   /** The environment variables eta sets from the configuration. */
   env: string[];
-  /** The headers eta adds from the configuration. */
+  /** The names of the headers the plugin sets itself or eta adds from the configuration; never values. */
   headers: string[];
+  /** Plain http to a host that is not this machine: the user's headers go there only once confirmed. */
+  plainHttp: boolean;
   /** Why it will not run, when it will not (`sse` is not supported by the runtimes). */
   problem: string | null;
 }
@@ -75,6 +78,22 @@ export interface PluginMachineView {
   missing: string[];
   /** False when the machine is offline and so was not looked at. */
   checked: boolean;
+}
+
+/**
+ * A request header the user attached to one of the plugin's remote servers. A secret's value is
+ * never sent: it says only that it is set, and a new value replaces it.
+ */
+export interface PluginHeaderView {
+  server: string;
+  name: string;
+  secret: boolean;
+  /** The value, for a header that is not a secret; null for a secret. */
+  value: string | null;
+  /** The user confirmed sending it over plain http to a host that is not this machine. */
+  plainOk: boolean;
+  /** Why it is not sent now, when it is not. */
+  blocked: "plain-http" | null;
 }
 
 export interface PluginAgentView {
@@ -100,6 +119,8 @@ export interface PluginView {
   requires: string[];
   machines: PluginMachineView[];
   fields: PluginFieldView[];
+  /** The headers the user attached to its remote servers. */
+  headers: PluginHeaderView[];
   /** The agents that have it enabled; they skip it while its state is `needs_config`. */
   agents: PluginAgentView[];
 }
@@ -126,6 +147,20 @@ export interface PluginArgs {
   configure: { name: string; values: Record<string, PluginValue | null> };
   /** Lower what agents may do with a field; `level` cannot be above what the manifest allows. */
   setLevel: { name: string; field: string; level: PluginAgentLevel };
+  /**
+   * Replace the headers of one remote server: what is not listed is removed. A `value` of null keeps
+   * the saved one (a secret is never read back), so it is allowed only for a header that is saved.
+   */
+  setHeaders: {
+    name: string;
+    server: string;
+    headers: {
+      name: string;
+      value: string | null;
+      secret: boolean;
+      plainOk?: boolean;
+    }[];
+  };
   /** Switch an installed plugin on or off for every agent; each agent's own choice is kept. */
   setEnabled: { name: string; enabled: boolean };
   /** Add a plugin from a git repository; `rev` is a branch, a tag or a commit. */
@@ -142,6 +177,7 @@ export interface PluginResults {
   configure: { name: string; state: PluginState; issues: FieldIssue[] };
   setLevel: { name: string };
   setEnabled: { name: string; enabled: boolean };
+  setHeaders: { name: string; server: string };
   add: { name: string };
   update: { names: string[] };
   remove: { name: string };

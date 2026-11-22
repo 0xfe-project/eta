@@ -14,6 +14,7 @@ import type {
   OpenedPlugin,
   PluginAgentLevel,
   PluginField,
+  PluginHeaderView,
   PluginState,
   PluginValue,
   PluginView,
@@ -38,10 +39,12 @@ import {
 import {
   claimServerNames,
   pluginChunks,
+  plainRemote,
   pluginMcpSources,
   runtimeExtras,
   serversConfig,
 } from "@eta/daemon";
+import { headerProblem, MAX_HEADERS_PER_SERVER } from "./headers";
 import { PluginRegistry } from "./registry";
 import { serverViews } from "./server-view";
 import { PluginRows } from "./store";
@@ -151,6 +154,15 @@ export class Plugins {
     return entry !== undefined && this.#usable(entry);
   }
 
+  /** What a plugin's servers are given: its fields' values, then the user's headers on top. */
+  #config(entry: PluginEntry): ReturnType<typeof serversConfig> {
+    return serversConfig(
+      entry.plugin!,
+      this.rows.values(entry.name),
+      this.rows.headers(entry.name),
+    );
+  }
+
   /** The plugins an agent's sessions load, and the ones it enabled that they skip. */
   #split(agentId: string): { active: PluginEntry[]; skipped: string[] } {
     const active: PluginEntry[] = [];
@@ -201,7 +213,7 @@ export class Plugins {
       this.active(agentId).map((entry) => ({
         plugin: entry.plugin!,
         hash: entry.hash!,
-        config: serversConfig(entry.plugin!, this.rows.values(entry.name)),
+        config: this.#config(entry),
       })),
       { dataDir: this.#dataDir, runtime: meta.runtime, warn: this.#warn },
     );
@@ -219,7 +231,7 @@ export class Plugins {
     return pluginMcpSources(
       active.map((entry) => ({
         plugin: entry.plugin!,
-        config: serversConfig(entry.plugin!, this.rows.values(entry.name)),
+        config: this.#config(entry),
       })),
       this.#dataDir,
       this.#warn,
@@ -268,6 +280,13 @@ export class Plugins {
     const redactions: Redaction[] = [];
     for (const entry of this.registry.entries()) {
       if (entry.plugin === undefined) continue;
+      // A header the user attached is a credential too, and no agent may read it.
+      for (const header of this.rows.headers(entry.name))
+        if (header.secret)
+          redactions.push({
+            value: header.value,
+            label: `[secret ${entry.name}.${header.server}.${header.name}]`,
+          });
       const values = this.rows.values(entry.name);
       for (const field of entry.plugin.fields) {
         const value = values[field.name];
@@ -304,7 +323,7 @@ export class Plugins {
         name: entry.name,
         hash: entry.hash!,
         // An external runtime and eta's own loop both start the servers on the machine.
-        servers: serversConfig(entry.plugin!, this.rows.values(entry.name)),
+        servers: this.#config(entry),
       });
     }
     return opened;
@@ -373,6 +392,7 @@ export class Plugins {
       servers: serverViews(plugin),
       requires,
       machines: this.#machineViews(requires),
+      headers: this.#headerViews(entry),
       fields: (plugin?.fields ?? []).map((field: PluginField) => {
         const saved = values[field.name];
         return {
@@ -389,6 +409,27 @@ export class Plugins {
         return agent === undefined ? [] : [{ id, name: agent.name }];
       }),
     };
+  }
+
+  /** The user's headers as the page sees them: a secret's value stays here. */
+  #headerViews(entry: PluginEntry): PluginHeaderView[] {
+    return this.rows.headers(entry.name).map((header) => {
+      const server = entry.plugin?.servers.find(
+        (one) => one.name === header.server,
+      );
+      const plain =
+        server !== undefined &&
+        server.config.type !== "stdio" &&
+        plainRemote(server.config.url);
+      return {
+        server: header.server,
+        name: header.name,
+        secret: header.secret,
+        value: header.secret ? null : header.value,
+        plainOk: header.plainOk,
+        blocked: plain && !header.plainOk ? "plain-http" : null,
+      };
+    });
   }
 
   #machineViews(requires: readonly string[]): PluginView["machines"] {
@@ -499,6 +540,56 @@ export class Plugins {
   setEnabled(name: string, enabled: boolean): void {
     this.#existing(name);
     this.rows.setDisabled(name, !enabled);
+    this.#changed();
+  }
+
+  /**
+   * Replace the headers of one remote server. A secret is written and not read back: a `null`
+   * value keeps what is saved under that name. Nothing that does not fit is ever saved.
+   */
+  setHeaders(
+    name: string,
+    server: string,
+    headers: readonly {
+      name: string;
+      value: string | null;
+      secret: boolean;
+      plainOk?: boolean;
+    }[],
+  ): void {
+    const entry = this.#existing(name);
+    const def = entry.plugin?.servers.find((one) => one.name === server);
+    if (def === undefined || def.config.type === "stdio")
+      throw new Error(`${name} has no remote server ${server}`);
+    if (headers.length > MAX_HEADERS_PER_SERVER)
+      throw new Error(`at most ${MAX_HEADERS_PER_SERVER} headers per server`);
+    const saved = new Map(
+      this.rows
+        .headers(name)
+        .filter((header) => header.server === server)
+        .map((header) => [header.name.toLowerCase(), header]),
+    );
+    const plain = plainRemote(def.config.url);
+    const seen = new Set<string>();
+    const next = headers.map((header) => {
+      const key = header.name.trim().toLowerCase();
+      const value = header.value ?? saved.get(key)?.value;
+      if (value === undefined)
+        throw new Error(`header ${header.name} has no saved value to keep`);
+      const problem = headerProblem(header.name.trim(), value);
+      if (problem !== undefined) throw new Error(problem);
+      if (seen.has(key))
+        throw new Error(`header ${header.name} is listed twice`);
+      seen.add(key);
+      return {
+        server,
+        name: header.name.trim(),
+        value,
+        secret: header.secret,
+        plainOk: plain && header.plainOk === true,
+      };
+    });
+    this.rows.saveHeaders(name, server, next);
     this.#changed();
   }
 

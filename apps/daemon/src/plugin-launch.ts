@@ -39,6 +39,35 @@ import { fillTemplate, isWithin } from "./plugin-package";
 interface ServerConfig {
   env?: Record<string, string>;
   headers?: Record<string, string>;
+  /** Some of `headers` were attached by the user, not by the plugin: no sign-in is offered instead. */
+  userHeaders?: boolean;
+}
+
+/** A header the user attached to one remote server of a plugin. */
+export interface UserHeaderInput {
+  server: string;
+  name: string;
+  value: string;
+  /** The user confirmed sending it over plain http to a host that is not this machine. */
+  plainOk: boolean;
+}
+
+/** Plain http to a host other than this machine: a header sent there crosses the network in clear. */
+export function plainRemote(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "http:") return false;
+  const host = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  return !(
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "::1" ||
+    /^127\./.test(host)
+  );
 }
 export type ServersConfig = Record<string, ServerConfig>;
 
@@ -56,8 +85,10 @@ function textOf(value: PluginValue): string {
 
 /** What the extension makes of these values, for each server that has a binding. */
 export function serversConfig(
-  plugin: Pick<PluginPackage, "bindings" | "fields">,
+  plugin: Pick<PluginPackage, "bindings" | "fields"> &
+    Partial<Pick<PluginPackage, "servers">>,
   values: Readonly<Record<string, PluginValue | null | undefined>>,
+  userHeaders: readonly UserHeaderInput[] = [],
 ): ServersConfig {
   const texts: Record<string, string | undefined> = {};
   for (const field of plugin.fields as PluginField[]) {
@@ -77,6 +108,20 @@ export function serversConfig(
       if (filled !== undefined) headers[name] = filled;
     }
     config[server] = { env, headers };
+  }
+  // The user's headers go on top, whatever the case of a name the file or a binding set already.
+  for (const header of userHeaders) {
+    const server = plugin.servers?.find((one) => one.name === header.server);
+    // Only a remote server takes headers; plain http to another machine needs the user's yes.
+    if (server === undefined || server.config.type === "stdio") continue;
+    if (plainRemote(server.config.url) && !header.plainOk) continue;
+    const entry = (config[header.server] ??= { env: {}, headers: {} });
+    const headers = entry.headers ?? {};
+    for (const name of Object.keys(headers))
+      if (name.toLowerCase() === header.name.toLowerCase()) delete headers[name];
+    headers[header.name] = header.value;
+    entry.headers = headers;
+    entry.userHeaders = true;
   }
   return config;
 }
@@ -119,6 +164,8 @@ export type ResolvedServer = {
       headers: Record<string, string>;
       /** What the extension declares (`mcp.<server>.auth`); left out, `toMcpEntries` infers it. */
       auth?: false | "oauth";
+      /** Some of `headers` are the user's: a 401 then means they were refused, not that a sign-in is due. */
+      userHeaders?: boolean;
     }
 );
 
@@ -260,6 +307,7 @@ export function resolvePluginServers(
         continue;
       }
       const given = config[server.name]?.headers ?? {};
+      const userHeaders = config[server.name]?.userHeaders === true;
       const auth = plugin.bindings[server.name]?.auth;
       const fixed = Object.entries(server.config.headers).filter(
         ([name]) =>
@@ -275,6 +323,7 @@ export function resolvePluginServers(
         url: server.config.url,
         headers: { ...Object.fromEntries(fixed), ...given },
         ...(auth === undefined ? {} : { auth }),
+        ...(userHeaders ? { userHeaders } : {}),
       });
     }
   }
@@ -335,8 +384,11 @@ const hasAuthorization = (headers: Record<string, string>): boolean =>
 function authOf(server: {
   headers: Record<string, string>;
   auth?: false | "oauth";
+  userHeaders?: boolean;
 }): false | "oauth" | undefined {
   if (server.auth !== undefined) return server.auth;
+  // The user chose how to authenticate: a refusal is reported as such, with no sign-in offered.
+  if (server.userHeaders === true) return undefined;
   return hasAuthorization(server.headers) ? undefined : "oauth";
 }
 

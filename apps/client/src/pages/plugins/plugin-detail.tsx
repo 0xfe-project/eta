@@ -17,6 +17,7 @@ import { ToggleSwitch } from "../../components/toggle-switch";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 
+import { HeadersEditor } from "./headers-editor";
 import { pluginText as text } from "./labels";
 import { PluginGlyph, Status } from "./plugin-status";
 import { PluginWarnings, pluginWarnings } from "./warnings";
@@ -375,6 +376,14 @@ export function PluginDetail(props: DetailProps) {
                         >{`${text("headers")}: ${server().headers.join(", ")}`}</Label>
                       </If>
                     </View>
+                    <If when={server().transport !== "stdio"}>
+                      <HeadersEditor
+                        item={props.item}
+                        server={server().name}
+                        plainHttp={server().plainHttp}
+                        phone={props.phone}
+                      />
+                    </If>
                   </View>
                 )}
               </Each>

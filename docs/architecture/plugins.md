@@ -148,3 +148,15 @@ The host reads somebody else's `marketplace.json` (the Claude Code shape, or Cur
 A stdio server runs the author's code on the machine and is not a sandbox, so before enabling it, the command it runs or the address it connects to is shown. Servers like `npx` install packages themselves at runtime, bypassing our checks.
 
 Secrets are only passed to the server's environment, but it runs as the same user as the agent; if the agent has a shell, it can read them from `/proc/<pid>/environ`. `none` means "does not enter the context, and no way to read it is provided", not OS-level isolation.
+
+## Request headers
+
+Besides the headers a plugin file declares (and the ones eta fills from fields), the user can attach request headers to any remote (streamable-http or sse) MCP server of an installed plugin, for example `Authorization: Bearer <key>` or `x-api-key`. The editor is in the plugin detail, per server.
+
+- Storage: table `plugin_header` (migration 0062), per plugin and per server, the value sealed like every other plugin secret. A secret's value is never sent back to the client, never in the preview, never logged, and is added to the redaction list so an agent cannot read it. Removing the plugin deletes its headers.
+- Merge: file headers, field bindings, then user headers; on a name clash (case-insensitive) the user's wins. A header name must be an HTTP token; a value may not hold CR, LF or NUL. Headers are limited to 32 per server.
+- Preview: header names the plugin file declares, never values. User headers exist only after install.
+- Reach: sent only to the server's own origin. `@eta/mcp` follows redirects by hand for a server that has headers and refuses a redirect to another origin. Over plain http to a host that is not this machine, a user header is sent only once the user ticked "Allow plain http" (the loader already refuses such a url in a plugin file, so this is a second guard).
+- 401: with user headers set and no declared OAuth, a 401 is reported as "credential rejected", not as a sign-in.
+- A globally disabled plugin sends nothing; its headers are kept and the editor is dimmed.
+
