@@ -288,6 +288,34 @@ export class Logos {
     return logo;
   }
 
+  /**
+   * A catalog entry's picture: its own logo in the repository, else its homepage's icon. The second
+   * answer is kept in the database too (under the entry's key), so a restart asks no site again.
+   */
+  async forEntry(repo: string, ref: string, path: string, homepage: string | null): Promise<Logo | null> {
+    const own = await this.fromRepo(repo, ref, path);
+    if (own || !homepage) return own;
+    const site = "#site:" + homepage;
+    const now = (this.#options.now ?? Date.now)();
+    const row = this.#options.store?.get(repo, ref, site, now);
+    if (row !== undefined && now < row.expiresAt) {
+      const kept = row.status === "miss" ? null : this.#checked(row.mime, row.bytes);
+      if (kept !== undefined) return kept;
+      this.#options.store?.delete(repo, ref, site);
+    }
+    const logo = await this.find(null, homepage, null);
+    const keep = logo ? (COMMIT.test(ref) ? PINNED_MS : KEEP_MS) : MISS_MS;
+    this.#options.store?.put(
+      repo,
+      ref,
+      site,
+      logo ? { mime: logo.type, bytes: Buffer.from(logo.data, "base64") } : null,
+      now + keep,
+      now,
+    );
+    return logo;
+  }
+
   /** Forget everything kept, in memory and in the database. */
   clear(): number {
     this.#kept.clear();

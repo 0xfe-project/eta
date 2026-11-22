@@ -298,12 +298,13 @@ export function pluginsPlugin(
           // A market entry that is a path in a GitHub repository: the plugin's own logo from its manifest.
           const repo = args.optionalString("repo");
           if (repo !== undefined) {
-            const own = await logos.fromRepo(
+            const found = await logos.forEntry(
               repo,
               args.optionalString("ref") ?? "HEAD",
               args.optionalString("path") ?? "",
+              args.optionalString("homepage") ?? null,
             );
-            if (own) return { result: own };
+            return { result: found };
           }
           return {
             result: await logos.find(
