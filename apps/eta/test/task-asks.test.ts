@@ -105,6 +105,7 @@ describe("an executor's question on a task", () => {
         archiveAfterDays: 7,
         reactToResults: false,
         autoAnswerAsks: false,
+        draftTimeout: { enabled: false, minutes: 10, action: "discard" },
       },
     });
     await until(() => rows(r.w).some((row) => row.status === "pending"));
