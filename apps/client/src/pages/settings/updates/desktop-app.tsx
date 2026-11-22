@@ -3,6 +3,7 @@ import type { AppUpdate, UpdateProgress } from "nsh/updater";
 import { appInfo, openUrl, Scroll, signal, View } from "nsh";
 import { checkForUpdate, downloadUpdate, installAndRestart } from "nsh/updater";
 import { Button, colors, grow, Label, Modal, row } from "../../../components";
+import { DownloadProgressBar } from "../../../components/download-progress";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 
@@ -131,6 +132,9 @@ export function DesktopAppUpdate(props: { work: UpgradeCheckView["busy"] }) {
             />
           </View>
         )}
+      </If>
+      <If when={busy() && !ready() ? percentage() : undefined}>
+        {(value) => <DownloadProgressBar value={value()} />}
       </If>
       <If when={failure()}>
         <Label variant="small" tone="red">
