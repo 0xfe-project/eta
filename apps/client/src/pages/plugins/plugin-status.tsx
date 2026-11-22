@@ -27,6 +27,15 @@ export function PluginGlyph(props: { size: number }) {
   );
 }
 
+/** The login a card shows, from its servers' states: only with evidence, never for headers-only servers. */
+export function cardLogin(item: PluginView): "needs_login" | "signed_in" | undefined {
+  const oauth = item.servers.filter(
+    (server) => server.login !== undefined && server.login !== "none" && !(server.headers?.length ?? 0),
+  );
+  if (!oauth.length) return undefined;
+  return oauth.some((server) => server.login === "needs_login") ? "needs_login" : "signed_in";
+}
+
 export function Status(props: { item: PluginView; phone?: boolean }) {
   const c = colors();
   const missing = () => props.item.state === "needs_config";

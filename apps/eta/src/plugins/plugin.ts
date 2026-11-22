@@ -44,10 +44,12 @@ export function pluginsPlugin(
                   ? server
                   : {
                       ...server,
-                      login: mcp.signedIn(server.url)
-                        ? ("signed_in" as const)
-                        : asked.has(server.url)
-                          ? ("needs_login" as const)
+                      // One source: a 401 seen after the token was stored (a test said so) beats the
+                      // token's mere presence; a login that starts clears that evidence.
+                      login: asked.has(server.url)
+                        ? ("needs_login" as const)
+                        : mcp.signedIn(server.url)
+                          ? ("signed_in" as const)
                           : ("none" as const),
                     },
               ),
@@ -233,6 +235,7 @@ export function pluginsPlugin(
           if (mcp === undefined) throw new Error("sign-in is not available");
           // The plugin must be on, usable and have the server: testPlan refuses otherwise.
           const url = remoteUrl(args.string("name"), args.string("server"));
+          asked.delete(url);
           return { result: await mcp.loginUrl(url, undefined, args.optionalString("redirectOrigin")) };
         }),
         wire.handle("plugins", "logoutServer", async (call) => {

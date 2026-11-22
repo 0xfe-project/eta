@@ -110,3 +110,11 @@ test("each installed card has exactly one avatar in its header, and no default p
   // The fixture lists seven installed plugins; one avatar each, not two.
   expect(app.count("id:plugin-avatar")).toBe(7);
 });
+
+test("a card shows its login only with evidence: needs login, signed in, and nothing otherwise", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 900 });
+  expect(app.count("id:card-login:login-plugin")).toBe(1);
+  expect(app.count("id:card-login:signed-plugin")).toBe(1);
+  expect(app.count("id:card-login:remote-plugin")).toBe(0);
+  expect(app.count("id:card-login:on-plugin")).toBe(0);
+});

@@ -22,7 +22,7 @@ import { PluginDetail } from "./plugin-detail";
 import { PluginLogo } from "./plugin-logo";
 import { PluginEnabled, PluginName } from "./plugin-name";
 import { ServersDialog } from "./servers-panel";
-import { NoPlugins, PluginGlyph, Status } from "./plugin-status";
+import { NoPlugins, PluginGlyph, Status, cardLogin } from "./plugin-status";
 import { Skills } from "./skills/list";
 import { PluginTablet } from "./tablet-list";
 import { pluginWarnings, PluginWarningsDialog } from "./warnings";
@@ -461,6 +461,15 @@ function PluginCard(props: {
             <View style={{ flex: 1, minWidth: 0 }}>
               <PluginName name={props.item.name} />
             </View>
+            <If when={cardLogin(props.item)}>
+              {(state) => (
+                <View testID={"card-login:" + props.item.name} style={{ flexShrink: 0, opacity: props.item.enabled ? 1 : 0.6 }}>
+                  <Label variant="caption" tone={state() === "needs_login" ? "warningInk" : "muted"}>
+                    {state() === "needs_login" ? uiText("serverNeedsLogin") : uiText("serverSignedIn")}
+                  </Label>
+                </View>
+              )}
+            </If>
           </View>
           <View style={{ ...row, height: 20, gap: 8 }}>
             <If when={props.item.version}>
