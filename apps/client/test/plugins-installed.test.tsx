@@ -107,8 +107,8 @@ test("sixty tools still list inside one scrolling region with a count header", a
 
 test("each installed card has exactly one avatar in its header, and no default plugin icon", async () => {
   const app = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 900 });
-  // The fixture lists eight installed plugins; one avatar each, not two.
-  expect(app.count("id:plugin-avatar")).toBe(8);
+  // The fixture lists nine installed plugins; one avatar each, not two.
+  expect(app.count("id:plugin-avatar")).toBe(9);
 });
 
 test("a card shows its login only with evidence: needs login, signed in, and nothing otherwise", async () => {
@@ -126,4 +126,20 @@ test("a ready plugin shows no status text; needs-config and off-for-all still do
   expect(app.shows("Can be enabled")).toBe(false);
   expect(app.shows("Needs configuring")).toBe(true);
   expect(app.shows("Off for all agents")).toBe(true);
+});
+
+test("a plugin missing a required value says which one and where to type it; no result block until a test is pressed, and a not-tested result has no time", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 900 });
+  await app.press("label:github-plugin");
+  expect(app.count("id:missing-values")).toBe(1);
+  expect(app.shows("Missing before it can run: GITHUB_PERSONAL_ACCESS_TOKEN")).toBe(true);
+  expect(app.shows("Headers: Authorization")).toBe(true);
+  expect(app.shows("Headers set")).toBe(false);
+  expect(app.shows("required values are missing")).toBe(false);
+  await app.press("label:Test connection");
+  expect(app.shows("required values are missing")).toBe(true);
+  expect(app.shows(" ms")).toBe(false);
+  const ready = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 900 });
+  await ready.press("label:remote-plugin");
+  expect(ready.count("id:missing-values")).toBe(0);
 });

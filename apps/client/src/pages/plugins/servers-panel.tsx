@@ -17,6 +17,7 @@ import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { EnvEditor } from "./env-editor";
 import { HeadersEditor } from "./headers-editor";
+import { MissingValues } from "./missing-values";
 import { pluginText as text } from "./labels";
 import { authStyle } from "./plugin-status";
 
@@ -24,6 +25,9 @@ import { authStyle } from "./plugin-status";
 export const hostKnowsHeaders = (item: PluginView): boolean =>
   Array.isArray(item.headers) &&
   item.servers.every((server) => Array.isArray(server.headers));
+
+/** Only a result that went to the server has a time worth showing. */
+const REQUEST_MADE = new Set<PluginTestResult["status"]>(["ok", "needs_login", "failed"]);
 
 const testLabel = (result: PluginTestResult): string =>
   result.status === "ok"
@@ -247,7 +251,7 @@ function TestResultView(props: { test: Test; stdio: boolean }) {
       <If when={result()}>
         <View style={{ gap: 4 }}>
           <Label variant="small" weight={600}>
-            {testLabel(result()!) + ` · ${result()!.ms} ms`}
+            {testLabel(result()!) + (REQUEST_MADE.has(result()!.status) ? ` · ${result()!.ms} ms` : "")}
           </Label>
           <If when={result()!.message}>
             <Label variant="small" tone="muted">
@@ -333,6 +337,7 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
           {uiText("hostNeedsUpdate")}
         </Label>
       </If>
+      <MissingValues item={props.item} />
       <Each of={props.item.servers} key={(server) => server.name}>
         {(server) => {
           const test = createTest({ item: props.item, server: server().name });

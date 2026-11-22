@@ -3,9 +3,9 @@ import { formatLocale } from "../../i18n";
 const copy = {
   source: ["Source", "来源"],
   runs: ["Runs", "运行"],
-  env: ["Environment set", "已设置环境变量"],
-  envShort: ["Env set", "已设环境变量"],
-  headers: ["Headers set", "已设置标头"],
+  env: ["Environment", "环境变量"],
+  envShort: ["Env", "环境变量"],
+  headers: ["Headers", "标头"],
   audit: ["Reads by agents", "智能体读取记录"],
   deletedAgent: ["Deleted agent", "已删除的智能体"],
   copySource: ["Copy source", "复制来源"],

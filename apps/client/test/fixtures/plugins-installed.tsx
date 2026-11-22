@@ -56,6 +56,26 @@ function Fixture() {
             { ...plugin("login-plugin", true), servers: [{ ...remote, login: "needs_login" as const }] },
             { ...plugin("expired-plugin", true), servers: [{ ...remote, login: "expired" as const }] },
             { ...plugin("setup-plugin", true), state: "needs_config" as const, servers: [remote] },
+            // A server whose Authorization header is bound to a required field nobody has filled in.
+            {
+              ...plugin("github-plugin", true),
+              state: "needs_config" as const,
+              servers: [{ ...remote, name: "gh", headers: ["Authorization"] }],
+              fields: [
+                {
+                  name: "GITHUB_PERSONAL_ACCESS_TOKEN",
+                  type: "string",
+                  title: "GITHUB_PERSONAL_ACCESS_TOKEN",
+                  required: true,
+                  secret: true,
+                  set: false,
+                  value: null,
+                  level: "none",
+                  levels: ["none"],
+                  issue: null,
+                },
+              ],
+            } as unknown as PluginView,
             // An older host sends neither `headers` on the plugin nor on its servers.
             {
               ...plugin("old-host-plugin", true),
@@ -72,6 +92,15 @@ function Fixture() {
   const stub = Object.assign(host, {
     call: async (_target: string, method: string, args: unknown) => {
       (globalThis as { __calls?: unknown[] }).__calls?.push([method, args]);
+      if (method === "testServer" && (args as { name?: string }).name === "github-plugin") {
+        return {
+          status: "needs_setup",
+          message: "required values are missing",
+          ms: 0,
+          tools: [],
+          toolCount: 0,
+        };
+      }
       if (method === "testServer") {
         // A variant fixture sets this before importing this one, to ask for many tools.
         const count = (globalThis as { __toolCount?: number }).__toolCount ?? 3;

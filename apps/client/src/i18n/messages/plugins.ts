@@ -213,5 +213,12 @@ export const pluginsMessages = {
   envSave: ["Save variables", "保存变量"],
   envIncomplete: ["Every variable needs a name and a value.", "每个变量都需要名称和值。"],
   envLocked: ["That name is set by the plugin and cannot be changed.", "该名称由插件固定，不能修改。"],
+  missingTitle: ["Missing before it can run: {{names}}", "运行前还缺少：{{names}}"],
+  missingElsewhere: [
+    "Fill the other values in the plugin's configuration form.",
+    "其余的值请在插件的配置表单里填写。",
+  ],
+  missingEnter: ["Enter a value first.", "请先输入值。"],
+  missingSave: ["Save", "保存"],
   warningsFor: ["Warnings for {{name}}", "{{name}} 的警告"],
 } as const;
