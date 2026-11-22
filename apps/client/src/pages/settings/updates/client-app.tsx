@@ -258,9 +258,7 @@ export function ClientAppUpdate(props: { phone: boolean }) {
                 onPress={() => pressClientUpdate(() => confirm.set(true))}
               />
             </View>
-            <If
-              when={update.downloading() ? update.percentage() : undefined}
-            >
+            <If when={update.downloading() ? update.percentage() : undefined}>
               {(value) => <DownloadProgressBar value={value()} />}
             </If>
             <If when={update.ready() && offer().kind === "package"}>
