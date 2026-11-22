@@ -221,6 +221,11 @@ export function Field(
         borderWidth: 1,
         borderColor: color().border,
         borderRadius: 0,
+        // A multiline field scrolls its own text, but nsh's layout still counts
+        // all of that text in the content size of the `Scroll` around it, so a
+        // long value made the page scroll on into blank space. Clipping the
+        // field keeps its text out of that size.
+        ...(props.multiline ? { overflow: "hidden" as const } : {}),
         ...props.style,
       }}
     />
