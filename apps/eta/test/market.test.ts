@@ -448,7 +448,8 @@ describe("installing from the catalog", () => {
     expect(preview.skills.map((s) => s.name)).toEqual(["a"]);
     expect(preview.servers).toEqual([]);
     const reports = preview.reports.join("\n");
-    expect(reports).toContain("manifest read from .cursor-plugin/plugin.json");
+    expect(reports).not.toContain("manifest read from");
+    expect(preview.layout).toBe(".cursor-plugin/plugin.json");
     expect(reports).toContain("agents is not supported by eta; ignored");
     expect(reports).toContain("agents/: not supported by eta; ignored");
     expect(await m.market.install("cursor-demo", sha)).toBe("cursor-demo");

@@ -523,9 +523,9 @@ describe("a Cursor or Claude Code layout", () => {
       );
       expect(loaded.manifest).toMatchObject({ name: "demo", version: "1.0.0" });
       expect(loaded.skills.map((entry) => entry.name)).toEqual(["a"]);
-      expect(loaded.reports).toEqual([
-        `manifest read from ${dir}/plugin.json; skills and MCP servers are loaded from this layout`,
-      ]);
+      // The layout is information, not a problem: no report, and `layout` says where it was read.
+      expect(loaded.reports).toEqual([]);
+      expect(loaded.layout).toBe(`${dir}/plugin.json`);
     },
   );
 
@@ -546,8 +546,76 @@ describe("a Cursor or Claude Code layout", () => {
     expect(text).toContain("agents is not supported by eta; ignored");
     expect(text).toContain("agents/: not supported by eta; ignored");
     expect(text).toContain("rules/: not supported by eta; ignored");
-    expect(text).toContain(".mcp.json: 1 MCP server will run after you confirm");
+    expect(text).not.toContain("will run after you confirm");
+    expect(text).not.toContain("manifest read from");
     expect(loaded.servers.map((entry) => entry.name)).toEqual(["s"]);
+  });
+
+  describe("plugin.json mcpServers", () => {
+    const servers = { s: { type: "http", url: "https://example.com/mcp" } };
+    const names = (loaded: { servers: { name: string }[] }) => loaded.servers.map((entry) => entry.name);
+
+    it("is not a warning, and unknown fields of a foreign manifest are not either", async () => {
+      const loaded = await loadPlugin(
+        await foreign(".cursor-plugin", { name: "demo", minClientVersions: { x: 1 }, mcpServers: "./mcp.json" }, { "mcp.json": { mcpServers: servers } }),
+      );
+      expect(loaded.reports).toEqual([]);
+      expect(names(loaded)).toEqual(["s"]);
+    });
+
+    it("reads a string path, an array of paths and an inline object", async () => {
+      const path = await loadPlugin(
+        await foreign(".claude-plugin", { name: "demo", mcpServers: "./config/servers.json" }, { "config/servers.json": { mcpServers: servers } }),
+      );
+      expect(names(path)).toEqual(["s"]);
+      const list = await loadPlugin(
+        await foreign(".claude-plugin", { name: "demo", mcpServers: ["./a.json", "b.json"] }, {
+          "a.json": { mcpServers: { one: servers.s } },
+          "b.json": { mcpServers: { two: servers.s } },
+        }),
+      );
+      expect(names(list)).toEqual(["one", "two"]);
+      const inline = await loadPlugin(await foreign(".claude-plugin", { name: "demo", mcpServers: servers }));
+      expect(names(inline)).toEqual(["s"]);
+      expect(inline.reports).toEqual([]);
+    });
+
+    it("reads a file named by the manifest once, even when it is also .mcp.json", async () => {
+      const loaded = await loadPlugin(
+        await foreign(".claude-plugin", { name: "demo", mcpServers: "./.mcp.json" }, { ".mcp.json": { mcpServers: servers } }),
+      );
+      expect(names(loaded)).toEqual(["s"]);
+      expect(loaded.reports).toEqual([]);
+    });
+
+    it("reports a missing file, and refuses a path that leaves the plugin", async () => {
+      const missing = await loadPlugin(await foreign(".claude-plugin", { name: "demo", mcpServers: "./nope.json" }));
+      expect(missing.reports.join("\n")).toContain("nope.json: the file does not exist");
+      for (const bad of ["../x.json", "/etc/x.json", "a/../../x.json"]) {
+        const loaded = await loadPlugin(await foreign(".claude-plugin", { name: "demo", mcpServers: bad }));
+        expect(loaded.servers).toEqual([]);
+        expect(loaded.reports.join("\n")).toContain("must be relative and stay inside the plugin");
+      }
+    });
+
+    it("does not follow a symlink out of the plugin", async () => {
+      const root = await foreign(".claude-plugin", { name: "demo", mcpServers: "./link.json" });
+      const outside = await temp();
+      await writeFile(join(outside, "x.json"), JSON.stringify({ mcpServers: servers }));
+      try {
+        await symlink(join(outside, "x.json"), join(root, "link.json"));
+      } catch {
+        return; // A symlink needs a privilege some systems do not give.
+      }
+      const loaded = await loadPlugin(root);
+      expect(loaded.servers).toEqual([]);
+      expect(loaded.reports.join("\n")).toContain("resolves outside the plugin");
+    });
+
+    it("still warns about an unknown field of a native plugin.json", async () => {
+      const loaded = await loadPlugin(await plugin({ "skills/a/SKILL.md": skill("a") }, { hooks: {} }));
+      expect(loaded.reports).toEqual(["plugin.json: unknown field hooks was ignored"]);
+    });
   });
 
   it("prefers the root plugin.json, then .cursor-plugin over .claude-plugin", async () => {
@@ -617,7 +685,7 @@ describe("a Cursor or Claude Code layout", () => {
       ["MY_API_KEY", true, true],
       ["REMOTE_TOKEN", true, true],
     ]);
-    expect(loaded.reports.join("\n")).toContain(".mcp.json: 2 MCP servers will run after you confirm");
+    expect(loaded.reports.join("\n")).not.toContain("after you confirm");
   });
 
   it("reads Cursor's root mcp.json and skips OAuth and unfillable servers with a reason", async () => {
@@ -643,7 +711,7 @@ describe("a Cursor or Claude Code layout", () => {
     expect(text).toContain("server hosted skipped: url holds a variable");
     expect(text).toContain("server mixed skipped: env A mixes text with a variable");
     expect(text).toContain("server plain: placement not supported by eta; ignored");
-    expect(text).toContain("mcp.json: 1 MCP server will run after you confirm");
+    expect(text).not.toContain("after you confirm");
   });
 
   it("does not warn about a skills list that only names directories under skills/", async () => {

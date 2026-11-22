@@ -18,7 +18,7 @@
 import type { PluginField } from "@eta/client-contracts";
 import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { realpath } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   ETA_EXTENSION,
   parseConfigFields,
@@ -61,7 +61,6 @@ const FOREIGN_COMPONENTS = [
   "agents",
   "hooks",
   "rules",
-  "mcpServers",
   "lspServers",
   "outputStyles",
   "themes",
@@ -125,6 +124,8 @@ export interface PluginPackage {
   manifest: PluginManifest;
   /** What was found wrong and ignored, for the user. */
   reports: string[];
+  /** The manifest path of a Claude Code or Cursor layout; absent for a native plugin.json. Information, not a problem. */
+  layout?: string;
   skills: PluginSkill[];
   servers: PluginServer[];
   fields: PluginField[];
@@ -200,12 +201,14 @@ function parseManifest(
   for (const field of Object.keys(raw)) {
     if (MANIFEST_FIELDS.has(field)) continue;
     if (foreign && FOREIGN_FIELDS.has(field)) continue;
+    // Claude and Cursor manifests carry fields eta does not know; that is normal, not a problem.
+    if (foreign && field === "mcpServers") continue;
     if (foreign && field === "skills") {
       if (!skillsInPlace(raw.skills, root))
         reports.push("plugin.json: skills is not at skills/; only skills/ is read");
     } else if (foreign && FOREIGN_COMPONENTS.includes(field))
       reports.push(`plugin.json: ${field} is not supported by eta; ignored`);
-    else reports.push(`plugin.json: unknown field ${field} was ignored`);
+    else if (!foreign) reports.push(`plugin.json: unknown field ${field} was ignored`);
   }
   if (foreign) {
     // Someone else's manifest: a field that does not fit is left out, the plugin is not refused.
@@ -561,38 +564,62 @@ function mapForeignServer(entry: unknown): ForeignServer | string {
 async function loadForeignServers(
   root: string,
   reports: string[],
+  declared?: unknown,
 ): Promise<
   Pick<PluginPackage, "servers" | "fields" | "bindings">
 > {
   const servers: PluginServer[] = [];
   const bindings: Record<string, PluginServerBinding> = {};
   const specs: Record<string, unknown> = {};
-  for (const file of FOREIGN_MCP_FILES) {
-    const path = join(root, file);
-    if (statSync(path, { throwIfNoEntry: false }) === undefined) continue;
+  // What plugin.json's mcpServers names (a path, a list of paths, or the servers themselves),
+  // then the conventional files; a file named twice is read once.
+  const sources: { file: string; inline?: unknown; declared: boolean }[] = [];
+  for (const item of Array.isArray(declared) ? declared : declared === undefined ? [] : [declared]) {
+    if (typeof item === "string") sources.push({ file: item, declared: true });
+    else if (isPlain(item)) sources.push({ file: "plugin.json mcpServers", inline: item, declared: true });
+    else reports.push("plugin.json: mcpServers must be a path or an object; ignored");
+  }
+  for (const file of FOREIGN_MCP_FILES) sources.push({ file, declared: false });
+  const read = new Set<string>();
+  for (const source of sources) {
+    const { file } = source;
     const refused = (why: string): void => {
       reports.push(`${file}: ${why}; its MCP servers are not loaded`);
     };
-    if (!isWithin(root, await resolvedPath(path))) {
-      refused("it resolves outside the plugin");
-      continue;
-    }
-    if (!statSync(path).isFile()) {
-      refused("it is not a file");
-      continue;
-    }
     let raw: unknown;
-    try {
-      raw = JSON.parse(readFileSync(path, "utf8"));
-    } catch (error) {
-      refused(`not valid JSON (${messageOf(error)})`);
-      continue;
+    if (source.inline !== undefined) raw = { mcpServers: source.inline };
+    else {
+      if (isAbsolute(file) || file.split(/[\\/]/).includes("..")) {
+        refused("the path must be relative and stay inside the plugin");
+        continue;
+      }
+      const path = join(root, file);
+      if (statSync(path, { throwIfNoEntry: false }) === undefined) {
+        if (source.declared) refused("the file does not exist");
+        continue;
+      }
+      const real = await resolvedPath(path);
+      if (!isWithin(root, real)) {
+        refused("it resolves outside the plugin");
+        continue;
+      }
+      if (!statSync(path).isFile()) {
+        refused("it is not a file");
+        continue;
+      }
+      if (read.has(real)) continue;
+      read.add(real);
+      try {
+        raw = JSON.parse(readFileSync(path, "utf8"));
+      } catch (error) {
+        refused(`not valid JSON (${messageOf(error)})`);
+        continue;
+      }
     }
     if (!isPlain(raw) || !isPlain(raw.mcpServers)) {
       refused("it has no mcpServers object");
       continue;
     }
-    let loaded = 0;
     for (const [name, entry] of Object.entries(raw.mcpServers)) {
       const skip = (why: string): void => {
         reports.push(`${file}: server ${name} skipped: ${why}`);
@@ -632,10 +659,7 @@ async function loadForeignServers(
         bindings[name] = { env: mapped.env, headers: mapped.headers };
       if (mapped.ignored.length > 0)
         reports.push(`${file}: server ${name}: ${mapped.ignored.join(", ")} not supported by eta; ignored`);
-      loaded++;
     }
-    if (loaded > 0)
-      reports.push(`${file}: ${loaded} MCP server${loaded === 1 ? "" : "s"} will run after you confirm`);
   }
   return { servers, bindings, fields: parseConfigFields(specs).fields };
 }
@@ -822,10 +846,6 @@ export async function loadPlugin(dir: string): Promise<PluginPackage> {
   }
   const foreign = found !== "plugin.json";
   const reports: string[] = [];
-  if (foreign)
-    reports.push(
-      `manifest read from ${found}; skills and MCP servers are loaded from this layout`,
-    );
   const { manifest, extensions } = parseManifest(raw, reports, foreign, root);
   const skills = await loadSkillDirs(root, reports);
   if (!foreign) {
@@ -833,13 +853,14 @@ export async function loadPlugin(dir: string): Promise<PluginPackage> {
     const extension = parseExtension(extensions[ETA_EXTENSION], listed, reports);
     return { root, manifest, reports, skills, ...extension };
   }
-  const mapped = await loadForeignServers(root, reports);
+  const mapped = await loadForeignServers(root, reports, isPlain(raw) ? raw.mcpServers : undefined);
   reportForeignParts(root, reports);
   const extension = parseExtension(extensions[ETA_EXTENSION], mapped.servers, reports);
   return {
     root,
     manifest,
     reports,
+    layout: found,
     skills,
     ...extension,
     fields: [...mapped.fields, ...extension.fields],

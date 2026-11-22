@@ -275,6 +275,8 @@ export interface MarketPreview {
   proxy: string | null;
   /** What the loader found wrong and ignored. */
   reports: string[];
+  /** The manifest path of a Claude Code or Cursor layout, null for a native plugin.json. Plain information. */
+  layout: string | null;
   /** The values it will ask for after it is installed. */
   fields: { name: string; secret: boolean; required: boolean }[];
 }

@@ -557,6 +557,7 @@ export class Market {
           description,
         })),
         reports: plugin.reports,
+        layout: plugin.layout ?? null,
         fields: plugin.fields.map((field) => ({
           name: field.name,
           secret: field.secret === true,

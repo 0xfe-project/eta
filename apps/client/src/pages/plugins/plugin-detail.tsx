@@ -362,6 +362,11 @@ export function PluginDetail(props: DetailProps) {
                       >
                         {server().transport}
                       </Label>
+                      <Label variant="caption" tone="muted">
+                        {props.item.state === "needs_config" || server().problem
+                          ? uiText("serverNeedsSetup")
+                          : uiText("serverReady")}
+                      </Label>
                       <View style={{ flex: 1 }} />
                       <If when={server().env.length}>
                         <Label

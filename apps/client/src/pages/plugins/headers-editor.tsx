@@ -5,9 +5,14 @@ import { ToggleSwitch } from "../../components/toggle-switch";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
-/** Names whose value is a credential: the "secret" toggle starts on for these. */
-const SECRET_NAME = /authorization|key|token|secret|auth|cookie|password/i;
-export const looksSecret = (name: string): boolean => SECRET_NAME.test(name);
+import {
+  customHeaderRow,
+  defaultHeaderRow,
+  hasHeader,
+  headerValue,
+  incomplete,
+  looksSecret,
+} from "./headers-model";
 
 interface Draft {
   id: number;
@@ -51,35 +56,31 @@ export function HeadersEditor(props: {
     drafts.update((all) =>
       all.map((draft) => (draft.id === id ? { ...draft, ...change } : draft)),
     );
-  const add = (name: string, bearer: boolean) =>
+  const add = (row: { name: string; secret: boolean; bearer: boolean }) =>
     drafts.update((all) => [
       ...all,
-      {
-        id: next++,
-        name,
-        value: "",
-        secret: true,
-        saved: false,
-        bearer,
-        plainOk: false,
-      },
+      { ...row, id: next++, value: "", saved: false, plainOk: false },
     ]);
+  // The plugin file may already carry an auth header; then no second Authorization row is offered.
+  const declared = () =>
+    props.item.servers.find((one) => one.name === props.server)?.headers ?? [];
+  const hasAuthorization = () =>
+    hasHeader(declared(), "Authorization") ||
+    hasHeader(
+      drafts().map((draft) => draft.name.trim()),
+      "Authorization",
+    );
   function save() {
     const rows = drafts();
     for (const draft of rows)
-      if (draft.name.trim() === "" || (draft.value === "" && !draft.saved)) {
+      if (incomplete(draft)) {
         problem.set(uiText("headerIncomplete"));
         return;
       }
     problem.set("");
     const headers = rows.map((draft) => ({
       name: draft.name.trim(),
-      value:
-        draft.value === ""
-          ? null
-          : draft.bearer
-            ? `Bearer ${draft.value}`
-            : draft.value,
+      value: headerValue(draft.value, draft.bearer),
       secret: draft.secret,
       plainOk: draft.plainOk,
     }));
@@ -179,19 +180,21 @@ export function HeadersEditor(props: {
         </Label>
       </If>
       <View style={{ ...row, gap: 8, flexWrap: "wrap" }}>
-        <Button
-          label={uiText("headerAddBearer")}
-          tone="plain"
-          labelVariant="caption"
-          disabled={off()}
-          onPress={() => add("Authorization", true)}
-        />
+        <If when={!hasAuthorization()}>
+          <Button
+            label={uiText("headerAddBearer")}
+            tone="plain"
+            labelVariant="caption"
+            disabled={off()}
+            onPress={() => add(defaultHeaderRow())}
+          />
+        </If>
         <Button
           label={uiText("headerAddCustom")}
           tone="plain"
           labelVariant="caption"
           disabled={off()}
-          onPress={() => add("", false)}
+          onPress={() => add(customHeaderRow())}
         />
         <Button
           label={uiText("headerSave")}

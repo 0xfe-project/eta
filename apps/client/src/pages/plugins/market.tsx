@@ -424,6 +424,9 @@ export function Market(props: {
                       .join(", "),
                   )}
                 </If>
+                <If when={shown().layout}>
+                  {line(uiText("marketLayout"), shown().layout ?? "")}
+                </If>
                 <If when={shown().reports.length}>
                   {line(uiText("marketReports"), shown().reports.join("; "))}
                 </If>
