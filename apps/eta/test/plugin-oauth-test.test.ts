@@ -29,6 +29,8 @@ interface Rig {
   dead: Set<string>;
   /** When set, every token gets this 401 challenge (a rejection that is not an expiry). */
   always: string | null;
+  /** When set, every request is refused with this body and no challenge (a server wanting a header of its own). */
+  noChallenge: string | null;
   /** What each MCP request carried: whether an Authorization header, and how long. */
   seen: { auth: boolean; length: number }[];
 }
@@ -40,6 +42,7 @@ function endpoint(auth: ReturnType<typeof createFakeAuthServer>, rig: Rig): Fetc
     rig.seen.push({ auth: bearer !== null, length: bearer?.length ?? 0 });
     const token = bearer?.startsWith("Bearer access-") ? bearer.slice(7) : undefined;
     if (token === undefined) return await auth.fetch(input, init);
+    if (rig.noChallenge !== null) return new Response(rig.noChallenge, { status: 401 });
     const challenge =
       rig.always ?? (rig.dead.has(token) ? 'Bearer error="invalid_token", error_description="the access token expired"' : null);
     if (challenge !== null)
@@ -70,7 +73,7 @@ async function signedIn() {
   const tokenFile = join(await tempDir("eta-token-"), "token");
   await writeFile(tokenFile, `${TOKEN}\n`, { mode: 0o600 });
   const auth = createFakeAuthServer();
-  const rig: Rig = { dead: new Set(), always: null, seen: [] };
+  const rig: Rig = { dead: new Set(), always: null, noChallenge: null, seen: [] };
   const fetchImpl = endpoint(auth, rig);
   const host = await testHost({
     dataDir,
@@ -158,5 +161,34 @@ describe("the connection test right after a real sign-in", () => {
     expect(JSON.stringify(result)).not.toContain("access-");
     // A refresh that works means the stored sign-in is not thrown away by a refused request.
     expect(s.store.has(s.key, "tokens")).toBe(true);
+  }, 30_000);
+
+  it("names the header a server wants, does not say expired, and keeps the sign-in", async () => {
+    const s = await signedIn();
+    s.rig.noChallenge = '{"error":"unauthorized","message":"Missing Cursor credential in x-cursor-auth"}';
+    const result = await s.test();
+    expect(result.status).toBe("failed");
+    expect(result.requiredHeader).toBe("x-cursor-auth");
+    expect(result.message).toContain("x-cursor-auth");
+    expect(result.message.toLowerCase()).not.toContain("expired");
+    expect(JSON.stringify(result)).not.toContain("access-");
+    expect(s.store.has(s.key, "tokens")).toBe(true);
+    // What was sent: the OAuth token in Authorization, and no x-cursor-auth made up from it.
+    expect(s.rig.seen.some((one) => one.auth)).toBe(true);
+  }, 30_000);
+
+  it("takes the header name from the server's words, not from a fixed one", async () => {
+    const s = await signedIn();
+    s.rig.noChallenge = "the X-Acme-Session header is required";
+    const result = await s.test();
+    expect(result).toMatchObject({ status: "failed", requiredHeader: "x-acme-session" });
+  }, 30_000);
+
+  it("falls back to the plain refusal when the server names no header", async () => {
+    const s = await signedIn();
+    s.rig.noChallenge = "nope";
+    const result = await s.test();
+    expect(result.requiredHeader).toBeUndefined();
+    expect(result.status).toBe("needs_login");
   }, 30_000);
 });

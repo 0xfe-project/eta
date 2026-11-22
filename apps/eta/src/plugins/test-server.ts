@@ -57,6 +57,18 @@ function reasonOf(error: unknown, timedOut: boolean): string {
 
 interface Rejection {
   text: string;
+  /** A request header the server's words say is missing, when they do. */
+  header?: string;
+}
+
+/** "Missing Cursor credential in x-cursor-auth", "x-foo header is required": the header named, or none. */
+function missingHeader(text: string): string | undefined {
+  const name = "([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+)";
+  const found =
+    new RegExp("\\bmissing\\b[^\\n]{0,60}?\\b(?:in|from)\\s+(?:the\\s+)?" + name, "i").exec(text) ??
+    new RegExp("\\b" + name + "\\s+header\\s+(?:is\\s+)?(?:required|missing)", "i").exec(text) ??
+    new RegExp("\\bmissing\\s+(?:the\\s+)?" + name + "\\s+header", "i").exec(text);
+  return found?.[1]?.toLowerCase();
 }
 
 /** What a 401 said: its challenge's error, description and metadata address, and the start of its body. */
@@ -75,7 +87,8 @@ async function rejectionOf(response: Response, sent: string | null): Promise<Rej
   if (token.length >= 3) text = text.split(token).join("***");
   const body = text.replace(/[\u0000-\u001f]+/g, " ").trim().slice(0, 200);
   if (body !== "") parts.push("body: " + body);
-  return { text: parts.join(", ") };
+  const header = missingHeader(text);
+  return header === undefined ? { text: parts.join(", ") } : { text: parts.join(", "), header };
 }
 
 /** What an unauthenticated request to the server says about sign-in: true when its 401 challenge is OAuth. */
@@ -151,6 +164,19 @@ export async function testConnection(
       // hide that the server also signs in.
       const sent = Object.values(definition.headers ?? {}).some((value) => value.trim() !== "");
       const challenge = definition.url !== undefined && (await declaresOauth(definition.url));
+      if (stored !== undefined && rejected?.header !== undefined) {
+        // The sign-in is stored; this server asks for something else (a header of its own client's).
+        // That is not an expired sign-in, and signing in again would not help.
+        const header = rejected.header;
+        return {
+          ...empty(
+            "failed",
+            `the sign-in is saved, but the server requires the ${header} header (not an OAuth token; for Cursor-hosted servers a Cursor account credential), which eta cannot provide (${mask(rejected.text, secrets)})`,
+            elapsed(),
+          ),
+          requiredHeader: header,
+        };
+      }
       if (challenge || declaredOauth) {
         return empty(
           "needs_login",

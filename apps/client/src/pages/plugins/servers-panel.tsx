@@ -95,6 +95,8 @@ function ServerBadge(props: { item: PluginView; server: PluginServerView; test: 
       return { text: uiText(authStyle("needs_setup").text), tone: authStyle("needs_setup").tone };
     if (props.server.login === "expired")
       return { text: uiText(authStyle("expired").text), tone: authStyle("expired").tone };
+    if (props.server.login === "signed_in" && test?.requiredHeader !== undefined)
+      return { text: uiText("serverSavedNotAccepted", { header: test.requiredHeader }), tone: "warningInk" };
     if (props.server.login === "signed_in")
       return { text: uiText(authStyle("signed_in").text), tone: authStyle("signed_in").tone };
     if (needsLogin(props.server, props.test))

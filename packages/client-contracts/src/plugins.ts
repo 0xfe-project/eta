@@ -233,6 +233,8 @@ export interface PluginTestResult {
   /** What the server listed, as the tools are. Absent from an older host. */
   resources?: { name: string; description: string; params: string[] }[];
   prompts?: { name: string; description: string; params: string[] }[];
+  /** The request header the server said it needs, when its refusal named one (not an OAuth token). */
+  requiredHeader?: string;
 }
 
 /** A logo the host found: the picture, base64, and its type; null when there is none. */
