@@ -24,7 +24,7 @@ import {
 import { hint } from "../../components/context-ring";
 import { CloseButton } from "../../components/navigation-buttons";
 import { ToggleSwitch } from "../../components/toggle-switch";
-import { PluginLogo } from "./plugin-logo";
+import { PluginLogo, primeLogos } from "./plugin-logo";
 import { PluginName } from "./plugin-name";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
@@ -92,6 +92,16 @@ export function Market(props: {
   }
   follow(() => "plugins");
 
+  /** The pictures the host already has for these entries, asked once, so the first frame shows them. */
+  const prime = (shown: MarketCatalog) =>
+    primeLogos(
+      host,
+      shown.sources
+        .flatMap((item) => item.entries ?? [])
+        .filter((item) => item.repo !== "" && item.unsupported === null)
+        .map((item) => ({ repo: item.repo, ref: item.rev ?? "HEAD", path: item.path, homepage: item.homepage })),
+    );
+
   async function load() {
     if (loading()) return;
     loading.set(true);
@@ -100,7 +110,10 @@ export function Market(props: {
       const kept = await host.action(() =>
         host.call<MarketCatalog>("plugins", "marketCatalog", { mode: "cached" }),
       );
-      if (kept?.sources.some((item) => item.entries !== null)) catalog.set(kept);
+      if (kept?.sources.some((item) => item.entries !== null)) {
+        await prime(kept);
+        catalog.set(kept);
+      }
     }
     const result = await host.action(() =>
       host.call<MarketCatalog>("plugins", "marketCatalog", {}),

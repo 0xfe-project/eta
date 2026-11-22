@@ -1,4 +1,4 @@
-import type { PluginLogoResult } from "@eta/client-contracts";
+import type { PluginLogoResult, PluginLogosCachedResult } from "@eta/client-contracts";
 import type { Signal } from "nsh";
 import { effect, Image, signal, untracked, View } from "nsh";
 import { colors, Label } from "../../components";
@@ -6,6 +6,59 @@ import { useHost } from "../../services/host";
 import { avatarFill, avatarInk, avatarInitial } from "./avatar-color";
 
 const found = new Map<string, Signal<string | null | undefined>>();
+
+/** The key a market entry's picture is kept under. */
+const repoKey = (repo: { repo: string; ref: string; path: string }, homepage: string | null | undefined): string =>
+  ["repo", repo.repo, repo.ref, repo.path, homepage ?? ""].join("\n");
+
+function slot(key: string): Signal<string | null | undefined> {
+  let one = found.get(key);
+  if (!one) {
+    one = signal<string | null | undefined>(undefined);
+    found.set(key, one);
+  }
+  return one;
+}
+
+/** How long the first screen waits for the host's kept pictures before it draws letters. */
+export const LOGOS_CACHED_WAIT_MS = 400;
+/** The most entries one `logosCached` call is asked about (the host's own limit). */
+const LOGOS_CACHED_MAX = 200;
+
+/**
+ * Before the market's first frame: ask the host once for the pictures it already has. A hit is put
+ * where the card reads it, so its first frame has the picture; a known miss stays a letter without a
+ * request. Anything else (unknown, a timeout, an error, a host without this call) changes nothing:
+ * the card draws its letter and asks for its own picture as before. This never fails and never waits
+ * longer than `waitMs`.
+ */
+export async function primeLogos(
+  host: ReturnType<typeof useHost>,
+  asks: { repo: string; ref: string; path: string; homepage: string | null }[],
+  waitMs = LOGOS_CACHED_WAIT_MS,
+): Promise<void> {
+  const batch = asks.filter((ask) => slot(repoKey(ask, ask.homepage))() === undefined).slice(0, LOGOS_CACHED_MAX);
+  if (batch.length === 0) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const answer = await Promise.race([
+    host
+      .call<PluginLogosCachedResult>("plugins", "logosCached", { entries: batch })
+      .catch(() => undefined),
+    new Promise<undefined>((done) => {
+      timer = setTimeout(() => done(undefined), waitMs);
+    }),
+  ]);
+  clearTimeout(timer);
+  if (!answer || !Array.isArray(answer.logos)) return;
+  answer.logos.forEach((one, index) => {
+    const ask = batch[index];
+    if (!ask || !one) return;
+    const one_ = slot(repoKey(ask, ask.homepage));
+    if (one_() !== undefined) return;
+    if (one.status === "hit") one_.set(`data:${one.type};base64,${one.data}`);
+    else if (one.status === "miss") one_.set(null);
+  });
+}
 
 /** Repository lookups the host is asked for at once; a market of many cards asks a few at a time. */
 const LOOKUPS = 4;
@@ -40,16 +93,9 @@ export function PluginLogo(props: {
     props.installed
       ? "installed:" + props.name
       : props.repo
-        ? ["repo", props.repo.repo, props.repo.ref, props.repo.path, props.homepage ?? ""].join("\n")
+        ? repoKey(props.repo, props.homepage)
         : (props.homepage ?? "");
-  const state = () => {
-    let one = found.get(key());
-    if (!one) {
-      one = signal<string | null | undefined>(undefined);
-      found.set(key(), one);
-    }
-    return one;
-  };
+  const state = () => slot(key());
   effect(() => {
     const at = key();
     const one = state();
