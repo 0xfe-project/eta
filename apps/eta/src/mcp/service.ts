@@ -366,6 +366,21 @@ export class McpService {
     return this.credentials.has(mcpServerKey(url), "tokens");
   }
 
+  /**
+   * For a plugin's connection test: the provider that sends this URL's stored sign-in (refreshing
+   * it when it has expired), or undefined when none is stored, so a test never starts a login.
+   */
+  storedAuthProvider(url: string): AuthProviderFor | undefined {
+    if (!this.signedIn(url)) return undefined;
+    return (_name, context) =>
+      createOAuthProvider({
+        serverKey: mcpServerKey(context.url),
+        serverUrl: context.url,
+        store: this.credentials,
+        redirectUrl: this.#redirect,
+      });
+  }
+
   /** Sign out of a URL (a plugin's panel); the servers using it reconnect without the token. */
   async logoutUrl(url: string): Promise<void> {
     await this.#forget(url);

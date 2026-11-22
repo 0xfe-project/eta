@@ -215,6 +215,10 @@ export function pluginsPlugin(
               hash: "plugin-test",
             },
             plan.secrets,
+            undefined,
+            (plan.entry as { url?: string }).url === undefined
+              ? undefined
+              : mcp?.storedAuthProvider((plan.entry as { url: string }).url),
           );
           const url = (plan.entry as { url?: string }).url;
           if (url !== undefined) {

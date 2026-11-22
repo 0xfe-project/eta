@@ -4,7 +4,7 @@
  * tool. Whatever the server said, a secret the config carries is masked before it is returned.
  */
 import type { PluginTestResult } from "@eta/client-contracts";
-import type { McpServerDefinition } from "@eta/mcp";
+import type { AuthProviderFor, McpServerDefinition } from "@eta/mcp";
 import { ServerManager } from "@eta/mcp";
 
 export const TEST_TIMEOUT_MS = 15_000;
@@ -81,16 +81,23 @@ export async function testConnection(
   definition: McpServerDefinition,
   secrets: readonly string[],
   timeoutMs = TEST_TIMEOUT_MS,
+  stored?: AuthProviderFor,
 ): Promise<PluginTestResult> {
   const started = Date.now();
   // A server declared `oauth` is first reached without a sign-in: a 401 then says it needs one,
   // and nothing is requested on the user's behalf by a test.
   const declaredOauth = definition.auth === "oauth";
-  if (declaredOauth) {
+  // With a stored sign-in the test sends it, as a launch does; only without one is auth dropped.
+  if (declaredOauth && stored === undefined) {
     definition = { ...definition };
     delete definition.auth;
   }
-  const manager = new ServerManager({ checkIntervalMs: 0, idleTimeoutMs: 0, requestTimeoutMs: timeoutMs });
+  const manager = new ServerManager({
+    checkIntervalMs: 0,
+    idleTimeoutMs: 0,
+    requestTimeoutMs: timeoutMs,
+    ...(stored === undefined ? {} : { authProviderFor: stored }),
+  });
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
@@ -110,7 +117,11 @@ export async function testConnection(
       if (challenge || declaredOauth) {
         return empty(
           "needs_login",
-          sent ? "credential rejected; this server also supports login" : "this server needs a sign-in",
+          stored !== undefined
+            ? "the stored sign-in was not accepted; sign in again"
+            : sent
+              ? "credential rejected; this server also supports login"
+              : "this server needs a sign-in",
           elapsed(),
         );
       }

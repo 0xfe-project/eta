@@ -10,7 +10,24 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { Plugins } from "../src/plugins/service";
+import type { AuthProviderFor } from "@eta/mcp";
+import { createOAuthProvider } from "@eta/mcp";
 import { testConnection } from "../src/plugins/test-server";
+
+/** The host's own provider over a store holding the token a login left (none can start a login here). */
+const storedProvider = (token: string): AuthProviderFor => (_name, context) => {
+  const rows = new Map<string, unknown>([["tokens", { access_token: token, token_type: "Bearer" }]]);
+  return createOAuthProvider({
+    serverKey: "k",
+    serverUrl: context.url,
+    redirectUrl: "http://127.0.0.1/mcp/oauth/callback",
+    store: {
+      get: async (_key: string, kind: string) => rows.get(kind),
+      set: async (_key: string, kind: string, value: unknown) => void rows.set(kind, value),
+      delete: async (_key: string, kind: string) => void rows.delete(kind),
+    } as never,
+  });
+};
 
 const PLUGIN = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
 const MCP = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json";
@@ -30,10 +47,27 @@ interface Fake {
 
 /** A minimal streamable-HTTP MCP server; `mode` picks how it misbehaves. */
 async function fake(
-  mode: "ok" | "401" | "challenge" | "hang" | { redirect: string } | "leak" | "garbage" = "ok",
+  mode: "ok" | "401" | "challenge" | "token" | "hang" | { redirect: string } | "leak" | "garbage" = "ok",
 ): Promise<Fake> {
   const hits: Fake["hits"] = [];
   const server = http.createServer((req, res) => {
+    const origin = `http://${req.headers.host}`;
+    // "token" mode publishes its OAuth metadata at the path-suffixed URL only, as the challenge says.
+    if (mode === "token" && req.url === "/.well-known/oauth-protected-resource/mcp")
+      return void res
+        .writeHead(200, { "content-type": "application/json" })
+        .end(JSON.stringify({ resource: `${origin}/mcp`, authorization_servers: [origin] }));
+    if (mode === "token" && req.url?.startsWith("/.well-known/oauth-authorization-server"))
+      return void res.writeHead(200, { "content-type": "application/json" }).end(
+        JSON.stringify({
+          issuer: origin,
+          authorization_endpoint: `${origin}/authorize`,
+          token_endpoint: `${origin}/token`,
+          registration_endpoint: `${origin}/register`,
+          response_types_supported: ["code"],
+          code_challenge_methods_supported: ["S256"],
+        }),
+      );
     let body = "";
     req.on("data", (chunk) => (body += chunk));
     req.on("end", () => {
@@ -45,6 +79,13 @@ async function fake(
       }
       hits.push({ method: req.method ?? "", auth: req.headers.authorization, rpc: rpc.method ?? "" });
       if (mode === "hang") return;
+      // "token": a server that signs in with OAuth; only the token the test below stores gets in.
+      if (mode === "token" && req.headers.authorization !== "Bearer access-stored")
+        return void res
+          .writeHead(401, {
+            "www-authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp", error="invalid_token"`,
+          })
+          .end("no");
       if (mode === "401") return void res.writeHead(401).end("no");
       if (mode === "challenge")
         return void res
@@ -118,13 +159,14 @@ async function setup(url: string, claude = false) {
     warn: () => {},
   });
   await plugins.registry.refresh();
-  const run = async (timeoutMs = 5000) => {
+  const run = async (timeoutMs = 5000, stored?: AuthProviderFor) => {
     const plan = plugins.testPlan("demo", "remote");
     if ("result" in plan) return plan.result;
     return testConnection(
       { ...plan.entry, name: "remote", source: "plugin-test", hash: "plugin-test" },
       plan.secrets,
       timeoutMs,
+      stored,
     );
   };
   return { plugins, run };
@@ -184,6 +226,30 @@ describe("testing a plugin server's connection", () => {
     expect(result.message).toContain("credential rejected");
     expect(result.message).toContain("login");
     expect(JSON.stringify(result)).not.toContain(SECRET);
+  });
+
+  it("sends the stored sign-in, so a logged-in server is listed, not asked to log in again", async () => {
+    const server = await fake("token");
+    const { run } = await setup(server.url);
+    const result = await run(5000, storedProvider("access-stored"));
+    expect(result.status).toBe("ok");
+    expect(result.tools.map((tool) => tool.name)).toEqual(["echo"]);
+    expect(server.hits.some((hit) => hit.auth === "Bearer access-stored")).toBe(true);
+  });
+
+  it("says needs login when the stored sign-in is rejected, and starts no login", async () => {
+    const server = await fake("token");
+    const { run } = await setup(server.url);
+    const result = await run(5000, storedProvider("access-expired"));
+    expect(result.status).toBe("needs_login");
+    expect(result.message).toContain("sign in again");
+    expect(JSON.stringify(result)).not.toContain("access-expired");
+  });
+
+  it("without a stored sign-in (logged out) says needs login", async () => {
+    const server = await fake("token");
+    const { run } = await setup(server.url);
+    expect((await run()).status).toBe("needs_login");
   });
 
   it("says a 401 with no credential at all needs a login", async () => {
