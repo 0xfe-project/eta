@@ -803,3 +803,17 @@ describe("skill names that are not legal", () => {
     expect(reports).toContain("skills/c: skipped");
   });
 });
+
+describe("skill ignore files", () => {
+  it("leaves out a skill that an ignore file in its directory ignores", async () => {
+    const loaded = await loadPlugin(
+      await plugin({
+        "skills/a/SKILL.md": skill("a"),
+        "skills/b/SKILL.md": skill("b"),
+        "skills/b/.ignore": "SKILL.md\n",
+      }),
+    );
+    expect(loaded.skills.map((item) => item.name)).toEqual(["a"]);
+    expect(loaded.reports.join("\n")).toContain("skills/b: skipped: ignored by an ignore file");
+  });
+});

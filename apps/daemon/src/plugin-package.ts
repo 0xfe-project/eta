@@ -23,7 +23,7 @@ import {
   ETA_EXTENSION,
   parseConfigFields,
 } from "@eta/client-contracts/plugin-fields";
-import { formatSkillName, parseSkillText } from "@eta/harness";
+import { formatSkillName, loadSkills, parseSkillText } from "@eta/harness";
 
 export class PluginError extends Error {
   override readonly name = "PluginError";
@@ -706,6 +706,13 @@ async function loadSkillDirs(
     if (parsed.skill === null) {
       const why = parsed.diagnostics.map((item) => item.message).join("; ") || "it has no description";
       reports.push(`skills/${dirName}: skipped: ${why}`);
+      continue;
+    }
+    // The harness loader honours the ignore files in the skill's directory; a skill it leaves out is
+    // one they ignore (the text itself was read above).
+    const visible = await loadSkills([dir]);
+    if (!visible.skills.some((candidate) => candidate.filePath === file)) {
+      reports.push(`skills/${dirName}: skipped: ignored by an ignore file`);
       continue;
     }
     found.push({
