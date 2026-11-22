@@ -8,6 +8,10 @@ export const machinesMessages = {
   machineNeedsUpdate: ["Needs update", "需要更新"],
   machineUpdatingTo: ["Updating to {{version}}…", "正在更新到 {{version}}…"],
   machineUpdatedTo: ["Updated to {{version}}", "已更新到 {{version}}"],
+  machineUpdatedToast: [
+    "{{name}} updated to {{version}}",
+    "{{name}} 已更新到 {{version}}",
+  ],
   machineUpdateFailed: ["Update failed", "更新失败"],
   machineLastSeen: ["Last seen {{time}}", "最后在线 {{time}}"],
   machineCapacity: ["Task runs at once: {{count}}", "并发任务数：{{count}}"],

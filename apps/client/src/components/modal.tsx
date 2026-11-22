@@ -6,6 +6,7 @@ import { CloseButton } from "./navigation-buttons";
 import { screenInsets } from "./safe-area";
 import { Label } from "./text";
 import { colors, fill, row } from "./theme";
+import { ToastLayer } from "./toast";
 
 const modalStack: (() => void)[] = [];
 
@@ -183,6 +184,7 @@ export function Modal(props: {
         </If>
         {props.children}
       </View>
+      <ToastLayer phone={props.phone} />
     </>
   );
   if (focused)
