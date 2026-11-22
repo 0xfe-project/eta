@@ -174,18 +174,34 @@ export function isWithin(root: string, path: string): boolean {
   return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`));
 }
 
+/** Whether a manifest's `skills` is `skills/`, or a list of directories that are under it. */
+function skillsInPlace(value: unknown, root: string): boolean {
+  const paths = typeof value === "string" ? [value] : isStrings(value) ? value : undefined;
+  if (paths === undefined) return false;
+  return paths.every((path) => {
+    if (/^(\.\/)?skills\/?$/.test(path)) return true;
+    const name = /^(?:\.\/)?skills\/([^/]+)\/?$/.exec(path)?.[1];
+    return (
+      name !== undefined &&
+      name !== ".." &&
+      statSync(join(root, "skills", name), { throwIfNoEntry: false })?.isDirectory() === true
+    );
+  });
+}
+
 /** The manifest, or the reason the plugin is rejected. */
 function parseManifest(
   raw: unknown,
   reports: string[],
   foreign: boolean,
+  root: string,
 ): { manifest: PluginManifest; extensions: Record<string, unknown> } {
   if (!isPlain(raw)) throw new PluginError("plugin.json must be a JSON object");
   for (const field of Object.keys(raw)) {
     if (MANIFEST_FIELDS.has(field)) continue;
     if (foreign && FOREIGN_FIELDS.has(field)) continue;
     if (foreign && field === "skills") {
-      if (!(typeof raw.skills === "string" && /^(\.\/)?skills\/?$/.test(raw.skills)))
+      if (!skillsInPlace(raw.skills, root))
         reports.push("plugin.json: skills is not at skills/; only skills/ is read");
     } else if (foreign && FOREIGN_COMPONENTS.includes(field))
       reports.push(`plugin.json: ${field} is not supported by eta; ignored`);
@@ -430,6 +446,200 @@ async function loadServers(
   return servers;
 }
 
+/** `${NAME}` in a Claude Code or Cursor MCP file. */
+const FOREIGN_VAR = /\$\{([^}]*)\}/g;
+/** A variable that is a secret by its name. */
+const SECRET_NAME = /key|token|secret|auth|password|credential/i;
+/** Claude Code's file, then Cursor's. */
+const FOREIGN_MCP_FILES = [".mcp.json", "mcp.json"] as const;
+const FOREIGN_SERVER_KEYS = new Set([
+  "type",
+  "command",
+  "args",
+  "env",
+  "cwd",
+  "url",
+  "headers",
+]);
+
+interface ForeignServer {
+  /** The server as eta's own `mcp.json` writes it. */
+  raw: Record<string, unknown>;
+  /** Environment variable to the variable of the file that fills it. */
+  env: Record<string, string>;
+  /** Header name to template (`Bearer {TOKEN}`). */
+  headers: Record<string, string>;
+  ignored: string[];
+}
+
+/** The variables of `text` other than the plugin's own directory, or why it cannot be used. */
+function foreignVars(text: string): string[] | string {
+  const names: string[] = [];
+  for (const [, name] of text.matchAll(FOREIGN_VAR)) {
+    if (name === "PLUGIN_ROOT") continue;
+    if (!ENV_NAME.test(name!)) return `\${${name}} is not a plain variable`;
+    names.push(name!);
+  }
+  return names;
+}
+
+/** One server of a Claude Code or Cursor file, in the shape eta's own file has, or why it is skipped. */
+function mapForeignServer(entry: unknown): ForeignServer | string {
+  if (!isPlain(entry)) return "must be an object";
+  if (entry.auth !== undefined)
+    return "it signs in with OAuth, which eta does not do for these plugins";
+  const swap = (text: string): string =>
+    text.replaceAll("${CLAUDE_PLUGIN_ROOT}", "${PLUGIN_ROOT}");
+  const ignored = Object.keys(entry).filter((key) => !FOREIGN_SERVER_KEYS.has(key));
+  const kind = entry.type ?? (typeof entry.url === "string" ? "http" : "stdio");
+  const raw: Record<string, unknown> = {
+    type: kind === "http" ? "streamable-http" : kind,
+  };
+  const env: Record<string, string> = {};
+  const headers: Record<string, string> = {};
+
+  if (raw.type === "stdio") {
+    if (typeof entry.command !== "string") return "command must be a string";
+    let command = swap(entry.command);
+    if (command.startsWith("${PLUGIN_ROOT}/"))
+      command = `./${command.slice("${PLUGIN_ROOT}/".length)}`;
+    if (command.includes("${")) return "command holds a variable";
+    raw.command = command;
+    if (entry.args !== undefined) {
+      if (!isStrings(entry.args)) return "args must be strings";
+      const args = entry.args.map(swap);
+      for (const arg of args) {
+        const names = foreignVars(arg);
+        if (typeof names === "string" || names.length > 0)
+          return "args hold a variable eta cannot fill in";
+      }
+      raw.args = args;
+    }
+    if (entry.cwd !== undefined) {
+      if (typeof entry.cwd !== "string") return "cwd must be a string";
+      raw.cwd = swap(entry.cwd);
+    }
+    if (entry.env !== undefined) {
+      if (!isStringMap(entry.env)) return "env must be strings";
+      const fixed: Record<string, string> = {};
+      for (const [name, value] of Object.entries(entry.env)) {
+        const text = swap(value);
+        const names = foreignVars(text);
+        if (typeof names === "string") return `env ${name}: ${names}`;
+        if (names.length === 0) fixed[name] = text;
+        else if (names.length === 1 && text === `\${${names[0]}}`)
+          env[name] = names[0]!;
+        else return `env ${name} mixes text with a variable`;
+      }
+      raw.env = fixed;
+    }
+  } else {
+    if (typeof entry.url !== "string") return "url must be a string";
+    if (entry.url.includes("${")) return "url holds a variable";
+    raw.url = entry.url;
+    if (entry.headers !== undefined) {
+      if (!isStringMap(entry.headers)) return "headers must be strings";
+      const fixed: Record<string, string> = {};
+      for (const [name, value] of Object.entries(entry.headers)) {
+        const names = foreignVars(value);
+        if (typeof names === "string") return `header ${name}: ${names}`;
+        if (value.includes("${PLUGIN_ROOT}")) return `header ${name} holds the plugin directory`;
+        if (names.length === 0) fixed[name] = value;
+        else headers[name] = value.replace(FOREIGN_VAR, (_, field: string) => `{${field}}`);
+      }
+      raw.headers = fixed;
+    }
+  }
+  return { raw, env, headers, ignored };
+}
+
+/**
+ * The MCP servers of a Cursor or Claude Code plugin: `.mcp.json` and a root `mcp.json`, both
+ * `{ "mcpServers": { ... } }`. They become the servers eta's own file has; a `${VAR}` becomes a
+ * field the user fills in after installing, and nothing runs before that.
+ */
+async function loadForeignServers(
+  root: string,
+  reports: string[],
+): Promise<
+  Pick<PluginPackage, "servers" | "fields" | "bindings">
+> {
+  const servers: PluginServer[] = [];
+  const bindings: Record<string, PluginServerBinding> = {};
+  const specs: Record<string, unknown> = {};
+  for (const file of FOREIGN_MCP_FILES) {
+    const path = join(root, file);
+    if (statSync(path, { throwIfNoEntry: false }) === undefined) continue;
+    const refused = (why: string): void => {
+      reports.push(`${file}: ${why}; its MCP servers are not loaded`);
+    };
+    if (!isWithin(root, await resolvedPath(path))) {
+      refused("it resolves outside the plugin");
+      continue;
+    }
+    if (!statSync(path).isFile()) {
+      refused("it is not a file");
+      continue;
+    }
+    let raw: unknown;
+    try {
+      raw = JSON.parse(readFileSync(path, "utf8"));
+    } catch (error) {
+      refused(`not valid JSON (${messageOf(error)})`);
+      continue;
+    }
+    if (!isPlain(raw) || !isPlain(raw.mcpServers)) {
+      refused("it has no mcpServers object");
+      continue;
+    }
+    let loaded = 0;
+    for (const [name, entry] of Object.entries(raw.mcpServers)) {
+      const skip = (why: string): void => {
+        reports.push(`${file}: server ${name} skipped: ${why}`);
+      };
+      if (servers.some((server) => server.name === name)) {
+        skip("a server of that name is already loaded");
+        continue;
+      }
+      const mapped = mapForeignServer(entry);
+      if (typeof mapped === "string") {
+        skip(mapped);
+        continue;
+      }
+      const config = await parseServer(mapped.raw, root);
+      if (typeof config === "string") {
+        skip(config);
+        continue;
+      }
+      const names = [...Object.values(mapped.env), ...Object.values(mapped.headers).flatMap((t) => [...t.matchAll(/\{([^}]*)\}/g)].map((m) => m[1]!))];
+      const fresh: Record<string, unknown> = {};
+      for (const variable of names)
+        fresh[variable] = {
+          type: "string",
+          title: variable,
+          description: `Used by the MCP server ${name}.`,
+          required: true,
+          secret: SECRET_NAME.test(variable),
+        };
+      const { problems } = parseConfigFields({ ...specs, ...fresh });
+      if (problems.length > 0) {
+        skip(`its variables cannot be configuration fields (${problems.join("; ")})`);
+        continue;
+      }
+      Object.assign(specs, fresh);
+      servers.push({ name, config });
+      if (Object.keys(mapped.env).length > 0 || Object.keys(mapped.headers).length > 0)
+        bindings[name] = { env: mapped.env, headers: mapped.headers };
+      if (mapped.ignored.length > 0)
+        reports.push(`${file}: server ${name}: ${mapped.ignored.join(", ")} not supported by eta; ignored`);
+      loaded++;
+    }
+    if (loaded > 0)
+      reports.push(`${file}: ${loaded} MCP server${loaded === 1 ? "" : "s"} will run after you confirm`);
+  }
+  return { servers, bindings, fields: parseConfigFields(specs).fields };
+}
+
 async function loadSkillDirs(
   root: string,
   reports: string[],
@@ -614,25 +824,34 @@ export async function loadPlugin(dir: string): Promise<PluginPackage> {
   const reports: string[] = [];
   if (foreign)
     reports.push(
-      `manifest read from ${found}; only skills are loaded from this layout`,
+      `manifest read from ${found}; skills and MCP servers are loaded from this layout`,
     );
-  const { manifest, extensions } = parseManifest(raw, reports, foreign);
+  const { manifest, extensions } = parseManifest(raw, reports, foreign, root);
   const skills = await loadSkillDirs(root, reports);
-  const listed = foreign ? [] : await loadServers(root, reports);
-  if (foreign) reportForeignParts(root, reports);
-  const extension = parseExtension(extensions[ETA_EXTENSION], listed, reports);
-  return { root, manifest, reports, skills, ...extension };
+  if (!foreign) {
+    const listed = await loadServers(root, reports);
+    const extension = parseExtension(extensions[ETA_EXTENSION], listed, reports);
+    return { root, manifest, reports, skills, ...extension };
+  }
+  const mapped = await loadForeignServers(root, reports);
+  reportForeignParts(root, reports);
+  const extension = parseExtension(extensions[ETA_EXTENSION], mapped.servers, reports);
+  return {
+    root,
+    manifest,
+    reports,
+    skills,
+    ...extension,
+    fields: [...mapped.fields, ...extension.fields],
+    bindings: { ...mapped.bindings, ...extension.bindings },
+  };
 }
 
 /** What a Cursor or Claude Code plugin ships that eta does not load, for the user to see. */
 function reportForeignParts(root: string, reports: string[]): void {
-  for (const name of [...FOREIGN_COMPONENTS, "mcp.json", ".mcp.json"]) {
+  for (const name of FOREIGN_COMPONENTS) {
     const kind = statSync(join(root, name), { throwIfNoEntry: false });
     if (kind === undefined) continue;
-    reports.push(
-      name.endsWith("mcp.json")
-        ? `${name}: MCP servers of this layout are not loaded`
-        : `${name}/: not supported by eta; ignored`,
-    );
+    reports.push(`${name}/: not supported by eta; ignored`);
   }
 }

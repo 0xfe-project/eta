@@ -263,7 +263,11 @@ export function Market(props: {
                       borderColor: c().border,
                     }}
                   >
-                    <Label weight={500} lines={1}>
+                    <Label
+                      variant="subtitle"
+                      weight={600}
+                      lines={1}
+                    >
                       {item().name}
                     </Label>
                     <Label variant="small" tone="muted" lines={1}>
@@ -365,6 +369,12 @@ export function Market(props: {
                     ? shown().requires.join(", ")
                     : uiText("marketNone"),
                 )}
+                <Label variant="small" weight={500}>
+                  {uiText("marketSummary", {
+                    skills: shown().skills.length,
+                    servers: shown().servers.length,
+                  })}
+                </Label>
                 <Label variant="caption" tone="muted">
                   {uiText("marketServers")}
                 </Label>

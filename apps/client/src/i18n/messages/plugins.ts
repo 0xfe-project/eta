@@ -62,6 +62,7 @@ export const pluginsMessages = {
   marketConfirmTitle: ["Install {{name}}?", "安装 {{name}}？"],
   marketConfirmDescription: ["This is what the plugin runs on your machine, read from the pinned commit. Nothing is installed until you confirm.", "以下是该插件在你机器上要运行的内容，读取自固定的提交。确认之前不会安装任何东西。"],
   marketServers: ["MCP servers", "MCP 服务器"],
+  marketSummary: ["{{skills}} skills, {{servers}} MCP servers", "{{skills}} 个技能,{{servers}} 个 MCP 服务器"],
   marketFixedEnv: ["Sets", "固定的环境变量"],
   marketEnv: ["Environment variables from your configuration", "由你的配置填入的环境变量"],
   marketHeaders: ["Headers from your configuration", "由你的配置填入的标头"],

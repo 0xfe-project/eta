@@ -524,7 +524,7 @@ describe("a Cursor or Claude Code layout", () => {
       expect(loaded.manifest).toMatchObject({ name: "demo", version: "1.0.0" });
       expect(loaded.skills.map((entry) => entry.name)).toEqual(["a"]);
       expect(loaded.reports).toEqual([
-        `manifest read from ${dir}/plugin.json; only skills are loaded from this layout`,
+        `manifest read from ${dir}/plugin.json; skills and MCP servers are loaded from this layout`,
       ]);
     },
   );
@@ -546,8 +546,8 @@ describe("a Cursor or Claude Code layout", () => {
     expect(text).toContain("agents is not supported by eta; ignored");
     expect(text).toContain("agents/: not supported by eta; ignored");
     expect(text).toContain("rules/: not supported by eta; ignored");
-    expect(text).toContain(".mcp.json: MCP servers of this layout are not loaded");
-    expect(loaded.servers).toEqual([]);
+    expect(text).toContain(".mcp.json: 1 MCP server will run after you confirm");
+    expect(loaded.servers.map((entry) => entry.name)).toEqual(["s"]);
   });
 
   it("prefers the root plugin.json, then .cursor-plugin over .claude-plugin", async () => {
@@ -571,5 +571,94 @@ describe("a Cursor or Claude Code layout", () => {
     await expect(
       loadPlugin(await foreign(".claude-plugin", { name: "Bad Name" })),
     ).rejects.toBeInstanceOf(PluginError);
+  });
+
+  it("reads Claude's .mcp.json: stdio with the plugin root, http, and ${VAR} as fields", async () => {
+    const loaded = await loadPlugin(
+      await foreign(
+        ".claude-plugin",
+        { name: "demo" },
+        {
+          ".mcp.json": {
+            mcpServers: {
+              local: {
+                command: "${CLAUDE_PLUGIN_ROOT}/bin/run",
+                args: ["--root", "${CLAUDE_PLUGIN_ROOT}/data"],
+                env: { API_KEY: "${MY_API_KEY}", MODE: "fast" },
+              },
+              remote: {
+                type: "http",
+                url: "https://example.com/mcp",
+                headers: { Authorization: "Bearer ${REMOTE_TOKEN}", "X-Fixed": "1" },
+              },
+            },
+          },
+          "bin/run": "x",
+        },
+      ),
+    );
+    expect(loaded.servers.map((entry) => entry.name)).toEqual(["local", "remote"]);
+    expect(loaded.servers[0]!.config).toEqual({
+      type: "stdio",
+      command: "./bin/run",
+      args: ["--root", "${PLUGIN_ROOT}/data"],
+      env: { MODE: "fast" },
+    });
+    expect(loaded.servers[1]!.config).toEqual({
+      type: "streamable-http",
+      url: "https://example.com/mcp",
+      headers: { "X-Fixed": "1" },
+    });
+    expect(loaded.bindings).toEqual({
+      local: { env: { API_KEY: "MY_API_KEY" }, headers: {} },
+      remote: { env: {}, headers: { Authorization: "Bearer {REMOTE_TOKEN}" } },
+    });
+    expect(loaded.fields.map((field) => [field.name, field.secret, field.required])).toEqual([
+      ["MY_API_KEY", true, true],
+      ["REMOTE_TOKEN", true, true],
+    ]);
+    expect(loaded.reports.join("\n")).toContain(".mcp.json: 2 MCP servers will run after you confirm");
+  });
+
+  it("reads Cursor's root mcp.json and skips OAuth and unfillable servers with a reason", async () => {
+    const loaded = await loadPlugin(
+      await foreign(
+        ".cursor-plugin",
+        { name: "demo" },
+        {
+          "mcp.json": {
+            mcpServers: {
+              plain: { type: "http", url: "https://example.com/mcp", placement: "x" },
+              oauth: { type: "http", url: "https://example.com/o", auth: { CLIENT_ID: "x" } },
+              hosted: { type: "http", url: "https://${HOST}/mcp" },
+              mixed: { command: "node", env: { A: "a-${B}" } },
+            },
+          },
+        },
+      ),
+    );
+    expect(loaded.servers.map((entry) => entry.name)).toEqual(["plain"]);
+    const text = loaded.reports.join("\n");
+    expect(text).toContain("server oauth skipped: it signs in with OAuth");
+    expect(text).toContain("server hosted skipped: url holds a variable");
+    expect(text).toContain("server mixed skipped: env A mixes text with a variable");
+    expect(text).toContain("server plain: placement not supported by eta; ignored");
+    expect(text).toContain("mcp.json: 1 MCP server will run after you confirm");
+  });
+
+  it("does not warn about a skills list that only names directories under skills/", async () => {
+    const files = { "skills/a/SKILL.md": skill("a") };
+    const ok = await loadPlugin(
+      await foreign(".claude-plugin", { name: "demo", skills: ["./skills/a", "skills/a/"] }, files),
+    );
+    expect(ok.reports.join("\n")).not.toContain("skills is not at skills/");
+    const outside = await loadPlugin(
+      await foreign(".claude-plugin", { name: "demo", skills: ["./other/a"] }, files),
+    );
+    expect(outside.reports.join("\n")).toContain("skills is not at skills/");
+    const missing = await loadPlugin(
+      await foreign(".claude-plugin", { name: "demo", skills: ["./skills/nope"] }, files),
+    );
+    expect(missing.reports.join("\n")).toContain("skills is not at skills/");
   });
 });
