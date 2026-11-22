@@ -1,5 +1,9 @@
 /* eslint-disable antfu/no-top-level-await, no-console -- the entry point of a program, not a module */
 import type { ServiceCommand } from "./service";
+import { existsSync } from "node:fs";
+import { basename, resolve } from "node:path";
+import process from "node:process";
+import { parseArgs } from "node:util";
 /**
  * The daemon's command line.
  *
@@ -20,10 +24,7 @@ import type { ServiceCommand } from "./service";
  * questions. It refuses to start on the old directory rather than treat it as empty: a machine
  * that moved silently would just be a machine with no sessions.
  */
-import { existsSync } from "node:fs";
-import { basename, resolve } from "node:path";
-import process from "node:process";
-import { parseArgs } from "node:util";
+import { shellQuote } from "@eta/ssh";
 import { DaemonLink } from "./client";
 import { enroll } from "./enroll";
 import {
@@ -201,11 +202,24 @@ switch (command) {
     await run();
     break;
   case "install-service": {
-    const definition = await serviceManager({
-      ...DAEMON_UNIT,
-      env: installedEnv(),
-    }).install(selfCommand());
-    console.log(`Installed ${definition.name} (${definition.path}).`);
+    const command = selfCommand();
+    try {
+      const definition = await serviceManager({
+        ...DAEMON_UNIT,
+        env: installedEnv(),
+      }).install(command);
+      console.log(`Installed ${definition.name} (${definition.path}).`);
+    } catch (error) {
+      if (process.platform !== "linux") throw error;
+      console.error(error instanceof Error ? error.message : String(error));
+      const executable = [command.program, ...command.args]
+        .map(shellQuote)
+        .join(" ");
+      console.error(
+        `To start the daemon manually on this machine, run:\n  ${executable} run`,
+      );
+      process.exitCode = 1;
+    }
     break;
   }
   case "uninstall-service": {
