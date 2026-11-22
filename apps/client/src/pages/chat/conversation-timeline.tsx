@@ -5,15 +5,7 @@ import type {
 } from "@eta/client-contracts";
 import type { Bounds, JSX, ListRef, ViewRef } from "nsh";
 import type { TextViewSelectionEvent } from "nsh/base";
-import {
-  cleanup,
-  computed,
-  effect,
-  List,
-  Overlay,
-  signal,
-  View,
-} from "nsh";
+import { cleanup, computed, effect, List, Overlay, signal, View } from "nsh";
 import { onWindows } from "../../app/platform";
 import {
   Button,

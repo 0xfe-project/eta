@@ -1,13 +1,11 @@
 import { expect, test } from "nsh/test";
-import { appendQuote } from "../src/pages/chat/quote";
+import { quoteMarkdown } from "../src/components/eta-editor/plugins/quote";
 
 test("a selection becomes a Markdown quote on lines of its own", () => {
-  expect(appendQuote("", "one\ntwo")).toBe("> one\n> two\n\n");
-  expect(appendQuote("draft  \n", "one\r\n\r\ntwo")).toBe(
-    "draft\n\n> one\n>\n> two\n\n",
-  );
+  expect(quoteMarkdown("one\ntwo")).toBe("> one\n> two");
+  expect(quoteMarkdown("  one  \r\n\r\ntwo\n")).toBe("> one\n>\n> two");
 });
 
-test("an empty selection leaves the draft as it was", () => {
-  expect(appendQuote("draft", "  \n ")).toBe("draft");
+test("an empty selection quotes nothing", () => {
+  expect(quoteMarkdown("  \n ")).toBe("");
 });
