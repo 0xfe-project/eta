@@ -59,3 +59,25 @@ test("the Settings panel lists the plugin's skills: one, many, and none", async 
   await none.press("label:on-plugin");
   expect(none.shows("No skills")).toBe(true);
 });
+
+test("a server's badge shows only what has evidence, and never says ready", async () => {
+  const open1 = async (name: string) => {
+    const app = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 800 });
+    await app.press("label:" + name);
+    return app;
+  };
+  const plain = await open1("remote-plugin");
+  expect(plain.shows("Not checked")).toBe(true);
+  expect(plain.shows("Ready")).toBe(false);
+  expect(plain.count("id:login-slot:fc >> label:Log in")).toBe(0);
+  const signed = await open1("signed-plugin");
+  expect(signed.shows("Signed in")).toBe(true);
+  expect(signed.shows("Log out")).toBe(true);
+  expect(signed.shows("Ready")).toBe(false);
+  const login = await open1("login-plugin");
+  expect(login.shows("Needs login")).toBe(true);
+  expect(login.count("id:login-slot:fc >> label:Log in")).toBe(1);
+  const setup = await open1("setup-plugin");
+  expect(setup.shows("Needs setup")).toBe(true);
+  expect(setup.shows("Ready")).toBe(false);
+});

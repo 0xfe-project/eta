@@ -69,6 +69,8 @@ export interface PluginServerView {
   plainHttp: boolean;
   /** Why it will not run, when it will not (`sse` is not supported by the runtimes). */
   problem: string | null;
+  /** The server's sign-in: stored (`signed_in`), or asked for by the server (`needs_login`). Absent from an older host. */
+  login?: "none" | "needs_login" | "signed_in";
 }
 
 /** Which commands a machine is missing, of the ones the plugin says it needs. */
@@ -176,6 +178,10 @@ export interface PluginArgs {
    * prompts), and close. Lists only: no tool is ever called. Runs on this click, never by itself.
    */
   testServer: { name: string; server: string };
+  /** Start a sign-in for one remote server; the browser returns to the host's callback. */
+  loginServer: { name: string; server: string; redirectOrigin?: string };
+  /** Forget a server's sign-in. */
+  logoutServer: { name: string; server: string };
   /** A plugin's logo as the host finds it: its own address, else the icon of its homepage. */
   logo: { own?: string | null; homepage?: string | null; plugin?: string | null };
 }
@@ -207,6 +213,8 @@ export interface PluginResults {
   setEnabled: { name: string; enabled: boolean };
   setHeaders: { name: string; server: string };
   testServer: PluginTestResult;
+  loginServer: { pendingId: string; authorizationUrl: string };
+  logoutServer: { name: string; server: string };
   add: { name: string };
   update: { names: string[] };
   remove: { name: string };

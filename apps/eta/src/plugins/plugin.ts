@@ -6,6 +6,7 @@
  */
 import type { PluginAuditView, PluginValue } from "@eta/client-contracts";
 import type { AgentStore } from "../agents/store";
+import type { McpService } from "../mcp/service";
 import type { Market } from "./market";
 import type { Plugins } from "./service";
 import { Args, productPlugin, publish } from "../wire";
@@ -16,17 +17,41 @@ const LEVELS = ["none", "read", "file", "value"] as const;
 const AUDIT_SHOWN = 200;
 
 export function pluginsPlugin(
-  deps: { plugins: Plugins; agents: AgentStore; market: Market },
+  deps: { plugins: Plugins; agents: AgentStore; market: Market; mcp?: McpService },
   applied: () => void,
 ) {
-  const { plugins, agents, market } = deps;
+  const { plugins, agents, market, mcp } = deps;
+  /** Servers a test or a connection found to ask for a sign-in, by URL. */
+  const asked = new Set<string>();
+  const remoteUrl = (name: string, server: string): string => {
+    const plan = plugins.testPlan(name, server);
+    if ("result" in plan) throw new Error(plan.result.message);
+    const url = (plan.entry as { url?: string }).url;
+    if (url === undefined) throw new Error(`${server} has no URL to sign in to`);
+    return url;
+  };
   const logos = new Logos();
   return productPlugin(
     "plugins",
     ({ wire }) => {
       const offs = [
         publish(wire, "plugins", {
-          list: () => plugins.view(),
+          list: () =>
+            plugins.view().map((view) => ({
+              ...view,
+              servers: view.servers.map((server) =>
+                mcp === undefined || server.url === undefined
+                  ? server
+                  : {
+                      ...server,
+                      login: mcp.signedIn(server.url)
+                        ? ("signed_in" as const)
+                        : asked.has(server.url)
+                          ? ("needs_login" as const)
+                          : ("none" as const),
+                    },
+              ),
+            })),
           audit: (): PluginAuditView[] =>
             plugins.rows.audits(AUDIT_SHOWN).map((row) => ({
               ...row,
@@ -119,7 +144,16 @@ export function pluginsPlugin(
         }),
         wire.handle("plugins", "remove", async (call) => {
           const name = new Args(call).string("name");
+          // Sign-ins are kept per URL: read them before the plugin goes, drop only those no other server uses.
+          const urlsOf = (view: { servers: { url?: string }[] }) =>
+            view.servers.flatMap((server) => (server.url === undefined ? [] : [server.url]));
+          const all = plugins.view();
+          const mine = urlsOf(all.find((view) => view.name === name) ?? { servers: [] });
+          const others = new Set(
+            all.filter((view) => view.name !== name).flatMap(urlsOf),
+          );
           await plugins.registry.remove(name);
+          if (mcp !== undefined) await mcp.releaseUrls(mine, name, new Set([...others].map((url) => mcp.keyOf(url))));
           return { result: { name } };
         }),
         wire.handle("plugins", "marketSettings", async () => ({
@@ -173,17 +207,37 @@ export function pluginsPlugin(
           const server = args.string("server");
           const plan = plugins.testPlan(name, server);
           if ("result" in plan) return { result: plan.result };
-          return {
-            result: await testConnection(
-              {
-                ...plan.entry,
-                name: server,
-                source: "plugin-test",
-                hash: "plugin-test",
-              },
-              plan.secrets,
-            ),
-          };
+          const result = await testConnection(
+            {
+              ...plan.entry,
+              name: server,
+              source: "plugin-test",
+              hash: "plugin-test",
+            },
+            plan.secrets,
+          );
+          const url = (plan.entry as { url?: string }).url;
+          if (url !== undefined) {
+            if (result.status === "needs_login") asked.add(url);
+            else if (result.status === "ok") asked.delete(url);
+            wire.pushNow?.("plugins");
+          }
+          return { result };
+        }),
+        wire.handle("plugins", "loginServer", async (call) => {
+          const args = new Args(call);
+          if (mcp === undefined) throw new Error("sign-in is not available");
+          // The plugin must be on, usable and have the server: testPlan refuses otherwise.
+          const url = remoteUrl(args.string("name"), args.string("server"));
+          return { result: await mcp.loginUrl(url, undefined, args.optionalString("redirectOrigin")) };
+        }),
+        wire.handle("plugins", "logoutServer", async (call) => {
+          const args = new Args(call);
+          if (mcp === undefined) throw new Error("sign-in is not available");
+          const url = remoteUrl(args.string("name"), args.string("server"));
+          await mcp.logoutUrl(url);
+          asked.delete(url);
+          return { result: { name: args.string("name"), server: args.string("server") } };
         }),
         wire.handle("plugins", "logo", async (call) => {
           const args = new Args(call);

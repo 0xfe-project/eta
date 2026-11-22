@@ -1,5 +1,9 @@
-import type { PluginTestResult, PluginView } from "@eta/client-contracts";
-import { signal, View } from "nsh";
+import type {
+  PluginServerView,
+  PluginTestResult,
+  PluginView,
+} from "@eta/client-contracts";
+import { openUrl, signal, View } from "nsh";
 import {
   Button,
   colors,
@@ -35,6 +39,7 @@ function createTest(props: { item: PluginView; server: string }) {
   const host = useHost();
   const busy = signal(false);
   const result = signal<PluginTestResult | undefined>(undefined);
+  const at = signal<number | undefined>(undefined);
   function run() {
     busy.set(true);
     void host.action(async () => {
@@ -45,12 +50,13 @@ function createTest(props: { item: PluginView; server: string }) {
             server: props.server,
           }),
         );
+        at.set(Date.now());
       } finally {
         busy.set(false);
       }
     });
   }
-  return { busy, result, run };
+  return { busy, result, at, run };
 }
 
 type Test = ReturnType<typeof createTest>;
@@ -66,6 +72,79 @@ function TestButton(props: { test: Test }) {
       disabled={props.test.busy()}
       onPress={props.test.run}
     />
+  );
+}
+
+/** The sign-in the server needs, from the host's evidence or this panel's last test. */
+const needsLogin = (server: PluginServerView, test: Test): boolean =>
+  server.login === "needs_login" || test.result()?.status === "needs_login";
+
+/** A state only when there is evidence for it; no evidence reads as "not checked", never as ready. */
+function ServerBadge(props: { item: PluginView; server: PluginServerView; test: Test }) {
+  const label = (): { text: string; tone: "ink" | "red" | "muted" } => {
+    const test = props.test.result();
+    const time = new Date(props.test.at() ?? 0).toLocaleTimeString();
+    if (props.item.state === "needs_config" || props.server.problem)
+      return { text: uiText("serverNeedsSetup"), tone: "ink" };
+    if (props.server.login === "signed_in")
+      return { text: uiText("serverSignedIn"), tone: "ink" };
+    if (needsLogin(props.server, props.test))
+      return { text: uiText("serverNeedsLogin"), tone: "ink" };
+    if (test?.status === "ok")
+      return { text: uiText("lastTestOk", { time }), tone: "ink" };
+    if (test !== undefined && test.status !== "off")
+      return { text: uiText("lastTestFailed", { time }), tone: "red" };
+    return { text: uiText("serverNotChecked"), tone: "muted" };
+  };
+  return (
+    <Label variant="small" tone={label().tone}>
+      {label().text}
+    </Label>
+  );
+}
+
+/** Log in / out in the panel itself: the host starts the sign-in, the browser comes back to the host. */
+function LoginButton(props: { item: PluginView; server: PluginServerView; test: Test }) {
+  const host = useHost();
+  const busy = signal(false);
+  const call = (method: "loginServer" | "logoutServer") => {
+    busy.set(true);
+    void host.action(async () => {
+      try {
+        const out = await host.call<{ authorizationUrl?: string }>("plugins", method, {
+          name: props.item.name,
+          server: props.server.name,
+          ...(method === "loginServer" ? { redirectOrigin: host.address()?.origin } : {}),
+        });
+        if (out?.authorizationUrl) await openUrl(out.authorizationUrl);
+      } finally {
+        busy.set(false);
+      }
+    });
+  };
+  return (
+    <>
+      <If when={props.item.enabled && props.server.login === "signed_in"}>
+        <Button
+          label={uiText("logoutButton")}
+          tone="plain"
+          labelVariant="body"
+          size={28}
+          disabled={busy()}
+          onPress={() => call("logoutServer")}
+        />
+      </If>
+      <If when={props.item.enabled && props.server.login !== "signed_in" && needsLogin(props.server, props.test)}>
+        <Button
+          label={uiText("loginButton")}
+          tone="plain"
+          labelVariant="body"
+          size={28}
+          disabled={busy()}
+          onPress={() => call("loginServer")}
+        />
+      </If>
+    </>
   );
 }
 
@@ -206,11 +285,7 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
               >
                 {server().transport}
               </Label>
-              <Label variant="small" tone="muted">
-                {props.item.state === "needs_config" || server().problem
-                  ? uiText("serverNeedsSetup")
-                  : uiText("serverReady")}
-              </Label>
+              <ServerBadge item={props.item} server={server()} test={test} />
               <View style={{ flex: 1 }} />
               <If when={(server().env ?? []).length}>
                 <Label
@@ -226,6 +301,9 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
               </If>
               <View testID={"test-slot:" + server().name} style={{ flexShrink: 0 }}>
                 <TestButton test={test} />
+              </View>
+              <View testID={"login-slot:" + server().name} style={{ flexShrink: 0 }}>
+                <LoginButton item={props.item} server={server()} test={test} />
               </View>
             </View>
             <TestResultView test={test} stdio={server().transport === "stdio"} />

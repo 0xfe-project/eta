@@ -52,6 +52,9 @@ function Fixture() {
               servers: [remote],
               skills: [{ name: "only-skill", description: "<b>x</b> does one thing" }],
             },
+            { ...plugin("signed-plugin", true), servers: [{ ...remote, login: "signed_in" as const }] },
+            { ...plugin("login-plugin", true), servers: [{ ...remote, login: "needs_login" as const }] },
+            { ...plugin("setup-plugin", true), state: "needs_config" as const, servers: [remote] },
             // An older host sends neither `headers` on the plugin nor on its servers.
             {
               ...plugin("old-host-plugin", true),
