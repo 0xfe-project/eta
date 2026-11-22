@@ -12,7 +12,9 @@ import type { IncomingMessage } from "node:http";
 import { lookup } from "node:dns/promises";
 import http from "node:http";
 import https from "node:https";
+import { readFile, realpath, stat } from "node:fs/promises";
 import { isIP } from "node:net";
+import { extname, isAbsolute, resolve, sep } from "node:path";
 import { viaProxy } from "./git";
 
 export interface Logo {
@@ -61,6 +63,47 @@ export function pictureType(bytes: Uint8Array): string | null {
   if (is(0x00, 0x00, 0x01, 0x00)) return "image/x-icon";
   if (is(0x52, 0x49, 0x46, 0x46) && bytes[8] === 0x57 && bytes[9] === 0x45) return "image/webp";
   return null;
+}
+
+const OWN_TYPES: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+};
+const MAX_OWN = 256 * 1024;
+/** What makes an SVG unfit: script, handlers, embedded pages, entities, references that leave the file. */
+const SVG_UNSAFE =
+  /<script|<foreignObject|<iframe|<embed|<object|<!ENTITY|\son[a-z]+\s*=|javascript:|(?:xlink:)?href\s*=\s*["'](?!#)/i;
+const SVG_HEAD = /^\s*(<\?xml[^>]*\?>\s*)?(<!--[\s\S]*?-->\s*)*(<!DOCTYPE\s+svg[^>[]*>\s*)?<svg\b/i;
+
+/**
+ * A plugin's own picture: `rel` is a path in its manifest, read only if it stays inside `root`
+ * after every link is resolved. png, jpg, webp and svg only, by name and by content, capped in
+ * size. An SVG with script or outside references is refused; it is shown as an image, which never
+ * runs script either. Anything wrong is null: the card falls back to its letter.
+ */
+export async function readOwnLogo(root: string, rel: string): Promise<Logo | null> {
+  try {
+    if (!rel || rel.includes("\0") || isAbsolute(rel) || /^[a-z]+:/i.test(rel)) return null;
+    const mime = OWN_TYPES[extname(rel).toLowerCase()];
+    if (!mime) return null;
+    const base = await realpath(root);
+    const file = await realpath(resolve(base, rel));
+    if (!file.startsWith(base.endsWith(sep) ? base : base + sep)) return null;
+    const info = await stat(file);
+    if (!info.isFile() || info.size > MAX_OWN) return null;
+    const body = await readFile(file);
+    if (body.length > MAX_OWN) return null;
+    if (mime === "image/svg+xml") {
+      const text = body.toString("utf8");
+      if (!SVG_HEAD.test(text) || SVG_UNSAFE.test(text)) return null;
+    } else if (pictureType(body) !== mime) return null;
+    return { type: mime, data: body.toString("base64") };
+  } catch {
+    return null;
+  }
 }
 
 export interface LogoOptions {

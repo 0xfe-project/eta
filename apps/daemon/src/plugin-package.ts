@@ -55,6 +55,7 @@ const MANIFEST_PATHS = [
 ] as const;
 /** Fields only a Cursor or Claude Code manifest has, and eta reads nothing from. */
 const FOREIGN_FIELDS = new Set(["displayName", "logo", "category", "tags"]);
+/** (`logo` is kept as a path for the host to read safely; the rest is not read.) */
 /** Components of those plugins that eta does not load. */
 const FOREIGN_COMPONENTS = [
   "commands",
@@ -77,6 +78,10 @@ interface PluginManifest {
   name: string;
   version?: string;
   description?: string;
+  /** Where the plugin says it lives; only a hint for its icon. */
+  homepage?: string;
+  /** The plugin's own picture, a path inside its root, as a Cursor or Claude manifest names it. Never read here. */
+  logo?: string;
 }
 
 interface PluginSkill {
@@ -278,6 +283,8 @@ function parseManifest(
       ...(raw.description === undefined
         ? {}
         : { description: raw.description as string }),
+      ...(typeof raw.homepage === "string" ? { homepage: raw.homepage } : {}),
+      ...(foreign && typeof raw.logo === "string" ? { logo: raw.logo } : {}),
     },
     extensions,
   };

@@ -468,7 +468,7 @@ function PluginCard(props: {
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
           <View style={{ ...row, gap: 8 }}>
-            <PluginLogo name={props.item.name} />
+            <PluginLogo name={props.item.name} installed />
             <View style={{ flex: 1, minWidth: 0 }}>
               <PluginName name={props.item.name} />
             </View>

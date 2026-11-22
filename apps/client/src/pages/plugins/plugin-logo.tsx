@@ -10,12 +10,14 @@ const found = new Map<string, Signal<string | null | undefined>>();
 export function PluginLogo(props: {
   name: string;
   homepage?: string | null;
+  /** An installed plugin: the host reads its own picture, then its homepage's icon. */
+  installed?: boolean;
   size?: number;
 }) {
   const host = useHost();
   const c = colors();
   const size = () => props.size ?? 28;
-  const key = () => props.homepage ?? "";
+  const key = () => (props.installed ? "installed:" + props.name : (props.homepage ?? ""));
   const state = () => {
     let one = found.get(key());
     if (!one) {
@@ -31,7 +33,7 @@ export function PluginLogo(props: {
     untracked(() => {
       one.set(null);
       host
-        .call<PluginLogoResult>("plugins", "logo", { homepage: at })
+        .call<PluginLogoResult>("plugins", "logo", props.installed ? { plugin: props.name } : { homepage: at })
         .then((logo) => {
           if (logo) one.set(`data:${logo.type};base64,${logo.data}`);
         })

@@ -9,7 +9,7 @@ import type { AgentStore } from "../agents/store";
 import type { Market } from "./market";
 import type { Plugins } from "./service";
 import { Args, productPlugin, publish } from "../wire";
-import { Logos } from "./logo";
+import { Logos, readOwnLogo } from "./logo";
 import { testConnection } from "./test-server";
 
 const LEVELS = ["none", "read", "file", "value"] as const;
@@ -187,6 +187,17 @@ export function pluginsPlugin(
         }),
         wire.handle("plugins", "logo", async (call) => {
           const args = new Args(call);
+          // An installed plugin: its own file first, then its homepage's icon.
+          const installed = args.optionalString("plugin");
+          if (installed !== undefined) {
+            const found = plugins.registry.entries().find((entry) => entry.name === installed)?.plugin;
+            const own =
+              found?.manifest.logo === undefined ? null : await readOwnLogo(found.root, found.manifest.logo);
+            return {
+              result:
+                own ?? (found?.manifest.homepage ? await logos.find(null, found.manifest.homepage) : null),
+            };
+          }
           return {
             result: await logos.find(
               args.optionalString("own") ?? null,

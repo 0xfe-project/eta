@@ -177,7 +177,7 @@ export interface PluginArgs {
    */
   testServer: { name: string; server: string };
   /** A plugin's logo as the host finds it: its own address, else the icon of its homepage. */
-  logo: { own?: string | null; homepage?: string | null };
+  logo: { own?: string | null; homepage?: string | null; plugin?: string | null };
 }
 
 /** What a connection test found. Secrets are never in it. */
