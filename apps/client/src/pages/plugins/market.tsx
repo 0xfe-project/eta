@@ -21,6 +21,8 @@ import {
   textFaces,
   textStyle,
 } from "../../components";
+import { hint } from "../../components/context-ring";
+import { CloseButton } from "../../components/navigation-buttons";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { PluginLogo } from "./plugin-logo";
 import { PluginName } from "./plugin-name";
@@ -155,7 +157,9 @@ export function Market(props: {
       : item.installed === "other"
         ? uiText("marketNameTaken")
         : "";
-  const line = (name: string, value: string) => (
+  /** A labelled value; a value that is empty or only blanks is not shown at all, nor its label. */
+  const line = (name: string, value: string | null | undefined) =>
+    value === null || value === undefined || value.trim() === "" ? null : (
     <View style={{ gap: 2 }}>
       <Label variant="caption" tone="muted">
         {name}
@@ -310,22 +314,30 @@ export function Market(props: {
         </View>
       </SmoothScroll>
       <If when={current() && !preview()}>
-        <Modal {...sheet(current()!.name, 512, () => detail.set(""))}>
+        <Modal {...sheet(current()!.name, 512, () => detail.set(""))} hideHeader>
           <View style={{ gap: 10, paddingTop: 6, paddingBottom: phone() ? 24 : 0, ...inset() }}>
-            <PluginLogo
-              name={current()!.name}
-              homepage={current()!.homepage}
-              repo={
-                current()!.repo !== "" && current()!.unsupported === null
-                  ? {
-                      repo: current()!.repo,
-                      ref: current()!.rev ?? "HEAD",
-                      path: current()!.path,
-                    }
-                  : null
-              }
-              size={40}
-            />
+            <View testID="market-detail-header" style={{ ...row, gap: 12, alignItems: "center" }}>
+              <PluginLogo
+                name={current()!.name}
+                homepage={current()!.homepage}
+                repo={
+                  current()!.repo !== "" && current()!.unsupported === null
+                    ? {
+                        repo: current()!.repo,
+                        ref: current()!.rev ?? "HEAD",
+                        path: current()!.path,
+                      }
+                    : null
+                }
+                size={40}
+              />
+              <View tooltip={hint(current()!.name, c)} style={{ flex: 1, minWidth: 0 }}>
+                <Label variant="title" weight={600} lines={1}>
+                  {current()!.name}
+                </Label>
+              </View>
+              <CloseButton onPress={() => detail.set("")} iconSize={14} />
+            </View>
             <Label variant="small" tone="muted" style={{ userSelect: "text" }}>
               {current()!.description}
             </Label>

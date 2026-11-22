@@ -23,3 +23,15 @@ test("the market lists every source, says where each entry is from, and shows a 
   expect(app.shows("1.0.0 · t")).toBe(true);
   expect(app.shows("2.0.0 · t")).toBe(true);
 });
+
+test("the detail leaves out a version or author the catalog did not give, and shows one it did", async () => {
+  const bare = await open("./fixtures/market-authors.tsx", { width: 900, height: 700 });
+  await bare.press("label:bare");
+  expect(bare.shows("Source repository")).toBe(true);
+  expect(bare.shows("Version")).toBe(false);
+  expect(bare.shows("Author")).toBe(false);
+  const full = await open("./fixtures/market-authors.tsx", { width: 900, height: 700 });
+  await full.press("label:with-author");
+  expect(full.shows("Version")).toBe(true);
+  expect(full.shows("Author")).toBe(true);
+});
