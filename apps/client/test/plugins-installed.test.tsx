@@ -104,3 +104,9 @@ test("sixty tools still list inside one scrolling region with a count header", a
   expect(app.shows("Tools (60)")).toBe(true);
   expect(app.count("id:tool-card:tool_0")).toBe(1);
 });
+
+test("each installed card has exactly one avatar in its header, and no default plugin icon", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 900 });
+  // The fixture lists seven installed plugins; one avatar each, not two.
+  expect(app.count("id:plugin-avatar")).toBe(7);
+});

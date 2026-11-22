@@ -3,16 +3,7 @@ import type { Signal } from "nsh";
 import { effect, Image, signal, untracked, View } from "nsh";
 import { colors, Label } from "../../components";
 import { useHost } from "../../services/host";
-
-/** Muted fills the initial sits on; dark enough for white text. */
-const AVATAR_FILLS = ["#5B6EAE", "#3F8F8B", "#9A5B8F", "#B0663F", "#5E8C4A", "#8A6FB0", "#B05A6A", "#4F7FA3"];
-
-/** The same name always gets the same fill. */
-export const avatarFill = (name: string): string => {
-  let h = 0;
-  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return AVATAR_FILLS[h % AVATAR_FILLS.length]!;
-};
+import { avatarFill, avatarInk, avatarInitial } from "./avatar-color";
 
 const found = new Map<string, Signal<string | null | undefined>>();
 
@@ -53,6 +44,7 @@ export function PluginLogo(props: {
   const picture = () => state()();
   return (
     <View
+      testID="plugin-avatar"
       accessibilityElementsHidden
       style={{
         width: size(),
@@ -63,7 +55,7 @@ export function PluginLogo(props: {
         backgroundColor: picture() ? c().border : avatarFill(props.name),
       }}
     >
-      <If when={picture()} else={<Label variant="small" weight={600} style={{ color: "#FFFFFF" }}>{(props.name[0] ?? "?").toUpperCase()}</Label>}>
+      <If when={picture()} else={<Label variant="small" weight={600} style={{ color: avatarInk(avatarFill(props.name)) }}>{avatarInitial(props.name)}</Label>}>
         <Image src={picture()!} fadeDuration={0} style={{ width: size(), height: size() }} />
       </If>
     </View>

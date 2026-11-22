@@ -455,17 +455,6 @@ function PluginCard(props: {
       }}
     >
       <View style={{ ...row, alignItems: "flex-start", gap: 12 }}>
-        <View
-          style={{
-            width: 36,
-            height: 36,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: c().selected,
-          }}
-        >
-          <Icon name="plugins" size={20} tone="muted" />
-        </View>
         <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
           <View style={{ ...row, gap: 8 }}>
             <PluginLogo name={props.item.name} installed />
