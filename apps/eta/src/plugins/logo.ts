@@ -42,8 +42,10 @@ export function isPrivateAddress(address: string): boolean {
       (a === 169 && b === 254) ||
       (a === 172 && b >= 16 && b <= 31) ||
       (a === 192 && b === 168) ||
-      (a === 192 && b === 0) ||
-      (a === 198 && (b === 18 || b === 19))
+      (a === 192 && b === 0)
+      // 198.18.0.0/15 is not listed: fake-IP proxies (Clash and the like) answer every name from it,
+      // so refusing it refuses every real site on such a machine. It is not routable, and the proxy
+      // resolves the real name itself.
     );
   }
   const low = address.toLowerCase();

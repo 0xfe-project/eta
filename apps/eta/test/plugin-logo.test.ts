@@ -27,6 +27,30 @@ describe("plugin logos", () => {
     expect(isPrivateAddress("93.184.216.34")).toBe(false);
   });
 
+  it("accepts the 198.18.0.0/15 range a fake-IP proxy answers from, and still refuses real private ranges", () => {
+    expect(isPrivateAddress("198.18.39.125")).toBe(false);
+    expect(isPrivateAddress("198.19.1.1")).toBe(false);
+    expect(isPrivateAddress("10.0.0.1")).toBe(true);
+  });
+
+  it("finds the icon of an apex site: relative rel=icon, apex -> www redirect, then the picture", async () => {
+    const seen: string[] = [];
+    const base = await serve((req, res) => {
+      const [host, port] = String(req.headers.host).split(":");
+      seen.push(host + req.url);
+      if (host === "apex.test" && req.url === "/") res.end('<link rel="icon" href="/favicon.png"/>');
+      else if (host === "apex.test" && req.url === "/favicon.png")
+        res.writeHead(308, { location: "http://www.apex.test:" + port + "/favicon.png" }).end();
+      else if (host === "www.apex.test" && req.url === "/favicon.png") res.end(PNG);
+      else res.writeHead(404).end();
+    });
+    const port = base.split(":").pop();
+    const logos = new Logos({ allowPrivate: true, resolve: async () => ["127.0.0.1"], sites: (server) => [server] });
+    const logo = await logos.find(null, null, `http://apex.test:${port}/`);
+    expect(logo?.type).toBe("image/png");
+    expect(seen).toContain("www.apex.test/favicon.png");
+  });
+
   it("does not call a private address by default, and sends nothing", async () => {
     let hits = 0;
     const base = await serve((_req, res) => {
