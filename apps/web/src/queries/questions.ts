@@ -12,6 +12,7 @@ export interface Question {
   conversationId: string;
   agentId: string;
   prompt: string;
+  context?: string;
   options: string[];
   /** More than one option may be chosen. */
   multi: boolean;
@@ -40,6 +41,7 @@ export function useQuestions(conversationId?: string): Question[] {
               conversationId: row.conversationId,
               agentId: row.agentId,
               prompt: row.prompt,
+              ...(row.context === undefined ? {} : { context: row.context }),
               options: row.options,
               multi: row.multi,
             },

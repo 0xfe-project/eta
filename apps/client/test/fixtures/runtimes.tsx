@@ -284,8 +284,6 @@ function Page(props: {
           initial="Runtimes"
           layout={layout}
           theme="light"
-          paletteId="default"
-          flavor="mocha"
           chatWidth="standard"
           chatRail
           paletteId="default"

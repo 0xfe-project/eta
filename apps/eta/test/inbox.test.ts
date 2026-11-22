@@ -125,6 +125,36 @@ describe("a question from a session", () => {
     expect(list(w).filter((row) => row.status === "pending")).toEqual([]);
   });
 
+  it("carries why the agent asked, and the answer still resumes the run", async () => {
+    const { models } = scriptedModels((request) =>
+      request.lastRole === "toolResult"
+        ? say(`Chose: ${request.last}`)
+        : call(
+            "ask_user",
+            {
+              question: "Which colour?",
+              context: "The logo is on a dark background.",
+              options: [{ title: "red" }, { title: "blue" }],
+            },
+            "q-1",
+          ),
+    );
+    const w = await world({ models });
+    const { group } = await ada(w);
+    const sent = await w.send(group.id, "paint it");
+
+    const pending = await listed(w, "pending");
+    expect(pending).toMatchObject({
+      prompt: "Which colour?",
+      context: "The logo is on a dark background.",
+      options: ["red", "blue"],
+    });
+
+    await answer(w, pending.id, { kind: "selection", selections: ["blue"] });
+    const done = await w.settled(group.id, sent.replies[0]!.id);
+    expect(done.text).toContain("blue");
+  });
+
   it("takes a freeform answer, and answering twice changes nothing", async () => {
     const { models } = colours();
     const w = await world({ models });

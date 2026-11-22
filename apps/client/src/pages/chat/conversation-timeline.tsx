@@ -20,6 +20,7 @@ import { wheelScroll } from "../../components/scroll-follow";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { Message } from "./message";
+import { questionRowIndex } from "./question-row";
 import { TaskDraftDetail } from "./task-draft-detail";
 
 export function ConversationTimeline(props: {
@@ -52,6 +53,8 @@ export function ConversationTimeline(props: {
   onPending?: () => void;
   onArtifact: (artifact: ArtifactView, version?: number) => void;
   onWidgetDraft: (conversationId: string, text: string) => void;
+  /** Hands out the function that scrolls to the row of a question's reply. */
+  revealer?: (reveal: (replyId: string | null) => void) => void;
   /** Quote what the reader selected in a reply into the composer. */
   onQuote: (conversationId: string, text: string) => void;
 }) {
@@ -103,6 +106,15 @@ export function ConversationTimeline(props: {
   const glide = wheelScroll((offset, animated) =>
     transcriptList?.scrollToOffset({ offset, animated }),
   );
+  props.revealer?.((replyId) => {
+    const index = questionRowIndex(props.rows, replyId);
+    if (index !== undefined)
+      transcriptList?.scrollToIndex({
+        index,
+        viewPosition: 0.5,
+        animated: true,
+      });
+  });
   let timelineFocus: ViewRef | undefined;
   let pendingFocus: string | undefined;
   let top: { id: string; offset: number } | undefined;

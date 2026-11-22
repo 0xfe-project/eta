@@ -9,6 +9,7 @@ import {
   Caption,
   colors,
   Field,
+  focusRing,
   grow,
   Icon,
   Label,
@@ -24,6 +25,8 @@ function SheetQuestion(props: {
   item: InteractionView;
   onDone?: () => void;
   onConversation?: () => void;
+  /** Takes the user to where the question came from; absent when there is no such place. */
+  onSource?: () => void;
   sheet?: boolean;
 }) {
   const host = useHost();
@@ -87,6 +90,13 @@ function SheetQuestion(props: {
             </Label>
           </If>
           <Label>{props.item.prompt}</Label>
+          <If when={props.item.context}>
+            {(text) => (
+              <Label variant="small" tone="muted">
+                {text()}
+              </Label>
+            )}
+          </If>
           <View
             style={
               props.sheet ? { gap: 8 } : { ...row, flexWrap: "wrap", gap: 6 }
@@ -155,19 +165,30 @@ function SheetQuestion(props: {
         }}
       >
         <If when={props.sheet}>
-          <View
-            role={props.onConversation ? "button" : undefined}
-            accessibilityLabel={uiText("openConversation")}
-            onPress={() => props.onConversation?.()}
-            style={{
-              flex: 1,
-              cursor: props.onConversation ? "pointer" : "default",
-            }}
-          >
+          <View style={{ ...row, flex: 1, gap: 16 }}>
             <If when={props.onConversation}>
-              <Label variant="small" tone="muted">
-                {uiText("openConversation")}
-              </Label>
+              <View
+                role="button"
+                accessibilityLabel={uiText("openConversation")}
+                onPress={() => props.onConversation?.()}
+                style={{ cursor: "pointer" }}
+              >
+                <Label variant="small" tone="muted">
+                  {uiText("openConversation")}
+                </Label>
+              </View>
+            </If>
+            <If when={props.onSource}>
+              <View
+                role="button"
+                accessibilityLabel={uiText("jumpToSource")}
+                onPress={() => props.onSource?.()}
+                style={{ cursor: "pointer" }}
+              >
+                <Label variant="small" tone="muted">
+                  {uiText("jumpToSource")}
+                </Label>
+              </View>
             </If>
           </View>
         </If>
@@ -359,6 +380,7 @@ export function Question(props: {
   item: InteractionView;
   onDone?: () => void;
   onConversation?: () => void;
+  onSource?: () => void;
   sheet?: boolean;
 }) {
   return (
@@ -487,6 +509,17 @@ function QuestionCard(props: { item: InteractionView }) {
       <Label style={{ paddingVertical: 8, paddingHorizontal: 10 }}>
         {props.item.prompt}
       </Label>
+      <If when={props.item.context}>
+        {(text) => (
+          <Label
+            variant="small"
+            tone="muted"
+            style={{ paddingHorizontal: 10, paddingBottom: 8 }}
+          >
+            {text()}
+          </Label>
+        )}
+      </If>
       <View
         style={{
           ...row,
@@ -550,7 +583,10 @@ function QuestionCard(props: { item: InteractionView }) {
 }
 
 /** The questions waiting in a conversation, above its transcript. */
-export function PendingStrip(props: { items: InteractionView[] }) {
+export function PendingStrip(props: {
+  items: InteractionView[];
+  onOpen?: (item: InteractionView) => void;
+}) {
   const host = useHost();
   const c = colors();
   const first = () => props.items[0];
@@ -558,7 +594,13 @@ export function PendingStrip(props: { items: InteractionView[] }) {
     <If when={first()}>
       {(item) => (
         <View
+          role="button"
+          accessibilityLabel={item().prompt}
+          onPress={() => props.onOpen?.(item())}
+          hoverStyle={{ opacity: 0.85 }}
+          focusVisibleStyle={focusRing(c())}
           style={{
+            cursor: "pointer",
             gap: 2,
             paddingVertical: 4,
             paddingHorizontal: 8,

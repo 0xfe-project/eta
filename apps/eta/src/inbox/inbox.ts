@@ -129,6 +129,7 @@ export class Inbox {
             sessionId: meta.id,
             questionId: payload.questionId,
             prompt: payload.question,
+            context: payload.context,
             options: payload.options ?? [],
             multi: payload.multi === true,
             agentId: meta.agentId ?? null,
