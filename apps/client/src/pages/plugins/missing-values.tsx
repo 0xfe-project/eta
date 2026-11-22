@@ -7,7 +7,11 @@ import { useHost } from "../../services/host";
 /** The required text fields nobody has filled in yet: what keeps the plugin from running. */
 const missingFields = (item: PluginView) =>
   item.fields.filter(
-    (field) => field.required && !field.set && field.value === null && field.default == null,
+    (field) =>
+      field.required &&
+      !field.set &&
+      field.value === null &&
+      field.default == null,
   );
 
 /**
@@ -20,8 +24,11 @@ export function MissingValues(props: { item: PluginView }) {
   const typed = signal<Record<string, string>>({});
   const problem = signal("");
   const busy = signal(false);
-  const text = missingFields(props.item).filter((field) => field.type === "string");
-  const other = () => missingFields(props.item).filter((field) => field.type !== "string");
+  const text = missingFields(props.item).filter(
+    (field) => field.type === "string",
+  );
+  const other = () =>
+    missingFields(props.item).filter((field) => field.type !== "string");
   function save() {
     const values = Object.fromEntries(
       Object.entries(typed()).filter(([, value]) => value.trim() !== ""),
@@ -34,7 +41,10 @@ export function MissingValues(props: { item: PluginView }) {
     busy.set(true);
     void host.action(async () => {
       try {
-        await host.call("plugins", "configure", { name: props.item.name, values });
+        await host.call("plugins", "configure", {
+          name: props.item.name,
+          values,
+        });
         typed.set({});
       } finally {
         busy.set(false);
@@ -56,14 +66,21 @@ export function MissingValues(props: { item: PluginView }) {
             {uiText("missingElsewhere")}
           </Label>
         </If>
-        <Each of={missingFields(props.item).filter((field) => field.type === "string")} key={(field) => field.name}>
+        <Each
+          of={missingFields(props.item).filter(
+            (field) => field.type === "string",
+          )}
+          key={(field) => field.name}
+        >
           {(field) => (
             <Field
               label={field().title || field().name}
               value={typed()[field().name] ?? ""}
               masked={field().secret === true}
               placeholder={field().title || field().name}
-              onChange={(value) => typed.update((all) => ({ ...all, [field().name]: value }))}
+              onChange={(value) =>
+                typed.update((all) => ({ ...all, [field().name]: value }))
+              }
             />
           )}
         </Each>

@@ -6,7 +6,11 @@ import { createHost, Host } from "../../src/services/host";
 /** A host that keeps the sources and the proxy the way the real one does. */
 let settings: MarketSettings = {
   sources: [
-    { name: "Cursor", url: "https://cursor.test/marketplace.json", enabled: false },
+    {
+      name: "Cursor",
+      url: "https://cursor.test/marketplace.json",
+      enabled: false,
+    },
     { name: "", url: "https://plain.test/marketplace.json", enabled: true },
   ],
   proxy: "",
@@ -17,12 +21,23 @@ function Fixture() {
   const host = createHost();
   host.state.update((state) => ({ ...state, status: "open" }));
   const stub = Object.assign(host, {
-    call: async (_section: string, method: string, args: Record<string, string | boolean>) => {
+    call: async (
+      _section: string,
+      method: string,
+      args: Record<string, string | boolean>,
+    ) => {
       (globalThis as { __calls?: unknown[] }).__calls?.push([method, args]);
       if (method === "marketAddSource")
         settings = {
           ...settings,
-          sources: [...settings.sources, { url: String(args.url), name: String(args.name ?? ""), enabled: true }],
+          sources: [
+            ...settings.sources,
+            {
+              url: String(args.url),
+              name: String(args.name ?? ""),
+              enabled: true,
+            },
+          ],
         };
       if (method === "marketRemoveSource")
         settings = {
@@ -33,7 +48,9 @@ function Fixture() {
         settings = {
           ...settings,
           sources: settings.sources.map((item) =>
-            item.url === args.url ? { ...item, enabled: Boolean(args.enabled) } : item,
+            item.url === args.url
+              ? { ...item, enabled: Boolean(args.enabled) }
+              : item,
           ),
         };
       if (method === "marketSetProxy")

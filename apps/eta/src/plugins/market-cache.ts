@@ -1,10 +1,11 @@
+import type { Database } from "bun:sqlite";
 /**
  * The market's catalog cache, in the host's database. A row is one catalog's JSON text with the
  * validators its server gave. The text is somebody else's: the caller checks its shape again on every
  * read, and a row that is too big is dropped here. When the rows together are over the cap, the ones
  * used longest ago go first.
  */
-import type { Database } from "bun:sqlite";
+import { Buffer } from "node:buffer";
 
 export interface CachedCatalog {
   text: string;
@@ -39,15 +40,21 @@ export class CatalogCache {
       .query(
         "SELECT body, etag, last_modified, fetched_at, size FROM market_catalog_cache WHERE url = ?",
       )
-      .get(url) as
-      | { body: string; etag: string | null; last_modified: string | null; fetched_at: number; size: number }
-      | null;
+      .get(url) as {
+      body: string;
+      etag: string | null;
+      last_modified: string | null;
+      fetched_at: number;
+      size: number;
+    } | null;
     if (row === null) return undefined;
     if (row.size > this.#maxRow || Buffer.byteLength(row.body) > this.#maxRow) {
       this.delete(url);
       return undefined;
     }
-    this.#db.query("UPDATE market_catalog_cache SET used_at = ? WHERE url = ?").run(now, url);
+    this.#db
+      .query("UPDATE market_catalog_cache SET used_at = ? WHERE url = ?")
+      .run(now, url);
     return {
       text: row.body,
       etag: row.etag,
@@ -57,7 +64,13 @@ export class CatalogCache {
   }
 
   /** Keep this text for this address; it replaces what was there. */
-  put(url: string, text: string, etag: string | null, lastModified: string | null, now: number): void {
+  put(
+    url: string,
+    text: string,
+    etag: string | null,
+    lastModified: string | null,
+    now: number,
+  ): void {
     const size = Buffer.byteLength(text);
     if (size > this.#maxRow) return;
     this.#db
@@ -75,7 +88,9 @@ export class CatalogCache {
   /** The server said "not changed": the same text, confirmed now. */
   confirm(url: string, now: number): void {
     this.#db
-      .query("UPDATE market_catalog_cache SET fetched_at = ?, used_at = ? WHERE url = ?")
+      .query(
+        "UPDATE market_catalog_cache SET fetched_at = ?, used_at = ? WHERE url = ?",
+      )
       .run(now, now, url);
   }
 
@@ -90,11 +105,15 @@ export class CatalogCache {
   #evict(keep: string): void {
     for (;;) {
       const total = this.#db
-        .query("SELECT COUNT(*) AS rows, COALESCE(SUM(size), 0) AS bytes FROM market_catalog_cache")
+        .query(
+          "SELECT COUNT(*) AS rows, COALESCE(SUM(size), 0) AS bytes FROM market_catalog_cache",
+        )
         .get() as { rows: number; bytes: number };
       if (total.rows <= this.#maxRows && total.bytes <= this.#maxTotal) return;
       const oldest = this.#db
-        .query("SELECT url FROM market_catalog_cache WHERE url <> ? ORDER BY used_at ASC LIMIT 1")
+        .query(
+          "SELECT url FROM market_catalog_cache WHERE url <> ? ORDER BY used_at ASC LIMIT 1",
+        )
         .get(keep) as { url: string } | null;
       if (oldest === null) return;
       this.delete(oldest.url);

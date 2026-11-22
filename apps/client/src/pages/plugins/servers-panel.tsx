@@ -7,19 +7,18 @@ import { openUrl, signal, View } from "nsh";
 import {
   Button,
   colors,
-  Icon,
   Label,
   Modal,
   row,
   SmoothScroll,
 } from "../../components";
-import { uiText } from "../../i18n";
 import { hint } from "../../components/context-ring";
+import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { EnvEditor } from "./env-editor";
 import { HeadersEditor } from "./headers-editor";
-import { MissingValues } from "./missing-values";
 import { pluginText as text } from "./labels";
+import { MissingValues } from "./missing-values";
 import { authStyle } from "./plugin-status";
 
 /** Whether the host sends the fields the servers panel reads (an older host does not). */
@@ -28,7 +27,11 @@ const hostKnowsHeaders = (item: PluginView): boolean =>
   item.servers.every((server) => Array.isArray(server.headers));
 
 /** Only a result that went to the server has a time worth showing. */
-const REQUEST_MADE = new Set<PluginTestResult["status"]>(["ok", "needs_login", "failed"]);
+const REQUEST_MADE = new Set<PluginTestResult["status"]>([
+  "ok",
+  "needs_login",
+  "failed",
+]);
 
 const testLabel = (result: PluginTestResult): string =>
   result.status === "ok"
@@ -95,23 +98,50 @@ function TestButton(props: { test: Test }) {
 
 /** The sign-in the server needs, from the host's evidence or this panel's last test. */
 const needsLogin = (server: PluginServerView, test: Test): boolean =>
-  server.login === "needs_login" || server.login === "expired" || test.result()?.status === "needs_login";
+  server.login === "needs_login" ||
+  server.login === "expired" ||
+  test.result()?.status === "needs_login";
 
 /** A state only when there is evidence for it; no evidence reads as "not checked", never as ready. */
-function ServerBadge(props: { item: PluginView; server: PluginServerView; test: Test }) {
-  const label = (): { text: string; tone: "ink" | "red" | "muted" | "green" | "warningInk" } => {
+function ServerBadge(props: {
+  item: PluginView;
+  server: PluginServerView;
+  test: Test;
+}) {
+  const label = (): {
+    text: string;
+    tone: "ink" | "red" | "muted" | "green" | "warningInk";
+  } => {
     const test = props.test.result();
     const time = new Date(props.test.at() ?? 0).toLocaleTimeString();
     if (props.item.state === "needs_config" || props.server.problem)
-      return { text: uiText(authStyle("needs_setup").text), tone: authStyle("needs_setup").tone };
+      return {
+        text: uiText(authStyle("needs_setup").text),
+        tone: authStyle("needs_setup").tone,
+      };
     if (props.server.login === "expired")
-      return { text: uiText(authStyle("expired").text), tone: authStyle("expired").tone };
-    if (props.server.login === "signed_in" && test?.requiredHeader !== undefined)
-      return { text: uiText("serverSavedNotAccepted", { header: test.requiredHeader }), tone: "warningInk" };
+      return {
+        text: uiText(authStyle("expired").text),
+        tone: authStyle("expired").tone,
+      };
+    if (
+      props.server.login === "signed_in" &&
+      test?.requiredHeader !== undefined
+    )
+      return {
+        text: uiText("serverSavedNotAccepted", { header: test.requiredHeader }),
+        tone: "warningInk",
+      };
     if (props.server.login === "signed_in")
-      return { text: uiText(authStyle("signed_in").text), tone: authStyle("signed_in").tone };
+      return {
+        text: uiText(authStyle("signed_in").text),
+        tone: authStyle("signed_in").tone,
+      };
     if (needsLogin(props.server, props.test))
-      return { text: uiText(authStyle("needs_login").text), tone: authStyle("needs_login").tone };
+      return {
+        text: uiText(authStyle("needs_login").text),
+        tone: authStyle("needs_login").tone,
+      };
     if (test?.status === "ok")
       return { text: uiText("lastTestOk", { time }), tone: "ink" };
     if (test !== undefined && test.status !== "off")
@@ -126,18 +156,28 @@ function ServerBadge(props: { item: PluginView; server: PluginServerView; test: 
 }
 
 /** Log in / out in the panel itself: the host starts the sign-in, the browser comes back to the host. */
-function LoginButton(props: { item: PluginView; server: PluginServerView; test: Test }) {
+function LoginButton(props: {
+  item: PluginView;
+  server: PluginServerView;
+  test: Test;
+}) {
   const host = useHost();
   const busy = signal(false);
   const call = (method: "loginServer" | "logoutServer") => {
     busy.set(true);
     void host.action(async () => {
       try {
-        const out = await host.call<{ authorizationUrl?: string }>("plugins", method, {
-          name: props.item.name,
-          server: props.server.name,
-          ...(method === "loginServer" ? { redirectOrigin: host.address()?.origin } : {}),
-        });
+        const out = await host.call<{ authorizationUrl?: string }>(
+          "plugins",
+          method,
+          {
+            name: props.item.name,
+            server: props.server.name,
+            ...(method === "loginServer"
+              ? { redirectOrigin: host.address()?.origin }
+              : {}),
+          },
+        );
         if (out?.authorizationUrl) await openUrl(out.authorizationUrl);
       } finally {
         busy.set(false);
@@ -156,7 +196,13 @@ function LoginButton(props: { item: PluginView; server: PluginServerView; test: 
           onPress={() => call("logoutServer")}
         />
       </If>
-      <If when={props.item.enabled && props.server.login !== "signed_in" && needsLogin(props.server, props.test)}>
+      <If
+        when={
+          props.item.enabled &&
+          props.server.login !== "signed_in" &&
+          needsLogin(props.server, props.test)
+        }
+      >
         <Button
           label={uiText("loginButton")}
           tone="plain"
@@ -171,18 +217,33 @@ function LoginButton(props: { item: PluginView; server: PluginServerView; test: 
 }
 
 /** "1 tool", "3 tools", "–" when the server did not say; the singular is its own string. */
-const counted = (key: "countTool" | "countResource" | "countPrompt", n: number | null | undefined): string =>
-  n == null ? "–" : n === 1 ? uiText((key + "1") as never, { n: "1" }) : uiText((key + "s") as never, { n: String(n) });
+const counted = (
+  key: "countTool" | "countResource" | "countPrompt",
+  n: number | null | undefined,
+): string =>
+  n == null
+    ? "–"
+    : n === 1
+      ? uiText(`${key}1` as never, { n: "1" })
+      : uiText(`${key}s` as never, { n: String(n) });
 
 const MAX_CHIPS = 12;
 const LONG_TOOL_TEXT = 140;
 /** A long list shows this many cards, and a link for the rest; the region still scrolls past it. */
 const COLLAPSED_ITEMS = 5;
 
-type Listed = { name: string; description: string; params: string[] };
+interface Listed {
+  name: string;
+  description: string;
+  params: string[];
+}
 
 /** A small text link, not a bordered button: a list of cards must not become a list of buttons. */
-function TextLink(props: { label: string; testID?: string; onPress: () => void }) {
+function TextLink(props: {
+  label: string;
+  testID?: string;
+  onPress: () => void;
+}) {
   return (
     <View
       testID={props.testID}
@@ -191,7 +252,11 @@ function TextLink(props: { label: string; testID?: string; onPress: () => void }
       onPress={props.onPress}
       style={{ alignSelf: "flex-end", cursor: "pointer" }}
     >
-      <Label variant="small" tone="mutedInk" style={{ textDecorationLine: "underline" }}>
+      <Label
+        variant="small"
+        tone="mutedInk"
+        style={{ textDecorationLine: "underline" }}
+      >
         {props.label}
       </Label>
     </View>
@@ -199,14 +264,17 @@ function TextLink(props: { label: string; testID?: string; onPress: () => void }
 }
 
 /** One tool, resource or prompt: its name, its description (a long one folds), its parameter names as chips. */
-function ItemCard(props: { kind: "tool" | "resource" | "prompt"; item: Listed }) {
+function ItemCard(props: {
+  kind: "tool" | "resource" | "prompt";
+  item: Listed;
+}) {
   const c = colors();
   const open = signal(false);
   const long = () => props.item.description.length > LONG_TOOL_TEXT;
   const params = () => props.item.params;
   return (
     <View
-      testID={props.kind + "-card:" + props.item.name}
+      testID={`${props.kind}-card:${props.item.name}`}
       style={{
         gap: 6,
         padding: 12,
@@ -218,10 +286,14 @@ function ItemCard(props: { kind: "tool" | "resource" | "prompt"; item: Listed })
         {props.item.name}
       </Label>
       <If when={props.item.description}>
-        <Label variant="small" tone="muted" lines={open() || !long() ? undefined : 2}>
+        <Label
+          variant="small"
+          tone="muted"
+          lines={open() || !long() ? undefined : 2}
+        >
           {open() || !long()
             ? props.item.description
-            : props.item.description.slice(0, LONG_TOOL_TEXT) + "…"}
+            : `${props.item.description.slice(0, LONG_TOOL_TEXT)}…`}
         </Label>
         <If when={long()}>
           <TextLink
@@ -235,15 +307,25 @@ function ItemCard(props: { kind: "tool" | "resource" | "prompt"; item: Listed })
           <Each of={params().slice(0, MAX_CHIPS)} key={(name) => name}>
             {(name) => (
               <View
-                testID={"tool-param:" + name()}
-                style={{ paddingVertical: 2, paddingHorizontal: 8, borderWidth: 1, borderColor: c().border }}
+                testID={`tool-param:${name()}`}
+                style={{
+                  paddingVertical: 2,
+                  paddingHorizontal: 8,
+                  borderWidth: 1,
+                  borderColor: c().border,
+                }}
               >
-                <Label variant="small" tone="muted">{name()}</Label>
+                <Label variant="small" tone="muted">
+                  {name()}
+                </Label>
               </View>
             )}
           </Each>
           <If when={params().length > MAX_CHIPS}>
-            <Label variant="small" tone="muted">{"+" + (params().length - MAX_CHIPS)}</Label>
+            <Label
+              variant="small"
+              tone="muted"
+            >{`+${params().length - MAX_CHIPS}`}</Label>
           </If>
         </View>
       </If>
@@ -261,10 +343,11 @@ function ItemList(props: {
   items: Listed[];
 }) {
   const all = signal(false);
-  const shown = () => (all() ? props.items : props.items.slice(0, COLLAPSED_ITEMS));
+  const shown = () =>
+    all() ? props.items : props.items.slice(0, COLLAPSED_ITEMS);
   return (
     <If when={props.items.length}>
-      <View testID={"list:" + props.kind} style={{ gap: 8 }}>
+      <View testID={`list:${props.kind}`} style={{ gap: 8 }}>
         <Label variant="small" weight={600}>
           {props.heading}
         </Label>
@@ -277,7 +360,7 @@ function ItemList(props: {
         </SmoothScroll>
         <If when={props.items.length > COLLAPSED_ITEMS}>
           <TextLink
-            testID={"list-toggle:" + props.kind}
+            testID={`list-toggle:${props.kind}`}
             label={
               all()
                 ? uiText("showFewerItems")
@@ -301,7 +384,7 @@ function serverLabel(
   const full = [name, version].filter(Boolean).join(" ");
   let rest = version ?? "";
   if (name) {
-    for (const lead of [name + "/", name + " ", name + "@"])
+    for (const lead of [`${name}/`, `${name} `, `${name}@`])
       if (rest.startsWith(lead)) rest = rest.slice(lead.length);
   }
   rest = rest.replace(HASH, (hash) => hash.slice(0, 7));
@@ -311,17 +394,30 @@ function serverLabel(
 /** The server's name and version on one line, and what it offers as small chips. */
 function ResultInfo(props: { result: PluginTestResult }) {
   const c = colors();
-  const label = () => serverLabel(props.result.serverName, props.result.serverVersion);
+  const label = () =>
+    serverLabel(props.result.serverName, props.result.serverVersion);
   const chips = () =>
     [
-      props.result.toolCount == null ? null : counted("countTool", props.result.toolCount),
-      props.result.resourceCount == null ? null : counted("countResource", props.result.resourceCount),
-      props.result.promptCount == null ? null : counted("countPrompt", props.result.promptCount),
+      props.result.toolCount == null
+        ? null
+        : counted("countTool", props.result.toolCount),
+      props.result.resourceCount == null
+        ? null
+        : counted("countResource", props.result.resourceCount),
+      props.result.promptCount == null
+        ? null
+        : counted("countPrompt", props.result.promptCount),
     ].filter((text): text is string => text !== null);
   return (
-    <View testID="result-info" style={{ ...row, flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+    <View
+      testID="result-info"
+      style={{ ...row, flexWrap: "wrap", gap: 8, alignItems: "center" }}
+    >
       <If when={label().text}>
-        <View tooltip={hint(label().full, c)} style={{ flexShrink: 1, minWidth: 0 }}>
+        <View
+          tooltip={hint(label().full, c)}
+          style={{ flexShrink: 1, minWidth: 0 }}
+        >
           <Label variant="small" weight={600} lines={1}>
             {label().text}
           </Label>
@@ -329,8 +425,17 @@ function ResultInfo(props: { result: PluginTestResult }) {
       </If>
       <Each of={chips()} key={(text) => text}>
         {(text) => (
-          <View style={{ paddingVertical: 1, paddingHorizontal: 6, borderWidth: 1, borderColor: c().border }}>
-            <Label variant="small" tone="muted">{text()}</Label>
+          <View
+            style={{
+              paddingVertical: 1,
+              paddingHorizontal: 6,
+              borderWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <Label variant="small" tone="muted">
+              {text()}
+            </Label>
           </View>
         )}
       </Each>
@@ -350,7 +455,10 @@ function TestResultView(props: { test: Test; stdio: boolean }) {
       <If when={result()}>
         <View style={{ gap: 8 }}>
           <Label variant="small" weight={600}>
-            {testLabel(result()!) + (REQUEST_MADE.has(result()!.status) ? ` · ${result()!.ms} ms` : "")}
+            {testLabel(result()!) +
+              (REQUEST_MADE.has(result()!.status)
+                ? ` · ${result()!.ms} ms`
+                : "")}
           </Label>
           <If when={result()!.message}>
             <Label variant="small" tone="muted">
@@ -363,12 +471,16 @@ function TestResultView(props: { test: Test; stdio: boolean }) {
             </Label>
             <View style={{ ...row, gap: 8, flexWrap: "wrap" }}>
               <Button
-                label={uiText("useTokenHeader", { header: result()!.requiredHeader! })}
+                label={uiText("useTokenHeader", {
+                  header: result()!.requiredHeader!,
+                })}
                 tone="plain"
                 labelVariant="body"
                 size={28}
                 disabled={props.test.busy()}
-                onPress={() => props.test.useToken(result()!.requiredHeader!, "raw")}
+                onPress={() =>
+                  props.test.useToken(result()!.requiredHeader!, "raw")
+                }
               />
               <Button
                 label={uiText("useTokenHeaderBearer")}
@@ -376,7 +488,9 @@ function TestResultView(props: { test: Test; stdio: boolean }) {
                 labelVariant="body"
                 size={28}
                 disabled={props.test.busy()}
-                onPress={() => props.test.useToken(result()!.requiredHeader!, "bearer")}
+                onPress={() =>
+                  props.test.useToken(result()!.requiredHeader!, "bearer")
+                }
               />
             </View>
           </If>
@@ -384,17 +498,23 @@ function TestResultView(props: { test: Test; stdio: boolean }) {
             <ResultInfo result={result()!} />
             <ItemList
               kind="tool"
-              heading={uiText("toolsHeading", { count: String(result()!.toolCount) })}
+              heading={uiText("toolsHeading", {
+                count: String(result()!.toolCount),
+              })}
               items={result()!.tools}
             />
             <ItemList
               kind="resource"
-              heading={uiText("resourcesHeading", { count: String(result()!.resourceCount ?? 0) })}
+              heading={uiText("resourcesHeading", {
+                count: String(result()!.resourceCount ?? 0),
+              })}
               items={result()!.resources ?? []}
             />
             <ItemList
               kind="prompt"
-              heading={uiText("promptsHeading", { count: String(result()!.promptCount ?? 0) })}
+              heading={uiText("promptsHeading", {
+                count: String(result()!.promptCount ?? 0),
+              })}
               items={result()!.prompts ?? []}
             />
           </If>
@@ -405,7 +525,7 @@ function TestResultView(props: { test: Test; stdio: boolean }) {
 }
 
 const clip = (text: string): string =>
-  text.length > 160 ? text.slice(0, 157) + "…" : text;
+  text.length > 160 ? `${text.slice(0, 157)}…` : text;
 
 /** The skills a plugin holds, read-only; the same list the card counts. Text is shown as plain text. */
 export function SkillRows(props: { item: PluginView }) {
@@ -425,7 +545,7 @@ export function SkillRows(props: { item: PluginView }) {
         <Each of={props.item.skills} key={(skill) => skill.name}>
           {(skill) => (
             <View
-              testID={"skill-card:" + skill().name}
+              testID={`skill-card:${skill().name}`}
               style={{
                 flexGrow: 1,
                 flexShrink: 1,
@@ -436,7 +556,9 @@ export function SkillRows(props: { item: PluginView }) {
                 borderColor: c().border,
               }}
             >
-              <Label variant="subtitle" weight={600}>{skill().name}</Label>
+              <Label variant="subtitle" weight={600}>
+                {skill().name}
+              </Label>
               <If when={skill().description}>
                 <Label variant="small" tone="muted">
                   {clip(skill().description)}
@@ -465,71 +587,121 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
         {(server) => {
           const test = createTest({ item: props.item, server: server().name });
           return (
-          <View
-            style={{
-              gap: 12,
-              padding: 16,
-              borderWidth: 1,
-              borderColor: c().border,
-            }}
-          >
             <View
-              testID={"server-head:" + server().name}
-              style={{ ...row, gap: 10, alignItems: "center" }}
+              style={{
+                gap: 12,
+                padding: 16,
+                borderWidth: 1,
+                borderColor: c().border,
+              }}
             >
-              {/* What may give way is the left cluster; the buttons are never squeezed or wrapped. */}
-              <View style={{ ...row, flexShrink: 1, minWidth: 0, gap: props.phone ? 8 : 10, alignItems: "center" }}>
-                <View style={{ flexShrink: 1, minWidth: 0 }} tooltip={hint(server().name, c)}>
-                  <Label variant="subtitle" weight={600} lines={1}>{server().name}</Label>
-                </View>
-                <Label
-                  variant="small"
-                  tone={props.phone ? "ink" : "mutedInk"}
-                  lines={1}
+              <View
+                testID={`server-head:${server().name}`}
+                style={{ ...row, gap: 10, alignItems: "center" }}
+              >
+                {/* What may give way is the left cluster; the buttons are never squeezed or wrapped. */}
+                <View
                   style={{
-                    flexShrink: 0,
-                    paddingHorizontal: 5,
-                    borderWidth: 1,
-                    borderColor: c().strong,
+                    ...row,
+                    flexShrink: 1,
+                    minWidth: 0,
+                    gap: props.phone ? 8 : 10,
+                    alignItems: "center",
                   }}
                 >
-                  {server().transport}
-                </Label>
-                <View style={{ flexShrink: 1, minWidth: 0 }}>
-                  <ServerBadge item={props.item} server={server()} test={test} />
+                  <View
+                    style={{ flexShrink: 1, minWidth: 0 }}
+                    tooltip={hint(server().name, c)}
+                  >
+                    <Label variant="subtitle" weight={600} lines={1}>
+                      {server().name}
+                    </Label>
+                  </View>
+                  <Label
+                    variant="small"
+                    tone={props.phone ? "ink" : "mutedInk"}
+                    lines={1}
+                    style={{
+                      flexShrink: 0,
+                      paddingHorizontal: 5,
+                      borderWidth: 1,
+                      borderColor: c().strong,
+                    }}
+                  >
+                    {server().transport}
+                  </Label>
+                  <View style={{ flexShrink: 1, minWidth: 0 }}>
+                    <ServerBadge
+                      item={props.item}
+                      server={server()}
+                      test={test}
+                    />
+                  </View>
+                </View>
+                <View style={{ flex: 1 }} />
+                <View
+                  testID={`test-slot:${server().name}`}
+                  style={{ flexShrink: 0 }}
+                >
+                  <TestButton test={test} />
+                </View>
+                <View
+                  testID={`login-slot:${server().name}`}
+                  style={{ flexShrink: 0 }}
+                >
+                  <LoginButton
+                    item={props.item}
+                    server={server()}
+                    test={test}
+                  />
                 </View>
               </View>
-              <View style={{ flex: 1 }} />
-              <View testID={"test-slot:" + server().name} style={{ flexShrink: 0 }}>
-                <TestButton test={test} />
-              </View>
-              <View testID={"login-slot:" + server().name} style={{ flexShrink: 0 }}>
-                <LoginButton item={props.item} server={server()} test={test} />
-              </View>
-            </View>
-            <If when={(server().env ?? []).length || (server().headers ?? []).length}>
-              <View style={{ ...row, flexWrap: "wrap", columnGap: 12, rowGap: 4 }}>
-                <If when={(server().env ?? []).length}>
-                  <Label variant="small" tone="muted">{`${text(props.phone ? "envShort" : "env")}: ${(server().env ?? []).join(", ")}`}</Label>
-                </If>
-                <If when={(server().headers ?? []).length}>
-                  <Label variant="small" tone="muted">{`${text("headers")}: ${(server().headers ?? []).join(", ")}`}</Label>
-                </If>
-              </View>
-            </If>
-            <TestResultView test={test} stdio={server().transport === "stdio"} />
-            <If when={server().transport === "stdio" && props.item.env !== undefined}>
-              <EnvEditor item={props.item} server={server().name} />
-            </If>
-            <If when={server().transport !== "stdio" && hostKnowsHeaders(props.item)}>
-              <HeadersEditor
-                item={props.item}
-                server={server().name}
-                plainHttp={server().plainHttp}
-                phone={props.phone}
+              <If
+                when={
+                  (server().env ?? []).length || (server().headers ?? []).length
+                }
+              >
+                <View
+                  style={{ ...row, flexWrap: "wrap", columnGap: 12, rowGap: 4 }}
+                >
+                  <If when={(server().env ?? []).length}>
+                    <Label
+                      variant="small"
+                      tone="muted"
+                    >{`${text(props.phone ? "envShort" : "env")}: ${(server().env ?? []).join(", ")}`}</Label>
+                  </If>
+                  <If when={(server().headers ?? []).length}>
+                    <Label
+                      variant="small"
+                      tone="muted"
+                    >{`${text("headers")}: ${(server().headers ?? []).join(", ")}`}</Label>
+                  </If>
+                </View>
+              </If>
+              <TestResultView
+                test={test}
+                stdio={server().transport === "stdio"}
               />
-            </If>
-          </View>
+              <If
+                when={
+                  server().transport === "stdio" && props.item.env !== undefined
+                }
+              >
+                <EnvEditor item={props.item} server={server().name} />
+              </If>
+              <If
+                when={
+                  server().transport !== "stdio" && hostKnowsHeaders(props.item)
+                }
+              >
+                <HeadersEditor
+                  item={props.item}
+                  server={server().name}
+                  plainHttp={server().plainHttp}
+                  phone={props.phone}
+                />
+              </If>
+            </View>
           );
         }}
       </Each>
@@ -543,7 +715,6 @@ export function ServersDialog(props: {
   phone: boolean;
   onClose: () => void;
 }) {
-  const c = colors();
   return (
     <Modal
       title={uiText("serversTitle", { name: props.item.name })}

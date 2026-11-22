@@ -13,8 +13,8 @@ import type {
   FieldIssue,
   OpenedPlugin,
   PluginAgentLevel,
-  PluginField,
   PluginEnvView,
+  PluginField,
   PluginHeaderView,
   PluginState,
   PluginTestResult,
@@ -40,19 +40,24 @@ import {
 } from "@eta/client-contracts/plugin-fields";
 import {
   claimServerNames,
-  pluginChunks,
   plainRemote,
+  pluginChunks,
   pluginMcpSources,
   resolvePluginServers,
-  toMcpEntries,
   runtimeExtras,
   serversConfig,
+  toMcpEntries,
 } from "@eta/daemon";
-import { envProblem, headerProblem, MAX_ENV_PER_SERVER, MAX_HEADERS_PER_SERVER } from "./headers";
+import {
+  envProblem,
+  headerProblem,
+  MAX_ENV_PER_SERVER,
+  MAX_HEADERS_PER_SERVER,
+} from "./headers";
 import { PluginRegistry } from "./registry";
-import { notTested, secretsOf } from "./test-server";
 import { serverViews } from "./server-view";
 import { PluginRows } from "./store";
+import { notTested, secretsOf } from "./test-server";
 
 export interface PluginsOptions {
   db: Database;
@@ -145,12 +150,19 @@ export class Plugins {
    * in". Until the user has set each one, the plugin is not usable and nothing is started.
    */
   #missingEnv(entry: PluginEntry): { server: string; name: string }[] {
-    const set = new Set(this.rows.env(entry.name).map((one) => `${one.server}\0${one.name}`));
+    const set = new Set(
+      this.rows.env(entry.name).map((one) => `${one.server}\0${one.name}`),
+    );
     return (entry.plugin?.servers ?? []).flatMap((def) =>
       def.config.type !== "stdio"
         ? []
-        : Object.entries((def.config as { env?: Record<string, string> }).env ?? {})
-            .filter(([name, value]) => value === "" && !set.has(`${def.name}\0${name}`))
+        : Object.entries(
+            (def.config as { env?: Record<string, string> }).env ?? {},
+          )
+            .filter(
+              ([name, value]) =>
+                value === "" && !set.has(`${def.name}\0${name}`),
+            )
             .map(([name]) => ({ server: def.name, name })),
     );
   }
@@ -193,7 +205,9 @@ export class Plugins {
     return [
       ...new Set([
         // An empty value in the file is a blank for the user to fill, not a fixed one.
-        ...Object.entries((def.config as { env?: Record<string, string> }).env ?? {})
+        ...Object.entries(
+          (def.config as { env?: Record<string, string> }).env ?? {},
+        )
           .filter(([, value]) => value !== "")
           .map(([name]) => name),
         ...Object.keys(entry.plugin?.bindings[server]?.env ?? {}),
@@ -220,7 +234,9 @@ export class Plugins {
     if (entry.plugin === undefined || def === undefined)
       throw new Error(`${name} has no server ${server}`);
     if (!this.#usable(entry))
-      return { result: notTested("needs_setup", "required values are missing") };
+      return {
+        result: notTested("needs_setup", "required values are missing"),
+      };
     const resolved = resolvePluginServers(
       [{ plugin: entry.plugin, config: this.#config(entry) }],
       this.#dataDir,
@@ -228,7 +244,9 @@ export class Plugins {
     ).filter((one) => one.server === server);
     const [mcp] = Object.values(toMcpEntries(resolved));
     if (mcp === undefined)
-      return { result: notTested("failed", "the server could not be resolved") };
+      return {
+        result: notTested("failed", "the server could not be resolved"),
+      };
     return { entry: mcp, secrets: secretsOf(mcp) };
   }
 
@@ -703,7 +721,10 @@ export class Plugins {
         throw new Error("Authorization already carries the sign-in token");
       if (header.format !== "raw" && header.format !== "bearer")
         throw new Error("the format is raw or bearer");
-      this.rows.saveTokenHeader(name, server, { name: clean, format: header.format });
+      this.rows.saveTokenHeader(name, server, {
+        name: clean,
+        format: header.format,
+      });
     } else this.rows.saveTokenHeader(name, server, null);
     this.#changed();
   }
@@ -740,8 +761,11 @@ export class Plugins {
       const problem = envProblem(variable, value);
       if (problem !== undefined) throw new Error(problem);
       if (fixed.has(variable))
-        throw new Error(`${variable} is set by the plugin and cannot be changed`);
-      if (seen.has(variable)) throw new Error(`variable ${variable} is listed twice`);
+        throw new Error(
+          `${variable} is set by the plugin and cannot be changed`,
+        );
+      if (seen.has(variable))
+        throw new Error(`variable ${variable} is listed twice`);
       seen.add(variable);
       return { server, name: variable, value, secret: one.secret };
     });

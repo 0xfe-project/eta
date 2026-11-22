@@ -12,7 +12,11 @@ const MAX_TOOLS = 100;
 const MAX_TEXT = 300;
 const MAX_PARAMS = 12;
 
-const empty = (status: PluginTestResult["status"], message: string, ms = 0): PluginTestResult => ({
+const empty = (
+  status: PluginTestResult["status"],
+  message: string,
+  ms = 0,
+): PluginTestResult => ({
   status,
   message,
   ms,
@@ -31,27 +35,45 @@ export const notTested = empty;
 /** `text` with every secret value, and any bearer token, replaced; short enough to show. */
 function mask(text: string, secrets: readonly string[]): string {
   let out = text;
-  for (const secret of secrets) if (secret.length >= 3) out = out.split(secret).join("***");
-  return out.replace(/Bearer\s+[A-Za-z0-9._~+\/=-]{6,}/gi, "Bearer ***").slice(0, MAX_TEXT);
+  for (const secret of secrets)
+    if (secret.length >= 3) out = out.split(secret).join("***");
+  return out
+    .replace(/Bearer\s+[\w.~+/=-]{6,}/gi, "Bearer ***")
+    .slice(0, MAX_TEXT);
 }
 
 /** The values a config carries, and the token part of a bearer one. */
-export function secretsOf(entry: { headers?: Record<string, string>; env?: Record<string, string> }): string[] {
-  const values = [...Object.values(entry.headers ?? {}), ...Object.values(entry.env ?? {})];
-  return values.flatMap((value) => [value, value.replace(/^Bearer\s+/i, "")]).filter((v) => v !== "");
+export function secretsOf(entry: {
+  headers?: Record<string, string>;
+  env?: Record<string, string>;
+}): string[] {
+  const values = [
+    ...Object.values(entry.headers ?? {}),
+    ...Object.values(entry.env ?? {}),
+  ];
+  return values
+    .flatMap((value) => [value, value.replace(/^Bearer\s+/i, "")])
+    .filter((v) => v !== "");
 }
 
 function reasonOf(error: unknown, timedOut: boolean): string {
   if (timedOut) return "no answer within 15 seconds";
   const text = error instanceof Error ? error.message : String(error);
   const low = text.toLowerCase();
-  if (/another host|redirect/.test(low)) return "the server redirected to another host; request headers are sent only to the server's own host, so it was refused";
-  if (/enotfound|eai_again|getaddrinfo|dns/.test(low)) return "the host name could not be resolved (DNS)";
-  if (/cert|tls|ssl|self.signed|unable to verify/.test(low)) return "the TLS certificate was not accepted";
-  if (/econnrefused|connection refused|unable to connect/.test(low)) return "the connection was refused";
-  if (/401|credential rejected/.test(low)) return "credential rejected (HTTP 401)";
-  if (/enoent|spawn/.test(low)) return "the server's command could not be started";
-  if (/json|protocol|invalid|unexpected|parse|schema/.test(low)) return "the server did not answer as an MCP server does";
+  if (/another host|redirect/.test(low))
+    return "the server redirected to another host; request headers are sent only to the server's own host, so it was refused";
+  if (/enotfound|eai_again|getaddrinfo|dns/.test(low))
+    return "the host name could not be resolved (DNS)";
+  if (/cert|tls|ssl|self.signed|unable to verify/.test(low))
+    return "the TLS certificate was not accepted";
+  if (/econnrefused|connection refused|unable to connect/.test(low))
+    return "the connection was refused";
+  if (/401|credential rejected/.test(low))
+    return "credential rejected (HTTP 401)";
+  if (/enoent|spawn/.test(low))
+    return "the server's command could not be started";
+  if (/json|protocol|invalid|unexpected|parse|schema/.test(low))
+    return "the server did not answer as an MCP server does";
   return "the connection failed";
 }
 
@@ -63,34 +85,57 @@ interface Rejection {
 
 /** "Missing Cursor credential in x-cursor-auth", "x-foo header is required": the header named, or none. */
 function missingHeader(text: string): string | undefined {
-  const name = "([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+)";
+  const name = "([a-z][a-z0-9]*(?:-[a-z0-9]+)+)";
   const found =
-    new RegExp("\\bmissing\\b[^\\n]{0,60}?\\b(?:in|from)\\s+(?:the\\s+)?" + name, "i").exec(text) ??
-    new RegExp("\\b" + name + "\\s+header\\s+(?:is\\s+)?(?:required|missing)", "i").exec(text) ??
-    new RegExp("\\bmissing\\s+(?:the\\s+)?" + name + "\\s+header", "i").exec(text);
+    new RegExp(
+      `\\bmissing\\W[^\\n]{0,60}?\\b(?:in|from)\\s+(?:the\\s+)?${name}`,
+      "i",
+    ).exec(text) ??
+    new RegExp(
+      `\\b${name}\\s+header\\s+(?:is\\s+)?(?:required|missing)`,
+      "i",
+    ).exec(text) ??
+    new RegExp(`\\bmissing\\s+(?:the\\s+)?${name}\\s+header`, "i").exec(text);
   return found?.[1]?.toLowerCase();
 }
 
 /** What a 401 said: its challenge's error, description and metadata address, and the start of its body. */
-async function rejectionOf(response: Response, sent: readonly (string | null)[]): Promise<Rejection> {
+async function rejectionOf(
+  response: Response,
+  sent: readonly (string | null)[],
+): Promise<Rejection> {
   const challenge = response.headers.get("www-authenticate") ?? "";
-  const field = (name: string) => new RegExp(name + '="?([^",]*)"?', "i").exec(challenge)?.[1];
+  const field = (name: string) =>
+    new RegExp(`${name}="?([^",]*)"?`, "i").exec(challenge)?.[1];
   const parts = [
     "HTTP 401",
-    ...[["error", "error"], ["error_description", "description"], ["resource_metadata", "metadata"]].flatMap(
-      ([key, label]) => (field(key!) === undefined ? [] : [label + "=" + field(key!)]),
+    ...[
+      ["error", "error"],
+      ["error_description", "description"],
+      ["resource_metadata", "metadata"],
+    ].flatMap(([key, label]) =>
+      field(key!) === undefined ? [] : [`${label}=${field(key!)}`],
     ),
   ];
   // A server may echo what it was sent: the token we sent never leaves here.
-  let text = await response.clone().text().catch(() => "");
+  let text = await response
+    .clone()
+    .text()
+    .catch(() => "");
   for (const one of sent) {
     const token = one?.replace(/^Bearer\s+/i, "") ?? "";
     if (token.length >= 3) text = text.split(token).join("***");
   }
-  const body = text.replace(/[\u0000-\u001f]+/g, " ").trim().slice(0, 200);
-  if (body !== "") parts.push("body: " + body);
+  const body = text
+    // eslint-disable-next-line no-control-regex -- control characters are exactly what is dropped here
+    .replace(/[\u0000-\u001F]+/g, " ")
+    .trim()
+    .slice(0, 200);
+  if (body !== "") parts.push(`body: ${body}`);
   const header = missingHeader(text);
-  return header === undefined ? { text: parts.join(", ") } : { text: parts.join(", "), header };
+  return header === undefined
+    ? { text: parts.join(", ") }
+    : { text: parts.join(", "), header };
 }
 
 /** What an unauthenticated request to the server says about sign-in: true when its 401 challenge is OAuth. */
@@ -99,18 +144,27 @@ async function declaresOauth(url: string, timeoutMs = 5000): Promise<boolean> {
     const response = await fetch(url, {
       method: "POST",
       redirect: "manual",
-      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+      },
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: 0,
         method: "initialize",
-        params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "eta", version: "0" } },
+        params: {
+          protocolVersion: "2025-03-26",
+          capabilities: {},
+          clientInfo: { name: "eta", version: "0" },
+        },
       }),
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (response.status !== 401) return false;
     const challenge = response.headers.get("www-authenticate") ?? "";
-    return /\bBearer\b/i.test(challenge) && /resource_metadata\s*=/i.test(challenge);
+    return (
+      /\bBearer\b/i.test(challenge) && /resource_metadata\s*=/i.test(challenge)
+    );
   } catch {
     return false;
   }
@@ -131,10 +185,16 @@ export async function testConnection(
   const base = fetchImpl ?? fetch;
   const recording = (async (input, init) => {
     const response = await base(input, init);
-    if (response.status === 401 && definition.url !== undefined && String(input) === new URL(definition.url).href)
+    if (
+      response.status === 401 &&
+      definition.url !== undefined &&
+      String(input) === new URL(definition.url).href
+    )
       rejected = await rejectionOf(response, [
         new Headers(init?.headers).get("authorization"),
-        definition.tokenHeader === undefined ? null : new Headers(init?.headers).get(definition.tokenHeader.name),
+        definition.tokenHeader === undefined
+          ? null
+          : new Headers(init?.headers).get(definition.tokenHeader.name),
       ]);
     return response;
   }) as typeof fetch;
@@ -167,8 +227,11 @@ export async function testConnection(
     if (connection.status === "needs-auth") {
       // The server's own challenge decides, not the config's default: a header the user set does not
       // hide that the server also signs in.
-      const sent = Object.values(definition.headers ?? {}).some((value) => value.trim() !== "");
-      const challenge = definition.url !== undefined && (await declaresOauth(definition.url));
+      const sent = Object.values(definition.headers ?? {}).some(
+        (value) => value.trim() !== "",
+      );
+      const challenge =
+        definition.url !== undefined && (await declaresOauth(definition.url));
       if (stored !== undefined && rejected?.header !== undefined) {
         // The sign-in is stored; this server asks for something else (a header of its own client's).
         // That is not an expired sign-in, and signing in again would not help.
@@ -186,14 +249,21 @@ export async function testConnection(
         return empty(
           "needs_login",
           stored !== undefined
-            ? `the server did not accept the stored sign-in${rejected === undefined ? "" : " (" + mask(rejected.text, secrets) + ")"}; sign in again`
+            ? `the server did not accept the stored sign-in${rejected === undefined ? "" : ` (${mask(rejected.text, secrets)})`}; sign in again`
             : sent
               ? "credential rejected; this server also supports login"
               : "this server needs a sign-in",
           elapsed(),
         );
       }
-      return empty("failed", mask(connection.authMessage ?? "credential rejected (HTTP 401)", secrets), elapsed());
+      return empty(
+        "failed",
+        mask(
+          connection.authMessage ?? "credential rejected (HTTP 401)",
+          secrets,
+        ),
+        elapsed(),
+      );
     }
     const client = connection.client!;
     const info = client.getServerVersion();
@@ -201,34 +271,57 @@ export async function testConnection(
     const listed = caps.tools ? await client.listTools() : { tools: [] };
     const resources = caps.resources ? await client.listResources() : null;
     const prompts = caps.prompts ? await client.listPrompts() : null;
-    const tools = (listed.tools as Array<Record<string, unknown>>).slice(0, MAX_TOOLS).map((tool) => {
-      const props = (tool.inputSchema as { properties?: Record<string, unknown> } | undefined)?.properties;
-      return {
-        name: mask(String(tool.name), secrets),
-        description: mask(typeof tool.description === "string" ? tool.description : "", secrets),
-        params: Object.keys(props ?? {}).slice(0, MAX_PARAMS),
-      };
-    });
-    const resourceList = (resources?.resources ?? []) as Array<Record<string, unknown>>;
-    const promptList = (prompts?.prompts ?? []) as Array<Record<string, unknown>>;
+    const tools = (listed.tools as Array<Record<string, unknown>>)
+      .slice(0, MAX_TOOLS)
+      .map((tool) => {
+        const props = (
+          tool.inputSchema as
+            | { properties?: Record<string, unknown> }
+            | undefined
+        )?.properties;
+        return {
+          name: mask(String(tool.name), secrets),
+          description: mask(
+            typeof tool.description === "string" ? tool.description : "",
+            secrets,
+          ),
+          params: Object.keys(props ?? {}).slice(0, MAX_PARAMS),
+        };
+      });
+    const resourceList = (resources?.resources ?? []) as Array<
+      Record<string, unknown>
+    >;
+    const promptList = (prompts?.prompts ?? []) as Array<
+      Record<string, unknown>
+    >;
     return {
       status: "ok",
       message: "",
       ms: elapsed(),
-      serverName: info?.name === undefined ? null : mask(String(info.name), secrets),
-      serverVersion: info?.version === undefined ? null : mask(String(info.version), secrets),
+      serverName:
+        info?.name === undefined ? null : mask(String(info.name), secrets),
+      serverVersion:
+        info?.version === undefined
+          ? null
+          : mask(String(info.version), secrets),
       tools,
       toolCount: listed.tools.length,
       resourceCount: resources === null ? null : resources.resources.length,
       promptCount: prompts === null ? null : prompts.prompts.length,
       resources: resourceList.slice(0, MAX_TOOLS).map((one) => ({
         name: mask(String(one.name ?? one.uri ?? ""), secrets),
-        description: mask(typeof one.description === "string" ? one.description : "", secrets),
+        description: mask(
+          typeof one.description === "string" ? one.description : "",
+          secrets,
+        ),
         params: [],
       })),
       prompts: promptList.slice(0, MAX_TOOLS).map((one) => ({
         name: mask(String(one.name ?? ""), secrets),
-        description: mask(typeof one.description === "string" ? one.description : "", secrets),
+        description: mask(
+          typeof one.description === "string" ? one.description : "",
+          secrets,
+        ),
         params: ((one.arguments as Array<{ name?: unknown }> | undefined) ?? [])
           .map((arg) => String(arg.name ?? ""))
           .filter((name) => name !== "")

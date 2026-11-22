@@ -4,7 +4,8 @@ import { Label } from "../../src/components";
 import { Market } from "../../src/pages/plugins/market";
 import { createHost, Host } from "../../src/services/host";
 
-const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+const PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 const entry = (name: string, path: string) => ({
   name,
   description: "d",
@@ -25,7 +26,11 @@ const kept: MarketCatalog = {
   sources: [
     {
       source: { url: "http://a.test/c.json", name: "Alpha", enabled: true },
-      entries: [entry("kept-entry", "p/kept"), entry("no-logo", "p/none"), entry("unknown-one", "p/unknown")],
+      entries: [
+        entry("kept-entry", "p/kept"),
+        entry("no-logo", "p/none"),
+        entry("unknown-one", "p/unknown"),
+      ],
       rejected: [],
       error: null,
       updatedAt: 1_700_000_000_000,
@@ -44,18 +49,33 @@ export function mountMarket(mode: "hit" | "stalled" | "old") {
     const host = createHost();
     host.state.update((state) => ({ ...state, status: "open" }));
     const stub = Object.assign(host, {
-      call: (_target: string, action: string, args?: { mode?: string; path?: string }) => {
+      call: (
+        _target: string,
+        action: string,
+        args?: { mode?: string; path?: string },
+      ) => {
         if (action === "marketCatalog")
-          return args?.mode === "cached" ? Promise.resolve(kept) : new Promise<MarketCatalog>(() => undefined);
+          return args?.mode === "cached"
+            ? Promise.resolve(kept)
+            : new Promise<MarketCatalog>(() => undefined);
         if (action === "logosCached") {
-          if (mode === "old") return Promise.reject(new Error("unknown action plugins.logosCached"));
+          if (mode === "old")
+            return Promise.reject(
+              new Error("unknown action plugins.logosCached"),
+            );
           if (mode === "stalled") return new Promise(() => undefined);
           return Promise.resolve({
-            logos: [{ status: "hit", type: "image/png", data: PNG }, { status: "miss" }, { status: "unknown" }],
+            logos: [
+              { status: "hit", type: "image/png", data: PNG },
+              { status: "miss" },
+              { status: "unknown" },
+            ],
           });
         }
         if (action === "logo") {
-          (globalThis as { __logoCalls?: string[] }).__logoCalls?.push(String(args?.path));
+          (globalThis as { __logoCalls?: string[] }).__logoCalls?.push(
+            String(args?.path),
+          );
           return new Promise(() => undefined);
         }
         return Promise.resolve(undefined);

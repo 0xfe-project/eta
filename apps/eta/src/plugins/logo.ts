@@ -1,3 +1,6 @@
+import type { LookupAddress } from "node:dns";
+import type { IncomingMessage } from "node:http";
+import type { IconCache } from "./icon-cache";
 /**
  * Plugin logos for the market: the host fetches them, so the client never contacts a catalog's
  * servers and a page cannot make the client's network reach anything. The address is untrusted:
@@ -7,15 +10,13 @@
  * service is asked. A homepage on github.com or gitlab.com is not asked either: its icon is the
  * site's, not the plugin's. A result, and a miss, is kept in memory for a day.
  */
-import type { LookupAddress } from "node:dns";
-import type { IncomingMessage } from "node:http";
+import { Buffer } from "node:buffer";
 import { lookup } from "node:dns/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import http from "node:http";
 import https from "node:https";
-import { readFile, realpath, stat } from "node:fs/promises";
 import { isIP } from "node:net";
 import { extname, isAbsolute, resolve, sep } from "node:path";
-import type { IconCache } from "./icon-cache";
 import { viaProxy } from "./git";
 
 export interface Logo {
@@ -34,7 +35,12 @@ const RETRY_MS = 2 * 60 * 1000;
 /** A logo read at a commit cannot change: kept long. A branch or HEAD is kept a day. */
 const PINNED_MS = 30 * 24 * 60 * 60 * 1000;
 const COMMIT = /^[0-9a-f]{40}$/;
-const SKIPPED = new Set(["github.com", "www.github.com", "gitlab.com", "www.gitlab.com"]);
+const SKIPPED = new Set([
+  "github.com",
+  "www.github.com",
+  "gitlab.com",
+  "www.gitlab.com",
+]);
 
 /** Whether an address is one this host must not call: private, loopback, link-local, reserved. */
 export function isPrivateAddress(address: string): boolean {
@@ -43,7 +49,10 @@ export function isPrivateAddress(address: string): boolean {
   if (isIP(address) === 4) {
     const [a, b] = address.split(".").map(Number) as [number, number];
     return (
-      a === 0 || a === 10 || a === 127 || a >= 224 ||
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      a >= 224 ||
       (a === 100 && b >= 64 && b <= 127) ||
       (a === 169 && b === 254) ||
       (a === 172 && b >= 16 && b <= 31) ||
@@ -56,9 +65,13 @@ export function isPrivateAddress(address: string): boolean {
   }
   const low = address.toLowerCase();
   return (
-    low === "::" || low === "::1" ||
-    low.startsWith("fc") || low.startsWith("fd") ||
-    /^fe[89ab]/.test(low) || low.startsWith("ff") || low.startsWith("2001:db8")
+    low === "::" ||
+    low === "::1" ||
+    low.startsWith("fc") ||
+    low.startsWith("fd") ||
+    /^fe[89ab]/.test(low) ||
+    low.startsWith("ff") ||
+    low.startsWith("2001:db8")
   );
 }
 
@@ -69,7 +82,8 @@ export function pictureType(bytes: Uint8Array): string | null {
   if (is(0xff, 0xd8, 0xff)) return "image/jpeg";
   if (is(0x47, 0x49, 0x46, 0x38)) return "image/gif";
   if (is(0x00, 0x00, 0x01, 0x00)) return "image/x-icon";
-  if (is(0x52, 0x49, 0x46, 0x46) && bytes[8] === 0x57 && bytes[9] === 0x45) return "image/webp";
+  if (is(0x52, 0x49, 0x46, 0x46) && bytes[8] === 0x57 && bytes[9] === 0x45)
+    return "image/webp";
   return null;
 }
 
@@ -84,7 +98,8 @@ const MAX_OWN = 256 * 1024;
 /** What makes an SVG unfit: script, handlers, embedded pages, entities, references that leave the file. */
 const SVG_UNSAFE =
   /<script|<foreignObject|<iframe|<embed|<object|<!ENTITY|\son[a-z]+\s*=|javascript:|(?:xlink:)?href\s*=\s*["'](?!#)/i;
-const SVG_HEAD = /^\s*(<\?xml[^>]*\?>\s*)?(<!--[\s\S]*?-->\s*)*(<!DOCTYPE\s+svg[^>[]*>\s*)?<svg\b/i;
+const SVG_HEAD =
+  /^\s*(?:<\?xml[^>]*\?>\s*)?(?:<!--[\s\S]*?-->\s*)*(?:<!DOCTYPE\s+svg[^>[]*>\s*)?<svg\b/i;
 
 /**
  * A plugin's own picture: `rel` is a path in its manifest, read only if it stays inside `root`
@@ -92,9 +107,13 @@ const SVG_HEAD = /^\s*(<\?xml[^>]*\?>\s*)?(<!--[\s\S]*?-->\s*)*(<!DOCTYPE\s+svg[
  * size. An SVG with script or outside references is refused; it is shown as an image, which never
  * runs script either. Anything wrong is null: the card falls back to its letter.
  */
-export async function readOwnLogo(root: string, rel: string): Promise<Logo | null> {
+export async function readOwnLogo(
+  root: string,
+  rel: string,
+): Promise<Logo | null> {
   try {
-    if (!rel || rel.includes("\0") || isAbsolute(rel) || /^[a-z]+:/i.test(rel)) return null;
+    if (!rel || rel.includes("\0") || isAbsolute(rel) || /^[a-z]+:/i.test(rel))
+      return null;
     const mime = OWN_TYPES[extname(rel).toLowerCase()];
     if (!mime) return null;
     const base = await realpath(root);
@@ -135,8 +154,9 @@ const MAX_MANIFEST = 64 * 1024;
 export const MAX_REPO_LOOKUPS = 4;
 /** A repository lookup that found nothing is not asked again for this long (a hit stays a day). */
 const MISS_MS = 60 * 60 * 1000;
-const GITHUB_REPO = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/;
-const REF = /^[\w][\w./-]{0,127}$/;
+const GITHUB_REPO =
+  /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/;
+const REF = /^\w[\w./-]{0,127}$/;
 const SEGMENT = /^[\w.@+-]+$/;
 /** Manifests that can name a logo, in the order the loader reads them. */
 const MANIFESTS = [".cursor-plugin/plugin.json", ".claude-plugin/plugin.json"];
@@ -144,23 +164,49 @@ const MANIFESTS = [".cursor-plugin/plugin.json", ".claude-plugin/plugin.json"];
 /** `path` as clean segments of a path inside a repository; throws for anything that could leave it. */
 function segments(path: string): string[] {
   const parts = path.split("/").filter((part) => part !== "" && part !== ".");
-  if (path.includes("\\") || path.includes("\0") || path.length > 512) throw new Refused("bad path");
-  for (const part of parts) if (part === ".." || !SEGMENT.test(part)) throw new Refused("bad path");
+  if (path.includes("\\") || path.includes("\0") || path.length > 512)
+    throw new Refused("bad path");
+  for (const part of parts)
+    if (part === ".." || !SEGMENT.test(part)) throw new Refused("bad path");
   return parts;
 }
 
 class Refused extends Error {}
 /** Whether an error is a failure to ask (network, timeout, 5xx), not an answer (a refusal, a 4xx). */
 const failure = (error: unknown): boolean =>
-  !(error instanceof Refused) && !/^HTTP 4\d\d$/.test(error instanceof Error ? error.message : "");
+  !(error instanceof Refused) &&
+  !/^HTTP 4\d\d$/.test(error instanceof Error ? error.message : "");
 /** The answer could not be had (network, timeout, 5xx): not a statement that there is no picture. */
 class Failed extends Error {}
 
 /** Two-label public suffixes a site name can end in; a small fixed list, not the full public suffix list. */
 const SECOND_LEVEL = new Set([
-  "co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au", "co.nz", "co.jp", "ne.jp", "or.jp",
-  "com.cn", "net.cn", "org.cn", "com.hk", "com.tw", "com.sg", "com.br", "com.mx", "com.tr", "co.in",
-  "co.kr", "co.za", "com.ar", "com.my", "com.ua",
+  "co.uk",
+  "org.uk",
+  "ac.uk",
+  "gov.uk",
+  "com.au",
+  "net.au",
+  "org.au",
+  "co.nz",
+  "co.jp",
+  "ne.jp",
+  "or.jp",
+  "com.cn",
+  "net.cn",
+  "org.cn",
+  "com.hk",
+  "com.tw",
+  "com.sg",
+  "com.br",
+  "com.mx",
+  "com.tr",
+  "co.in",
+  "co.kr",
+  "co.za",
+  "com.ar",
+  "com.my",
+  "com.ua",
 ]);
 
 /**
@@ -178,7 +224,8 @@ export function siteOf(server: string): string[] {
     if (isIP(host.replace(/^\[|\]$/g, "")) === 0) {
       const labels = host.split(".");
       const take = SECOND_LEVEL.has(labels.slice(-2).join(".")) ? 3 : 2;
-      if (labels.length > take) sites.push(`${url.protocol}//${labels.slice(-take).join(".")}`);
+      if (labels.length > take)
+        sites.push(`${url.protocol}//${labels.slice(-take).join(".")}`);
     }
     sites.push(url.origin);
     return sites;
@@ -192,7 +239,10 @@ export const MAX_CACHED_LOGOS = 200;
 /** The most picture data (base64) one `cached` answer carries; hits past it are answered "unknown". */
 export const MAX_CACHED_BYTES = 2 * 1024 * 1024;
 
-export type CachedLogo = { status: "hit"; logo: Logo } | { status: "miss" } | { status: "unknown" };
+export type CachedLogo =
+  | { status: "hit"; logo: Logo }
+  | { status: "miss" }
+  | { status: "unknown" };
 
 export class Logos {
   readonly #options: LogoOptions;
@@ -214,15 +264,20 @@ export class Logos {
    * The first picture found among the plugin's own logo, its homepage's icon, then the icon of its
    * remote MCP server's site (`origin`); null when none. The server's own headers are never sent.
    */
-  async find(own: string | null, homepage: string | null, origin: string | null = null): Promise<Logo | null> {
-    const key = (own ?? "") + "\n" + (homepage ?? "") + "\n" + (origin ?? "");
+  async find(
+    own: string | null,
+    homepage: string | null,
+    origin: string | null = null,
+  ): Promise<Logo | null> {
+    const key = `${own ?? ""}\n${homepage ?? ""}\n${origin ?? ""}`;
     const now = (this.#options.now ?? Date.now)();
     const hit = this.#kept.get(key);
     if (hit && now - hit.at < KEEP_MS) return hit.logo;
     let logo: Logo | null = null;
     try {
       if (own) logo = await this.#picture(own);
-      if (!logo && homepage) logo = await this.#fromHomepage(homepage).catch(() => null);
+      if (!logo && homepage)
+        logo = await this.#fromHomepage(homepage).catch(() => null);
       if (!logo && origin) {
         for (const site of (this.#options.sites ?? siteOf)(origin)) {
           logo = await this.#fromHomepage(site).catch(() => null);
@@ -243,8 +298,12 @@ export class Logos {
    * is read from the same place. Any other host, or anything wrong, is null. At most
    * MAX_REPO_LOOKUPS run at once, and an answer (a miss for an hour) is kept.
    */
-  async fromRepo(repo: string, ref: string, path: string): Promise<Logo | null> {
-    const key = repo + "\n" + ref + "\n" + path;
+  async fromRepo(
+    repo: string,
+    ref: string,
+    path: string,
+  ): Promise<Logo | null> {
+    const key = `${repo}\n${ref}\n${path}`;
     const now = (this.#options.now ?? Date.now)();
     const hit = this.#repoKept.get(key);
     if (hit && now < hit.until) return hit.logo;
@@ -264,7 +323,8 @@ export class Logos {
     let logo: Logo | null = null;
     let failed = false;
     try {
-      if (this.#active >= MAX_REPO_LOOKUPS) await new Promise<void>((go) => this.#waiting.push(go));
+      if (this.#active >= MAX_REPO_LOOKUPS)
+        await new Promise<void>((go) => this.#waiting.push(go));
       else this.#active++;
       this.peak = Math.max(this.peak, this.#active);
       try {
@@ -291,7 +351,9 @@ export class Logos {
       repo,
       ref,
       path,
-      logo ? { mime: logo.type, bytes: Buffer.from(logo.data, "base64") } : null,
+      logo
+        ? { mime: logo.type, bytes: Buffer.from(logo.data, "base64") }
+        : null,
       now + keep,
       now,
     );
@@ -302,19 +364,25 @@ export class Logos {
    * A catalog entry's picture: its own logo in the repository, else its homepage's icon. The second
    * answer is kept in the database too (under the entry's key), so a restart asks no site again.
    */
-  async forEntry(repo: string, ref: string, path: string, homepage: string | null): Promise<Logo | null> {
+  async forEntry(
+    repo: string,
+    ref: string,
+    path: string,
+    homepage: string | null,
+  ): Promise<Logo | null> {
     const own = await this.fromRepo(repo, ref, path);
     if (own || !homepage) return own;
-    const site = "#site:" + homepage;
+    const site = `#site:${homepage}`;
     const now = (this.#options.now ?? Date.now)();
     const row = this.#options.store?.get(repo, ref, site, now);
     if (row !== undefined && now < row.expiresAt) {
-      const kept = row.status === "miss" ? null : this.#checked(row.mime, row.bytes);
+      const kept =
+        row.status === "miss" ? null : this.#checked(row.mime, row.bytes);
       if (kept !== undefined) return kept;
       this.#options.store?.delete(repo, ref, site);
     }
     // A short wait after a failed ask; a failure is never kept as "no picture".
-    const waitKey = site + "\n" + repo + "\n" + ref;
+    const waitKey = `${site}\n${repo}\n${ref}`;
     if ((this.#repoBackoff.get(waitKey) ?? 0) > now) return null;
     const seen = { failed: false };
     const logo = await this.#fromHomepage(homepage, seen).catch((error) => {
@@ -331,7 +399,9 @@ export class Logos {
       repo,
       ref,
       site,
-      logo ? { mime: logo.type, bytes: Buffer.from(logo.data, "base64") } : null,
+      logo
+        ? { mime: logo.type, bytes: Buffer.from(logo.data, "base64") }
+        : null,
       now + keep,
       now,
     );
@@ -344,25 +414,39 @@ export class Logos {
    * too: better than a letter), `miss` a recent answer that there is none, `unknown` anything not
    * known (including entries past MAX_CACHED_LOGOS and hits past MAX_CACHED_BYTES).
    */
-  cached(entries: { repo: string; ref: string; path: string; homepage: string | null }[]): CachedLogo[] {
+  cached(
+    entries: {
+      repo: string;
+      ref: string;
+      path: string;
+      homepage: string | null;
+    }[],
+  ): CachedLogo[] {
     const now = (this.#options.now ?? Date.now)();
     let total = 0;
     return entries.map((one, index): CachedLogo => {
       if (index >= MAX_CACHED_LOGOS) return { status: "unknown" };
       let got = this.#peek(one.repo, one.ref, one.path, now);
       // An own logo that is known not to exist: the homepage's icon, kept under the entry's key, is next.
-      if (got === null && one.homepage) got = this.#peek(one.repo, one.ref, "#site:" + one.homepage, now);
+      if (got === null && one.homepage)
+        got = this.#peek(one.repo, one.ref, `#site:${one.homepage}`, now);
       if (got === undefined) return { status: "unknown" };
       if (got === null) return { status: "miss" };
-      if (total + got.data.length > MAX_CACHED_BYTES) return { status: "unknown" };
+      if (total + got.data.length > MAX_CACHED_BYTES)
+        return { status: "unknown" };
       total += got.data.length;
       return { status: "hit", logo: got };
     });
   }
 
   /** A picture, null (known: none), or undefined (not known). Reads only. */
-  #peek(repo: string, ref: string, path: string, now: number): Logo | null | undefined {
-    const hit = this.#repoKept.get(repo + "\n" + ref + "\n" + path);
+  #peek(
+    repo: string,
+    ref: string,
+    path: string,
+    now: number,
+  ): Logo | null | undefined {
+    const hit = this.#repoKept.get(`${repo}\n${ref}\n${path}`);
     if (hit && now < hit.until) return hit.logo;
     const row = this.#options.store?.peek(repo, ref, path);
     if (row === undefined) return undefined;
@@ -380,7 +464,13 @@ export class Logos {
 
   /** A kept picture checked again: its type, its size and, for an SVG, the same rules as a fresh one. */
   #checked(mime: string | null, bytes: Uint8Array | null): Logo | undefined {
-    if (mime === null || bytes === null || bytes.byteLength === 0 || bytes.byteLength > MAX_OWN) return undefined;
+    if (
+      mime === null ||
+      bytes === null ||
+      bytes.byteLength === 0 ||
+      bytes.byteLength > MAX_OWN
+    )
+      return undefined;
     if (!Object.values(OWN_TYPES).includes(mime)) return undefined;
     if (mime === "image/svg+xml") {
       const text = Buffer.from(bytes).toString("utf8");
@@ -389,22 +479,34 @@ export class Logos {
     return { type: mime, data: Buffer.from(bytes).toString("base64") };
   }
 
-  async #repoLogo(repo: string, ref: string, path: string): Promise<Logo | null> {
+  async #repoLogo(
+    repo: string,
+    ref: string,
+    path: string,
+  ): Promise<Logo | null> {
     const match = GITHUB_REPO.exec(repo.trim());
     if (!match || !REF.test(ref) || ref.includes("..")) return null;
     const dir = segments(path);
     const base = `${this.#options.rawBase ?? RAW}/${match[1]}/${match[2]}/${ref}`;
-    const raw = (parts: string[]) => this.#address(viaProxy([base, ...parts].join("/")));
+    const raw = (parts: string[]) =>
+      this.#address(viaProxy([base, ...parts].join("/")));
     for (const manifest of MANIFESTS) {
       const got = await this.#getRepo(raw([...dir, manifest]), MAX_MANIFEST);
       if (!got) continue;
       let rel: unknown;
       try {
-        rel = (JSON.parse(new TextDecoder().decode(got.body)) as { logo?: unknown }).logo;
+        rel = (
+          JSON.parse(new TextDecoder().decode(got.body)) as { logo?: unknown }
+        ).logo;
       } catch {
         continue;
       }
-      if (typeof rel !== "string" || rel.length > 256 || /^[a-z][a-z0-9+.-]*:/i.test(rel)) continue;
+      if (
+        typeof rel !== "string" ||
+        rel.length > 256 ||
+        /^[a-z][a-z0-9+.-]*:/i.test(rel)
+      )
+        continue;
       let file: string[];
       try {
         file = segments(rel);
@@ -429,21 +531,32 @@ export class Logos {
    * or a rate limit), is null: there is nothing to show. A network error, a timeout and a 5xx throw
    * `Failed`, so the caller does not take them for an absent picture.
    */
-  async #getRepo(url: URL, cap: number): Promise<{ url: string; body: Uint8Array } | null> {
+  async #getRepo(
+    url: URL,
+    cap: number,
+  ): Promise<{ url: string; body: Uint8Array } | null> {
     try {
       return await this.#get(url, cap);
     } catch (error) {
       if (error instanceof Refused) return null;
-      const status = /^HTTP (\d+)$/.exec(error instanceof Error ? error.message : "");
+      const status = /^HTTP (\d+)$/.exec(
+        error instanceof Error ? error.message : "",
+      );
       if (status) {
         const code = Number(status[1]);
-        if (code >= 400 && code < 500 && code !== 408 && code !== 429) return null;
+        if (code >= 400 && code < 500 && code !== 408 && code !== 429)
+          return null;
       }
-      throw new Failed(error instanceof Error ? error.message : "request failed");
+      throw new Failed(
+        error instanceof Error ? error.message : "request failed",
+      );
     }
   }
 
-  async #fromHomepage(homepage: string, seen?: { failed: boolean }): Promise<Logo | null> {
+  async #fromHomepage(
+    homepage: string,
+    seen?: { failed: boolean },
+  ): Promise<Logo | null> {
     const page = this.#address(homepage);
     if (SKIPPED.has(page.hostname.toLowerCase())) return null;
     const html = await this.#get(page, MAX_PAGE).catch((error) => {
@@ -454,9 +567,13 @@ export class Logos {
     if (html) {
       const text = new TextDecoder().decode(html.body);
       for (const tag of text.match(/<link\b[^>]*>/gi) ?? []) {
-        const rel = /\brel\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1]?.toLowerCase() ?? "";
+        const rel =
+          /\brel\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1]?.toLowerCase() ?? "";
         const href = /\bhref\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1];
-        if (href && /(^|\s)(icon|shortcut icon|apple-touch-icon)(\s|$)/.test(rel)) {
+        if (
+          href &&
+          /(?:^|\s)(?:icon|shortcut icon|apple-touch-icon)(?:\s|$)/.test(rel)
+        ) {
           try {
             candidates.push(new URL(href, html.url).href);
           } catch {
@@ -479,19 +596,25 @@ export class Logos {
   async #picture(address: string): Promise<Logo | null> {
     const got = await this.#get(this.#address(address), MAX_PICTURE);
     const type = pictureType(got.body);
-    return type ? { type, data: Buffer.from(got.body).toString("base64") } : null;
+    return type
+      ? { type, data: Buffer.from(got.body).toString("base64") }
+      : null;
   }
 
   #address(value: string): URL {
     const url = new URL(value);
     if (url.protocol !== "https:" && url.protocol !== "http:")
       throw new Refused("not an http(s) address");
-    if (url.username || url.password) throw new Refused("an address with credentials");
+    if (url.username || url.password)
+      throw new Refused("an address with credentials");
     return url;
   }
 
   /** One GET with the redirects followed by hand, each hop checked; the body is capped. */
-  async #get(start: URL, cap: number): Promise<{ url: string; body: Uint8Array }> {
+  async #get(
+    start: URL,
+    cap: number,
+  ): Promise<{ url: string; body: Uint8Array }> {
     let url = start;
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       const response = await this.#once(url, cap);
@@ -501,7 +624,7 @@ export class Logos {
         url = this.#address(viaProxy(new URL(response.location, url).href));
         continue;
       }
-      if (status !== 200) throw new Error("HTTP " + status);
+      if (status !== 200) throw new Error(`HTTP ${status}`);
       return { url: url.href, body: response.body };
     }
     throw new Refused("too many redirects");
@@ -517,8 +640,12 @@ export class Logos {
         ? [host]
         : this.#options.resolve
           ? await this.#options.resolve(host)
-          : (await lookup(host, { all: true })).map((one: LookupAddress) => one.address);
-    const usable = this.#options.allowPrivate ? found : found.filter((one) => !isPrivateAddress(one));
+          : (await lookup(host, { all: true })).map(
+              (one: LookupAddress) => one.address,
+            );
+    const usable = this.#options.allowPrivate
+      ? found
+      : found.filter((one) => !isPrivateAddress(one));
     // One private answer is enough to refuse: a name must not be half inside the network.
     if (!usable.length || usable.length !== found.length)
       throw new Refused("the address is not a public one");
@@ -534,7 +661,11 @@ export class Logos {
           path: url.pathname + url.search,
           method: "GET",
           servername: secure && isIP(host) === 0 ? host : undefined,
-          headers: { host: url.host, accept: "image/*,text/html;q=0.8", "user-agent": "eta-logo" },
+          headers: {
+            host: url.host,
+            accept: "image/*,text/html;q=0.8",
+            "user-agent": "eta-logo",
+          },
           timeout: timeoutMs,
         },
         (response: IncomingMessage) => {
@@ -553,16 +684,26 @@ export class Logos {
           });
           // An answer cut short is a failure, never a short body taken for the whole one.
           response.on("end", () => {
-            if (!response.complete) reject(new Error("the connection closed early"));
-            else resolve({ status: response.statusCode ?? 0, location, body: Buffer.concat(chunks) });
+            if (!response.complete)
+              reject(new Error("the connection closed early"));
+            else
+              resolve({
+                status: response.statusCode ?? 0,
+                location,
+                body: Buffer.concat(chunks),
+              });
           });
           response.on("close", () => {
-            if (!response.complete) reject(new Error("the connection closed early"));
+            if (!response.complete)
+              reject(new Error("the connection closed early"));
           });
           response.on("error", () => undefined);
         },
       );
-      const stop = setTimeout(() => request.destroy(new Error("no answer")), timeoutMs);
+      const stop = setTimeout(
+        () => request.destroy(new Error("no answer")),
+        timeoutMs,
+      );
       request.on("timeout", () => request.destroy(new Error("no answer")));
       request.on("error", (error) => reject(error));
       request.on("close", () => clearTimeout(stop));

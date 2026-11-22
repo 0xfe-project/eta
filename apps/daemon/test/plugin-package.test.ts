@@ -534,7 +534,12 @@ describe("a Cursor or Claude Code layout", () => {
     const loaded = await loadPlugin(
       await foreign(
         ".cursor-plugin",
-        { name: "demo", hooks: "./hooks.json", agents: "./agents/", skills: "./skills/" },
+        {
+          name: "demo",
+          hooks: "./hooks.json",
+          agents: "./agents/",
+          skills: "./skills/",
+        },
         {
           "agents/a.md": "x",
           "rules/r.mdc": "x",
@@ -554,11 +559,20 @@ describe("a Cursor or Claude Code layout", () => {
 
   describe("plugin.json mcpServers", () => {
     const servers = { s: { type: "http", url: "https://example.com/mcp" } };
-    const names = (loaded: { servers: { name: string }[] }) => loaded.servers.map((entry) => entry.name);
+    const names = (loaded: { servers: { name: string }[] }) =>
+      loaded.servers.map((entry) => entry.name);
 
     it("is not a warning, and unknown fields of a foreign manifest are not either", async () => {
       const loaded = await loadPlugin(
-        await foreign(".cursor-plugin", { name: "demo", minClientVersions: { x: 1 }, mcpServers: "./mcp.json" }, { "mcp.json": { mcpServers: servers } }),
+        await foreign(
+          ".cursor-plugin",
+          {
+            name: "demo",
+            minClientVersions: { x: 1 },
+            mcpServers: "./mcp.json",
+          },
+          { "mcp.json": { mcpServers: servers } },
+        ),
       );
       expect(loaded.reports).toEqual([]);
       expect(names(loaded)).toEqual(["s"]);
@@ -566,43 +580,74 @@ describe("a Cursor or Claude Code layout", () => {
 
     it("reads a string path, an array of paths and an inline object", async () => {
       const path = await loadPlugin(
-        await foreign(".claude-plugin", { name: "demo", mcpServers: "./config/servers.json" }, { "config/servers.json": { mcpServers: servers } }),
+        await foreign(
+          ".claude-plugin",
+          { name: "demo", mcpServers: "./config/servers.json" },
+          { "config/servers.json": { mcpServers: servers } },
+        ),
       );
       expect(names(path)).toEqual(["s"]);
       const list = await loadPlugin(
-        await foreign(".claude-plugin", { name: "demo", mcpServers: ["./a.json", "b.json"] }, {
-          "a.json": { mcpServers: { one: servers.s } },
-          "b.json": { mcpServers: { two: servers.s } },
-        }),
+        await foreign(
+          ".claude-plugin",
+          { name: "demo", mcpServers: ["./a.json", "b.json"] },
+          {
+            "a.json": { mcpServers: { one: servers.s } },
+            "b.json": { mcpServers: { two: servers.s } },
+          },
+        ),
       );
       expect(names(list)).toEqual(["one", "two"]);
-      const inline = await loadPlugin(await foreign(".claude-plugin", { name: "demo", mcpServers: servers }));
+      const inline = await loadPlugin(
+        await foreign(".claude-plugin", { name: "demo", mcpServers: servers }),
+      );
       expect(names(inline)).toEqual(["s"]);
       expect(inline.reports).toEqual([]);
     });
 
     it("reads a file named by the manifest once, even when it is also .mcp.json", async () => {
       const loaded = await loadPlugin(
-        await foreign(".claude-plugin", { name: "demo", mcpServers: "./.mcp.json" }, { ".mcp.json": { mcpServers: servers } }),
+        await foreign(
+          ".claude-plugin",
+          { name: "demo", mcpServers: "./.mcp.json" },
+          { ".mcp.json": { mcpServers: servers } },
+        ),
       );
       expect(names(loaded)).toEqual(["s"]);
       expect(loaded.reports).toEqual([]);
     });
 
     it("reports a missing file, and refuses a path that leaves the plugin", async () => {
-      const missing = await loadPlugin(await foreign(".claude-plugin", { name: "demo", mcpServers: "./nope.json" }));
-      expect(missing.reports.join("\n")).toContain("nope.json: the file does not exist");
+      const missing = await loadPlugin(
+        await foreign(".claude-plugin", {
+          name: "demo",
+          mcpServers: "./nope.json",
+        }),
+      );
+      expect(missing.reports.join("\n")).toContain(
+        "nope.json: the file does not exist",
+      );
       for (const bad of ["../x.json", "/etc/x.json", "a/../../x.json"]) {
-        const loaded = await loadPlugin(await foreign(".claude-plugin", { name: "demo", mcpServers: bad }));
+        const loaded = await loadPlugin(
+          await foreign(".claude-plugin", { name: "demo", mcpServers: bad }),
+        );
         expect(loaded.servers).toEqual([]);
-        expect(loaded.reports.join("\n")).toContain("must be relative and stay inside the plugin");
+        expect(loaded.reports.join("\n")).toContain(
+          "must be relative and stay inside the plugin",
+        );
       }
     });
 
     it("does not follow a symlink out of the plugin", async () => {
-      const root = await foreign(".claude-plugin", { name: "demo", mcpServers: "./link.json" });
+      const root = await foreign(".claude-plugin", {
+        name: "demo",
+        mcpServers: "./link.json",
+      });
       const outside = await temp();
-      await writeFile(join(outside, "x.json"), JSON.stringify({ mcpServers: servers }));
+      await writeFile(
+        join(outside, "x.json"),
+        JSON.stringify({ mcpServers: servers }),
+      );
       try {
         await symlink(join(outside, "x.json"), join(root, "link.json"));
       } catch {
@@ -610,19 +655,29 @@ describe("a Cursor or Claude Code layout", () => {
       }
       const loaded = await loadPlugin(root);
       expect(loaded.servers).toEqual([]);
-      expect(loaded.reports.join("\n")).toContain("resolves outside the plugin");
+      expect(loaded.reports.join("\n")).toContain(
+        "resolves outside the plugin",
+      );
     });
 
     it("still warns about an unknown field of a native plugin.json", async () => {
-      const loaded = await loadPlugin(await plugin({ "skills/a/SKILL.md": skill("a") }, { hooks: {} }));
-      expect(loaded.reports).toEqual(["plugin.json: unknown field hooks was ignored"]);
+      const loaded = await loadPlugin(
+        await plugin({ "skills/a/SKILL.md": skill("a") }, { hooks: {} }),
+      );
+      expect(loaded.reports).toEqual([
+        "plugin.json: unknown field hooks was ignored",
+      ]);
     });
   });
 
   it("prefers the root plugin.json, then .cursor-plugin over .claude-plugin", async () => {
-    const both = await foreign(".claude-plugin", { name: "claude" }, {
-      ".cursor-plugin/plugin.json": { name: "cursor" },
-    });
+    const both = await foreign(
+      ".claude-plugin",
+      { name: "claude" },
+      {
+        ".cursor-plugin/plugin.json": { name: "cursor" },
+      },
+    );
     expect((await loadPlugin(both)).manifest.name).toBe("cursor");
     await writeFile(
       join(both, "plugin.json"),
@@ -633,7 +688,11 @@ describe("a Cursor or Claude Code layout", () => {
 
   it("drops a field that does not fit instead of refusing the plugin, and still refuses a bad name", async () => {
     const loaded = await loadPlugin(
-      await foreign(".claude-plugin", { name: "demo", author: "x", version: 3 }),
+      await foreign(".claude-plugin", {
+        name: "demo",
+        author: "x",
+        version: 3,
+      }),
     );
     expect(loaded.manifest).toEqual({ name: "demo" });
     expect(loaded.reports.join("\n")).toContain("author does not fit");
@@ -658,7 +717,10 @@ describe("a Cursor or Claude Code layout", () => {
               remote: {
                 type: "http",
                 url: "https://example.com/mcp",
-                headers: { Authorization: "Bearer ${REMOTE_TOKEN}", "X-Fixed": "1" },
+                headers: {
+                  Authorization: "Bearer ${REMOTE_TOKEN}",
+                  "X-Fixed": "1",
+                },
               },
             },
           },
@@ -666,7 +728,10 @@ describe("a Cursor or Claude Code layout", () => {
         },
       ),
     );
-    expect(loaded.servers.map((entry) => entry.name)).toEqual(["local", "remote"]);
+    expect(loaded.servers.map((entry) => entry.name)).toEqual([
+      "local",
+      "remote",
+    ]);
     expect(loaded.servers[0]!.config).toEqual({
       type: "stdio",
       command: "./bin/run",
@@ -682,7 +747,9 @@ describe("a Cursor or Claude Code layout", () => {
       local: { env: { API_KEY: "MY_API_KEY" }, headers: {} },
       remote: { env: {}, headers: { Authorization: "Bearer {REMOTE_TOKEN}" } },
     });
-    expect(loaded.fields.map((field) => [field.name, field.secret, field.required])).toEqual([
+    expect(
+      loaded.fields.map((field) => [field.name, field.secret, field.required]),
+    ).toEqual([
       ["MY_API_KEY", true, true],
       ["REMOTE_TOKEN", true, true],
     ]);
@@ -697,8 +764,16 @@ describe("a Cursor or Claude Code layout", () => {
         {
           "mcp.json": {
             mcpServers: {
-              plain: { type: "http", url: "https://example.com/mcp", placement: "x" },
-              oauth: { type: "http", url: "https://example.com/o", auth: { CLIENT_ID: "x" } },
+              plain: {
+                type: "http",
+                url: "https://example.com/mcp",
+                placement: "x",
+              },
+              oauth: {
+                type: "http",
+                url: "https://example.com/o",
+                auth: { CLIENT_ID: "x" },
+              },
               hosted: { type: "http", url: "https://${HOST}/mcp" },
               mixed: { command: "node", env: { A: "a-${B}" } },
             },
@@ -710,23 +785,39 @@ describe("a Cursor or Claude Code layout", () => {
     const text = loaded.reports.join("\n");
     expect(text).toContain("server oauth skipped: it signs in with OAuth");
     expect(text).toContain("server hosted skipped: url holds a variable");
-    expect(text).toContain("server mixed skipped: env A mixes text with a variable");
-    expect(text).toContain("server plain: placement not supported by eta; ignored");
+    expect(text).toContain(
+      "server mixed skipped: env A mixes text with a variable",
+    );
+    expect(text).toContain(
+      "server plain: placement not supported by eta; ignored",
+    );
     expect(text).not.toContain("after you confirm");
   });
 
   it("does not warn about a skills list that only names directories under skills/", async () => {
     const files = { "skills/a/SKILL.md": skill("a") };
     const ok = await loadPlugin(
-      await foreign(".claude-plugin", { name: "demo", skills: ["./skills/a", "skills/a/"] }, files),
+      await foreign(
+        ".claude-plugin",
+        { name: "demo", skills: ["./skills/a", "skills/a/"] },
+        files,
+      ),
     );
     expect(ok.reports.join("\n")).not.toContain("skills is not at skills/");
     const outside = await loadPlugin(
-      await foreign(".claude-plugin", { name: "demo", skills: ["./other/a"] }, files),
+      await foreign(
+        ".claude-plugin",
+        { name: "demo", skills: ["./other/a"] },
+        files,
+      ),
     );
     expect(outside.reports.join("\n")).toContain("skills is not at skills/");
     const missing = await loadPlugin(
-      await foreign(".claude-plugin", { name: "demo", skills: ["./skills/nope"] }, files),
+      await foreign(
+        ".claude-plugin",
+        { name: "demo", skills: ["./skills/nope"] },
+        files,
+      ),
     );
     expect(missing.reports.join("\n")).toContain("skills is not at skills/");
   });
@@ -735,11 +826,17 @@ describe("a Cursor or Claude Code layout", () => {
 describe("skill names that are not legal", () => {
   const load = async (files: Record<string, string>) => {
     const loaded = await loadPlugin(await plugin(files));
-    return { names: loaded.skills.map((item) => item.name), loaded, reports: loaded.reports.join("\n") };
+    return {
+      names: loaded.skills.map((item) => item.name),
+      loaded,
+      reports: loaded.reports.join("\n"),
+    };
   };
 
   it("leaves a legal name alone", async () => {
-    const { names, reports } = await load({ "skills/good-one/SKILL.md": skill("good-one") });
+    const { names, reports } = await load({
+      "skills/good-one/SKILL.md": skill("good-one"),
+    });
     expect(names).toEqual(["good-one"]);
     expect(reports).not.toContain("renamed");
   });
@@ -765,7 +862,9 @@ describe("skill names that are not legal", () => {
   });
 
   it("skips a name with nothing usable left, with the reason", async () => {
-    const { names, reports } = await load({ "skills/a/SKILL.md": skill("代码审查") });
+    const { names, reports } = await load({
+      "skills/a/SKILL.md": skill("代码审查"),
+    });
     expect(names).toEqual([]);
     expect(reports).toContain("skills/a: skipped");
     expect(reports).toContain("no usable characters");
@@ -789,8 +888,13 @@ describe("skill names that are not legal", () => {
   it("shows the original name, and leaves the skill's text as it was", async () => {
     const root = await plugin({ "skills/a/SKILL.md": skill("My Skill") });
     const loaded = await loadPlugin(root);
-    expect(loaded.skills[0]).toMatchObject({ name: "my-skill", renamedFrom: "My Skill" });
-    expect(await fs.readFile(join(root, "skills/a/SKILL.md"), "utf8")).toBe(skill("My Skill"));
+    expect(loaded.skills[0]).toMatchObject({
+      name: "my-skill",
+      renamedFrom: "My Skill",
+    });
+    expect(await fs.readFile(join(root, "skills/a/SKILL.md"), "utf8")).toBe(
+      skill("My Skill"),
+    );
   });
 
   it("still skips what is not a naming fault: a legal name in the wrong directory, no description", async () => {
@@ -814,6 +918,8 @@ describe("skill ignore files", () => {
       }),
     );
     expect(loaded.skills.map((item) => item.name)).toEqual(["a"]);
-    expect(loaded.reports.join("\n")).toContain("skills/b: skipped: ignored by an ignore file");
+    expect(loaded.reports.join("\n")).toContain(
+      "skills/b: skipped: ignored by an ignore file",
+    );
   });
 });

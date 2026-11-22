@@ -29,20 +29,30 @@ const draftOf = (one: PluginEnvView): Draft => ({
 export function EnvEditor(props: { item: PluginView; server: string }) {
   const host = useHost();
   const c = colors();
-  const mine = () => (props.item.env ?? []).filter((one) => one.server === props.server);
+  const mine = () =>
+    (props.item.env ?? []).filter((one) => one.server === props.server);
   const drafts = signal<Draft[]>(mine().map(draftOf));
   const problem = signal("");
   const off = () => !props.item.enabled;
   const locked = () =>
-    props.item.servers.find((one) => one.name === props.server)?.lockedEnv ?? [];
+    props.item.servers.find((one) => one.name === props.server)?.lockedEnv ??
+    [];
   const patch = (id: number, change: Partial<Draft>) =>
-    drafts.update((all) => all.map((d) => (d.id === id ? { ...d, ...change } : d)));
+    drafts.update((all) =>
+      all.map((d) => (d.id === id ? { ...d, ...change } : d)),
+    );
   function save() {
     const rows = drafts();
     for (const d of rows) {
       const name = d.name.trim();
-      if (name === "" || (d.value === "" && !d.saved) || locked().includes(name)) {
-        problem.set(uiText(locked().includes(name) ? "envLocked" : "envIncomplete"));
+      if (
+        name === "" ||
+        (d.value === "" && !d.saved) ||
+        locked().includes(name)
+      ) {
+        problem.set(
+          uiText(locked().includes(name) ? "envLocked" : "envIncomplete"),
+        );
         return;
       }
     }
@@ -53,7 +63,11 @@ export function EnvEditor(props: { item: PluginView; server: string }) {
       secret: d.secret,
     }));
     void host.action(async () => {
-      await host.call("plugins", "setEnv", { name: props.item.name, server: props.server, env });
+      await host.call("plugins", "setEnv", {
+        name: props.item.name,
+        server: props.server,
+        env,
+      });
       drafts.update((all) =>
         all.map((d) => ({ ...d, value: d.secret ? "" : d.value, saved: true })),
       );
@@ -70,7 +84,7 @@ export function EnvEditor(props: { item: PluginView; server: string }) {
         </Label>
         <If when={locked().length}>
           <Label variant="small" tone="muted">
-            {uiText("envFixed") + ": " + locked().join(", ")}
+            {`${uiText("envFixed")}: ${locked().join(", ")}`}
           </Label>
         </If>
       </View>
@@ -83,7 +97,10 @@ export function EnvEditor(props: { item: PluginView; server: string }) {
                 value={d().name}
                 placeholder={uiText("envName")}
                 onChange={(name) =>
-                  patch(d().id, { name, ...(d().saved ? {} : { secret: looksSecret(name) }) })
+                  patch(d().id, {
+                    name,
+                    ...(d().saved ? {} : { secret: looksSecret(name) }),
+                  })
                 }
               />
             </View>
@@ -110,7 +127,9 @@ export function EnvEditor(props: { item: PluginView; server: string }) {
               tone="ghost"
               labelVariant="small"
               disabled={off()}
-              onPress={() => drafts.update((all) => all.filter((o) => o.id !== d().id))}
+              onPress={() =>
+                drafts.update((all) => all.filter((o) => o.id !== d().id))
+              }
             />
           </View>
         )}

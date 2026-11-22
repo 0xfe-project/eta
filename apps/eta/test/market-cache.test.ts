@@ -22,7 +22,9 @@ beforeEach(() => {
   handler = (request) =>
     request.headers.get("if-none-match") === '"v1"'
       ? new Response(null, { status: 304 })
-      : new Response(BODY, { headers: { etag: '"v1"', "content-type": "application/json" } });
+      : new Response(BODY, {
+          headers: { etag: '"v1"', "content-type": "application/json" },
+        });
   server = Bun.serve({
     port: 0,
     fetch: (request) => {
@@ -35,7 +37,8 @@ afterEach(async () => {
   await server.stop(true);
 });
 
-const address = (path = "catalog.json") => `http://127.0.0.1:${server.port}/${path}`;
+const address = (path = "catalog.json") =>
+  `http://127.0.0.1:${server.port}/${path}`;
 
 function open() {
   const db = openDatabase(":memory:");
@@ -118,7 +121,8 @@ describe("the catalog cache", () => {
     handler = () => new Response("{not json", { headers: { etag: '"v2"' } });
     const bad = (await market.catalog()).sources[0]!;
     expect(bad.stale).toContain("JSON");
-    handler = () => new Response(JSON.stringify({ nope: 1 }), { headers: { etag: '"v3"' } });
+    handler = () =>
+      new Response(JSON.stringify({ nope: 1 }), { headers: { etag: '"v3"' } });
     expect((await market.catalog()).sources[0]!.stale).toContain("plugins");
     const kept = (await market.catalog("cached")).sources[0]!;
     expect(kept.entries?.map((entry) => entry.name)).toEqual(["demo"]);
@@ -127,7 +131,8 @@ describe("the catalog cache", () => {
   it("is keyed by the address: another address starts empty", async () => {
     const { start } = open();
     await start().catalog();
-    const other = (await start(address("other.json")).catalog("cached")).sources[0]!;
+    const other = (await start(address("other.json")).catalog("cached"))
+      .sources[0]!;
     expect(other).toMatchObject({ entries: null, error: null });
   });
 
@@ -142,7 +147,9 @@ describe("the catalog cache", () => {
         .run(url, body, body.length);
     row('{"plugins": "x"}');
     expect((await start().catalog("cached")).sources[0]!.entries).toBeNull();
-    expect(db.query("SELECT COUNT(*) AS n FROM market_catalog_cache").get()).toEqual({ n: 0 });
+    expect(
+      db.query("SELECT COUNT(*) AS n FROM market_catalog_cache").get(),
+    ).toEqual({ n: 0 });
     row(JSON.stringify({ plugins: [], pad: "x".repeat(2000) }));
     const small = openDatabase(":memory:");
     applyMigrations(small, loadMigrations());
@@ -170,7 +177,10 @@ describe("sources read on their own", () => {
   /** Two sources: the test server, and one that takes the request and never answers. */
   function two() {
     const { db } = open();
-    const hang = Bun.serve({ port: 0, fetch: () => new Promise<Response>(() => undefined) });
+    const hang = Bun.serve({
+      port: 0,
+      fetch: () => new Promise<Response>(() => undefined),
+    });
     const market = new Market({
       settings: new SettingStore(db),
       plugins: {} as never,
@@ -190,7 +200,9 @@ describe("sources read on their own", () => {
     try {
       const fast = await market.catalog("refresh", address());
       expect(fast.sources).toHaveLength(1);
-      expect(fast.sources[0]!.entries?.map((entry) => entry.name)).toEqual(["demo"]);
+      expect(fast.sources[0]!.entries?.map((entry) => entry.name)).toEqual([
+        "demo",
+      ]);
       expect(requests).toHaveLength(1);
       expect(slow).not.toBe(address());
     } finally {
@@ -205,7 +217,10 @@ describe("sources read on their own", () => {
       const started = performance.now();
       const kept = await market.catalog("cached");
       expect(performance.now() - started).toBeLessThan(200);
-      expect(kept.sources.map((item) => item.entries !== null)).toEqual([true, false]);
+      expect(kept.sources.map((item) => item.entries !== null)).toEqual([
+        true,
+        false,
+      ]);
       expect(kept.sources.every((item) => item.error === null)).toBe(true);
       expect(requests).toHaveLength(1);
     } finally {

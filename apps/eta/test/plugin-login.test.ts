@@ -76,13 +76,15 @@ function withMcpEndpoint(
   };
 }
 
-
 async function plugin(dataDir: string, name: string): Promise<void> {
   const dir = join(dataDir, "plugins", name);
   await mkdir(dir, { recursive: true });
   await writeFile(
     join(dir, "plugin.json"),
-    JSON.stringify({ $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", name }),
+    JSON.stringify({
+      $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+      name,
+    }),
   );
   await writeFile(
     join(dir, "mcp.json"),
@@ -103,15 +105,27 @@ async function setUp() {
   const host = await testHost({
     dataDir,
     tokenFile,
-    mcp: { fetch: withMcpEndpoint(auth), manager: { resolvers: false, checkIntervalMs: 0 } },
+    mcp: {
+      fetch: withMcpEndpoint(auth),
+      manager: { resolvers: false, checkIntervalMs: 0 },
+    },
   });
-  const client = await connect(`ws://127.0.0.1:${host.port}/ws`, { authorization: `Bearer ${TOKEN}` });
+  const client = await connect(`ws://127.0.0.1:${host.port}/ws`, {
+    authorization: `Bearer ${TOKEN}`,
+  });
   await client.hello();
   client.subscribe("plugins");
   const store = new CredentialRows(host.db, loadSecretKey(dataDir));
-  const call = (method: string, args: Record<string, unknown>) => client.call("plugins", method, args);
-  const login = () => call("loginServer", { name: "demo", server: "remote", redirectOrigin: ORIGIN }) as Promise<{ pendingId: string; authorizationUrl: string }>;
-  const callback = (query: string) => fetch(`http://127.0.0.1:${host.port}/mcp/oauth/callback${query}`);
+  const call = (method: string, args: Record<string, unknown>) =>
+    client.call("plugins", method, args);
+  const login = () =>
+    call("loginServer", {
+      name: "demo",
+      server: "remote",
+      redirectOrigin: ORIGIN,
+    }) as Promise<{ pendingId: string; authorizationUrl: string }>;
+  const callback = (query: string) =>
+    fetch(`http://127.0.0.1:${host.port}/mcp/oauth/callback${query}`);
   return { host, auth, store, call, login, callback, client };
 }
 
@@ -125,8 +139,15 @@ describe("a plugin server's login from its panel", () => {
     expect((await s.callback(redirect.search)).status).toBe(200);
     expect(s.store.has(KEY, "tokens")).toBe(true);
     await until(() => {
-      const list = s.client.section<{ name: string; servers: { login?: string }[] }[]>("plugins", "list") ?? [];
-      return list.find((one) => one.name === "demo")?.servers[0]?.login === "signed_in";
+      const list =
+        s.client.section<{ name: string; servers: { login?: string }[] }[]>(
+          "plugins",
+          "list",
+        ) ?? [];
+      return (
+        list.find((one) => one.name === "demo")?.servers[0]?.login ===
+        "signed_in"
+      );
     });
   }, 30_000);
 
@@ -134,7 +155,9 @@ describe("a plugin server's login from its panel", () => {
     const s = await setUp();
     const { authorizationUrl } = await s.login();
     const redirect = new URL(s.auth.approve(authorizationUrl));
-    const response = await s.callback(`?code=${redirect.searchParams.get("code")}&state=other`);
+    const response = await s.callback(
+      `?code=${redirect.searchParams.get("code")}&state=other`,
+    );
     expect(response.status).toBe(400);
     expect(s.store.has(KEY, "tokens")).toBe(false);
   });
@@ -149,7 +172,10 @@ describe("a plugin server's login from its panel", () => {
   it("uninstall drops a token only when no other server uses the URL (token store rule)", async () => {
     const s = await setUp();
     const { authorizationUrl } = await s.login();
-    expect((await s.callback(new URL(s.auth.approve(authorizationUrl)).search)).status).toBe(200);
+    expect(
+      (await s.callback(new URL(s.auth.approve(authorizationUrl)).search))
+        .status,
+    ).toBe(200);
     expect(s.store.has(KEY, "tokens")).toBe(true);
     const mcp = s.host.product.mcp;
     // Another server still uses the URL: the token stays.

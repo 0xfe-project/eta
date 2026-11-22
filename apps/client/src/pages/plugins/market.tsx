@@ -23,12 +23,11 @@ import {
 } from "../../components";
 import { hint } from "../../components/context-ring";
 import { CloseButton } from "../../components/navigation-buttons";
-import { ToggleSwitch } from "../../components/toggle-switch";
-import { PluginLogo, primeLogos } from "./plugin-logo";
-import { PluginName } from "./plugin-name";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { sheetEdge } from "./configure";
+import { PluginLogo, primeLogos } from "./plugin-logo";
+import { PluginName } from "./plugin-name";
 
 /**
  * The online market. Everything the catalog says is shown as text, never as markup. The detail shows
@@ -63,7 +62,7 @@ export function Market(props: {
   const installError = signal("");
   const busy = signal(false);
   const phone = () => props.layout === "phone";
-  const key = (item: MarketEntry) => item.source + "\n" + item.name;
+  const key = (item: MarketEntry) => `${item.source}\n${item.name}`;
   const all = () =>
     (catalog()?.sources ?? []).flatMap((item) => item.entries ?? []);
   const entries = () => {
@@ -82,7 +81,10 @@ export function Market(props: {
     (catalog()?.sources ?? []).filter((item) => item.error !== null);
   const skipped = () =>
     (catalog()?.sources ?? []).flatMap((item) =>
-      item.rejected.map((one) => ({ ...one, from: item.source.name || item.source.url })),
+      item.rejected.map((one) => ({
+        ...one,
+        from: item.source.name || item.source.url,
+      })),
     );
   const stale = () =>
     (catalog()?.sources ?? []).filter((item) => item.stale != null);
@@ -91,7 +93,9 @@ export function Market(props: {
     const times = (catalog()?.sources ?? []).flatMap((item) =>
       item.entries !== null && item.updatedAt != null ? [item.updatedAt] : [],
     );
-    return times.length === 0 ? undefined : new Date(Math.min(...times)).toLocaleString();
+    return times.length === 0
+      ? undefined
+      : new Date(Math.min(...times)).toLocaleString();
   };
   async function clearCache() {
     await host.action(() => host.call("plugins", "marketClearCache", {}));
@@ -106,7 +110,12 @@ export function Market(props: {
       shown.sources
         .flatMap((item) => item.entries ?? [])
         .filter((item) => item.repo !== "" && item.unsupported === null)
-        .map((item) => ({ repo: item.repo, ref: item.rev ?? "HEAD", path: item.path, homepage: item.homepage })),
+        .map((item) => ({
+          repo: item.repo,
+          ref: item.rev ?? "HEAD",
+          path: item.path,
+          homepage: item.homepage,
+        })),
     );
 
   async function load() {
@@ -123,7 +132,9 @@ export function Market(props: {
       const merged: MarketCatalog = {
         ...kept,
         sources: kept.sources.map((item) => {
-          const shown = before?.sources.find((one) => one.source.url === item.source.url);
+          const shown = before?.sources.find(
+            (one) => one.source.url === item.source.url,
+          );
           return shown?.entries != null && item.entries === null ? shown : item;
         }),
       };
@@ -142,7 +153,9 @@ export function Market(props: {
       await Promise.all(
         urls.map(async (url) => {
           const result = await host.action(() =>
-            host.call<MarketCatalog>("plugins", "marketCatalog", { source: url }),
+            host.call<MarketCatalog>("plugins", "marketCatalog", {
+              source: url,
+            }),
           );
           const one = result?.sources.find((item) => item.source.url === url);
           const now = catalog();
@@ -150,7 +163,9 @@ export function Market(props: {
           show({
             ...now,
             proxy: result!.proxy,
-            sources: now.sources.map((item) => (item.source.url === url ? one : item)),
+            sources: now.sources.map((item) =>
+              item.source.url === url ? one : item,
+            ),
           });
         }),
       );
@@ -163,7 +178,9 @@ export function Market(props: {
   });
 
   const messageOf = (error: unknown) =>
-    error instanceof Error && error.message !== "" ? error.message : String(error);
+    error instanceof Error && error.message !== ""
+      ? error.message
+      : String(error);
 
   /** Read what the entry would run. The same read an install pins its commit from; nothing is installed. */
   async function readInfo(entry: MarketEntry): Promise<MarketPreview> {
@@ -180,7 +197,8 @@ export function Market(props: {
       infoError.set("");
       installError.set("");
       const entry = all().find((item) => key(item) === open);
-      if (!entry || entry.unsupported !== null || entry.installed !== "no") return;
+      if (!entry || entry.unsupported !== null || entry.installed !== "no")
+        return;
       infoLoading.set(true);
       readInfo(entry)
         .then((result) => {
@@ -247,96 +265,113 @@ export function Market(props: {
     item.unsupported !== null
       ? uiText("marketUnsupported")
       : item.installed === "this"
-      ? uiText("marketInstalled")
-      : item.installed === "other"
-        ? uiText("marketNameTaken")
-        : "";
+        ? uiText("marketInstalled")
+        : item.installed === "other"
+          ? uiText("marketNameTaken")
+          : "";
   /** A labelled value; a value that is empty or only blanks is not shown at all, nor its label. */
   const line = (name: string, value: string | null | undefined) =>
     value === null || value === undefined || value.trim() === "" ? null : (
-    <View style={{ gap: 2 }}>
-      <Label variant="caption" tone="muted">
-        {name}
-      </Label>
-      <Label variant="small" style={{ userSelect: "text" }}>
-        {value}
-      </Label>
-    </View>
-  );
+      <View style={{ gap: 2 }}>
+        <Label variant="caption" tone="muted">
+          {name}
+        </Label>
+        <Label variant="small" style={{ userSelect: "text" }}>
+          {value}
+        </Label>
+      </View>
+    );
   /** What the plugin would run, read from its pinned commit. Plain text; nothing here installs anything. */
   const previewBlock = (shown: MarketPreview) => (
     <View testID="market-info" style={{ gap: 10 }}>
-                <If when={shown.proxy}>
-                  {line(uiText("marketProxy"), shown.proxy ?? "")}
-                </If>
-                {line(uiText("marketPath"), shown.path || "/")}
-                {line(
-                  uiText("marketRequires"),
-                  shown.requires.length
-                    ? shown.requires.join(", ")
-                    : uiText("marketNone"),
-                )}
-                <Label variant="small" weight={500}>
-                  {uiText("marketSummary", {
-                    skills: shown.skills.length,
-                    servers: shown.servers.length,
-                  })}
-                </Label>
-                <Label variant="caption" tone="muted">
-                  {uiText("marketServers")}
-                </Label>
-                <If when={!shown.servers.length}>
-                  <Label variant="small">{uiText("marketNone")}</Label>
-                </If>
-                <Each of={shown.servers} key={(item) => item.name}>
-                  {(server) => (
-                    <View
-                      style={{ gap: 4, padding: 8, borderWidth: 1, borderColor: c().border }}
-                    >
-                      <Label variant="small" weight={500}>
-                        {server().name}
-                      </Label>
-                      <Label variant="small" style={{ userSelect: "text" }}>
-                        {server().transport === "stdio"
-                          ? (server().command ?? []).join(" ")
-                          : (server().url ?? "")}
-                      </Label>
-                      <If when={Object.keys(server().fixedEnv).length}>
-                        <Label variant="caption" tone="muted" style={{ userSelect: "text" }}>
-                          {uiText("marketFixedEnv") +
-                            ": " +
-                            Object.entries(server().fixedEnv)
-                              .map(([key, value]) => key + "=" + value)
-                              .join(" ")}
-                        </Label>
-                      </If>
-                      <If when={server().env.length}>
-                        <Label variant="caption" tone="muted" style={{ userSelect: "text" }}>
-                          {uiText("marketEnv") + ": " + server().env.join(", ")}
-                        </Label>
-                      </If>
-                      <If when={server().headers.length}>
-                        <Label variant="caption" tone="muted" style={{ userSelect: "text" }}>
-                          {uiText("marketHeaders") + ": " + server().headers.join(", ")}
-                        </Label>
-                      </If>
-                    </View>
-                  )}
-                </Each>
-                <If when={shown.fields.length}>
-                  {line(
-                    uiText("marketFields"),
-                    shown
-                      .fields.map((item) => item.name + (item.secret ? " *" : ""))
-                      .join(", "),
-                  )}
-                </If>
-                <If when={shown.layout}>
-                  {line(uiText("marketLayout"), shown.layout ?? "")}
-                </If>
-                <If when={shown.reports.length}>
-                  {line(uiText("marketReports"), shown.reports.join("; "))}
-                </If>
+      <If when={shown.proxy}>
+        {line(uiText("marketProxy"), shown.proxy ?? "")}
+      </If>
+      {line(uiText("marketPath"), shown.path || "/")}
+      {line(
+        uiText("marketRequires"),
+        shown.requires.length
+          ? shown.requires.join(", ")
+          : uiText("marketNone"),
+      )}
+      <Label variant="small" weight={500}>
+        {uiText("marketSummary", {
+          skills: shown.skills.length,
+          servers: shown.servers.length,
+        })}
+      </Label>
+      <Label variant="caption" tone="muted">
+        {uiText("marketServers")}
+      </Label>
+      <If when={!shown.servers.length}>
+        <Label variant="small">{uiText("marketNone")}</Label>
+      </If>
+      <Each of={shown.servers} key={(item) => item.name}>
+        {(server) => (
+          <View
+            style={{
+              gap: 4,
+              padding: 8,
+              borderWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <Label variant="small" weight={500}>
+              {server().name}
+            </Label>
+            <Label variant="small" style={{ userSelect: "text" }}>
+              {server().transport === "stdio"
+                ? (server().command ?? []).join(" ")
+                : (server().url ?? "")}
+            </Label>
+            <If when={Object.keys(server().fixedEnv).length}>
+              <Label
+                variant="caption"
+                tone="muted"
+                style={{ userSelect: "text" }}
+              >
+                {`${uiText("marketFixedEnv")}: ${Object.entries(
+                  server().fixedEnv,
+                )
+                  .map(([key, value]) => `${key}=${value}`)
+                  .join(" ")}`}
+              </Label>
+            </If>
+            <If when={server().env.length}>
+              <Label
+                variant="caption"
+                tone="muted"
+                style={{ userSelect: "text" }}
+              >
+                {`${uiText("marketEnv")}: ${server().env.join(", ")}`}
+              </Label>
+            </If>
+            <If when={server().headers.length}>
+              <Label
+                variant="caption"
+                tone="muted"
+                style={{ userSelect: "text" }}
+              >
+                {`${uiText("marketHeaders")}: ${server().headers.join(", ")}`}
+              </Label>
+            </If>
+          </View>
+        )}
+      </Each>
+      <If when={shown.fields.length}>
+        {line(
+          uiText("marketFields"),
+          shown.fields
+            .map((item) => item.name + (item.secret ? " *" : ""))
+            .join(", "),
+        )}
+      </If>
+      <If when={shown.layout}>
+        {line(uiText("marketLayout"), shown.layout ?? "")}
+      </If>
+      <If when={shown.reports.length}>
+        {line(uiText("marketReports"), shown.reports.join("; "))}
+      </If>
     </View>
   );
   const sheet = (title: string, width: number, onClose: () => void) => ({
@@ -402,7 +437,11 @@ export function Market(props: {
                 <Label variant="small" tone="muted">
                   {uiText("marketUnavailable")}
                 </Label>
-                <Label variant="small" tone="muted" style={{ userSelect: "text" }}>
+                <Label
+                  variant="small"
+                  tone="muted"
+                  style={{ userSelect: "text" }}
+                >
                   {item().error ?? ""}
                 </Label>
               </View>
@@ -410,7 +449,11 @@ export function Market(props: {
           </Each>
           <Each of={stale()} key={(item) => item.source.url}>
             {(item) => (
-              <Label variant="small" tone="muted" style={{ userSelect: "text" }}>
+              <Label
+                variant="small"
+                tone="muted"
+                style={{ userSelect: "text" }}
+              >
                 {uiText("marketKeptCopy", {
                   name: item().source.name || item().source.url,
                   time: new Date(item().updatedAt ?? 0).toLocaleString(),
@@ -420,7 +463,9 @@ export function Market(props: {
             )}
           </Each>
           <If when={updated() !== undefined}>
-            <View style={{ ...row, gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <View
+              style={{ ...row, gap: 8, alignItems: "center", flexWrap: "wrap" }}
+            >
               <Label variant="small" tone="muted">
                 {uiText("marketUpdatedAt", { time: updated() ?? "" })}
               </Label>
@@ -441,7 +486,12 @@ export function Market(props: {
               </Label>
             </If>
             <View
-              style={{ ...row, flexWrap: "wrap", alignItems: "flex-start", gap: 12 }}
+              style={{
+                ...row,
+                flexWrap: "wrap",
+                alignItems: "flex-start",
+                gap: 12,
+              }}
             >
               <Each of={entries()} key={key}>
                 {(item) => (
@@ -465,7 +515,11 @@ export function Market(props: {
                         homepage={item().homepage}
                         repo={
                           item().repo !== "" && item().unsupported === null
-                            ? { repo: item().repo, ref: item().rev ?? "HEAD", path: item().path }
+                            ? {
+                                repo: item().repo,
+                                ref: item().rev ?? "HEAD",
+                                path: item().path,
+                              }
                             : null
                         }
                       />
@@ -497,8 +551,12 @@ export function Market(props: {
               </Label>
               <Each of={skipped()} key={(item) => item.from + item.index}>
                 {(item) => (
-                  <Label variant="caption" tone="muted" style={{ userSelect: "text" }}>
-                    {item().from + " #" + item().index + " " + (item().name ?? "") + ": " + item().reason}
+                  <Label
+                    variant="caption"
+                    tone="muted"
+                    style={{ userSelect: "text" }}
+                  >
+                    {`${item().from} #${item().index} ${item().name ?? ""}: ${item().reason}`}
                   </Label>
                 )}
               </Each>
@@ -507,91 +565,117 @@ export function Market(props: {
         </View>
       </SmoothScroll>
       <If when={current()}>
-        <Modal {...sheet(current()!.name, 512, () => detail.set(""))} hideHeader>
+        <Modal
+          {...sheet(current()!.name, 512, () => detail.set(""))}
+          hideHeader
+        >
           <SmoothScroll style={{ maxHeight: 440 }} scrollbar={false}>
-          <View style={{ gap: 10, paddingTop: 6, ...inset() }}>
-            <View testID="market-detail-header" style={{ ...row, gap: 12, alignItems: "center" }}>
-              <PluginLogo
-                name={current()!.name}
-                homepage={current()!.homepage}
-                repo={
-                  current()!.repo !== "" && current()!.unsupported === null
-                    ? {
-                        repo: current()!.repo,
-                        ref: current()!.rev ?? "HEAD",
-                        path: current()!.path,
-                      }
-                    : null
-                }
-                size={40}
-              />
-              <View tooltip={hint(current()!.name, c)} style={{ flex: 1, minWidth: 0 }}>
-                <Label variant="title" weight={600} lines={1}>
-                  {current()!.name}
-                </Label>
-              </View>
-              <CloseButton onPress={() => detail.set("")} iconSize={14} />
-            </View>
-            <Label variant="small" tone="muted" style={{ userSelect: "text" }}>
-              {current()!.description}
-            </Label>
-            {line(uiText("marketVersion"), current()!.version)}
-            {line(uiText("marketAuthor"), current()!.author)}
-            {line(uiText("marketSource"), current()!.sourceName)}
-            {line(uiText("marketRepository"), current()!.repo)}
-            {line(
-              uiText("marketCommit"),
-              current()!.rev ?? info()?.sha ?? uiText("marketCommitLatest"),
-            )}
-            <If when={current()!.unsupported}>
-              {line(uiText("marketUnsupported"), current()!.unsupported ?? "")}
-            </If>
-            <If when={current()!.requires.length}>
-              {line(uiText("marketRequires"), current()!.requires.join(", "))}
-            </If>
-            <If when={current()!.homepage}>
-              {line(uiText("marketHomepage"), current()!.homepage ?? "")}
-            </If>
-            <If when={infoLoading()}>
-              <Label variant="small" tone="muted">
-                {uiText("marketReading")}
-              </Label>
-            </If>
-            <If when={infoError()}>
-              <Label variant="small" tone="red" style={{ userSelect: "text" }}>
-                {infoError()}
-              </Label>
-            </If>
-            <If when={info()}>{(shown) => previewBlock(shown())}</If>
-            <If when={installError()}>
-              <Label variant="small" tone="red" style={{ userSelect: "text" }}>
-                {installError()}
-              </Label>
-            </If>
-          </View>
-          </SmoothScroll>
-            <View
-              style={{
-                ...row,
-                justifyContent: "flex-end",
-                paddingTop: 10,
-                paddingBottom: phone() ? 24 : 0,
-                ...inset(),
-              }}
-            >
-              <If
-                when={current()!.installed === "no" && current()!.unsupported === null}
-                else={<Label variant="small">{marker(current()!)}</Label>}
+            <View style={{ gap: 10, paddingTop: 6, ...inset() }}>
+              <View
+                testID="market-detail-header"
+                style={{ ...row, gap: 12, alignItems: "center" }}
               >
-                <Button
-                  label={busy() ? uiText("adding") : uiText("marketInstall")}
-                  tone="primary"
-                  size={phone() ? 44 : 28}
-                  disabled={busy()}
-                  onPress={() => void install(current()!)}
+                <PluginLogo
+                  name={current()!.name}
+                  homepage={current()!.homepage}
+                  repo={
+                    current()!.repo !== "" && current()!.unsupported === null
+                      ? {
+                          repo: current()!.repo,
+                          ref: current()!.rev ?? "HEAD",
+                          path: current()!.path,
+                        }
+                      : null
+                  }
+                  size={40}
                 />
+                <View
+                  tooltip={hint(current()!.name, c)}
+                  style={{ flex: 1, minWidth: 0 }}
+                >
+                  <Label variant="title" weight={600} lines={1}>
+                    {current()!.name}
+                  </Label>
+                </View>
+                <CloseButton onPress={() => detail.set("")} iconSize={14} />
+              </View>
+              <Label
+                variant="small"
+                tone="muted"
+                style={{ userSelect: "text" }}
+              >
+                {current()!.description}
+              </Label>
+              {line(uiText("marketVersion"), current()!.version)}
+              {line(uiText("marketAuthor"), current()!.author)}
+              {line(uiText("marketSource"), current()!.sourceName)}
+              {line(uiText("marketRepository"), current()!.repo)}
+              {line(
+                uiText("marketCommit"),
+                current()!.rev ?? info()?.sha ?? uiText("marketCommitLatest"),
+              )}
+              <If when={current()!.unsupported}>
+                {line(
+                  uiText("marketUnsupported"),
+                  current()!.unsupported ?? "",
+                )}
+              </If>
+              <If when={current()!.requires.length}>
+                {line(uiText("marketRequires"), current()!.requires.join(", "))}
+              </If>
+              <If when={current()!.homepage}>
+                {line(uiText("marketHomepage"), current()!.homepage ?? "")}
+              </If>
+              <If when={infoLoading()}>
+                <Label variant="small" tone="muted">
+                  {uiText("marketReading")}
+                </Label>
+              </If>
+              <If when={infoError()}>
+                <Label
+                  variant="small"
+                  tone="red"
+                  style={{ userSelect: "text" }}
+                >
+                  {infoError()}
+                </Label>
+              </If>
+              <If when={info()}>{(shown) => previewBlock(shown())}</If>
+              <If when={installError()}>
+                <Label
+                  variant="small"
+                  tone="red"
+                  style={{ userSelect: "text" }}
+                >
+                  {installError()}
+                </Label>
               </If>
             </View>
+          </SmoothScroll>
+          <View
+            style={{
+              ...row,
+              justifyContent: "flex-end",
+              paddingTop: 10,
+              paddingBottom: phone() ? 24 : 0,
+              ...inset(),
+            }}
+          >
+            <If
+              when={
+                current()!.installed === "no" && current()!.unsupported === null
+              }
+              else={<Label variant="small">{marker(current()!)}</Label>}
+            >
+              <Button
+                label={busy() ? uiText("adding") : uiText("marketInstall")}
+                tone="primary"
+                size={phone() ? 44 : 28}
+                disabled={busy()}
+                onPress={() => void install(current()!)}
+              />
+            </If>
+          </View>
         </Modal>
       </If>
     </View>

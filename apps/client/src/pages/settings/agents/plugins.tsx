@@ -50,13 +50,13 @@ export function AgentPlugins(props: { form: AgentForm }) {
     !item.enabled
       ? { label: uiText("pluginOffForAll"), color: c().faint }
       : item.state === "ready"
-      ? undefined
-      : {
-          label: phoneEditor()
-            ? uiText("pluginNeedsConfiguring")
-            : uiText("pluginNeedsSetup"),
-          color: c().amber,
-        };
+        ? undefined
+        : {
+            label: phoneEditor()
+              ? uiText("pluginNeedsConfiguring")
+              : uiText("pluginNeedsSetup"),
+            color: c().amber,
+          };
   return (
     <View>
       <If when={!phoneEditor()}>

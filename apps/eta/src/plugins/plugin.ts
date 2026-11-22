@@ -7,11 +7,12 @@
 import type { PluginAuditView, PluginValue } from "@eta/client-contracts";
 import type { AgentStore } from "../agents/store";
 import type { McpService } from "../mcp/service";
+import type { IconCache } from "./icon-cache";
 import type { Market } from "./market";
 import type { Plugins } from "./service";
 import { Args, productPlugin, publish } from "../wire";
-import { Logos, readOwnLogo } from "./logo";
-import type { IconCache } from "./icon-cache";
+
+import { Logos, readOwnLogo } from "./logo";
 import { testConnection } from "./test-server";
 
 const LEVELS = ["none", "read", "file", "value"] as const;
@@ -37,10 +38,13 @@ export function pluginsPlugin(
     const plan = plugins.testPlan(name, server);
     if ("result" in plan) throw new Error(plan.result.message);
     const url = (plan.entry as { url?: string }).url;
-    if (url === undefined) throw new Error(`${server} has no URL to sign in to`);
+    if (url === undefined)
+      throw new Error(`${server} has no URL to sign in to`);
     return url;
   };
-  const logos = new Logos(deps.icons === undefined ? {} : { store: deps.icons });
+  const logos = new Logos(
+    deps.icons === undefined ? {} : { store: deps.icons },
+  );
   return productPlugin(
     "plugins",
     ({ wire }) => {
@@ -56,13 +60,16 @@ export function pluginsPlugin(
                       ...server,
                       // One source: a 401 seen after the token was stored (a test said so) beats the
                       // token's mere presence; a login that starts clears that evidence.
-                      login: asked.has(server.url) && asked.get(server.url) === (mcp.signInStamp(server.url) ?? "")
-                        ? mcp.signedIn(server.url)
-                          ? ("expired" as const)
-                          : ("needs_login" as const)
-                        : mcp.signedIn(server.url)
-                          ? ("signed_in" as const)
-                          : ("none" as const),
+                      login:
+                        asked.has(server.url) &&
+                        asked.get(server.url) ===
+                          (mcp.signInStamp(server.url) ?? "")
+                          ? mcp.signedIn(server.url)
+                            ? ("expired" as const)
+                            : ("needs_login" as const)
+                          : mcp.signedIn(server.url)
+                            ? ("signed_in" as const)
+                            : ("none" as const),
                     },
               ),
             })),
@@ -111,7 +118,8 @@ export function pluginsPlugin(
           const args = new Args(call);
           const name = args.string("name");
           const enabled = args.optionalBoolean("enabled");
-          if (enabled === undefined) throw new Error("plugins.setEnabled needs enabled");
+          if (enabled === undefined)
+            throw new Error("plugins.setEnabled needs enabled");
           plugins.setEnabled(name, enabled);
           return { result: { name, enabled } };
         }),
@@ -146,12 +154,30 @@ export function pluginsPlugin(
           const name = args.string("name");
           const server = args.string("server");
           const { header } = (call.args ?? {}) as { header?: unknown };
-          if (header !== null && (typeof header !== "object" || header === undefined))
+          if (
+            header !== null &&
+            (typeof header !== "object" || header === undefined)
+          )
             throw new Error("plugins.setTokenHeader needs header (or null)");
           const one = header as { name?: unknown; format?: unknown } | null;
-          if (one !== null && (typeof one.name !== "string" || (one.format !== "raw" && one.format !== "bearer")))
-            throw new Error("a token header needs a name and a format (raw or bearer)");
-          plugins.setTokenHeader(name, server, one === null ? null : { name: one.name as string, format: one.format as "raw" | "bearer" });
+          if (
+            one !== null &&
+            (typeof one.name !== "string" ||
+              (one.format !== "raw" && one.format !== "bearer"))
+          )
+            throw new Error(
+              "a token header needs a name and a format (raw or bearer)",
+            );
+          plugins.setTokenHeader(
+            name,
+            server,
+            one === null
+              ? null
+              : {
+                  name: one.name as string,
+                  format: one.format as "raw" | "bearer",
+                },
+          );
           return { result: { name, server } };
         }),
         wire.handle("plugins", "setEnv", (call) => {
@@ -165,10 +191,15 @@ export function pluginsPlugin(
             server,
             env.map((raw) => {
               const one = (raw ?? {}) as Record<string, unknown>;
-              if (typeof one.name !== "string") throw new Error("a variable needs a name");
+              if (typeof one.name !== "string")
+                throw new Error("a variable needs a name");
               if (one.value !== null && typeof one.value !== "string")
                 throw new Error("a variable value is text, or null to keep it");
-              return { name: one.name, value: one.value as string | null, secret: one.secret === true };
+              return {
+                name: one.name,
+                value: one.value as string | null,
+                secret: one.secret === true,
+              };
             }),
           );
           return { result: { name, server } };
@@ -192,14 +223,23 @@ export function pluginsPlugin(
           const name = new Args(call).string("name");
           // Sign-ins are kept per URL: read them before the plugin goes, drop only those no other server uses.
           const urlsOf = (view: { servers: { url?: string }[] }) =>
-            view.servers.flatMap((server) => (server.url === undefined ? [] : [server.url]));
+            view.servers.flatMap((server) =>
+              server.url === undefined ? [] : [server.url],
+            );
           const all = plugins.view();
-          const mine = urlsOf(all.find((view) => view.name === name) ?? { servers: [] });
+          const mine = urlsOf(
+            all.find((view) => view.name === name) ?? { servers: [] },
+          );
           const others = new Set(
             all.filter((view) => view.name !== name).flatMap(urlsOf),
           );
           await plugins.registry.remove(name);
-          if (mcp !== undefined) await mcp.releaseUrls(mine, name, new Set([...others].map((url) => mcp.keyOf(url))));
+          if (mcp !== undefined)
+            await mcp.releaseUrls(
+              mine,
+              name,
+              new Set([...others].map((url) => mcp.keyOf(url))),
+            );
           return { result: { name } };
         }),
         wire.handle("plugins", "marketSettings", async () => ({
@@ -232,7 +272,9 @@ export function pluginsPlugin(
         wire.handle("plugins", "marketCatalog", async (call) => ({
           // "cached": only what is kept, at once; otherwise read again (asking the server first).
           result: await market.catalog(
-            new Args(call).optionalString("mode") === "cached" ? "cached" : "refresh",
+            new Args(call).optionalString("mode") === "cached"
+              ? "cached"
+              : "refresh",
             new Args(call).optionalString("source"),
           ),
         })),
@@ -242,7 +284,10 @@ export function pluginsPlugin(
         wire.handle("plugins", "marketPreview", async (call) => {
           const args = new Args(call);
           return {
-            result: await market.preview(args.string("name"), args.string("source")),
+            result: await market.preview(
+              args.string("name"),
+              args.string("source"),
+            ),
           };
         }),
         wire.handle("plugins", "marketInstall", async (call) => {
@@ -275,7 +320,8 @@ export function pluginsPlugin(
           );
           const url = (plan.entry as { url?: string }).url;
           if (url !== undefined) {
-            if (result.status === "needs_login") asked.set(url, mcp?.signInStamp(url) ?? "");
+            if (result.status === "needs_login")
+              asked.set(url, mcp?.signInStamp(url) ?? "");
             else if (result.status === "ok") asked.delete(url);
             wire.pushNow?.("plugins");
           }
@@ -287,7 +333,13 @@ export function pluginsPlugin(
           // The plugin must be on, usable and have the server: testPlan refuses otherwise.
           const url = remoteUrl(args.string("name"), args.string("server"));
           asked.delete(url);
-          return { result: await mcp.loginUrl(url, undefined, args.optionalString("redirectOrigin")) };
+          return {
+            result: await mcp.loginUrl(
+              url,
+              undefined,
+              args.optionalString("redirectOrigin"),
+            ),
+          };
         }),
         wire.handle("plugins", "logoutServer", async (call) => {
           const args = new Args(call);
@@ -295,22 +347,38 @@ export function pluginsPlugin(
           const url = remoteUrl(args.string("name"), args.string("server"));
           await mcp.logoutUrl(url);
           asked.delete(url);
-          return { result: { name: args.string("name"), server: args.string("server") } };
+          return {
+            result: {
+              name: args.string("name"),
+              server: args.string("server"),
+            },
+          };
         }),
         wire.handle("plugins", "logo", async (call) => {
           const args = new Args(call);
           // An installed plugin: its own file first, then its homepage's icon.
           const installed = args.optionalString("plugin");
           if (installed !== undefined) {
-            const found = plugins.registry.entries().find((entry) => entry.name === installed)?.plugin;
+            const found = plugins.registry
+              .entries()
+              .find((entry) => entry.name === installed)?.plugin;
             const own =
-              found?.manifest.logo === undefined ? null : await readOwnLogo(found.root, found.manifest.logo);
+              found?.manifest.logo === undefined
+                ? null
+                : await readOwnLogo(found.root, found.manifest.logo);
             if (own) return { result: own };
             // The first remote MCP server's site is the last source before the letter.
-            const remote = plugins.view().find((view) => view.name === installed)?.servers.find(
-              (server) => server.url !== undefined,
-            )?.url;
-            return { result: await logos.find(null, found?.manifest.homepage ?? null, remote ?? null) };
+            const remote = plugins
+              .view()
+              .find((view) => view.name === installed)
+              ?.servers.find((server) => server.url !== undefined)?.url;
+            return {
+              result: await logos.find(
+                null,
+                found?.manifest.homepage ?? null,
+                remote ?? null,
+              ),
+            };
           }
           // A market entry that is a path in a GitHub repository: the plugin's own logo from its manifest.
           const repo = args.optionalString("repo");
@@ -333,8 +401,10 @@ export function pluginsPlugin(
         }),
         wire.handle("plugins", "logosCached", (call) => {
           const { entries } = (call.args ?? {}) as { entries?: unknown };
-          if (!Array.isArray(entries)) throw new Error("plugins.logosCached needs entries");
-          const text = (value: unknown): string => (typeof value === "string" ? value : "");
+          if (!Array.isArray(entries))
+            throw new Error("plugins.logosCached needs entries");
+          const text = (value: unknown): string =>
+            typeof value === "string" ? value : "";
           const asked = entries.map((raw) => {
             const one = (raw ?? {}) as Record<string, unknown>;
             return {
@@ -348,7 +418,11 @@ export function pluginsPlugin(
             result: {
               logos: logos.cached(asked).map((one) =>
                 one.status === "hit"
-                  ? { status: "hit", type: one.logo.type, data: one.logo.data }
+                  ? {
+                      status: "hit",
+                      type: one.logo.type,
+                      data: one.logo.data,
+                    }
                   : { status: one.status },
               ),
             },

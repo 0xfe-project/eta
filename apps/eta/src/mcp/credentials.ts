@@ -33,7 +33,12 @@ export class CredentialRows implements CredentialStore {
   /** A short stamp of the stored value (never the value): changes when a new sign-in is stored. */
   stamp(serverKey: string, kind: CredentialKind): string | undefined {
     const value = this.#table.read(INTEGRATION, serverKey, kind);
-    return value === undefined ? undefined : createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
+    return value === undefined
+      ? undefined
+      : createHash("sha256")
+          .update(JSON.stringify(value))
+          .digest("hex")
+          .slice(0, 16);
   }
 
   async get<K extends CredentialKind>(

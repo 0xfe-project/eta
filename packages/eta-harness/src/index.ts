@@ -117,9 +117,9 @@ export {
   onTurnStart,
 } from "./reminder/cadence";
 export {
+  formatSkillName,
   loadSkills,
   loadSourcedSkills,
-  formatSkillName,
   parseSkillText,
   type Skill,
   type SkillDiagnostic,

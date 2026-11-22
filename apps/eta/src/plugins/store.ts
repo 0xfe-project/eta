@@ -98,7 +98,9 @@ export class PluginRows {
     this.#db.query("DELETE FROM plugin_disabled WHERE plugin = ?").run(name);
     this.#db.query("DELETE FROM plugin_header WHERE plugin = ?").run(name);
     this.#db.query("DELETE FROM plugin_env WHERE plugin = ?").run(name);
-    this.#db.query("DELETE FROM plugin_token_header WHERE plugin = ?").run(name);
+    this.#db
+      .query("DELETE FROM plugin_token_header WHERE plugin = ?")
+      .run(name);
   }
 
   /* --------------------------------------------------------------- the switch */
@@ -118,7 +120,10 @@ export class PluginRows {
       this.#db
         .query("INSERT OR IGNORE INTO plugin_disabled (plugin) VALUES (?)")
         .run(plugin);
-    else this.#db.query("DELETE FROM plugin_disabled WHERE plugin = ?").run(plugin);
+    else
+      this.#db
+        .query("DELETE FROM plugin_disabled WHERE plugin = ?")
+        .run(plugin);
   }
 
   /* ----------------------------------------------------------------- values */
@@ -162,9 +167,17 @@ export class PluginRows {
   }
 
   /** One server's choice; `null` removes it. */
-  saveTokenHeader(plugin: string, server: string, header: Omit<UserTokenHeader, "server"> | null): void {
+  saveTokenHeader(
+    plugin: string,
+    server: string,
+    header: Omit<UserTokenHeader, "server"> | null,
+  ): void {
     this.#db.transaction(() => {
-      this.#db.query("DELETE FROM plugin_token_header WHERE plugin = ? AND server = ?").run(plugin, server);
+      this.#db
+        .query(
+          "DELETE FROM plugin_token_header WHERE plugin = ? AND server = ?",
+        )
+        .run(plugin, server);
       if (header !== null)
         this.#db
           .query(
@@ -243,7 +256,10 @@ export class PluginRows {
   /** The variables the user set on stdio servers, by server then name; one whose blob does not open is left out. */
   env(plugin: string): UserEnv[] {
     return this.#db
-      .query<{ server: string; name: string; sealed: Uint8Array; secret: number }, [string]>(
+      .query<
+        { server: string; name: string; sealed: Uint8Array; secret: number },
+        [string]
+      >(
         "SELECT server, name, sealed, secret FROM plugin_env WHERE plugin = ? ORDER BY server, name",
       )
       .all(plugin)
@@ -251,7 +267,14 @@ export class PluginRows {
         const value = unseal(this.#key, row.sealed);
         return value === undefined
           ? []
-          : [{ server: row.server, name: row.name, value, secret: row.secret === 1 }];
+          : [
+              {
+                server: row.server,
+                name: row.name,
+                value,
+                secret: row.secret === 1,
+              },
+            ];
       });
   }
 
@@ -259,13 +282,22 @@ export class PluginRows {
   saveEnv(plugin: string, server: string, env: readonly UserEnv[]): void {
     const now = Date.now();
     this.#db.transaction(() => {
-      this.#db.query("DELETE FROM plugin_env WHERE plugin = ? AND server = ?").run(plugin, server);
+      this.#db
+        .query("DELETE FROM plugin_env WHERE plugin = ? AND server = ?")
+        .run(plugin, server);
       for (const one of env)
         this.#db
           .query(
             `INSERT INTO plugin_env (plugin, server, name, sealed, secret, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
           )
-          .run(plugin, server, one.name, seal(this.#key, one.value), one.secret ? 1 : 0, now);
+          .run(
+            plugin,
+            server,
+            one.name,
+            seal(this.#key, one.value),
+            one.secret ? 1 : 0,
+            now,
+          );
     })();
   }
 

@@ -3,7 +3,7 @@ import { expect, open, test } from "nsh/test";
 const OPEN = { width: 1000, height: 700 };
 // A letter avatar holds the entry's first letter; a picture replaces it.
 const letter = (app: Awaited<ReturnType<typeof open>>, name: string) =>
-  app.count("id:plugin-avatar >> text:" + name.charAt(0).toUpperCase());
+  app.count(`id:plugin-avatar >> text:${name.charAt(0).toUpperCase()}`);
 
 test("a kept picture is in the first frame: no letter for it, a letter for a known miss", async () => {
   const app = await open("./fixtures/market-logos-hit.tsx", OPEN);

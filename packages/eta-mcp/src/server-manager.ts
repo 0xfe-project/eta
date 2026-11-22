@@ -574,12 +574,17 @@ export class ServerManager {
         ? base
         : async (input, init) => {
             const tokens = await authProvider!.tokens();
-            if (tokens?.access_token === undefined || new URL(String(input)).origin !== url.origin)
+            if (
+              tokens?.access_token === undefined ||
+              new URL(String(input)).origin !== url.origin
+            )
               return await base(input, init);
             const next = new Headers(init?.headers);
             next.set(
               tokenHeader.name,
-              tokenHeader.format === "bearer" ? `Bearer ${tokens.access_token}` : tokens.access_token,
+              tokenHeader.format === "bearer"
+                ? `Bearer ${tokens.access_token}`
+                : tokens.access_token,
             );
             return await base(input, { ...init, headers: next });
           };
@@ -588,7 +593,12 @@ export class ServerManager {
       ...(authProvider ? { authProvider } : {}),
       // Headers configured for this server stay with it: no redirect may carry them elsewhere.
       ...(Object.keys(headers).length > 0 || tokenHeader !== undefined
-        ? { fetch: sameOriginFetch(withToken(this.options.fetch ?? fetch), url.origin) }
+        ? {
+            fetch: sameOriginFetch(
+              withToken(this.options.fetch ?? fetch),
+              url.origin,
+            ),
+          }
         : this.options.fetch
           ? { fetch: this.options.fetch }
           : {}),

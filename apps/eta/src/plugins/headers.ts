@@ -5,24 +5,25 @@
  */
 
 /** An HTTP field name: a token (RFC 9110), so no space, colon, CR or LF can slip in. */
-const NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+const NAME = /^[!#$%&'*+.^\w`|~-]+$/;
 const MAX_NAME = 128;
 const MAX_VALUE = 4096;
 export const MAX_HEADERS_PER_SERVER = 32;
 
 /** Names whose value is a credential: the toggle starts on for these. */
 const SECRET_NAME = /authorization|key|token|secret|auth|cookie|password/i;
-export const looksSecret = (name: string): boolean => SECRET_NAME.test(name);
+const looksSecret = (name: string): boolean => SECRET_NAME.test(name);
 
 export const MAX_ENV_PER_SERVER = 32;
-const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const ENV_NAME = /^[A-Z_]\w*$/i;
 
 /** Why an environment variable cannot be used, or undefined when it can. Never includes the value. */
 export function envProblem(name: string, value: string): string | undefined {
   if (!ENV_NAME.test(name) || name.length > MAX_NAME)
     return `${JSON.stringify(name)} is not a valid variable name`;
   if (value === "") return `variable ${name} needs a value`;
-  if (value.length > MAX_VALUE) return `the value of ${name} is longer than ${MAX_VALUE}`;
+  if (value.length > MAX_VALUE)
+    return `the value of ${name} is longer than ${MAX_VALUE}`;
   if (value.includes("\0")) return `the value of ${name} has a NUL`;
   return undefined;
 }
@@ -31,10 +32,13 @@ export function envProblem(name: string, value: string): string | undefined {
 export function headerProblem(name: string, value: string): string | undefined {
   if (name.trim() === "") return "a header needs a name";
   if (name.length > MAX_NAME) return `header name is longer than ${MAX_NAME}`;
-  if (!NAME.test(name)) return `${JSON.stringify(name)} is not a valid header name`;
+  if (!NAME.test(name))
+    return `${JSON.stringify(name)} is not a valid header name`;
   if (value === "") return `header ${name} needs a value`;
-  if (value.length > MAX_VALUE) return `the value of ${name} is longer than ${MAX_VALUE}`;
+  if (value.length > MAX_VALUE)
+    return `the value of ${name} is longer than ${MAX_VALUE}`;
   // CR, LF and NUL would end the header or the request line: never allowed.
-  if (/[\r\n\0]/.test(value)) return `the value of ${name} has a line break or NUL`;
+  if (/[\r\n\0]/.test(value))
+    return `the value of ${name} has a line break or NUL`;
   return undefined;
 }

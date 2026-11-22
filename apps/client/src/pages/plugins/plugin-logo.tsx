@@ -1,14 +1,20 @@
-import type { PluginLogoResult, PluginLogosCachedResult } from "@eta/client-contracts";
+import type {
+  PluginLogoResult,
+  PluginLogosCachedResult,
+} from "@eta/client-contracts";
 import type { Signal } from "nsh";
 import { effect, Image, signal, untracked, View } from "nsh";
 import { colors, Label } from "../../components";
 import { useHost } from "../../services/host";
-import { avatarFill, avatarInk, avatarInitial } from "./avatar-color";
+import { avatarFill, avatarInitial, avatarInk } from "./avatar-color";
 
 const found = new Map<string, Signal<string | null | undefined>>();
 
 /** The key a market entry's picture is kept under. */
-const repoKey = (repo: { repo: string; ref: string; path: string }, homepage: string | null | undefined): string =>
+const repoKey = (
+  repo: { repo: string; ref: string; path: string },
+  homepage: string | null | undefined,
+): string =>
   ["repo", repo.repo, repo.ref, repo.path, homepage ?? ""].join("\n");
 
 function slot(key: string): Signal<string | null | undefined> {
@@ -21,7 +27,7 @@ function slot(key: string): Signal<string | null | undefined> {
 }
 
 /** How long the first screen waits for the host's kept pictures before it draws letters. */
-export const LOGOS_CACHED_WAIT_MS = 400;
+const LOGOS_CACHED_WAIT_MS = 400;
 /** The most entries one `logosCached` call is asked about (the host's own limit). */
 const LOGOS_CACHED_MAX = 200;
 
@@ -37,15 +43,19 @@ export async function primeLogos(
   asks: { repo: string; ref: string; path: string; homepage: string | null }[],
   waitMs = LOGOS_CACHED_WAIT_MS,
 ): Promise<void> {
-  const batch = asks.filter((ask) => slot(repoKey(ask, ask.homepage))() === undefined).slice(0, LOGOS_CACHED_MAX);
+  const batch = asks
+    .filter((ask) => slot(repoKey(ask, ask.homepage))() === undefined)
+    .slice(0, LOGOS_CACHED_MAX);
   if (batch.length === 0) return;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const answer = await Promise.race([
     host
-      .call<PluginLogosCachedResult>("plugins", "logosCached", { entries: batch })
+      .call<PluginLogosCachedResult>("plugins", "logosCached", {
+        entries: batch,
+      })
       .catch(() => undefined),
     new Promise<undefined>((done) => {
-      timer = setTimeout(() => done(undefined), waitMs);
+      timer = setTimeout(done, waitMs, undefined);
     }),
   ]);
   clearTimeout(timer);
@@ -91,7 +101,7 @@ export function PluginLogo(props: {
   const size = () => props.size ?? 28;
   const key = () =>
     props.installed
-      ? "installed:" + props.name
+      ? `installed:${props.name}`
       : props.repo
         ? repoKey(props.repo, props.homepage)
         : (props.homepage ?? "");
@@ -134,8 +144,23 @@ export function PluginLogo(props: {
         backgroundColor: picture() ? c().border : avatarFill(props.name),
       }}
     >
-      <If when={picture()} else={<Label variant="small" weight={600} style={{ color: avatarInk(avatarFill(props.name)) }}>{avatarInitial(props.name)}</Label>}>
-        <Image src={picture()!} fadeDuration={0} style={{ width: size(), height: size() }} />
+      <If
+        when={picture()}
+        else={
+          <Label
+            variant="small"
+            weight={600}
+            style={{ color: avatarInk(avatarFill(props.name)) }}
+          >
+            {avatarInitial(props.name)}
+          </Label>
+        }
+      >
+        <Image
+          src={picture()!}
+          fadeDuration={0}
+          style={{ width: size(), height: size() }}
+        />
       </If>
     </View>
   );

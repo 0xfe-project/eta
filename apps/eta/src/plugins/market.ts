@@ -1,3 +1,15 @@
+import type {
+  MarketCatalog,
+  MarketEntry,
+  MarketPreview,
+  MarketRejected,
+  MarketSettings,
+  MarketSource,
+  MarketSourceCatalog,
+} from "@eta/client-contracts";
+import type { SettingStore } from "../settings/store";
+import type { CachedCatalog, CatalogCache } from "./market-cache";
+import type { Plugins } from "./service";
 /**
  * The plugin market: an online catalog of git sources, and the install of one of them.
  *
@@ -12,17 +24,7 @@
  *
  * A catalog that cannot be read is an answer, not a failure: the installed plugins do not depend on it.
  */
-import type {
-  MarketCatalog,
-  MarketEntry,
-  MarketPreview,
-  MarketRejected,
-  MarketSettings,
-  MarketSource,
-  MarketSourceCatalog,
-} from "@eta/client-contracts";
-import type { SettingStore } from "../settings/store";
-import type { Plugins } from "./service";
+import { Buffer } from "node:buffer";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { loadPlugin, PluginError } from "@eta/daemon";
@@ -34,7 +36,6 @@ import {
   resolveRev,
   viaProxy,
 } from "./git";
-import type { CachedCatalog, CatalogCache } from "./market-cache";
 import { serverViews } from "./server-view";
 
 const CURSOR_URL =
@@ -58,7 +59,6 @@ const TIMEOUT_MS = 10_000;
 const MAX_ENTRIES = 500;
 const SHA = /^[0-9a-f]{40}$/;
 const NAME = /^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$/;
-const COMMAND = /^[\w.+-]{1,64}$/;
 
 export interface MarketOptions {
   settings: SettingStore;
@@ -80,7 +80,11 @@ const messageOf = (error: unknown): string =>
 const isPlain = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-function text(entry: Record<string, unknown>, key: string, max: number): string {
+function text(
+  entry: Record<string, unknown>,
+  key: string,
+  max: number,
+): string {
   const value = entry[key];
   if (typeof value !== "string" || value.trim() === "")
     throw new Error(`${key} is missing`);
@@ -206,7 +210,10 @@ export class Market {
     if (list.some((item) => item.url === clean))
       throw new PluginError("that address is in the list already");
     const label = name.trim().slice(0, 60);
-    this.#settings.set(SOURCES_KEY, [...list, { url: clean, name: label, enabled: true }]);
+    this.#settings.set(SOURCES_KEY, [
+      ...list,
+      { url: clean, name: label, enabled: true },
+    ]);
     return this.settings();
   }
 
@@ -242,13 +249,21 @@ export class Market {
   }
 
   /** Every source's catalog, each read on its own: one that fails does not hide the others. */
-  async catalog(mode: "refresh" | "cached" = "refresh", only?: string): Promise<MarketCatalog> {
+  async catalog(
+    mode: "refresh" | "cached" = "refresh",
+    only?: string,
+  ): Promise<MarketCatalog> {
     const proxy = this.#proxy();
     const sources = await Promise.all(
       this.sources()
         // `only`: one source's address, so a slow source does not hold the others back.
-        .filter((source) => source.enabled && (only === undefined || source.url === only))
-        .map(async (source) => await this.#read(source, proxy, new Map(), mode)),
+        .filter(
+          (source) =>
+            source.enabled && (only === undefined || source.url === only),
+        )
+        .map(
+          async (source) => await this.#read(source, proxy, new Map(), mode),
+        ),
     );
     return { sources, proxy };
   }
@@ -300,7 +315,14 @@ export class Market {
       if (raw === undefined) {
         if (cached !== undefined) this.#cache?.delete(url);
         // Nothing kept: no answer yet, and not a failure.
-        return { source, entries: null, rejected: [], error: null, updatedAt: null, stale: null };
+        return {
+          source,
+          entries: null,
+          rejected: [],
+          error: null,
+          updatedAt: null,
+          stale: null,
+        };
       }
       updatedAt = cached!.fetchedAt;
     } else {
@@ -309,7 +331,8 @@ export class Market {
         const now = Date.now();
         if (got === "same") {
           raw = this.#fromCache(cached);
-          if (raw === undefined) throw new Error("the kept catalog can no longer be used");
+          if (raw === undefined)
+            throw new Error("the kept catalog can no longer be used");
           this.#cache?.confirm(url, now);
         } else {
           try {
@@ -325,7 +348,14 @@ export class Market {
         // The network failed or the answer was bad: a kept catalog stays, with its age and the reason.
         const kept = this.#fromCache(cached);
         if (kept === undefined)
-          return { source, entries: null, rejected: [], error: messageOf(error), updatedAt: null, stale: null };
+          return {
+            source,
+            entries: null,
+            rejected: [],
+            error: messageOf(error),
+            updatedAt: null,
+            stale: null,
+          };
         raw = kept;
         updatedAt = cached!.fetchedAt;
         stale = messageOf(error);
@@ -375,7 +405,9 @@ export class Market {
   async #download(
     url: string,
     cached: CachedCatalog | undefined,
-  ): Promise<{ text: string; etag: string | null; lastModified: string | null } | "same"> {
+  ): Promise<
+    { text: string; etag: string | null; lastModified: string | null } | "same"
+  > {
     let response: Response;
     try {
       response = await fetch(url, {
@@ -384,7 +416,9 @@ export class Market {
         headers: {
           accept: "application/json",
           ...(cached?.etag ? { "if-none-match": cached.etag } : {}),
-          ...(cached?.lastModified ? { "if-modified-since": cached.lastModified } : {}),
+          ...(cached?.lastModified
+            ? { "if-modified-since": cached.lastModified }
+            : {}),
         },
       });
     } catch (error) {
@@ -508,7 +542,9 @@ export class Market {
         return unsupported(
           "a path in the catalog's repository, and the catalog is not on raw.githubusercontent.com",
         );
-      const path = cleanPath([origin.root, source].filter((part) => part !== "").join("/"));
+      const path = cleanPath(
+        [origin.root, source].filter((part) => part !== "").join("/"),
+      );
       this.#checkRepo(origin.repo);
       return {
         repo: origin.repo,
@@ -545,7 +581,7 @@ export class Market {
   }
 
   #checkRepo(repo: string): void {
-    const scp = /^[\w.-]+@[\w.-]+:[^\s]+$/.test(repo);
+    const scp = /^[\w.-]+@[\w.-]+:\S+$/.test(repo);
     let ok = scp && this.#schemes.includes("ssh:");
     if (!scp) {
       try {
@@ -586,7 +622,8 @@ export class Market {
       throw new PluginError(`${url} is not one of the plugin sources`);
     const refs = new Map<string, string>();
     const read = await this.#read(source, proxy, refs);
-    if (read.entries === null) throw new PluginError(read.error ?? "no catalog");
+    if (read.entries === null)
+      throw new PluginError(read.error ?? "no catalog");
     const entry = read.entries.find((item) => item.name === name);
     if (entry === undefined)
       throw new PluginError(`${name} is not in the catalog`);
@@ -618,8 +655,7 @@ export class Market {
         repo: entry.repo,
         path: entry.path,
         sha,
-        proxy:
-          viaProxy(entry.repo) === entry.repo ? null : githubProxy.prefix,
+        proxy: viaProxy(entry.repo) === entry.repo ? null : githubProxy.prefix,
         requires: plugin.requires,
         servers: serverViews(plugin).map((view, index) => {
           const { config } = plugin.servers[index]!;

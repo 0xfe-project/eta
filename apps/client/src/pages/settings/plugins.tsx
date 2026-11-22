@@ -193,7 +193,9 @@ export function PluginSettings(props: { phone?: boolean }) {
                     })}
                     size={props.phone ? 40 : 28}
                     disabled={busy()}
-                    onPress={() => void call("marketRemoveSource", { url: item().url })}
+                    onPress={() =>
+                      void call("marketRemoveSource", { url: item().url })
+                    }
                   />
                 </View>
               )}
@@ -202,7 +204,12 @@ export function PluginSettings(props: { phone?: boolean }) {
         </If>
         <View style={{ gap: 8, maxWidth: 560 }}>
           {field(uiText("pluginsSourceName"), name, name.set)}
-          {field(uiText("pluginsSourceUrl"), address, address.set, () => void add())}
+          {field(
+            uiText("pluginsSourceUrl"),
+            address,
+            address.set,
+            () => void add(),
+          )}
           <If when={problem()}>
             <Label variant="small" tone="mutedInk">
               {problem()}
@@ -227,7 +234,12 @@ export function PluginSettings(props: { phone?: boolean }) {
           {uiText("pluginsProxyHint")}
         </Label>
         <View style={{ gap: 8, maxWidth: 560 }}>
-          {field(uiText("pluginsProxy"), proxy, proxy.set, () => void saveProxy())}
+          {field(
+            uiText("pluginsProxy"),
+            proxy,
+            proxy.set,
+            () => void saveProxy(),
+          )}
           <If when={proxyProblem()}>
             <Label variant="small" tone="mutedInk">
               {proxyProblem()}

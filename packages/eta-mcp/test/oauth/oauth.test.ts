@@ -417,35 +417,57 @@ describe("connect", () => {
   });
 });
 
-describe("RFC 9207 issuer of a proxy whose sign-in is a real provider's", () => {
+describe("rFC 9207 issuer of a proxy whose sign-in is a real provider's", () => {
   const PROXY = "https://auth.test/dcr";
   const IDP = "https://idp.test";
   function proxied(issParameterSupported: boolean) {
     const server = createFakeAuthServer();
     const json = (body: unknown) =>
-      new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
     const fetchFn = (async (input: string | URL, init?: RequestInit) => {
       const url = new URL(String(input));
-      if (url.origin === "https://mcp.test" && url.pathname.startsWith("/.well-known/oauth-protected-resource"))
-        return json({ resource: MCP_URL, authorization_servers: [PROXY], scopes_supported: ["read"] });
-      if (url.origin === "https://auth.test" && url.pathname === "/.well-known/oauth-authorization-server/dcr")
+      if (
+        url.origin === "https://mcp.test" &&
+        url.pathname.startsWith("/.well-known/oauth-protected-resource")
+      )
+        return json({
+          resource: MCP_URL,
+          authorization_servers: [PROXY],
+          scopes_supported: ["read"],
+        });
+      if (
+        url.origin === "https://auth.test" &&
+        url.pathname === "/.well-known/oauth-authorization-server/dcr"
+      )
         return json({
           issuer: PROXY,
-          authorization_endpoint: IDP + "/o/auth",
+          authorization_endpoint: `${IDP}/o/auth`,
           token_endpoint: "https://auth.test/token",
           registration_endpoint: "https://auth.test/register",
           response_types_supported: ["code"],
           grant_types_supported: ["authorization_code", "refresh_token"],
           code_challenge_methods_supported: ["S256"],
           token_endpoint_auth_methods_supported: ["none"],
-          ...(issParameterSupported ? { authorization_response_iss_parameter_supported: true } : {}),
+          ...(issParameterSupported
+            ? { authorization_response_iss_parameter_supported: true }
+            : {}),
         });
       return await server.fetch(input as never, init as never);
     }) as never;
     const store = createMemoryCredentialStore();
-    const logins = createOAuthLogins({ store, redirectUrl: REDIRECT_URL, fetchFn });
+    const logins = createOAuthLogins({
+      store,
+      redirectUrl: REDIRECT_URL,
+      fetchFn,
+    });
     const run = async (iss: string | null) => {
-      const pending = await logins.beginLogin({ serverKey: KEY, serverUrl: MCP_URL });
+      const pending = await logins.beginLogin({
+        serverKey: KEY,
+        serverUrl: MCP_URL,
+      });
       expect(new URL(pending.authorizationUrl).host).toBe("idp.test");
       const local = new URL(pending.authorizationUrl);
       local.host = "auth.test";
@@ -473,7 +495,9 @@ describe("RFC 9207 issuer of a proxy whose sign-in is a real provider's", () => 
 
   it("refuses an iss from a host eta did not send the user to (a real mix-up)", async () => {
     const { store, run } = proxied(false);
-    await expect(run("https://evil.test")).rejects.toMatchObject({ code: "exchange_failed" });
+    await expect(run("https://evil.test")).rejects.toMatchObject({
+      code: "exchange_failed",
+    });
     expect(await store.get(KEY, "tokens")).toBeUndefined();
   });
 

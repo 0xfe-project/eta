@@ -39,7 +39,9 @@ function Fixture() {
   host.state.update((state) => ({ ...state, status: "open" }));
   const stub = Object.assign(host, {
     call: (_target: string, _action: string, args?: { mode?: string }) =>
-      args?.mode === "cached" ? Promise.resolve(kept) : new Promise<MarketCatalog>(() => undefined),
+      args?.mode === "cached"
+        ? Promise.resolve(kept)
+        : new Promise<MarketCatalog>(() => undefined),
     action: async <T,>(run: () => Promise<T>) => await run(),
   });
   return (

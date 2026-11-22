@@ -13,14 +13,13 @@ import {
   SmoothScroll,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
-import { ToggleSwitch } from "../../components/toggle-switch";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 
-import { ServerRows, SkillRows } from "./servers-panel";
-import { PluginEnabled } from "./plugin-name";
 import { pluginText as text } from "./labels";
+import { PluginEnabled } from "./plugin-name";
 import { PluginGlyph, Status } from "./plugin-status";
+import { ServerRows, SkillRows } from "./servers-panel";
 import { PluginWarnings, pluginWarnings } from "./warnings";
 function excerpt(source: PluginView["source"]) {
   if (source.kind === "local")
@@ -205,7 +204,11 @@ export function PluginDetail(props: DetailProps) {
             <Label
               variant="small"
               tone="muted"
-              style={props.phone ? { paddingHorizontal: 16, paddingTop: 8 } : undefined}
+              style={
+                props.phone
+                  ? { paddingHorizontal: 16, paddingTop: 8 }
+                  : undefined
+              }
             >
               {uiText("pluginSwitchHint")}
             </Label>

@@ -52,16 +52,37 @@ function Fixture() {
             {
               ...plugin("remote-plugin", true),
               servers: [remote],
-              skills: [{ name: "only-skill", description: "<b>x</b> does one thing" }],
+              skills: [
+                { name: "only-skill", description: "<b>x</b> does one thing" },
+              ],
             },
-            { ...plugin("signed-plugin", true), servers: [{ ...remote, login: "signed_in" as const }] },
+            {
+              ...plugin("signed-plugin", true),
+              servers: [{ ...remote, login: "signed_in" as const }],
+            },
             // Signed in, but the server wants a header eta cannot fill by itself (until the user sets it).
-            { ...plugin("header-plugin", true), servers: [{ ...remote, login: "signed_in" as const }] },
-            { ...plugin("login-plugin", true), servers: [{ ...remote, login: "needs_login" as const }] },
-            { ...plugin("expired-plugin", true), servers: [{ ...remote, login: "expired" as const }] },
-            { ...plugin("setup-plugin", true), state: "needs_config" as const, servers: [remote] },
+            {
+              ...plugin("header-plugin", true),
+              servers: [{ ...remote, login: "signed_in" as const }],
+            },
+            {
+              ...plugin("login-plugin", true),
+              servers: [{ ...remote, login: "needs_login" as const }],
+            },
+            {
+              ...plugin("expired-plugin", true),
+              servers: [{ ...remote, login: "expired" as const }],
+            },
+            {
+              ...plugin("setup-plugin", true),
+              state: "needs_config" as const,
+              servers: [remote],
+            },
             // A server that lists many tools, a few resources and one prompt, with a hash in its version.
-            { ...plugin("rich-plugin", true), servers: [{ ...remote, name: "rich" }] },
+            {
+              ...plugin("rich-plugin", true),
+              servers: [{ ...remote, name: "rich" }],
+            },
             // A server whose Authorization header is bound to a required field nobody has filled in.
             {
               ...plugin("github-plugin", true),
@@ -85,9 +106,14 @@ function Fixture() {
             // An older host sends neither `headers` on the plugin nor on its servers.
             {
               ...plugin("old-host-plugin", true),
-              skills: ["alpha", "beta", "gamma"].map((name) => ({ name, description: name + " skill" })),
+              skills: ["alpha", "beta", "gamma"].map((name) => ({
+                name,
+                description: name + " skill",
+              })),
               headers: undefined,
-              servers: [{ ...remote, headers: undefined, plainHttp: undefined }],
+              servers: [
+                { ...remote, headers: undefined, plainHttp: undefined },
+              ],
             } as unknown as PluginView,
           ],
           audit: [],
@@ -98,8 +124,15 @@ function Fixture() {
   const stub = Object.assign(host, {
     call: async (_target: string, method: string, args: unknown) => {
       (globalThis as { __calls?: unknown[] }).__calls?.push([method, args]);
-      if (method === "setTokenHeader") tokenHeaderSet = (args as { header: { format: string } | null }).header?.format ?? null;
-      if (method === "testServer" && (args as { name?: string }).name === "header-plugin" && tokenHeaderSet === null) {
+      if (method === "setTokenHeader")
+        tokenHeaderSet =
+          (args as { header: { format: string } | null }).header?.format ??
+          null;
+      if (
+        method === "testServer" &&
+        (args as { name?: string }).name === "header-plugin" &&
+        tokenHeaderSet === null
+      ) {
         return {
           status: "needs_login",
           message: "the server did not accept the stored sign-in (HTTP 401)",
@@ -109,7 +142,10 @@ function Fixture() {
           requiredHeader: "x-cursor-auth",
         };
       }
-      if (method === "testServer" && (args as { name?: string }).name === "github-plugin") {
+      if (
+        method === "testServer" &&
+        (args as { name?: string }).name === "github-plugin"
+      ) {
         return {
           status: "needs_setup",
           message: "required values are missing",
@@ -118,13 +154,17 @@ function Fixture() {
           toolCount: 0,
         };
       }
-      if (method === "testServer" && (args as { name?: string }).name === "rich-plugin") {
+      if (
+        method === "testServer" &&
+        (args as { name?: string }).name === "rich-plugin"
+      ) {
         return {
           status: "ok",
           message: "",
           ms: 30,
           serverName: "github-mcp-server",
-          serverVersion: "github-mcp-server/remote-15f22585c741f51171c729338572905dfaae65d4",
+          serverVersion:
+            "github-mcp-server/remote-15f22585c741f51171c729338572905dfaae65d4",
           tools: Array.from({ length: 12 }, (_, i) => ({
             name: "tool_" + i,
             description: i === 0 ? "long ".repeat(60) : "short " + i,
@@ -133,8 +173,14 @@ function Fixture() {
           toolCount: 12,
           resourceCount: 4,
           promptCount: 1,
-          resources: [0, 1, 2, 3].map((i) => ({ name: "res_" + i, description: "resource " + i, params: [] })),
-          prompts: [{ name: "prompt_0", description: "a prompt", params: ["topic"] }],
+          resources: [0, 1, 2, 3].map((i) => ({
+            name: "res_" + i,
+            description: "resource " + i,
+            params: [],
+          })),
+          prompts: [
+            { name: "prompt_0", description: "a prompt", params: ["topic"] },
+          ],
         };
       }
       if (method === "testServer") {
@@ -149,7 +195,8 @@ function Fixture() {
           tools: Array.from({ length: count }, (_, i) => ({
             name: "tool_" + i,
             description: i === 0 ? "long ".repeat(60) : "short " + i,
-            params: i === 0 ? Array.from({ length: 15 }, (_, k) => "p" + k) : ["a"],
+            params:
+              i === 0 ? Array.from({ length: 15 }, (_, k) => "p" + k) : ["a"],
           })),
           toolCount: count,
           resourceCount: 2,

@@ -1,17 +1,19 @@
+import type { SessionMeta } from "@eta/server";
 /**
  * Request headers a user attaches to a plugin's remote MCP server: sent to that server only, over
  * the plugin file's own, never shown again, gone with the plugin, and not sent while it is off.
  */
-import type { SessionMeta } from "@eta/server";
+import { Buffer } from "node:buffer";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   plainRemote,
   resolvePluginServers,
   serversConfig,
+  serversConfig as serversConfigOf,
   toMcpEntries,
 } from "@eta/daemon";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { Plugins } from "../src/plugins/service";
@@ -181,7 +183,11 @@ describe("headers the user attaches to a remote server", () => {
       servers: [
         {
           name: "plain",
-          config: { type: "streamable-http", url: "http://example.com/mcp", headers: {} },
+          config: {
+            type: "streamable-http",
+            url: "http://example.com/mcp",
+            headers: {},
+          },
         },
       ],
     } as never;
@@ -201,9 +207,19 @@ describe("headers the user attaches to a remote server", () => {
       plugins.rows.saveHeaders(
         "demo",
         "remote",
-        user ? [{ server: "remote", name: "X-K", value: "v", secret: true, plainOk: false }] : [],
+        user
+          ? [
+              {
+                server: "remote",
+                name: "X-K",
+                value: "v",
+                secret: true,
+                plainOk: false,
+              },
+            ]
+          : [],
       );
-      const config = (plugins as never as { "#config"?: never });
+      const config = plugins as never as { "#config"?: never };
       void config;
       return toMcpEntries(
         resolvePluginServers(
@@ -236,6 +252,9 @@ describe("headers the user attaches to a remote server", () => {
 
 function configOf(plugins: Plugins, name: string) {
   const entry = plugins.registry.get(name)!;
-  return serversConfigOf(entry.plugin!, plugins.rows.values(name), plugins.rows.headers(name));
+  return serversConfigOf(
+    entry.plugin!,
+    plugins.rows.values(name),
+    plugins.rows.headers(name),
+  );
 }
-import { serversConfig as serversConfigOf } from "@eta/daemon";

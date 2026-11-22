@@ -1,5 +1,14 @@
 /** Muted fills the initial sits on. */
-const AVATAR_FILLS = ["#5B6EAE", "#3F8F8B", "#9A5B8F", "#B0663F", "#5E8C4A", "#8A6FB0", "#B05A6A", "#4F7FA3"];
+const AVATAR_FILLS = [
+  "#5B6EAE",
+  "#3F8F8B",
+  "#9A5B8F",
+  "#B0663F",
+  "#5E8C4A",
+  "#8A6FB0",
+  "#B05A6A",
+  "#4F7FA3",
+];
 
 /** The letter an avatar shows: the first character of the name, upper case; "?" for an empty name. */
 export const avatarInitial = (name: string): string => {
@@ -16,7 +25,7 @@ export const avatarFill = (name: string): string => {
 
 const luminance = (hex: string): number => {
   const [r, g, b] = [1, 3, 5].map((i) => {
-    const v = parseInt(hex.slice(i, i + 2), 16) / 255;
+    const v = Number.parseInt(hex.slice(i, i + 2), 16) / 255;
     return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
   });
   return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;

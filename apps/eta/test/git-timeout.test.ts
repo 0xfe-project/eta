@@ -2,7 +2,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { fetchInto, gitLimit, GIT_TIMEOUT_MS, resolveRev } from "../src/plugins/git";
+import {
+  fetchInto,
+  GIT_TIMEOUT_MS,
+  gitLimit,
+  resolveRev,
+} from "../src/plugins/git";
 
 /** A git:// server that takes the connection and never answers. */
 let server: Bun.TCPSocketListener<undefined>;
@@ -34,8 +39,10 @@ afterEach(() => {
 });
 
 async function ended(): Promise<boolean> {
-  for (let i = 0; i < 100 && (opened === 0 || closed < opened); i++)
+  for (let i = 0; i < 100; i++) {
+    if (opened > 0 && closed >= opened) break;
     await Bun.sleep(100);
+  }
   return opened > 0 && closed === opened;
 }
 

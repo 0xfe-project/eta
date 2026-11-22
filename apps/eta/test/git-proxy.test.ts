@@ -62,7 +62,9 @@ describe("git through a prefix proxy", () => {
     const root = await tempDir("eta-proxy-out-");
     const dir = join(root, "plugin");
     await fetchInto({ dir, repo: REPO, sha, ref: "main", path: "p" });
-    expect(await Bun.file(join(dir, "f.txt")).text()).toBe("what the proxy serves");
+    expect(await Bun.file(join(dir, "f.txt")).text()).toBe(
+      "what the proxy serves",
+    );
     await rm(root, { recursive: true, force: true });
   });
 

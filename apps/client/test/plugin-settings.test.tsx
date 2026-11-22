@@ -51,12 +51,16 @@ test("a proxy prefix that is not http(s) is refused", async () => {
   expect(app.shows("GitHub proxy")).toBe(true);
   await app.type(PROXY_FIELD, "proxy.test");
   await app.press("label:Save proxy");
-  expect(app.shows("Enter an http or https address, or leave it empty.")).toBe(true);
+  expect(app.shows("Enter an http or https address, or leave it empty.")).toBe(
+    true,
+  );
 });
 
 test("a proxy prefix is saved, and nothing is refused", async () => {
   const app = await open("./fixtures/plugin-settings.tsx", OPEN);
   await app.type(PROXY_FIELD, "https://proxy.test");
   await app.press("label:Save proxy");
-  expect(app.shows("Enter an http or https address, or leave it empty.")).toBe(false);
+  expect(app.shows("Enter an http or https address, or leave it empty.")).toBe(
+    false,
+  );
 });

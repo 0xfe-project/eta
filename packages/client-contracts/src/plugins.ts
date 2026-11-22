@@ -256,7 +256,12 @@ export interface PluginTestResult {
  * 2 MB of picture data are "unknown" too. Asked of a host without it, the call fails: treat all as unknown.
  */
 export interface PluginLogosCachedArgs {
-  entries: { repo: string; ref: string; path: string; homepage?: string | null }[];
+  entries: {
+    repo: string;
+    ref: string;
+    path: string;
+    homepage?: string | null;
+  }[];
 }
 export const PLUGIN_LOGOS_CACHED_MAX = 200;
 export type PluginLogoCached =

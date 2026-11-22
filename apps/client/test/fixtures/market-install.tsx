@@ -53,9 +53,16 @@ function Fixture() {
   const host = createHost();
   host.state.update((state) => ({ ...state, status: "open" }));
   const stub = Object.assign(host, {
-    call: async (_target: string, method: string, args: { name?: string; sha?: string }) => {
-      (globalThis as { __calls?: string[] }).__calls?.push(method + ":" + (args?.name ?? "") + ":" + (args?.sha ?? ""));
-      if (method === "marketCatalog") return JSON.parse(JSON.stringify(catalog)) as MarketCatalog;
+    call: async (
+      _target: string,
+      method: string,
+      args: { name?: string; sha?: string },
+    ) => {
+      (globalThis as { __calls?: string[] }).__calls?.push(
+        method + ":" + (args?.name ?? "") + ":" + (args?.sha ?? ""),
+      );
+      if (method === "marketCatalog")
+        return JSON.parse(JSON.stringify(catalog)) as MarketCatalog;
       if (method === "marketPreview")
         return {
           name: args.name,
@@ -65,16 +72,26 @@ function Fixture() {
           requires: ["node"],
           skills: [],
           servers: [
-            { name: "srv", transport: "stdio", command: ["node", "run.js"], fixedEnv: {}, env: [], headers: [] },
+            {
+              name: "srv",
+              transport: "stdio",
+              command: ["node", "run.js"],
+              fixedEnv: {},
+              env: [],
+              headers: [],
+            },
           ],
           fields: [],
           layout: null,
           reports: [],
           proxy: null,
         };
-      if (method === "marketInstall" && args.name === "bad") throw new Error("the plugin name is taken by a local plugin");
+      if (method === "marketInstall" && args.name === "bad")
+        throw new Error("the plugin name is taken by a local plugin");
       if (method === "marketInstall") {
-        const entry = catalog.sources[0]!.entries!.find((one) => one.name === args.name);
+        const entry = catalog.sources[0]!.entries!.find(
+          (one) => one.name === args.name,
+        );
         if (entry) entry.installed = "this";
       }
       return {};

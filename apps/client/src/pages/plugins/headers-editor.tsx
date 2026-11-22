@@ -48,7 +48,9 @@ export function HeadersEditor(props: {
   const host = useHost();
   const c = colors();
   const mine = () =>
-    (props.item.headers ?? []).filter((header) => header.server === props.server);
+    (props.item.headers ?? []).filter(
+      (header) => header.server === props.server,
+    );
   const drafts = signal<Draft[]>(mine().map(draftOf));
   const problem = signal("");
   const off = () => !props.item.enabled;
@@ -171,7 +173,7 @@ export function HeadersEditor(props: {
       <If when={drafts().length}>
         <Label variant="small" tone="muted">
           {uiText("headerSecret") +
-            (props.plainHttp ? " · " + uiText("headerPlainOk") : "")}
+            (props.plainHttp ? ` · ${uiText("headerPlainOk")}` : "")}
         </Label>
       </If>
       <If when={problem()}>

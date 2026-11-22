@@ -43,6 +43,8 @@ describe("sameOriginFetch", () => {
   it("stops a redirect loop", async () => {
     const base = async () => redirect("/again");
     const fetchSafe = sameOriginFetch(base as never, "https://api.example.com");
-    await expect(fetchSafe("https://api.example.com/x")).rejects.toThrow(/redirects/);
+    await expect(fetchSafe("https://api.example.com/x")).rejects.toThrow(
+      /redirects/,
+    );
   });
 });

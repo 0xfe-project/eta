@@ -1,8 +1,9 @@
+import type { SessionMeta } from "@eta/server";
 /**
  * The global switch of an installed plugin: off, it gives no agent skills or servers, whatever each
  * agent enabled; on, the agents' own choice decides again. Read straight from the service.
  */
-import type { SessionMeta } from "@eta/server";
+import { Buffer } from "node:buffer";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -76,7 +77,9 @@ describe("the global switch of a plugin", () => {
     const seen = changes.length;
     plugins.setEnabled("demo", false);
     expect(changes.length).toBe(seen + 1);
-    expect(plugins.view().find((entry) => entry.name === "demo")!.enabled).toBe(false);
+    expect(plugins.view().find((entry) => entry.name === "demo")!.enabled).toBe(
+      false,
+    );
     expect(plugins.skillDirsFor(meta("ada"))).toEqual([]);
     expect(plugins.mcpSourcesFor("ada")).toEqual([]);
     const extras = await plugins.runtimeExtrasFor(meta("ada"));

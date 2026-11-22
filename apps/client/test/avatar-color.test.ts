@@ -1,5 +1,9 @@
 import { expect, test } from "nsh/test";
-import { avatarFill, avatarInitial, avatarInk } from "../src/pages/plugins/avatar-color";
+import {
+  avatarFill,
+  avatarInitial,
+  avatarInk,
+} from "../src/pages/plugins/avatar-color";
 
 test("the fill comes from the first letter, in any case", () => {
   expect(avatarFill("firecrawl")).toBe(avatarFill("figma"));

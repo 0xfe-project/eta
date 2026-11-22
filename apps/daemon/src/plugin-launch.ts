@@ -99,7 +99,11 @@ export function serversConfig(
   values: Readonly<Record<string, PluginValue | null | undefined>>,
   userHeaders: readonly UserHeaderInput[] = [],
   userEnv: readonly UserEnvInput[] = [],
-  tokenHeaders: readonly { server: string; name: string; format: "raw" | "bearer" }[] = [],
+  tokenHeaders: readonly {
+    server: string;
+    name: string;
+    format: "raw" | "bearer";
+  }[] = [],
 ): ServersConfig {
   const texts: Record<string, string | undefined> = {};
   for (const field of plugin.fields as PluginField[]) {
@@ -131,13 +135,16 @@ export function serversConfig(
     const entry = (config[header.server] ??= { env: {}, headers: {} });
     const headers = entry.headers ?? {};
     for (const name of Object.keys(headers))
-      if (name.toLowerCase() === header.name.toLowerCase()) delete headers[name];
+      if (name.toLowerCase() === header.name.toLowerCase())
+        delete headers[name];
     headers[header.name] = header.value;
     entry.headers = headers;
     entry.userHeaders = true;
   }
   for (const one of tokenHeaders) {
-    const server = plugin.servers?.find((candidate) => candidate.name === one.server);
+    const server = plugin.servers?.find(
+      (candidate) => candidate.name === one.server,
+    );
     if (server === undefined || server.config.type === "stdio") continue;
     const entry = (config[one.server] ??= { env: {}, headers: {} });
     entry.tokenHeader = { name: one.name, format: one.format };
@@ -145,7 +152,9 @@ export function serversConfig(
   // The user's variables go on top of what the binding set, for a stdio server only.
   for (const one of userEnv) {
     if (one.name.trim() === "" || one.value === "") continue;
-    const server = plugin.servers?.find((candidate) => candidate.name === one.server);
+    const server = plugin.servers?.find(
+      (candidate) => candidate.name === one.server,
+    );
     if (server === undefined || server.config.type !== "stdio") continue;
     const entry = (config[one.server] ??= { env: {}, headers: {} });
     entry.env = { ...entry.env, [one.name]: one.value };
@@ -352,7 +361,9 @@ export function resolvePluginServers(
         headers: { ...Object.fromEntries(fixed), ...given },
         ...(auth === undefined ? {} : { auth }),
         ...(userHeaders ? { userHeaders } : {}),
-        ...(config[server.name]?.tokenHeader === undefined ? {} : { tokenHeader: config[server.name]!.tokenHeader! }),
+        ...(config[server.name]?.tokenHeader === undefined
+          ? {}
+          : { tokenHeader: config[server.name]!.tokenHeader! }),
       });
     }
   }
@@ -455,7 +466,9 @@ export function toMcpEntries(
             ? {}
             : { headers: server.headers }),
           ...(auth === undefined ? {} : { auth }),
-          ...(server.tokenHeader === undefined ? {} : { tokenHeader: server.tokenHeader }),
+          ...(server.tokenHeader === undefined
+            ? {}
+            : { tokenHeader: server.tokenHeader }),
         },
       ];
     }),

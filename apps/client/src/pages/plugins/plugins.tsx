@@ -21,8 +21,15 @@ import { Market } from "./market";
 import { PluginDetail } from "./plugin-detail";
 import { PluginLogo } from "./plugin-logo";
 import { PluginEnabled, PluginName } from "./plugin-name";
+import {
+  authStyle,
+  BADGE_EDGE_ALPHA,
+  cardLogin,
+  NoPlugins,
+  PluginGlyph,
+  Status,
+} from "./plugin-status";
 import { ServersDialog } from "./servers-panel";
-import { BADGE_EDGE_ALPHA, NoPlugins, PluginGlyph, Status, authStyle, cardLogin } from "./plugin-status";
 import { Skills } from "./skills/list";
 import { PluginTablet } from "./tablet-list";
 import { pluginWarnings, PluginWarningsDialog } from "./warnings";
@@ -461,7 +468,7 @@ function PluginCard(props: {
             <If when={cardLogin(props.item)}>
               {(state) => (
                 <View
-                  testID={"card-login:" + props.item.name}
+                  testID={`card-login:${props.item.name}`}
                   style={{
                     flexShrink: 0,
                     opacity: props.item.enabled ? 1 : 0.6,
@@ -469,7 +476,8 @@ function PluginCard(props: {
                     paddingVertical: 1,
                     backgroundColor: c()[authStyle(state()).fill],
                     borderWidth: 1,
-                    borderColor: c()[authStyle(state()).edge] + BADGE_EDGE_ALPHA,
+                    borderColor:
+                      c()[authStyle(state()).edge] + BADGE_EDGE_ALPHA,
                   }}
                 >
                   <Label variant="caption" tone={authStyle(state()).tone}>
@@ -575,7 +583,9 @@ function PluginCard(props: {
         {/* Switch at the left end; with all three buttons the row is tight, so the label becomes a tooltip. */}
         <PluginEnabled
           item={props.item}
-          compact={props.item.source.kind === "git" && props.item.fields.length > 0}
+          compact={
+            props.item.source.kind === "git" && props.item.fields.length > 0
+          }
         />
         <View style={{ flex: 1 }} />
         <If when={props.item.source.kind === "git"}>

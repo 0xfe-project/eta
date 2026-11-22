@@ -1,11 +1,12 @@
+import type { AddressInfo } from "node:net";
+import { Buffer } from "node:buffer";
+import { mkdtemp, rm } from "node:fs/promises";
 /**
  * A restart against a database file on disk: a catalog entry with no logo of its own and a homepage
  * with an icon is asked once; after a new Logos on a re-opened file no site is asked again.
  * Local fake servers only.
  */
 import http from "node:http";
-import type { AddressInfo } from "node:net";
-import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -13,12 +14,18 @@ import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { IconCache } from "../src/plugins/icon-cache";
 import { Logos } from "../src/plugins/logo";
 
-const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+const PNG = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3,
+]);
 const servers: http.Server[] = [];
 const dirs: string[] = [];
 afterEach(async () => {
-  for (const server of servers.splice(0)) server.closeAllConnections?.(), server.close();
-  for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
+  for (const server of servers.splice(0)) {
+    server.closeAllConnections?.();
+    server.close();
+  }
+  for (const dir of dirs.splice(0))
+    await rm(dir, { recursive: true, force: true });
 });
 
 async function listen(handler: http.RequestListener): Promise<string> {
@@ -51,12 +58,17 @@ describe("a restart keeps the homepage fallback of an entry too", () => {
       applyMigrations(db, loadMigrations());
       return {
         db,
-        logos: new Logos({ allowPrivate: true, rawBase, timeoutMs: 500, store: new IconCache(db) }),
+        logos: new Logos({
+          allowPrivate: true,
+          rawBase,
+          timeoutMs: 500,
+          store: new IconCache(db),
+        }),
       };
     };
 
     const first = boot();
-    const a = await first.logos.forEntry(repo, "HEAD", "plugins/x", home + "/");
+    const a = await first.logos.forEntry(repo, "HEAD", "plugins/x", `${home}/`);
     expect(a?.type).toBe("image/png");
     expect(site.length).toBeGreaterThan(0);
     first.db.close();
@@ -64,7 +76,12 @@ describe("a restart keeps the homepage fallback of an entry too", () => {
     const sitesBefore = site.length;
     const rawBefore = raw.length;
     const second = boot();
-    const b = await second.logos.forEntry(repo, "HEAD", "plugins/x", home + "/");
+    const b = await second.logos.forEntry(
+      repo,
+      "HEAD",
+      "plugins/x",
+      `${home}/`,
+    );
     expect(b?.type).toBe("image/png");
     expect(site.length).toBe(sitesBefore);
     expect(raw.length).toBe(rawBefore);
@@ -84,8 +101,18 @@ describe("a restart keeps the homepage fallback of an entry too", () => {
     const run = async () => {
       const db = openDatabase(file);
       applyMigrations(db, loadMigrations());
-      const logos = new Logos({ allowPrivate: true, rawBase, timeoutMs: 500, store: new IconCache(db) });
-      const out = await logos.forEntry("https://github.com/acme/plugins.git", "HEAD", "p", home + "/");
+      const logos = new Logos({
+        allowPrivate: true,
+        rawBase,
+        timeoutMs: 500,
+        store: new IconCache(db),
+      });
+      const out = await logos.forEntry(
+        "https://github.com/acme/plugins.git",
+        "HEAD",
+        "p",
+        `${home}/`,
+      );
       db.close();
       return out;
     };
@@ -110,14 +137,24 @@ describe("a restart keeps the homepage fallback of an entry too", () => {
     const clock = { at: 5_000_000 };
     const db = openDatabase(file);
     applyMigrations(db, loadMigrations());
-    const logos = new Logos({ allowPrivate: true, rawBase, timeoutMs: 500, now: () => clock.at, store: new IconCache(db) });
+    const logos = new Logos({
+      allowPrivate: true,
+      rawBase,
+      timeoutMs: 500,
+      now: () => clock.at,
+      store: new IconCache(db),
+    });
     const repo = "https://github.com/acme/plugins.git";
-    expect(await logos.forEntry(repo, "HEAD", "p", home + "/")).toBeNull();
-    const rows = db.query("select count(*) n from plugin_icon where path like '#site:%'").get() as { n: number };
+    expect(await logos.forEntry(repo, "HEAD", "p", `${home}/`)).toBeNull();
+    const rows = db
+      .query("select count(*) n from plugin_icon where path like '#site:%'")
+      .get() as { n: number };
     expect(rows.n).toBe(0);
     broken = false;
     clock.at += 3 * 60 * 1000;
-    expect((await logos.forEntry(repo, "HEAD", "p", home + "/"))?.type).toBe("image/png");
+    expect((await logos.forEntry(repo, "HEAD", "p", `${home}/`))?.type).toBe(
+      "image/png",
+    );
     db.close();
   });
 });

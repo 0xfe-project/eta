@@ -18,7 +18,15 @@
 import type { PluginField } from "@eta/client-contracts";
 import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { realpath } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import {
   ETA_EXTENSION,
   parseConfigFields,
@@ -151,7 +159,8 @@ const isString = (value: unknown): value is string => typeof value === "string";
 const isAuthor = (value: unknown): boolean =>
   isPlain(value) &&
   Object.entries(value).every(
-    ([key, item]) => ["name", "email", "url"].includes(key) && typeof item === "string",
+    ([key, item]) =>
+      ["name", "email", "url"].includes(key) && typeof item === "string",
   );
 
 const isStrings = (value: unknown): value is string[] =>
@@ -184,15 +193,18 @@ export function isWithin(root: string, path: string): boolean {
 
 /** Whether a manifest's `skills` is `skills/`, or a list of directories that are under it. */
 function skillsInPlace(value: unknown, root: string): boolean {
-  const paths = typeof value === "string" ? [value] : isStrings(value) ? value : undefined;
+  const paths =
+    typeof value === "string" ? [value] : isStrings(value) ? value : undefined;
   if (paths === undefined) return false;
   return paths.every((path) => {
-    if (/^(\.\/)?skills\/?$/.test(path)) return true;
+    if (/^(?:\.\/)?skills\/?$/.test(path)) return true;
     const name = /^(?:\.\/)?skills\/([^/]+)\/?$/.exec(path)?.[1];
     return (
       name !== undefined &&
       name !== ".." &&
-      statSync(join(root, "skills", name), { throwIfNoEntry: false })?.isDirectory() === true
+      statSync(join(root, "skills", name), {
+        throwIfNoEntry: false,
+      })?.isDirectory() === true
     );
   });
 }
@@ -212,10 +224,13 @@ function parseManifest(
     if (foreign && field === "mcpServers") continue;
     if (foreign && field === "skills") {
       if (!skillsInPlace(raw.skills, root))
-        reports.push("plugin.json: skills is not at skills/; only skills/ is read");
+        reports.push(
+          "plugin.json: skills is not at skills/; only skills/ is read",
+        );
     } else if (foreign && FOREIGN_COMPONENTS.includes(field))
       reports.push(`plugin.json: ${field} is not supported by eta; ignored`);
-    else if (!foreign) reports.push(`plugin.json: unknown field ${field} was ignored`);
+    else if (!foreign)
+      reports.push(`plugin.json: unknown field ${field} was ignored`);
   }
   if (foreign) {
     // Someone else's manifest: a field that does not fit is left out, the plugin is not refused.
@@ -502,7 +517,9 @@ function mapForeignServer(entry: unknown): ForeignServer | string {
     return "it signs in with OAuth, which eta does not do for these plugins";
   const swap = (text: string): string =>
     text.replaceAll("${CLAUDE_PLUGIN_ROOT}", "${PLUGIN_ROOT}");
-  const ignored = Object.keys(entry).filter((key) => !FOREIGN_SERVER_KEYS.has(key));
+  const ignored = Object.keys(entry).filter(
+    (key) => !FOREIGN_SERVER_KEYS.has(key),
+  );
   const kind = entry.type ?? (typeof entry.url === "string" ? "http" : "stdio");
   const raw: Record<string, unknown> = {
     type: kind === "http" ? "streamable-http" : kind,
@@ -555,9 +572,14 @@ function mapForeignServer(entry: unknown): ForeignServer | string {
       for (const [name, value] of Object.entries(entry.headers)) {
         const names = foreignVars(value);
         if (typeof names === "string") return `header ${name}: ${names}`;
-        if (value.includes("${PLUGIN_ROOT}")) return `header ${name} holds the plugin directory`;
+        if (value.includes("${PLUGIN_ROOT}"))
+          return `header ${name} holds the plugin directory`;
         if (names.length === 0) fixed[name] = value;
-        else headers[name] = value.replace(FOREIGN_VAR, (_, field: string) => `{${field}}`);
+        else
+          headers[name] = value.replace(
+            FOREIGN_VAR,
+            (_, field: string) => `{${field}}`,
+          );
       }
       raw.headers = fixed;
     }
@@ -574,19 +596,29 @@ async function loadForeignServers(
   root: string,
   reports: string[],
   declared?: unknown,
-): Promise<
-  Pick<PluginPackage, "servers" | "fields" | "bindings">
-> {
+): Promise<Pick<PluginPackage, "servers" | "fields" | "bindings">> {
   const servers: PluginServer[] = [];
   const bindings: Record<string, PluginServerBinding> = {};
   const specs: Record<string, unknown> = {};
   // What plugin.json's mcpServers names (a path, a list of paths, or the servers themselves),
   // then the conventional files; a file named twice is read once.
   const sources: { file: string; inline?: unknown; declared: boolean }[] = [];
-  for (const item of Array.isArray(declared) ? declared : declared === undefined ? [] : [declared]) {
+  for (const item of Array.isArray(declared)
+    ? declared
+    : declared === undefined
+      ? []
+      : [declared]) {
     if (typeof item === "string") sources.push({ file: item, declared: true });
-    else if (isPlain(item)) sources.push({ file: "plugin.json mcpServers", inline: item, declared: true });
-    else reports.push("plugin.json: mcpServers must be a path or an object; ignored");
+    else if (isPlain(item))
+      sources.push({
+        file: "plugin.json mcpServers",
+        inline: item,
+        declared: true,
+      });
+    else
+      reports.push(
+        "plugin.json: mcpServers must be a path or an object; ignored",
+      );
   }
   for (const file of FOREIGN_MCP_FILES) sources.push({ file, declared: false });
   const read = new Set<string>();
@@ -647,7 +679,12 @@ async function loadForeignServers(
         skip(config);
         continue;
       }
-      const names = [...Object.values(mapped.env), ...Object.values(mapped.headers).flatMap((t) => [...t.matchAll(/\{([^}]*)\}/g)].map((m) => m[1]!))];
+      const names = [
+        ...Object.values(mapped.env),
+        ...Object.values(mapped.headers).flatMap((t) =>
+          [...t.matchAll(/\{([^}]*)\}/g)].map((m) => m[1]!),
+        ),
+      ];
       const fresh: Record<string, unknown> = {};
       for (const variable of names)
         fresh[variable] = {
@@ -659,15 +696,22 @@ async function loadForeignServers(
         };
       const { problems } = parseConfigFields({ ...specs, ...fresh });
       if (problems.length > 0) {
-        skip(`its variables cannot be configuration fields (${problems.join("; ")})`);
+        skip(
+          `its variables cannot be configuration fields (${problems.join("; ")})`,
+        );
         continue;
       }
       Object.assign(specs, fresh);
       servers.push({ name, config });
-      if (Object.keys(mapped.env).length > 0 || Object.keys(mapped.headers).length > 0)
+      if (
+        Object.keys(mapped.env).length > 0 ||
+        Object.keys(mapped.headers).length > 0
+      )
         bindings[name] = { env: mapped.env, headers: mapped.headers };
       if (mapped.ignored.length > 0)
-        reports.push(`${file}: server ${name}: ${mapped.ignored.join(", ")} not supported by eta; ignored`);
+        reports.push(
+          `${file}: server ${name}: ${mapped.ignored.join(", ")} not supported by eta; ignored`,
+        );
     }
   }
   return { servers, bindings, fields: parseConfigFields(specs).fields };
@@ -691,7 +735,13 @@ async function loadSkillDirs(
     reports.push("skills: not a directory inside the plugin; ignored");
     return [];
   }
-  type Found = { dirName: string; dir: string; file: string; raw: string; legal: boolean };
+  interface Found {
+    dirName: string;
+    dir: string;
+    file: string;
+    raw: string;
+    legal: boolean;
+  }
   const found: Found[] = [];
   for (const dirName of readdirSync(location).sort()) {
     const dir = join(location, dirName);
@@ -702,9 +752,16 @@ async function loadSkillDirs(
       continue;
     }
     // One directory at a time: the spec looks at immediate children and goes no deeper.
-    const parsed = parseSkillText(readFileSync(file, "utf8"), file, dirName, true);
+    const parsed = parseSkillText(
+      readFileSync(file, "utf8"),
+      file,
+      dirName,
+      true,
+    );
     if (parsed.skill === null) {
-      const why = parsed.diagnostics.map((item) => item.message).join("; ") || "it has no description";
+      const why =
+        parsed.diagnostics.map((item) => item.message).join("; ") ||
+        "it has no description";
       reports.push(`skills/${dirName}: skipped: ${why}`);
       continue;
     }
@@ -733,7 +790,9 @@ async function loadSkillDirs(
     if (!one.legal) {
       const base = formatSkillName(one.raw);
       if (base === "") {
-        reports.push(`skills/${one.dirName}: skipped: name "${one.raw}" has no usable characters`);
+        reports.push(
+          `skills/${one.dirName}: skipped: name "${one.raw}" has no usable characters`,
+        );
         continue;
       }
       name = base;
@@ -741,18 +800,37 @@ async function loadSkillDirs(
         const suffix = `-${n}`;
         name = base.slice(0, 64 - suffix.length).replace(/-+$/, "") + suffix;
       }
-      const checked = parseSkillText(readFileSync(one.file, "utf8"), one.file, one.dirName, true, name);
+      const checked = parseSkillText(
+        readFileSync(one.file, "utf8"),
+        one.file,
+        one.dirName,
+        true,
+        name,
+      );
       if (name === one.raw || checked.diagnostics.length > 0) {
         // Not a naming fault we fix (a name that is legal but not the directory's, a bad description).
-        const why = checked.diagnostics.map((item) => item.message).join("; ") || "the name does not match its directory";
+        const why =
+          checked.diagnostics.map((item) => item.message).join("; ") ||
+          "the name does not match its directory";
         reports.push(`skills/${one.dirName}: skipped: ${why}`);
         continue;
       }
       taken.add(name);
       reports.push(`skills/${one.dirName}: renamed "${one.raw}" -> "${name}"`);
     }
-    const description = parseSkillText(readFileSync(one.file, "utf8"), one.file, one.dirName, true, name).skill!.description;
-    skills.push({ name, description, dir: one.dir, ...(name === one.raw ? {} : { renamedFrom: one.raw }) });
+    const description = parseSkillText(
+      readFileSync(one.file, "utf8"),
+      one.file,
+      one.dirName,
+      true,
+      name,
+    ).skill!.description;
+    skills.push({
+      name,
+      description,
+      dir: one.dir,
+      ...(name === one.raw ? {} : { renamedFrom: one.raw }),
+    });
   }
   return skills;
 }
@@ -901,12 +979,24 @@ export async function loadPlugin(dir: string): Promise<PluginPackage> {
   const skills = await loadSkillDirs(root, reports);
   if (!foreign) {
     const listed = await loadServers(root, reports);
-    const extension = parseExtension(extensions[ETA_EXTENSION], listed, reports);
+    const extension = parseExtension(
+      extensions[ETA_EXTENSION],
+      listed,
+      reports,
+    );
     return { root, manifest, reports, skills, ...extension };
   }
-  const mapped = await loadForeignServers(root, reports, isPlain(raw) ? raw.mcpServers : undefined);
+  const mapped = await loadForeignServers(
+    root,
+    reports,
+    isPlain(raw) ? raw.mcpServers : undefined,
+  );
   reportForeignParts(root, reports);
-  const extension = parseExtension(extensions[ETA_EXTENSION], mapped.servers, reports);
+  const extension = parseExtension(
+    extensions[ETA_EXTENSION],
+    mapped.servers,
+    reports,
+  );
   return {
     root,
     manifest,

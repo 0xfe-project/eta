@@ -42,9 +42,9 @@ export {
 export {
   type ActivePlugin,
   claimServerNames,
+  plainRemote,
   pluginDataDir,
   pluginMcpSources,
-  plainRemote,
   type PluginServersInput,
   type ResolvedServer,
   resolvePluginServers,
@@ -52,12 +52,12 @@ export {
   type ServerNameClash,
   type ServersConfig,
   serversConfig,
-  type UserEnvInput,
-  type UserHeaderInput,
   serverSupported,
   sessionServerName,
   toMcpEntries,
   toSessionServers,
+  type UserEnvInput,
+  type UserHeaderInput,
 } from "./plugin-launch";
 export {
   loadPlugin,

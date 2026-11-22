@@ -259,7 +259,11 @@ export class McpService {
     const definition = this.#scopeOf(agentId, server).definition(server);
     if (definition?.auth !== "oauth" || definition.url === undefined)
       throw new Error(`${server} does not sign in with OAuth`);
-    return await this.loginUrl(definition.url, definition.headers, redirectOrigin);
+    return await this.loginUrl(
+      definition.url,
+      definition.headers,
+      redirectOrigin,
+    );
   }
 
   /**
@@ -392,7 +396,10 @@ export class McpService {
     for (const agent of this.#options.agents()) {
       const scope = this.host.inspect(agent.id);
       for (const definition of scope.servers())
-        if (definition.url !== undefined && mcpServerKey(definition.url) === mcpServerKey(url))
+        if (
+          definition.url !== undefined &&
+          mcpServerKey(definition.url) === mcpServerKey(url)
+        )
           await this.host.manager.servers.close(agent.id, definition.name);
     }
     this.#options.changed();
@@ -402,11 +409,18 @@ export class McpService {
    * An uninstalled plugin's sign-ins: removed only for a URL no other server uses (another plugin,
    * given in `others`, or any other source of any agent), since the tokens are shared by URL.
    */
-  async releaseUrls(urls: readonly string[], plugin: string, others: ReadonlySet<string>): Promise<void> {
+  async releaseUrls(
+    urls: readonly string[],
+    plugin: string,
+    others: ReadonlySet<string>,
+  ): Promise<void> {
     const used = new Set(others);
     for (const agent of this.#options.agents())
       for (const definition of this.host.inspect(agent.id).servers())
-        if (definition.url !== undefined && definition.source !== `${PLUGIN}${plugin}`)
+        if (
+          definition.url !== undefined &&
+          definition.source !== `${PLUGIN}${plugin}`
+        )
           used.add(mcpServerKey(definition.url));
     for (const url of urls)
       if (!used.has(mcpServerKey(url))) await this.#forget(url);
@@ -449,7 +463,10 @@ export class McpService {
       );
     let note: string | undefined;
     try {
-      note = await this.completeLogin(state, `${held.redirectUrl}${url.search}`);
+      note = await this.completeLogin(
+        state,
+        `${held.redirectUrl}${url.search}`,
+      );
     } catch (error) {
       return page(
         400,
