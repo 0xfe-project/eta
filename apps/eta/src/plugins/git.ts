@@ -25,9 +25,24 @@ const WINDOWS_TAR = join(
 const TAR =
   process.platform === "win32" && existsSync(WINDOWS_TAR) ? WINDOWS_TAR : "tar";
 
+/** How long one `git` call may take before it is killed and reported. `ms` is changed by tests only. */
+export const GIT_TIMEOUT_MS = 20_000;
+export const gitLimit = { ms: GIT_TIMEOUT_MS };
+
+/** Stop `child` and what it started: on Windows `git` leaves `git-remote-https` behind otherwise. */
+function stop(child: Bun.Subprocess): void {
+  if (process.platform === "win32")
+    Bun.spawnSync(["taskkill", "/T", "/F", "/PID", String(child.pid)], {
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+  child.kill();
+}
+
 async function run(
   args: string[],
   cwd?: string,
+  repo?: string,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   const child = Bun.spawn(["git", ...args], {
     ...(cwd === undefined ? {} : { cwd }),
@@ -44,12 +59,25 @@ async function run(
       GIT_ALLOW_PROTOCOL: "https:ssh:git:file",
     },
   });
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  return { code, stdout, stderr };
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    stop(child);
+  }, gitLimit.ms);
+  try {
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    if (timedOut)
+      throw new PluginError(
+        `git ${args[0]}${repo === undefined ? "" : ` for ${repo}`} gave no answer in ${gitLimit.ms / 1000} s: the network is slow, or the repository needs credentials`,
+      );
+    return { code, stdout, stderr };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 const lastLine = (text: string): string => text.trim().split("\n").at(-1) ?? "";
@@ -58,8 +86,9 @@ async function must(
   args: string[],
   cwd: string | undefined,
   what: string,
+  repo?: string,
 ): Promise<string> {
-  const result = await run(args, cwd);
+  const result = await run(args, cwd, repo);
   if (result.code !== 0)
     throw new PluginError(`${what}: ${lastLine(result.stderr)}`);
   return result.stdout;
@@ -117,6 +146,7 @@ export async function resolveRev(
     ],
     undefined,
     `cannot read ${repo}`,
+    repo,
   );
   const refs = new Map<string, string>();
   for (const line of listed.split("\n")) {
@@ -159,11 +189,13 @@ export async function fetchInto(options: {
     let fetched = await run(
       ["fetch", "-q", "--depth", "1", "--", repo, sha],
       scratch,
+      repo,
     );
     if (fetched.code !== 0 && ref !== null)
       fetched = await run(
         ["fetch", "-q", "--depth", "1", "--", repo, ref],
         scratch,
+        repo,
       );
     if (fetched.code !== 0)
       throw new PluginError(
@@ -187,6 +219,7 @@ export async function fetchInto(options: {
       ],
       scratch,
       `${path === "" ? "the repository" : path} is not in ${repo} at ${sha.slice(0, 12)}`,
+      repo,
     );
     const untar = Bun.spawn([TAR, "-xf", archive, "-C", tree], {
       stdout: "ignore",

@@ -271,7 +271,9 @@ export function Market(props: {
                       {item().name}
                     </Label>
                     <Label variant="small" tone="muted" lines={1}>
-                      {[item().version, item().author].join(" · ")}
+                      {[item().version, item().author]
+                        .filter((part) => part.trim() !== "")
+                        .join(" · ")}
                     </Label>
                     <Label variant="small" tone="muted" lines={2}>
                       {item().description}
