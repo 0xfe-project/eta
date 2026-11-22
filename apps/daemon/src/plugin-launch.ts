@@ -111,6 +111,8 @@ export function serversConfig(
   }
   // The user's headers go on top, whatever the case of a name the file or a binding set already.
   for (const header of userHeaders) {
+    // An empty row (the editor's default Authorization) is nothing: not sent, not a choice.
+    if (header.name.trim() === "" || header.value.trim() === "") continue;
     const server = plugin.servers?.find((one) => one.name === header.server);
     // Only a remote server takes headers; plain http to another machine needs the user's yes.
     if (server === undefined || server.config.type === "stdio") continue;

@@ -30,7 +30,7 @@ interface Fake {
 
 /** A minimal streamable-HTTP MCP server; `mode` picks how it misbehaves. */
 async function fake(
-  mode: "ok" | "401" | "hang" | { redirect: string } | "leak" | "garbage" = "ok",
+  mode: "ok" | "401" | "challenge" | "hang" | { redirect: string } | "leak" | "garbage" = "ok",
 ): Promise<Fake> {
   const hits: Fake["hits"] = [];
   const server = http.createServer((req, res) => {
@@ -46,6 +46,12 @@ async function fake(
       hits.push({ method: req.method ?? "", auth: req.headers.authorization, rpc: rpc.method ?? "" });
       if (mode === "hang") return;
       if (mode === "401") return void res.writeHead(401).end("no");
+      if (mode === "challenge")
+        return void res
+          .writeHead(401, {
+            "www-authenticate": `Bearer resource_metadata="http://127.0.0.1/.well-known/oauth-protected-resource/mcp", error="invalid_token", error_description="OAuth access token required"`,
+          })
+          .end("no");
       if (typeof mode === "object") return void res.writeHead(302, { location: mode.redirect }).end();
       if (mode === "garbage") return void res.writeHead(200, { "content-type": "application/json" }).end("not json at all");
       if (req.method !== "POST") return void res.writeHead(405).end();
@@ -150,6 +156,33 @@ describe("testing a plugin server's connection", () => {
     const result = await run();
     expect(result.status).toBe("failed");
     expect(result.message).toContain("401");
+    expect(JSON.stringify(result)).not.toContain(SECRET);
+  });
+
+  it("an OAuth challenge with no header is a login, whatever the config default", async () => {
+    const server = await fake("challenge");
+    const { run } = await setup(server.url);
+    const result = await run();
+    expect(result.status).toBe("needs_login");
+    expect(result.message).not.toContain("rejected");
+  });
+
+  it("an empty Authorization row is nothing: not sent, still a login", async () => {
+    const server = await fake("challenge");
+    const { plugins, run } = await setup(server.url);
+    expect(() => plugins.setHeaders("demo", "remote", [{ name: "Authorization", value: "", secret: true }])).toThrow();
+    expect((await run()).status).toBe("needs_login");
+    expect(server.hits.every((hit) => hit.auth === undefined)).toBe(true);
+  });
+
+  it("a real header the server still refuses, with a challenge, says rejected and also offers login", async () => {
+    const server = await fake("challenge");
+    const { plugins, run } = await setup(server.url);
+    plugins.setHeaders("demo", "remote", [{ name: "Authorization", value: "Bearer " + SECRET, secret: true }]);
+    const result = await run();
+    expect(result.status).toBe("needs_login");
+    expect(result.message).toContain("credential rejected");
+    expect(result.message).toContain("login");
     expect(JSON.stringify(result)).not.toContain(SECRET);
   });
 

@@ -53,6 +53,29 @@ function reasonOf(error: unknown, timedOut: boolean): string {
   return "the connection failed";
 }
 
+/** What an unauthenticated request to the server says about sign-in: true when its 401 challenge is OAuth. */
+export async function declaresOauth(url: string, timeoutMs = 5000): Promise<boolean> {
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      redirect: "manual",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 0,
+        method: "initialize",
+        params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "eta", version: "0" } },
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (response.status !== 401) return false;
+    const challenge = response.headers.get("www-authenticate") ?? "";
+    return /\bBearer\b/i.test(challenge) && /resource_metadata\s*=/i.test(challenge);
+  } catch {
+    return false;
+  }
+}
+
 /** Connect once, list, close. `secrets` are masked out of anything said. */
 export async function testConnection(
   definition: McpServerDefinition,
@@ -80,12 +103,18 @@ export async function testConnection(
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (connection.status === "needs-auth") {
-      const login = declaredOauth;
-      return empty(
-        login ? "needs_login" : "failed",
-        mask(login ? "this server needs a sign-in" : (connection.authMessage ?? "credential rejected (HTTP 401)"), secrets),
-        elapsed(),
-      );
+      // The server's own challenge decides, not the config's default: a header the user set does not
+      // hide that the server also signs in.
+      const sent = Object.values(definition.headers ?? {}).some((value) => value.trim() !== "");
+      const challenge = definition.url !== undefined && (await declaresOauth(definition.url));
+      if (challenge || declaredOauth) {
+        return empty(
+          "needs_login",
+          sent ? "credential rejected; this server also supports login" : "this server needs a sign-in",
+          elapsed(),
+        );
+      }
+      return empty("failed", mask(connection.authMessage ?? "credential rejected (HTTP 401)", secrets), elapsed());
     }
     const client = connection.client!;
     const info = client.getServerVersion();
