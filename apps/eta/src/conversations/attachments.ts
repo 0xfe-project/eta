@@ -375,3 +375,42 @@ export class AttachmentStore {
     return path;
   }
 }
+
+/**
+ * `GET /attachments/<id>`: an attached picture's bytes, for the page that shows it, behind the
+ * normal access. Only the image formats a browser draws as pictures: anything else (an SVG, a
+ * page) served from this origin could run as the app. It never changes, so it is kept.
+ */
+export function createAttachmentRoutes(
+  attachments: AttachmentStore,
+): (request: Request) => Promise<Response | undefined> {
+  return async (request) => {
+    const parts = new URL(request.url).pathname.split("/");
+    if (parts[1] !== "attachments" || parts.length !== 3) return undefined;
+    if (request.method !== "GET" && request.method !== "HEAD")
+      return new Response("method not allowed", {
+        status: 405,
+        headers: { allow: "GET, HEAD" },
+      });
+    const id = parts[2] ?? "";
+    const record = UPLOAD_ID.test(id) ? attachments.get(id) : undefined;
+    const bytes =
+      record === undefined || !IMAGE_TYPES.has(record.contentType)
+        ? undefined
+        : await readFile(attachments.pathOf(record)).catch(() => undefined);
+    if (record === undefined || bytes === undefined)
+      return new Response("not found", {
+        status: 404,
+        headers: { "cache-control": "no-store" },
+      });
+    return new Response(request.method === "HEAD" ? null : bytes, {
+      headers: {
+        "content-type": record.contentType,
+        "content-length": String(bytes.byteLength),
+        "cache-control": "private, max-age=31536000, immutable",
+        "content-security-policy": "sandbox",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  };
+}

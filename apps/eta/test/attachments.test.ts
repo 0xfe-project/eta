@@ -295,6 +295,28 @@ describe("images", () => {
     expect(requests[0]!.images).toBe(0);
     expect(requests[0]!.transcript.join("\n")).toContain("pixel.png");
   });
+
+  it("are served to the page by id, and only pictures are", async () => {
+    const w = await world();
+    const { group } = await ada(w);
+    const picture = await upload(w, group.id, PNG, "pixel.png", "image/png");
+    const page = await upload(
+      w,
+      group.id,
+      Buffer.from("<svg onload='alert(1)'/>"),
+      "x.svg",
+      "image/svg+xml",
+    );
+    const get = (path: string) =>
+      fetch(`http://127.0.0.1:${w.host.port}${path}`);
+    const served = await get(`/attachments/${picture.id}`);
+    expect(served.status).toBe(200);
+    expect(served.headers.get("content-type")).toBe("image/png");
+    expect(served.headers.get("content-security-policy")).toBe("sandbox");
+    expect(Buffer.from(await served.arrayBuffer())).toEqual(PNG);
+    expect((await get(`/attachments/${page.id}`)).status).toBe(404);
+    expect((await get(`/attachments/${crypto.randomUUID()}`)).status).toBe(404);
+  });
 });
 
 describe("on a remote machine", () => {
