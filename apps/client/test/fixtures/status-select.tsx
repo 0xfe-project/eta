@@ -133,6 +133,7 @@ function Fixture(props: { surface: string }) {
                 layout={layout()}
                 onClose={noop}
                 onTask={noop}
+                onArtifact={noop}
               />
             </View>
           }

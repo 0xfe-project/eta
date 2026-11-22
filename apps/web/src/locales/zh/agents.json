@@ -19,7 +19,13 @@
       "instructions": "指令",
       "plugins": "插件"
     },
-    "sectionsLabel": "智能体设置分类"
+    "sectionsLabel": "智能体设置分类",
+    "avatar": {
+      "draw": "重新抽一张",
+      "recent": "最近的头像",
+      "current": "当前头像",
+      "wear": "换回这张头像"
+    }
   },
   "models": {
     "loading": "正在加载模型…",
@@ -111,8 +117,14 @@
     "status": {
       "unauthenticated": "（未登录）",
       "missing": "（未安装）",
-      "error": "（不可用）"
-    }
+      "error": "（不可用）",
+      "timeout": "（探测超时 30s）",
+      "failed": "（探测失败）"
+    },
+    "details": "详情",
+    "retrying": "正在重新探测…",
+    "signIn": "{{runtime}} 还没登录：在终端运行 <code>{{command}}</code> 登录，再点重试。",
+    "openRuntimes": "在运行时页查看"
   },
   "plugins": {
     "empty": "还没有插件。",

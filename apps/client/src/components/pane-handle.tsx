@@ -9,10 +9,15 @@ import {
 import { useText } from "../i18n";
 
 const grip = 6;
+const labels = {
+  sidebar: "resizeSidebar",
+  panel: "resizePanel",
+  task: "resizeTaskRail",
+} as const;
 
 /**
  * The strip on a pane's inner edge the reader drags to resize it. It straddles the pane's border
- * (the sidebar's right edge, the panel's left) and takes only the pointer there, so the pane's
+ * (the sidebar's right edge, the panel's and task rail's left) and takes only the pointer there, so the pane's
  * content, its scrolling and its inputs are untouched.
  */
 export function PaneHandle(props: { pane: Pane }) {
@@ -32,9 +37,7 @@ export function PaneHandle(props: { pane: Pane }) {
     <View
       {...responder.panHandlers}
       role="adjustable"
-      accessibilityLabel={text(
-        props.pane === "sidebar" ? "resizeSidebar" : "resizePanel",
-      )}
+      accessibilityLabel={text(labels[props.pane])}
       style={{
         position: "absolute",
         top: 0,

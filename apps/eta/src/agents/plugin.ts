@@ -1,5 +1,6 @@
 import type {
   AgentRuntime,
+  AgentRuntimeAccount,
   AgentRuntimeInfo,
   AgentView,
   ThinkingLevel,
@@ -61,9 +62,20 @@ export interface AgentsDeps {
   machineRuntimes?:
     | ((machineId: string, fresh: boolean) => Promise<AgentRuntimeInfo[]>)
     | undefined;
+  /** A runtime's sign-in and plan usage on this host; undefined for a runtime it does not have. */
+  runtimeAccount?:
+    | ((runtime: string) => Promise<AgentRuntimeAccount | undefined>)
+    | undefined;
+  /** The same on a daemon machine, asked over its link. */
+  machineRuntimeAccount?:
+    | ((machineId: string, runtime: string) => Promise<AgentRuntimeAccount>)
+    | undefined;
   /** Append prompt history for user edits as well as Captain edits. */
   capturePrompt?: AgentCreateDeps["capturePrompt"];
 }
+
+/** What a client may draw an avatar from: an agent's id is one, and so is a short random string. */
+const AVATAR_SEED = /^[\w-]{1,64}$/;
 
 export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
   const { agents, projects, machines, conversations, timeline, plugins } = deps;
@@ -86,6 +98,8 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
       plugins: plugins.rows.enabled(agent.id),
       skippedPlugins: plugins.skipped(agent.id),
       systemRole: agent.systemRole,
+      avatarSeed: agent.avatarSeed,
+      avatarSeeds: agent.avatarSeeds,
       home,
       homeProjectId: project?.id ?? "",
       status: statuses.get(agent.id) ?? "idle",
@@ -137,6 +151,11 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
               "the Captain is managed through the captain target",
             );
           const fields = fieldsOf(call, false);
+          const avatarSeed = args.optionalString("avatarSeed");
+          if (avatarSeed !== undefined && !AVATAR_SEED.test(avatarSeed))
+            throw new Error(
+              "avatarSeed must be 1 to 64 letters, digits, - or _",
+            );
           const moved =
             fields.runtime !== undefined && fields.runtime !== before.runtime;
           // Another runtime's names mean nothing on this one: a move that names no model clears it.
@@ -151,7 +170,10 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             checkAgentName(agents, fields.name, id);
           checkMachine(machines, fields.machineId);
           checkPlugins(plugins, id, fields.plugins);
-          const agent = agents.update(id, fields)!;
+          const agent = agents.update(id, {
+            ...fields,
+            ...(avatarSeed === undefined ? {} : { avatarSeed }),
+          })!;
           if (fields.plugins !== undefined)
             plugins.rows.setEnabled(id, fields.plugins);
           if (agent.instructions !== before.instructions)
@@ -225,6 +247,32 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
           return {
             result: {
               runtimes: await deps.machineRuntimes(machine.id, fresh),
+            },
+          };
+        }),
+
+        wire.handle("agents", "runtimeAccount", async (call) => {
+          const args = new Args(call);
+          const runtime = args.string("runtime");
+          const machineId = args.optionalString("machineId");
+          const machine =
+            machineId === undefined ? undefined : machines.get(machineId);
+          if (machineId !== undefined && machine === undefined)
+            throw new Error(`no such machine: ${machineId}`);
+          if (machine === undefined || machine.kind === "primary") {
+            const account = await deps.runtimeAccount?.(runtime);
+            if (account === undefined)
+              throw new Error(`no such runtime here: ${runtime}`);
+            return { result: { account } };
+          }
+          if (
+            machine.status !== "online" ||
+            deps.machineRuntimeAccount === undefined
+          )
+            throw new Error(`${machine.name} is not online`);
+          return {
+            result: {
+              account: await deps.machineRuntimeAccount(machine.id, runtime),
             },
           };
         }),

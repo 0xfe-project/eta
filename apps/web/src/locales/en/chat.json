@@ -244,6 +244,7 @@
   },
   "attachments": {
     "fullContentLabel": "Full content of {{name}}",
+    "openPicture": "View picture {{name}} · {{size}}",
     "pastedTextSummary": "Pasted text · {{characterCount}} characters",
     "removePastedText": "Remove pasted text",
     "expandText": "Expand as text",

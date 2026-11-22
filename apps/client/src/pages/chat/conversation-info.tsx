@@ -18,13 +18,11 @@ import { BackButton, CloseButton } from "../../components/navigation-buttons";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskGlyph } from "../tasks/status";
-import {
-  ArtifactBrowser,
-  ViewAllRow,
-} from "./artifacts/conversation-artifacts";
+import { ArtifactBrowser } from "./artifacts/conversation-artifacts";
 import { RECENT, recentArtifacts } from "./artifacts/filter";
 import { memberStatus } from "./member-status";
 import { messageTime } from "./message-time";
+import { ViewAll } from "./section-heading";
 
 /**
  * A phone's conversation info sheet: members, tasks and the latest artifacts in one list; "View
@@ -103,7 +101,16 @@ export function PhoneConversationInfo(props: {
               </InfoRow>
             )}
           </Each>
-          <Section label={uiText("chatArtifacts")} count={artifacts().length} />
+          <Section label={uiText("chatArtifacts")} count={artifacts().length}>
+            <If when={artifacts().length > RECENT}>
+              <View style={{ flex: 1 }} />
+              <ViewAll
+                label={uiText("artifactsViewAll")}
+                phone
+                onPress={() => allArtifacts.set(true)}
+              />
+            </If>
+          </Section>
           <Each
             of={recentArtifacts(artifacts())}
             key={(artifact) => artifact.id}
@@ -126,9 +133,6 @@ export function PhoneConversationInfo(props: {
               </InfoRow>
             )}
           </Each>
-          <If when={artifacts().length > RECENT}>
-            <ViewAllRow phone onViewAll={() => allArtifacts.set(true)} />
-          </If>
           <If when={!artifacts().length}>
             <Empty
               icon="appWindow"

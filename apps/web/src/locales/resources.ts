@@ -14,6 +14,7 @@ import enOverview from "./en/overview.json";
 import enPlugins from "./en/plugins.json";
 import enProviders from "./en/providers.json";
 import enRoutines from "./en/routines.json";
+import enRuntimes from "./en/runtimes.json";
 import enSettings from "./en/settings.json";
 import enSkills from "./en/skills.json";
 import enTasks from "./en/tasks.json";
@@ -34,6 +35,7 @@ import zhOverview from "./zh/overview.json";
 import zhPlugins from "./zh/plugins.json";
 import zhProviders from "./zh/providers.json";
 import zhRoutines from "./zh/routines.json";
+import zhRuntimes from "./zh/runtimes.json";
 import zhSettings from "./zh/settings.json";
 import zhSkills from "./zh/skills.json";
 import zhTasks from "./zh/tasks.json";
@@ -57,6 +59,7 @@ export const en = {
   plugins: enPlugins,
   providers: enProviders,
   routines: enRoutines,
+  runtimes: enRuntimes,
   skills: enSkills,
   settings: enSettings,
   tasks: enTasks,
@@ -80,6 +83,7 @@ export const zh = {
   plugins: zhPlugins,
   providers: zhProviders,
   routines: zhRoutines,
+  runtimes: zhRuntimes,
   skills: zhSkills,
   settings: zhSettings,
   tasks: zhTasks,
@@ -105,6 +109,7 @@ export const namespaces = [
   "plugins",
   "providers",
   "routines",
+  "runtimes",
   "skills",
   "settings",
   "tasks",

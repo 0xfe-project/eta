@@ -46,8 +46,8 @@ import {
   ThinkingField,
 } from "./agent-fields";
 import { agentDraft, agentFormSchema, agentNameProblem } from "./agent-form";
-import { AgentAvatar } from "./agent-identity";
 import { AgentPluginsField } from "./agent-plugins";
+import { AvatarDraw } from "./avatar-draw";
 import { CreateAgentWizard } from "./create-agent-wizard";
 import { MachinePicker } from "./machine-picker";
 import { useReturnFocus } from "./return-focus";
@@ -190,7 +190,7 @@ function AgentEditorForm({
     onDone();
     setSettings({ open: true, section: "providers" });
   };
-  const leaveForPlugins = () => {
+  const leave = () => {
     onDone();
     // The editor may have been opened on top of the settings dialog.
     setSettings((state) => ({ ...state, open: false }));
@@ -207,7 +207,10 @@ function AgentEditorForm({
   const { errors, isDirty } = useFormState({ control: form.control });
   const runtime = useWatch({ control: form.control, name: "runtime" });
   const machineId = useWatch({ control: form.control, name: "machineId" });
-  const { runtimes, models } = useAgentRuntimeChoices(runtime, machineId);
+  const { runtimes, models, refresh } = useAgentRuntimeChoices(
+    runtime,
+    machineId,
+  );
 
   const save = form.handleSubmit(
     (values) => {
@@ -280,7 +283,12 @@ function AgentEditorForm({
             <>
               <NameField form={form} />
               <MachinePicker form={form} />
-              <RuntimeField form={form} runtimes={runtimes} />
+              <RuntimeField
+                form={form}
+                runtimes={runtimes}
+                refresh={refresh}
+                onOpenRuntimes={leave}
+              />
               <ModelField
                 form={form}
                 models={models}
@@ -298,7 +306,7 @@ function AgentEditorForm({
             <AgentPluginsField
               form={form}
               skipped={agent.skippedPlugins}
-              onOpenPlugins={leaveForPlugins}
+              onOpenPlugins={leave}
             />
           )}
         </section>
@@ -365,6 +373,18 @@ export function AgentEditor() {
   useEffect(() => {
     if (missing) close();
   });
+  const title = (
+    <div className="min-w-0">
+      <DialogTitle className="truncate text-base">
+        {agent ? agent.name : translateText("actions.create")}
+      </DialogTitle>
+      <DialogDescription className="sr-only">
+        {agent
+          ? translateText("actions.edit")
+          : translateText("actions.create")}
+      </DialogDescription>
+    </div>
+  );
 
   return (
     <Dialog open={open} onOpenChange={(open) => !open && close()}>
@@ -380,17 +400,7 @@ export function AgentEditor() {
         )}
       >
         <DialogHeader className="shrink-0 flex-row items-center gap-3 border-b p-3 pr-12">
-          {agent ? <AgentAvatar agent={agent} /> : null}
-          <div className="min-w-0">
-            <DialogTitle className="truncate text-base">
-              {agent ? agent.name : translateText("actions.create")}
-            </DialogTitle>
-            <DialogDescription className="sr-only">
-              {agent
-                ? translateText("actions.edit")
-                : translateText("actions.create")}
-            </DialogDescription>
-          </div>
+          {agent ? <AvatarDraw agent={agent}>{title}</AvatarDraw> : title}
         </DialogHeader>
         {!agentEditor.open ? null : agent ? (
           // Keyed so each open starts from the agent's saved values.

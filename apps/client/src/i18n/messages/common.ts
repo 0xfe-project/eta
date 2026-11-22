@@ -106,6 +106,8 @@ export const commonMessages = {
   noConversationSelected: ["No conversation selected", "尚未选择对话"],
   none: ["None", "无"],
   noTasksYet: ["No tasks yet", "还没有任务"],
+  viewAll: ["View all", "查看全部"],
+  tasksViewAll: ["View all tasks", "查看全部任务"],
   on: ["On", "启用"],
   panel: ["Panel", "面板"],
   parentDirectory: ["Parent directory", "上级目录"],

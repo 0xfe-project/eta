@@ -302,4 +302,22 @@ export const chatMessages = {
     "Nothing is waiting for approval.",
     "没有等待批准的事项。",
   ],
+  openPicture: [
+    "View picture {{name}} · {{size}}",
+    "查看图片 {{name}} · {{size}}",
+  ],
+  openImage: [
+    "Open image {{index}} of {{count}}",
+    "打开第 {{index}} 张图片，共 {{count}} 张",
+  ],
+  pictureTitle: [
+    "Image {{index}} of {{count}}",
+    "第 {{index}} 张图片，共 {{count}} 张",
+  ],
+  pictureHint: [
+    "Press the image to toggle its actual size, use the arrow keys or swipe to move between images, Esc to close.",
+    "点按图片切换原尺寸，方向键或左右滑动切换图片，Esc 关闭。",
+  ],
+  pictureFailed: ["Couldn't load the image", "图片加载失败"],
+  removeAttachment: ["Remove {{name}}", "移除 {{name}}"],
 } as const;

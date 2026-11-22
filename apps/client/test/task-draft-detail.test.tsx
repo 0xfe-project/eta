@@ -86,3 +86,25 @@ test("shows the relationships already in the draft", async () => {
     expect(text).toContain(part);
   expect(app.shows("label:Create")).toBe(true);
 });
+
+test("discarding sends the draft's id and asks nothing first", async () => {
+  const app = await open("./fixtures/draft-conversation.tsx", {
+    locale: "en-US",
+  });
+  await app.press("label:Discard");
+  await app.waitFor("text:Calls: 1");
+  expect(app.texts()).toContain(
+    'tasks.discardDraft {"conversationId":"group","messageId":"draft-1"}',
+  );
+});
+
+test("a discarded draft says so and offers no way to confirm it", async () => {
+  const app = await open("./fixtures/draft-conversation.tsx", {
+    urlScheme: "eta://fixture/discarded",
+    locale: "en-US",
+  });
+  expect(app.texts()).toContain("Discarded");
+  expect(app.texts()).not.toContain("Needs confirming");
+  expect(app.shows("label:Edit and confirm")).toBe(false);
+  expect(app.shows("label:Discard")).toBe(false);
+});

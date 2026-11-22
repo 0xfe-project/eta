@@ -1,7 +1,12 @@
 import type { AcpAgentView, AcpTestResult } from "./acp";
 import type { PromptImage } from "./operations";
 import type { MachinePlaceOp, MachinePlaceReply } from "./places/types";
-import type { AgentRuntimeInfo, ProcessStep, ToolActivity } from "./product";
+import type {
+  AgentRuntimeAccount,
+  AgentRuntimeInfo,
+  ProcessStep,
+  ToolActivity,
+} from "./product";
 
 /**
  * The link between the primary and a machine that runs the daemon.
@@ -195,6 +200,8 @@ export interface DaemonServiceParams {
   upgrade: { version: string; sha256: string };
   /** The external agent runtimes this machine has, with their models; `fresh` asks them again. */
   runtimes: { fresh?: boolean };
+  /** One of this machine's runtimes' sign-in and plan usage, as it reports them. */
+  runtimeAccount: { runtime: string };
   /**
    * The ACP agents in this machine's own `~/.eta/acp.json`, as the settings page shows them: as
    * known now, or (`settled`) once every look under way has finished. A file that cannot be read
@@ -226,6 +233,7 @@ export interface DaemonServiceResults {
   run: RunOutcome;
   upgrade: { ok: true } | { ok: false; reason: string };
   runtimes: { runtimes: AgentRuntimeInfo[] };
+  runtimeAccount: AgentRuntimeAccount;
   acpList: { agents: AcpAgentView[] };
   acpSave: AcpAgentView;
   acpDelete: Record<string, never>;

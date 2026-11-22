@@ -20,6 +20,7 @@ import { TaskGlyph } from "../../tasks/status";
 import { EntityRow, SectionHeader } from "../section";
 import { SettingRow } from "../setting-row";
 import { MachineRunsLimit, RevokeMachine } from "./machine-dialogs";
+import { useMachineUpdate } from "./machine-update";
 import { machineStatus } from "./machines";
 
 export function MachineDetail(props: {
@@ -34,6 +35,7 @@ export function MachineDetail(props: {
   const editing = signal(false);
   const removing = signal(false);
   const busy = signal(false);
+  const machineUpdate = useMachineUpdate(() => props.item);
   const pending = () => props.item.status === "pending";
   const candidates = () =>
     host.tasks().filter((item) => item.status === "in_progress");
@@ -85,10 +87,11 @@ export function MachineDetail(props: {
     borderColor: c().border,
   });
   const upgrade = () =>
-    props.item.kind === "daemon" &&
-    props.item.install === "service" &&
-    props.item.status === "online" &&
-    (props.item.build === "outdated" || !!props.item.updateError);
+    (props.item.kind === "daemon" &&
+      props.item.install === "service" &&
+      props.item.status === "online" &&
+      (props.item.build === "outdated" || !!props.item.updateError)) ||
+    machineUpdate.state() === "updating";
   async function act(action: () => Promise<unknown>, onSuccess?: () => void) {
     if (busy()) return;
     busy.set(true);
@@ -313,23 +316,19 @@ export function MachineDetail(props: {
             else={
               <Button
                 label={
-                  props.phone && host.upgradeCheck()?.version
-                    ? uiText("updateMachineTo", {
-                        version: host.upgradeCheck()!.version,
-                      })
-                    : uiText("updateMachine")
+                  machineUpdate.state() === "updating"
+                    ? machineUpdate.label()!
+                    : props.phone && host.upgradeCheck()?.version
+                      ? uiText("updateMachineTo", {
+                          version: host.upgradeCheck()!.version,
+                        })
+                      : uiText("updateMachine")
                 }
                 tone="primary"
                 size={props.phone ? 32 : undefined}
                 style={props.phone ? { alignSelf: "stretch" } : undefined}
-                disabled={busy()}
-                onPress={() =>
-                  void act(() =>
-                    host.call("machines", "upgrade", {
-                      machineId: props.item.id,
-                    }),
-                  )
-                }
+                disabled={busy() || machineUpdate.state() === "updating"}
+                onPress={() => void machineUpdate.start()}
               />
             }
           >

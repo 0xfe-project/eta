@@ -105,6 +105,8 @@ interface PendingCall {
   output?: string;
   /** The steps the runtime's subagent took inside this call, deeper subagents flattened in. */
   children: OarChildStep[];
+  /** The runtime's MCP gateway tool this host tool was called through (Grok's `use_tool`). */
+  via?: string;
   runtimeTask?: OarRuntimeTask;
 }
 
@@ -433,8 +435,10 @@ export class Translator {
 
   #callStarted(callId: string, tool: string, input: string | undefined): void {
     const open = this.#ensure(undefined);
-    const args = argumentsOf(input);
-    const name = this.#calls.hostTool(callId, tool) ?? tool;
+    const raw = argumentsOf(input);
+    const gateway = this.#calls.gateway(tool, raw);
+    const name = gateway?.name ?? this.#calls.hostTool(callId, tool) ?? tool;
+    const args = gateway?.args ?? raw;
     open.message.content.push({
       type: "toolCall",
       id: callId,
@@ -447,6 +451,7 @@ export class Translator {
       turnId: open.turnId,
       startedAt: Date.now(),
       children: [],
+      ...(gateway === undefined ? {} : { via: tool }),
     });
     this.#update({
       type: "toolcall_start",
@@ -477,8 +482,12 @@ export class Translator {
   }
 
   #callInput(callId: string, input: string): void {
-    const args = argumentsOf(input);
     const pending = this.#pending.get(callId);
+    const raw = argumentsOf(input);
+    const args =
+      pending?.via === undefined
+        ? raw
+        : (this.#calls.gateway(pending.via, raw)?.args ?? pending.args);
     if (pending !== undefined) pending.args = args;
     const open = this.#open;
     const index = this.#callIndex(callId);
@@ -498,7 +507,7 @@ export class Translator {
 
   #callEnded(
     callId: string,
-    content: readonly ToolOutputPart[] | undefined,
+    said: readonly ToolOutputPart[] | undefined,
     failed: boolean,
     exitCode: number | null | undefined,
   ): void {
@@ -506,6 +515,11 @@ export class Translator {
     if (this.#callIndex(callId) >= 0) this.#close("toolUse");
     const call = this.#pending.get(callId);
     if (call === undefined) return;
+    // A host tool called through the runtime's gateway answers as the host tool.
+    const content =
+      call.via === undefined || said === undefined
+        ? said
+        : this.#calls.gatewayResult(said);
     const other = (content ?? []).flatMap((part) =>
       part.type === "other" ? [part.value] : [],
     );

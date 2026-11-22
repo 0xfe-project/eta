@@ -5,9 +5,12 @@
  *
  * - **The name.** Each runtime reports a call in its own spelling: Claude Code and Pi say
  *   `mcp__eta__x`, OpenCode says `eta_x`, and Codex says `mcpToolCall` for every MCP tool and names
- *   the server and the tool only in its native frame. The transcript holds the name the host gave
- *   the tool, whoever called it, so what reads a tool by name reads it the same on every run. Only
- *   tools this server serves are restored: a user's own MCP tools keep the runtime's name.
+ *   the server and the tool only in its native frame. Grok Build calls every MCP tool through its
+ *   own `use_tool`, naming it `eta__x` beside the tool's own arguments (`tool_input`), and wraps
+ *   the answer (`gateway`). The transcript holds the name the host gave the tool, whoever called
+ *   it, so what reads a tool by name reads it the same on every run. Only tools this server serves
+ *   are restored: a user's own MCP tools keep the runtime's name (through Grok's gateway, the
+ *   `<server>__x` it calls them by, its answer unwrapped).
  * - **The details.** An MCP answer is its content and `isError`, so what a tool left for the page
  *   stays on this side, with the handler. The handler is not told the runtime's call id and the
  *   runtime is not told the handler's, so the end of a call finds its answer by what both sides
@@ -29,6 +32,15 @@ const PREFIXES: Partial<Record<RuntimeId, string>> = {
   pi: `mcp__${HOST_SERVER}__`,
   opencode: `${HOST_SERVER}_`,
 };
+
+/** A runtime's one tool that calls any MCP tool, by the name it is called under. */
+const GATEWAYS: Partial<Record<RuntimeId, string>> = {
+  // Grok Build 1.0.89: `use_tool { tool_name: "eta__x", tool_input }`; `search_tool` lists them.
+  grok: "use_tool",
+};
+
+/** How a gateway call names an MCP tool: Grok's `search_tool` answers `<server>__x`. */
+const GATEWAY_PREFIX = `${HOST_SERVER}__`;
 
 interface Answer {
   name: string;
@@ -99,6 +111,45 @@ export class HostCalls {
     if (prefix === undefined || !tool.startsWith(prefix)) return undefined;
     const name = tool.slice(prefix.length);
     return this.#tools.has(name) ? name : undefined;
+  }
+
+  /**
+   * A call to the runtime's MCP gateway tool (Grok's `use_tool`) as the MCP tool it calls, with
+   * that tool's own arguments: a host tool under the host's name, any other (a plugin's) under the
+   * name the runtime gave it (`probe__echo`). Undefined for any other call.
+   */
+  gateway(
+    tool: string,
+    args: Record<string, unknown>,
+  ): { name: string; args: Record<string, unknown> } | undefined {
+    if (tool !== GATEWAYS[this.#runtime]) return undefined;
+    const named = args.tool_name;
+    if (typeof named !== "string" || named === "") return undefined;
+    const bare = named.startsWith(GATEWAY_PREFIX)
+      ? named.slice(GATEWAY_PREFIX.length)
+      : undefined;
+    // Arguments handed over in a file (`tool_input_file`, `file`) are not seen here.
+    return {
+      name: bare !== undefined && this.#tools.has(bare) ? bare : named,
+      args: isRecord(args.tool_input) ? args.tool_input : {},
+    };
+  }
+
+  /**
+   * A gateway call's answer as the MCP tool's: the output the runtime wrapped
+   * (`{ type: "MCP", server_name, output: { OkayOutput } }`) as its text, anything else as it is.
+   */
+  gatewayResult(parts: readonly ToolOutputPart[]): ToolOutputPart[] {
+    return parts.map((part) => {
+      if (part.type !== "other" || !isRecord(part.value)) return part;
+      const { type, output } = part.value;
+      if (type !== "MCP" || !isRecord(output)) return part;
+      const [said] = Object.values(output);
+      return {
+        type: "text",
+        text: typeof said === "string" ? said : JSON.stringify(output),
+      };
+    });
   }
 
   /** A tool answered: what it said, and what it left beside that. */

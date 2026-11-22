@@ -120,7 +120,7 @@ test("an interrupted attachment can be retried in its original chat", async () =
   expect(app.shows("label:Retry")).toBe(false);
   await app.press("label:Switch");
   await app.press("label:Retry");
-  await app.waitFor("label:onboard.jpg");
+  await app.waitFor("label:View picture onboard.jpg · 0.0 KB");
   expect(app.value(input)).toBe("photo");
 });
 

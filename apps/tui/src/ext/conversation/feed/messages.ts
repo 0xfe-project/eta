@@ -19,6 +19,7 @@ export const feedMessages = defineMessages({
     taskDraft: "Task draft: {title}",
     taskDraftBacklog:
       "Task draft: {title} (goes to the backlog when confirmed; does not run yet)",
+    taskDraftDiscarded: "Task draft: {title} (discarded)",
     taskCard: "Task #{number}: {title}",
     nameSeparator: ", ",
   },
@@ -38,6 +39,7 @@ export const feedMessages = defineMessages({
       "这条消息已经用完 {budget} 次唤醒；之后的 @ 只记入对话，等你再发言才会唤醒。",
     taskDraft: "任务草稿：{title}",
     taskDraftBacklog: "任务草稿：{title}（确认后放入积压，不会立即执行）",
+    taskDraftDiscarded: "任务草稿：{title}（已丢弃）",
     taskCard: "任务 #{number}：{title}",
     nameSeparator: "、",
   },

@@ -8,7 +8,6 @@ import type {
 } from "@eta/client-contracts";
 import { runBlocks } from "@eta/client-contracts";
 import { Scroll, signal, View } from "nsh";
-import { Select } from "nsh/base";
 import {
   Button,
   colors,
@@ -21,6 +20,7 @@ import {
   textFaces,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
+import { LayoutSelect } from "../../components/select";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 
@@ -684,7 +684,7 @@ function AssignField(props: {
       <Label variant="small" tone="muted">
         {props.label}
       </Label>
-      <Select
+      <LayoutSelect
         accessibilityLabel={props.label}
         items={props.items}
         value={props.value || null}

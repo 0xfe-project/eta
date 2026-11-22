@@ -112,8 +112,9 @@ export interface HostOptions {
   /** Whether this host starts El Capitan. Tests that are not about Captain leave it off. */
   captain?: boolean;
   /**
-   * The external agent runtimes (Claude Code, Codex, OpenCode, Pi) agents may run on: oar's, on
-   * this machine, by default. A test hands in scripted ones; `false` runs none.
+   * The external agent runtimes (Claude Code, Codex, OpenCode, Pi, Grok Build)
+   * agents may run on: oar's, on this machine, by default. A test hands in scripted ones; `false`
+   * runs none.
    */
   runtimes?: ListedRuntimes | false;
   /**
@@ -227,7 +228,11 @@ export async function startHost(options: HostOptions): Promise<Host> {
       ...(options.places === undefined ? {} : { places: options.places }),
       ...(runtimes === undefined
         ? {}
-        : { runtimes: async (fresh) => await runtimes.catalog.list(fresh) }),
+        : {
+            runtimes: async (fresh) => await runtimes.catalog.list(fresh),
+            runtimeAccount: async (runtime) =>
+              await runtimes.catalog.account?.(runtime),
+          }),
       ...(acp === undefined ? {} : { acp }),
       ...(options.tailscale === undefined || options.tailscale === false
         ? {}

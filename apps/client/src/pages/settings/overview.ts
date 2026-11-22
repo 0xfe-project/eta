@@ -12,6 +12,7 @@ import type { AppearanceProps } from "./appearance";
 import { effect } from "nsh";
 import { formatLocale, uiText, useText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { createRuntimeListing } from "./runtimes/listing";
 
 export const sections = [
   ["Agents", "robot", "agents"],
@@ -19,6 +20,7 @@ export const sections = [
   ["Machines", "monitor", "machines"],
   ["MCP servers", "plug", "mcpServers"],
   ["External agents", "terminal", "externalAgents"],
+  ["Runtimes", "cpu", "runtimes"],
   ["Email", "email", "email"],
   ["Archived", "archive", "archived"],
   ["Appearance", "palette", "appearance"],
@@ -43,6 +45,7 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
   follow(() => "mcp");
   follow(() => "acp");
   follow(() => "email");
+  const runtimes = createRuntimeListing();
   // The Update row says which build runs, so read it once the host allows
   // it rather than waiting for the Update pane to be opened.
   let checking = false;
@@ -97,6 +100,12 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
       }
       case "External agents":
         return { text: String(externalAgents().length) };
+      case "Runtimes":
+        return {
+          text: uiText("runtimesAvailableCount", {
+            count: runtimes.available(),
+          }),
+        };
       case "Email": {
         const errors = email().filter((item) => item.status === "error").length;
         return errors
@@ -136,5 +145,5 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
     }
   };
 
-  return { providers, machines, email, externalAgents, summary };
+  return { providers, machines, email, externalAgents, runtimes, summary };
 }
