@@ -136,6 +136,7 @@ describe("the seeds a release upgrades", () => {
       "0056-places",
       "0057-task-usage",
       "0058-agent-avatar",
+      "0059-pending-session-settings",
     ]);
   });
 
