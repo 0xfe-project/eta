@@ -44,6 +44,28 @@ const MANIFEST_FIELDS = new Set([
   "keywords",
   "extensions",
 ]);
+/**
+ * Where a manifest is looked for, in order. The first is the spec's; the other two are the
+ * Cursor and Claude Code plugin layouts, which share `skills/<name>/SKILL.md` with it.
+ */
+const MANIFEST_PATHS = [
+  "plugin.json",
+  ".cursor-plugin/plugin.json",
+  ".claude-plugin/plugin.json",
+] as const;
+/** Fields only a Cursor or Claude Code manifest has, and eta reads nothing from. */
+const FOREIGN_FIELDS = new Set(["displayName", "logo", "category", "tags"]);
+/** Components of those plugins that eta does not load. */
+const FOREIGN_COMPONENTS = [
+  "commands",
+  "agents",
+  "hooks",
+  "rules",
+  "mcpServers",
+  "lspServers",
+  "outputStyles",
+  "themes",
+];
 const RESERVED_ENV = new Set(["PLUGIN_ROOT", "PLUGIN_DATA"]);
 const ENV_NAME = /^[A-Z_]\w*$/i;
 /** RFC 9110's `token`. */
@@ -116,6 +138,14 @@ export interface PluginPackage {
 const isPlain = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+const isString = (value: unknown): value is string => typeof value === "string";
+
+const isAuthor = (value: unknown): boolean =>
+  isPlain(value) &&
+  Object.entries(value).every(
+    ([key, item]) => ["name", "email", "url"].includes(key) && typeof item === "string",
+  );
+
 const isStrings = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === "string");
 
@@ -148,12 +178,36 @@ export function isWithin(root: string, path: string): boolean {
 function parseManifest(
   raw: unknown,
   reports: string[],
+  foreign: boolean,
 ): { manifest: PluginManifest; extensions: Record<string, unknown> } {
   if (!isPlain(raw)) throw new PluginError("plugin.json must be a JSON object");
-  for (const field of Object.keys(raw))
-    if (!MANIFEST_FIELDS.has(field))
-      reports.push(`plugin.json: unknown field ${field} was ignored`);
-  if (raw.$schema !== PLUGIN_SCHEMA)
+  for (const field of Object.keys(raw)) {
+    if (MANIFEST_FIELDS.has(field)) continue;
+    if (foreign && FOREIGN_FIELDS.has(field)) continue;
+    if (foreign && field === "skills") {
+      if (!(typeof raw.skills === "string" && /^(\.\/)?skills\/?$/.test(raw.skills)))
+        reports.push("plugin.json: skills is not at skills/; only skills/ is read");
+    } else if (foreign && FOREIGN_COMPONENTS.includes(field))
+      reports.push(`plugin.json: ${field} is not supported by eta; ignored`);
+    else reports.push(`plugin.json: unknown field ${field} was ignored`);
+  }
+  if (foreign) {
+    // Someone else's manifest: a field that does not fit is left out, the plugin is not refused.
+    const optional = {
+      version: isString,
+      description: isString,
+      homepage: isString,
+      repository: isString,
+      license: isString,
+      keywords: isStrings,
+      author: isAuthor,
+    } as const;
+    for (const [field, fits] of Object.entries(optional))
+      if (raw[field] !== undefined && !fits(raw[field])) {
+        reports.push(`plugin.json: ${field} does not fit and was ignored`);
+        delete raw[field];
+      }
+  } else if (raw.$schema !== PLUGIN_SCHEMA)
     throw new PluginError(
       `plugin.json: unsupported $schema ${JSON.stringify(raw.$schema)}`,
     );
@@ -543,21 +597,42 @@ export function fillTemplate(
 /** Read and validate the plugin at `dir`; throws `PluginError` when the spec rejects it. */
 export async function loadPlugin(dir: string): Promise<PluginPackage> {
   const root = await resolvedPath(dir);
-  const path = join(root, "plugin.json");
-  if (!statSync(path, { throwIfNoEntry: false })?.isFile())
-    throw new PluginError("plugin.json is missing");
+  const found = MANIFEST_PATHS.find((candidate) =>
+    statSync(join(root, candidate), { throwIfNoEntry: false })?.isFile(),
+  );
+  if (found === undefined) throw new PluginError("plugin.json is missing");
+  const path = join(root, found);
   if (!isWithin(root, await resolvedPath(path)))
-    throw new PluginError("plugin.json resolves outside the plugin");
+    throw new PluginError(`${found} resolves outside the plugin`);
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(path, "utf8"));
   } catch (error) {
-    throw new PluginError(`plugin.json: ${messageOf(error)}`);
+    throw new PluginError(`${found}: ${messageOf(error)}`);
   }
+  const foreign = found !== "plugin.json";
   const reports: string[] = [];
-  const { manifest, extensions } = parseManifest(raw, reports);
+  if (foreign)
+    reports.push(
+      `manifest read from ${found}; only skills are loaded from this layout`,
+    );
+  const { manifest, extensions } = parseManifest(raw, reports, foreign);
   const skills = await loadSkillDirs(root, reports);
-  const listed = await loadServers(root, reports);
+  const listed = foreign ? [] : await loadServers(root, reports);
+  if (foreign) reportForeignParts(root, reports);
   const extension = parseExtension(extensions[ETA_EXTENSION], listed, reports);
   return { root, manifest, reports, skills, ...extension };
+}
+
+/** What a Cursor or Claude Code plugin ships that eta does not load, for the user to see. */
+function reportForeignParts(root: string, reports: string[]): void {
+  for (const name of [...FOREIGN_COMPONENTS, "mcp.json", ".mcp.json"]) {
+    const kind = statSync(join(root, name), { throwIfNoEntry: false });
+    if (kind === undefined) continue;
+    reports.push(
+      name.endsWith("mcp.json")
+        ? `${name}: MCP servers of this layout are not loaded`
+        : `${name}/: not supported by eta; ignored`,
+    );
+  }
 }

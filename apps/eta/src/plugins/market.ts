@@ -1,11 +1,13 @@
 /**
  * The plugin market: an online catalog of git sources, and the install of one of them.
  *
- * The catalog is one JSON document at a URL the user can change (`plugins.catalogUrl` in the
- * settings), and nothing in it is trusted: it is fetched with a time and a size limit, every entry is
- * checked on its own, and one that does not fit is thrown away with the reason. An entry is a git
- * source whose `rev` is a commit, never a branch or a tag, so what the user was shown is what is
- * installed. Installing is adding that source (`PluginRegistry.add`), after a preview that reads the
+ * The catalog is somebody else's `marketplace.json`, in the Claude Code or the Cursor shape, at a URL
+ * the user can change (`plugins.catalogUrl` in the settings). Nothing in it is trusted: it is fetched
+ * with a time and a size limit, every entry is checked on its own, and one that does not fit is
+ * thrown away with the reason. An entry is turned into a git source `{repo, rev, path}`; a source
+ * eta does not read is listed and marked unsupported. A `rev` is always a commit: the catalog's
+ * `sha`, or, when it has none, the one the host resolves when the entry is previewed. What the user
+ * was shown is that commit, and that commit is installed. Installing is adding that source (`PluginRegistry.add`), after a preview that reads the
  * plugin at the pinned commit and says what it would run. Nothing in the catalog is executed.
  *
  * A catalog that cannot be read is an answer, not a failure: the installed plugins do not depend on it.
@@ -21,11 +23,16 @@ import type { Plugins } from "./service";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { loadPlugin, PluginError } from "@eta/daemon";
-import { cleanPath, fetchInto } from "./git";
+import { cleanPath, fetchInto, resolveRev } from "./git";
 import { serverViews } from "./server-view";
 
-/** No official catalog is known: the address is the user's to set. */
-export const DEFAULT_CATALOG_URL = "";
+/**
+ * Cursor's own plugin list. The Anthropic list is
+ * https://raw.githubusercontent.com/anthropics/claude-plugins-official/main/.claude-plugin/marketplace.json
+ * and reads the same way; the user can point the market at it.
+ */
+export const DEFAULT_CATALOG_URL =
+  "https://raw.githubusercontent.com/cursor/plugins/HEAD/.cursor-plugin/marketplace.json";
 export const CATALOG_URL_KEY = "plugins.catalogUrl";
 
 const MAX_BYTES = 1024 * 1024;
@@ -43,6 +50,8 @@ export interface MarketOptions {
   timeoutMs?: number;
   /** The URL schemes a repository may have. A catalog cannot make eta read a local path. */
   schemes?: readonly string[];
+  /** The repository the catalog is in, when its address does not say (a test's local one). */
+  catalogRepo?: string;
 }
 
 const messageOf = (error: unknown): string =>
@@ -71,6 +80,36 @@ function httpUrl(value: string, key: string): string {
   return value;
 }
 
+interface Origin {
+  /** The repository the catalog itself is in, when its address says which. */
+  repo: string | null;
+  ref: string;
+  /** `metadata.pluginRoot`: where a relative `source` starts. */
+  root: string;
+}
+
+function originOf(url: string, metadata: unknown): Origin {
+  let repo: string | null = null;
+  let ref = "HEAD";
+  try {
+    const address = new URL(url);
+    if (address.hostname === "raw.githubusercontent.com") {
+      const [owner, name, at] = address.pathname.split("/").filter(Boolean);
+      if (owner !== undefined && name !== undefined && at !== undefined) {
+        repo = `https://github.com/${owner}/${name}.git`;
+        ref = at;
+      }
+    }
+  } catch {
+    // The address was checked when it was set.
+  }
+  const root =
+    isPlain(metadata) && typeof metadata.pluginRoot === "string"
+      ? metadata.pluginRoot
+      : "";
+  return { repo, ref, root };
+}
+
 export class Market {
   readonly #settings: SettingStore;
   readonly #plugins: Plugins;
@@ -78,6 +117,9 @@ export class Market {
   readonly #maxBytes: number;
   readonly #timeoutMs: number;
   readonly #schemes: readonly string[];
+  readonly #catalogRepo: string | undefined;
+  /** The branch or tag an entry without a `sha` follows, from the last catalog read. */
+  #refs = new Map<string, string>();
 
   constructor(options: MarketOptions) {
     this.#settings = options.settings;
@@ -86,6 +128,7 @@ export class Market {
     this.#maxBytes = options.maxBytes ?? MAX_BYTES;
     this.#timeoutMs = options.timeoutMs ?? TIMEOUT_MS;
     this.#schemes = options.schemes ?? ["https:", "ssh:", "git:"];
+    this.#catalogRepo = options.catalogRepo;
   }
 
   #url(): string {
@@ -126,7 +169,7 @@ export class Market {
         ...base,
         entries: null,
         rejected: [],
-        error: 'the catalog must be an object with a "plugins" list',
+        error: 'the catalog must be an object with a "plugins" list (a Claude Code or Cursor marketplace.json)',
       };
     if (raw.plugins.length > MAX_ENTRIES)
       return {
@@ -138,16 +181,21 @@ export class Market {
     const entries: MarketEntry[] = [];
     const rejected: MarketRejected[] = [];
     const seen = new Set<string>();
+    const origin = originOf(url, raw.metadata);
+    if (this.#catalogRepo !== undefined) origin.repo = this.#catalogRepo;
+    const refs = new Map<string, string>();
+    this.#refs = refs;
     raw.plugins.forEach((item: unknown, index: number) => {
       const name =
         isPlain(item) && typeof item.name === "string"
           ? item.name.slice(0, 64)
           : null;
       try {
-        const entry = this.#entry(item);
+        const { entry, ref } = this.#entry(item, origin);
         if (seen.has(entry.name))
           throw new Error(`${entry.name} is listed twice`);
         seen.add(entry.name);
+        refs.set(entry.name, ref);
         entries.push(entry);
       } catch (error) {
         rejected.push({ index: index + 1, name, reason: messageOf(error) });
@@ -210,57 +258,109 @@ export class Market {
   }
 
   /** One entry as it must be; throws the reason it is not. */
-  #entry(item: unknown): MarketEntry {
+  #entry(item: unknown, origin: Origin): { entry: MarketEntry; ref: string } {
     if (!isPlain(item)) throw new Error("an entry must be an object");
     const name = text(item, "name", 64);
     if (!NAME.test(name) || name.includes("--") || name.includes(".."))
       throw new Error(`invalid name ${JSON.stringify(name)}`);
-    const repo = text(item, "repo", 512).trim();
-    this.#checkRepo(repo);
-    const rev = text(item, "rev", 64);
-    if (!SHA.test(rev))
-      throw new Error(
-        "rev must be a full commit hash (40 lowercase hex digits), not a branch, a tag or a short hash",
-      );
-    let path = "";
-    if (item.path !== undefined) {
-      if (typeof item.path !== "string") throw new Error("path must be text");
+    const source = this.#source(item.source, origin);
+    let homepage: string | null = null;
+    if (typeof item.homepage === "string" && item.homepage.length <= 512) {
       try {
-        path = cleanPath(item.path);
-      } catch (error) {
-        throw new Error(messageOf(error));
+        homepage = httpUrl(item.homepage, "homepage");
+      } catch {
+        homepage = null;
       }
     }
-    let homepage: string | null = null;
-    if (item.homepage !== undefined) {
-      if (typeof item.homepage !== "string" || item.homepage.length > 512)
-        throw new Error("homepage must be a URL");
-      homepage = httpUrl(item.homepage, "homepage");
-    }
-    let requires: string[] = [];
-    if (item.requires !== undefined) {
-      if (
-        !Array.isArray(item.requires) ||
-        item.requires.length > 20 ||
-        !item.requires.every(
-          (command) => typeof command === "string" && COMMAND.test(command),
-        )
-      )
-        throw new Error("requires must be a short list of command names");
-      requires = item.requires as string[];
-    }
+    const author = isPlain(item.author) ? item.author.name : item.author;
+    const description =
+      typeof item.description === "string" ? item.description : "";
     return {
-      name,
-      description: text(item, "description", 500),
-      author: text(item, "author", 100),
-      version: text(item, "version", 64),
-      repo,
-      path,
-      rev,
-      homepage,
-      requires,
-      installed: this.#installed(name, repo, path),
+      ref: source.ref,
+      entry: {
+        name,
+        description:
+          description.length > 500
+            ? `${description.slice(0, 499)}…`
+            : description,
+        author: typeof author === "string" ? author.slice(0, 100) : "",
+        version:
+          typeof item.version === "string" ? item.version.slice(0, 64) : "",
+        repo: source.repo,
+        path: source.path,
+        rev: source.rev,
+        homepage,
+        requires: [],
+        installed:
+          source.unsupported === null
+            ? this.#installed(name, source.repo, source.path)
+            : "no",
+        unsupported: source.unsupported,
+      },
     };
+  }
+
+  /**
+   * The git source a catalog `source` stands for: a path in the catalog's own repository, a
+   * repository (`url`), or a directory of one (`git-subdir`). Anything else is kept and says why
+   * it cannot be installed.
+   */
+  #source(
+    source: unknown,
+    origin: Origin,
+  ): {
+    repo: string;
+    path: string;
+    rev: string | null;
+    ref: string;
+    unsupported: string | null;
+  } {
+    const unsupported = (why: string) => ({
+      repo: "",
+      path: "",
+      rev: null,
+      ref: "HEAD",
+      unsupported: `format not supported: ${why}`,
+    });
+    if (typeof source === "string") {
+      if (origin.repo === null)
+        return unsupported(
+          "a path in the catalog's repository, and the catalog is not on raw.githubusercontent.com",
+        );
+      const path = cleanPath([origin.root, source].filter((part) => part !== "").join("/"));
+      this.#checkRepo(origin.repo);
+      return {
+        repo: origin.repo,
+        path,
+        rev: null,
+        ref: origin.ref,
+        unsupported: null,
+      };
+    }
+    if (
+      !isPlain(source) ||
+      (source.source !== "url" && source.source !== "git-subdir")
+    )
+      return unsupported(
+        `source ${isPlain(source) ? JSON.stringify(source.source) : typeof source}`,
+      );
+    const repo = text(source, "url", 512).trim();
+    this.#checkRepo(repo);
+    const path =
+      source.source === "git-subdir"
+        ? cleanPath(text(source, "path", 256))
+        : "";
+    let rev: string | null = null;
+    if (source.sha !== undefined) {
+      if (typeof source.sha !== "string" || !SHA.test(source.sha))
+        throw new Error(
+          "sha must be a full commit hash (40 lowercase hex digits)",
+        );
+      rev = source.sha;
+    }
+    const ref =
+      typeof source.ref === "string" && source.ref !== "" ? source.ref : "HEAD";
+    return { repo, path, rev, ref, unsupported: null };
   }
 
   #checkRepo(repo: string): void {
@@ -277,51 +377,57 @@ export class Market {
       throw new Error(`repo is not a repository address eta takes: ${repo}`);
   }
 
-  #installed(name: string, repo: string, path: string): MarketEntry["installed"] {
-    const entry = this.#plugins.registry.get(name);
-    if (entry === undefined) return "no";
-    return entry.source.kind === "git" &&
-      entry.source.repo === repo &&
-      entry.source.path === path
-      ? "this"
-      : "other";
+  /** "this": a git source of this repository and path is installed already. */
+  #installed(
+    name: string,
+    repo: string,
+    path: string,
+  ): MarketEntry["installed"] {
+    const same = this.#plugins.registry
+      .entries()
+      .some(
+        ({ source }) =>
+          source.kind === "git" && source.repo === repo && source.path === path,
+      );
+    if (same) return "this";
+    return this.#plugins.registry.get(name) === undefined ? "no" : "other";
   }
 
-  async #listed(name: string): Promise<MarketEntry> {
+  async #listed(name: string): Promise<{ entry: MarketEntry; ref: string }> {
     const catalog = await this.catalog();
     if (catalog.entries === null)
       throw new PluginError(catalog.error ?? "no catalog");
     const entry = catalog.entries.find((item) => item.name === name);
     if (entry === undefined)
       throw new PluginError(`${name} is not in the catalog`);
-    return entry;
+    if (entry.unsupported !== null)
+      throw new PluginError(`${name}: ${entry.unsupported}`);
+    return { entry, ref: this.#refs.get(name) ?? "HEAD" };
   }
 
   /** Read the plugin at the pinned commit and say what it would run. Nothing is installed. */
   async preview(name: string): Promise<MarketPreview> {
-    const entry = await this.#listed(name);
+    const { entry, ref } = await this.#listed(name);
+    // The commit the user is shown: the catalog's, or the repository's right now, once.
+    const sha = entry.rev ?? (await resolveRev(entry.repo, ref)).sha;
     const scratch = await mkdtemp(join(this.#dataDir, ".market-"));
     try {
       const dir = join(scratch, "plugin");
       await fetchInto({
         dir,
         repo: entry.repo,
-        sha: entry.rev,
+        sha,
         ref: null,
         path: entry.path,
       });
       const plugin = await loadPlugin(dir);
-      if (plugin.manifest.name !== entry.name)
-        throw new PluginError(
-          `the catalog says ${entry.name}, the plugin says ${plugin.manifest.name}`,
-        );
       return {
         name: entry.name,
         version: plugin.manifest.version ?? null,
         description: plugin.manifest.description ?? "",
         repo: entry.repo,
         path: entry.path,
-        sha: entry.rev,
+        sha,
         requires: plugin.requires,
         servers: serverViews(plugin).map((view, index) => {
           const { config } = plugin.servers[index]!;
@@ -348,28 +454,19 @@ export class Market {
   }
 
   /**
-   * Add the entry as a git source at its commit. `sha` is the commit the user confirmed: if the
-   * catalog now says another, nothing is installed, and the user is shown the new one first.
+   * Add the entry as a git source at `sha`, the commit the user confirmed. A catalog that pins a
+   * commit must still pin that one; if it now says another, nothing is installed, and the user is
+   * shown the new one first. The plugin keeps the name its own manifest gives it.
    */
   async install(name: string, sha: string): Promise<string> {
-    const entry = await this.#listed(name);
-    if (entry.rev !== sha)
+    const { entry } = await this.#listed(name);
+    if (!SHA.test(sha)) throw new PluginError("sha must be a full commit hash");
+    if (entry.rev !== null && entry.rev !== sha)
       throw new PluginError(
         `the catalog now lists ${name} at ${entry.rev.slice(0, 12)}, not ${sha.slice(0, 12)}; look at it again`,
       );
     if (entry.installed === "this")
       throw new PluginError(`${name} is installed; use Update`);
-    const added = await this.#plugins.registry.add(
-      entry.repo,
-      entry.rev,
-      entry.path,
-    );
-    if (added !== entry.name) {
-      await this.#plugins.registry.remove(added);
-      throw new PluginError(
-        `the catalog says ${entry.name}, the plugin says ${added}`,
-      );
-    }
-    return added;
+    return await this.#plugins.registry.add(entry.repo, sha, entry.path);
   }
 }

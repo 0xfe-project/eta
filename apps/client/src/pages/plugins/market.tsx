@@ -151,7 +151,9 @@ export function Market(props: {
     />
   );
   const marker = (item: MarketEntry) =>
-    item.installed === "this"
+    item.unsupported !== null
+      ? uiText("marketUnsupported")
+      : item.installed === "this"
       ? uiText("marketInstalled")
       : item.installed === "other"
         ? uiText("marketNameTaken")
@@ -327,7 +329,13 @@ export function Market(props: {
             {line(uiText("marketVersion"), current()!.version)}
             {line(uiText("marketAuthor"), current()!.author)}
             {line(uiText("marketRepository"), current()!.repo)}
-            {line(uiText("marketCommit"), current()!.rev)}
+            {line(
+              uiText("marketCommit"),
+              current()!.rev ?? uiText("marketCommitLatest"),
+            )}
+            <If when={current()!.unsupported}>
+              {line(uiText("marketUnsupported"), current()!.unsupported ?? "")}
+            </If>
             <If when={current()!.requires.length}>
               {line(uiText("marketRequires"), current()!.requires.join(", "))}
             </If>
@@ -336,7 +344,7 @@ export function Market(props: {
             </If>
             <View style={{ ...row, justifyContent: "flex-end", paddingTop: 10 }}>
               <If
-                when={current()!.installed === "no"}
+                when={current()!.installed === "no" && current()!.unsupported === null}
                 else={<Label variant="small">{marker(current()!)}</Label>}
               >
                 <Button

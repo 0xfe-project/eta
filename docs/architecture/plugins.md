@@ -121,14 +121,23 @@ This is only a safeguard against accidents: it matches exact text, cannot catch 
 
 ## Market
 
-The host reads an online catalog and turns an entry into the git source `{repo, rev, path}` the plugin store already has. Nothing else installs.
+The host reads somebody else's `marketplace.json` (the Claude Code shape, or Cursor's, which is the same) and turns an entry into the git source `{repo, rev, path}` the plugin store already has. Nothing else installs; eta has no catalog format of its own.
 
-- Catalog address: setting `plugins.catalogUrl`, changed with `plugins.marketSetUrl`, applied without a restart. `DEFAULT_CATALOG_URL` is empty: no address, no catalog. The page says so and offers to set one.
-- Format: `{"plugins":[{name, description, author, version, repo, path, rev, homepage?, requires?}]}`. `rev` must be a 40-character lowercase commit hash, never a branch or tag.
-- Fetch: http(s) only, size cap, timeout, JSON and schema checks. An invalid entry is dropped with a reason, the rest are kept. Failure or offline returns an error and leaves installed plugins alone.
-- Wire (`plugins`): `marketCatalog` lists entries marked `installed` (`no`, `this`, `other`); `marketPreview {name}` fetches the pinned commit into a temporary directory and returns its MCP servers (command, env, headers), `requires`, repo, path and commit; `marketInstall {name, sha}` installs only if the catalog still pins `sha`.
-- Confirmation: the client shows the preview and requires an explicit confirm before `marketInstall`. Catalog text is rendered as text only.
+- Catalog address: setting `plugins.catalogUrl`, changed with `plugins.marketSetUrl`, applied without a restart. The default is Cursor's list, `https://raw.githubusercontent.com/cursor/plugins/HEAD/.cursor-plugin/marketplace.json`. Anthropic's list, `https://raw.githubusercontent.com/anthropics/claude-plugins-official/main/.claude-plugin/marketplace.json`, reads the same way; the user can set it. One address at a time. An empty setting means no catalog, and the page says so.
+- `source` of an entry: a path in the catalog's repository (relative to `metadata.pluginRoot`; only when the catalog is on raw.githubusercontent.com, which says the repository), `{source:"url", url, sha?}`, or `{source:"git-subdir", url, path, ref?, sha?}`. Any other source (`command`, `github`, none) is listed and marked unsupported (`unsupported` is set); it cannot be previewed or installed.
+- Commit: a `sha` must be 40 lowercase hex digits. An entry without one has `rev: null`; the host resolves the repository's current commit once, at preview, and the install carries that hash. Preview and install use the same commit.
+- Fetch: http(s) only, 1 MiB cap, 10 s timeout, at most 500 entries, per-entry checks. An invalid entry is dropped with a reason, the rest are kept. Failure or offline returns an error and leaves installed plugins alone.
+- Wire (`plugins`): `marketCatalog` lists entries marked `installed` (`no`, `this`, `other`); `marketPreview {name}` fetches the commit into a temporary directory and returns its MCP servers, `requires`, repo, path, commit and the `reports` of the loader; `marketInstall {name, sha}` installs only that `sha`, and refuses it if the catalog pins another.
+- Confirmation: the client shows the preview, with what is ignored, and requires an explicit confirm before `marketInstall`. Catalog text is rendered as text only.
 - Out of scope: publishing and automatic update.
+
+### Cursor and Claude Code layouts
+
+`loadPlugin` takes the manifest from `plugin.json`, else `.cursor-plugin/plugin.json`, else `.claude-plugin/plugin.json`. Both share `skills/<name>/SKILL.md` with the spec, so skills load. In those layouts only skills load:
+
+- no `$schema` is required, and a field of the wrong type is dropped with a report instead of rejecting the plugin (the `name` rule still rejects);
+- `displayName`, `logo`, `category`, `tags` are silently ignored; `commands`, `agents`, `hooks`, `rules`, `mcpServers` and the like, and their folders and `.mcp.json`, are ignored and listed in `reports`, which the preview shows;
+- a `skills` path other than `skills/` is reported; only `skills/` is read.
 
 ## Security boundary
 

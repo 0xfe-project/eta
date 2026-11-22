@@ -154,13 +154,19 @@ export interface MarketEntry {
   version: string;
   repo: string;
   path: string;
-  /** The commit to install, 40 hex digits; never a branch or a tag. */
-  rev: string;
+  /**
+   * The commit the catalog pins, 40 hex digits; never a branch or a tag. Null when the catalog pins
+   * none: the host then resolves the repository's current commit when it is previewed, and installs
+   * that very commit.
+   */
+  rev: string | null;
   homepage: string | null;
   /** Commands it says it needs; only a hint, and the preview says what the plugin itself says. */
   requires: string[];
   /** Whether a plugin of this name is installed already, and from where. */
   installed: "no" | "this" | "other";
+  /** Why eta cannot install it (a source it does not read); null when it can. */
+  unsupported: string | null;
 }
 
 /** An entry the host threw away, and why. */

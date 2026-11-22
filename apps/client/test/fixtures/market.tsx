@@ -26,6 +26,7 @@ const full: MarketCatalog = {
       homepage: null,
       requires: [],
       installed: "this",
+      unsupported: null,
     },
   ],
   rejected: [{ index: 2, name: "bad", reason: "rev is missing" }],

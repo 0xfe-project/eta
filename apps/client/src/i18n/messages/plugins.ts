@@ -15,6 +15,11 @@ export const pluginsMessages = {
   marketSearch: ["Search the catalog", "搜索目录"],
   marketNothingFound: ["Nothing found", "没有找到"],
   marketInstalled: ["Installed", "已安装"],
+  marketUnsupported: ["Format not supported", "格式不支持"],
+  marketCommitLatest: [
+    "Not pinned by the catalog; the current commit is read and pinned when you look at it",
+    "目录未固定提交;查看时读取当前提交并钉死",
+  ],
   marketNameTaken: ["A plugin with this name is installed from another source", "已安装同名插件，来源不同"],
   marketSkipped: ["{{count}} catalog entries were skipped", "目录中有 {{count}} 项被跳过"],
   marketVersion: ["Version", "版本"],

@@ -483,3 +483,93 @@ describe("mcp.json", () => {
     expect(loaded.reports[0]).toContain("outside the plugin");
   });
 });
+
+describe("a Cursor or Claude Code layout", () => {
+  async function foreign(
+    dir: string,
+    manifest: Record<string, unknown>,
+    files: Record<string, unknown> = {},
+  ): Promise<string> {
+    const root = await temp();
+    const all = { [`${dir}/plugin.json`]: manifest, ...files };
+    for (const [path, content] of Object.entries(all)) {
+      const file = join(root, path);
+      await mkdir(join(file, ".."), { recursive: true });
+      await writeFile(
+        file,
+        typeof content === "string" ? content : JSON.stringify(content),
+      );
+    }
+    return root;
+  }
+
+  it.each([".cursor-plugin", ".claude-plugin"])(
+    "falls back to %s/plugin.json and loads its skills",
+    async (dir) => {
+      const loaded = await loadPlugin(
+        await foreign(
+          dir,
+          {
+            name: "demo",
+            displayName: "Demo",
+            version: "1.0.0",
+            logo: "a.png",
+            category: "x",
+            tags: ["t"],
+            skills: "./skills/",
+          },
+          { "skills/a/SKILL.md": skill("a") },
+        ),
+      );
+      expect(loaded.manifest).toMatchObject({ name: "demo", version: "1.0.0" });
+      expect(loaded.skills.map((entry) => entry.name)).toEqual(["a"]);
+      expect(loaded.reports).toEqual([
+        `manifest read from ${dir}/plugin.json; only skills are loaded from this layout`,
+      ]);
+    },
+  );
+
+  it("lists what it ignores: unsupported fields, folders and MCP files", async () => {
+    const loaded = await loadPlugin(
+      await foreign(
+        ".cursor-plugin",
+        { name: "demo", hooks: "./hooks.json", agents: "./agents/", skills: "./skills/" },
+        {
+          "agents/a.md": "x",
+          "rules/r.mdc": "x",
+          ".mcp.json": { mcpServers: { s: { command: "node" } } },
+        },
+      ),
+    );
+    const text = loaded.reports.join("\n");
+    expect(text).toContain("hooks is not supported by eta; ignored");
+    expect(text).toContain("agents is not supported by eta; ignored");
+    expect(text).toContain("agents/: not supported by eta; ignored");
+    expect(text).toContain("rules/: not supported by eta; ignored");
+    expect(text).toContain(".mcp.json: MCP servers of this layout are not loaded");
+    expect(loaded.servers).toEqual([]);
+  });
+
+  it("prefers the root plugin.json, then .cursor-plugin over .claude-plugin", async () => {
+    const both = await foreign(".claude-plugin", { name: "claude" }, {
+      ".cursor-plugin/plugin.json": { name: "cursor" },
+    });
+    expect((await loadPlugin(both)).manifest.name).toBe("cursor");
+    await writeFile(
+      join(both, "plugin.json"),
+      JSON.stringify({ $schema: PLUGIN, name: "root" }),
+    );
+    expect((await loadPlugin(both)).manifest.name).toBe("root");
+  });
+
+  it("drops a field that does not fit instead of refusing the plugin, and still refuses a bad name", async () => {
+    const loaded = await loadPlugin(
+      await foreign(".claude-plugin", { name: "demo", author: "x", version: 3 }),
+    );
+    expect(loaded.manifest).toEqual({ name: "demo" });
+    expect(loaded.reports.join("\n")).toContain("author does not fit");
+    await expect(
+      loadPlugin(await foreign(".claude-plugin", { name: "Bad Name" })),
+    ).rejects.toBeInstanceOf(PluginError);
+  });
+});
