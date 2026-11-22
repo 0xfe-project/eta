@@ -315,6 +315,20 @@ export function Market(props: {
       <If when={current() && !preview()}>
         <Modal {...sheet(current()!.name, 512, () => detail.set(""))}>
           <View style={{ gap: 10, paddingTop: 6, paddingBottom: phone() ? 24 : 0, ...inset() }}>
+            <PluginLogo
+              name={current()!.name}
+              homepage={current()!.homepage}
+              repo={
+                current()!.repo !== "" && current()!.unsupported === null
+                  ? {
+                      repo: current()!.repo,
+                      ref: current()!.rev ?? "HEAD",
+                      path: current()!.path,
+                    }
+                  : null
+              }
+              size={40}
+            />
             <Label variant="small" tone="muted" style={{ userSelect: "text" }}>
               {current()!.description}
             </Label>
@@ -363,6 +377,11 @@ export function Market(props: {
           >
             <SmoothScroll style={{ maxHeight: 420 }} scrollbar={false}>
               <View style={{ gap: 10, paddingTop: 6, ...inset() }}>
+                <PluginLogo
+                  name={shown().name}
+                  repo={{ repo: shown().repo, ref: shown().sha, path: shown().path }}
+                  size={40}
+                />
                 <Label variant="small" tone="muted">
                   {uiText("marketConfirmDescription")}
                 </Label>
