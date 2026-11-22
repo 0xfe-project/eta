@@ -69,7 +69,7 @@ test("a Host gone for five minutes is said to be not normal", async () => {
   expect(app.shows("label:Change host")).toBe(true);
 });
 
-test("a new version is said, then the window goes back to Settings with the result", async () => {
+test("a new version is said, then the window goes back to the app with a toast", async () => {
   const app = await settings(
     "update",
     "Restarting@0,Gone@0,Done@1000,Back@5000",
@@ -82,8 +82,13 @@ test("a new version is said, then the window goes back to Settings with the resu
   expect(app.shows("label:Host update in progress")).toBe(true);
   await app.clock!.runFor(2_200);
   expect(app.shows("label:Host update in progress")).toBe(false);
+  expect(app.shows("id:toast")).toBe(true);
   expect(app.texts()).toContain("Updated to 0.9.1");
   expect(app.texts()).toContain("From 0.9.0. The data was backed up first.");
+  // Settings itself keeps no notice of it, and the toast goes by itself.
+  expect(app.shows("id:update-result")).toBe(false);
+  await app.clock!.runFor(6_100);
+  expect(app.texts()).not.toContain("Updated to 0.9.1");
 });
 
 test("rolling back is shown, then told once, then kept in Settings", async () => {
@@ -133,13 +138,15 @@ test("a failed, cancelled or lost update is explained in Settings with a next st
   expect(app.texts()).toContain("The update stopped partway");
 });
 
-test("a machine's row says it is updating, then that it was updated", async () => {
+test("a machine's row says it is updating, then a toast says it was updated", async () => {
   const app = await settings("machines");
   expect(app.texts()).toContain("Needs update");
   await app.press("label:Machine updating");
   expect(app.texts()).toContain("Updating to 0.9.0…");
   await app.press("label:Machine updated");
-  expect(app.texts()).toContain("Updated to 0.9.0");
+  expect(app.texts()).toContain("gpu-box updated to 0.9.0");
+  expect(app.texts()).not.toContain("Updating to 0.9.0…");
+  expect(app.texts()).not.toContain("Updated to 0.9.0");
 });
 
 test("a machine whose update failed says why and can try again", async () => {
