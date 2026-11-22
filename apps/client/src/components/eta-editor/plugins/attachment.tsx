@@ -1,12 +1,20 @@
 import type { UploadState } from "@eta/client-contracts/composer-doc";
+import type { Signal } from "nsh";
 import type { RichNodeViewProps } from "nsh/base";
 import type { EtaEditorHandle, EtaPlugin } from "../editor";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "@eta/client-contracts";
 import { DOC_NODES, docToDraft } from "@eta/client-contracts/composer-doc";
 import { fileSize } from "@eta/client-contracts/composer-draft";
-import { Picker } from "nsh";
+import { computed, effect, Picker, signal } from "nsh";
 import { defineExtension, insertContent } from "nsh/base";
 import { uiText } from "../../../i18n";
+import {
+  isPicture,
+  fileSize as pictureSize,
+  useAttachmentPictures,
+} from "../../../services/pictures";
+import { Lightbox, picturePreview } from "../../picture-viewer";
+import { isBmp, pastedFile } from "../bmp-to-png";
 import { Chip } from "../chip";
 import { oneStep } from "../step";
 
@@ -24,9 +32,14 @@ export interface Uploads {
 
 const isImage = (type: string) => type.startsWith("image/");
 
-function FileView(input: { view: RichNodeViewProps; uploads: Uploads }) {
+function FileView(input: {
+  view: RichNodeViewProps;
+  uploads: Uploads;
+  onOpen: (id: string) => void;
+}) {
   const props = input.view;
   const uploads = input.uploads;
+  const pictureOf = useAttachmentPictures();
   const id = () => String(props.node.attrs.id);
   const name = () => String(props.node.attrs.name);
   const image = () => isImage(String(props.node.attrs.contentType));
@@ -35,6 +48,14 @@ function FileView(input: { view: RichNodeViewProps; uploads: Uploads }) {
     const current = state();
     return current?.state === "failed" ? current : undefined;
   };
+  /** An uploaded picture: it previews on hover and opens in the lightbox on a press (#735). */
+  const picture = () => {
+    const current = state();
+    return image() && current?.state === "done" && isPicture(current.attachment)
+      ? pictureOf(current.attachment)
+      : undefined;
+  };
+  effect(() => picture()?.load());
   const status = () => {
     const current = state();
     if (!current) return uiText("uploadLost");
@@ -50,18 +71,28 @@ function FileView(input: { view: RichNodeViewProps; uploads: Uploads }) {
       thumbnail={image() ? uploads.thumbnail(id()) : undefined}
       status={status()}
       tone={state()?.state === "failed" || !state() ? "red" : "ink"}
-      tooltip={failure()?.error}
+      tooltip={(() => {
+        const shown = picture();
+        return shown ? picturePreview(shown) : failure()?.error;
+      })()}
+      cursor={picture() ? "zoom-in" : undefined}
       dim={state()?.state === "uploading"}
       selected={props.selected}
-      accessibilityLabel={
-        failure()?.retry
-          ? uiText("retryUpload", { name: name() })
-          : uiText(image() ? "imageKindNamed" : "fileKindNamed", {
-              name: name(),
-            })
-      }
+      accessibilityLabel={(() => {
+        const current = state();
+        if (failure()?.retry) return uiText("retryUpload", { name: name() });
+        if (picture() && current?.state === "done")
+          return uiText("openPicture", {
+            name: name(),
+            size: pictureSize(current.attachment.size),
+          });
+        return uiText(image() ? "imageKindNamed" : "fileKindNamed", {
+          name: name(),
+        });
+      })()}
       onPress={() => {
         if (failure()?.retry) uploads.retry(id());
+        else if (picture()) input.onOpen(id());
       }}
       removeLabel={uiText("removeAttachment", { name: name() })}
       onRemove={() => props.deleteNode()}
@@ -87,8 +118,28 @@ export function attachment(options: {
   blocked?: () => boolean;
 }): EtaPlugin & { pick: (editor: EtaEditorHandle) => Promise<void> } {
   const { uploads } = options;
+  /** The lightbox's picture, by its block id. */
+  const open = signal<string>();
+  let handle: EtaEditorHandle | undefined;
   function insert(files: File[], editor: EtaEditorHandle) {
     if (options.blocked?.()) return true;
+    // A Windows screenshot comes as a BMP, which neither the models nor Chromium take.
+    if (files.some(isBmp)) {
+      void Promise.all(
+        files.map((file) =>
+          pastedFile(file).catch((error: unknown) =>
+            refusedFile(
+              file.name,
+              error instanceof Error ? error.message : String(error),
+            ),
+          ),
+        ),
+      ).then((converted) => place(converted, editor));
+      return true;
+    }
+    return place(files, editor);
+  }
+  function place(files: File[], editor: EtaEditorHandle) {
     const room = MAX_ATTACHMENTS - attachmentCount(editor);
     const nodes = files.map((file, index) => {
       const id = crypto.randomUUID();
@@ -146,11 +197,28 @@ export function attachment(options: {
           ],
         },
         addNodeView: () => (props: RichNodeViewProps) => (
-          <FileView view={props} uploads={uploads} />
+          <FileView view={props} uploads={uploads} onOpen={open.set} />
         ),
       }),
     ],
     files: insert,
+    setup(editor) {
+      handle = editor;
+    },
+    overlay: () => (
+      <PictureLightbox
+        ids={() => {
+          handle?.revision();
+          return handle
+            ? docToDraft(handle.doc())
+                .draft.filter((part) => part.type === "file")
+                .map((part) => part.id)
+            : [];
+        }}
+        uploads={uploads}
+        open={open}
+      />
+    ),
     paste(action, editor) {
       if (action.kind !== "textFile") return false;
       return insert(
@@ -183,6 +251,38 @@ export function attachment(options: {
       editor.focus();
     },
   };
+}
+
+/** The draft's uploaded pictures over the window, the one pressed first; arrows walk the rest. */
+function PictureLightbox(props: {
+  ids: () => string[];
+  uploads: Uploads;
+  open: Signal<string | undefined>;
+}) {
+  const pictureOf = useAttachmentPictures();
+  const pictures = computed(() =>
+    props.ids().flatMap((id) => {
+      const current = props.uploads.state(id);
+      return current?.state === "done" && isPicture(current.attachment)
+        ? [pictureOf(current.attachment)]
+        : [];
+    }),
+  );
+  const index = () => {
+    const id = props.open();
+    if (id === undefined) return undefined;
+    const at = pictures().findIndex((picture) => picture.key === id);
+    return at < 0 ? undefined : at;
+  };
+  return (
+    <Lightbox
+      pictures={pictures}
+      index={index}
+      onIndex={(at) =>
+        props.open.set(at === undefined ? undefined : pictures()[at]?.key)
+      }
+    />
+  );
 }
 
 const refused = new WeakMap<File, string>();

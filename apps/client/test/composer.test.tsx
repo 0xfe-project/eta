@@ -163,7 +163,7 @@ test("an interrupted upload shows on its block and can be retried in its chat", 
   expect(app.shows("label:Retry uploading onboard.jpg")).toBe(false);
   await app.press("label:Switch");
   await app.press("label:Retry uploading onboard.jpg");
-  await app.waitFor("label:Image onboard.jpg");
+  await app.waitFor("label:View picture onboard.jpg · 0.0 KB");
   await app.keyboard.press("enter");
   await app.waitFor("text:attachments onboard.jpg");
 });
@@ -261,4 +261,35 @@ test("a paste is an undo step of its own, even right after typing", async () => 
   expect(app.shows("label:Unfold pasted text (4 lines)")).toBe(false);
   await app.keyboard.press("enter");
   await app.waitFor(sent(["alpha", "typed", "queue", []]));
+});
+
+test("a pasted BMP screenshot goes in as a PNG and other images keep their name", async () => {
+  const app = await fixture();
+  await app.paste(input, { files: ["test/paste-pixel.bmp"] });
+  await app.waitFor("label:View picture paste-pixel.png · 0.0 KB");
+  expect(app.shows("label:Image paste-pixel.bmp")).toBe(false);
+  // The fixture fails a first upload of onboard.jpg: its block still has its own name.
+  await app.paste(input, { files: ["assets/onboard.jpg"] });
+  await app.waitFor("label:Retry uploading onboard.jpg");
+});
+
+test("an uploaded picture previews on hover and opens from its block, from its own bytes", async () => {
+  const app = await fixture();
+  await app.paste(input, { files: ["test/fixtures/pixel.png"] });
+  const block = "label:View picture pixel.png · 0.0 KB";
+  await app.waitFor(block);
+  await app.hover(block);
+  await app.wait(300);
+  expect(app.shows("label:pixel.png · 0.0 KB")).toBe(true);
+  await app.press(block);
+  await app.waitFor("text:pixel.png · 0.0 KB");
+  expect(app.shows("id:picture-stage")).toBe(true);
+  await app.keyboard.press("escape");
+  await app.waitUntil(() => !app.shows("id:picture-stage"));
+  // The draft's picture is the file it sent: the host is never asked for it.
+  expect(
+    app.requests().some((request) => request.url.includes("/attachments/")),
+  ).toBe(false);
+  await app.press("label:Remove pixel.png");
+  await app.waitUntil(() => !app.shows(block));
 });

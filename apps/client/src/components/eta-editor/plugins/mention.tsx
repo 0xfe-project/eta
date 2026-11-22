@@ -8,7 +8,7 @@ import type { RichNodeViewProps } from "nsh/base";
 import type { EtaEditorHandle, EtaPlugin } from "../editor";
 import { DOC_NODES } from "@eta/client-contracts/composer-doc";
 import { buildMenu } from "@eta/client-contracts/composer-menu";
-import { computed, effect, Scroll, signal, Text, untracked, View } from "nsh";
+import { computed, effect, signal, Text, untracked, View } from "nsh";
 import {
   defineExtension,
   exitSuggestion,
@@ -18,6 +18,7 @@ import {
   suggestion,
 } from "nsh/base";
 import { uiText } from "../../../i18n";
+import { SmoothScroll } from "../../smooth-scroll";
 import { Caption, Label } from "../../text";
 import { colors, fontFamily, Fonts, row, textFaces } from "../../theme";
 
@@ -273,7 +274,7 @@ function SuggestionList(props: {
           )}
           style={{ paddingHorizontal: 10, paddingTop: 6, paddingBottom: 4 }}
         />
-        <Scroll style={{ maxHeight: 224, flexShrink: 1 }}>
+        <SmoothScroll style={{ maxHeight: 224, flexShrink: 1 }}>
           <Each
             of={props.menu()?.items ?? []}
             key={(entry) => entry.kind + entry.value}
@@ -323,7 +324,7 @@ function SuggestionList(props: {
               </View>
             )}
           </Each>
-        </Scroll>
+        </SmoothScroll>
       </View>
     </If>
   );

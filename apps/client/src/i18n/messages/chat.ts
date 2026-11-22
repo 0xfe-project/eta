@@ -127,7 +127,6 @@ export const chatMessages = {
   uploadRefused: ["can't attach", "无法添加"],
   uploadLost: ["upload lost", "上传已丢失"],
   retryUpload: ["Retry uploading {{name}}", "重试上传 {{name}}"],
-  removeAttachment: ["Remove {{name}}", "移除 {{name}}"],
   fileUnreadable: ["Can't read {{name}}", "无法读取 {{name}}"],
   attachmentCountLimit: [
     "A message can carry up to {{count}} attachments.",

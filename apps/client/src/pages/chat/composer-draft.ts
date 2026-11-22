@@ -12,6 +12,7 @@ import { legacyDraftToDoc } from "@eta/client-contracts/composer-doc";
 import { WireError } from "@eta/client-contracts/wire";
 import { cleanup, computed, effect, signal, Storage } from "nsh";
 import { uiText } from "../../i18n";
+import { forgetPicture, rememberPicture } from "../../services/pictures";
 
 export interface Outgoing {
   id: string;
@@ -171,8 +172,17 @@ function createDraft(key: string, legacyKey: string) {
               ).toString("base64"),
             },
           );
-          if (result.attachment)
+          if (result.attachment) {
+            // The draft shows the picture from the bytes it sent, not the host's copy (#735).
+            if (origin)
+              rememberPicture(
+                origin,
+                result.attachment.id,
+                data,
+                result.attachment.contentType,
+              );
             setState(id, { state: "done", attachment: result.attachment });
+          }
         }
       } catch (error) {
         if (host.address()?.origin === origin)
@@ -258,13 +268,17 @@ function createDraft(key: string, legacyKey: string) {
       const left = Object.keys(value().uploads).filter(
         (id) => !kept.includes(id),
       );
-      for (const id of left)
+      const origin = host.address()?.origin;
+      for (const id of left) {
         void host
           .call("conversations", "unattach", {
             conversationId,
             attachmentId: id,
           })
           .catch(() => {});
+        // A picture taken out of the draft goes with it (#735).
+        if (origin) forgetPicture(origin, id);
+      }
       edit({ uploads: {} });
       states.set({});
       bytes.clear();

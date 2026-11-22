@@ -16,8 +16,10 @@ export function Chip(props: {
   /** A state after the label: "uploading…", "failed · retry". */
   status?: string;
   tone?: "ink" | "amber" | "red";
-  /** Shown on hover (desktop): the whole reason of a failure. */
-  tooltip?: string;
+  /** Shown on hover (desktop): the whole reason of a failure, or the picture of an image. */
+  tooltip?: string | JSX.Element;
+  /** The pointer over the block's body ("zoom-in" for a picture that opens). */
+  cursor?: "pointer" | "zoom-in";
   selected?: boolean;
   dim?: boolean;
   accessibilityLabel: string;
@@ -77,7 +79,7 @@ export function Chip(props: {
           ...row,
           gap: 5,
           flexShrink: 1,
-          cursor: props.onPress ? "pointer" : "default",
+          cursor: props.cursor ?? (props.onPress ? "pointer" : "default"),
         }}
       >
         <If when={props.thumbnail}>
