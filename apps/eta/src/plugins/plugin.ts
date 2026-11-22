@@ -254,15 +254,18 @@ export function pluginsPlugin(
             const found = plugins.registry.entries().find((entry) => entry.name === installed)?.plugin;
             const own =
               found?.manifest.logo === undefined ? null : await readOwnLogo(found.root, found.manifest.logo);
-            return {
-              result:
-                own ?? (found?.manifest.homepage ? await logos.find(null, found.manifest.homepage) : null),
-            };
+            if (own) return { result: own };
+            // The first remote MCP server's site is the last source before the letter.
+            const remote = plugins.view().find((view) => view.name === installed)?.servers.find(
+              (server) => server.url !== undefined,
+            )?.url;
+            return { result: await logos.find(null, found?.manifest.homepage ?? null, remote ?? null) };
           }
           return {
             result: await logos.find(
               args.optionalString("own") ?? null,
               args.optionalString("homepage") ?? null,
+              args.optionalString("origin") ?? null,
             ),
           };
         }),

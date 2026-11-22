@@ -5,7 +5,7 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { isPrivateAddress, Logos, pictureType } from "../src/plugins/logo";
+import { isPrivateAddress, Logos, pictureType, siteOf } from "../src/plugins/logo";
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
 const servers: http.Server[] = [];
@@ -100,5 +100,39 @@ describe("plugin logos", () => {
     await logos.find(base + "/a.png", null);
     await logos.find(base + "/a.png", null);
     expect(hits).toBe(1);
+  });
+
+  it("takes the icon of the MCP server's site after the logo and the homepage fail, and sends no credential", async () => {
+    const seen: http.IncomingHttpHeaders[] = [];
+    const site = await serve((req, res) => {
+      seen.push(req.headers);
+      if (req.url === "/") res.end('<link rel="apple-touch-icon" href="/t.png">');
+      else if (req.url === "/t.png") res.end(PNG);
+      else res.writeHead(404).end();
+    });
+    const logos = new Logos({ allowPrivate: true });
+    expect((await logos.find(null, null, site + "/mcp"))?.type).toBe("image/png");
+    expect(seen.every((h) => h.authorization === undefined && h.cookie === undefined)).toBe(true);
+  });
+
+  it("prefers the homepage icon over the MCP site's, and falls back to nothing when both fail", async () => {
+    const home = await serve((req, res) => (req.url === "/favicon.ico" ? res.end(Buffer.from([0, 0, 1, 0, 9])) : res.end("<html></html>")));
+    const site = await serve((_req, res) => res.end(PNG));
+    expect((await new Logos({ allowPrivate: true }).find(null, home + "/", site + "/mcp"))?.type).toBe("image/x-icon");
+    const none = await serve((_req, res) => res.writeHead(404).end());
+    expect(await new Logos({ allowPrivate: true }).find(null, null, none + "/mcp")).toBeNull();
+  });
+
+  it("refuses an MCP site on a private address, and a site that redirects into one", async () => {
+    expect(await new Logos().find(null, null, "http://127.0.0.1:9/mcp")).toBeNull();
+    const target = await serve((_req, res) => res.end(PNG));
+    const site = await serve((_req, res) => res.writeHead(302, { location: target + "/x.png" }).end());
+    expect(await new Logos().find(null, null, site + "/mcp")).toBeNull();
+  });
+
+  it("asks the origin, then the parent of an mcp. or api. host", () => {
+    expect(siteOf("https://mcp.firecrawl.dev/v2/mcp")).toEqual(["https://mcp.firecrawl.dev", "https://firecrawl.dev"]);
+    expect(siteOf("https://example.com/mcp")).toEqual(["https://example.com"]);
+    expect(siteOf("stdio:foo")).toEqual([]);
   });
 });

@@ -117,6 +117,20 @@ export interface LogoOptions {
 
 class Refused extends Error {}
 
+/** The sites to ask for an MCP server's icon: its origin, then without a leading "mcp." or "api." label. */
+export function siteOf(server: string): string[] {
+  try {
+    const url = new URL(server);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return [];
+    const sites = [url.origin];
+    const parent = /^(?:mcp|api)\.(.+\..+)$/i.exec(url.hostname);
+    if (parent && isIP(url.hostname) === 0) sites.push(`${url.protocol}//${parent[1]}`);
+    return sites;
+  } catch {
+    return [];
+  }
+}
+
 export class Logos {
   readonly #options: LogoOptions;
   readonly #kept = new Map<string, { at: number; logo: Logo | null }>();
@@ -127,16 +141,25 @@ export class Logos {
     this.#options = options;
   }
 
-  /** The first picture found among the plugin's own logo, then its homepage's icon; null when none. */
-  async find(own: string | null, homepage: string | null): Promise<Logo | null> {
-    const key = (own ?? "") + "\n" + (homepage ?? "");
+  /**
+   * The first picture found among the plugin's own logo, its homepage's icon, then the icon of its
+   * remote MCP server's site (`origin`); null when none. The server's own headers are never sent.
+   */
+  async find(own: string | null, homepage: string | null, origin: string | null = null): Promise<Logo | null> {
+    const key = (own ?? "") + "\n" + (homepage ?? "") + "\n" + (origin ?? "");
     const now = (this.#options.now ?? Date.now)();
     const hit = this.#kept.get(key);
     if (hit && now - hit.at < KEEP_MS) return hit.logo;
     let logo: Logo | null = null;
     try {
       if (own) logo = await this.#picture(own);
-      if (!logo && homepage) logo = await this.#fromHomepage(homepage);
+      if (!logo && homepage) logo = await this.#fromHomepage(homepage).catch(() => null);
+      if (!logo && origin) {
+        for (const site of siteOf(origin)) {
+          logo = await this.#fromHomepage(site).catch(() => null);
+          if (logo) break;
+        }
+      }
     } catch {
       logo = null;
     }
