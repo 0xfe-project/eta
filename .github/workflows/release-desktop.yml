@@ -1,6 +1,11 @@
 # A `desktop-v*` tag becomes a GitHub Release of the client app: an installer for each desktop
 # platform, an Android APK, an iOS IPA, and SHA256SUMS. The host is released apart, from `v*` tags (release.yml). How to cut either is
 # in docs/release.md.
+#
+# With an update key configured, the release also feeds the apps' own updates: the desktop
+# apps' update archives and Android's OTA package go on the release, and a signed `latest.json`
+# on the fixed `desktop-channel-stable` / `desktop-channel-rc` releases points at them ("The
+# client app's own updates" in docs/release.md).
 name: Release desktop
 
 on:
@@ -37,6 +42,9 @@ jobs:
       contents: write
     outputs:
       version: ${{ steps.version.outputs.version }}
+      update-url: ${{ steps.channels.outputs.url }}
+      update-channels: ${{ steps.channels.outputs.channels }}
+      download-base: ${{ steps.channels.outputs.base }}
     steps:
       - name: Read the version from the tag
         id: version
@@ -46,6 +54,26 @@ jobs:
             exit 1
           fi
           echo "version=${TAG#desktop-v}" >> "$GITHUB_OUTPUT"
+
+      # Where the apps look for updates, fixed in each build: a manifest per channel on a release
+      # of its own (never Latest: that is the host's, and nsh's `github` source would read it). An
+      # rc build looks at rc by default, a full release at stable; the desktop's settings choose
+      # either by name. ETA_CLIENT_DOWNLOAD_BASE stands in for this repository's download URL, for
+      # a test from a private repository, whose downloads need a token the apps do not have.
+      - name: Name the update channels
+        id: channels
+        if: vars.ETA_CLIENT_UPDATE_PUBLIC_KEY != ''
+        env:
+          BASE: ${{ vars.ETA_CLIENT_DOWNLOAD_BASE || format('{0}/{1}/releases/download', github.server_url, github.repository) }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          own=stable
+          if [[ $VERSION == *-* ]]; then own=rc; fi
+          {
+            echo "base=$BASE"
+            echo "url=$BASE/desktop-channel-$own/latest.json"
+            echo "channels=stable=$BASE/desktop-channel-stable/latest.json,rc=$BASE/desktop-channel-rc/latest.json"
+          } | tee -a "$GITHUB_OUTPUT"
 
       # Never the repository's Latest: that is the host's, and what `eta-host upgrade` and the
       # install instructions mean by the latest release (packages/releases/src/releases.ts only
@@ -130,8 +158,12 @@ jobs:
       # The app downloads its host from this repository, so a fork's app follows the fork.
       ETA_HOST_UPSTREAM: ${{ github.api_url }}/repos/${{ github.repository }}
       ETA_DESKTOP_TARGET: ${{ matrix.target }}
-      ETA_CLIENT_UPDATE_URL: ${{ vars.ETA_CLIENT_UPDATE_URL }}
-      ETA_CLIENT_UPDATE_PUBLIC_KEY: ${{ vars.ETA_CLIENT_UPDATE_PUBLIC_KEY }}
+      # iOS updates through the store: no update source in its build.
+      ETA_CLIENT_UPDATE_URL: ${{ matrix.target != 'ios' && needs.prepare.outputs.update-url || '' }}
+      ETA_CLIENT_UPDATE_CHANNELS: ${{ matrix.target != 'ios' && needs.prepare.outputs.update-channels || '' }}
+      ETA_CLIENT_UPDATE_PUBLIC_KEY: ${{ matrix.target != 'ios' && needs.prepare.outputs.update-url && vars.ETA_CLIENT_UPDATE_PUBLIC_KEY || '' }}
+      # The OTA root Android builds trust: packages signed by a release key it certified run in them.
+      ETA_CLIENT_PACKAGE_ROOT: ${{ matrix.target == 'android' && vars.ETA_CLIENT_PACKAGE_ROOT || '' }}
     steps:
       # What is built is what is in git: Windows runners would check out CRLF.
       - run: git config --global core.autocrlf false
@@ -240,6 +272,28 @@ jobs:
               ;;
           esac
 
+      # The same code as the APK, as a signed package that installed apps run without a new APK.
+      # Its build is this run's, as the APK's is: apps from earlier releases take it, this
+      # release's own APK already runs it.
+      - name: Sign the OTA package
+        if: matrix.target == 'android' && env.ETA_CLIENT_PACKAGE_ROOT != '' && env.ETA_CLIENT_UPDATE_URL != ''
+        env:
+          RELEASE_KEY: ${{ secrets.ETA_CLIENT_RELEASE_KEY }}
+          RELEASE_CERT: ${{ secrets.ETA_CLIENT_RELEASE_CERT }}
+          ETA_CLIENT_BUILD: ${{ github.run_number }}
+        run: |
+          if [[ -z $RELEASE_KEY || -z $RELEASE_CERT ]]; then
+            echo "::warning::No ETA_CLIENT_RELEASE_KEY / ETA_CLIENT_RELEASE_CERT: no OTA package, Android updates only by a new APK."
+            exit 0
+          fi
+          keys=$(mktemp -d)
+          printf '%s\n' "$RELEASE_KEY" > "$keys/release.secret"
+          printf '%s\n' "$RELEASE_CERT" > "$keys/release.cert"
+          bun scripts/nsh-client.ts publish --key "$keys/release.secret" --cert "$keys/release.cert" \
+            --app-version "$ETA_DESKTOP_VERSION" --build "$ETA_CLIENT_BUILD" \
+            -o "$RUNNER_TEMP/eta-desktop/dev.eta.client-$ETA_CLIENT_BUILD.nshpkg"
+          rm -rf "$keys"
+
       - name: The build left the checkout as it was
         run: |
           changed=$(git status --porcelain)
@@ -254,18 +308,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "$TAG" "$RUNNER_TEMP/try/$DESKTOP" --clobber
-          if [[ -n "$ETA_CLIENT_UPDATE_URL" ]]; then
-            gh release upload "$TAG" "$RUNNER_TEMP/eta-desktop"/Eta-"$ETA_DESKTOP_VERSION"-"$ETA_DESKTOP_TARGET"-* --clobber
+          shopt -s nullglob
+          # The desktops' update archives (Eta-<version>-<os>-<arch>.*) and Android's OTA package.
+          updates=("$RUNNER_TEMP/eta-desktop"/Eta-"$ETA_DESKTOP_VERSION"-* "$RUNNER_TEMP/eta-desktop"/*.nshpkg)
+          if [[ -n $ETA_CLIENT_UPDATE_URL && ${#updates[@]} -gt 0 ]]; then
+            gh release upload "$TAG" "${updates[@]}" --clobber
           fi
 
   publish:
-    needs: [check, build]
+    needs: [prepare, check, build]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      BASE: ${{ needs.prepare.outputs.download-base }}
     steps:
       # From the draft, so the sums are of what people will download.
       - name: Add SHA256SUMS
@@ -277,3 +336,83 @@ jobs:
 
       # Publishing makes a release the Latest unless told otherwise.
       - run: gh release edit "$TAG" --draft=false --latest=false
+
+      # After publishing: a draft's files cannot be downloaded, and the manifest must not point at
+      # files nobody can get.
+      - uses: actions/checkout@v7
+        if: needs.prepare.outputs.update-url != ''
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        if: needs.prepare.outputs.update-url != ''
+        with:
+          bun-version-file: package.json
+
+      - if: needs.prepare.outputs.update-url != ''
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - uses: ./.github/actions/setup-nsh
+        if: needs.prepare.outputs.update-url != ''
+
+      # One signed manifest for the release: each desktop's archive, the OTA package, and on
+      # Android the APK when it can install over the last one (only with a release keystore: a
+      # debug-signed APK cannot). Its notes are the release's.
+      - name: Write the update manifest
+        if: needs.prepare.outputs.update-url != ''
+        env:
+          UPDATE_KEY: ${{ secrets.ETA_CLIENT_UPDATE_KEY }}
+          ANDROID_KEYSTORE: ${{ secrets.ETA_ANDROID_KEYSTORE }}
+          ETA_CLIENT_VERSION: ${{ needs.prepare.outputs.version }}
+          ETA_CLIENT_UPDATE_URL: ${{ needs.prepare.outputs.update-url }}
+          ETA_CLIENT_UPDATE_PUBLIC_KEY: ${{ vars.ETA_CLIENT_UPDATE_PUBLIC_KEY }}
+          ETA_CLIENT_PACKAGE_ROOT: ${{ vars.ETA_CLIENT_PACKAGE_ROOT }}
+        run: |
+          if [[ -z $UPDATE_KEY ]]; then
+            echo "::error::ETA_CLIENT_UPDATE_PUBLIC_KEY is set but the ETA_CLIENT_UPDATE_KEY secret is not: the apps of this release cannot be offered."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/updates" "$RUNNER_TEMP/manifest"
+          gh release download "$TAG" --pattern "Eta-$VERSION-*" --pattern '*.nshpkg' --dir "$RUNNER_TEMP/updates"
+          gh release view "$TAG" --json body --jq .body > "$RUNNER_TEMP/notes.md"
+          shopt -s nullglob
+          archives=("$RUNNER_TEMP/updates"/Eta-"$VERSION"-*)
+          packages=("$RUNNER_TEMP/updates"/*.nshpkg)
+          args=(--notes "$RUNNER_TEMP/notes.md" --base-url "$BASE/$TAG/" -o "$RUNNER_TEMP/manifest")
+          if [[ ${#packages[@]} -gt 0 ]]; then args+=(--package "${packages[0]}"); fi
+          if [[ -n $ANDROID_KEYSTORE ]]; then args+=(--link "android=$BASE/$TAG/eta-android.apk"); fi
+          keys=$(mktemp -d)
+          printf '%s\n' "$UPDATE_KEY" > "$keys/update.secret"
+          bun scripts/nsh-client.ts update-manifest "${archives[@]}" "${args[@]}" --key "$keys/update.secret"
+          rm -rf "$keys"
+          cat "$RUNNER_TEMP/manifest/latest.json"
+
+      # A full release goes to both channels, an rc only to rc. A channel only moves forward: a
+      # rerun of an older tag, or a full release behind the rc already out, leaves it alone.
+      - name: Put the manifest on its channels
+        if: needs.prepare.outputs.update-url != ''
+        run: |
+          channels=(rc)
+          if [[ $VERSION != *-* ]]; then channels=(stable rc); fi
+          for channel in "${channels[@]}"; do
+            release="desktop-channel-$channel"
+            if ! gh release view "$release" > /dev/null 2>&1; then
+              # Its tag on the default branch: the job's token may not make a tag elsewhere.
+              gh release create "$release" --prerelease --latest=false \
+                --title "eta desktop updates ($channel)" \
+                --notes "Where the Eta client apps on the $channel channel look for updates: \`latest.json\` and its signature, replaced by every desktop release. The apps themselves are on the desktop-v* releases." || {
+                echo "::error::Could not create $release. Create it once by hand (gh release create $release --prerelease --latest=false --notes ...), then rerun this job."
+                exit 1
+              }
+            fi
+            current=$(curl -fsSL "$BASE/$release/latest.json" 2>/dev/null | jq -r .version || true)
+            if [[ -n $current ]] && ! bun -e 'process.exit(Bun.semver.order(process.argv[1], process.argv[2]) > 0 ? 0 : 1)' "$VERSION" "$current"; then
+              echo "::notice::$channel already offers $current, not older than $VERSION: left as it is."
+              continue
+            fi
+            # The signature last: until it is there, apps refuse the new manifest rather than trust it.
+            gh release upload "$release" "$RUNNER_TEMP/manifest"/notes.*.md --clobber 2>/dev/null || true
+            gh release upload "$release" "$RUNNER_TEMP/manifest/latest.json" --clobber
+            gh release upload "$release" "$RUNNER_TEMP/manifest/latest.json.sig" --clobber
+            echo "$channel: $VERSION"
+          done

@@ -17,6 +17,7 @@ import {
   windowSize,
 } from "nsh";
 import { createAppearancePreferences } from "./src/app/appearance-preferences";
+import { ClientUpdateNotice } from "./src/app/client-update-notice";
 import { Workspace } from "./src/app/workspace";
 import {
   Button,
@@ -42,6 +43,7 @@ import {
   canStartHost,
   startLocalHost,
 } from "./src/pages/connection/local-host";
+import { clientUpdate } from "./src/services/client-update";
 import {
   addressFrom,
   createHost,
@@ -112,6 +114,7 @@ function App() {
   const dismissCompatibility = signal(false);
   const applicationVersion = appInfo().version ?? undefined;
   cleanup(() => host.start(null));
+  clientUpdate.start();
   if (initial) host.start(initial);
   if (!initial)
     void Storage.getItem(connectKey)
@@ -300,6 +303,7 @@ function App() {
                       />
                     </View>
                   </If>
+                  <ClientUpdateNotice />
                   <If when={host.error()}>
                     <View
                       style={{
