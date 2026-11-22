@@ -189,7 +189,29 @@ export const updatesMessages = {
     "修改更新来源",
   ],
   channel: ["Channel", "更新通道"],
-  checkDesktopApp: ["Check desktop app", "检查桌面应用更新"],
+  checkAppUpdate: ["Check for app update", "检查应用更新"],
+  androidApp: ["Android app", "Android 应用"],
+  appUpdateChannel: ["App update channel", "应用更新通道"],
+  downloadApk: ["Download APK", "下载 APK"],
+  closeEtaToUpdate: ["Close Eta to update", "关闭 Eta 以完成更新"],
+  reopenEtaToUse: [
+    "Version {{version}} is downloaded. Close Eta and open it again to use it.",
+    "{{version}} 已下载。关闭 Eta 再打开即可使用。",
+  ],
+  appUpdateAvailable: [
+    "Eta {{version}} is available.",
+    "Eta {{version}} 可以更新了。",
+  ],
+  appUpdateReady: ["Eta {{version}} is ready.", "Eta {{version}} 已下载好。"],
+  appUpdateReadyReopen: [
+    "Eta {{version}} is ready. Close Eta and open it again to use it.",
+    "Eta {{version}} 已下载好，关闭后再打开即可使用。",
+  ],
+  appUpdateNeedsApk: [
+    "Eta {{version}} needs a new APK.",
+    "Eta {{version}} 需要安装新的 APK。",
+  ],
+  dismissAppUpdate: ["Not now", "稍后"],
   checkForUpdates: ["Check for updates", "检查更新"],
   checkingForUpdates: ["Checking for updates…", "正在检查更新…"],
   desktopApp: ["Desktop app", "桌面应用"],
@@ -210,11 +232,7 @@ export const updatesMessages = {
     "Eta quits, swaps in the new version and opens again. The remote Host keeps running.",
     "Eta 会退出、替换为新版本并重新打开。远程主机会继续运行。",
   ],
-  noDesktopAppUpdateAvailable: [
-    "No desktop app update available.",
-    "桌面应用暂无可用更新。",
-  ],
-  openDownload: ["Open download", "打开下载页"],
+  noAppUpdateAvailable: ["No app update available.", "应用已是最新版本。"],
   preReleasesRcBetaGetNew: [
     "Pre-releases (-rc, -beta...) get new features earlier and can be unstable. Switching back never goes to an older version.",
     "预发布版（-rc、-beta 等）可以更早体验新功能，也可能不稳定。切换回正式版时不会降级。",
