@@ -85,6 +85,8 @@ const UNSENT_TTL_MS = 24 * 60 * 60 * 1000;
 /** The images a run carries are the first this many, up to this many bytes in all. */
 const MAX_IMAGES = 4;
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+/** The largest picture the transcript fetches; one reply carries it whole. */
+const MAX_PICTURE_BYTES = 8 * 1024 * 1024;
 const IMAGE_TYPES = new Set([
   "image/png",
   "image/jpeg",
@@ -307,6 +309,32 @@ export class AttachmentStore {
     this.#db.query("DELETE FROM attachment WHERE id = ?").run(id);
     await rm(this.pathOf(record), { force: true });
     return true;
+  }
+
+  /**
+   * A sent image of this conversation, to be shown in its transcript. Any image type a browser
+   * draws (the Windows client pastes bmp), not only those a model takes; unsent files, other
+   * conversations' files and other kinds of file are refused.
+   */
+  async picture(
+    conversationId: string,
+    id: string,
+  ): Promise<{ contentType: string; data: string }> {
+    const record = this.get(id);
+    if (
+      record === undefined ||
+      record.conversationId !== conversationId ||
+      record.messageId === null
+    )
+      throw new Error(`no such attachment: ${id}`);
+    if (!record.contentType.startsWith("image/"))
+      throw new Error(`${record.name} is not an image`);
+    if (record.size > MAX_PICTURE_BYTES)
+      throw new Error(
+        `${record.name} is over the ${MAX_PICTURE_BYTES / (1024 * 1024)} MB a picture may be`,
+      );
+    const bytes = await readFile(this.pathOf(record));
+    return { contentType: record.contentType, data: bytes.toString("base64") };
   }
 
   /**

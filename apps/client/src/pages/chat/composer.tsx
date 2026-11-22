@@ -51,6 +51,7 @@ import {
 
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { pastedFile } from "./bmp-to-png";
 import { composerAttachments } from "./composer-attachments";
 import { HeldRows, OutboxRows } from "./composer-delivery";
 import { drainOutbox, openComposerDraft } from "./composer-draft";
@@ -358,7 +359,7 @@ export function Composer(props: {
         event.files.every((file) => file.type.startsWith("image/"))
       )
     ) {
-      void attach(event.files);
+      void attach(Promise.all(event.files.map(pastedFile)));
     } else if (text.length > MAX_MESSAGE_CHARS) {
       void attach([
         new File([text], uiText("pastedFile"), {
