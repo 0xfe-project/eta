@@ -147,6 +147,8 @@ test("removing a folded paste keeps the words on both sides", async () => {
   await app.type(input, "left");
   await app.paste(input, { text: "1\n2\n3\n4" });
   await app.type(input, "right");
+  // Its × shows while the pointer is over it.
+  await app.hover("label:Unfold pasted text (4 lines)");
   await app.press("label:Remove pasted text");
   await app.keyboard.press("enter");
   await app.waitFor(sent(["alpha", "leftright", "queue", []]));

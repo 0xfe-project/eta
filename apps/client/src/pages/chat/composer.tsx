@@ -3,16 +3,12 @@ import type {
   MessageView,
   ProjectResults,
 } from "@eta/client-contracts";
+import type { DocNode } from "@eta/client-contracts/composer-doc";
 import type { MenuItem } from "@eta/client-contracts/composer-menu";
 import type { RichNodeJSON } from "nsh/base";
 import type { Outgoing } from "./composer-draft";
 import { MAX_ATTACHMENTS } from "@eta/client-contracts";
-import {
-  draftToDoc,
-  isBlankDoc,
-  sentToDraft,
-  textToNodes,
-} from "@eta/client-contracts/composer-doc";
+import { DOC_NODES, isBlankDoc } from "@eta/client-contracts/composer-doc";
 import {
   composerTarget,
   mentionLabel,
@@ -31,13 +27,11 @@ import { insertContent, insertContentAt } from "nsh/base";
 import { Button, colors, Icon, Label, row } from "../../components";
 import {
   attachment,
-  createEtaEditor,
+  chatText,
   draft,
   EtaEditor,
   limit,
   mention,
-  pasteBlock,
-  plainText,
   quote,
   serialize,
   submitKeys,
@@ -155,10 +149,17 @@ function ComposerBody(
     store.states();
     out.refresh();
   });
-  const editor = createEtaEditor({
+  /** The members as `@` names them, for reading a message's mentions back. */
+  const mentionRefs = () =>
+    members().map((member) => ({
+      id: member.id,
+      label: mentionLabel(member, members()),
+    }));
+  // The chat's text (formatted, Markdown as you type; long pastes folded; code as code) with the
+  // composer's own: the send keys, `@`, files, the draft, the length limit, quotes.
+  const editor = chatText.createEditor({
     doc: untracked(() => store.value().doc),
     plugins: [
-      plainText(),
       submitKeys({
         onSubmit: () => send(),
         escape: () =>
@@ -181,7 +182,6 @@ function ComposerBody(
         describe,
         wide: () => props.tablet,
       }),
-      pasteBlock(),
       files$,
       draft({ save: (doc) => edit({ doc }) }),
       limits,
@@ -194,7 +194,7 @@ function ComposerBody(
 
   const text = computed(() => {
     editor.revision();
-    return out.read().text;
+    return out.text();
   });
   const target = computed(() =>
     composerTarget({
@@ -219,14 +219,16 @@ function ComposerBody(
       .map((member) => member.name)
       .join(", ");
 
+  /** Markdown as blocks to put in the box. */
+  const blocksOf = (doc: DocNode) => (doc.content ?? []) as RichNodeJSON[];
   /** Text put in from outside (a held message pulled back, a widget's prompt): above the draft. */
   function prepend(value: string) {
-    if (isBlankDoc(editor.doc()))
-      editor.session.run(insertContent(textToNodes(value) as RichNodeJSON[]));
+    const nodes = blocksOf(
+      chatText.read({ text: value, mentions: mentionRefs() }),
+    );
+    if (isBlankDoc(editor.doc())) editor.session.run(insertContent(nodes));
     else
-      editor.session.run(
-        insertContentAt(0, [...textToNodes(value), { type: "paragraph" }]),
-      );
+      editor.session.run(insertContentAt(0, [...nodes, { type: "paragraph" }]));
     editor.focus();
   }
   let appliedWidgetDraft: typeof props.widgetDraft;
@@ -301,8 +303,27 @@ function ComposerBody(
   /** A failed send back in the box to edit, above what is there. */
   function restore(message: Outgoing) {
     store.remember(message.attachments);
-    const nodes = (draftToDoc(sentToDraft(message)).content ??
-      []) as RichNodeJSON[];
+    // Its words as they were written (formatting, folded pastes, mentions), its files after them.
+    const nodes = blocksOf(
+      chatText.read({
+        text: message.text,
+        blocks: message.blocks,
+        mentions: mentionRefs(),
+      }),
+    );
+    if (message.attachments.length)
+      nodes.push({
+        type: DOC_NODES.paragraph,
+        content: message.attachments.map((file) => ({
+          type: DOC_NODES.file,
+          attrs: {
+            id: file.id,
+            name: file.name,
+            contentType: file.contentType,
+            size: file.size,
+          },
+        })),
+      } as RichNodeJSON);
     edit({ outgoing: removeOutgoing(message.id) });
     if (isBlankDoc(editor.doc()))
       editor.session.setContent({ type: "doc", content: nodes });

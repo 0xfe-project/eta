@@ -55,7 +55,10 @@ function MentionView(props: RichNodeViewProps) {
         fontFamily: fontFamily(fonts().interface),
         fontSize: type("body").size,
         color: c().blue,
-        backgroundColor: props.selected ? c().blueFill : undefined,
+        backgroundColor: c().blueFill,
+        paddingHorizontal: 2,
+        borderWidth: 1,
+        borderColor: props.selected ? c().blue : c().blueFill,
       }}
     >
       {`@${String(props.node.attrs.label)}`}

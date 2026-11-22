@@ -29,6 +29,7 @@ function PasteView(props: RichNodeViewProps) {
   const lines = () => lineCount(String(props.node.attrs.text));
   return (
     <Chip
+      icon="lines"
       kind={uiText("pastedKind")}
       label={uiText("pastedLines", { count: lines() })}
       selected={props.selected}

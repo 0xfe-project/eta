@@ -2,13 +2,11 @@ import type { ConversationResults, MessageView } from "@eta/client-contracts";
 import { effect, signal, View } from "nsh";
 import { Button, colors, Label, row } from "../../components";
 import {
-  createEtaEditor,
+  chatText,
   draft,
   EtaEditor,
   limit,
   openDocDraft,
-  pasteBlock,
-  plainText,
   serialize,
   submitKeys,
 } from "../../components/eta-editor";
@@ -52,8 +50,9 @@ export function indexInserts(messages: MessageView[]) {
 
 /**
  * The words to add to a turn that is still running, in the popover under the
- * user message it answers: the chat's editor (`EtaEditor`, no files: a steer
- * carries text), who it goes to and the Insert button. Its draft is kept per
+ * user message it answers: the chat's text (`chatText`: formatted, long pastes
+ * folded; no `@` and no files, a steer carries text to the agents already
+ * replying), who it goes to and the Insert button. Its draft is kept per
  * message, so closing the popover loses nothing.
  */
 export function InsertMessage(props: {
@@ -104,12 +103,10 @@ function InsertBody(props: {
   const out = serialize();
   /** One id per wording, so a retry of the same words is the same message. */
   let attempt: { text: string; id: string } | undefined;
-  const editor = createEtaEditor({
+  const editor = chatText.createEditor({
     doc: props.store.doc(),
     plugins: [
-      plainText(),
       submitKeys({ onSubmit: () => void send() }),
-      pasteBlock(),
       draft({ save: props.store.save }),
       limits,
       out,

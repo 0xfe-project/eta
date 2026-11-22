@@ -56,24 +56,30 @@ function FileView(input: {
       : undefined;
   };
   effect(() => picture()?.load());
+  /** Uploading, failed: said after the name. A done file says its size; a picture says it on hover. */
   const status = () => {
     const current = state();
     if (!current) return uiText("uploadLost");
     if (current.state === "uploading") return uiText("uploading");
     if (current.state === "failed")
       return uiText(current.retry ? "uploadFailedRetry" : "uploadRefused");
-    return fileSize(current.attachment.size);
+    return undefined;
+  };
+  const size = () => {
+    const current = state();
+    return current?.state === "done" ? fileSize(current.attachment.size) : "";
   };
   return (
     <Chip
-      kind={uiText(image() ? "imageKind" : "fileKind")}
       label={name()}
+      icon={image() ? undefined : "file"}
       thumbnail={image() ? uploads.thumbnail(id()) : undefined}
+      detail={image() ? undefined : size() || undefined}
       status={status()}
       tone={state()?.state === "failed" || !state() ? "red" : "ink"}
       tooltip={(() => {
         const shown = picture();
-        return shown ? picturePreview(shown) : failure()?.error;
+        return shown ? picturePreview(shown, 248) : failure()?.error;
       })()}
       cursor={picture() ? "zoom-in" : undefined}
       dim={state()?.state === "uploading"}

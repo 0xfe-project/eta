@@ -3,15 +3,17 @@ import type {
   ClipboardInput,
   DocNode,
 } from "@eta/client-contracts/composer-doc";
-import type { JSX, ViewStyle } from "nsh";
+import type { JSX, TextStyle, ViewStyle } from "nsh";
 import type {
   RichEditorFile,
   RichEditorSession,
+  RichEditorStyles,
   RichExtension,
   RichExtensionClass,
   RichNodeJSON,
   RichPluginSpec,
 } from "nsh/base";
+import type { light, TextFace, TextVariant } from "../theme";
 import { classifyClipboard } from "@eta/client-contracts/composer-doc";
 import { cleanup, Clipboard, signal, View } from "nsh";
 import {
@@ -22,7 +24,15 @@ import {
   setMeta,
 } from "nsh/base";
 import { uiText } from "../../i18n";
-import { colors, fontFamily, Fonts, textFaces, textStyle } from "../theme";
+import {
+  colors,
+  fontFamily,
+  Fonts,
+  monoFontFamily,
+  textFaces,
+  textStyle,
+} from "../theme";
+import { asRich, markdownToDoc } from "./markdown";
 import { refusedFile } from "./plugins/attachment";
 import { LineRoom } from "./room";
 
@@ -32,11 +42,41 @@ import { LineRoom } from "./room";
 // profile. The plugins are in ./plugins, one file each; this file only puts them together and
 // routes the two things more than one plugin has a say in — a paste, and files.
 
+/** What a text's styles are made of: the theme's colours, type scale and faces. */
+export interface TextTheme {
+  colors: typeof light;
+  face: (variant: TextVariant) => TextFace;
+  /** The interface font's family stack. */
+  font: string;
+  /** The monospace family stack. */
+  mono: string;
+}
+
+/** A plugin's look: its nodes' and marks' styles, and the editor's own parts it styles. */
+interface TextStyles {
+  /** Shared by the editor and the text shown read-only (by type name, as `RichEditorStyles`). */
+  common?: (theme: TextTheme) => {
+    nodes?: Record<string, TextStyle>;
+    marks?: Record<string, TextStyle>;
+  };
+  /** The editor's parts: list markers, the task checkbox, the caret. */
+  editor?: (theme: TextTheme) => Partial<RichEditorStyles>;
+}
+
 /** What a plugin adds to the editor and what it does with it. */
 export interface EtaPlugin {
   name: string;
-  /** Extensions: node types (with their views), keys and kernel plugins, by priority. */
-  extensions?: (RichExtension | RichExtensionClass)[];
+  /** Formatted text (Markdown as you type): pastes of Markdown and of code are read as such. */
+  rich?: boolean;
+  /** The look of what it adds, from the theme. */
+  styles?: TextStyles;
+  /** What it draws in the text's own layer (a code block's header), scrolling with it. */
+  contentLayer?: (editor: EtaEditorHandle) => JSX.Element;
+  /** Extensions: node types (with their views), keys and kernel plugins, by priority; made per
+   * editor when they depend on it (`rich`: keys for nodes only formatted text has). */
+  extensions?:
+    | (RichExtension | RichExtensionClass)[]
+    | ((editor: { rich: boolean }) => (RichExtension | RichExtensionClass)[]);
   /** Kernel plugins after the extensions'. */
   plugins?: (RichPluginSpec | RichEditorPlugin)[];
   /** Takes a paste the clipboard rules sorted, returning whether it did. */
@@ -67,7 +107,11 @@ export interface EtaEditorHandle {
   focused: () => boolean;
   /** The editor box's width, for overlays that must stay inside it. */
   width: () => number;
+  /** Moves each time the text is laid out again (blocks' boxes, `nodeRect`, are new). */
+  laidOut: () => number;
   has: (name: string) => boolean;
+  /** Formatted text (a `rich` plugin is on). */
+  rich: boolean;
   /** Sends files where a plugin takes them (the attachment plugin); false where none does. */
   addFiles: (files: File[]) => boolean;
   /** The document, as JSON. */
@@ -80,6 +124,7 @@ export interface EtaEditorHandle {
     composing: (value: boolean) => void;
     focused: (value: boolean) => void;
     width: (value: number) => void;
+    laidOut: () => void;
     pasteFiles: (files: RichEditorFile[], uris: string[]) => void;
     dropFiles: (uris: string[]) => void;
   };
@@ -101,12 +146,14 @@ async function readUri(uri: string): Promise<File> {
 export function createEtaEditor(profile: EtaEditorProfile): EtaEditorHandle {
   const plugins = profile.plugins;
   const takesFiles = plugins.some((plugin) => plugin.files);
+  const rich = plugins.some((plugin) => plugin.rich);
   const revision = signal(0);
   /** The handle, for the hooks the session calls once it exists. */
   const self: { handle?: EtaEditorHandle } = {};
   const composing = signal(false);
   const focused = signal(false);
   const width = signal(0);
+  const laidOut = signal(0);
   // One paste hook for every plugin: the clipboard rules decide what the paste is, then the
   // plugin that takes that kind of paste does it. A copy from an editor of ours (`data-pm-slice`,
   // its blocks in the HTML) goes in natively, so a copied block pastes as a block.
@@ -120,7 +167,11 @@ export function createEtaEditor(profile: EtaEditorProfile): EtaEditorHandle {
       return route({ text: clipboard.text, html: clipboard.html });
     },
   );
-  const extensions = plugins.flatMap((plugin) => plugin.extensions ?? []);
+  const extensions = plugins.flatMap((plugin) =>
+    typeof plugin.extensions === "function"
+      ? plugin.extensions({ rich })
+      : (plugin.extensions ?? []),
+  );
   const session = createRichEditor({
     extensions: [
       ...extensions,
@@ -134,10 +185,17 @@ export function createEtaEditor(profile: EtaEditorProfile): EtaEditorHandle {
     doc: (profile.doc as RichNodeJSON | null | undefined) ?? undefined,
   });
   function route(input: ClipboardInput): boolean {
-    const action = classifyClipboard(input, { files: takesFiles });
+    const action = classifyClipboard(input, { files: takesFiles, rich });
     if (action.kind === "nothing") return true;
     for (const plugin of plugins)
       if (plugin.paste?.(action, self.handle!)) return true;
+    if (action.kind === "markdown") {
+      // Markdown, formatted: its blocks where the caret is, one undo step.
+      const doc = markdownToDoc({ text: action.text });
+      session.run(setMeta("closeHistory$", true));
+      session.insertContent((doc.content ?? []).map(asRich) as RichNodeJSON[]);
+      return true;
+    }
     // Nobody folds or attaches it: plain text, typed in as text (formatting never pastes).
     if (action.kind !== "files") {
       session.run(setMeta("closeHistory$", true));
@@ -166,8 +224,10 @@ export function createEtaEditor(profile: EtaEditorProfile): EtaEditorHandle {
     composing,
     focused,
     width,
+    laidOut,
     plugins,
     has: (name) => plugins.some((plugin) => plugin.name === name),
+    rich,
     addFiles,
     doc: () => session.getJSON() as DocNode,
     clear: () =>
@@ -177,6 +237,7 @@ export function createEtaEditor(profile: EtaEditorProfile): EtaEditorHandle {
       composing: (value) => composing.set(value),
       focused: (value) => focused.set(value),
       width: (value) => width.set(value),
+      laidOut: () => laidOut.set(laidOut() + 1),
       pasteFiles(files, uris) {
         void (async () => {
           // A picture beside text (Word, Excel, a web page) is a copy of the text: the editor
@@ -198,7 +259,7 @@ export function createEtaEditor(profile: EtaEditorProfile): EtaEditorHandle {
               })),
               uris,
             },
-            { files: takesFiles },
+            { files: takesFiles, rich },
           );
           if (action.kind === "files")
             addFiles([...files.map(fileOf), ...(await filesFromUris(uris))]);
@@ -240,9 +301,31 @@ export function EtaEditor(props: {
   const fonts = Fonts();
   const type = textFaces();
   const face = () => type(props.variant ?? "body");
+  const theme = (): TextTheme => ({
+    colors: c(),
+    face: type,
+    font: fontFamily(fonts().interface),
+    mono: monoFontFamily(fonts()),
+  });
+  /** The plugins' styles, over one another in their order. */
+  const looks = () => {
+    const nodes: Record<string, TextStyle> = {};
+    const marks: Record<string, TextStyle> = {};
+    let own: Partial<RichEditorStyles> = {};
+    for (const plugin of props.editor.plugins) {
+      const common = plugin.styles?.common?.(theme());
+      for (const [key, value] of Object.entries(common?.nodes ?? {}))
+        nodes[key] = { ...nodes[key], ...value };
+      for (const [key, value] of Object.entries(common?.marks ?? {}))
+        marks[key] = { ...marks[key], ...value };
+      own = { ...own, ...plugin.styles?.editor?.(theme()) };
+    }
+    return { nodes, marks, own };
+  };
   const pad = () => props.padding ?? { top: 8, bottom: 8, left: 8, right: 8 };
   const editor = props.editor;
   const room = signal(0);
+  const layers = editor.plugins.filter((plugin) => plugin.contentLayer);
   return (
     <View
       onLayout={({ bounds }) => {
@@ -274,7 +357,18 @@ export function EtaEditor(props: {
             editor.view.pasteFiles(paste.files, paste.uris)
           }
           onFileDrop={({ uris }) => editor.view.dropFiles(uris)}
+          onContentSizeChange={() => editor.view.laidOut()}
+          contentLayer={
+            layers.length ? (
+              <Each of={layers}>
+                {(plugin) => plugin().contentLayer!(editor)}
+              </Each>
+            ) : undefined
+          }
           styles={{
+            ...looks().own,
+            nodes: looks().nodes,
+            marks: looks().marks,
             root: {
               maxHeight: props.maxHeight,
               minHeight: props.minHeight,

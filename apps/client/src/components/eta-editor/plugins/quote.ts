@@ -2,6 +2,7 @@ import type { DocNode } from "@eta/client-contracts/composer-doc";
 import type { EtaEditorHandle, EtaPlugin } from "../editor";
 import { DOC_NODES, textToNodes } from "@eta/client-contracts/composer-doc";
 import { chain, focus, insertContentAt, scrollIntoView } from "nsh/base";
+import { nodeSize } from "../positions";
 import { oneStep } from "../step";
 
 /** `selected` as Markdown quote lines (`> ...`, a blank line as `>`); `""` when it is blank. */
@@ -14,20 +15,12 @@ export function quoteMarkdown(selected: string): string {
     .join("\n");
 }
 
-/** A node's size in the document's positions (ProseMirror's: text by its UTF-16 length). */
-function nodeSize(node: DocNode): number {
-  if (node.type === DOC_NODES.text) return node.text?.length ?? 0;
-  if (node.type === DOC_NODES.paragraph)
-    return 2 + (node.content ?? []).reduce((sum, n) => sum + nodeSize(n), 0);
-  // An inline block: a file, a folded paste, a mention.
-  return 1;
-}
-
 const empty: DocNode = { type: DOC_NODES.paragraph };
 
 /**
  * Quotes text from elsewhere (a part of a reply the reader selected) after the draft: a blank
- * line, the quote, a blank line, and the caret on the line below to answer it. What is in the
+ * line, the quote, a blank line, and the caret on the line below to answer it. In formatted text
+ * the quote is a quote block, which goes as the same `> …` lines. What is in the
  * draft (words, files, folded pastes, mentions) stays as it is; only blank lines at its end make
  * way for the quote's own. One undo step takes the quote back out.
  */
@@ -55,12 +48,10 @@ export function quote(): EtaPlugin & {
         kept--;
       }
       const blank = kept === 0;
-      const nodes = [
-        ...(blank ? [] : [empty]),
-        ...textToNodes(markdown),
-        empty,
-        empty,
-      ];
+      // Formatted text quotes as a quote (written `> …` when it goes); plain text as its lines.
+      const nodes = editor.rich
+        ? [{ type: "blockquote", content: textToNodes(selected.trim()) }, empty]
+        : [...(blank ? [] : [empty]), ...textToNodes(markdown), empty, empty];
       const done = editor.session.run(
         oneStep(
           chain([
