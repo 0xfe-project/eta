@@ -163,9 +163,6 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
           gap: 16,
         }}
       >
-        <Label variant="small" tone="muted" style={{ maxWidth: 1000 }}>
-          {uiText("pluginsGiveAgentsSkillsAndMcp")}
-        </Label>
         <If when={!list().length}>
           <NoPlugins width={300} />
         </If>
