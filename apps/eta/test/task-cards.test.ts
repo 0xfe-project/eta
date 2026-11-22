@@ -306,7 +306,8 @@ describe("a task draft", () => {
     w
       .rows(conversationId)
       .filter(
-        (row) => row.kind === "system" && row.data.event === "task_draft_decided",
+        (row) =>
+          row.kind === "system" && row.data.event === "task_draft_decided",
       );
 
   it("tells the agent that drafted it the task number once confirmed, and only once", async () => {
