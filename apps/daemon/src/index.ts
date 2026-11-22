@@ -52,6 +52,7 @@ export {
   type ServerNameClash,
   type ServersConfig,
   serversConfig,
+  type UserEnvInput,
   type UserHeaderInput,
   serverSupported,
   sessionServerName,

@@ -14,6 +14,19 @@ export const MAX_HEADERS_PER_SERVER = 32;
 const SECRET_NAME = /authorization|key|token|secret|auth|cookie|password/i;
 export const looksSecret = (name: string): boolean => SECRET_NAME.test(name);
 
+export const MAX_ENV_PER_SERVER = 32;
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** Why an environment variable cannot be used, or undefined when it can. Never includes the value. */
+export function envProblem(name: string, value: string): string | undefined {
+  if (!ENV_NAME.test(name) || name.length > MAX_NAME)
+    return `${JSON.stringify(name)} is not a valid variable name`;
+  if (value === "") return `variable ${name} needs a value`;
+  if (value.length > MAX_VALUE) return `the value of ${name} is longer than ${MAX_VALUE}`;
+  if (value.includes("\0")) return `the value of ${name} has a NUL`;
+  return undefined;
+}
+
 /** Why a header cannot be used, or undefined when it can. Never includes the value. */
 export function headerProblem(name: string, value: string): string | undefined {
   if (name.trim() === "") return "a header needs a name";

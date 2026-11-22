@@ -14,6 +14,18 @@ export function serverViews(plugin: PluginPackage | undefined): PluginServerView
         ? { command: [config.command, ...config.args] }
         : { url: config.url }),
       env: Object.keys(binding?.env ?? {}),
+      ...(config.type === "stdio"
+        ? {
+            lockedEnv: [
+              ...new Set([
+                ...Object.keys((config as { env?: Record<string, string> }).env ?? {}),
+                ...Object.keys(binding?.env ?? {}),
+                "PLUGIN_ROOT",
+                "PLUGIN_DATA",
+              ]),
+            ],
+          }
+        : {}),
       // Names only, never values: the ones the plugin file sets, and the ones eta fills from fields.
       headers: [
         ...new Set([

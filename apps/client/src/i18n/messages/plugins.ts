@@ -202,5 +202,21 @@ export const pluginsMessages = {
   headerAddCustom: ["Add custom header", "添加自定义标头"],
   headerSave: ["Save headers", "保存标头"],
   headerIncomplete: ["Every header needs a name and a value.", "每个标头都需要名称和值。"],
+  envTitle: ["Environment variables", "环境变量"],
+  envHint: [
+    "Variables passed to this local server only. A secret is saved encrypted and not shown again; typing a new value replaces it. Variables the plugin fixes cannot be changed.",
+    "仅传给该本地服务器的环境变量。机密值加密保存且不会再次显示，重新输入即可替换。插件固定的变量不可修改。",
+  ],
+  envOff: [
+    "This plugin is switched off: nothing is started, and the variables cannot be changed.",
+    "该插件已关闭：不会启动任何内容，也不能修改环境变量。",
+  ],
+  envFixed: ["Set by the plugin (read-only)", "由插件固定（只读）"],
+  envName: ["Variable name", "变量名"],
+  envRemove: ["Remove variable", "移除变量"],
+  envAdd: ["Add variable", "添加变量"],
+  envSave: ["Save variables", "保存变量"],
+  envIncomplete: ["Every variable needs a name and a value.", "每个变量都需要名称和值。"],
+  envLocked: ["That name is set by the plugin and cannot be changed.", "该名称由插件固定，不能修改。"],
   warningsFor: ["Warnings for {{name}}", "{{name}} 的警告"],
 } as const;

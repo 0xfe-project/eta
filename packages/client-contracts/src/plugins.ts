@@ -20,6 +20,7 @@ export const PLUGIN_ACTIONS = [
   "setLevel",
   "setEnabled",
   "setHeaders",
+  "setEnv",
   "add",
   "update",
   "remove",
@@ -63,6 +64,8 @@ export interface PluginServerView {
   url?: string;
   /** The environment variables eta sets from the configuration. */
   env: string[];
+  /** The names of the variables the plugin fixes on a stdio server: shown, not editable. Absent from an older host. */
+  lockedEnv?: string[];
   /** The names of the headers the plugin sets itself or eta adds from the configuration; never values. */
   headers: string[];
   /** Plain http to a host that is not this machine: the user's headers go there only once confirmed. */
@@ -98,6 +101,15 @@ export interface PluginHeaderView {
   blocked: "plain-http" | null;
 }
 
+/** An environment variable the user set on a stdio server. A secret's value is never sent. */
+export interface PluginEnvView {
+  server: string;
+  name: string;
+  secret: boolean;
+  /** The value, for a variable that is not a secret; null for a secret. */
+  value: string | null;
+}
+
 export interface PluginAgentView {
   id: string;
   name: string;
@@ -123,6 +135,8 @@ export interface PluginView {
   fields: PluginFieldView[];
   /** The headers the user attached to its remote servers. */
   headers: PluginHeaderView[];
+  /** The variables the user set on its stdio servers. Absent from an older host. */
+  env?: PluginEnvView[];
   /** The agents that have it enabled; they skip it while its state is `needs_config`. */
   agents: PluginAgentView[];
 }
@@ -162,6 +176,12 @@ export interface PluginArgs {
       secret: boolean;
       plainOk?: boolean;
     }[];
+  };
+  /** Replace the variables of one stdio server; a `value` of null keeps the saved one. */
+  setEnv: {
+    name: string;
+    server: string;
+    env: { name: string; value: string | null; secret: boolean }[];
   };
   /** Switch an installed plugin on or off for every agent; each agent's own choice is kept. */
   setEnabled: { name: string; enabled: boolean };
@@ -220,6 +240,7 @@ export interface PluginResults {
   setLevel: { name: string };
   setEnabled: { name: string; enabled: boolean };
   setHeaders: { name: string; server: string };
+  setEnv: { name: string; server: string };
   testServer: PluginTestResult;
   loginServer: { pendingId: string; authorizationUrl: string };
   logoutServer: { name: string; server: string };

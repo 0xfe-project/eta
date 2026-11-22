@@ -131,6 +131,25 @@ export function pluginsPlugin(
           );
           return { result: { name, server } };
         }),
+        wire.handle("plugins", "setEnv", (call) => {
+          const args = new Args(call);
+          const name = args.string("name");
+          const server = args.string("server");
+          const { env } = (call.args ?? {}) as { env?: unknown };
+          if (!Array.isArray(env)) throw new Error("plugins.setEnv needs env");
+          plugins.setEnv(
+            name,
+            server,
+            env.map((raw) => {
+              const one = (raw ?? {}) as Record<string, unknown>;
+              if (typeof one.name !== "string") throw new Error("a variable needs a name");
+              if (one.value !== null && typeof one.value !== "string")
+                throw new Error("a variable value is text, or null to keep it");
+              return { name: one.name, value: one.value as string | null, secret: one.secret === true };
+            }),
+          );
+          return { result: { name, server } };
+        }),
         wire.handle("plugins", "add", async (call) => {
           const args = new Args(call);
           const name = await plugins.registry.add(

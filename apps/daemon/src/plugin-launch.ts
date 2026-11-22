@@ -52,6 +52,13 @@ export interface UserHeaderInput {
   plainOk: boolean;
 }
 
+/** An environment variable the user set on one stdio server of a plugin. */
+export interface UserEnvInput {
+  server: string;
+  name: string;
+  value: string;
+}
+
 /** Plain http to a host other than this machine: a header sent there crosses the network in clear. */
 export function plainRemote(url: string): boolean {
   let parsed: URL;
@@ -89,6 +96,7 @@ export function serversConfig(
     Partial<Pick<PluginPackage, "servers">>,
   values: Readonly<Record<string, PluginValue | null | undefined>>,
   userHeaders: readonly UserHeaderInput[] = [],
+  userEnv: readonly UserEnvInput[] = [],
 ): ServersConfig {
   const texts: Record<string, string | undefined> = {};
   for (const field of plugin.fields as PluginField[]) {
@@ -124,6 +132,14 @@ export function serversConfig(
     headers[header.name] = header.value;
     entry.headers = headers;
     entry.userHeaders = true;
+  }
+  // The user's variables go on top of what the binding set, for a stdio server only.
+  for (const one of userEnv) {
+    if (one.name.trim() === "" || one.value === "") continue;
+    const server = plugin.servers?.find((candidate) => candidate.name === one.server);
+    if (server === undefined || server.config.type !== "stdio") continue;
+    const entry = (config[one.server] ??= { env: {}, headers: {} });
+    entry.env = { ...entry.env, [one.name]: one.value };
   }
   return config;
 }

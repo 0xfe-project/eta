@@ -15,6 +15,7 @@ import {
 } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { EnvEditor } from "./env-editor";
 import { HeadersEditor } from "./headers-editor";
 import { pluginText as text } from "./labels";
 import { authStyle } from "./plugin-status";
@@ -385,6 +386,9 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
               </View>
             </View>
             <TestResultView test={test} stdio={server().transport === "stdio"} />
+            <If when={server().transport === "stdio" && props.item.env !== undefined}>
+              <EnvEditor item={props.item} server={server().name} />
+            </If>
             <If when={server().transport !== "stdio" && hostKnowsHeaders(props.item)}>
               <HeadersEditor
                 item={props.item}

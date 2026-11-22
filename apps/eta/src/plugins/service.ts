@@ -14,6 +14,7 @@ import type {
   OpenedPlugin,
   PluginAgentLevel,
   PluginField,
+  PluginEnvView,
   PluginHeaderView,
   PluginState,
   PluginTestResult,
@@ -47,7 +48,7 @@ import {
   runtimeExtras,
   serversConfig,
 } from "@eta/daemon";
-import { headerProblem, MAX_HEADERS_PER_SERVER } from "./headers";
+import { envProblem, headerProblem, MAX_ENV_PER_SERVER, MAX_HEADERS_PER_SERVER } from "./headers";
 import { PluginRegistry } from "./registry";
 import { notTested, secretsOf } from "./test-server";
 import { serverViews } from "./server-view";
@@ -164,7 +165,22 @@ export class Plugins {
       entry.plugin!,
       this.rows.values(entry.name),
       this.rows.headers(entry.name),
+      this.rows.env(entry.name),
     );
+  }
+
+  /** Names the plugin itself fixes on a stdio server (its file, or a field): read-only for the user. */
+  #fixedEnv(entry: PluginEntry, server: string): string[] {
+    const def = entry.plugin?.servers.find((one) => one.name === server);
+    if (def === undefined || def.config.type !== "stdio") return [];
+    return [
+      ...new Set([
+        ...Object.keys((def.config as { env?: Record<string, string> }).env ?? {}),
+        ...Object.keys(entry.plugin?.bindings[server]?.env ?? {}),
+        "PLUGIN_ROOT",
+        "PLUGIN_DATA",
+      ]),
+    ];
   }
 
   /**
@@ -320,6 +336,13 @@ export class Plugins {
             value: header.value,
             label: `[secret ${entry.name}.${header.server}.${header.name}]`,
           });
+      // So is a secret variable the user set on a stdio server.
+      for (const one of this.rows.env(entry.name))
+        if (one.secret)
+          redactions.push({
+            value: one.value,
+            label: `[secret ${entry.name}.${one.server}.${one.name}]`,
+          });
       const values = this.rows.values(entry.name);
       for (const field of entry.plugin.fields) {
         const value = values[field.name];
@@ -426,6 +449,7 @@ export class Plugins {
       requires,
       machines: this.#machineViews(requires),
       headers: this.#headerViews(entry),
+      env: this.#envViews(entry),
       fields: (plugin?.fields ?? []).map((field: PluginField) => {
         const saved = values[field.name];
         return {
@@ -463,6 +487,16 @@ export class Plugins {
         blocked: plain && !header.plainOk ? "plain-http" : null,
       };
     });
+  }
+
+  /** The user's variables on stdio servers as the page sees them: a secret's value stays here. */
+  #envViews(entry: PluginEntry): PluginEnvView[] {
+    return this.rows.env(entry.name).map((one) => ({
+      server: one.server,
+      name: one.name,
+      secret: one.secret,
+      value: one.secret ? null : one.value,
+    }));
   }
 
   #machineViews(requires: readonly string[]): PluginView["machines"] {
@@ -623,6 +657,47 @@ export class Plugins {
       };
     });
     this.rows.saveHeaders(name, server, next);
+    this.#changed();
+  }
+
+  /**
+   * Replace the environment variables the user set on one stdio server. A secret is written and
+   * not read back: a `null` value keeps what is saved under that name. A name the plugin fixes
+   * itself cannot be set. Nothing that does not fit is ever saved, and no message has a value.
+   */
+  setEnv(
+    name: string,
+    server: string,
+    env: readonly { name: string; value: string | null; secret: boolean }[],
+  ): void {
+    const entry = this.#existing(name);
+    const def = entry.plugin?.servers.find((one) => one.name === server);
+    if (def === undefined || def.config.type !== "stdio")
+      throw new Error(`${name} has no stdio server ${server}`);
+    if (env.length > MAX_ENV_PER_SERVER)
+      throw new Error(`at most ${MAX_ENV_PER_SERVER} variables per server`);
+    const saved = new Map(
+      this.rows
+        .env(name)
+        .filter((one) => one.server === server)
+        .map((one) => [one.name, one]),
+    );
+    const fixed = new Set(this.#fixedEnv(entry, server));
+    const seen = new Set<string>();
+    const next = env.map((one) => {
+      const variable = one.name.trim();
+      const value = one.value ?? saved.get(variable)?.value;
+      if (value === undefined)
+        throw new Error(`variable ${one.name} has no saved value to keep`);
+      const problem = envProblem(variable, value);
+      if (problem !== undefined) throw new Error(problem);
+      if (fixed.has(variable))
+        throw new Error(`${variable} is set by the plugin and cannot be changed`);
+      if (seen.has(variable)) throw new Error(`variable ${variable} is listed twice`);
+      seen.add(variable);
+      return { server, name: variable, value, secret: one.secret };
+    });
+    this.rows.saveEnv(name, server, next);
     this.#changed();
   }
 
