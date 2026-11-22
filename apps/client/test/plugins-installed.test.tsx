@@ -89,7 +89,10 @@ test("test results list each tool as a card with chips, fold long text, and coun
   expect(app.shows("Tools (3)")).toBe(true);
   expect(app.count("id:tool-card:tool_0")).toBe(1);
   expect(app.count("id:tool-card:tool_2")).toBe(1);
-  expect(app.shows("fake 1.0 · 3 tools · 2 resources · 1 prompt")).toBe(true);
+  expect(app.shows("fake 1.0")).toBe(true);
+  expect(app.shows("3 tools")).toBe(true);
+  expect(app.shows("2 resources")).toBe(true);
+  expect(app.shows("1 prompt")).toBe(true);
   expect(app.shows("+3")).toBe(true);
   expect(app.count("id:tool-param:p0")).toBe(1);
   expect(app.shows("Show more")).toBe(true);
@@ -107,8 +110,8 @@ test("sixty tools still list inside one scrolling region with a count header", a
 
 test("each installed card has exactly one avatar in its header, and no default plugin icon", async () => {
   const app = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 900 });
-  // The fixture lists nine installed plugins; one avatar each, not two.
-  expect(app.count("id:plugin-avatar")).toBe(9);
+  // The fixture lists ten installed plugins; one avatar each, not two.
+  expect(app.count("id:plugin-avatar")).toBe(10);
 });
 
 test("a card shows its login only with evidence: needs login, signed in, and nothing otherwise", async () => {
@@ -142,4 +145,57 @@ test("a plugin missing a required value says which one and where to type it; no 
   const ready = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 900 });
   await ready.press("label:remote-plugin");
   expect(ready.count("id:missing-values")).toBe(0);
+});
+
+test("a result shows name and version once, a short hash, and counts as chips", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 900 });
+  await app.press("label:rich-plugin");
+  await app.press("label:Test connection");
+  expect(app.shows("github-mcp-server remote-15f2258")).toBe(true);
+  expect(app.shows("15f22585c741f5")).toBe(false);
+  expect(app.shows("github-mcp-server github-mcp-server")).toBe(false);
+  expect(app.shows("12 tools")).toBe(true);
+  expect(app.shows("4 resources")).toBe(true);
+  expect(app.shows("1 prompt")).toBe(true);
+  expect(app.shows("1 prompts")).toBe(false);
+});
+
+test("tools fold to the first five with a link for the rest; resources and prompts list too", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 900 });
+  await app.press("label:rich-plugin");
+  await app.press("label:Test connection");
+  expect(app.count("id:tool-card:tool_4")).toBe(1);
+  expect(app.count("id:tool-card:tool_5")).toBe(0);
+  expect(app.shows("Show all 12")).toBe(true);
+  await app.press("label:Show all 12");
+  expect(app.count("id:tool-card:tool_11")).toBe(1);
+  expect(app.shows("Show fewer")).toBe(true);
+  await app.press("label:Show fewer");
+  expect(app.count("id:tool-card:tool_5")).toBe(0);
+  expect(app.shows("Resources (4)")).toBe(true);
+  expect(app.count("id:resource-card:res_3")).toBe(1);
+  expect(app.shows("Prompts (1)")).toBe(true);
+  expect(app.count("id:prompt-card:prompt_0")).toBe(1);
+  expect(app.shows("Show all 4")).toBe(false);
+});
+
+test("Show more is a link on a card whose text is cut, and only there; it turns into Show less", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 900 });
+  await app.press("label:rich-plugin");
+  await app.press("label:Test connection");
+  expect(app.count("id:tool-card:tool_0 >> label:Show more")).toBe(1);
+  expect(app.count("id:tool-card:tool_1 >> label:Show more")).toBe(0);
+  await app.press("id:tool-card:tool_0 >> label:Show more");
+  expect(app.count("id:tool-card:tool_0 >> label:Show less")).toBe(1);
+  await app.press("id:tool-card:tool_0 >> label:Show less");
+  expect(app.count("id:tool-card:tool_0 >> label:Show more")).toBe(1);
+});
+
+test("the Test connection button is never squeezed or wrapped, at a narrow width", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", { width: 520, height: 900 });
+  await app.press("label:github-plugin");
+  // The title row holds the buttons and what may give way; names and headers have their own line.
+  expect(app.count("id:server-head:gh >> id:test-slot:gh >> label:Test connection")).toBe(1);
+  // The harness has no geometry, so the layout itself (no wrap on the title row, slots that do not
+  // shrink) is only checked by reading the code; the buttons staying in the title row is checked here.
 });

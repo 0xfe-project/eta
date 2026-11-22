@@ -56,6 +56,8 @@ function Fixture() {
             { ...plugin("login-plugin", true), servers: [{ ...remote, login: "needs_login" as const }] },
             { ...plugin("expired-plugin", true), servers: [{ ...remote, login: "expired" as const }] },
             { ...plugin("setup-plugin", true), state: "needs_config" as const, servers: [remote] },
+            // A server that lists many tools, a few resources and one prompt, with a hash in its version.
+            { ...plugin("rich-plugin", true), servers: [{ ...remote, name: "rich" }] },
             // A server whose Authorization header is bound to a required field nobody has filled in.
             {
               ...plugin("github-plugin", true),
@@ -99,6 +101,25 @@ function Fixture() {
           ms: 0,
           tools: [],
           toolCount: 0,
+        };
+      }
+      if (method === "testServer" && (args as { name?: string }).name === "rich-plugin") {
+        return {
+          status: "ok",
+          message: "",
+          ms: 30,
+          serverName: "github-mcp-server",
+          serverVersion: "github-mcp-server/remote-15f22585c741f51171c729338572905dfaae65d4",
+          tools: Array.from({ length: 12 }, (_, i) => ({
+            name: "tool_" + i,
+            description: i === 0 ? "long ".repeat(60) : "short " + i,
+            params: ["a", "b"],
+          })),
+          toolCount: 12,
+          resourceCount: 4,
+          promptCount: 1,
+          resources: [0, 1, 2, 3].map((i) => ({ name: "res_" + i, description: "resource " + i, params: [] })),
+          prompts: [{ name: "prompt_0", description: "a prompt", params: ["topic"] }],
         };
       }
       if (method === "testServer") {

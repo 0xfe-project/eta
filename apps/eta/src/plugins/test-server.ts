@@ -22,6 +22,8 @@ const empty = (status: PluginTestResult["status"], message: string, ms = 0): Plu
   toolCount: 0,
   resourceCount: null,
   promptCount: null,
+  resources: [],
+  prompts: [],
 });
 
 export const notTested = empty;
@@ -141,6 +143,8 @@ export async function testConnection(
         params: Object.keys(props ?? {}).slice(0, MAX_PARAMS),
       };
     });
+    const resourceList = (resources?.resources ?? []) as Array<Record<string, unknown>>;
+    const promptList = (prompts?.prompts ?? []) as Array<Record<string, unknown>>;
     return {
       status: "ok",
       message: "",
@@ -151,6 +155,19 @@ export async function testConnection(
       toolCount: listed.tools.length,
       resourceCount: resources === null ? null : resources.resources.length,
       promptCount: prompts === null ? null : prompts.prompts.length,
+      resources: resourceList.slice(0, MAX_TOOLS).map((one) => ({
+        name: mask(String(one.name ?? one.uri ?? ""), secrets),
+        description: mask(typeof one.description === "string" ? one.description : "", secrets),
+        params: [],
+      })),
+      prompts: promptList.slice(0, MAX_TOOLS).map((one) => ({
+        name: mask(String(one.name ?? ""), secrets),
+        description: mask(typeof one.description === "string" ? one.description : "", secrets),
+        params: ((one.arguments as Array<{ name?: unknown }> | undefined) ?? [])
+          .map((arg) => String(arg.name ?? ""))
+          .filter((name) => name !== "")
+          .slice(0, MAX_PARAMS),
+      })),
     };
   } catch (error) {
     return empty("failed", mask(reasonOf(error, timedOut), secrets), elapsed());

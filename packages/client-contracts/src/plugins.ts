@@ -230,6 +230,9 @@ export interface PluginTestResult {
   /** Null when the server does not offer them. */
   resourceCount: number | null;
   promptCount: number | null;
+  /** What the server listed, as the tools are. Absent from an older host. */
+  resources?: { name: string; description: string; params: string[] }[];
+  prompts?: { name: string; description: string; params: string[] }[];
 }
 
 /** A logo the host found: the picture, base64, and its type; null when there is none. */

@@ -14,6 +14,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { uiText } from "../../i18n";
+import { hint } from "../../components/context-ring";
 import { useHost } from "../../services/host";
 import { EnvEditor } from "./env-editor";
 import { HeadersEditor } from "./headers-editor";
@@ -105,7 +106,7 @@ function ServerBadge(props: { item: PluginView; server: PluginServerView; test: 
     return { text: uiText("serverNotChecked"), tone: "muted" };
   };
   return (
-    <Label variant="small" tone={label().tone}>
+    <Label variant="small" tone={label().tone} lines={1}>
       {label().text}
     </Label>
   );
@@ -162,38 +163,56 @@ const counted = (key: "countTool" | "countResource" | "countPrompt", n: number |
 
 const MAX_CHIPS = 12;
 const LONG_TOOL_TEXT = 140;
+/** A long list shows this many cards, and a link for the rest; the region still scrolls past it. */
+const COLLAPSED_ITEMS = 5;
 
-/** One tool: its name, its description (long ones fold), and its parameter names as chips. */
-function ToolCard(props: { tool: PluginTestResult["tools"][number] }) {
-  const c = colors();
-  const open = signal(false);
-  const long = () => props.tool.description.length > LONG_TOOL_TEXT;
-  const params = () => props.tool.params;
+type Listed = { name: string; description: string; params: string[] };
+
+/** A small text link, not a bordered button: a list of cards must not become a list of buttons. */
+function TextLink(props: { label: string; testID?: string; onPress: () => void }) {
   return (
     <View
-      testID={"tool-card:" + props.tool.name}
+      testID={props.testID}
+      role="button"
+      accessibilityLabel={props.label}
+      onPress={props.onPress}
+      style={{ alignSelf: "flex-end", cursor: "pointer" }}
+    >
+      <Label variant="small" tone="mutedInk" style={{ textDecorationLine: "underline" }}>
+        {props.label}
+      </Label>
+    </View>
+  );
+}
+
+/** One tool, resource or prompt: its name, its description (a long one folds), its parameter names as chips. */
+function ItemCard(props: { kind: "tool" | "resource" | "prompt"; item: Listed }) {
+  const c = colors();
+  const open = signal(false);
+  const long = () => props.item.description.length > LONG_TOOL_TEXT;
+  const params = () => props.item.params;
+  return (
+    <View
+      testID={props.kind + "-card:" + props.item.name}
       style={{
-        gap: 8,
+        gap: 6,
         padding: 12,
         borderWidth: 1,
         borderColor: c().border,
       }}
     >
       <Label variant="body" weight={600} lines={1}>
-        {props.tool.name}
+        {props.item.name}
       </Label>
-      <If when={props.tool.description}>
+      <If when={props.item.description}>
         <Label variant="small" tone="muted" lines={open() || !long() ? undefined : 2}>
           {open() || !long()
-            ? props.tool.description
-            : props.tool.description.slice(0, LONG_TOOL_TEXT) + "…"}
+            ? props.item.description
+            : props.item.description.slice(0, LONG_TOOL_TEXT) + "…"}
         </Label>
         <If when={long()}>
-          <Button
+          <TextLink
             label={open() ? uiText("toolCollapse") : uiText("toolExpand")}
-            tone="plain"
-            labelVariant="small"
-            size={24}
             onPress={() => open.set(!open())}
           />
         </If>
@@ -219,23 +238,101 @@ function ToolCard(props: { tool: PluginTestResult["tools"][number] }) {
   );
 }
 
-/** The listed tools as cards, in a region that scrolls when there are many. */
-export function ToolCards(props: { tools: PluginTestResult["tools"]; total: number }) {
+/**
+ * A heading, the first few cards, and a link for the rest. Folded by default so a server with dozens
+ * of tools does not make the result a wall; the region keeps its height cap and scrolls when open.
+ */
+function ItemList(props: {
+  kind: "tool" | "resource" | "prompt";
+  heading: string;
+  items: Listed[];
+}) {
+  const all = signal(false);
+  const shown = () => (all() ? props.items : props.items.slice(0, COLLAPSED_ITEMS));
   return (
-    <If when={props.tools.length}>
-      <View style={{ gap: 8 }}>
+    <If when={props.items.length}>
+      <View testID={"list:" + props.kind} style={{ gap: 8 }}>
         <Label variant="small" weight={600}>
-          {uiText("toolsHeading", { count: String(props.total) })}
+          {props.heading}
         </Label>
         <SmoothScroll style={{ maxHeight: 420 }} scrollbar={false}>
           <View style={{ gap: 8 }}>
-            <Each of={props.tools} key={(tool) => tool.name}>
-              {(tool) => <ToolCard tool={tool()} />}
+            <Each of={shown()} key={(item) => item.name}>
+              {(item) => <ItemCard kind={props.kind} item={item()} />}
             </Each>
           </View>
         </SmoothScroll>
+        <If when={props.items.length > COLLAPSED_ITEMS}>
+          <TextLink
+            testID={"list-toggle:" + props.kind}
+            label={
+              all()
+                ? uiText("showFewerItems")
+                : uiText("showAllItems", { count: String(props.items.length) })
+            }
+            onPress={() => all.set(!all())}
+          />
+        </If>
       </View>
     </If>
+  );
+}
+
+/** The tools as cards; kept as a name other pages import. */
+export function ToolCards(props: { tools: PluginTestResult["tools"]; total: number }) {
+  return (
+    <ItemList
+      kind="tool"
+      heading={uiText("toolsHeading", { count: String(props.total) })}
+      items={props.tools}
+    />
+  );
+}
+
+const HASH = /[0-9a-f]{40}/g;
+
+/** "name version" once: a version that starts with the name drops it, and a 40-digit hash keeps 7. */
+export function serverLabel(
+  name: string | null,
+  version: string | null,
+): { text: string; full: string } {
+  const full = [name, version].filter(Boolean).join(" ");
+  let rest = version ?? "";
+  if (name) {
+    for (const lead of [name + "/", name + " ", name + "@"])
+      if (rest.startsWith(lead)) rest = rest.slice(lead.length);
+  }
+  rest = rest.replace(HASH, (hash) => hash.slice(0, 7));
+  return { text: [name, rest].filter(Boolean).join(" "), full };
+}
+
+/** The server's name and version on one line, and what it offers as small chips. */
+function ResultInfo(props: { result: PluginTestResult }) {
+  const c = colors();
+  const label = () => serverLabel(props.result.serverName, props.result.serverVersion);
+  const chips = () =>
+    [
+      props.result.toolCount == null ? null : counted("countTool", props.result.toolCount),
+      props.result.resourceCount == null ? null : counted("countResource", props.result.resourceCount),
+      props.result.promptCount == null ? null : counted("countPrompt", props.result.promptCount),
+    ].filter((text): text is string => text !== null);
+  return (
+    <View testID="result-info" style={{ ...row, flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+      <If when={label().text}>
+        <View tooltip={hint(label().full, c)} style={{ flexShrink: 1, minWidth: 0 }}>
+          <Label variant="small" weight={600} lines={1}>
+            {label().text}
+          </Label>
+        </View>
+      </If>
+      <Each of={chips()} key={(text) => text}>
+        {(text) => (
+          <View style={{ paddingVertical: 1, paddingHorizontal: 6, borderWidth: 1, borderColor: c().border }}>
+            <Label variant="small" tone="muted">{text()}</Label>
+          </View>
+        )}
+      </Each>
+    </View>
   );
 }
 
@@ -249,7 +346,7 @@ function TestResultView(props: { test: Test; stdio: boolean }) {
         </Label>
       </If>
       <If when={result()}>
-        <View style={{ gap: 4 }}>
+        <View style={{ gap: 8 }}>
           <Label variant="small" weight={600}>
             {testLabel(result()!) + (REQUEST_MADE.has(result()!.status) ? ` · ${result()!.ms} ms` : "")}
           </Label>
@@ -259,21 +356,22 @@ function TestResultView(props: { test: Test; stdio: boolean }) {
             </Label>
           </If>
           <If when={result()!.status === "ok"}>
-            <Label variant="small" tone="muted">
-              {[
-                result()!.serverName
-                  ? `${result()!.serverName} ${result()!.serverVersion ?? ""}`.trim()
-                  : "",
-                uiText("testCounts", {
-                  tools: counted("countTool", result()!.toolCount),
-                  resources: counted("countResource", result()!.resourceCount),
-                  prompts: counted("countPrompt", result()!.promptCount),
-                }),
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </Label>
-            <ToolCards tools={result()!.tools} total={result()!.toolCount} />
+            <ResultInfo result={result()!} />
+            <ItemList
+              kind="tool"
+              heading={uiText("toolsHeading", { count: String(result()!.toolCount) })}
+              items={result()!.tools}
+            />
+            <ItemList
+              kind="resource"
+              heading={uiText("resourcesHeading", { count: String(result()!.resourceCount ?? 0) })}
+              items={result()!.resources ?? []}
+            />
+            <ItemList
+              kind="prompt"
+              heading={uiText("promptsHeading", { count: String(result()!.promptCount ?? 0) })}
+              items={result()!.prompts ?? []}
+            />
           </If>
         </View>
       </If>
@@ -351,38 +449,32 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
             }}
           >
             <View
-              style={{
-                ...row,
-                flexWrap: "wrap",
-                gap: props.phone ? 8 : 10,
-              }}
+              testID={"server-head:" + server().name}
+              style={{ ...row, gap: 10, alignItems: "center" }}
             >
-                <Label variant="subtitle" weight={600}>{server().name}</Label>
-              <Label
-                variant="small"
-                tone={props.phone ? "ink" : "mutedInk"}
-                style={{
-                  paddingHorizontal: 5,
-                  borderWidth: 1,
-                  borderColor: c().strong,
-                }}
-              >
-                {server().transport}
-              </Label>
-              <ServerBadge item={props.item} server={server()} test={test} />
+              {/* What may give way is the left cluster; the buttons are never squeezed or wrapped. */}
+              <View style={{ ...row, flexShrink: 1, minWidth: 0, gap: props.phone ? 8 : 10, alignItems: "center" }}>
+                <View style={{ flexShrink: 1, minWidth: 0 }} tooltip={hint(server().name, c)}>
+                  <Label variant="subtitle" weight={600} lines={1}>{server().name}</Label>
+                </View>
+                <Label
+                  variant="small"
+                  tone={props.phone ? "ink" : "mutedInk"}
+                  lines={1}
+                  style={{
+                    flexShrink: 0,
+                    paddingHorizontal: 5,
+                    borderWidth: 1,
+                    borderColor: c().strong,
+                  }}
+                >
+                  {server().transport}
+                </Label>
+                <View style={{ flexShrink: 1, minWidth: 0 }}>
+                  <ServerBadge item={props.item} server={server()} test={test} />
+                </View>
+              </View>
               <View style={{ flex: 1 }} />
-              <If when={(server().env ?? []).length}>
-                <Label
-                  variant="small"
-                  tone="muted"
-                >{`${text(props.phone ? "envShort" : "env")}: ${(server().env ?? []).join(", ")}`}</Label>
-              </If>
-              <If when={(server().headers ?? []).length}>
-                <Label
-                  variant="small"
-                  tone="muted"
-                >{`${text("headers")}: ${(server().headers ?? []).join(", ")}`}</Label>
-              </If>
               <View testID={"test-slot:" + server().name} style={{ flexShrink: 0 }}>
                 <TestButton test={test} />
               </View>
@@ -390,6 +482,16 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
                 <LoginButton item={props.item} server={server()} test={test} />
               </View>
             </View>
+            <If when={(server().env ?? []).length || (server().headers ?? []).length}>
+              <View style={{ ...row, flexWrap: "wrap", columnGap: 12, rowGap: 4 }}>
+                <If when={(server().env ?? []).length}>
+                  <Label variant="small" tone="muted">{`${text(props.phone ? "envShort" : "env")}: ${(server().env ?? []).join(", ")}`}</Label>
+                </If>
+                <If when={(server().headers ?? []).length}>
+                  <Label variant="small" tone="muted">{`${text("headers")}: ${(server().headers ?? []).join(", ")}`}</Label>
+                </If>
+              </View>
+            </If>
             <TestResultView test={test} stdio={server().transport === "stdio"} />
             <If when={server().transport === "stdio" && props.item.env !== undefined}>
               <EnvEditor item={props.item} server={server().name} />
