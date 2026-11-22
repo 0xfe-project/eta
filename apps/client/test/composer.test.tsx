@@ -293,3 +293,54 @@ test("an uploaded picture previews on hover and opens from its block, from its o
   await app.press("label:Remove pixel.png");
   await app.waitUntil(() => !app.shows(block));
 });
+
+const quoted = "> Line one\n>\n> Line two";
+
+test("a quoted selection goes after the draft, and a second quote after the first", async () => {
+  const app = await fixture();
+  await app.type(input, "Look at this:");
+  await app.press("label:Quote");
+  // The caret is on the line below the quote.
+  await app.type(input, "Why?");
+  await app.press("label:Quote");
+  await app.type(input, "And this?");
+  await app.keyboard.press("enter");
+  await app.waitFor(
+    sent([
+      "alpha",
+      `Look at this:\n\n${quoted}\n\nWhy?\n\n${quoted}\n\nAnd this?`,
+      "queue",
+      [],
+    ]),
+  );
+});
+
+test("a quote keeps the draft's words and files, and stays in its own chat", async () => {
+  const app = await fixture();
+  await app.type(input, "😀 see ");
+  await app.paste(input, { files: ["test/composer-fixture.tsx"] });
+  await app.waitFor("label:File composer-fixture.tsx");
+  await app.press("label:Quote");
+  await app.type(input, "ok");
+  await app.press("label:Switch");
+  expect(screen(app)).not.toContain("Line one");
+  await app.press("label:Switch");
+  await app.waitFor("label:File composer-fixture.tsx");
+  await app.keyboard.press("enter");
+  await app.waitFor("text:attachments composer-fixture.tsx");
+  expect(screen(app)).toContain(
+    `sent ${JSON.stringify(["alpha", `😀 see \n\n${quoted}\n\nok`, "queue"]).slice(0, -1)},[`,
+  );
+});
+
+test("one undo takes a quote back out", async () => {
+  const app = await fixture();
+  await app.type(input, "keep");
+  // Changes within half a second undo together, as typing does.
+  await app.wait(600);
+  await app.press("label:Quote");
+  await app.keyboard.press("mod+z");
+  expect(screen(app)).not.toContain("Line one");
+  await app.keyboard.press("enter");
+  await app.waitFor(sent(["alpha", "keep", "queue", []]));
+});

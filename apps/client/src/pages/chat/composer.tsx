@@ -38,6 +38,7 @@ import {
   mention,
   pasteBlock,
   plainText,
+  quote,
   serialize,
   submitKeys,
 } from "../../components/eta-editor";
@@ -66,7 +67,12 @@ interface ComposerProps {
   alignWithContent?: boolean;
   held: MessageView[];
   widgetDraft?: { conversationId: string; text: string } | undefined;
+  /** Text the reader selected in a reply: it goes after the draft as a quote. */
+  quote?: { conversationId: string; text: string } | undefined;
 }
+
+/** Quotes already put in a draft: a composer made again (the chat opened again) skips them. */
+const quoted = new WeakSet<object>();
 
 /** The chat's composer: its outbox and queue above, the editor (`EtaEditor`) and its bar. */
 export function Composer(props: ComposerProps) {
@@ -143,6 +149,7 @@ function ComposerBody(
   const files$ = attachment({ uploads, blocked });
   const limits = limit();
   const out = serialize(uploads);
+  const quotes = quote();
   // Upload states change without the document changing: re-read them for the Send button.
   effect(() => {
     store.states();
@@ -178,6 +185,7 @@ function ComposerBody(
       files$,
       draft({ save: (doc) => edit({ doc }) }),
       limits,
+      quotes,
       out,
     ],
   });
@@ -232,6 +240,18 @@ function ComposerBody(
       return;
     appliedWidgetDraft = suggestion;
     untracked(() => prepend(suggestion.text));
+  });
+  effect(() => {
+    const selected = props.quote;
+    if (
+      props.blocked ||
+      !selected ||
+      quoted.has(selected) ||
+      selected.conversationId !== conversationId
+    )
+      return;
+    quoted.add(selected);
+    untracked(() => quotes.append(selected.text));
   });
 
   function stopConversation() {

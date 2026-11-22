@@ -90,6 +90,7 @@ export const chatMessages = {
   insert: ["Insert", "插入"],
   inserted: ["Inserted · {{clock}}", "插入 · {{clock}}"],
   insertMessage: ["Insert message", "插入消息"],
+  quoteSelection: ["Quote", "引用"],
   invite: ["Invite {{length}}", "邀请 {{length}} 位"],
   invite2: ["Invite", "邀请"],
   inviteAgents: ["Invite agents", "邀请智能体"],
