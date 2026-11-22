@@ -142,9 +142,12 @@ export function Workspace(props: {
         mobileOpen.set(Boolean(next.conversation));
       }),
     );
+  // The groups opened before this one, newest last: archiving the open group goes back to them.
+  const previous: string[] = [];
   function open(id: string) {
     openTask("");
     page.set("chat");
+    if (conversation() && conversation() !== id) previous.push(conversation());
     conversation.set(id);
     mobileOpen.set(true);
     link("chat", id);
@@ -205,6 +208,28 @@ export function Workspace(props: {
     }
     conversation.set("");
     navigate(phone() ? "chat" : "tasks");
+  }
+  /** A group archived from the sidebar: if it was open, the one opened before it, else the empty page. */
+  function leaveArchived(id: string) {
+    if (conversation() !== id) return;
+    const live = (other: string) =>
+      host
+        .conversations()
+        .some(
+          (item) =>
+            item.id === other && item.kind === "group" && !item.archived,
+        );
+    let back: string | undefined;
+    while (back === undefined && previous.length) {
+      const other = previous.pop()!;
+      if (other !== id && live(other)) back = other;
+    }
+    if (back && !phone()) {
+      open(back);
+      return;
+    }
+    conversation.set("");
+    if (!phone()) link("chat");
   }
   const conversationVisible = () =>
     Boolean(activeId()) && (page() === "captain" || !phone() || mobileOpen());
@@ -268,6 +293,7 @@ export function Workspace(props: {
             onAgent={(id) => void direct(id)}
             onCreate={() => newGroup.set(true)}
             onCreateAgent={() => newAgent.set(true)}
+            onArchived={leaveArchived}
             collapsed={collapsed()}
             onToggle={() => collapsed.set(!collapsed())}
           />
@@ -311,6 +337,7 @@ export function Workspace(props: {
               onAgent={(id) => void direct(id)}
               onCreate={() => newGroup.set(true)}
               onCreateAgent={() => newAgent.set(true)}
+              onArchived={leaveArchived}
             />
           </If>
           <If
