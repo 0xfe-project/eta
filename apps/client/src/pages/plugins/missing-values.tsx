@@ -5,7 +5,7 @@ import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
 /** The required text fields nobody has filled in yet: what keeps the plugin from running. */
-export const missingFields = (item: PluginView) =>
+const missingFields = (item: PluginView) =>
   item.fields.filter(
     (field) => field.required && !field.set && field.value === null && field.default == null,
   );

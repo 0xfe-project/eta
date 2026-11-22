@@ -278,21 +278,10 @@ function ItemList(props: {
   );
 }
 
-/** The tools as cards; kept as a name other pages import. */
-export function ToolCards(props: { tools: PluginTestResult["tools"]; total: number }) {
-  return (
-    <ItemList
-      kind="tool"
-      heading={uiText("toolsHeading", { count: String(props.total) })}
-      items={props.tools}
-    />
-  );
-}
-
 const HASH = /[0-9a-f]{40}/g;
 
 /** "name version" once: a version that starts with the name drops it, and a 40-digit hash keeps 7. */
-export function serverLabel(
+function serverLabel(
   name: string | null,
   version: string | null,
 ): { text: string; full: string } {
