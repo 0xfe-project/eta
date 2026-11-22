@@ -206,8 +206,14 @@ export function pluginsPlugin(
         wire.handle("plugins", "marketSetProxy", async (call) => ({
           result: market.setProxy(new Args(call).optionalString("proxy") ?? ""),
         })),
-        wire.handle("plugins", "marketCatalog", async () => ({
-          result: await market.catalog(),
+        wire.handle("plugins", "marketCatalog", async (call) => ({
+          // "cached": only what is kept, at once; otherwise read again (asking the server first).
+          result: await market.catalog(
+            new Args(call).optionalString("mode") === "cached" ? "cached" : "refresh",
+          ),
+        })),
+        wire.handle("plugins", "marketClearCache", async () => ({
+          result: { cleared: market.clearCache() },
         })),
         wire.handle("plugins", "marketPreview", async (call) => {
           const args = new Args(call);

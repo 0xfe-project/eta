@@ -97,6 +97,7 @@ import { MachinePlaces, wireFailure } from "./places/on-machine";
 import { placesPlugin } from "./places/plugin";
 import { PlaceStore } from "./places/store";
 import { Market } from "./plugins/market";
+import { CatalogCache } from "./plugins/market-cache";
 import { pluginsPlugin } from "./plugins/plugin";
 import { Plugins } from "./plugins/service";
 import { pluginSessionTools } from "./plugins/tools";
@@ -1069,7 +1070,12 @@ export function createProduct(options: {
           {
             plugins,
             agents,
-            market: new Market({ settings: new SettingStore(db), plugins, dataDir }),
+            market: new Market({
+              settings: new SettingStore(db),
+              plugins,
+              dataDir,
+              cache: new CatalogCache(db, { maxRowBytes: 1024 * 1024 }),
+            }),
             mcp,
           },
           applied("plugins"),

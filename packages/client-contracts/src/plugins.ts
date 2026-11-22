@@ -313,6 +313,10 @@ export interface MarketSourceCatalog {
   entries: MarketEntry[] | null;
   rejected: MarketRejected[];
   error: string | null;
+  /** When the host last had this catalog confirmed by its server (ms); absent or null when nothing is kept. */
+  updatedAt?: number | null;
+  /** Set when what is shown is a kept copy because reading again failed: why. */
+  stale?: string | null;
 }
 
 /** Every source's catalog. Installed plugins are never touched by any of them. */

@@ -34,6 +34,7 @@ import {
   resolveRev,
   viaProxy,
 } from "./git";
+import type { CachedCatalog, CatalogCache } from "./market-cache";
 import { serverViews } from "./server-view";
 
 const CURSOR_URL =
@@ -69,6 +70,8 @@ export interface MarketOptions {
   schemes?: readonly string[];
   /** The repository the catalog is in, when its address does not say (a test's local one). */
   catalogRepo?: string;
+  /** Where catalogs are kept between runs; without it every read goes to the network. */
+  cache?: CatalogCache;
 }
 
 const messageOf = (error: unknown): string =>
@@ -135,6 +138,7 @@ export class Market {
   readonly #timeoutMs: number;
   readonly #schemes: readonly string[];
   readonly #catalogRepo: string | undefined;
+  readonly #cache: CatalogCache | undefined;
 
   constructor(options: MarketOptions) {
     this.#settings = options.settings;
@@ -144,6 +148,7 @@ export class Market {
     this.#timeoutMs = options.timeoutMs ?? TIMEOUT_MS;
     this.#schemes = options.schemes ?? ["https:", "ssh:", "git:"];
     this.#catalogRepo = options.catalogRepo;
+    this.#cache = options.cache;
     this.#proxy();
   }
 
@@ -237,16 +242,42 @@ export class Market {
   }
 
   /** Every source's catalog, each read on its own: one that fails does not hide the others. */
-  async catalog(): Promise<MarketCatalog> {
+  async catalog(mode: "refresh" | "cached" = "refresh"): Promise<MarketCatalog> {
     const proxy = this.#proxy();
     const sources = await Promise.all(
       this.sources()
         .filter((source) => source.enabled)
-        .map(
-        async (source) => await this.#read(source, proxy, new Map()),
-      ),
+        .map(async (source) => await this.#read(source, proxy, new Map(), mode)),
     );
     return { sources, proxy };
+  }
+
+  /** Forget every kept catalog; the next read goes to the network. */
+  clearCache(): number {
+    return this.#cache?.clear() ?? 0;
+  }
+
+  /** The document must be a marketplace: throws the reason it is not. */
+  #shape(raw: unknown): Record<string, unknown> & { plugins: unknown[] } {
+    if (!isPlain(raw) || !Array.isArray(raw.plugins))
+      throw new Error(
+        'the catalog must be an object with a "plugins" list (a Claude Code or Cursor marketplace.json)',
+      );
+    if (raw.plugins.length > MAX_ENTRIES)
+      throw new Error(`the catalog lists more than ${MAX_ENTRIES} plugins`);
+    return raw as Record<string, unknown> & { plugins: unknown[] };
+  }
+
+  /** A kept catalog, checked again as if it had just come: undefined when it no longer passes. */
+  #fromCache(cached: CachedCatalog | undefined): unknown {
+    if (cached === undefined) return undefined;
+    try {
+      const raw: unknown = JSON.parse(cached.text);
+      this.#shape(raw);
+      return raw;
+    } catch {
+      return undefined;
+    }
   }
 
   /** One source: its entries, or why there are none. */
@@ -254,13 +285,50 @@ export class Market {
     source: MarketSource,
     proxy: string,
     refs: Map<string, string>,
+    mode: "refresh" | "cached" = "refresh",
   ): Promise<MarketSourceCatalog> {
     const { url } = source;
+    // The key is the address as written: another address, or the same one after the user changed it
+    // back, is another row; the proxy is a way to reach it, not a part of what it is.
+    const cached = this.#cache?.get(url, Date.now());
     let raw: unknown;
-    try {
-      raw = await this.#fetch(viaProxy(url, proxy));
-    } catch (error) {
-      return { source, entries: null, rejected: [], error: messageOf(error) };
+    let updatedAt: number | null = null;
+    let stale: string | null = null;
+    if (mode === "cached") {
+      raw = this.#fromCache(cached);
+      if (raw === undefined) {
+        if (cached !== undefined) this.#cache?.delete(url);
+        // Nothing kept: no answer yet, and not a failure.
+        return { source, entries: null, rejected: [], error: null, updatedAt: null, stale: null };
+      }
+      updatedAt = cached!.fetchedAt;
+    } else {
+      try {
+        const got = await this.#download(viaProxy(url, proxy), cached);
+        const now = Date.now();
+        if (got === "same") {
+          raw = this.#fromCache(cached);
+          if (raw === undefined) throw new Error("the kept catalog can no longer be used");
+          this.#cache?.confirm(url, now);
+        } else {
+          try {
+            raw = JSON.parse(got.text);
+          } catch {
+            throw new Error("the catalog is not valid JSON");
+          }
+          this.#shape(raw);
+          this.#cache?.put(url, got.text, got.etag, got.lastModified, now);
+        }
+        updatedAt = now;
+      } catch (error) {
+        // The network failed or the answer was bad: a kept catalog stays, with its age and the reason.
+        const kept = this.#fromCache(cached);
+        if (kept === undefined)
+          return { source, entries: null, rejected: [], error: messageOf(error), updatedAt: null, stale: null };
+        raw = kept;
+        updatedAt = cached!.fetchedAt;
+        stale = messageOf(error);
+      }
     }
     if (!isPlain(raw) || !Array.isArray(raw.plugins))
       return {
@@ -299,21 +367,29 @@ export class Market {
         rejected.push({ index: index + 1, name, reason: messageOf(error) });
       }
     });
-    return { source, entries, rejected, error: null };
+    return { source, entries, rejected, error: null, updatedAt, stale };
   }
 
-  /** Read the document with a time limit and a size limit, and parse it. */
-  async #fetch(url: string): Promise<unknown> {
+  /** Read the document with a time limit and a size limit; `"same"` when the server says it is as kept. */
+  async #download(
+    url: string,
+    cached: CachedCatalog | undefined,
+  ): Promise<{ text: string; etag: string | null; lastModified: string | null } | "same"> {
     let response: Response;
     try {
       response = await fetch(url, {
         signal: AbortSignal.timeout(this.#timeoutMs),
         redirect: "follow",
-        headers: { accept: "application/json" },
+        headers: {
+          accept: "application/json",
+          ...(cached?.etag ? { "if-none-match": cached.etag } : {}),
+          ...(cached?.lastModified ? { "if-modified-since": cached.lastModified } : {}),
+        },
       });
     } catch (error) {
       throw new Error(`cannot read the catalog: ${this.#reason(error)}`);
     }
+    if (response.status === 304 && cached !== undefined) return "same";
     if (!response.ok)
       throw new Error(`cannot read the catalog: HTTP ${response.status}`);
     const length = Number(response.headers.get("content-length") ?? 0);
@@ -337,11 +413,11 @@ export class Market {
         throw error;
       throw new Error(`cannot read the catalog: ${this.#reason(error)}`);
     }
-    try {
-      return JSON.parse(new TextDecoder().decode(Buffer.concat(chunks)));
-    } catch {
-      throw new Error("the catalog is not valid JSON");
-    }
+    return {
+      text: new TextDecoder().decode(Buffer.concat(chunks)),
+      etag: response.headers.get("etag"),
+      lastModified: response.headers.get("last-modified"),
+    };
   }
 
   #tooBig(): Error {
