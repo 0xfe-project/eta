@@ -36,6 +36,7 @@ import { ExternalAgentList } from "./external-agent-list";
 import { Machines } from "./machines/machines";
 import { MailboxEditor, mailboxProvider } from "./mailbox-editor";
 import { McpSettings } from "./mcp/server-list";
+import { PluginSettings } from "./plugins";
 import { AddSource } from "./models/add-source";
 import { ProviderDetail } from "./models/provider-detail";
 import { ModelSourceList, useModelSources } from "./models/source-list";
@@ -317,6 +318,9 @@ export function Settings(
                   layout={props.layout}
                   onBack={() => section.set(undefined)}
                 />
+              </If>
+              <If when={current() === "Plugins"}>
+                <PluginSettings phone={phone()} />
               </If>
               <If when={current() === "External agents"}>
                 <If

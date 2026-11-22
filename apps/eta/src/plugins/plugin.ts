@@ -85,18 +85,49 @@ export function pluginsPlugin(
           await plugins.registry.remove(name);
           return { result: { name } };
         }),
+        wire.handle("plugins", "marketSettings", async () => ({
+          result: market.settings(),
+        })),
+        wire.handle("plugins", "marketAddSource", async (call) => {
+          const args = new Args(call);
+          return {
+            result: market.addSource(
+              args.string("url"),
+              args.optionalString("name") ?? "",
+            ),
+          };
+        }),
+        wire.handle("plugins", "marketRemoveSource", async (call) => ({
+          result: market.removeSource(new Args(call).string("url")),
+        })),
+        wire.handle("plugins", "marketSetSourceEnabled", async (call) => {
+          const args = new Args(call);
+          return {
+            result: market.setSourceEnabled(
+              args.string("url"),
+              args.optionalBoolean("enabled") ?? true,
+            ),
+          };
+        }),
+        wire.handle("plugins", "marketSetProxy", async (call) => ({
+          result: market.setProxy(new Args(call).optionalString("proxy") ?? ""),
+        })),
         wire.handle("plugins", "marketCatalog", async () => ({
           result: await market.catalog(),
         })),
-        wire.handle("plugins", "marketSetUrl", async (call) => ({
-          result: await market.setUrl(new Args(call).optionalString("url") ?? ""),
-        })),
-        wire.handle("plugins", "marketPreview", async (call) => ({
-          result: await market.preview(new Args(call).string("name")),
-        })),
+        wire.handle("plugins", "marketPreview", async (call) => {
+          const args = new Args(call);
+          return {
+            result: await market.preview(args.string("name"), args.string("source")),
+          };
+        }),
         wire.handle("plugins", "marketInstall", async (call) => {
           const args = new Args(call);
-          const name = await market.install(args.string("name"), args.string("sha"));
+          const name = await market.install(
+            args.string("name"),
+            args.string("source"),
+            args.string("sha"),
+          );
           return { result: { name } };
         }),
         wire.handle("plugins", "recheck", async () => {

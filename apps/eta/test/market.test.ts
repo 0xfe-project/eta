@@ -2,16 +2,19 @@
  * The plugin market against a local catalog server and a local git repository: nothing here
  * reaches the network. The registry is the real one, so an install is the real git-source add.
  */
-import type { MarketCatalog } from "@eta/client-contracts";
+import type { MarketEntry, MarketRejected } from "@eta/client-contracts";
 import { cp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
+import { githubProxy, normalizeProxy, viaProxy } from "../src/plugins/git";
 import {
-  CATALOG_URL_KEY,
-  DEFAULT_CATALOG_URL,
+  DEFAULT_SOURCES,
+  LEGACY_URL_KEY,
   Market,
+  PROXY_KEY,
+  SOURCES_KEY,
 } from "../src/plugins/market";
 import { PluginRegistry } from "../src/plugins/registry";
 import { PluginRows } from "../src/plugins/store";
@@ -77,7 +80,16 @@ async function repo(): Promise<{ url: string; sha: string }> {
 let handler: (request: Request) => Response | Promise<Response>;
 let server: ReturnType<typeof Bun.serve>;
 
+/** One source's catalog, flat: what most tests look at. */
+interface Flat {
+  url: string;
+  entries: MarketEntry[] | null;
+  rejected: MarketRejected[];
+  error: string | null;
+}
+
 beforeEach(() => {
+  githubProxy.prefix = "";
   server = Bun.serve({ port: 0, fetch: (request) => handler(request) });
 });
 afterEach(async () => {
@@ -112,7 +124,37 @@ async function market(
     ...options,
   });
   const url = `http://127.0.0.1:${server.port}/catalog.json`;
-  return { market: instance, settings, registry, url };
+  // The first source, as the tests that read one catalog want it; `raw` is the market itself.
+  let current = url;
+  const flat = async (): Promise<Flat> => {
+    const first = (await instance.catalog()).sources[0];
+    if (first === undefined)
+      return { url: "", entries: null, rejected: [], error: "no source" };
+    current = first.source.url;
+    return {
+      url: first.source.url,
+      entries: first.entries,
+      rejected: first.rejected,
+      error: first.error,
+    };
+  };
+  const adapted = {
+    catalog: flat,
+    /** Make `address` the only source, and read it. */
+    async setUrl(address: string): Promise<Flat> {
+      for (const source of instance.sources())
+        instance.removeSource(source.url);
+      instance.addSource(address, "");
+      return await flat();
+    },
+    async preview(name: string) {
+      return await instance.preview(name, current);
+    },
+    async install(name: string, sha: string) {
+      return await instance.install(name, current, sha);
+    },
+  };
+  return { market: adapted, raw: instance, settings, registry, url };
 }
 
 const SHA = "a".repeat(40);
@@ -140,26 +182,25 @@ const sourceOf = (over: Record<string, unknown>) => ({
 });
 
 describe("the catalog", () => {
-  it("defaults to Cursor's public list, says so when the address is empty, and applies a new one at once", async () => {
-    expect(DEFAULT_CATALOG_URL).toBe(
+  it("starts with Cursor's and Anthropic's lists, and says so when there is none", async () => {
+    expect(DEFAULT_SOURCES.map((x) => [x.name, x.enabled])).toEqual([
+      ["Anthropic", true],
+      ["Cursor", false],
+    ]);
+    expect(DEFAULT_SOURCES[1]!.url).toBe(
       "https://raw.githubusercontent.com/cursor/plugins/HEAD/.cursor-plugin/marketplace.json",
     );
+    expect(DEFAULT_SOURCES[0]!.url).toBe(
+      "https://raw.githubusercontent.com/anthropics/claude-plugins-official/main/.claude-plugin/marketplace.json",
+    );
     const m = await market();
-    m.settings.set(CATALOG_URL_KEY, "");
-    expect(await m.market.catalog()).toMatchObject({
-      url: "",
-      isDefault: false,
-      entries: null,
-      error: "no catalog address is set",
-    });
+    expect(m.raw.settings()).toEqual({ sources: DEFAULT_SOURCES, proxy: "" });
+    m.settings.set(SOURCES_KEY, []);
+    expect(await m.raw.catalog()).toEqual({ sources: [], proxy: "" });
     handler = () => json({ plugins: [item()] });
     const set = await m.market.setUrl(m.url);
-    expect(set).toMatchObject({ url: m.url, isDefault: false, error: null });
+    expect(set).toMatchObject({ url: m.url, error: null });
     expect(set.entries?.map((e) => e.name)).toEqual([NAME]);
-    expect(m.settings.get(CATALOG_URL_KEY)).toBe(m.url);
-    await expect(m.market.setUrl("file:///etc/passwd")).rejects.toThrow(
-      /not an http\(s\) URL/,
-    );
   });
 
   it("reads the three kinds of source: a path in the catalog's repository, url, and git-subdir", async () => {
@@ -281,7 +322,7 @@ describe("the catalog", () => {
 
   async function failure(
     over: Parameters<typeof market>[0],
-  ): Promise<MarketCatalog> {
+  ): Promise<Flat> {
     const m = await market(over);
     return await m.market.setUrl(m.url);
   }
@@ -431,5 +472,326 @@ describe("installing from the catalog", () => {
     const m = await market();
     await m.market.setUrl(m.url);
     await expect(m.market.preview("missing")).rejects.toThrow(/not in the catalog/);
+  });
+});
+
+describe("the sources", () => {
+  it("adds, removes, refuses a duplicate and an address that is not http(s), and may be empty", async () => {
+    const m = await market();
+    const custom = "https://example.com/m.json";
+    const added = m.raw.addSource(`  ${custom}  `, "  Mine  ");
+    expect(added.sources.at(-1)).toEqual({ url: custom, name: "Mine", enabled: true });
+    expect(added.sources).toHaveLength(3);
+    expect(() => m.raw.addSource(custom, "again")).toThrow(/in the list already/);
+    expect(() => m.raw.addSource(DEFAULT_SOURCES[0]!.url, "")).toThrow(
+      /in the list already/,
+    );
+    expect(() => m.raw.addSource("file:///etc/passwd", "")).toThrow(/http\(s\)/);
+    expect(() => m.raw.addSource("nope", "")).toThrow(/not a URL/);
+    expect(() => m.raw.addSource("", "")).toThrow();
+    expect(m.raw.sources()).toHaveLength(3);
+    expect(() => m.raw.removeSource("https://example.com/other.json")).toThrow(
+      /not in the list/,
+    );
+    for (const source of m.raw.sources()) m.raw.removeSource(source.url);
+    // An emptied list stays empty: it is not seeded again.
+    expect(m.raw.settings().sources).toEqual([]);
+    expect(m.settings.get(SOURCES_KEY)).toEqual([]);
+  });
+
+  it("moves an address kept by an earlier version into the list, once", async () => {
+    const custom = "https://example.com/old.json";
+    const m = await market();
+    m.settings.set(LEGACY_URL_KEY, custom);
+    expect(m.raw.sources()).toEqual([
+      ...DEFAULT_SOURCES,
+      { name: "", url: custom, enabled: true },
+    ]);
+    expect(m.settings.get(LEGACY_URL_KEY)).toBeUndefined();
+    expect(m.settings.get(SOURCES_KEY)).toHaveLength(3);
+
+    const same = await market();
+    same.settings.set(LEGACY_URL_KEY, DEFAULT_SOURCES[0]!.url);
+    expect(same.raw.sources()).toEqual(DEFAULT_SOURCES);
+
+    // Cursor's address was the user's choice: it stays on, and is not listed twice.
+    const cursor = await market();
+    cursor.settings.set(LEGACY_URL_KEY, DEFAULT_SOURCES[1]!.url);
+    expect(cursor.raw.sources()).toEqual([
+      DEFAULT_SOURCES[0],
+      { ...DEFAULT_SOURCES[1]!, enabled: true },
+    ]);
+    expect(
+      cursor.raw.sources().filter((x) => x.url === DEFAULT_SOURCES[1]!.url),
+    ).toHaveLength(1);
+
+    const none = await market();
+    none.settings.set(LEGACY_URL_KEY, "");
+    expect(none.raw.sources()).toEqual([]);
+    // A stored list is never overwritten by the old key.
+    none.settings.set(LEGACY_URL_KEY, custom);
+    expect(none.raw.sources()).toEqual([]);
+  });
+
+  it("lists every source, shows which each entry came from, and a failing source hides no other", async () => {
+    handler = (request) => {
+      const path = new URL(request.url).pathname;
+      if (path === "/a.json") return json({ plugins: [item({ name: "both" }), item({ name: "only-a" })] });
+      if (path === "/c.json") return json({ plugins: [item({ name: "both" })] });
+      if (path === "/slow.json") return new Response("{nope");
+      return new Response("gone", { status: 404 });
+    };
+    const m = await market();
+    for (const source of m.raw.sources()) m.raw.removeSource(source.url);
+    const base = `http://127.0.0.1:${server.port}`;
+    m.raw.addSource(`${base}/a.json`, "A");
+    m.raw.addSource(`${base}/b.json`, "");
+    m.raw.addSource(`${base}/slow.json`, "Broken");
+    m.raw.addSource(`${base}/c.json`, "C");
+    const catalog = await m.raw.catalog();
+    expect(catalog.sources.map((x) => x.source.url.slice(base.length))).toEqual([
+      "/a.json",
+      "/b.json",
+      "/slow.json",
+      "/c.json",
+    ]);
+    expect(catalog.sources[1]!).toMatchObject({ entries: null });
+    expect(catalog.sources[1]!.error).toMatch(/HTTP 404/);
+    expect(catalog.sources[2]!.error).toMatch(/not valid JSON/);
+    const a = catalog.sources[0]!.entries!;
+    const c = catalog.sources[3]!.entries!;
+    expect(a.map((e) => e.name)).toEqual(["both", "only-a"]);
+    // The same name in two sources: both stay, told apart by their source.
+    expect(c[0]).toMatchObject({ name: "both", source: `${base}/c.json`, sourceName: "C" });
+    expect(a[0]).toMatchObject({ source: `${base}/a.json`, sourceName: "A" });
+    expect(a[0]!.name).toBe(c[0]!.name);
+    // A source with no name is shown by its address.
+    expect(catalog.sources[1]!.source.name).toBe("");
+    // Preview reads only the source it is asked about.
+    await expect(m.raw.preview("only-a", `${base}/c.json`)).rejects.toThrow(
+      /not in the catalog/,
+    );
+    await expect(m.raw.preview("both", "https://elsewhere.test/x.json")).rejects.toThrow(
+      /not one of the plugin sources/,
+    );
+  });
+});
+
+describe("the GitHub proxy", () => {
+  const RAW = "https://raw.githubusercontent.com/o/n/main/.claude-plugin/marketplace.json";
+
+  it("is off until a prefix is set, and then every URL is as it was", () => {
+    expect(githubProxy.prefix).toBe("");
+    for (const url of [
+      RAW,
+      "https://github.com/o/r.git",
+      "git@github.com:o/r.git",
+      "https://example.com/r.git",
+      "file:///tmp/r",
+      "not a url",
+    ])
+      expect(viaProxy(url)).toBe(url);
+  });
+
+  it("takes a prefix as typed: http(s) only, one trailing slash, empty is off", () => {
+    expect(normalizeProxy("")).toBe("");
+    expect(normalizeProxy("   ")).toBe("");
+    expect(normalizeProxy("https://p.test")).toBe("https://p.test/");
+    expect(normalizeProxy(" https://p.test/a/// ")).toBe("https://p.test/a/");
+    expect(normalizeProxy("http://p.test/x/")).toBe("http://p.test/x/");
+    expect(() => normalizeProxy("ftp://p.test/")).toThrow(/http\(s\)/);
+    expect(() => normalizeProxy("p.test")).toThrow(/not a URL/);
+  });
+
+  it("puts the prefix before the whole URL of github.com and raw.githubusercontent.com only", () => {
+    const p = "https://p.test/";
+    expect(viaProxy(RAW, p)).toBe(`https://p.test/${RAW}`);
+    expect(viaProxy("https://github.com/o/r.git", p)).toBe(
+      "https://p.test/https://github.com/o/r.git",
+    );
+    expect(viaProxy("https://GitHub.com/o/r.git", p)).toBe(
+      "https://p.test/https://GitHub.com/o/r.git",
+    );
+    expect(viaProxy(`https://p.test/${RAW}`, p)).toBe(`https://p.test/${RAW}`);
+    for (const other of [
+      "https://gitlab.com/o/r.git",
+      "https://github.com.evil.test/o/r.git",
+      "https://example.com/github.com/r.git",
+      "git@github.com:o/r.git",
+      "file:///tmp/r",
+    ])
+      expect(viaProxy(other, p)).toBe(other);
+  });
+
+  it("joins with exactly one slash however the prefix was typed", () => {
+    const repo = "https://github.com/o/r.git";
+    for (const typed of ["https://gh-proxy.com", "https://gh-proxy.com/", "  https://gh-proxy.com  ", "https://gh-proxy.com//"]) {
+      expect(viaProxy(repo, typed)).toBe(`https://gh-proxy.com/${repo}`);
+      expect(viaProxy(RAW, typed)).toBe(`https://gh-proxy.com/${RAW}`);
+    }
+    expect(viaProxy(repo, "  ")).toBe(repo);
+    expect(viaProxy(repo, "ftp://gh-proxy.com")).toBe(repo);
+  });
+
+  it("is kept as a setting, applied at once, and the catalog is fetched through it", async () => {
+    const seen: string[] = [];
+    handler = (request) => {
+      seen.push(new URL(request.url).pathname);
+      return json({
+        plugins: [{ name: "rel", description: "d", source: "./plugins/rel" }],
+      });
+    };
+    const m = await market();
+    for (const source of m.raw.sources()) m.raw.removeSource(source.url);
+    m.raw.addSource(RAW, "Raw");
+    m.raw.addSource(`http://127.0.0.1:${server.port}/own.json`, "Own");
+    expect(m.raw.setProxy(` http://127.0.0.1:${server.port}/px `).proxy).toBe(
+      `http://127.0.0.1:${server.port}/px/`,
+    );
+    expect(m.settings.get(PROXY_KEY)).toBe(`http://127.0.0.1:${server.port}/px/`);
+    expect(githubProxy.prefix).toBe(`http://127.0.0.1:${server.port}/px/`);
+    const catalog = await m.raw.catalog();
+    // The GitHub catalog went through the proxy; the other host's did not.
+    expect(seen).toEqual([`/px/${RAW}`, "/own.json"]);
+    // A relative path is resolved against the original address, then the repository is fetched through the proxy.
+    expect(catalog.sources[0]!.entries![0]).toMatchObject({
+      repo: "https://github.com/o/n.git",
+      path: "plugins/rel",
+    });
+    expect(catalog.sources[1]!.entries![0]!.unsupported).toMatch(/format not supported/);
+    expect(catalog.proxy).toBe(`http://127.0.0.1:${server.port}/px/`);
+    expect(() => m.raw.setProxy("ftp://x/")).toThrow();
+    expect(m.raw.setProxy("").proxy).toBe("");
+    expect(m.settings.get(PROXY_KEY)).toBeUndefined();
+    expect(githubProxy.prefix).toBe("");
+  });
+
+  it("shows no proxy in the preview of a repository that is not on GitHub", async () => {
+    const { url, sha } = await repo();
+    handler = () => json({ plugins: [item({ ...sourceOf({ url, sha }) })] });
+    const m = await market();
+    m.raw.setProxy("https://p.test/");
+    await m.market.setUrl(m.url);
+    expect((await m.market.preview(NAME)).proxy).toBeNull();
+  });
+});
+
+describe("switching a source on and off", () => {
+  /** Every address the market fetched, answering each with one plugin named after its host path. */
+  function recordFetches(): { urls: string[]; restore: () => void } {
+    const real = globalThis.fetch;
+    const urls: string[] = [];
+    globalThis.fetch = (async (input: Request | string | URL) => {
+      const url = String(input instanceof Request ? input.url : input);
+      urls.push(url);
+      return json({
+        plugins: [
+          {
+            name: url.includes("cursor") ? "from-cursor" : "from-anthropic",
+            description: "d",
+            source: "./p",
+          },
+        ],
+      });
+    }) as typeof fetch;
+    return { urls, restore: () => void (globalThis.fetch = real) };
+  }
+
+  it("on a fresh install reads Anthropic's list only; switching Cursor on brings its entries in, off takes them away", async () => {
+    const seen = recordFetches();
+    try {
+      const m = await market();
+      let catalog = await m.raw.catalog();
+      expect(seen.urls).toEqual([DEFAULT_SOURCES[0]!.url]);
+      expect(catalog.sources.map((x) => x.source.name)).toEqual(["Anthropic"]);
+      expect(catalog.sources[0]!.entries!.map((e) => e.name)).toEqual(["from-anthropic"]);
+
+      m.raw.setSourceEnabled(DEFAULT_SOURCES[1]!.url, true);
+      seen.urls.length = 0;
+      catalog = await m.raw.catalog();
+      expect(seen.urls.sort()).toEqual(DEFAULT_SOURCES.map((x) => x.url).sort());
+      expect(
+        catalog.sources.flatMap((x) => x.entries!.map((e) => e.name)).sort(),
+      ).toEqual(["from-anthropic", "from-cursor"]);
+
+      m.raw.setSourceEnabled(DEFAULT_SOURCES[1]!.url, false);
+      expect((await m.raw.catalog()).sources).toHaveLength(1);
+      // Off is not removed: the address and the name stay.
+      expect(m.raw.sources()).toEqual([
+        DEFAULT_SOURCES[0],
+        DEFAULT_SOURCES[1],
+      ]);
+      expect(() => m.raw.setSourceEnabled("https://nope.test/x.json", true)).toThrow(
+        /not in the list/,
+      );
+    } finally {
+      seen.restore();
+    }
+  });
+
+  it("does not fetch a source that is off, shows no error for it, and cannot preview from it", async () => {
+    const seen = recordFetches();
+    try {
+      const m = await market();
+      m.raw.setSourceEnabled(DEFAULT_SOURCES[0]!.url, false);
+      seen.urls.length = 0;
+      expect(await m.raw.catalog()).toEqual({ sources: [], proxy: "" });
+      expect(seen.urls).toEqual([]);
+      await expect(
+        m.raw.preview("from-anthropic", DEFAULT_SOURCES[0]!.url),
+      ).rejects.toThrow(/not one of the plugin sources/);
+      expect(seen.urls).toEqual([]);
+    } finally {
+      seen.restore();
+    }
+  });
+
+  it("counts a source stored without the flag as on", async () => {
+    const m = await market();
+    m.settings.set(SOURCES_KEY, [
+      { url: "https://old.test/a.json", name: "Old" },
+      { url: "https://off.test/b.json", name: "Off", enabled: false },
+    ]);
+    expect(m.raw.sources()).toEqual([
+      { url: "https://old.test/a.json", name: "Old", enabled: true },
+      { url: "https://off.test/b.json", name: "Off", enabled: false },
+    ]);
+  });
+
+  it("one enabled source failing still hides no other, and a source that is off is not read", async () => {
+    let asked = 0;
+    handler = (request) => {
+      const path = new URL(request.url).pathname;
+      if (path === "/off.json") asked++;
+      if (path === "/good.json") return json({ plugins: [item({ name: "good" })] });
+      return new Response("gone", { status: 404 });
+    };
+    const m = await market();
+    for (const source of m.raw.sources()) m.raw.removeSource(source.url);
+    const base = `http://127.0.0.1:${server.port}`;
+    m.raw.addSource(`${base}/bad.json`, "Bad");
+    m.raw.addSource(`${base}/good.json`, "Good");
+    m.raw.addSource(`${base}/off.json`, "Off");
+    m.raw.setSourceEnabled(`${base}/off.json`, false);
+    const catalog = await m.raw.catalog();
+    expect(catalog.sources.map((x) => x.source.name)).toEqual(["Bad", "Good"]);
+    expect(catalog.sources[0]!.error).toMatch(/HTTP 404/);
+    expect(catalog.sources[1]!.entries!.map((e) => e.name)).toEqual(["good"]);
+    expect(asked).toBe(0);
+    m.raw.setSourceEnabled(`${base}/off.json`, true);
+    await m.raw.catalog();
+    expect(asked).toBe(1);
+  });
+
+  it("keeps an installed plugin installed when its source is switched off", async () => {
+    const { url, sha } = await repo();
+    handler = () => json({ plugins: [item({ ...sourceOf({ url, sha }) })] });
+    const m = await market();
+    await m.market.setUrl(m.url);
+    await m.market.install(NAME, sha);
+    m.raw.setSourceEnabled(m.url, false);
+    expect(m.registry.get(NAME)).toBeDefined();
+    m.raw.setSourceEnabled(m.url, true);
+    expect((await m.market.catalog()).entries![0]!.installed).toBe("this");
   });
 });

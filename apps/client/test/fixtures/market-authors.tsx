@@ -5,9 +5,11 @@ import { Market } from "../../src/pages/plugins/market";
 import { createHost, Host } from "../../src/services/host";
 
 const catalog: MarketCatalog = {
-  url: "http://catalog.test/c.json",
-  isDefault: false,
-  entries: [
+  proxy: "",
+  sources: [
+    {
+      source: { url: "http://a.test/c.json", name: "A", enabled: true },
+      entries: [
     {
       name: "with-author",
       description: "d",
@@ -20,6 +22,8 @@ const catalog: MarketCatalog = {
       requires: [],
       installed: "no",
       unsupported: null,
+      source: "http://a.test/c.json",
+      sourceName: "A",
     },
     {
       name: "blank-author",
@@ -33,6 +37,8 @@ const catalog: MarketCatalog = {
       requires: [],
       installed: "no",
       unsupported: null,
+      source: "http://a.test/c.json",
+      sourceName: "A",
     },
     {
       name: "no-author",
@@ -46,10 +52,14 @@ const catalog: MarketCatalog = {
       requires: [],
       installed: "no",
       unsupported: null,
+      source: "http://a.test/c.json",
+      sourceName: "A",
+    },
+      ],
+      rejected: [],
+      error: null,
     },
   ],
-  rejected: [],
-  error: null,
 };
 
 function Fixture() {

@@ -46,22 +46,30 @@ export function Market(props: {
   const preview = signal<MarketPreview>();
   const agreed = signal(false);
   const busy = signal(false);
-  const editing = signal(false);
-  const address = signal("");
+  /** The source of the entry being previewed: what `install` is asked for. */
+  const from = signal("");
   const phone = () => props.layout === "phone";
+  const key = (item: MarketEntry) => item.source + "\n" + item.name;
+  const all = () =>
+    (catalog()?.sources ?? []).flatMap((item) => item.entries ?? []);
   const entries = () => {
     const needle = query().trim().toLowerCase();
-    return (catalog()?.entries ?? []).filter(
+    return all().filter(
       (item) =>
         needle === "" ||
-        [item.name, item.description, item.author]
+        [item.name, item.description, item.author, item.sourceName]
           .join(" ")
           .toLowerCase()
           .includes(needle),
     );
   };
-  const current = () =>
-    catalog()?.entries?.find((item) => item.name === detail());
+  const current = () => all().find((item) => key(item) === detail());
+  const failed = () =>
+    (catalog()?.sources ?? []).filter((item) => item.error !== null);
+  const skipped = () =>
+    (catalog()?.sources ?? []).flatMap((item) =>
+      item.rejected.map((one) => ({ ...one, from: item.source.name || item.source.url })),
+    );
   follow(() => "plugins");
 
   async function load() {
@@ -84,10 +92,12 @@ export function Market(props: {
     const result = await host.action(() =>
       host.call<MarketPreview>("plugins", "marketPreview", {
         name: entry.name,
+        source: entry.source,
       }),
     );
     busy.set(false);
     if (!result) return;
+    from.set(entry.source);
     agreed.set(false);
     preview.set(result);
   }
@@ -98,6 +108,7 @@ export function Market(props: {
     const result = await host.action(() =>
       host.call("plugins", "marketInstall", {
         name: shown.name,
+        source: from(),
         sha: shown.sha,
       }),
     );
@@ -105,35 +116,19 @@ export function Market(props: {
     if (!result) return;
     preview.set(undefined);
     detail.set("");
+    from.set("");
     await load();
   }
-  async function saveAddress() {
-    const result = await host.action(() =>
-      host.call<MarketCatalog>("plugins", "marketSetUrl", {
-        url: address().trim(),
-      }),
-    );
-    if (!result) return;
-    catalog.set(result);
-    editing.set(false);
-  }
-  const openAddress = () => {
-    address.set(catalog()?.url ?? "");
-    editing.set(true);
-  };
-
   const field = (
     label: string,
     value: () => string,
     onChange: (value: string) => void,
-    onSubmit?: () => void,
   ) => (
     <Input
       accessibilityLabel={label}
       placeholder={label}
       value={value()}
       submitBehavior="submit"
-      onSubmit={onSubmit}
       onChange={(event) => onChange(event.value)}
       focusStyle={{ borderColor: c().ink }}
       style={{
@@ -192,7 +187,6 @@ export function Market(props: {
       >
         <View style={{ flex: 1 }} />
         <View style={{ ...row, gap: 12 }}>
-          <Button label={uiText("marketSetAddress")} onPress={openAddress} />
           <Button
             label={uiText("refreshPlugins")}
             icon="refresh"
@@ -218,28 +212,30 @@ export function Market(props: {
           <Label variant="small" tone="muted" style={{ maxWidth: 1000 }}>
             {uiText("marketIntro")}
           </Label>
-          <If when={catalog()?.error}>
-            {(reason) => (
-              <View style={{ gap: 8 }}>
+          <If when={catalog() && !catalog()!.sources.length}>
+            <View style={{ gap: 8 }}>
+              <Label weight={500}>{uiText("marketNoSources")}</Label>
+              <Label variant="small" tone="muted">
+                {uiText("marketNoSourcesHint")}
+              </Label>
+            </View>
+          </If>
+          <Each of={failed()} key={(item) => item.source.url}>
+            {(item) => (
+              <View style={{ gap: 4 }}>
                 <Label weight={500}>
-                  {catalog()?.url === ""
-                    ? uiText("marketNoAddress")
-                    : uiText("marketUnavailable")}
+                  {item().source.name || item().source.url}
+                </Label>
+                <Label variant="small" tone="muted">
+                  {uiText("marketUnavailable")}
                 </Label>
                 <Label variant="small" tone="muted" style={{ userSelect: "text" }}>
-                  {catalog()?.url === "" ? uiText("marketNoAddressHint") : reason()}
+                  {item().error ?? ""}
                 </Label>
-                <View style={{ ...row }}>
-                  <Button
-                    label={uiText("marketSetAddress")}
-                    tone="primary"
-                    onPress={openAddress}
-                  />
-                </View>
               </View>
             )}
-          </If>
-          <If when={catalog()?.entries}>
+          </Each>
+          <If when={all().length}>
             <View style={{ maxWidth: 480 }}>
               {field(uiText("marketSearch"), query, query.set)}
             </View>
@@ -251,12 +247,12 @@ export function Market(props: {
             <View
               style={{ ...row, flexWrap: "wrap", alignItems: "flex-start", gap: 12 }}
             >
-              <Each of={entries()} key={(item) => item.name}>
+              <Each of={entries()} key={key}>
                 {(item) => (
                   <View
                     role="button"
                     accessibilityLabel={item().name}
-                    onPress={() => detail.set(item().name)}
+                    onPress={() => detail.set(key(item()))}
                     style={{
                       width: phone() ? undefined : 267,
                       flex: phone() ? 1 : undefined,
@@ -278,6 +274,9 @@ export function Market(props: {
                     <Label variant="small" tone="muted" lines={2}>
                       {item().description}
                     </Label>
+                    <Label variant="caption" tone="muted" lines={1}>
+                      {uiText("marketFrom", { name: item().sourceName })}
+                    </Label>
                     <If when={marker(item())}>
                       <Label variant="small">{marker(item())}</Label>
                     </If>
@@ -285,14 +284,14 @@ export function Market(props: {
                 )}
               </Each>
             </View>
-            <If when={catalog()?.rejected.length}>
+            <If when={skipped().length}>
               <Label variant="small" tone="muted">
-                {uiText("marketSkipped", { count: catalog()!.rejected.length })}
+                {uiText("marketSkipped", { count: skipped().length })}
               </Label>
-              <Each of={catalog()?.rejected ?? []} key={(item) => item.index}>
+              <Each of={skipped()} key={(item) => item.from + item.index}>
                 {(item) => (
                   <Label variant="caption" tone="muted" style={{ userSelect: "text" }}>
-                    {"#" + item().index + " " + (item().name ?? "") + ": " + item().reason}
+                    {item().from + " #" + item().index + " " + (item().name ?? "") + ": " + item().reason}
                   </Label>
                 )}
               </Each>
@@ -300,28 +299,6 @@ export function Market(props: {
           </If>
         </View>
       </SmoothScroll>
-      <If when={editing()}>
-        <Modal {...sheet(uiText("marketSetAddress"), 512, () => editing.set(false))}>
-          <View style={phone() ? { paddingHorizontal: 16, paddingBottom: 24 } : undefined}>
-            <Label variant="small" tone="muted" style={phone() ? undefined : { paddingTop: 6 }}>
-              {uiText("marketAddressDescription")}
-            </Label>
-            <View style={{ paddingTop: 14 }}>
-              {field(uiText("marketAddress"), address, address.set, () =>
-                void saveAddress(),
-              )}
-            </View>
-            <View style={{ ...row, justifyContent: "flex-end", paddingTop: 16 }}>
-              <Button
-                label={uiText("marketSave")}
-                tone="primary"
-                size={phone() ? 44 : 28}
-                onPress={() => void saveAddress()}
-              />
-            </View>
-          </View>
-        </Modal>
-      </If>
       <If when={current() && !preview()}>
         <Modal {...sheet(current()!.name, 512, () => detail.set(""))}>
           <View style={{ gap: 10, paddingTop: 6, paddingBottom: phone() ? 24 : 0, ...inset() }}>
@@ -330,6 +307,7 @@ export function Market(props: {
             </Label>
             {line(uiText("marketVersion"), current()!.version)}
             {line(uiText("marketAuthor"), current()!.author)}
+            {line(uiText("marketSource"), current()!.sourceName)}
             {line(uiText("marketRepository"), current()!.repo)}
             {line(
               uiText("marketCommit"),
@@ -375,6 +353,9 @@ export function Market(props: {
                 <Label variant="small" tone="muted">
                   {uiText("marketConfirmDescription")}
                 </Label>
+                <If when={shown().proxy}>
+                  {line(uiText("marketProxy"), shown().proxy ?? "")}
+                </If>
                 {line(uiText("marketRepository"), shown().repo)}
                 {line(uiText("marketPath"), shown().path || "/")}
                 {line(uiText("marketCommit"), shown().sha)}

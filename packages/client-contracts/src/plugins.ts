@@ -167,6 +167,9 @@ export interface MarketEntry {
   installed: "no" | "this" | "other";
   /** Why eta cannot install it (a source it does not read); null when it can. */
   unsupported: string | null;
+  /** The source (its catalog address) it was listed by, and its display name. */
+  source: string;
+  sourceName: string;
 }
 
 /** An entry the host threw away, and why. */
@@ -177,16 +180,34 @@ export interface MarketRejected {
   reason: string;
 }
 
-/** The catalog, or why there is none. Installed plugins are never touched by either. */
-export interface MarketCatalog {
-  /** The address in force; `""` when none is set. */
+/** A catalog the market reads. `name` is what the user calls it; `""` when nothing. */
+export interface MarketSource {
   url: string;
-  /** Whether `url` is the default and not the user's own. */
-  isDefault: boolean;
+  name: string;
+  /** A source that is off stays in the list, but is not read and shows no entries. */
+  enabled: boolean;
+}
+
+/** The sources and the GitHub proxy, as set. */
+export interface MarketSettings {
+  sources: MarketSource[];
+  /** The prefix of a GitHub proxy, with one trailing slash; `""` when there is none. */
+  proxy: string;
+}
+
+/** What one source gave, or why it gave nothing. One failing source does not touch the others. */
+export interface MarketSourceCatalog {
+  source: MarketSource;
   /** Null when the catalog could not be read; `error` says why. */
   entries: MarketEntry[] | null;
   rejected: MarketRejected[];
   error: string | null;
+}
+
+/** Every source's catalog. Installed plugins are never touched by any of them. */
+export interface MarketCatalog {
+  sources: MarketSourceCatalog[];
+  proxy: string;
 }
 
 /** An MCP server as it would start: what the user must see before saying yes. */
@@ -208,6 +229,8 @@ export interface MarketPreview {
   requires: string[];
   servers: MarketServerView[];
   skills: { name: string; description: string }[];
+  /** The proxy this was read through, when the repository is on GitHub and a proxy is set. */
+  proxy: string | null;
   /** What the loader found wrong and ignored. */
   reports: string[];
   /** The values it will ask for after it is installed. */

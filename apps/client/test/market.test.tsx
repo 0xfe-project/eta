@@ -1,9 +1,9 @@
 import { expect, open, test } from "nsh/test";
 
-test("with no catalog address the market says so and offers to set one", async () => {
+test("with no source the market says so and points to the settings", async () => {
   const app = await open("./fixtures/market.tsx", { width: 900, height: 700 });
-  expect(app.shows("No catalog address is set")).toBe(true);
-  expect(app.shows("Set catalog address")).toBe(true);
+  expect(app.shows("No plugin sources")).toBe(true);
+  expect(app.shows("Add a source, or switch one on, in Settings → Plugins to browse it. Installed plugins are not affected.")).toBe(true);
 });
 
 test("a card shows no separator when the entry has no author", async () => {
@@ -13,4 +13,13 @@ test("a card shows no separator when the entry has no author", async () => {
   expect(app.shows("3.0.0")).toBe(true);
   expect(app.shows("2.0.0 ·")).toBe(false);
   expect(app.shows("3.0.0 ·")).toBe(false);
+});
+
+test("the market lists every source, says where each entry is from, and shows a failing source's error", async () => {
+  const app = await open("./fixtures/market-several.tsx", { width: 1100, height: 700 });
+  expect(app.shows("From Alpha")).toBe(true);
+  expect(app.shows("From Beta")).toBe(true);
+  expect(app.shows("cannot read the catalog: HTTP 404")).toBe(true);
+  expect(app.shows("1.0.0 · t")).toBe(true);
+  expect(app.shows("2.0.0 · t")).toBe(true);
 });

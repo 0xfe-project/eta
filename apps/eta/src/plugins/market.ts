@@ -1,8 +1,8 @@
 /**
  * The plugin market: an online catalog of git sources, and the install of one of them.
  *
- * The catalog is somebody else's `marketplace.json`, in the Claude Code or the Cursor shape, at a URL
- * the user can change (`plugins.catalogUrl` in the settings). Nothing in it is trusted: it is fetched
+ * The catalog is somebody else's `marketplace.json`, in the Claude Code or the Cursor shape, at URLs
+ * the user keeps as a list (`plugins.sources` in the settings), each read on its own. Nothing in it is trusted: it is fetched
  * with a time and a size limit, every entry is checked on its own, and one that does not fit is
  * thrown away with the reason. An entry is turned into a git source `{repo, rev, path}`; a source
  * eta does not read is listed and marked unsupported. A `rev` is always a commit: the catalog's
@@ -17,23 +17,40 @@ import type {
   MarketEntry,
   MarketPreview,
   MarketRejected,
+  MarketSettings,
+  MarketSource,
+  MarketSourceCatalog,
 } from "@eta/client-contracts";
 import type { SettingStore } from "../settings/store";
 import type { Plugins } from "./service";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { loadPlugin, PluginError } from "@eta/daemon";
-import { cleanPath, fetchInto, resolveRev } from "./git";
+import {
+  cleanPath,
+  fetchInto,
+  githubProxy,
+  normalizeProxy,
+  resolveRev,
+  viaProxy,
+} from "./git";
 import { serverViews } from "./server-view";
 
-/**
- * Cursor's own plugin list. The Anthropic list is
- * https://raw.githubusercontent.com/anthropics/claude-plugins-official/main/.claude-plugin/marketplace.json
- * and reads the same way; the user can point the market at it.
- */
-export const DEFAULT_CATALOG_URL =
+const CURSOR_URL =
   "https://raw.githubusercontent.com/cursor/plugins/HEAD/.cursor-plugin/marketplace.json";
-export const CATALOG_URL_KEY = "plugins.catalogUrl";
+/** The two public lists the market starts with: Anthropic's is on, Cursor's is there to be switched on. */
+export const DEFAULT_SOURCES: readonly MarketSource[] = [
+  {
+    name: "Anthropic",
+    url: "https://raw.githubusercontent.com/anthropics/claude-plugins-official/main/.claude-plugin/marketplace.json",
+    enabled: true,
+  },
+  { name: "Cursor", url: CURSOR_URL, enabled: false },
+];
+export const SOURCES_KEY = "plugins.sources";
+export const PROXY_KEY = "plugins.githubProxy";
+/** The single address an earlier version kept; read once and moved into the list. */
+export const LEGACY_URL_KEY = "plugins.catalogUrl";
 
 const MAX_BYTES = 1024 * 1024;
 const TIMEOUT_MS = 10_000;
@@ -118,8 +135,6 @@ export class Market {
   readonly #timeoutMs: number;
   readonly #schemes: readonly string[];
   readonly #catalogRepo: string | undefined;
-  /** The branch or tag an entry without a `sha` follows, from the last catalog read. */
-  #refs = new Map<string, string>();
 
   constructor(options: MarketOptions) {
     this.#settings = options.settings;
@@ -129,51 +144,135 @@ export class Market {
     this.#timeoutMs = options.timeoutMs ?? TIMEOUT_MS;
     this.#schemes = options.schemes ?? ["https:", "ssh:", "git:"];
     this.#catalogRepo = options.catalogRepo;
+    this.#proxy();
   }
 
-  #url(): string {
-    const saved = this.#settings.get(CATALOG_URL_KEY);
-    return typeof saved === "string" ? saved : DEFAULT_CATALOG_URL;
+  /** The proxy prefix now; also what every `git` call of the host goes through. */
+  #proxy(): string {
+    const saved = this.#settings.get(PROXY_KEY);
+    githubProxy.prefix = typeof saved === "string" ? saved : "";
+    return githubProxy.prefix;
   }
 
-  /** Point the market at another catalog; `""` goes back to the default. */
-  async setUrl(url: string): Promise<MarketCatalog> {
-    const clean = url.trim();
-    if (clean === "") this.#settings.delete(CATALOG_URL_KEY);
-    else {
-      httpUrl(clean, "the catalog address");
-      this.#settings.set(CATALOG_URL_KEY, clean);
+  /** The sources, read when asked: the stored list, else the defaults (or the old single address). */
+  sources(): MarketSource[] {
+    const saved = this.#settings.get(SOURCES_KEY);
+    if (Array.isArray(saved))
+      return saved.flatMap((item: unknown) =>
+        isPlain(item) && typeof item.url === "string"
+          ? [
+              {
+                url: item.url,
+                name: typeof item.name === "string" ? item.name : "",
+                // Stored without the flag (an earlier version): on.
+                enabled: item.enabled !== false,
+              },
+            ]
+          : [],
+      );
+    const list = DEFAULT_SOURCES.map((item) => ({ ...item }));
+    const old = this.#settings.get(LEGACY_URL_KEY);
+    if (old === undefined) return list;
+    // An address from before there was a list: kept, after the defaults; `""` was "no catalog".
+    if (old === "") list.length = 0;
+    else if (typeof old === "string") {
+      // An address the user chose is on, and is not listed twice.
+      const same = list.find((item) => item.url === old);
+      if (same === undefined) list.push({ name: "", url: old, enabled: true });
+      else same.enabled = true;
     }
-    return await this.catalog();
+    this.#settings.set(SOURCES_KEY, list);
+    this.#settings.delete(LEGACY_URL_KEY);
+    return list;
   }
 
-  /** The catalog now, or why there is none. */
+  settings(): MarketSettings {
+    return { sources: this.sources(), proxy: this.#proxy() };
+  }
+
+  addSource(url: string, name: string): MarketSettings {
+    const clean = url.trim();
+    try {
+      httpUrl(clean, "the address");
+    } catch (error) {
+      throw new PluginError(messageOf(error));
+    }
+    const list = this.sources();
+    if (list.some((item) => item.url === clean))
+      throw new PluginError("that address is in the list already");
+    const label = name.trim().slice(0, 60);
+    this.#settings.set(SOURCES_KEY, [...list, { url: clean, name: label, enabled: true }]);
+    return this.settings();
+  }
+
+  removeSource(url: string): MarketSettings {
+    const list = this.sources();
+    if (!list.some((item) => item.url === url))
+      throw new PluginError("that address is not in the list");
+    this.#settings.set(
+      SOURCES_KEY,
+      list.filter((item) => item.url !== url),
+    );
+    return this.settings();
+  }
+
+  /** Switch a source on or off; it stays in the list either way. */
+  setSourceEnabled(url: string, enabled: boolean): MarketSettings {
+    const list = this.sources();
+    if (!list.some((item) => item.url === url))
+      throw new PluginError("that address is not in the list");
+    this.#settings.set(
+      SOURCES_KEY,
+      list.map((item) => (item.url === url ? { ...item, enabled } : item)),
+    );
+    return this.settings();
+  }
+
+  /** The GitHub proxy prefix; `""` turns it off. */
+  setProxy(prefix: string): MarketSettings {
+    const clean = normalizeProxy(prefix);
+    if (clean === "") this.#settings.delete(PROXY_KEY);
+    else this.#settings.set(PROXY_KEY, clean);
+    return this.settings();
+  }
+
+  /** Every source's catalog, each read on its own: one that fails does not hide the others. */
   async catalog(): Promise<MarketCatalog> {
-    const url = this.#url();
-    const base = { url, isDefault: url === DEFAULT_CATALOG_URL };
-    if (url === "")
-      return {
-        ...base,
-        entries: null,
-        rejected: [],
-        error: "no catalog address is set",
-      };
+    const proxy = this.#proxy();
+    const sources = await Promise.all(
+      this.sources()
+        .filter((source) => source.enabled)
+        .map(
+        async (source) => await this.#read(source, proxy, new Map()),
+      ),
+    );
+    return { sources, proxy };
+  }
+
+  /** One source: its entries, or why there are none. */
+  async #read(
+    source: MarketSource,
+    proxy: string,
+    refs: Map<string, string>,
+  ): Promise<MarketSourceCatalog> {
+    const { url } = source;
     let raw: unknown;
     try {
-      raw = await this.#fetch(url);
+      raw = await this.#fetch(viaProxy(url, proxy));
     } catch (error) {
-      return { ...base, entries: null, rejected: [], error: messageOf(error) };
+      return { source, entries: null, rejected: [], error: messageOf(error) };
     }
     if (!isPlain(raw) || !Array.isArray(raw.plugins))
       return {
-        ...base,
+        source,
         entries: null,
         rejected: [],
-        error: 'the catalog must be an object with a "plugins" list (a Claude Code or Cursor marketplace.json)',
+        error:
+          'the catalog must be an object with a "plugins" list (a Claude Code or Cursor marketplace.json)',
       };
     if (raw.plugins.length > MAX_ENTRIES)
       return {
-        ...base,
+        source,
         entries: null,
         rejected: [],
         error: `the catalog lists more than ${MAX_ENTRIES} plugins`,
@@ -181,27 +280,26 @@ export class Market {
     const entries: MarketEntry[] = [];
     const rejected: MarketRejected[] = [];
     const seen = new Set<string>();
+    // The repository is read from the address as written, before any proxy is put in front of it.
     const origin = originOf(url, raw.metadata);
     if (this.#catalogRepo !== undefined) origin.repo = this.#catalogRepo;
-    const refs = new Map<string, string>();
-    this.#refs = refs;
     raw.plugins.forEach((item: unknown, index: number) => {
       const name =
         isPlain(item) && typeof item.name === "string"
           ? item.name.slice(0, 64)
           : null;
       try {
-        const { entry, ref } = this.#entry(item, origin);
+        const { entry, ref } = this.#entry(item, origin, source);
         if (seen.has(entry.name))
           throw new Error(`${entry.name} is listed twice`);
         seen.add(entry.name);
-        refs.set(entry.name, ref);
+        refs.set(`${url}\n${entry.name}`, ref);
         entries.push(entry);
       } catch (error) {
         rejected.push({ index: index + 1, name, reason: messageOf(error) });
       }
     });
-    return { ...base, entries, rejected, error: null };
+    return { source, entries, rejected, error: null };
   }
 
   /** Read the document with a time limit and a size limit, and parse it. */
@@ -258,7 +356,11 @@ export class Market {
   }
 
   /** One entry as it must be; throws the reason it is not. */
-  #entry(item: unknown, origin: Origin): { entry: MarketEntry; ref: string } {
+  #entry(
+    item: unknown,
+    origin: Origin,
+    from: MarketSource,
+  ): { entry: MarketEntry; ref: string } {
     if (!isPlain(item)) throw new Error("an entry must be an object");
     const name = text(item, "name", 64);
     if (!NAME.test(name) || name.includes("--") || name.includes(".."))
@@ -296,6 +398,8 @@ export class Market {
             ? this.#installed(name, source.repo, source.path)
             : "no",
         unsupported: source.unsupported,
+        source: from.url,
+        sourceName: from.name === "" ? from.url : from.name,
       },
     };
   }
@@ -393,21 +497,30 @@ export class Market {
     return this.#plugins.registry.get(name) === undefined ? "no" : "other";
   }
 
-  async #listed(name: string): Promise<{ entry: MarketEntry; ref: string }> {
-    const catalog = await this.catalog();
-    if (catalog.entries === null)
-      throw new PluginError(catalog.error ?? "no catalog");
-    const entry = catalog.entries.find((item) => item.name === name);
+  async #listed(
+    name: string,
+    url: string,
+  ): Promise<{ entry: MarketEntry; ref: string }> {
+    const proxy = this.#proxy();
+    const source = this.sources().find(
+      (item) => item.url === url && item.enabled,
+    );
+    if (source === undefined)
+      throw new PluginError(`${url} is not one of the plugin sources`);
+    const refs = new Map<string, string>();
+    const read = await this.#read(source, proxy, refs);
+    if (read.entries === null) throw new PluginError(read.error ?? "no catalog");
+    const entry = read.entries.find((item) => item.name === name);
     if (entry === undefined)
       throw new PluginError(`${name} is not in the catalog`);
     if (entry.unsupported !== null)
       throw new PluginError(`${name}: ${entry.unsupported}`);
-    return { entry, ref: this.#refs.get(name) ?? "HEAD" };
+    return { entry, ref: refs.get(`${url}\n${name}`) ?? "HEAD" };
   }
 
   /** Read the plugin at the pinned commit and say what it would run. Nothing is installed. */
-  async preview(name: string): Promise<MarketPreview> {
-    const { entry, ref } = await this.#listed(name);
+  async preview(name: string, source: string): Promise<MarketPreview> {
+    const { entry, ref } = await this.#listed(name, source);
     // The commit the user is shown: the catalog's, or the repository's right now, once.
     const sha = entry.rev ?? (await resolveRev(entry.repo, ref)).sha;
     const scratch = await mkdtemp(join(this.#dataDir, ".market-"));
@@ -428,6 +541,8 @@ export class Market {
         repo: entry.repo,
         path: entry.path,
         sha,
+        proxy:
+          viaProxy(entry.repo) === entry.repo ? null : githubProxy.prefix,
         requires: plugin.requires,
         servers: serverViews(plugin).map((view, index) => {
           const { config } = plugin.servers[index]!;
@@ -458,8 +573,8 @@ export class Market {
    * commit must still pin that one; if it now says another, nothing is installed, and the user is
    * shown the new one first. The plugin keeps the name its own manifest gives it.
    */
-  async install(name: string, sha: string): Promise<string> {
-    const { entry } = await this.#listed(name);
+  async install(name: string, source: string, sha: string): Promise<string> {
+    const { entry } = await this.#listed(name, source);
     if (!SHA.test(sha)) throw new PluginError("sha must be a full commit hash");
     if (entry.rev !== null && entry.rev !== sha)
       throw new PluginError(
