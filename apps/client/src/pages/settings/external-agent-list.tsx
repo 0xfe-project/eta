@@ -15,6 +15,8 @@ export function ExternalAgentList(props: {
   lists: Record<string, AcpMachineList>;
   machines: MachineView[];
   onAgent: (machineId: string, agent: AcpAgentView) => void;
+  /** Opens the edit form; absent when this client may not change agents. */
+  onEdit?: (machineId: string, agent: AcpAgentView) => void;
 }) {
   const c = colors();
   const groups = () => {
@@ -119,10 +121,20 @@ export function ExternalAgentList(props: {
                 }}
                 menuLabel={agent().label}
                 menu={
-                  <ActionItem
-                    label={uiText("settingsDetails")}
-                    onSelect={() => props.onAgent(group().id, agent())}
-                  />
+                  <>
+                    <ActionItem
+                      label={uiText("settingsDetails")}
+                      onSelect={() => props.onAgent(group().id, agent())}
+                    />
+                    <If when={props.onEdit}>
+                      {(edit) => (
+                        <ActionItem
+                          label={uiText("settingsEdit")}
+                          onSelect={() => edit()(group().id, agent())}
+                        />
+                      )}
+                    </If>
+                  </>
                 }
                 onPress={() => props.onAgent(group().id, agent())}
               />

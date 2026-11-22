@@ -1,7 +1,7 @@
 import type { BoardTaskView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
-import { Scroll, signal, View } from "nsh";
-import { colors, grow, Icon, Label, row } from "../../components";
+import { signal, View } from "nsh";
+import { colors, grow, Icon, Label, row, SmoothScroll } from "../../components";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 import { ownerLine } from "./creator";
@@ -60,7 +60,7 @@ export function PhoneTaskList(props: {
   const c = colors();
   const expanded = signal<string[]>([]);
   return (
-    <Scroll style={grow} scrollbar={false}>
+    <SmoothScroll style={grow} scrollbar={false}>
       <Each of={phoneGroups}>
         {(group) => {
           const entries = () =>
@@ -244,7 +244,7 @@ export function PhoneTaskList(props: {
           );
         }}
       </Each>
-    </Scroll>
+    </SmoothScroll>
   );
 }
 
@@ -351,7 +351,7 @@ export function TabletTaskList(props: {
       ? taskDay(task.updatedAt)
       : relativeTime(task.updatedAt);
   return (
-    <Scroll style={grow} scrollbar={false}>
+    <SmoothScroll style={grow} scrollbar={false}>
       <Each of={props.tasks} key={(task) => task.id}>
         {(task) => (
           <View
@@ -396,7 +396,7 @@ export function TabletTaskList(props: {
           </View>
         )}
       </Each>
-    </Scroll>
+    </SmoothScroll>
   );
 }
 

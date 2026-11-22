@@ -150,8 +150,6 @@ export const chatMessages = {
     "来自 {{value1}} 的问题{{value2}}",
   ],
   questionFromWithCount: ["Question from {{value1}}", "来自 {{value1}} 的问题"],
-  queuedWithCount: ["Queued · {{text}}", "已排队 · {{text}}"],
-  recall: ["Recall", "撤回"],
   reject: ["Reject", "拒绝"],
   removeFrom: [
     "Remove {{memberName}} from {{name}}?",
@@ -166,7 +164,6 @@ export const chatMessages = {
   saveModel: ["Save model", "保存模型"],
   sendAnswer: ["Send answer", "发送回答"],
   skip: ["Skip", "跳过"],
-  steer: ["Steer", "补充指令"],
   steward: ["steward", "主理人"],
   steward2: ["Steward", "主理人"],
   taskDraft: ["Task draft", "任务草稿"],
@@ -177,7 +174,47 @@ export const chatMessages = {
   yourAnswer: ["Your answer", "你的回答"],
   yourAnswerProgress: ["Your answer…", "输入回答…"],
   memberWriting: ["{{name}} · writing", "{{name}} · 正在回复"],
-  queuedMessages: ["{{count}} queued", "{{count}} 条排队"],
+  queueLane: ["Queued messages", "排队中的消息"],
+  queueQueued: ["Queued", "排队中"],
+  queueWaitsFor: ["waits for {{names}} to finish", "等 {{names}} 回完"],
+  queueAfterPrevious: ["after the one above", "接在上一条后面"],
+  queueThem: ["them", "他们"],
+  queueSeparator: [", ", "、"],
+  queueLabel: ["Queued message: {{text}}", "排队中的消息：{{text}}"],
+  queueSteer: ["Insert into this turn", "插入当前回合"],
+  queueSteerSeveral: ["Insert into the replies", "插入当前回复"],
+  queueSteerLabel: [
+    "Insert into this turn: {{text}}",
+    "插入当前回合：{{text}}",
+  ],
+  queueSteering: [
+    "Inserting into {{names}}'s turn…",
+    "正在插入 {{names}} 的这一轮…",
+  ],
+  queuePullBack: ["Pull back to edit", "撤回到输入框"],
+  queuePullBackLabel: [
+    "Pull back into the box: {{text}}",
+    "撤回到输入框：{{text}}",
+  ],
+  queuePulling: ["pulling back…", "正在撤回…"],
+  queueDrop: ["Delete", "删除"],
+  queueDropLabel: ["Delete this one: {{text}}", "删除这条：{{text}}"],
+  queueDropping: ["deleting…", "正在删除…"],
+  queueTaken: ["{{names}} already read this one", "{{names}} 已经读到这条了"],
+  queueSteerIdle: [
+    "{{names}} has no reply to insert into; it stays queued",
+    "{{names}} 现在没有可以插入的回复，这条仍在排队",
+  ],
+  queueSteerEnded: [
+    "{{names}} just finished; this goes out as the next message",
+    "{{names}} 这一轮刚好结束，这条作为下一条发出",
+  ],
+  queueSteerFailed: ["Could not insert it: {{reason}}", "没能插入：{{reason}}"],
+  queuePullFailed: [
+    "Could not pull it back: {{reason}}",
+    "没能撤回：{{reason}}",
+  ],
+  queueDropFailed: ["Could not delete it: {{reason}}", "没能删除：{{reason}}"],
   stopMember: ["Stop {{name}}", "停止 {{name}}"],
   waitsUntilFinishes: [
     "Waits until {{names}} finishes this turn",
@@ -303,4 +340,22 @@ export const chatMessages = {
     "Nothing is waiting for approval.",
     "没有等待批准的事项。",
   ],
+  openPicture: [
+    "View picture {{name}} · {{size}}",
+    "查看图片 {{name}} · {{size}}",
+  ],
+  openImage: [
+    "Open image {{index}} of {{count}}",
+    "打开第 {{index}} 张图片，共 {{count}} 张",
+  ],
+  pictureTitle: [
+    "Image {{index}} of {{count}}",
+    "第 {{index}} 张图片，共 {{count}} 张",
+  ],
+  pictureHint: [
+    "Press the image to toggle its actual size, use the arrow keys or swipe to move between images, Esc to close.",
+    "点按图片切换原尺寸，方向键或左右滑动切换图片，Esc 关闭。",
+  ],
+  pictureFailed: ["Couldn't load the image", "图片加载失败"],
+  removeAttachment: ["Remove {{name}}", "移除 {{name}}"],
 } as const;

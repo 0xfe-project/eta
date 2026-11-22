@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { agentName, useAgentList } from "@/queries/agents";
@@ -548,6 +549,37 @@ export function TaskArchiveSetting() {
               {choice.label}
             </button>
           ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Settings: whether the agent that made a task answers its executor's questions before the user. */
+export function TaskAskSetting() {
+  const { t } = useTranslation(["tasks"] as const);
+  const { autoAnswerAsks } = useBoardSettings();
+  const save = useSetBoardSettings();
+  return (
+    <div className="mb-6">
+      <div className="settings-heading">
+        <h2>{t("asks.settingTitle")}</h2>
+      </div>
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div>{t("asks.settingLabel")}</div>
+          <p>{t("asks.settingHint")}</p>
+        </div>
+        <div className="settings-control">
+          <Switch
+            id="task-auto-answer-asks"
+            aria-label={t("asks.settingLabel")}
+            checked={autoAnswerAsks}
+            disabled={save.isPending}
+            onCheckedChange={(on) =>
+              save.mutate({ autoAnswerAsks: on }, { onError: showError })
+            }
+          />
         </div>
       </div>
     </div>

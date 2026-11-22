@@ -44,6 +44,15 @@ const task: BoardTaskView = {
   updatedAt: 0,
 } as BoardTaskView;
 
+/** Closed, so only the Tasks tab lists it. */
+const done: BoardTaskView = {
+  ...task,
+  id: "task-6",
+  number: 6,
+  title: "Ship the redesign",
+  status: "done",
+};
+
 const hour = 3_600_000;
 const now = Date.now();
 let count = 0;
@@ -105,7 +114,7 @@ function Fixture() {
         agent("cy", "Cyrus"),
       ]),
       artifacts: list(artifacts),
-      tasks: list([task]),
+      tasks: list([task, done]),
       "conversations.group": {
         sections: { timeline: { messages: [], hasMore: false, held: [] } },
         revisions: {},

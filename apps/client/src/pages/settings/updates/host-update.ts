@@ -2,6 +2,7 @@ import type { UpgradeArgs, UpgradeResults } from "@eta/client-contracts";
 import { cleanup, effect, signal } from "nsh";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { recentResult } from "./progress";
 
 function describeError(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -26,6 +27,14 @@ export function useHostUpdate() {
   const canRead = () => connected() && host.can("upgrade.check");
   const failed = () =>
     ["failed", "rolled-back", "broken", "lost"].includes(status()?.state ?? "");
+  /** The last upgrade, once it has ended, while it is recent enough to tell. */
+  const result = () => recentResult(status(), checkClock());
+  /** Pressed and not answered yet: the row says so before the Host does. */
+  const launched = signal<string>();
+  const starting = () =>
+    !active() &&
+    (pending() === "start" ||
+      (launched() !== undefined && status()?.id !== launched()));
   const version = () =>
     status()?.state === "done"
       ? (status()?.to ?? check()?.version)
@@ -90,9 +99,47 @@ export function useHostUpdate() {
     if (!connected() || pending()) return;
     error.set("");
     pending.set(action);
+    // The dialog closes at once: the row says what happens next.
+    if (action === "start") confirm.set(false);
     try {
-      await host.call<UpgradeResults[A]>("upgrade", action, args);
+      const answer = await host.call<UpgradeResults[A]>(
+        "upgrade",
+        action,
+        args,
+      );
+      if (action === "start") launch((answer as UpgradeResults["start"]).id);
       confirm.set(false);
+    } catch (problem) {
+      error.set(describeError(problem));
+    } finally {
+      pending.set("");
+      host.refreshUpgrade();
+    }
+  }
+
+  // The Host answered with the upgrade's id; its status follows within a poll. A Host whose
+  // status never comes stops counting as starting after a while.
+  let launchTimer: ReturnType<typeof setTimeout> | undefined;
+  function launch(id: string) {
+    launched.set(id);
+    clearTimeout(launchTimer);
+    launchTimer = setTimeout(() => launched.set(undefined), 20_000);
+  }
+  cleanup(() => clearTimeout(launchTimer));
+
+  /** While waiting for work: give up waiting and restart now, stopping it. */
+  async function updateNow() {
+    if (!connected() || pending()) return;
+    error.set("");
+    pending.set("start");
+    try {
+      await host.call<UpgradeResults["cancel"]>("upgrade", "cancel", {});
+      const answer = await host.call<UpgradeResults["start"]>(
+        "upgrade",
+        "start",
+        { force: true },
+      );
+      launch(answer.id);
     } catch (problem) {
       error.set(describeError(problem));
     } finally {
@@ -148,6 +195,9 @@ export function useHostUpdate() {
     editable,
     canRead,
     failed,
+    result,
+    starting,
+    updateNow,
     version,
     offer,
     canUpdate,

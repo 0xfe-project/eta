@@ -31,7 +31,6 @@ import {
   effect,
   keyboardFrame,
   keymap,
-  Scroll,
   signal,
   untracked,
   View,
@@ -46,16 +45,19 @@ import {
   Icon,
   Label,
   row,
+  SmoothScroll,
   textFaces,
 } from "../../components";
 
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { pastedFile } from "./bmp-to-png";
 import { composerAttachments } from "./composer-attachments";
-import { HeldRows, OutboxRows } from "./composer-delivery";
+import { OutboxRows } from "./composer-delivery";
 import { drainOutbox, openComposerDraft } from "./composer-draft";
-
 import { ComposerRecipients } from "./composer-recipients";
+
+import { HeldMessages } from "./held-messages";
 
 import { activeReply } from "./member-status";
 
@@ -78,7 +80,6 @@ export function Composer(props: {
   const host = useHost();
   const c = colors();
   const type = textFaces();
-  const showHeld = signal(false);
   const conversationId = props.id;
   const origin = host.address()!.origin;
   const store = openComposerDraft(origin, conversationId);
@@ -104,7 +105,6 @@ export function Composer(props: {
   let input: InputRef | undefined;
   const list = signal<ViewRef>();
   const activeOption = signal<ViewRef>();
-  const heldRows = new Map<string, ViewRef>();
   let mounted = true;
   cleanup(() => {
     mounted = false;
@@ -358,7 +358,7 @@ export function Composer(props: {
         event.files.every((file) => file.type.startsWith("image/"))
       )
     ) {
-      void attach(event.files);
+      void attach(Promise.all(event.files.map(pastedFile)));
     } else if (text.length > MAX_MESSAGE_CHARS) {
       void attach([
         new File([text], uiText("pastedFile"), {
@@ -433,14 +433,14 @@ export function Composer(props: {
           />
         </View>
       </If>
-      <HeldRows
-        messages={showHeld() || !props.group ? props.held : []}
+      <HeldMessages
+        messages={props.held}
         conversationId={conversationId}
-        onRecall={(text) => {
+        phone={props.phone}
+        onPullBack={(text) => {
           prepend(text);
           focusEditor();
         }}
-        rows={heldRows}
       />
       <If when={props.group}>
         <ComposerRecipients
@@ -458,18 +458,11 @@ export function Composer(props: {
           running={members()
             .filter((member) => member.busy)
             .map((member) => member.id)}
-          held={props.held.length}
           names={names()}
           waitsFor={waitsFor()}
           onChangeMentions={(mentions) =>
             edit({ sticky: mentions ? "everyone" : undefined })
           }
-          onToggleHeld={() => {
-            showHeld.set(!showHeld());
-            const first = props.held[0];
-            if (first && showHeld())
-              queueMicrotask(() => heldRows.get(first.id)?.focus());
-          }}
           onToggleRecipient={toggle}
         />
       </If>
@@ -513,7 +506,7 @@ export function Composer(props: {
               text={uiText(menu()?.kind === "hash" ? "tasks" : "mentions")}
               style={{ paddingHorizontal: 10, paddingTop: 6, paddingBottom: 4 }}
             />
-            <Scroll
+            <SmoothScroll
               ref={(ref) => {
                 scroll = ref;
               }}
@@ -569,7 +562,7 @@ export function Composer(props: {
                   </View>
                 )}
               </Each>
-            </Scroll>
+            </SmoothScroll>
           </View>
         </If>
         <If when={prefix().length}>
@@ -713,14 +706,6 @@ export function Composer(props: {
               <Icon name="clip" size={props.phone ? 16 : 14} tone="muted" />
             </View>
             <View style={{ flex: props.phone ? 0 : 1 }} />
-            <If when={props.writing && !props.phone}>
-              <Button
-                icon="stop"
-                label={uiText("stop")}
-                size={28}
-                onPress={stopConversation}
-              />
-            </If>
             <Button
               label={uiText("send")}
               icon={props.phone ? "arrowUp" : undefined}

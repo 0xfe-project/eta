@@ -1,0 +1,310 @@
+import type {
+  ConversationResults,
+  MessageView,
+  SteerHeldResult,
+} from "@eta/client-contracts";
+import { effect, keymap, signal, View } from "nsh";
+import { colors, Label, row } from "../../components";
+import { StatusDot } from "../../components/status-dot";
+import { uiText } from "../../i18n";
+import { useHost } from "../../services/host";
+
+/** More names than this read as a list nobody reads: say "them" instead. */
+const MAX_NAMES = 3;
+
+type Busy = "steer" | "pull" | "drop";
+
+/** The agents a held message waits for (`data.woke`), as one phrase. */
+function waitingNames(
+  message: MessageView,
+  nameOf: (agentId: string) => string,
+): string {
+  const ids = Array.isArray(message.data.woke)
+    ? (message.data.woke as string[])
+    : [];
+  if (ids.length === 0 || ids.length > MAX_NAMES) return uiText("queueThem");
+  return ids.map(nameOf).join(uiText("queueSeparator"));
+}
+
+const reason = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+/**
+ * Messages that are written but not in the conversation yet, over the member strip and the box
+ * that would have sent them: one bordered block each, as wide as the box, the text cut at two lines
+ * (the whole of it on hover).
+ *
+ * They are held because every lane that would answer them was busy: nothing read them, so they are
+ * not part of the record and the transcript never shows them. When a lane takes one, the host moves
+ * it into the conversation and it leaves this lane. Three things can be done with one, and each
+ * waits for the host to say it happened:
+ *
+ * - insert it into the turn in flight (`steerHeld`). A lane that read it first means it is not sent
+ *   again, and the lane only says so;
+ * - pull it back into the box, or drop it (`recall`). A lane that picked it up first makes `recall`
+ *   answer false: the words are already in the conversation, and putting them back in the box would
+ *   say them twice.
+ *
+ * With a block focused, ⌘/Ctrl+Enter inserts, E pulls back and Delete drops.
+ */
+export function HeldMessages(props: {
+  messages: MessageView[];
+  conversationId: string;
+  /** Put the message's text back above whatever is being typed. */
+  onPullBack: (text: string) => void;
+  phone: boolean;
+}) {
+  const host = useHost();
+  const c = colors();
+  const busy = signal<{ id: string; kind: Busy } | undefined>(undefined);
+  // What the host said when an action did not do what was asked; it goes by itself.
+  const notice = signal("");
+  effect(() => {
+    if (!notice()) return;
+    const timer = setTimeout(() => notice.set(""), 6000);
+    return () => clearTimeout(timer);
+  });
+  const nameOf = (agentId: string) => host.agent(agentId)?.name ?? agentId;
+  // A second press before the first answer would only be told the first one took it.
+  const inFlight = new Set<string>();
+
+  async function take(message: MessageView, kind: "pull" | "drop") {
+    if (inFlight.has(message.id)) return;
+    inFlight.add(message.id);
+    busy.set({ id: message.id, kind });
+    notice.set("");
+    try {
+      const answer = await host.call<ConversationResults["recall"]>(
+        "conversations",
+        "recall",
+        { conversationId: props.conversationId, messageId: message.id },
+      );
+      if (!answer.recalled)
+        notice.set(
+          uiText("queueTaken", { names: waitingNames(message, nameOf) }),
+        );
+      else if (kind === "pull") props.onPullBack(message.text);
+    } catch (error) {
+      notice.set(
+        uiText(kind === "pull" ? "queuePullFailed" : "queueDropFailed", {
+          reason: reason(error),
+        }),
+      );
+    } finally {
+      inFlight.delete(message.id);
+      busy.set(undefined);
+    }
+  }
+
+  async function steer(message: MessageView) {
+    if (inFlight.has(message.id)) return;
+    inFlight.add(message.id);
+    busy.set({ id: message.id, kind: "steer" });
+    notice.set("");
+    const names = waitingNames(message, nameOf);
+    try {
+      const answer = await host.call<SteerHeldResult>(
+        "conversations",
+        "steerHeld",
+        { conversationId: props.conversationId, messageId: message.id },
+      );
+      if (!answer.steered)
+        notice.set(
+          uiText(
+            answer.reason === "idle"
+              ? "queueSteerIdle"
+              : answer.reason === "ended"
+                ? "queueSteerEnded"
+                : "queueTaken",
+            { names },
+          ),
+        );
+    } catch (error) {
+      notice.set(uiText("queueSteerFailed", { reason: reason(error) }));
+    } finally {
+      inFlight.delete(message.id);
+      busy.set(undefined);
+    }
+  }
+
+  return (
+    <If when={props.messages.length || notice()}>
+      <View
+        role="list"
+        accessibilityLabel={uiText("queueLane")}
+        style={{ gap: 6 }}
+      >
+        <If when={notice()}>
+          <View role="alert" style={{ ...row, gap: 6 }}>
+            <StatusDot color={c().warning} />
+            <Label variant="small" tone="warningInk" style={{ flex: 1 }}>
+              {notice()}
+            </Label>
+          </View>
+        </If>
+        <Each of={props.messages} key={(message) => message.id}>
+          {(message, index) => {
+            const id = message().id;
+            const focused = signal(false);
+            const mine = () =>
+              busy()?.id === id
+                ? busy()!.kind
+                : (undefined as Busy | undefined);
+            const several = () =>
+              Array.isArray(message().data.woke) &&
+              (message().data.woke as string[]).length > 1;
+            const names = () => waitingNames(message(), nameOf);
+            effect(() => {
+              if (!focused()) return;
+              return keymap.bind(
+                {
+                  "mod+enter": () => void steer(message()),
+                  e: () => void take(message(), "pull"),
+                  delete: () => void take(message(), "drop"),
+                },
+                { when: "always" },
+              );
+            });
+            const head = () => {
+              const kind = mine();
+              if (kind === "steer")
+                return uiText("queueSteering", { names: names() });
+              const where =
+                index() === 0
+                  ? uiText("queueWaitsFor", { names: names() })
+                  : uiText("queueAfterPrevious");
+              const doing =
+                kind === "pull"
+                  ? ` · ${uiText("queuePulling")}`
+                  : kind === "drop"
+                    ? ` · ${uiText("queueDropping")}`
+                    : "";
+              return `${uiText("queueQueued")} · ${where}${doing}`;
+            };
+            const action = (
+              label: string,
+              a11y: string,
+              press: () => void,
+              primary = false,
+            ) => (
+              <View
+                role="button"
+                accessibilityLabel={a11y}
+                accessibilityState={{ disabled: !!mine() }}
+                onPress={() => {
+                  if (!mine()) press();
+                }}
+                style={{
+                  paddingHorizontal: 8,
+                  paddingVertical: props.phone ? 8 : 2,
+                  opacity: mine() ? 0.4 : 1,
+                  cursor: mine() ? undefined : "pointer",
+                }}
+              >
+                <Label
+                  variant="small"
+                  tone={primary ? "ink" : "mutedInk"}
+                  style={
+                    primary ? { textDecorationLine: "underline" } : undefined
+                  }
+                >
+                  {label}
+                </Label>
+              </View>
+            );
+            return (
+              <View
+                focusable
+                onFocus={() => focused.set(true)}
+                onBlur={() => focused.set(false)}
+                accessibilityLabel={uiText("queueLabel", {
+                  text: message().text,
+                })}
+                accessibilityState={{ busy: !!mine() }}
+                hoverStyle={{ borderColor: c().strong }}
+                focusVisibleStyle={{ borderColor: c().blue }}
+                style={{
+                  borderWidth: 1,
+                  borderColor: c().border,
+                  backgroundColor: c().canvas,
+                }}
+              >
+                <View
+                  style={{
+                    ...row,
+                    gap: 6,
+                    paddingHorizontal: 10,
+                    paddingTop: 6,
+                  }}
+                >
+                  <If when={mine() === "steer"}>
+                    <StatusDot color={c().blue} />
+                  </If>
+                  <Label
+                    variant="caption"
+                    tone={mine() === "steer" ? "blue" : "muted"}
+                    lines={1}
+                    style={{ flex: 1 }}
+                  >
+                    {head()}
+                  </Label>
+                  <If when={props.messages.length > 1 && !mine()}>
+                    <Label variant="caption" tone="muted">
+                      {`${index() + 1} / ${props.messages.length}`}
+                    </Label>
+                  </If>
+                </View>
+                <View
+                  tooltip={
+                    <View
+                      style={{
+                        maxWidth: 520,
+                        paddingHorizontal: 10,
+                        paddingVertical: 8,
+                        backgroundColor: c().ink,
+                      }}
+                    >
+                      <Label variant="small" tone="canvas">
+                        {message().text}
+                      </Label>
+                    </View>
+                  }
+                  style={{ paddingHorizontal: 10, paddingTop: 2 }}
+                >
+                  <Label lines={2}>{message().text}</Label>
+                </View>
+                <View
+                  style={{
+                    ...row,
+                    gap: 2,
+                    paddingHorizontal: 2,
+                    paddingTop: 2,
+                    paddingBottom: props.phone ? 2 : 6,
+                  }}
+                >
+                  {action(
+                    uiText(several() ? "queueSteerSeveral" : "queueSteer"),
+                    uiText("queueSteerLabel", { text: message().text }),
+                    () => void steer(message()),
+                    true,
+                  )}
+                  {action(
+                    uiText("queuePullBack"),
+                    uiText("queuePullBackLabel", { text: message().text }),
+                    () => void take(message(), "pull"),
+                  )}
+                  <View style={{ flex: 1 }} />
+                  {action(
+                    uiText("queueDrop"),
+                    uiText("queueDropLabel", { text: message().text }),
+                    () => void take(message(), "drop"),
+                  )}
+                </View>
+              </View>
+            );
+          }}
+        </Each>
+      </View>
+    </If>
+  );
+}

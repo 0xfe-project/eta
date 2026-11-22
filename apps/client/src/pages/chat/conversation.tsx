@@ -135,14 +135,33 @@ export function Conversation(props: {
           task.runStatus !== null &&
           isActiveRunStatus(task.runStatus),
       );
-  const messages = () => [
-    ...new Map(
-      [...older(), ...(timeline()?.messages ?? [])].map((message) => [
-        message.id,
-        message,
-      ]),
-    ).values(),
-  ];
+  const held = () => timeline()?.held ?? [];
+  /*
+   * A message that waits for a lane is not in the conversation yet, and neither is the reply the
+   * host queued for it. The host leaves the message out of the window but not the reply rows under
+   * it (they carry no `held` of their own), so they are held back here: otherwise the transcript
+   * draws an empty turn, as if the message had gone out. Both stay in the lane above the composer
+   * until a lane takes the message.
+   */
+  const messages = computed(() => {
+    const waiting = new Set(held().map((message) => message.id));
+    return [
+      ...new Map(
+        [...older(), ...(timeline()?.messages ?? [])].map((message) => [
+          message.id,
+          message,
+        ]),
+      ).values(),
+    ].filter(
+      (message) =>
+        !waiting.has(message.id) &&
+        !(
+          message.author === "agent" &&
+          (waiting.has(message.rootMessageId ?? "") ||
+            waiting.has(message.replyToId ?? ""))
+        ),
+    );
+  });
   const indexed = computed(() => indexInserts(messages()));
   const questionSourceOf = (item: InteractionView) =>
     questionSource(

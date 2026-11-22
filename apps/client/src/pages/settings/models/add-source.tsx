@@ -15,7 +15,6 @@ import {
   Clipboard,
   effect,
   openUrl,
-  Scroll,
   signal,
   untracked,
   View,
@@ -33,6 +32,7 @@ import {
   Modal,
   monoFontFamily,
   row,
+  SmoothScroll,
 } from "../../../components";
 import { CheckControl } from "../../../components/check-control";
 import { CloseButton } from "../../../components/navigation-buttons";
@@ -287,7 +287,7 @@ export function AddSource(props: {
       {/* One scroll per step, so a step opens at its top whatever the last one was scrolled to. */}
       <Each of={[step()]} key={(current) => String(current)}>
         {() => (
-          <Scroll
+          <SmoothScroll
             style={props.phone ? grow : { flexShrink: 1, minHeight: 200 }}
           >
             <If when={step() === 0 || preset() === undefined}>
@@ -426,7 +426,7 @@ export function AddSource(props: {
                 </View>
               )}
             </If>
-          </Scroll>
+          </SmoothScroll>
         )}
       </Each>
       <View

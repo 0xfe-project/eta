@@ -9,12 +9,20 @@ import {
   Markdown,
   row,
 } from "../../../components";
-import { DownloadProgressBar } from "../../../components/download-progress";
 import { StatusDot } from "../../../components/status-dot";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { canStartHost } from "../../connection/local-host";
 import { BusyList } from "./busy-list";
+import {
+  downloadPercent,
+  megabytes,
+  resultLabel,
+  resultNotice,
+  resultTone,
+  UpdateNotice,
+  UpdateSteps,
+} from "./progress";
 
 const phaseName = {
   starting: "updatePreparing",
@@ -34,12 +42,6 @@ const blockedExplanation = {
   "other-file": "updateDifferentBinary",
 } as const;
 
-function percent(received: number, total?: number) {
-  return total && total > 0
-    ? Math.max(0, Math.min(100, Math.round((100 * received) / total)))
-    : undefined;
-}
-
 export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
   const host = useHost();
   const c = colors();
@@ -47,7 +49,9 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
     version,
     offer,
     canUpdate,
-    failed,
+    result,
+    starting,
+    updateNow,
     check,
     active,
     status,
@@ -67,15 +71,27 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
       : uiText("updateServerHost");
   };
   const statusTone = () => {
-    if (active()) return "blue";
-    if (failed() || check()?.error) return "red";
+    if (active() || starting()) return "blue";
+    const ended = result();
+    if (ended && ended.state !== "done") {
+      const tone = resultTone(ended);
+      return tone === "faint" ? "strong" : tone;
+    }
+    if (check()?.error) return "red";
     if (offer()) return "blue";
     if (check()?.blocked || check()?.heldOnPrerelease) return "amber";
     return "green";
   };
+  const percent = () => downloadPercent(status()?.download);
   const statusLabel = () => {
-    if (active()) return uiText(phaseName[status()!.phase]);
-    if (failed()) return uiText("updateLastFailed");
+    if (starting()) return uiText("updateStarting");
+    if (active()) {
+      if (status()!.phase === "downloading" && percent() !== undefined)
+        return uiText("updateDownloadingPercent", { percent: percent() });
+      return uiText(phaseName[status()!.phase]);
+    }
+    const ended = result();
+    if (ended && ended.state !== "done") return resultLabel(ended);
     if (check()?.error) return uiText("updateCheckFailed");
     if (offer()) return uiText("updateAvailable");
     if (check()?.heldOnPrerelease) return uiText("updatePreRelease");
@@ -86,13 +102,36 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
   const canCancel = () =>
     host.can("upgrade.cancel") &&
     ["starting", "downloading", "waiting"].includes(phase() ?? "");
-  const offerLabel = () =>
-    uiText("updateToVersion", { version: check()?.latest ?? "" });
+  const offerLabel = () => {
+    const latest = check()?.latest ?? "";
+    const ended = result();
+    if (ended?.state === "rolled-back" && ended.to === latest)
+      return uiText("updateTryVersionAgain", { version: latest });
+    if (ended?.state === "failed" || ended?.state === "lost")
+      return uiText("updateTryAgain");
+    return uiText("updateToVersion", { version: latest });
+  };
+  const waitingOnWork = () =>
+    phase() === "waiting" && (status()?.busy?.length ?? 0) > 0;
+  const progressDetail = () => {
+    if (starting() || phase() === "starting")
+      return uiText("updateStartingDetail");
+    const download = status()?.download;
+    if (phase() === "downloading" && download)
+      return download.total
+        ? uiText("updateDownloadedOf", {
+            received: megabytes(download.received),
+            total: megabytes(download.total),
+          })
+        : uiText("updateDownloadedSome", {
+            received: megabytes(download.received),
+          });
+    return undefined;
+  };
   const note = () => check()?.notes;
-  const progress = () => status()?.download;
   const updateAction = () => (
     <If
-      when={active()}
+      when={active() || starting()}
       else={
         <If when={offer()}>
           <Button
@@ -110,13 +149,30 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
         </If>
       }
     >
-      <If when={canCancel()}>
-        <Button
-          label={uiText("cancelUpdate")}
-          disabled={!connected() || !!pending()}
-          onPress={() => void request("cancel", {})}
-        />
-      </If>
+      <View
+        style={{
+          ...(props.phone ? {} : { alignItems: "flex-start" }),
+          gap: props.phone ? 8 : 6,
+          marginTop: props.phone ? 8 : 0,
+        }}
+      >
+        <If when={waitingOnWork() && host.can("upgrade.start")}>
+          <Button
+            label={uiText("updateNow")}
+            size={props.phone ? 40 : undefined}
+            disabled={!connected() || !!pending()}
+            onPress={() => void updateNow()}
+          />
+        </If>
+        <If when={starting() || canCancel()}>
+          <Button
+            label={uiText("cancelUpdate")}
+            size={props.phone ? 40 : undefined}
+            disabled={!connected() || !!pending() || starting()}
+            onPress={() => void request("cancel", {})}
+          />
+        </If>
+      </View>
     </If>
   );
 
@@ -195,7 +251,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
             </View>
           }
         >
-          <If when={active() || offer()}>
+          <If when={active() || starting() || offer()}>
             <View style={{ alignItems: "stretch" }}>{updateAction()}</View>
           </If>
         </If>
@@ -222,29 +278,68 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
           </View>
         )}
       </If>
-      <If when={active() && (progress() || status()?.busy?.length)}>
+      <If when={active() || starting()}>
         <View
+          testID="update-progress"
           style={{
-            padding: 16,
+            paddingTop: 4,
+            paddingBottom: 12,
+            paddingLeft: props.phone ? 16 : 50,
+            paddingRight: 16,
             gap: 8,
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
-          <If when={progress()}>
-            {(download) => (
-              <DownloadProgressBar
-                value={percent(download().received, download().total)}
-              />
+          <UpdateSteps
+            phase={starting() ? "starting" : status()!.phase}
+            percent={phase() === "downloading" ? percent() : undefined}
+          />
+          <If when={progressDetail()}>
+            {(detail) => (
+              <Label variant="small" tone="mutedInk">
+                {detail()}
+              </Label>
             )}
           </If>
-          <BusyList work={status()?.busy ?? []} label={uiText("waitingFor")} />
+          <If when={phase() === "waiting"}>
+            <BusyList
+              work={status()?.busy ?? []}
+              label={uiText("waitingFor")}
+            />
+          </If>
         </View>
+      </If>
+      {/* A new version is told by a toast (host-restart.tsx); what went wrong stays here. */}
+      <If
+        when={
+          !active() && !starting() && result()?.state !== "done"
+            ? result()
+            : undefined
+        }
+      >
+        {(ended) => (
+          <View
+            style={{
+              paddingBottom: 12,
+              paddingLeft: props.phone ? 16 : 50,
+              paddingRight: 16,
+              borderBottomWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <UpdateNotice
+              testID="update-result"
+              tone={resultTone(ended())}
+              title={resultNotice(ended()).title}
+              body={resultNotice(ended()).body}
+            />
+          </View>
+        )}
       </If>
       <If
         when={
           (error() && !editor() && !confirm()) ||
-          (failed() && status()?.error) ||
           check()?.error ||
           check()?.blocked
         }
@@ -258,16 +353,9 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
             borderColor: c().border,
           }}
         >
-          <If
-            when={
-              (error() && !editor() && !confirm()) ||
-              (failed() && status()?.error) ||
-              check()?.error
-            }
-          >
+          <If when={(error() && !editor() && !confirm()) || check()?.error}>
             <Label variant="small" tone="red">
               {(error() && !editor() && !confirm() ? error() : "") ||
-                (failed() ? status()?.error : "") ||
                 check()?.error}
             </Label>
           </If>

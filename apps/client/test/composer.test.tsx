@@ -120,7 +120,7 @@ test("an interrupted attachment can be retried in its original chat", async () =
   expect(app.shows("label:Retry")).toBe(false);
   await app.press("label:Switch");
   await app.press("label:Retry");
-  await app.waitFor("label:onboard.jpg");
+  await app.waitFor("label:View picture onboard.jpg · 0.0 KB");
   expect(app.value(input)).toBe("photo");
 });
 
@@ -193,13 +193,33 @@ test("reconnecting drains a saved message even when another chat is open", async
   expect(app.value(input)).toBe("draft in beta");
 });
 
-test("the member queue link focuses its held message and E recalls it above the draft", async () => {
+test("a queued message waits above the box and pulls back above the draft", async () => {
   const app = await fixture();
   await app.type(input, "current");
   await app.press("label:Queue one");
-  await app.press("label:1 queued");
-  await app.keyboard.press("e");
+  expect(app.shows("label:Queued message: earlier")).toBe(true);
+  expect(app.shows("text:Queued · waits for Ada to finish")).toBe(true);
+  await app.press("label:Pull back into the box: earlier");
+  expect(app.shows("label:Queued message: earlier")).toBe(false);
   expect(app.value(input)).toBe("earlier\n\ncurrent");
+});
+
+test("a queued message the host had already handed on stays out of the box", async () => {
+  const app = await fixture();
+  await app.type(input, "current");
+  await app.press("label:Queue one");
+  await app.press("label:Hand it on");
+  await app.press("label:Pull back into the box: earlier");
+  await app.waitFor("text:Ada already read this one");
+  expect(app.value(input)).toBe("current");
+});
+
+test("inserting a queued message that failed says why", async () => {
+  const app = await fixture();
+  await app.press("label:Queue one");
+  await app.press("label:Insert into this turn: earlier");
+  await app.waitFor("text:Could not insert it: lane closed");
+  expect(app.shows("label:Queued message: earlier")).toBe(true);
 });
 
 test("a second pasted file waits for the first upload in the same draft", async () => {
@@ -209,4 +229,14 @@ test("a second pasted file waits for the first upload in the same draft", async 
   await app.press("label:Finish upload");
   await app.waitFor("label:composer-fixture.tsx");
   expect(app.shows("label:composer.test.tsx")).toBe(true);
+});
+
+test("a pasted BMP screenshot is attached as a PNG and other images keep their name", async () => {
+  const app = await fixture();
+  await app.paste(input, { files: ["test/paste-pixel.bmp"] });
+  await app.waitFor("label:paste-pixel.png");
+  expect(app.shows("label:paste-pixel.bmp")).toBe(false);
+  await app.paste(input, { files: ["assets/onboard.jpg"] });
+  // the fixture fails a first upload of onboard.jpg; the label still shows it kept its name
+  await app.waitFor("text:onboard.jpg · upload interrupted");
 });

@@ -2,7 +2,7 @@ import type { ArtifactView, MemberView } from "@eta/client-contracts";
 import type { JSX, Signal } from "nsh";
 import type { TextVariant } from "../../components";
 import type { ArtifactFilters } from "./artifacts/filter";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   Caption,
   colors,
@@ -11,6 +11,7 @@ import {
   Icon,
   Label,
   row,
+  SmoothScroll,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { ContextRing, useContextUsage } from "../../components/context-ring";
@@ -18,13 +19,11 @@ import { BackButton, CloseButton } from "../../components/navigation-buttons";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskGlyph } from "../tasks/status";
-import {
-  ArtifactBrowser,
-  ViewAllRow,
-} from "./artifacts/conversation-artifacts";
+import { ArtifactBrowser } from "./artifacts/conversation-artifacts";
 import { RECENT, recentArtifacts } from "./artifacts/filter";
 import { memberStatus } from "./member-status";
 import { messageTime } from "./message-time";
+import { ViewAll } from "./section-heading";
 
 /**
  * A phone's conversation info sheet: members, tasks and the latest artifacts in one list; "View
@@ -75,7 +74,7 @@ export function PhoneConversationInfo(props: {
           </View>
           <CloseButton size={32} iconSize={16} onPress={props.onClose} />
         </View>
-        <Scroll style={grow} scrollbar={false}>
+        <SmoothScroll style={grow} scrollbar={false}>
           <Section
             label={uiText("members")}
             count={props.members.length}
@@ -103,7 +102,16 @@ export function PhoneConversationInfo(props: {
               </InfoRow>
             )}
           </Each>
-          <Section label={uiText("chatArtifacts")} count={artifacts().length} />
+          <Section label={uiText("chatArtifacts")} count={artifacts().length}>
+            <If when={artifacts().length > RECENT}>
+              <View style={{ flex: 1 }} />
+              <ViewAll
+                label={uiText("artifactsViewAll")}
+                phone
+                onPress={() => allArtifacts.set(true)}
+              />
+            </If>
+          </Section>
           <Each
             of={recentArtifacts(artifacts())}
             key={(artifact) => artifact.id}
@@ -126,9 +134,6 @@ export function PhoneConversationInfo(props: {
               </InfoRow>
             )}
           </Each>
-          <If when={artifacts().length > RECENT}>
-            <ViewAllRow phone onViewAll={() => allArtifacts.set(true)} />
-          </If>
           <If when={!artifacts().length}>
             <Empty
               icon="appWindow"
@@ -139,7 +144,7 @@ export function PhoneConversationInfo(props: {
               style={{ flex: 0, paddingVertical: 32 }}
             />
           </If>
-        </Scroll>
+        </SmoothScroll>
       </View>
     </If>
   );

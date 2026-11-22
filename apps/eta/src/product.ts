@@ -57,7 +57,10 @@ import { CaptainService } from "./captain/service";
 import { CaptainStore } from "./captain/store";
 import { CaptainSupervisor } from "./captain/supervisor";
 import { captainSessionTools } from "./captain/tools";
-import { AttachmentStore } from "./conversations/attachments";
+import {
+  AttachmentStore,
+  createAttachmentRoutes,
+} from "./conversations/attachments";
 import {
   combineRunHooks,
   Engine,
@@ -114,9 +117,11 @@ import {
 import { SettingStore } from "./settings/store";
 import { skillFilesPlugin } from "./skills/plugin";
 import { SkillFileService } from "./skills/service";
-import { TaskArchiver } from "./tasks/archiver";
+import { boardSettings, TaskArchiver } from "./tasks/archiver";
+import { TaskAsks } from "./tasks/asks";
 import { TaskBoard } from "./tasks/board";
 import { TaskCards } from "./tasks/cards";
+import { TaskDraftExpirer } from "./tasks/draft-timeout";
 import { tasksPlugin } from "./tasks/plugin";
 import { TaskRunner } from "./tasks/runner";
 import { TaskRunStore } from "./tasks/runs";
@@ -153,6 +158,8 @@ export interface RepliesOptions {
 
 /** What a test sets to keep tasks from running; a real host leaves all of it alone. */
 export interface TasksOptions {
+  /** How long the agent that made a task has to answer its executor's question before the user is asked. */
+  askTimeoutMs?: number;
   /** False keeps the runner from taking runs: a task is made and confirmed, and nothing starts. */
   runs?: boolean;
 }
@@ -163,6 +170,7 @@ export interface Product {
   readonly board: TaskBoard;
   /** What puts quiet finished tasks away; `sweep()` for a test whose timer is off. */
   readonly archiver: TaskArchiver;
+  readonly draftExpirer: TaskDraftExpirer;
   /** The links to other machines. */
   readonly hub: MachineHub;
   /** El Capitan's product service and its supervisor. */
@@ -672,6 +680,7 @@ export function createProduct(options: {
     machines,
     transport,
   });
+  const taskSettings = new SettingStore(db);
   const taskRunner = new TaskRunner({
     board,
     tasks: taskRows,
@@ -688,6 +697,8 @@ export function createProduct(options: {
     changed: (touched) => changed(touched),
     usage: taskUsage,
     warn,
+    reactToResults: () => boardSettings(taskSettings).reactToResults,
+    isCaptain: (agentId) => made.captain?.identity()?.agentId === agentId,
   });
   later.taskRunner = taskRunner;
   void taskUsage
@@ -765,7 +776,6 @@ export function createProduct(options: {
       `[eta] corrected the status of ${corrected.length} parent task(s) from their subtasks`,
     );
   // Done and cancelled tasks left quiet are put away, now and every hour.
-  const taskSettings = new SettingStore(db);
   const archiver = new TaskArchiver({
     board,
     settings: taskSettings,
@@ -773,6 +783,14 @@ export function createProduct(options: {
     warn,
   });
   archiver.start();
+  // Drafts nobody answered are settled as the user's setting says, looked at every half minute.
+  const draftExpirer = new TaskDraftExpirer({
+    board,
+    settings: taskSettings,
+    timer: options.routines?.timer ?? true,
+    warn,
+  });
+  draftExpirer.start();
 
   const limits = { ...DEFAULT_LIMITS, ...options.artifactLimits };
   const artifactsRoot = join(dataDir, "artifacts");
@@ -785,6 +803,7 @@ export function createProduct(options: {
     changed: () => wire?.pushNow("artifacts"),
   });
   const artifactRoutes = createArtifactRoutes(artifacts);
+  const attachmentRoutes = createAttachmentRoutes(attachments);
 
   const answerCaptainInbox: Parameters<
     typeof captainSessionTools
@@ -806,6 +825,25 @@ export function createProduct(options: {
         return managed?.session.ask?.answer(questionId, value) === true;
       },
     );
+
+  const taskAsks = new TaskAsks({
+    tasks: taskRows,
+    runs: runRows,
+    agents,
+    board,
+    runner: taskRunner,
+    inbox,
+    answer: async (interactionId, response) =>
+      await answerCaptainInbox(interactionId, response),
+    captainOwns: (interaction, makerId) =>
+      captain.identity()?.agentId === makerId ||
+      captain.assignmentForInbox(interaction) !== undefined,
+    enabled: () => boardSettings(taskSettings).autoAnswerAsks,
+    changed: () => wire?.pushNow("inbox"),
+    warn,
+    timeoutMs: options.tasks?.askTimeoutMs,
+  });
+  inbox.onOpened((interaction) => taskAsks.opened(interaction));
 
   // Each feature that adds tools, tool middleware or a question observer to sessions is one entry
   // here; the order is the order its tools and middleware are installed in.
@@ -867,6 +905,7 @@ export function createProduct(options: {
         board,
         agents,
         runner: taskRunner,
+        asks: taskAsks,
         workspaceFor: taskWorkspaceFor,
         captain: {
           isCaptain: (agentId) => captain.identity()?.agentId === agentId,
@@ -939,6 +978,7 @@ export function createProduct(options: {
     engine,
     board,
     archiver,
+    draftExpirer,
     hub,
     captain,
     captainSupervisor,
@@ -955,12 +995,14 @@ export function createProduct(options: {
       (await hub.route(request)) ??
       (await mcp.route(request)) ??
       (await artifactRoutes(request)) ??
+      (await attachmentRoutes(request)) ??
       upgradeRoutes(request, dataDir),
     remote: router,
     endpoints: [hub.endpoint],
     close: async () => {
       // The runs stop first: they work through the links and the session host.
       archiver.stop();
+      draftExpirer.stop();
       captainSupervisor.stop();
       await taskRunner.detach();
       hub.close();
@@ -1156,7 +1198,10 @@ export function createProduct(options: {
             usage: taskUsage,
             workspaceFor: taskWorkspaceFor,
             settings: taskSettings,
-            settingsChanged: () => void archiver.sweep(),
+            settingsChanged: () => {
+              archiver.sweep();
+              draftExpirer.sweep();
+            },
           },
           applied("tasks"),
         ),
@@ -1172,7 +1217,8 @@ export function createProduct(options: {
             inbox,
             visible: (interaction) =>
               interaction.status !== "pending" ||
-              captain.assignmentForInbox(interaction) === undefined,
+              (captain.assignmentForInbox(interaction) === undefined &&
+                !taskAsks.holds(interaction)),
           },
           applied("inbox"),
         ),

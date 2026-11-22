@@ -5,7 +5,7 @@ import type {
 } from "@eta/client-contracts";
 import type { JSX } from "nsh";
 import type { Layout } from "../../components";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -17,6 +17,7 @@ import {
   Icon,
   Label,
   row,
+  SmoothScroll,
   textFaces,
   textStyle,
 } from "../../components";
@@ -245,7 +246,7 @@ export function MailboxEditor(props: {
           backIconSize={16}
         />
       </If>
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <If when={account()}>
           {(a) => (
             <View
@@ -405,7 +406,7 @@ export function MailboxEditor(props: {
             {error()}
           </Label>
         </If>
-      </Scroll>
+      </SmoothScroll>
       <View
         style={{
           alignItems: phone() ? "stretch" : "flex-end",

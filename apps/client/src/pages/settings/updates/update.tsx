@@ -1,11 +1,11 @@
 import type { Layout } from "../../../components";
-import { Scroll, View } from "nsh";
-import { Button, grow, Label, row } from "../../../components";
+import { View } from "nsh";
+import { Button, grow, Label, row, SmoothScroll } from "../../../components";
 import { uiText } from "../../../i18n";
+import { clientUpdatable } from "../../../services/client-update";
 import { useHost } from "../../../services/host";
-import { canStartHost } from "../../connection/local-host";
+import { ClientAppUpdate } from "./client-app";
 import { ConfirmHostUpdate } from "./confirm-update";
-import { DesktopAppUpdate } from "./desktop-app";
 import { GroupHeading } from "./group-heading";
 import { HostRelease } from "./host-release";
 import { useHostUpdate } from "./host-update";
@@ -53,7 +53,7 @@ export function UpdateSettings(props: {
           />
         </View>
       </GroupHeading>
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <If
           when={check()}
           else={
@@ -84,10 +84,11 @@ export function UpdateSettings(props: {
           <HostRelease update={update} phone={phone()} />
           <ReleaseSettings update={update} phone={phone()} />
         </If>
-        <If when={canStartHost}>
-          <DesktopAppUpdate work={check()?.busy ?? []} />
+        {/* The app updates itself whichever Host it is connected to. */}
+        <If when={clientUpdatable}>
+          <ClientAppUpdate phone={phone()} />
         </If>
-      </Scroll>
+      </SmoothScroll>
       <UpdateSourceEditor update={update} phone={phone()} />
       <ConfirmHostUpdate update={update} phone={phone()} />
     </View>

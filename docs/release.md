@@ -112,6 +112,28 @@ The packages are signed with what the repository's Actions secrets provide. Miss
 
 A signed IPA installs only on the devices its profile allows (development or ad hoc). Anything beyond that goes through TestFlight or the App Store, see "Local packages and store uploads" below; the same goes for Google Play.
 
+### The client app's own updates
+
+The desktop apps (macOS, Windows, Linux) and the Android app update themselves from Settings → Update, whichever host they are connected to, and check once at start: a newer release shows a strip at the bottom of the window with one button (download, then restart) and a close button that hides it for that version. iOS is left to the store or a manual install: its build has no update source.
+
+- **Desktop**: `nsh/updater` downloads the platform's archive (`Eta-<version>-<os>-<arch>.tar.gz|zip`), checks its size and SHA-256 against the signed manifest, and on restart swaps the app in place and opens it again. When the app runs this computer's host, the confirmation lists the work the restart would stop, as the host's own update does. The settings choose the channel: Full releases only (`stable`) or Pre-releases too (`rc`); a build starts on its own kind's channel.
+- **Android**: the release's code also ships as a signed OTA package (`dev.eta.client-<build>.nshpkg`, `nsh publish`). The app downloads and verifies it, and runs it from its next start: the button then closes the app, and opening it again runs the new version. When the code needs a newer native shell (a newer nsh runtime than the installed APK's), there is no package for it and the app offers the release's APK instead, which the system installs. That only works over an APK signed with the same key, so the manifest lists the APK only when `ETA_ANDROID_KEYSTORE` is configured; without it, a new shell still means uninstalling and installing by hand. Android follows its build's own channel (nsh 0.6 checks for packages on the default source only).
+
+Where they look is fixed in each build: two releases that are never Latest and hold nothing but `latest.json` and `latest.json.sig`, `desktop-channel-stable` and `desktop-channel-rc` (`https://github.com/<repo>/releases/download/desktop-channel-<channel>/latest.json`, downloadable without a token as the repository is public). The archives, the package and the APK stay on the versioned `desktop-v*` release, which the manifest points at. The publish job writes the manifest from the published release (notes included) and puts it on `rc`, and for a full release on `stable` too; a channel only moves forward, so rerunning an older tag leaves it alone. Not GitHub Pages: two small files do not need a site and a deploy, and a release asset is replaced at once rather than after a CDN's cache.
+
+| Name                           | Kind               | What                                                                                                                                                        |
+| ------------------------------ | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ETA_CLIENT_UPDATE_PUBLIC_KEY` | variable           | Ed25519 public key the apps check `latest.json.sig` with (`nsh keygen`). Without it a release has no updates at all, as before                              |
+| `ETA_CLIENT_UPDATE_KEY`        | secret             | Its secret key: signs the manifest                                                                                                                          |
+| `ETA_CLIENT_PACKAGE_ROOT`      | variable           | OTA root public key Android builds trust (comma separated to rotate). Its secret key is kept offline, not in GitHub                                         |
+| `ETA_CLIENT_RELEASE_KEY`       | secret             | Release key that signs the OTA package                                                                                                                      |
+| `ETA_CLIENT_RELEASE_CERT`      | secret             | The root's certificate for it (`nsh certify --apps dev.eta.client`), 365 days: certify the key again before it runs out                                     |
+| `ETA_CLIENT_DOWNLOAD_BASE`     | variable, optional | Replaces `https://github.com/<repo>/releases/download` in the URLs, for a test from a private repository, whose downloads need a token the apps do not have |
+
+A build trusts the update key and OTA root it was built with; changing either means users install a new app by hand once. A new release key only needs a new certificate.
+
+macOS checks the new app's code signature before swapping it in (`codesign --verify --deep --strict`), which the ad hoc signature of `nsh package` passes. Gatekeeper is not involved, as the app downloads the archive itself, but a Developer ID signature and notarization are still what lets people open the first download without the quarantine workaround below.
+
 ### Local packages and store uploads
 
 Install Native Shell v0.6.0, then package for your desktop from the repository root.
@@ -140,7 +162,7 @@ The desktop package includes a host launcher. The launcher uses the installed ho
 
 The launcher follows the repository set at build time with `ETA_HOST_UPSTREAM`. Set `ETA_RELEASES_URL` to use a different release server. For private GitHub repositories, authenticate with `gh` on the desktop. Selecting an existing remote host skips the local launcher.
 
-Host upgrades are available in Settings → Update when the host is managed by the desktop launcher or a system service. Update the desktop app by installing a newer `desktop-v*` package.
+Host upgrades are available in Settings → Update when the host is managed by the desktop launcher or a system service. The app updates itself there too, see "The client app's own updates".
 
 ## Upgrade testing
 
@@ -200,7 +222,7 @@ Rows written before `data.process` existed (v0.3.0 kept a reply's calls as `data
 
 ## No signatures
 
-None of these files are signed or notarized. Desktop app updates are triggered by the user in settings (see "The desktop app's own updates"), and builds without a configured update URL can only be re-downloaded and reinstalled. macOS and Windows both block them on first open; once allowed, they work normally.
+None of these files are signed or notarized. Desktop app updates are triggered by the user in settings (see "The client app's own updates"), and builds without a configured update URL can only be re-downloaded and reinstalled. macOS and Windows both block them on first open; once allowed, they work normally.
 
 On macOS, drag eta from the DMG into Applications, then remove the quarantine flag from the download, otherwise the system will say the app is damaged:
 

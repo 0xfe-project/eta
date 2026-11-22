@@ -10,7 +10,7 @@ import { mkdir, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { tempDir } from "./support/host";
-import { say, scriptedModels } from "./support/models";
+import { call, say, scriptedModels } from "./support/models";
 import { remoteWorld } from "./support/remote";
 import { world } from "./support/world";
 
@@ -187,6 +187,31 @@ describe("uploading", () => {
     await w.settled(group.id, sent.replies[0]!.id);
     expect(await unattach(kept.id)).toBe(false);
   });
+
+  it("reads a sent image back for the transcript, and nothing else", async () => {
+    const w = await world();
+    const { group } = await ada(w);
+    const read = (id: string, conversationId = group.id) =>
+      w.client.call("conversations", "attachment", {
+        conversationId,
+        attachmentId: id,
+      }) as Promise<{ contentType: string; data: string }>;
+    const image = await upload(w, group.id, PNG, "x.bmp", "image/bmp");
+    const text = await upload(w, group.id, Buffer.from("hi"));
+    await expect(read(image.id)).rejects.toThrow(/no such attachment/);
+    const sent = await w.send(group.id, "", {
+      attachments: [image.id, text.id],
+    });
+    await w.settled(group.id, sent.replies[0]!.id);
+    expect(await read(image.id)).toEqual({
+      contentType: "image/bmp",
+      data: PNG.toString("base64"),
+    });
+    await expect(read(text.id)).rejects.toThrow(/not an image/);
+    await expect(read(crypto.randomUUID())).rejects.toThrow(
+      /no such attachment/,
+    );
+  });
 });
 
 describe("sending with files", () => {
@@ -294,6 +319,73 @@ describe("images", () => {
     await w.settled(group.id, sent.replies[0]!.id);
     expect(requests[0]!.images).toBe(0);
     expect(requests[0]!.transcript.join("\n")).toContain("pixel.png");
+    // Said, not dropped: the agent is told the picture was not shown, and why.
+    expect(requests[0]!.transcript.join("\n")).toContain(
+      "not shown: the model you run on does not support images",
+    );
+  });
+
+  it("can be looked at with read_image, by id or by the path the agent was told", async () => {
+    let fileId = "";
+    const { models, requests } = scriptedModels(
+      (request) =>
+        request.lastRole === "toolResult"
+          ? say("a pixel")
+          : call("read_image", { file: `C:\\somewhere\\${fileId}-pixel.png` }),
+      { vision: true },
+    );
+    const w = await world({ models });
+    const { group } = await ada(w);
+    const file = await upload(w, group.id, PNG, "pixel.png", "image/png");
+    fileId = file.id;
+    const sent = await w.send(group.id, "look again", {
+      attachments: [file.id],
+    });
+    await w.settled(group.id, sent.replies[0]!.id);
+    expect(requests[0]!.tools).toContain("read_image");
+    // One image came with the message, one came back from the tool.
+    expect(requests.at(-1)!.images).toBe(2);
+  });
+
+  it("are refused by read_image, with a reason, when the model does not take them", async () => {
+    let fileId = "";
+    const { models, requests } = scriptedModels((request) =>
+      request.lastRole === "toolResult"
+        ? say("cannot see")
+        : call("read_image", { file: fileId }),
+    );
+    const w = await world({ models });
+    const { group } = await ada(w);
+    const file = await upload(w, group.id, PNG, "pixel.png", "image/png");
+    fileId = file.id;
+    const sent = await w.send(group.id, "look", { attachments: [file.id] });
+    await w.settled(group.id, sent.replies[0]!.id);
+    expect(requests.at(-1)!.images).toBe(0);
+    expect(requests.at(-1)!.transcript.at(-1)).toContain(
+      "does not support images",
+    );
+  });
+
+  it("are served to the page by id, and only pictures are", async () => {
+    const w = await world();
+    const { group } = await ada(w);
+    const picture = await upload(w, group.id, PNG, "pixel.png", "image/png");
+    const page = await upload(
+      w,
+      group.id,
+      Buffer.from("<svg onload='alert(1)'/>"),
+      "x.svg",
+      "image/svg+xml",
+    );
+    const get = (path: string) =>
+      fetch(`http://127.0.0.1:${w.host.port}${path}`);
+    const served = await get(`/attachments/${picture.id}`);
+    expect(served.status).toBe(200);
+    expect(served.headers.get("content-type")).toBe("image/png");
+    expect(served.headers.get("content-security-policy")).toBe("sandbox");
+    expect(Buffer.from(await served.arrayBuffer())).toEqual(PNG);
+    expect((await get(`/attachments/${page.id}`)).status).toBe(404);
+    expect((await get(`/attachments/${crypto.randomUUID()}`)).status).toBe(404);
   });
 });
 

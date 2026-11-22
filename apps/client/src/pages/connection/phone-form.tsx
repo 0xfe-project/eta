@@ -1,6 +1,13 @@
 import type { JSX } from "nsh";
-import { Scroll, View } from "nsh";
-import { Button, colors, grow, Label, row } from "../../components";
+import { View } from "nsh";
+import {
+  Button,
+  colors,
+  grow,
+  Label,
+  row,
+  SmoothScroll,
+} from "../../components";
 import { uiText } from "../../i18n";
 import { ConnectionIntro, ConnectionMessage, PhoneHero } from "./visuals";
 
@@ -21,7 +28,7 @@ export function PhoneConnectionForm(props: {
 }) {
   const c = colors();
   return (
-    <Scroll style={grow} contentStyle={{ flexGrow: 1 }}>
+    <SmoothScroll style={grow} contentStyle={{ flexGrow: 1 }}>
       <PhoneHero />
       <View
         style={{
@@ -109,6 +116,6 @@ export function PhoneConnectionForm(props: {
           </If>
         </View>
       </View>
-    </Scroll>
+    </SmoothScroll>
   );
 }

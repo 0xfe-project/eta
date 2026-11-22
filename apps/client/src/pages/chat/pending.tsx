@@ -6,7 +6,7 @@ import type {
 } from "@eta/client-contracts";
 import type { JSX } from "nsh";
 import type { Layout, TextVariant } from "../../components";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   Caption,
   colors,
@@ -18,6 +18,7 @@ import {
   Modal,
   row,
   RowChevron,
+  SmoothScroll,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { CloseButton } from "../../components/navigation-buttons";
@@ -303,7 +304,7 @@ export function Pending(props: {
         when={asks() + reviews().length + reports().length}
         else={<Empty title={uiText("nothingIsWaitingForYou")} />}
       >
-        <Scroll style={grow} scrollbar={false}>
+        <SmoothScroll style={grow} scrollbar={false}>
           <If when={asks()}>
             <View
               style={{
@@ -413,7 +414,7 @@ export function Pending(props: {
               )}
             </Each>
           </If>
-        </Scroll>
+        </SmoothScroll>
       </If>
     );
   }
@@ -477,7 +478,7 @@ export function Pending(props: {
               }
               else={<Empty title={uiText("nothingIsWaitingForYou")} />}
             >
-              <Scroll style={grow}>
+              <SmoothScroll style={grow}>
                 <View style={{ gap: 8, padding: 12 }}>
                   <Each of={items()} key={(entry) => entry.id}>
                     {(entry) => <Question item={entry()} />}
@@ -531,12 +532,12 @@ export function Pending(props: {
                     </Each>
                   </If>
                 </View>
-              </Scroll>
+              </SmoothScroll>
             </If>
           </If>
         }
       >
-        <Scroll style={grow} scrollbar={false}>
+        <SmoothScroll style={grow} scrollbar={false}>
           <If when={items().length + proposals().length}>
             <PhoneSection
               label={uiText("confirmationRequestCaption")}
@@ -631,7 +632,7 @@ export function Pending(props: {
             first={!reviews().length}
             onPress={() => props.onRoutines?.()}
           />
-        </Scroll>
+        </SmoothScroll>
       </If>
       <If when={chosen()}>
         {(entry) => (

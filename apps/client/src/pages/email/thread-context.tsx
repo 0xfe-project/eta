@@ -7,7 +7,7 @@ import type {
   ViewCore,
 } from "@eta/client-contracts";
 import { runBlocks } from "@eta/client-contracts";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   Button,
   colors,
@@ -17,6 +17,7 @@ import {
   Markdown,
   Modal,
   row,
+  SmoothScroll,
   textFaces,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
@@ -495,7 +496,7 @@ export function EmailContext(props: {
       side
       onClose={props.onClose}
     >
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <View style={{ padding: 12, gap: 12 }}>
           <If when={meta()?.carrier !== "none" ? meta() : undefined}>
             {(value) => <EmailMetaCard meta={value()} drawer />}
@@ -506,7 +507,7 @@ export function EmailContext(props: {
             </Label>
           </If>
         </View>
-      </Scroll>
+      </SmoothScroll>
     </Modal>
   );
 }
@@ -536,7 +537,7 @@ export function EmailProcess(props: {
       height={props.phone ? "90%" : 520}
       onClose={props.onClose}
     >
-      <Scroll style={grow}>
+      <SmoothScroll style={grow}>
         <View style={{ padding: 16, gap: 12 }}>
           <If
             when={steps().length}
@@ -565,7 +566,7 @@ export function EmailProcess(props: {
             </Each>
           </If>
         </View>
-      </Scroll>
+      </SmoothScroll>
     </Modal>
   );
 }

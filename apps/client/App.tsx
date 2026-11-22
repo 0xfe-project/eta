@@ -17,6 +17,7 @@ import {
   windowSize,
 } from "nsh";
 import { createAppearancePreferences } from "./src/app/appearance-preferences";
+import { ClientUpdateNotice } from "./src/app/client-update-notice";
 import { Workspace } from "./src/app/workspace";
 import {
   Button,
@@ -33,6 +34,7 @@ import {
   ElementPickerOverlay,
   ElementPicking,
 } from "./src/components/element-picker";
+import { ToastLayer } from "./src/components/toast";
 import { createLanguagePreference, LanguageSettings, uiText } from "./src/i18n";
 import { resumeComposerOutbox } from "./src/pages/chat/composer-draft";
 import { Connection, WorkspaceSkeleton } from "./src/pages/connection";
@@ -41,13 +43,13 @@ import {
   canStartHost,
   startLocalHost,
 } from "./src/pages/connection/local-host";
+import { clientUpdate } from "./src/services/client-update";
 import {
   addressFrom,
   createHost,
   defaultAddress,
   Host,
 } from "./src/services/host";
-import { isHostRestart } from "./src/services/upgrade-watch";
 
 const connectKey = "eta.host";
 
@@ -112,6 +114,7 @@ function App() {
   const dismissCompatibility = signal(false);
   const applicationVersion = appInfo().version ?? undefined;
   cleanup(() => host.start(null));
+  clientUpdate.start();
   if (initial) host.start(initial);
   if (!initial)
     void Storage.getItem(connectKey)
@@ -252,16 +255,14 @@ function App() {
                       }}
                     />
                   </If>
-                  <If
-                    when={
-                      !forcedConnect() &&
-                      (isHostRestart(host.upgrade()) ||
-                        (host.upgrade()?.state === "running" &&
-                          host.upgradeUnreachable() &&
-                          host.state().status !== "open"))
-                    }
-                  >
-                    <HostRestartScreen />
+                  <ToastLayer />
+                  <If when={!forcedConnect()}>
+                    <HostRestartScreen
+                      onConnect={() => {
+                        forcedConnect.set(true);
+                        host.start(null);
+                      }}
+                    />
                   </If>
                   <If
                     when={
@@ -302,6 +303,7 @@ function App() {
                       />
                     </View>
                   </If>
+                  <ClientUpdateNotice />
                   <If when={host.error()}>
                     <View
                       style={{

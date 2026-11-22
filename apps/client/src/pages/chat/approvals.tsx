@@ -3,7 +3,7 @@ import type {
   InboxResponse,
   InteractionView,
 } from "@eta/client-contracts";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   Button,
   Caption,
@@ -14,6 +14,7 @@ import {
   Icon,
   Label,
   row,
+  SmoothScroll,
   textFaces,
   textStyle,
 } from "../../components";
@@ -73,7 +74,7 @@ function SheetQuestion(props: {
         backgroundColor: c().canvas,
       }}
     >
-      <Scroll style={props.sheet ? grow : undefined} scrollbar={false}>
+      <SmoothScroll style={props.sheet ? grow : undefined} scrollbar={false}>
         <View
           style={
             props.sheet
@@ -150,7 +151,7 @@ function SheetQuestion(props: {
             }
           />
         </View>
-      </Scroll>
+      </SmoothScroll>
       <View
         style={{
           ...row,
@@ -241,7 +242,7 @@ function SheetProposal(props: {
   }
   return (
     <View style={grow}>
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <View style={{ paddingTop: 4, paddingHorizontal: 16, gap: 14 }}>
           <View style={{ gap: 4 }}>
             <Caption
@@ -286,7 +287,7 @@ function SheetProposal(props: {
             </If>
           </If>
         </View>
-      </Scroll>
+      </SmoothScroll>
       <If when={pending()}>
         <View
           style={{
