@@ -160,3 +160,15 @@ Besides the headers a plugin file declares (and the ones eta fills from fields),
 - 401: with user headers set and no declared OAuth, a 401 is reported as "credential rejected", not as a sign-in.
 - A globally disabled plugin sends nothing; its headers are kept and the editor is dimmed.
 
+## Logos
+
+- `plugins.logo` finds a picture for a market card: the plugin's own logo, else the icon of its homepage, else the client shows the first letter. No third-party icon service is used.
+- The host fetches it (`plugins/logo.ts`): public addresses only, the connection pinned to the address it checked, every redirect checked again, picture bytes only (no SVG), size and time caps, cached. github.com and gitlab.com homepages are skipped.
+- An installed plugin carries no homepage, so its card shows the first letter. The market preview does not show a logo yet.
+
+## Connection test
+
+- `plugins.testServer { name, server }` connects to one server once, lists tools (names, descriptions, parameter names) and the counts of resources and prompts, and closes. It never calls a tool. It runs only on the click of "Test connection" in the plugin's Settings panel.
+- It uses the same config merge a session uses (`Plugins.testPlan`: fields, then user headers) and the same `@eta/mcp` client, with a 15 s limit. Headers go only to the server's own origin.
+- A plugin that is off sends nothing (`off`). A missing required value makes no connection (`needs_setup`). A server declared `oauth` is reached without a sign-in; a 401 is `needs_login`. A 401 after user headers were sent is "credential rejected". Timeout, DNS, TLS, refusal, a cross-origin redirect and a non-MCP answer each have their own message.
+- Header values and tokens are masked in everything returned. A stdio server is started once by the click and stopped after it.
