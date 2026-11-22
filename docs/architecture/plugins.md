@@ -211,6 +211,30 @@ A built-in market source (`MarketSource.kind: "composio"`, address `composio:too
 - Link: `composioLink { slug }` → `{ redirectUrl }` (https only). It finds the project's Composio-managed auth config for the toolkit (`GET /api/v3/auth_configs?toolkit_slug&is_composio_managed=true`) or makes one (`POST /api/v3/auth_configs`, `use_composio_managed_auth`), then `POST /api/v3/connected_accounts/link`. `user_id` is a random `eta-<uuid>` made once and kept in the settings: Composio keeps connected accounts per user id, and nothing about the person is sent.
 - Not done: installing a toolkit adds no git source (`marketInstall` is untouched), and the shared MCP server is not connected.
 
+#### API key and OAuth toolkits
+
+`ComposioToolkit.auth` tells the card how a toolkit signs in; it changes nothing about how the link is made.
+
+- `oauth`: the person approves on the provider's page. Composio-managed auth means Composio's own OAuth app, so no client id or secret is needed.
+- `api_key`: the person gives the provider's own key on Composio's hosted page (as Composio describes it, not yet seen live). eta never receives that key.
+- `none` (`no_auth`) needs no sign-in; `unknown` is shown as it is, not guessed.
+- In both cases the card's install action goes straight to `redirectUrl` with no confirm dialog. The result is a connected account at Composio under the stored `user_id`; nothing is written to eta's plugin store.
+- The list and the icon come from `meta` of each toolkit (`meta.logo`, `meta.categories`, `meta.tools_count`). Logos are fetched by the host and cached (see Caches); the client only names a slug.
+
+#### MCP: current state
+
+- Composio serves all toolkits through one shared server, `https://connect.composio.dev/mcp`; there is no per-toolkit server.
+- In eta, MCP servers come only from plugins. The Composio source creates no server and no plugin.
+- To use it, install or write a plugin that has an `mcp.json` with that URL, and put the Composio key in a secret `${VAR}` field. The plugin Settings panel then supplies it: the request-header editor sends it to the server's own origin, and "Test connection" lists the tools without calling one.
+- The key stored for the market source is not read by plugins. The plugin field is a separate entry.
+
+#### Known limits
+
+- Nothing here was checked against the real Composio service. Requests and answers follow its public API description and local fake servers (`apps/eta/test/composio.test.ts`). Field names, paging limits and the auth-config flow may differ.
+- It is not confirmed whether the key for `https://backend.composio.dev` (the market list) is the same key the shared MCP server accepts. Treat them as possibly two keys.
+- No real sign-in was done, so a link that opens, a callback and a connected account are untested.
+- The `user_id` is made once per eta installation and kept in the settings; Composio's connected accounts hang on it, so it is not a person's identity.
+
 ## Caches
 
 Both live in the host's database (migrations 0064 and 0065), behind a memory layer where there is one. Everything read back is treated as untrusted again, and the page still renders it as text.
