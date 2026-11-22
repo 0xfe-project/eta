@@ -1,7 +1,21 @@
-import type { LogBlock, SessionImage, ToolBlock } from "@eta/client-contracts";
+import type {
+  LogBlock,
+  RunImage,
+  SessionImage,
+  ToolBlock,
+} from "@eta/client-contracts";
+import type { Signal } from "nsh";
 import { fullOutputOf } from "@eta/client-contracts/tool-shape";
-import { cleanup, effect, Image, signal, View } from "nsh";
-import { Caption, colors, Label, Markdown, row } from "../../../components";
+import { cleanup, computed, effect, Image, signal, View } from "nsh";
+import {
+  Caption,
+  colors,
+  focusRing,
+  Label,
+  Markdown,
+  row,
+} from "../../../components";
+import { Lightbox, picturePreview } from "../../../components/picture-viewer";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { toolDescription } from "./run-timing";
@@ -81,14 +95,9 @@ export function TranscriptLine(props: {
               }
             />
           </If>
-          <Each
-            of={images()}
-            key={(image) => `${image.entryId}:${image.index}`}
-          >
-            {(image) => (
-              <TranscriptImage session={props.session} image={image()} />
-            )}
-          </Each>
+          <If when={images().length}>
+            <TranscriptImages session={props.session} images={images} />
+          </If>
         </View>
       }
     >
@@ -163,14 +172,9 @@ export function TranscriptLine(props: {
                 <Caption text={uiText("runOutput")} />
                 <Label variant="caption">{output()}</Label>
               </If>
-              <Each
-                of={images()}
-                key={(image) => `${image.entryId}:${image.index}`}
-              >
-                {(image) => (
-                  <TranscriptImage session={props.session} image={image()} />
-                )}
-              </Each>
+              <If when={images().length}>
+                <TranscriptImages session={props.session} images={images} />
+              </If>
               <If
                 when={
                   entry().input === undefined && !output() && !images().length
@@ -188,14 +192,100 @@ export function TranscriptLine(props: {
   );
 }
 
+type RunPictureState = Signal<{ src?: string }>;
+
+// The pictures runs carried, as `data:` URLs by session, entry and index: those the view left out
+// are fetched once (`sessions.image`) and kept, so the preview and the lightbox show them at once.
+const runPictures = new Map<string, RunPictureState>();
+
+function runPicture(session: string, image: RunImage) {
+  const key = `${session}:${image.entryId}:${image.index}`;
+  let state = runPictures.get(key);
+  if (!state) {
+    state = signal<{ src?: string }>(
+      image.data ? { src: `data:${image.mimeType};base64,${image.data}` } : {},
+    );
+    runPictures.set(key, state);
+  }
+  return { key, state };
+}
+
+/** The kind and size of a picture, as a caption: "PNG · 84 KB". */
+function sizeLabel(image: RunImage): string {
+  const kind = image.mimeType.replace(/^image\//, "").toUpperCase();
+  const bytes = image.bytes ?? Math.floor((image.data.length * 3) / 4);
+  if (bytes <= 0) return kind;
+  const size =
+    bytes >= 1024 * 1024
+      ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
+      : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${kind} · ${size}`;
+}
+
+/**
+ * The pictures a step carried (a screenshot a tool read back, an image the user attached). Resting
+ * on one shows it larger beside it (desktops); pressing it opens it over the window, where the
+ * others of the step are a swipe or an arrow key away.
+ */
+function TranscriptImages(props: {
+  session: string;
+  images: () => RunImage[];
+}) {
+  const c = colors();
+  const open = signal<number>();
+  const pictures = computed(() =>
+    props.images().map((image) => {
+      const { key, state } = runPicture(props.session, image);
+      return {
+        key,
+        caption: sizeLabel(image),
+        src: () => state().src,
+        failed: () => false,
+        image,
+        state,
+      };
+    }),
+  );
+  return (
+    <>
+      <Each of={pictures()} key={(picture) => picture.key}>
+        {(picture) => {
+          const index = () =>
+            pictures().findIndex((other) => other.key === picture().key);
+          return (
+            <View
+              role="button"
+              accessibilityLabel={uiText("openImage", {
+                index: index() + 1,
+                count: pictures().length,
+              })}
+              tooltip={picturePreview(picture())}
+              onPress={() => open.set(index())}
+              focusVisibleStyle={focusRing(c())}
+              style={{ cursor: "zoom-in" }}
+            >
+              <TranscriptImage
+                session={props.session}
+                image={picture().image}
+                state={picture().state}
+              />
+            </View>
+          );
+        }}
+      </Each>
+      <Lightbox pictures={pictures} index={open} onIndex={open.set} />
+    </>
+  );
+}
+
 function TranscriptImage(props: {
   session: string;
-  image: NonNullable<Extract<LogBlock, { type: "tool" }>["images"]>[number];
+  image: RunImage;
+  state: RunPictureState;
 }) {
   const host = useHost();
-  const source = signal(props.image.data);
   effect(() => {
-    if (source() || host.state().status !== "open") return;
+    if (props.state().src || host.state().status !== "open") return;
     let active = true;
     void host
       .call<SessionImage>("sessions", "image", {
@@ -205,7 +295,10 @@ function TranscriptImage(props: {
       })
       .then(
         (image) => {
-          if (active) source.set(image.data);
+          if (active && image.data)
+            props.state.set({
+              src: `data:${props.image.mimeType};base64,${image.data}`,
+            });
         },
         () => {},
       );
@@ -215,7 +308,7 @@ function TranscriptImage(props: {
   });
   return (
     <If
-      when={source()}
+      when={props.state().src}
       else={
         <Label variant="caption" tone="muted">
           {uiText("imageUnavailable")}
@@ -223,7 +316,7 @@ function TranscriptImage(props: {
       }
     >
       <Image
-        src={`data:${props.image.mimeType};base64,${source()}`}
+        src={props.state().src}
         style={{ width: "100%", height: 220, objectFit: "contain" }}
       />
     </If>
