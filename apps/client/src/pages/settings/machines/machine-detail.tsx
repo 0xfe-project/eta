@@ -3,7 +3,7 @@ import type {
   BoardTaskView,
   MachineView,
 } from "@eta/client-contracts";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   Button,
   colors,
@@ -12,6 +12,7 @@ import {
   Label,
   Modal,
   row,
+  SmoothScroll,
 } from "../../../components";
 import { StatusDot } from "../../../components/status-dot";
 import { uiText } from "../../../i18n";
@@ -109,7 +110,7 @@ export function MachineDetail(props: {
       height={props.phone ? "100%" : 490}
       onClose={props.onClose}
     >
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <If
           when={pending()}
           else={
@@ -301,7 +302,7 @@ export function MachineDetail(props: {
             {props.item.updateError}
           </Label>
         </If>
-      </Scroll>
+      </SmoothScroll>
       <If when={pending() || upgrade()}>
         <View
           style={{

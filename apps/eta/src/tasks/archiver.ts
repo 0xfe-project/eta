@@ -20,6 +20,10 @@ import {
 /** The setting's key: a number of days from `TASK_ARCHIVE_DAYS`, or null for never. */
 const ARCHIVE_AFTER_SETTING = "tasks.archiveAfterDays";
 
+/** The setting's key: whether `finish_task` wakes the task's maker (a boolean; off when never set). */
+const REACT_TO_RESULTS_SETTING = "tasks.reactToResults";
+/** The setting's key: true lets a task's maker answer its executor's questions first; off by default. */
+const AUTO_ANSWER_ASKS_SETTING = "tasks.autoAnswerAsks";
 /** The setting's key: a `TaskDraftTimeout`; off, 10 minutes, discard when never set. */
 const DRAFT_TIMEOUT_SETTING = "tasks.draftTimeout";
 
@@ -87,12 +91,22 @@ export function boardSettings(
   settings: Pick<SettingStore, "get">,
 ): TaskBoardSettings {
   const stored = settings.get(ARCHIVE_AFTER_SETTING);
+  const reactToResults = settings.get(REACT_TO_RESULTS_SETTING) === true;
+  const autoAnswerAsks = settings.get(AUTO_ANSWER_ASKS_SETTING) === true;
   const draftTimeout = draftTimeoutOf(settings.get(DRAFT_TIMEOUT_SETTING));
-  if (stored === null) return { archiveAfterDays: null, draftTimeout };
+  if (stored === null)
+    return {
+      archiveAfterDays: null,
+      reactToResults,
+      autoAnswerAsks,
+      draftTimeout,
+    };
   return {
     archiveAfterDays: (TASK_ARCHIVE_DAYS as readonly unknown[]).includes(stored)
       ? (stored as TaskArchiveDays)
       : DEFAULT_TASK_ARCHIVE_DAYS,
+    reactToResults,
+    autoAnswerAsks,
     draftTimeout,
   };
 }
@@ -100,7 +114,12 @@ export function boardSettings(
 /** Check and keep what a caller asked for; a value the setting does not offer is refused. */
 export function saveBoardSettings(
   settings: Pick<SettingStore, "get" | "set">,
-  input: { archiveAfterDays?: unknown; draftTimeout?: unknown },
+  input: {
+    archiveAfterDays?: unknown;
+    reactToResults?: unknown;
+    autoAnswerAsks?: unknown;
+    draftTimeout?: unknown;
+  },
 ): TaskBoardSettings {
   // Everything is checked before anything is kept, so a refused call changes nothing.
   const draftTimeout =
@@ -110,6 +129,20 @@ export function saveBoardSettings(
           draftTimeoutOf(settings.get(DRAFT_TIMEOUT_SETTING)),
           input.draftTimeout,
         );
+  if (
+    input.reactToResults !== undefined &&
+    typeof input.reactToResults !== "boolean"
+  )
+    throw new Error(
+      `reactToResults is true or false, not ${JSON.stringify(input.reactToResults)}`,
+    );
+  if (
+    input.autoAnswerAsks !== undefined &&
+    typeof input.autoAnswerAsks !== "boolean"
+  )
+    throw new Error(
+      `autoAnswerAsks is true or false, not ${JSON.stringify(input.autoAnswerAsks)}`,
+    );
   if (input.archiveAfterDays !== undefined) {
     const days = input.archiveAfterDays;
     if (
@@ -121,6 +154,10 @@ export function saveBoardSettings(
       );
     settings.set(ARCHIVE_AFTER_SETTING, days);
   }
+  if (input.reactToResults !== undefined)
+    settings.set(REACT_TO_RESULTS_SETTING, input.reactToResults);
+  if (input.autoAnswerAsks !== undefined)
+    settings.set(AUTO_ANSWER_ASKS_SETTING, input.autoAnswerAsks);
   if (draftTimeout !== undefined)
     settings.set(DRAFT_TIMEOUT_SETTING, draftTimeout);
   return boardSettings(settings);

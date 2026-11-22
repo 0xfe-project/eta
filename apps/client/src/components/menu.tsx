@@ -1,7 +1,8 @@
 import type { JSX, ViewStyle } from "nsh";
 import type { Layout } from "./theme";
-import { context, platform, Scroll, signal, View } from "nsh";
+import { context, platform, signal, View } from "nsh";
 import { Menu, MenuItem, MenuSeparator, Popover, Sheet } from "nsh/base";
+import { SmoothScroll } from "./smooth-scroll";
 import { colors, Screen } from "./theme";
 
 /** How a menu shows: a sheet at the bottom of the screen, or a popup at its trigger. */
@@ -172,13 +173,13 @@ export function MenuFrame(props: {
       popupStyle={props.popupStyle}
       trigger={props.trigger}
     >
-      <Scroll
+      <SmoothScroll
         role="menu"
         style={{ maxHeight: room(), flexShrink: 1 }}
         scrollbar={false}
       >
         {content(false)}
-      </Scroll>
+      </SmoothScroll>
     </Popover>
   );
   const viaSheet = () => (
@@ -198,9 +199,9 @@ export function MenuFrame(props: {
         popupStyle={{ ...sheetStyle(), maxHeight: "80%" }}
         backdropStyle={{ backgroundColor: c().sheetShade }}
       >
-        <Scroll role="menu" style={{ flexShrink: 1 }} scrollbar={false}>
+        <SmoothScroll role="menu" style={{ flexShrink: 1 }} scrollbar={false}>
           {content(false)}
-        </Scroll>
+        </SmoothScroll>
       </Sheet>
     </>
   );

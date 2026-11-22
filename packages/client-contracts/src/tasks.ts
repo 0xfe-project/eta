@@ -237,6 +237,10 @@ export interface TaskDraftTimeout {
 export interface TaskBoardSettings {
   /** Days a done or cancelled task stays quiet before the host archives it; null never does. */
   archiveAfterDays: TaskArchiveDays | null;
+  /** Whether a finished task's result wakes the agent that made it, to review and follow up. Off by default. */
+  reactToResults: boolean;
+  /** Whether the agent that made a task answers its executor's questions before the user is asked. */
+  autoAnswerAsks: boolean;
   /** What happens to a draft nobody confirmed or discarded in time. Absent from a host that predates it. */
   draftTimeout?: TaskDraftTimeout | undefined;
 }

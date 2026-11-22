@@ -1,6 +1,14 @@
 import type { BoardTaskDetail } from "@eta/client-contracts";
-import { Scroll, View } from "nsh";
-import { Button, colors, Field, Label, Modal, row } from "../../components";
+import { View } from "nsh";
+import {
+  Button,
+  colors,
+  Field,
+  Label,
+  Modal,
+  row,
+  SmoothScroll,
+} from "../../components";
 import { uiText } from "../../i18n";
 import { TaskGlyph } from "./status";
 
@@ -126,7 +134,7 @@ export function TaskReviewDialog(props: {
                 },
               )}
             </Label>
-            <Scroll style={{ maxHeight: 120 }}>
+            <SmoothScroll style={{ maxHeight: 120 }}>
               <Each
                 of={props.task?.dependents ?? []}
                 key={(edge) => edge.taskId}
@@ -145,7 +153,7 @@ export function TaskReviewDialog(props: {
                   </View>
                 )}
               </Each>
-            </Scroll>
+            </SmoothScroll>
           </View>
         </If>
       </View>

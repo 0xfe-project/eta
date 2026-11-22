@@ -1,6 +1,13 @@
 import type { RoutineSummary } from "@eta/client-contracts";
-import { Scroll, View } from "nsh";
-import { colors, grow, Label, Modal, row } from "../../components";
+import { View } from "nsh";
+import {
+  colors,
+  grow,
+  Label,
+  Modal,
+  row,
+  SmoothScroll,
+} from "../../components";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { routineTime } from "./schedule";
@@ -21,7 +28,7 @@ export function PendingReports(props: {
       blurBackdrop={false}
       onClose={props.onClose}
     >
-      <Scroll style={grow}>
+      <SmoothScroll style={grow}>
         <View style={{ padding: 12, gap: 8 }}>
           <Each
             of={props.routines
@@ -92,7 +99,7 @@ export function PendingReports(props: {
             )}
           </Each>
         </View>
-      </Scroll>
+      </SmoothScroll>
     </Modal>
   );
 }

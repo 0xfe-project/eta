@@ -20,6 +20,7 @@ export const sections = [
   ["Machines", "monitor", "machines"],
   ["MCP servers", "plug", "mcpServers"],
   ["External agents", "terminal", "externalAgents"],
+  ["Tasks", "tasks", "tasks"],
   ["Runtimes", "cpu", "runtimes"],
   ["Email", "email", "email"],
   ["Archived", "archive", "archived"],
@@ -118,6 +119,8 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
       }
       case "External agents":
         return { text: String(externalAgents().length) };
+      case "Tasks":
+        return { text: "" };
       case "Runtimes":
         return {
           text: uiText("runtimesAvailableCount", {

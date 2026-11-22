@@ -1,7 +1,15 @@
 import type { PluginView } from "@eta/client-contracts";
 import type { ViewStyle } from "nsh";
-import { Scroll, signal, View } from "nsh";
-import { Button, colors, Icon, Label, Modal, row } from "../../components";
+import { signal, View } from "nsh";
+import {
+  Button,
+  colors,
+  Icon,
+  Label,
+  Modal,
+  row,
+  SmoothScroll,
+} from "../../components";
 import { CloseButton } from "../../components/navigation-buttons";
 import { uiText } from "../../i18n";
 
@@ -115,11 +123,11 @@ export function PluginWarningsDialog(props: {
           style={{ marginVertical: -2, marginRight: -6 }}
         />
       </View>
-      <Scroll style={{ maxHeight: 300 }} scrollbar={false}>
+      <SmoothScroll style={{ maxHeight: 300 }} scrollbar={false}>
         <View style={{ paddingHorizontal: 16, gap: 6 }}>
           <WarningsText item={props.item} />
         </View>
-      </Scroll>
+      </SmoothScroll>
       <View
         style={{
           ...row,

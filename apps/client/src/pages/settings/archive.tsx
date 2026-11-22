@@ -11,7 +11,7 @@ import {
   TASK_DRAFT_TIMEOUT_ACTIONS,
   TASK_DRAFT_TIMEOUT_MINUTES,
 } from "@eta/client-contracts";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -23,6 +23,7 @@ import {
   Icon,
   Label,
   row,
+  SmoothScroll,
 } from "../../components";
 import { formatLocale, uiText, useText } from "../../i18n";
 import { ToggleSwitch } from "../../components/toggle-switch";
@@ -251,7 +252,7 @@ export function ArchiveSettings(props: { phone?: boolean }) {
           </ActionMenu>
         </View>
       </If>
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <SectionHeader
           title={text("archived")}
           count={conversations().length || undefined}
@@ -346,7 +347,7 @@ export function ArchiveSettings(props: { phone?: boolean }) {
             )}
           </Each>
         </If>
-      </Scroll>
+      </SmoothScroll>
     </View>
   );
 }

@@ -6,7 +6,7 @@ import type {
 } from "@eta/client-contracts";
 import type { JSX, ViewStyle } from "nsh";
 import { HOURLY_STEPS } from "@eta/client-contracts";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import { TimeField } from "nsh/base";
 import {
   ActionItem,
@@ -21,6 +21,7 @@ import {
   Label,
   Modal,
   row,
+  SmoothScroll,
   textFaces,
   textStyle,
 } from "../../components";
@@ -709,12 +710,12 @@ export function RoutineEditor(props: {
           width={540}
           onClose={props.onClose}
         >
-          <Scroll style={{ flexShrink: 1 }}>{form()}</Scroll>
+          <SmoothScroll style={{ flexShrink: 1 }}>{form()}</SmoothScroll>
           <If when={sheet()}>{actions()}</If>
         </Modal>
       }
     >
-      <Scroll style={grow}>{form()}</Scroll>
+      <SmoothScroll style={grow}>{form()}</SmoothScroll>
     </If>
   );
 }

@@ -3,16 +3,8 @@ import type {
   MemberView,
   MessageView,
 } from "@eta/client-contracts";
-import type { JSX, ListRef, ViewRef, WheelEvent } from "nsh";
-import {
-  cleanup,
-  computed,
-  effect,
-  List,
-  reduceMotion,
-  signal,
-  View,
-} from "nsh";
+import type { JSX, ListRef, ViewRef } from "nsh";
+import { cleanup, computed, effect, List, signal, View } from "nsh";
 import { onWindows } from "../../app/platform";
 import {
   Button,
@@ -23,15 +15,10 @@ import {
   Label,
   MessagesSkeleton,
 } from "../../components";
+import { wheelScroll } from "../../components/scroll-follow";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { Message } from "./message";
-import {
-  animateFollow,
-  wheelDistance,
-  wheelIsNotch,
-  wheelTarget,
-} from "./scroll-follow";
 import { TaskDraftDetail } from "./task-draft-detail";
 
 export function ConversationTimeline(props: {
@@ -86,24 +73,9 @@ export function ConversationTimeline(props: {
   const actions = new Map<string, () => void>();
   // On Windows the wheel scrolls the list itself, so mouse notches can glide;
   // elsewhere the system already scrolls smoothly and the list keeps it.
-  // No scroll event yet: the end is not known, and the list clamps to it.
-  let scrolled = { offset: 0, max: Number.POSITIVE_INFINITY };
-  let wheel: { aim?: number; last: number } = { last: 0 };
-  function onWheel(event: WheelEvent) {
-    // The list scrolls along its own axis only.
-    if (Math.abs(event.delta.x) > Math.abs(event.delta.y)) return;
-    const now = Date.now();
-    const target = wheelTarget({
-      ...scrolled,
-      aim: wheel.aim,
-      last: wheel.last,
-      now,
-      distance: wheelDistance(event),
-    });
-    const glide = wheelIsNotch(event) && animateFollow(reduceMotion());
-    wheel = { aim: glide ? target : undefined, last: now };
-    transcriptList?.scrollToOffset({ offset: target, animated: glide });
-  }
+  const glide = wheelScroll((offset, animated) =>
+    transcriptList?.scrollToOffset({ offset, animated }),
+  );
   let timelineFocus: ViewRef | undefined;
   let pendingFocus: string | undefined;
   let top: { id: string; offset: number } | undefined;
@@ -229,16 +201,7 @@ export function ConversationTimeline(props: {
           estimatedItemSize={134}
           scrollbar={false}
           scrollEventThrottle={onWindows ? 16 : undefined}
-          onScroll={
-            onWindows
-              ? (event) => {
-                  scrolled = {
-                    offset: event.offset.y,
-                    max: event.contentSize.height - event.size.height,
-                  };
-                }
-              : undefined
-          }
+          onScroll={onWindows ? glide.onScroll : undefined}
           contentStyle={{
             paddingLeft: 16,
             paddingRight: props.rail ? 60 : 16,
@@ -307,7 +270,7 @@ export function ConversationTimeline(props: {
                 }
               />
             );
-            return onWindows ? <View onWheel={onWheel}>{row}</View> : row;
+            return onWindows ? <View onWheel={glide.onWheel}>{row}</View> : row;
           }}
         </List>
         <If when={selected()}>

@@ -28,12 +28,12 @@ export function composerAttachments(
   const origin = host.address()?.origin;
   const { ready, uploading, failedUploads, edit } = store;
   const attachments = () => store.value().attachments;
-  async function attach(pasted?: File[]) {
+  async function attach(pasted?: File[] | Promise<File[]>) {
     if (!ready() || blocked()) return;
     await store.updateAttachments(() =>
       host.action(async () => {
         const chosen =
-          pasted ??
+          (await pasted) ??
           (
             await Picker.pickFiles({
               multiple: true,

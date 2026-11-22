@@ -211,23 +211,12 @@ test("a second pasted file waits for the first upload in the same draft", async 
   expect(app.shows("label:composer.test.tsx")).toBe(true);
 });
 
-test("a pasted picture opens from its chip, shows its own bytes, and comes out by its own button", async () => {
+test("a pasted BMP screenshot is attached as a PNG and other images keep their name", async () => {
   const app = await fixture();
-  await app.paste(input, { files: ["test/fixtures/pixel.png"] });
-  const chip = "label:View picture pixel.png · 0.0 KB";
-  await app.waitFor(chip);
-  await app.hover(chip);
-  await app.wait(300);
-  expect(app.shows("label:pixel.png · 0.0 KB")).toBe(true);
-  await app.press(chip);
-  await app.waitFor("text:pixel.png · 0.0 KB");
-  expect(app.shows("id:picture-stage")).toBe(true);
-  await app.keyboard.press("escape");
-  await app.waitUntil(() => !app.shows("id:picture-stage"));
-  // The draft's picture is the file it sent: the host is never asked for it.
-  expect(
-    app.requests().some((request) => request.url.includes("/attachments/")),
-  ).toBe(false);
-  await app.press("label:Remove pixel.png");
-  await app.waitUntil(() => !app.shows(chip));
+  await app.paste(input, { files: ["test/paste-pixel.bmp"] });
+  await app.waitFor("label:paste-pixel.png");
+  expect(app.shows("label:paste-pixel.bmp")).toBe(false);
+  await app.paste(input, { files: ["assets/onboard.jpg"] });
+  // the fixture fails a first upload of onboard.jpg; the label still shows it kept its name
+  await app.waitFor("text:onboard.jpg · upload interrupted");
 });

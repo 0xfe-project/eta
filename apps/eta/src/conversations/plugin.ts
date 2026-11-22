@@ -256,6 +256,18 @@ export function conversationsPlugin(
           };
         }),
 
+        wire.handle("conversations", "attachment", async (call) => {
+          const args = new Args(call);
+          const id = args.string("conversationId");
+          existing(id);
+          return {
+            result: await deps.attachments.picture(
+              id,
+              args.string("attachmentId"),
+            ),
+          };
+        }),
+
         wire.handle("conversations", "stop", (call) => {
           const args = new Args(call);
           const stopped = engine.stop(

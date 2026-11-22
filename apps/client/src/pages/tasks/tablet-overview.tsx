@@ -1,7 +1,15 @@
 import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { TaskDetailState } from "./task-detail-state";
-import { Scroll, View } from "nsh";
-import { colors, grow, Icon, Label, Markdown, row } from "../../components";
+import { View } from "nsh";
+import {
+  colors,
+  grow,
+  Icon,
+  Label,
+  Markdown,
+  row,
+  SmoothScroll,
+} from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "./activity";
@@ -45,7 +53,7 @@ export function TabletOverview(props: {
   const creator = () => actorLabel(item().createdBy, host.agent);
   return (
     <View style={grow}>
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <View
           style={{
             paddingHorizontal: 20,
@@ -189,7 +197,7 @@ export function TabletOverview(props: {
             }
           />
         </View>
-      </Scroll>
+      </SmoothScroll>
       <View style={{ paddingHorizontal: 20, paddingBottom: 14, gap: 12 }}>
         <RunLine item={item()} state={props.state} tablet />
         <TaskCommentBox state={props.state} tablet />

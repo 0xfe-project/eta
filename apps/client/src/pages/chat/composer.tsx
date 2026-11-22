@@ -31,7 +31,6 @@ import {
   effect,
   keyboardFrame,
   keymap,
-  Scroll,
   signal,
   untracked,
   View,
@@ -46,11 +45,13 @@ import {
   Icon,
   Label,
   row,
+  SmoothScroll,
   textFaces,
 } from "../../components";
 
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { pastedFile } from "./bmp-to-png";
 import { composerAttachments } from "./composer-attachments";
 import { HeldRows, OutboxRows } from "./composer-delivery";
 import { drainOutbox, openComposerDraft } from "./composer-draft";
@@ -358,7 +359,7 @@ export function Composer(props: {
         event.files.every((file) => file.type.startsWith("image/"))
       )
     ) {
-      void attach(event.files);
+      void attach(Promise.all(event.files.map(pastedFile)));
     } else if (text.length > MAX_MESSAGE_CHARS) {
       void attach([
         new File([text], uiText("pastedFile"), {
@@ -513,7 +514,7 @@ export function Composer(props: {
               text={uiText(menu()?.kind === "hash" ? "tasks" : "mentions")}
               style={{ paddingHorizontal: 10, paddingTop: 6, paddingBottom: 4 }}
             />
-            <Scroll
+            <SmoothScroll
               ref={(ref) => {
                 scroll = ref;
               }}
@@ -569,7 +570,7 @@ export function Composer(props: {
                   </View>
                 )}
               </Each>
-            </Scroll>
+            </SmoothScroll>
           </View>
         </If>
         <If when={prefix().length}>
