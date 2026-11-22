@@ -356,3 +356,79 @@ export async function publicModelMetadata(
   }
   return { models };
 }
+
+/** What a catalog entry can fill in for a custom endpoint's model. */
+export type GatewayFacts = Pick<
+  ModelCapabilities,
+  | "contextWindow"
+  | "maxTokens"
+  | "input"
+  | "reasoning"
+  | "reasoningEfforts"
+  | "thinkingMode"
+>;
+
+const GATEWAY_FACTS = [
+  "contextWindow",
+  "maxTokens",
+  "input",
+  "reasoning",
+  "reasoningEfforts",
+  "thinkingMode",
+] as const;
+
+/**
+ * Facts for the models of a custom endpoint, by model id: a gateway's `gateway/model-a`
+ * is looked up as `model-a`.
+ *
+ * Stricter than `modelsDevByModelId`, because here the endpoint is nobody's known address: the
+ * id must be a key in a provider's `models`, exactly (no case folding, no maker ranking), and
+ * when several providers list it a field is taken only if every listing that states it agrees.
+ * A field the listings disagree on, or none states, is left out; so is an id nothing lists.
+ */
+export async function gatewayModelFacts(
+  modelIds: readonly string[],
+  send: typeof fetch = fetch,
+  signal?: AbortSignal,
+): Promise<Map<string, GatewayFacts>> {
+  const body = await fetchModelsDev(send, signal);
+  const providers: ModelsDevProvider[] = [];
+  for (const providerId of Object.keys(body)) {
+    try {
+      const provider = modelsDevProvider(body, providerId);
+      if (provider !== undefined) providers.push(provider);
+    } catch {
+      // One malformed entry is not a reason to know nothing about the rest.
+    }
+  }
+  const result = new Map<string, GatewayFacts>();
+  for (const id of modelIds) {
+    const bare = id.slice(id.lastIndexOf("/") + 1);
+    const listings: ModelsDevModel[] = [];
+    for (const provider of providers) {
+      if (!Object.hasOwn(provider.models, bare)) continue;
+      try {
+        listings.push(
+          parseModelsDevModel(bare, provider.models[bare], provider),
+        );
+      } catch {
+        // An entry that does not parse says nothing.
+      }
+    }
+    const facts: Record<string, unknown> = {};
+    for (const field of GATEWAY_FACTS) {
+      const stated = listings.flatMap((listing) =>
+        listing[field] === undefined ? [] : [listing[field]],
+      );
+      if (
+        stated.length > 0 &&
+        stated.every(
+          (value) => JSON.stringify(value) === JSON.stringify(stated[0]),
+        )
+      )
+        facts[field] = stated[0];
+    }
+    if (Object.keys(facts).length > 0) result.set(id, facts as GatewayFacts);
+  }
+  return result;
+}

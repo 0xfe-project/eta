@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { Context } from "cordis";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PROVIDER_ACTIONS, providersPlugin } from "../src/bundled/providers";
+import { MODELS_DEV_URL } from "../src/providers/metadata";
 import { ProviderConfigStore, revisionOf } from "../src/providers/store";
 import { WireService } from "../src/wire-service";
 
@@ -338,6 +339,9 @@ describe("refreshing a provider's model list", () => {
     const calls: string[] = [];
     const auth: (string | null)[] = [];
     const send = (async (url: string, init?: RequestInit) => {
+      // The public catalog is asked for custom endpoints too; these tests are about the endpoint.
+      if (String(url) === MODELS_DEV_URL)
+        return new Response(null, { status: 404 });
       calls.push(String(url));
       auth.push(new Headers(init?.headers).get("authorization"));
       return new Response(
@@ -442,6 +446,9 @@ describe("unsaved model discovery", () => {
       url: Parameters<typeof fetch>[0],
       init?: RequestInit,
     ) => {
+      // The public catalog is asked for custom endpoints too; these tests are about the endpoint.
+      if (String(url) === MODELS_DEV_URL)
+        return new Response(null, { status: 404 });
       requested = { url: String(url), headers: new Headers(init?.headers) };
       return Response.json({
         data: [{ id: "new-model", context_window: 12000 }],
@@ -477,7 +484,10 @@ describe("unsaved model discovery", () => {
   it("editing reuses the saved key only when omitted; replacement and clear are write-free, and stale revisions are refused", async () => {
     const keys: (string | null)[] = [];
     const h = await harness({
-      fetch: (async (_url: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      fetch: (async (url: Parameters<typeof fetch>[0], init?: RequestInit) => {
+        // The public catalog is asked for custom endpoints too; these tests are about the endpoint.
+        if (String(url) === MODELS_DEV_URL)
+          return new Response(null, { status: 404 });
         keys.push(new Headers(init?.headers).get("Authorization"));
         return Response.json({ data: [{ id: "new-model" }] });
       }) as unknown as typeof fetch,
