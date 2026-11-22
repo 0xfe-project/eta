@@ -4,8 +4,10 @@ import { signal, Storage, untracked } from "nsh";
 
 const activeInterval = 600;
 const idleInterval = 20_000;
-// The worker can wait two minutes for the new service, then two more for rollback.
-const restartWindow = 5 * 60_000;
+// The worker can wait two minutes for the new service, then two more for rollback, so a Host away
+// for five minutes is not normal: the restart screen says so then and offers another host. The
+// upgrade is only given up on (and the app goes back to reconnecting as usual) well after that.
+const restartWindow = 30 * 60_000;
 const phases = [
   "starting",
   "downloading",
