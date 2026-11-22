@@ -40,3 +40,17 @@ test("each server offers a Test connection button, and nothing is tested until i
   expect(app.shows("Connected")).toBe(false);
   expect(app.shows("Failed")).toBe(false);
 });
+
+test("the Settings panel lists the plugin's skills: one, many, and none", async () => {
+  const one = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 800 });
+  await one.press("label:remote-plugin");
+  expect(one.shows("only-skill")).toBe(true);
+  expect(one.shows("<b>x</b> does one thing")).toBe(true);
+  const many = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 800 });
+  await many.press("label:old-host-plugin");
+  expect(many.shows("alpha")).toBe(true);
+  expect(many.shows("gamma skill")).toBe(true);
+  const none = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 800 });
+  await none.press("label:on-plugin");
+  expect(none.shows("No skills")).toBe(true);
+});

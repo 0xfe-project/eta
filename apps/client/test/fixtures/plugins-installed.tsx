@@ -47,10 +47,15 @@ function Fixture() {
           list: [
             plugin("on-plugin", true),
             plugin("off-plugin", false),
-            { ...plugin("remote-plugin", true), servers: [remote] },
+            {
+              ...plugin("remote-plugin", true),
+              servers: [remote],
+              skills: [{ name: "only-skill", description: "<b>x</b> does one thing" }],
+            },
             // An older host sends neither `headers` on the plugin nor on its servers.
             {
               ...plugin("old-host-plugin", true),
+              skills: ["alpha", "beta", "gamma"].map((name) => ({ name, description: name + " skill" })),
               headers: undefined,
               servers: [{ ...remote, headers: undefined, plainHttp: undefined }],
             } as unknown as PluginView,

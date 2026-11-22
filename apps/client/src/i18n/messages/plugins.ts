@@ -77,6 +77,8 @@ export const pluginsMessages = {
   serversHeading: ["MCP servers", "MCP 服务器"],
   cardValues: ["Values", "配置值"],
   serversButton: ["Settings", "设置"],
+  pluginSkillsHeading: ["Skills", "技能"],
+  pluginNoSkills: ["No skills", "没有技能"],
   testConnection: ["Test connection", "测试连接"],
   testing: ["Testing…", "正在测试…"],
   testOk: ["Connected", "连接成功"],

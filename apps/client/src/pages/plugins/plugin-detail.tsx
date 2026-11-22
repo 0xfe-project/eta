@@ -17,7 +17,7 @@ import { ToggleSwitch } from "../../components/toggle-switch";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 
-import { ServerRows } from "./servers-panel";
+import { ServerRows, SkillRows } from "./servers-panel";
 import { PluginEnabled } from "./plugin-name";
 import { pluginText as text } from "./labels";
 import { PluginGlyph, Status } from "./plugin-status";
@@ -316,6 +316,7 @@ export function PluginDetail(props: DetailProps) {
             <Caption text={text("runs")} phone={props.phone} />
             <View style={{ gap: 12 }}>
               <ServerRows item={props.item} phone={props.phone} />
+              <SkillRows item={props.item} />
               <Label
                 variant="small"
                 tone="muted"

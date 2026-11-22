@@ -107,6 +107,37 @@ function TestConnection(props: { item: PluginView; server: string; stdio: boolea
   );
 }
 
+const clip = (text: string): string =>
+  text.length > 160 ? text.slice(0, 157) + "…" : text;
+
+/** The skills a plugin holds, read-only; the same list the card counts. Text is shown as plain text. */
+export function SkillRows(props: { item: PluginView }) {
+  return (
+    <View style={{ gap: 8 }}>
+      <Label variant="subtitle" weight={600}>
+        {uiText("pluginSkillsHeading")}
+      </Label>
+      <If when={!props.item.skills.length}>
+        <Label variant="small" tone="muted">
+          {uiText("pluginNoSkills")}
+        </Label>
+      </If>
+      <Each of={props.item.skills} key={(skill) => skill.name}>
+        {(skill) => (
+          <View style={{ gap: 2 }}>
+            <Label variant="small" weight={600}>{skill().name}</Label>
+            <If when={skill().description}>
+              <Label variant="small" tone="muted">
+                {clip(skill().description)}
+              </Label>
+            </If>
+          </View>
+        )}
+      </Each>
+    </View>
+  );
+}
+
 /** A plugin's MCP servers: what each is, its state, and for a remote one its request headers. */
 export function ServerRows(props: { item: PluginView; phone?: boolean }) {
   const c = colors();
@@ -211,6 +242,7 @@ export function ServersDialog(props: {
             {uiText("serversHeading")}
           </Label>
           <ServerRows item={props.item} phone={props.phone} />
+          <SkillRows item={props.item} />
         </View>
       </SmoothScroll>
     </Modal>
