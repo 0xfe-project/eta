@@ -117,6 +117,28 @@ export interface LogoOptions {
   sites?: (server: string) => string[];
   timeoutMs?: number;
   now?: () => number;
+  /** Tests only: where raw files are read from, in place of https://raw.githubusercontent.com. */
+  rawBase?: string;
+}
+
+const RAW = "https://raw.githubusercontent.com";
+const MAX_MANIFEST = 64 * 1024;
+/** Lookups into a repository that run at once; the rest wait. */
+export const MAX_REPO_LOOKUPS = 4;
+/** A repository lookup that found nothing is not asked again for this long (a hit stays a day). */
+const MISS_MS = 60 * 60 * 1000;
+const GITHUB_REPO = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/;
+const REF = /^[\w][\w./-]{0,127}$/;
+const SEGMENT = /^[\w.@+-]+$/;
+/** Manifests that can name a logo, in the order the loader reads them. */
+const MANIFESTS = [".cursor-plugin/plugin.json", ".claude-plugin/plugin.json"];
+
+/** `path` as clean segments of a path inside a repository; throws for anything that could leave it. */
+function segments(path: string): string[] {
+  const parts = path.split("/").filter((part) => part !== "" && part !== ".");
+  if (path.includes("\\") || path.includes("\0") || path.length > 512) throw new Refused("bad path");
+  for (const part of parts) if (part === ".." || !SEGMENT.test(part)) throw new Refused("bad path");
+  return parts;
 }
 
 class Refused extends Error {}
@@ -155,8 +177,13 @@ export function siteOf(server: string): string[] {
 export class Logos {
   readonly #options: LogoOptions;
   readonly #kept = new Map<string, { at: number; logo: Logo | null }>();
+  readonly #repoKept = new Map<string, { until: number; logo: Logo | null }>();
+  #active = 0;
+  readonly #waiting: (() => void)[] = [];
   /** Requests made, for tests. */
   requests = 0;
+  /** The most repository lookups that ran at once, for tests. */
+  peak = 0;
 
   constructor(options: LogoOptions = {}) {
     this.#options = options;
@@ -186,6 +213,72 @@ export class Logos {
     }
     this.#kept.set(key, { at: now, logo });
     return logo;
+  }
+
+  /**
+   * The own logo of a catalog entry that is a path in a GitHub repository, read from the plugin's
+   * manifest (`.cursor-plugin/plugin.json`, else `.claude-plugin/plugin.json`) on
+   * raw.githubusercontent.com: nothing is cloned. `logo` is a path inside the plugin; the picture
+   * is read from the same place. Any other host, or anything wrong, is null. At most
+   * MAX_REPO_LOOKUPS run at once, and an answer (a miss for an hour) is kept.
+   */
+  async fromRepo(repo: string, ref: string, path: string): Promise<Logo | null> {
+    const key = repo + "\n" + ref + "\n" + path;
+    const now = (this.#options.now ?? Date.now)();
+    const hit = this.#repoKept.get(key);
+    if (hit && now < hit.until) return hit.logo;
+    let logo: Logo | null = null;
+    try {
+      if (this.#active >= MAX_REPO_LOOKUPS) await new Promise<void>((go) => this.#waiting.push(go));
+      else this.#active++;
+      this.peak = Math.max(this.peak, this.#active);
+      try {
+        logo = await this.#repoLogo(repo, ref, path);
+      } finally {
+        const next = this.#waiting.shift();
+        if (next) next();
+        else this.#active--;
+      }
+    } catch {
+      logo = null;
+    }
+    this.#repoKept.set(key, { until: now + (logo ? KEEP_MS : MISS_MS), logo });
+    return logo;
+  }
+
+  async #repoLogo(repo: string, ref: string, path: string): Promise<Logo | null> {
+    const match = GITHUB_REPO.exec(repo.trim());
+    if (!match || !REF.test(ref) || ref.includes("..")) return null;
+    const dir = segments(path);
+    const base = `${this.#options.rawBase ?? RAW}/${match[1]}/${match[2]}/${ref}`;
+    const raw = (parts: string[]) => this.#address(viaProxy([base, ...parts].join("/")));
+    for (const manifest of MANIFESTS) {
+      const got = await this.#get(raw([...dir, manifest]), MAX_MANIFEST).catch(() => null);
+      if (!got) continue;
+      let rel: unknown;
+      try {
+        rel = (JSON.parse(new TextDecoder().decode(got.body)) as { logo?: unknown }).logo;
+      } catch {
+        continue;
+      }
+      if (typeof rel !== "string" || rel.length > 256 || /^[a-z][a-z0-9+.-]*:/i.test(rel)) continue;
+      let file: string[];
+      try {
+        file = segments(rel);
+      } catch {
+        continue;
+      }
+      const mime = OWN_TYPES[extname(rel).toLowerCase()];
+      if (!mime || !file.length) continue;
+      const picture = await this.#get(raw([...dir, ...file]), MAX_OWN).catch(() => null);
+      if (!picture) continue;
+      if (mime === "image/svg+xml") {
+        const text = Buffer.from(picture.body).toString("utf8");
+        if (!SVG_HEAD.test(text) || SVG_UNSAFE.test(text)) continue;
+      } else if (pictureType(picture.body) !== mime) continue;
+      return { type: mime, data: Buffer.from(picture.body).toString("base64") };
+    }
+    return null;
   }
 
   async #fromHomepage(homepage: string): Promise<Logo | null> {

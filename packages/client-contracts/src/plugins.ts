@@ -183,7 +183,15 @@ export interface PluginArgs {
   /** Forget a server's sign-in. */
   logoutServer: { name: string; server: string };
   /** A plugin's logo as the host finds it: its own address, else the icon of its homepage. */
-  logo: { own?: string | null; homepage?: string | null; plugin?: string | null };
+  logo: {
+    own?: string | null;
+    homepage?: string | null;
+    plugin?: string | null;
+    /** A market entry in a GitHub repository: its own logo is read from its manifest there (repo, ref, path). */
+    repo?: string | null;
+    ref?: string | null;
+    path?: string | null;
+  };
 }
 
 /** What a connection test found. Secrets are never in it. */

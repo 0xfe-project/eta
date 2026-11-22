@@ -266,7 +266,15 @@ export function Market(props: {
                     }}
                   >
                     <View style={{ ...row, gap: 8 }}>
-                      <PluginLogo name={item().name} homepage={item().homepage} />
+                      <PluginLogo
+                        name={item().name}
+                        homepage={item().homepage}
+                        repo={
+                          item().repo !== "" && item().unsupported === null
+                            ? { repo: item().repo, ref: item().rev ?? "HEAD", path: item().path }
+                            : null
+                        }
+                      />
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <PluginName name={item().name} />
                       </View>

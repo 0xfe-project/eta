@@ -263,6 +263,16 @@ export function pluginsPlugin(
             )?.url;
             return { result: await logos.find(null, found?.manifest.homepage ?? null, remote ?? null) };
           }
+          // A market entry that is a path in a GitHub repository: the plugin's own logo from its manifest.
+          const repo = args.optionalString("repo");
+          if (repo !== undefined) {
+            const own = await logos.fromRepo(
+              repo,
+              args.optionalString("ref") ?? "HEAD",
+              args.optionalString("path") ?? "",
+            );
+            if (own) return { result: own };
+          }
           return {
             result: await logos.find(
               args.optionalString("own") ?? null,
