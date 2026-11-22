@@ -1,8 +1,10 @@
 import type { AgentView, ConversationSummary } from "@eta/client-contracts";
+import type { JSX, Point } from "nsh";
 import type { Layout } from "../components";
 import { View } from "nsh";
 import { colors, focusRing, Label, row, RowChevron } from "../components";
 import { AgentFace } from "../components/agent-face";
+import { touchScreen } from "../components/menu";
 import { StatusDot } from "../components/status-dot";
 import { uiText } from "../i18n";
 import { relativeTime, useHost } from "../services/host";
@@ -14,8 +16,19 @@ export function GroupRow(props: {
   layout: Layout;
   collapsed?: boolean;
   onPress: () => void;
+  /** A right click, or a long press on a touch screen, asked for its menu here (in the row). */
+  onMenu?: (at: Point) => void;
+  /** Drawn over the row, such as its menu. */
+  children?: JSX.Element;
 }) {
   const host = useHost();
+  const menu = {
+    onContextMenu: (event: { position: Point }) =>
+      props.onMenu?.(event.position),
+    onLongPress: touchScreen
+      ? (event: { position: Point }) => props.onMenu?.(event.position)
+      : undefined,
+  };
   const c = colors();
   const phone = () => props.layout === "phone";
   const people = () => props.group.participants.slice(0, 3);
@@ -31,6 +44,7 @@ export function GroupRow(props: {
       accessibilityLabel={props.group.name}
       accessibilityState={{ selected: props.selected }}
       onPress={() => props.onPress()}
+      {...menu}
       hoverStyle={{ backgroundColor: c().selected }}
       focusVisibleStyle={focusRing(c())}
       style={{
@@ -97,28 +111,32 @@ export function GroupRow(props: {
     </View>
   );
   return (
-    <If when={props.collapsed} else={detailed()}>
-      <RailEntry
-        label={props.group.name}
-        selected={props.selected}
-        status={
-          props.group.participants.some((person) => person.status !== "idle")
-            ? "active"
-            : undefined
-        }
-        onPress={props.onPress}
-      >
-        <View style={{ ...row, height: 14 }}>
-          <Each of={people()} key={(person) => person.agentId}>
-            {(person, index) => (
-              <View style={{ marginLeft: index() ? -3 : 0 }}>
-                <AgentFace id={person().agentId} size={14} />
-              </View>
-            )}
-          </Each>
-        </View>
-      </RailEntry>
-    </If>
+    <View style={{ flexShrink: 0 }}>
+      <If when={props.collapsed} else={detailed()}>
+        <RailEntry
+          {...menu}
+          label={props.group.name}
+          selected={props.selected}
+          status={
+            props.group.participants.some((person) => person.status !== "idle")
+              ? "active"
+              : undefined
+          }
+          onPress={props.onPress}
+        >
+          <View style={{ ...row, height: 14 }}>
+            <Each of={people()} key={(person) => person.agentId}>
+              {(person, index) => (
+                <View style={{ marginLeft: index() ? -3 : 0 }}>
+                  <AgentFace id={person().agentId} size={14} />
+                </View>
+              )}
+            </Each>
+          </View>
+        </RailEntry>
+      </If>
+      {props.children}
+    </View>
   );
 }
 

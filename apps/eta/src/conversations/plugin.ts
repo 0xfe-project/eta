@@ -15,7 +15,7 @@ import type { ConversationRecord, ConversationStore } from "./store";
 import type { ConversationTargets } from "./targets";
 import type { Timeline } from "./timeline";
 import { Args, productPlugin, publish } from "../wire";
-import { createGroup } from "./groups";
+import { createGroup, groupNamed } from "./groups";
 import { announceSteward } from "./steward";
 import { summaryOf } from "./views";
 
@@ -115,6 +115,15 @@ export function conversationsPlugin(
           const current = existing(id);
           const name = args.optionalString("name")?.trim();
           if (name === "") throw new Error("a conversation needs a name");
+          // Two live groups of a project with one name are two rows nobody can tell apart: the
+          // same rule Captain's proposals keep. Archived groups and other projects' do not count.
+          if (name !== undefined && current.kind === "group") {
+            const clash = groupNamed(conversations, current.projectId, name);
+            if (clash !== undefined && clash.id !== id)
+              throw new Error(
+                `a group named "${name}" already exists in this project`,
+              );
+          }
           const archived = args.optionalBoolean("archived");
           // Captain's conversation is the way to Captain: archived, Captain would leave the sidebar
           // with nothing that brings it back.
