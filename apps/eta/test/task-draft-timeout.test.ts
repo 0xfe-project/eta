@@ -12,6 +12,18 @@ import { world } from "./support/world";
 
 const MINUTE = 60 * 1000;
 
+const told = (w: World, id: string) =>
+  w.host.db
+    .query<{ text: string; data: string }, []>(
+      "SELECT text, data FROM message WHERE kind = 'system' ORDER BY rowid",
+    )
+    .all()
+    .filter(
+      (row) =>
+        JSON.parse(row.data).event === "task_draft_decided" &&
+        JSON.parse(row.data).draftId === id,
+    );
+
 async function drafted() {
   const { models } = scriptedModels((request) =>
     request.lastRole === "toolResult"
@@ -158,6 +170,13 @@ describe("a draft that waited too long", () => {
     // Idempotent: a second look finds nothing pending.
     expect(sweep(60)).toEqual([]);
     expect(count(w, "task")).toBe(1);
+    const sent = told(w, draft.id);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.text).toMatch(/Nobody decided in time.*created as task #/);
+    expect(JSON.parse(sent[0]!.data)).toMatchObject({
+      outcome: "created",
+      decidedBy: "timeout",
+    });
   });
 
   it("is discarded when the action is discard: no task, and the card says the host did it", async () => {
@@ -170,6 +189,13 @@ describe("a draft that waited too long", () => {
       autoHandled: "timeout",
     });
     expect(sweep(60)).toEqual([]);
+    const sent = told(w, draft.id);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.text).toMatch(/Nobody decided in time.*discarded/);
+    expect(JSON.parse(sent[0]!.data)).toMatchObject({
+      outcome: "discarded",
+      decidedBy: "timeout",
+    });
   });
 
   it("is skipped when a person got there first", async () => {

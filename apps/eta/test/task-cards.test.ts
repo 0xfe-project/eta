@@ -302,6 +302,73 @@ describe("a task draft", () => {
     ).rejects.toThrow(/already confirmed/);
   });
 
+  const decisions = (w: World, conversationId: string) =>
+    w
+      .rows(conversationId)
+      .filter(
+        (row) =>
+          row.kind === "system" && row.data.event === "task_draft_decided",
+      );
+
+  it("tells the agent that drafted it the task number once confirmed, and only once", async () => {
+    const { w, ada, group, draft } = await drafted();
+    expect(decisions(w, group.id)).toEqual([]);
+    const { task } = await confirm(w, group.id, draft.id);
+    await confirm(w, group.id, draft.id);
+    const told = decisions(w, group.id);
+    expect(told).toHaveLength(1);
+    expect(told[0]!.text).toContain("Fix login");
+    expect(told[0]!.text).toContain(`created as task #${task.number}`);
+    expect(told[0]!.data).toMatchObject({
+      draftId: draft.id,
+      agentId: ada.id,
+      outcome: "created",
+      taskId: task.id,
+      number: task.number,
+    });
+  });
+
+  it("tells the agent that drafted it the draft was discarded, and only once", async () => {
+    const { w, ada, group, draft } = await drafted();
+    const discard = () =>
+      w.client.call("tasks", "discardDraft", {
+        conversationId: group.id,
+        messageId: draft.id,
+      });
+    await discard();
+    await expect(discard()).rejects.toThrow(/already discarded/);
+    const told = decisions(w, group.id);
+    expect(told).toHaveLength(1);
+    expect(told[0]!.text).toContain("discarded, no task was made");
+    expect(told[0]!.data).toMatchObject({
+      agentId: ada.id,
+      outcome: "discarded",
+    });
+  });
+
+  it("tells nobody when a confirm fails", async () => {
+    const { w, group, draft } = await drafted();
+    await expect(
+      confirm(w, group.id, draft.id, { title: "  " }),
+    ).rejects.toThrow(/needs a title/);
+    await expect(
+      confirm(w, group.id, draft.id, { status: "finished" }),
+    ).rejects.toThrow(/status must be one of/);
+    expect(decisions(w, group.id)).toEqual([]);
+    expect(w.rows(group.id).find((row) => row.id === draft.id)?.kind).toBe(
+      "task_draft",
+    );
+  });
+
+  it("tells nobody when no agent is behind the draft", async () => {
+    const { w, group, draft } = await drafted();
+    w.host.db.run("UPDATE message SET agent_id = NULL WHERE id = ?", [
+      draft.id,
+    ]);
+    await confirm(w, group.id, draft.id);
+    expect(decisions(w, group.id)).toEqual([]);
+  });
+
   it("is refused when the row is not a draft of that conversation", async () => {
     const { w, ada, project, group, draft } = await drafted();
     const other = await w.group(project.id, [ada.id], "elsewhere");

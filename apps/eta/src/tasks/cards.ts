@@ -247,6 +247,13 @@ export class TaskCards {
           draft.turnMessageId,
         ),
       })!;
+      this.#told(
+        row,
+        `created as task #${task.number}`,
+        title,
+        input.auto,
+        task,
+      );
       return {
         task,
         message,
@@ -280,11 +287,18 @@ export class TaskCards {
       throw new Error("that draft was already confirmed");
     if ((row.data as unknown as TaskDraftData).discarded)
       throw new Error("that draft was already discarded");
-    return timeline.setData(row.id, {
+    const message = timeline.setData(row.id, {
       ...row.data,
       discarded: true,
       ...(input.auto === undefined ? {} : { autoHandled: input.auto }),
     })!;
+    this.#told(
+      row,
+      "discarded, no task was made",
+      String(row.data.title ?? ""),
+      input.auto,
+    );
+    return message;
   }
 
   /** The drafts still waiting that were written at or before `cutoff`. */
@@ -300,6 +314,41 @@ export class TaskCards {
       ...row.data,
       autoFailure: error,
     });
+  }
+
+  /**
+   * Tell the agent that proposed a draft what became of it. A system row, like the steward's: it
+   * wakes nobody, and the drafter reads it at its next wake with the rest of what it missed, so an
+   * agent that is gone or idle is not called back by it. A draft has one outcome (confirming twice
+   * makes no second row, a discarded one cannot be decided again), so it is told once. A draft
+   * with no agent behind it has nobody to tell. `auto` says the host decided it on a timeout.
+   */
+  #told(
+    row: MessageView,
+    outcome: string,
+    title: string,
+    auto?: "timeout",
+    task?: TaskRecord,
+  ): void {
+    if (row.agentId === null) return;
+    const { agents, timeline } = this.#deps;
+    const name = agents.get(row.agentId)?.name ?? "an agent that is gone";
+    const who =
+      auto === undefined
+        ? "The user decided on"
+        : "Nobody decided in time on, so the host settled,";
+    timeline.system(
+      row.conversationId,
+      `${who} the task draft “${title}” by ${name}: ${outcome}.`,
+      {
+        event: "task_draft_decided",
+        draftId: row.id,
+        agentId: row.agentId,
+        outcome: task === undefined ? "discarded" : "created",
+        decidedBy: auto ?? "user",
+        ...(task === undefined ? {} : { taskId: task.id, number: task.number }),
+      },
+    );
   }
 
   /**
