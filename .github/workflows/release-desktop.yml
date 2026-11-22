@@ -397,9 +397,13 @@ jobs:
           for channel in "${channels[@]}"; do
             release="desktop-channel-$channel"
             if ! gh release view "$release" > /dev/null 2>&1; then
-              gh release create "$release" --target "$GITHUB_SHA" --prerelease --latest=false \
+              # Its tag on the default branch: the job's token may not make a tag elsewhere.
+              gh release create "$release" --prerelease --latest=false \
                 --title "eta desktop updates ($channel)" \
-                --notes "Where the Eta client apps on the $channel channel look for updates: \`latest.json\` and its signature, replaced by every desktop release. The apps themselves are on the desktop-v* releases."
+                --notes "Where the Eta client apps on the $channel channel look for updates: \`latest.json\` and its signature, replaced by every desktop release. The apps themselves are on the desktop-v* releases." || {
+                echo "::error::Could not create $release. Create it once by hand (gh release create $release --prerelease --latest=false --notes ...), then rerun this job."
+                exit 1
+              }
             fi
             current=$(curl -fsSL "$BASE/$release/latest.json" 2>/dev/null | jq -r .version || true)
             if [[ -n $current ]] && ! bun -e 'process.exit(Bun.semver.order(process.argv[1], process.argv[2]) > 0 ? 0 : 1)' "$VERSION" "$current"; then
