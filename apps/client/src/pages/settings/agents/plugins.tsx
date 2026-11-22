@@ -45,16 +45,12 @@ export function AgentPlugins(props: { form: AgentForm }) {
     item.servers
       .map((server) => `${transports[server.transport]} · ${server.name}`)
       .join(", ");
+  /** Nothing for a ready plugin: "can enable" adds nothing. */
   const status = (item: PluginView) =>
     !item.enabled
       ? { label: uiText("pluginOffForAll"), color: c().faint }
       : item.state === "ready"
-      ? {
-          label: phoneEditor()
-            ? uiText("pluginCanBeEnabled")
-            : uiText("pluginCanEnable"),
-          color: c().faint,
-        }
+      ? undefined
       : {
           label: phoneEditor()
             ? uiText("pluginNeedsConfiguring")
@@ -133,13 +129,17 @@ export function AgentPlugins(props: { form: AgentForm }) {
                           />
                         </If>
                       </View>
-                      <StatusLane width={108} status={status(item())} />
+                      <If when={status(item())}>
+                        {(shown) => <StatusLane width={108} status={shown()} />}
+                      </If>
                     </>
                   }
                 >
                   <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                     <Label weight={500}>{item().name}</Label>
-                    <StatusLine status={status(item())} />
+                    <If when={status(item())}>
+                      {(shown) => <StatusLine status={shown()} />}
+                    </If>
                     <Label variant="small" tone="muted">
                       {counts(item())}
                     </Label>

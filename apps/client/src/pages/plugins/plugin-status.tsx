@@ -65,10 +65,12 @@ export function cardLogin(item: PluginView): "needs_login" | "signed_in" | "expi
   return oauth.some((server) => server.login === "needs_login") ? "needs_login" : "signed_in";
 }
 
+/** Off for all agents, or needs configuring. A ready plugin shows nothing: "can be enabled" says no more than the absence of the other two. */
 export function Status(props: { item: PluginView; phone?: boolean }) {
   const c = colors();
   const missing = () => props.item.state === "needs_config";
   return (
+    <If when={!props.item.enabled || missing()}>
     <Label
       variant="caption"
       lines={1}
@@ -83,10 +85,9 @@ export function Status(props: { item: PluginView; phone?: boolean }) {
     >
       {!props.item.enabled
         ? uiText("pluginOffForAll")
-        : missing()
-          ? uiText("needsConfiguring")
-          : uiText("canBeEnabled")}
+        : uiText("needsConfiguring")}
     </Label>
+    </If>
   );
 }
 

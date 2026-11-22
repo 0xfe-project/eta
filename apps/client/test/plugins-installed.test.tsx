@@ -120,3 +120,10 @@ test("a card shows its login only with evidence: needs login, signed in, and not
   expect(app.count("id:card-login:remote-plugin")).toBe(0);
   expect(app.count("id:card-login:on-plugin")).toBe(0);
 });
+
+test("a ready plugin shows no status text; needs-config and off-for-all still do", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 700 });
+  expect(app.shows("Can be enabled")).toBe(false);
+  expect(app.shows("Needs configuring")).toBe(true);
+  expect(app.shows("Off for all agents")).toBe(true);
+});
