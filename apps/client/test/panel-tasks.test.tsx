@@ -23,3 +23,67 @@ for (const [name, width, height] of sizes) {
     expect(texts).toContain("#7 · Ada · Just now");
   });
 }
+
+// The sort beside the title: by what each task needs from you (the default), or every open task in
+// one list by when it last changed, the time leading its second line. Done ones stay folded.
+const titles = [
+  "Build the login API",
+  "Write the login API tests",
+  "Wire up the login page",
+  "Design the login flow",
+];
+const order = (texts: string[]) =>
+  texts.filter((text) => titles.includes(text));
+
+test("by default the tasks are grouped by what they need", async () => {
+  const app = await open("./fixtures/panel-tasks.tsx", {
+    width: 1440,
+    height: 900,
+    locale: "en-US",
+  });
+  await app.waitFor("text:Build the login API");
+  expect(app.texts()).toContain("Sort: Needs you first");
+  expect(order(app.texts())).toEqual([
+    "Build the login API",
+    "Write the login API tests",
+    "Wire up the login page",
+  ]);
+});
+
+test("Recently updated lists the open tasks newest first", async () => {
+  const app = await open("./fixtures/panel-tasks.tsx", {
+    width: 1440,
+    height: 900,
+    locale: "en-US",
+  });
+  await app.waitFor("text:Build the login API");
+  await app.press("label:Sort tasks");
+  await app.press("label:Recently updated");
+  expect(app.texts()).toContain("Sort: Recently updated");
+  expect(app.texts()).not.toContain("Needs you 1");
+  expect(order(app.texts())).toEqual([
+    "Wire up the login page",
+    "Build the login API",
+    "Write the login API tests",
+  ]);
+  expect(app.texts()).toContain("12 minutes ago");
+
+  // Done tasks are still folded at the end.
+  await app.press("text:Completed 1");
+  expect(order(app.texts()).at(-1)).toBe("Design the login flow");
+});
+
+test("the sort chosen on this device is kept", async () => {
+  const app = await open("./fixtures/panel-tasks.tsx", {
+    width: 1440,
+    height: 900,
+    locale: "en-US",
+    storage: { "eta.tasks-panel-sort.v1": "updated" },
+  });
+  await app.waitFor("text:Sort: Recently updated");
+  expect(order(app.texts())).toEqual([
+    "Wire up the login page",
+    "Build the login API",
+    "Write the login API tests",
+  ]);
+});
