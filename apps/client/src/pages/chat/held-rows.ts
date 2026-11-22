@@ -20,8 +20,7 @@ export function withoutHeldReplies(
     (row) =>
       row.author !== "agent" ||
       !(
-        waiting.has(row.rootMessageId ?? "") ||
-        waiting.has(row.replyToId ?? "")
+        waiting.has(row.rootMessageId ?? "") || waiting.has(row.replyToId ?? "")
       ),
   );
 }
