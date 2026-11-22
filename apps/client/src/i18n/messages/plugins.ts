@@ -72,6 +72,7 @@ export const pluginsMessages = {
   marketFields: ["It will ask you for (* secret)", "安装后会要求你填写（* 为机密）"],
   marketLayout: ["Read from (skills and MCP servers load from this layout)", "读取自（从该布局加载 skill 和 MCP 服务器）"],
   serverSignedIn: ["Signed in", "已登录"],
+  serverExpired: ["Sign-in expired", "登录已过期"],
   serverNeedsLogin: ["Needs login", "需要登录"],
   serverNotChecked: ["Not checked", "未检测"],
   lastTestOk: ["Last test: passed, {{time}}", "上次测试:成功 {{time}}"],

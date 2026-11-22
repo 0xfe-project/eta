@@ -27,12 +27,32 @@ export function PluginGlyph(props: { size: number }) {
   );
 }
 
+export type AuthState = "signed_in" | "needs_login" | "expired" | "needs_setup";
+
+/**
+ * The one map from an auth state to its label and colour, used by the card badge and the panel
+ * label so they cannot differ. Green: signed in. Amber (warning): nothing wrong yet, a step is
+ * missing (sign in, fill a field). Red: a failure with evidence, a stored sign-in the server refused.
+ * The text always says it, so colour is never the only signal.
+ */
+export const authStyle = (
+  state: AuthState,
+): { text: "serverSignedIn" | "serverNeedsLogin" | "serverExpired" | "serverNeedsSetup"; tone: "green" | "warningInk" | "red" } =>
+  state === "signed_in"
+    ? { text: "serverSignedIn", tone: "green" }
+    : state === "expired"
+      ? { text: "serverExpired", tone: "red" }
+      : state === "needs_login"
+        ? { text: "serverNeedsLogin", tone: "warningInk" }
+        : { text: "serverNeedsSetup", tone: "warningInk" };
+
 /** The login a card shows, from its servers' states: only with evidence, never for headers-only servers. */
-export function cardLogin(item: PluginView): "needs_login" | "signed_in" | undefined {
+export function cardLogin(item: PluginView): "needs_login" | "signed_in" | "expired" | undefined {
   const oauth = item.servers.filter(
     (server) => server.login !== undefined && server.login !== "none" && !(server.headers?.length ?? 0),
   );
   if (!oauth.length) return undefined;
+  if (oauth.some((server) => server.login === "expired")) return "expired";
   return oauth.some((server) => server.login === "needs_login") ? "needs_login" : "signed_in";
 }
 

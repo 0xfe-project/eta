@@ -47,7 +47,9 @@ export function pluginsPlugin(
                       // One source: a 401 seen after the token was stored (a test said so) beats the
                       // token's mere presence; a login that starts clears that evidence.
                       login: asked.has(server.url)
-                        ? ("needs_login" as const)
+                        ? mcp.signedIn(server.url)
+                          ? ("expired" as const)
+                          : ("needs_login" as const)
                         : mcp.signedIn(server.url)
                           ? ("signed_in" as const)
                           : ("none" as const),

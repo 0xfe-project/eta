@@ -17,6 +17,7 @@ import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { HeadersEditor } from "./headers-editor";
 import { pluginText as text } from "./labels";
+import { authStyle } from "./plugin-status";
 
 /** Whether the host sends the fields the servers panel reads (an older host does not). */
 export const hostKnowsHeaders = (item: PluginView): boolean =>
@@ -77,19 +78,21 @@ function TestButton(props: { test: Test }) {
 
 /** The sign-in the server needs, from the host's evidence or this panel's last test. */
 const needsLogin = (server: PluginServerView, test: Test): boolean =>
-  server.login === "needs_login" || test.result()?.status === "needs_login";
+  server.login === "needs_login" || server.login === "expired" || test.result()?.status === "needs_login";
 
 /** A state only when there is evidence for it; no evidence reads as "not checked", never as ready. */
 function ServerBadge(props: { item: PluginView; server: PluginServerView; test: Test }) {
-  const label = (): { text: string; tone: "ink" | "red" | "muted" } => {
+  const label = (): { text: string; tone: "ink" | "red" | "muted" | "green" | "warningInk" } => {
     const test = props.test.result();
     const time = new Date(props.test.at() ?? 0).toLocaleTimeString();
     if (props.item.state === "needs_config" || props.server.problem)
-      return { text: uiText("serverNeedsSetup"), tone: "ink" };
+      return { text: uiText(authStyle("needs_setup").text), tone: authStyle("needs_setup").tone };
+    if (props.server.login === "expired")
+      return { text: uiText(authStyle("expired").text), tone: authStyle("expired").tone };
     if (props.server.login === "signed_in")
-      return { text: uiText("serverSignedIn"), tone: "ink" };
+      return { text: uiText(authStyle("signed_in").text), tone: authStyle("signed_in").tone };
     if (needsLogin(props.server, props.test))
-      return { text: uiText("serverNeedsLogin"), tone: "ink" };
+      return { text: uiText(authStyle("needs_login").text), tone: authStyle("needs_login").tone };
     if (test?.status === "ok")
       return { text: uiText("lastTestOk", { time }), tone: "ink" };
     if (test !== undefined && test.status !== "off")

@@ -69,8 +69,8 @@ export interface PluginServerView {
   plainHttp: boolean;
   /** Why it will not run, when it will not (`sse` is not supported by the runtimes). */
   problem: string | null;
-  /** The server's sign-in: stored (`signed_in`), or asked for by the server (`needs_login`). Absent from an older host. */
-  login?: "none" | "needs_login" | "signed_in";
+  /** The server's sign-in: stored (`signed_in`), or asked for by the server (`needs_login`); `expired`: a token is stored but the server refused it. Absent from an older host. */
+  login?: "none" | "needs_login" | "signed_in" | "expired";
 }
 
 /** Which commands a machine is missing, of the ones the plugin says it needs. */
