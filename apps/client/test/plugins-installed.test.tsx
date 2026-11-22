@@ -45,10 +45,13 @@ test("the Settings panel lists the plugin's skills: one, many, and none", async 
   const one = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 800 });
   await one.press("label:remote-plugin");
   expect(one.shows("only-skill")).toBe(true);
+  expect(one.count("id:skill-card:only-skill")).toBe(1);
   expect(one.shows("<b>x</b> does one thing")).toBe(true);
   const many = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 800 });
   await many.press("label:old-host-plugin");
   expect(many.shows("alpha")).toBe(true);
+  expect(many.count("id:skill-card:alpha")).toBe(1);
+  expect(many.count("id:skill-card:gamma")).toBe(1);
   expect(many.shows("gamma skill")).toBe(true);
   const none = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 800 });
   await none.press("label:on-plugin");

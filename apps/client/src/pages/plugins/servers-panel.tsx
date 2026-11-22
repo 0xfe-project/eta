@@ -112,6 +112,7 @@ const clip = (text: string): string =>
 
 /** The skills a plugin holds, read-only; the same list the card counts. Text is shown as plain text. */
 export function SkillRows(props: { item: PluginView }) {
+  const c = colors();
   return (
     <View style={{ gap: 8 }}>
       <Label variant="subtitle" weight={600}>
@@ -122,18 +123,32 @@ export function SkillRows(props: { item: PluginView }) {
           {uiText("pluginNoSkills")}
         </Label>
       </If>
-      <Each of={props.item.skills} key={(skill) => skill.name}>
-        {(skill) => (
-          <View style={{ gap: 2 }}>
-            <Label variant="small" weight={600}>{skill().name}</Label>
-            <If when={skill().description}>
-              <Label variant="small" tone="muted">
-                {clip(skill().description)}
-              </Label>
-            </If>
-          </View>
-        )}
-      </Each>
+      {/* One column when narrow; cards keep a readable basis and wrap into two when there is room. */}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        <Each of={props.item.skills} key={(skill) => skill.name}>
+          {(skill) => (
+            <View
+              testID={"skill-card:" + skill().name}
+              style={{
+                flexGrow: 1,
+                flexShrink: 1,
+                flexBasis: 280,
+                gap: 4,
+                padding: 12,
+                borderWidth: 1,
+                borderColor: c().border,
+              }}
+            >
+              <Label variant="subtitle" weight={600}>{skill().name}</Label>
+              <If when={skill().description}>
+                <Label variant="small" tone="muted">
+                  {clip(skill().description)}
+                </Label>
+              </If>
+            </View>
+          )}
+        </Each>
+      </View>
     </View>
   );
 }
