@@ -233,6 +233,7 @@ export function pluginsPlugin(
           // "cached": only what is kept, at once; otherwise read again (asking the server first).
           result: await market.catalog(
             new Args(call).optionalString("mode") === "cached" ? "cached" : "refresh",
+            new Args(call).optionalString("source"),
           ),
         })),
         wire.handle("plugins", "marketClearCache", async () => ({

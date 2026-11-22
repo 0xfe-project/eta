@@ -242,11 +242,12 @@ export class Market {
   }
 
   /** Every source's catalog, each read on its own: one that fails does not hide the others. */
-  async catalog(mode: "refresh" | "cached" = "refresh"): Promise<MarketCatalog> {
+  async catalog(mode: "refresh" | "cached" = "refresh", only?: string): Promise<MarketCatalog> {
     const proxy = this.#proxy();
     const sources = await Promise.all(
       this.sources()
-        .filter((source) => source.enabled)
+        // `only`: one source's address, so a slow source does not hold the others back.
+        .filter((source) => source.enabled && (only === undefined || source.url === only))
         .map(async (source) => await this.#read(source, proxy, new Map(), mode)),
     );
     return { sources, proxy };

@@ -165,3 +165,60 @@ describe("the catalog cache", () => {
     expect(cache.get("a", 6)).toBeUndefined();
   });
 });
+
+describe("sources read on their own", () => {
+  /** Two sources: the test server, and one that takes the request and never answers. */
+  function two() {
+    const { db } = open();
+    const hang = Bun.serve({ port: 0, fetch: () => new Promise<Response>(() => undefined) });
+    const market = new Market({
+      settings: new SettingStore(db),
+      plugins: {} as never,
+      dataDir: "unused",
+      schemes: ["https:", "file:"],
+      cache: new CatalogCache(db, { maxRowBytes: 1024 * 1024 }),
+    });
+    for (const source of market.sources()) market.removeSource(source.url);
+    const slow = `http://127.0.0.1:${hang.port}/slow.json`;
+    market.addSource(address(), "Fast");
+    market.addSource(slow, "Slow");
+    return { market, slow, stop: () => hang.stop(true) };
+  }
+
+  it("reads only the source asked for, so a slow one holds nothing back", async () => {
+    const { market, slow, stop } = two();
+    try {
+      const fast = await market.catalog("refresh", address());
+      expect(fast.sources).toHaveLength(1);
+      expect(fast.sources[0]!.entries?.map((entry) => entry.name)).toEqual(["demo"]);
+      expect(requests).toHaveLength(1);
+      expect(slow).not.toBe(address());
+    } finally {
+      await stop();
+    }
+  });
+
+  it("answers the kept lists at once even when a source's server never answers", async () => {
+    const { market, stop } = two();
+    try {
+      await market.catalog("refresh", address());
+      const started = performance.now();
+      const kept = await market.catalog("cached");
+      expect(performance.now() - started).toBeLessThan(200);
+      expect(kept.sources.map((item) => item.entries !== null)).toEqual([true, false]);
+      expect(kept.sources.every((item) => item.error === null)).toBe(true);
+      expect(requests).toHaveLength(1);
+    } finally {
+      await stop();
+    }
+  });
+
+  it("serves a kept catalog however old it is: age only decides when to read again", async () => {
+    const { db, start } = open();
+    await start().catalog();
+    db.query("UPDATE market_catalog_cache SET fetched_at = 1").run();
+    const old = (await start().catalog("cached")).sources[0]!;
+    expect(old.entries?.map((entry) => entry.name)).toEqual(["demo"]);
+    expect(old.updatedAt).toBe(1);
+  });
+});

@@ -36,6 +36,9 @@ import { sheetEdge } from "./configure";
  * user decided to drop the confirmation step; the host still pins the commit and refuses what it
  * does not support).
  */
+/** The last list shown, kept for the session: the market opened again draws it on its first frame. */
+let lastCatalog: MarketCatalog | undefined;
+
 export function Market(props: {
   layout: Layout;
   tabs: () => JSX.Element;
@@ -45,7 +48,11 @@ export function Market(props: {
   const c = colors();
   const type = textFaces();
   const fonts = Fonts();
-  const catalog = signal<MarketCatalog>();
+  const catalog = signal<MarketCatalog | undefined>(lastCatalog);
+  const show = (next: MarketCatalog) => {
+    lastCatalog = next;
+    catalog.set(next);
+  };
   const loading = signal(false);
   const query = signal("");
   const detail = signal("");
@@ -105,20 +112,49 @@ export function Market(props: {
   async function load() {
     if (loading()) return;
     loading.set(true);
-    // What the host kept shows at once; the read that asks the servers follows and replaces it.
-    if (catalog() === undefined) {
-      const kept = await host.action(() =>
-        host.call<MarketCatalog>("plugins", "marketCatalog", { mode: "cached" }),
-      );
-      if (kept?.sources.some((item) => item.entries !== null)) {
-        await prime(kept);
-        catalog.set(kept);
-      }
-    }
-    const result = await host.action(() =>
-      host.call<MarketCatalog>("plugins", "marketCatalog", {}),
+    // What the host kept shows at once (a list already on screen stays); it also says which sources
+    // there are now. Then each source is read on its own and replaces only its own part, so a slow
+    // one holds nothing back. A kept list is never hidden because it is old.
+    const kept = await host.action(() =>
+      host.call<MarketCatalog>("plugins", "marketCatalog", { mode: "cached" }),
     );
-    if (result) catalog.set(result);
+    if (kept) {
+      const before = catalog();
+      const merged: MarketCatalog = {
+        ...kept,
+        sources: kept.sources.map((item) => {
+          const shown = before?.sources.find((one) => one.source.url === item.source.url);
+          return shown?.entries != null && item.entries === null ? shown : item;
+        }),
+      };
+      if (merged.sources.some((item) => item.entries !== null)) {
+        if (before === undefined) await prime(merged);
+        show(merged);
+      } else catalog.set(merged);
+    }
+    const urls = (kept?.sources ?? []).map((item) => item.source.url);
+    if (urls.length === 0) {
+      const result = await host.action(() =>
+        host.call<MarketCatalog>("plugins", "marketCatalog", {}),
+      );
+      if (result) show(result);
+    } else {
+      await Promise.all(
+        urls.map(async (url) => {
+          const result = await host.action(() =>
+            host.call<MarketCatalog>("plugins", "marketCatalog", { source: url }),
+          );
+          const one = result?.sources.find((item) => item.source.url === url);
+          const now = catalog();
+          if (!one || !now) return;
+          show({
+            ...now,
+            proxy: result!.proxy,
+            sources: now.sources.map((item) => (item.source.url === url ? one : item)),
+          });
+        }),
+      );
+    }
     loading.set(false);
   }
   effect(() => {
