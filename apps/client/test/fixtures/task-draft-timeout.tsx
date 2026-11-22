@@ -1,12 +1,14 @@
 import type { TaskBoardSettings } from "@eta/client-contracts";
 import { mount, signal, Text, View } from "nsh";
-import { ArchiveSettings } from "../../src/pages/settings/archive";
+import { TaskSettings } from "../../src/pages/settings/tasks";
 import { createHost, Host } from "../../src/services/host";
 
-// The Archived tab of Settings against a host that keeps what it is sent, as the real one does: every
+// The Tasks tab of Settings against a host that keeps what it is sent, as the real one does: every
 // change is listed under "Sent:" and shows on the controls once the host has it.
 const kept: TaskBoardSettings = {
   archiveAfterDays: 7,
+  autoAnswerAsks: false,
+  reactToResults: false,
   draftTimeout: { enabled: false, minutes: 10, action: "discard" },
 };
 
@@ -47,7 +49,7 @@ function Fixture() {
     <Host.Provider value={host}>
       <View style={{ flex: 1 }}>
         <Text>{`Sent: ${sent().join(" | ")}`}</Text>
-        <ArchiveSettings />
+        <TaskSettings />
       </View>
     </Host.Provider>
   );
