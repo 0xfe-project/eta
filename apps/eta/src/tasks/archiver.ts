@@ -3,37 +3,113 @@
  * are archived (`TaskBoard.archiveStale` says which), once when the host starts and every hour
  * after. How long "a while" is, or never, is the user's setting, kept with the host's others.
  */
-import type { TaskArchiveDays, TaskBoardSettings } from "@eta/client-contracts";
+import type {
+  TaskArchiveDays,
+  TaskBoardSettings,
+  TaskDraftTimeout,
+} from "@eta/client-contracts";
 import type { SettingStore } from "../settings/store";
 import type { TaskBoard } from "./board";
 import {
   DEFAULT_TASK_ARCHIVE_DAYS,
   TASK_ARCHIVE_DAYS,
+  TASK_DRAFT_TIMEOUT_ACTIONS,
+  TASK_DRAFT_TIMEOUT_MINUTES,
 } from "@eta/client-contracts";
 
 /** The setting's key: a number of days from `TASK_ARCHIVE_DAYS`, or null for never. */
 const ARCHIVE_AFTER_SETTING = "tasks.archiveAfterDays";
 
+/** The setting's key: a `TaskDraftTimeout`; off, 10 minutes, discard when never set. */
+const DRAFT_TIMEOUT_SETTING = "tasks.draftTimeout";
+
 const HOUR = 60 * 60 * 1000;
+
+const DEFAULT_DRAFT_TIMEOUT: TaskDraftTimeout = {
+  enabled: false,
+  minutes: TASK_DRAFT_TIMEOUT_MINUTES.default,
+  action: "discard",
+};
+
+const isMinutes = (value: unknown): value is number =>
+  typeof value === "number" &&
+  Number.isInteger(value) &&
+  value >= TASK_DRAFT_TIMEOUT_MINUTES.min &&
+  value <= TASK_DRAFT_TIMEOUT_MINUTES.max;
+
+const isAction = (value: unknown): value is TaskDraftTimeout["action"] =>
+  (TASK_DRAFT_TIMEOUT_ACTIONS as readonly unknown[]).includes(value);
+
+/** The draft timeout as stored; each field that is unreadable is its default. */
+function draftTimeoutOf(stored: unknown): TaskDraftTimeout {
+  const raw =
+    typeof stored === "object" && stored !== null
+      ? (stored as Record<string, unknown>)
+      : {};
+  return {
+    enabled: raw.enabled === true,
+    minutes: isMinutes(raw.minutes)
+      ? raw.minutes
+      : DEFAULT_DRAFT_TIMEOUT.minutes,
+    action: isAction(raw.action) ? raw.action : DEFAULT_DRAFT_TIMEOUT.action,
+  };
+}
+
+/** What a caller sent for the draft timeout, checked field by field over what is kept. */
+function checkedDraftTimeout(
+  current: TaskDraftTimeout,
+  input: unknown,
+): TaskDraftTimeout {
+  if (typeof input !== "object" || input === null || Array.isArray(input))
+    throw new Error("draftTimeout is an object of enabled, minutes and action");
+  const raw = input as Record<string, unknown>;
+  if (raw.enabled !== undefined && typeof raw.enabled !== "boolean")
+    throw new Error(
+      `draftTimeout.enabled is true or false, not ${JSON.stringify(raw.enabled)}`,
+    );
+  if (raw.minutes !== undefined && !isMinutes(raw.minutes))
+    throw new Error(
+      `draftTimeout.minutes is a whole number from ${TASK_DRAFT_TIMEOUT_MINUTES.min} to ${TASK_DRAFT_TIMEOUT_MINUTES.max}, not ${JSON.stringify(raw.minutes)}`,
+    );
+  if (raw.action !== undefined && !isAction(raw.action))
+    throw new Error(
+      `draftTimeout.action is one of ${TASK_DRAFT_TIMEOUT_ACTIONS.join(", ")}, not ${JSON.stringify(raw.action)}`,
+    );
+  return {
+    enabled: raw.enabled ?? current.enabled,
+    minutes: raw.minutes ?? current.minutes,
+    action: raw.action ?? current.action,
+  };
+}
 
 /** The board's settings as stored; anything unreadable is the default. */
 export function boardSettings(
   settings: Pick<SettingStore, "get">,
 ): TaskBoardSettings {
   const stored = settings.get(ARCHIVE_AFTER_SETTING);
-  if (stored === null) return { archiveAfterDays: null };
+  const draftTimeout = draftTimeoutOf(settings.get(DRAFT_TIMEOUT_SETTING));
+  if (stored === null) return { archiveAfterDays: null, draftTimeout };
   return {
     archiveAfterDays: (TASK_ARCHIVE_DAYS as readonly unknown[]).includes(stored)
       ? (stored as TaskArchiveDays)
       : DEFAULT_TASK_ARCHIVE_DAYS,
+    draftTimeout,
   };
 }
 
 /** Check and keep what a caller asked for; a value the setting does not offer is refused. */
 export function saveBoardSettings(
   settings: Pick<SettingStore, "get" | "set">,
-  input: { archiveAfterDays?: unknown },
+  input: { archiveAfterDays?: unknown; draftTimeout?: unknown },
 ): TaskBoardSettings {
+  // Everything is checked before anything is kept, so a refused call changes nothing.
+  const draftTimeout =
+    input.draftTimeout === undefined
+      ? undefined
+      : checkedDraftTimeout(
+          draftTimeoutOf(settings.get(DRAFT_TIMEOUT_SETTING)),
+          input.draftTimeout,
+        );
   if (input.archiveAfterDays !== undefined) {
     const days = input.archiveAfterDays;
     if (
@@ -45,6 +121,8 @@ export function saveBoardSettings(
       );
     settings.set(ARCHIVE_AFTER_SETTING, days);
   }
+  if (draftTimeout !== undefined)
+    settings.set(DRAFT_TIMEOUT_SETTING, draftTimeout);
   return boardSettings(settings);
 }
 
