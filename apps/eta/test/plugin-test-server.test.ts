@@ -15,8 +15,11 @@ import { createOAuthProvider } from "@eta/mcp";
 import { testConnection } from "../src/plugins/test-server";
 
 /** The host's own provider over a store holding the token a login left (none can start a login here). */
-const storedProvider = (token: string): AuthProviderFor => (_name, context) => {
-  const rows = new Map<string, unknown>([["tokens", { access_token: token, token_type: "Bearer" }]]);
+const storedProvider = (token: string, refresh?: string): AuthProviderFor => (_name, context) => {
+  const rows = new Map<string, unknown>([
+    ["tokens", { access_token: token, token_type: "Bearer", ...(refresh ? { refresh_token: refresh } : {}) }],
+    ...(refresh ? ([["clientInformation", { client_id: "fake-client", redirect_uris: ["http://127.0.0.1/mcp/oauth/callback"] }]] as const) : []),
+  ]);
   return createOAuthProvider({
     serverKey: "k",
     serverUrl: context.url,
@@ -43,6 +46,8 @@ afterEach(async () => {
 interface Fake {
   url: string;
   hits: { method: string; auth: string | undefined; rpc: string }[];
+  /** Refresh requests the token endpoint accepted. */
+  readonly refreshes: number;
 }
 
 /** A minimal streamable-HTTP MCP server; `mode` picks how it misbehaves. */
@@ -50,6 +55,7 @@ async function fake(
   mode: "ok" | "401" | "challenge" | "token" | "hang" | { redirect: string } | "leak" | "garbage" = "ok",
 ): Promise<Fake> {
   const hits: Fake["hits"] = [];
+  let refreshes = 0;
   const server = http.createServer((req, res) => {
     const origin = `http://${req.headers.host}`;
     // "token" mode publishes its OAuth metadata at the path-suffixed URL only, as the challenge says.
@@ -71,6 +77,16 @@ async function fake(
     let body = "";
     req.on("data", (chunk) => (body += chunk));
     req.on("end", () => {
+      if (mode === "token" && req.method === "POST" && req.url === "/token") {
+        const form = new URLSearchParams(body);
+        if (form.get("grant_type") === "refresh_token" && form.get("refresh_token") === "refresh-ok") {
+          refreshes++;
+          return void res
+            .writeHead(200, { "content-type": "application/json" })
+            .end(JSON.stringify({ access_token: "access-stored", token_type: "Bearer", refresh_token: "refresh-ok", expires_in: 3600 }));
+        }
+        return void res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ error: "invalid_grant" }));
+      }
       let rpc: { id?: number; method?: string; params?: { protocolVersion?: string } } = {};
       try {
         rpc = JSON.parse(body);
@@ -124,7 +140,13 @@ async function fake(
   });
   servers.push(server);
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
-  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/mcp`, hits };
+  return {
+    url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/mcp`,
+    hits,
+    get refreshes() {
+      return refreshes;
+    },
+  };
 }
 
 async function setup(url: string, claude = false) {
@@ -244,6 +266,24 @@ describe("testing a plugin server's connection", () => {
     expect(result.status).toBe("needs_login");
     expect(result.message).toContain("sign in again");
     expect(JSON.stringify(result)).not.toContain("access-expired");
+  });
+
+  it("an expired token with a valid refresh token is refreshed, and the test succeeds", async () => {
+    const server = await fake("token");
+    const { run } = await setup(server.url);
+    const result = await run(5000, storedProvider("access-expired", "refresh-ok"));
+    expect(result.status).toBe("ok");
+    expect(result.tools.map((tool) => tool.name)).toEqual(["echo"]);
+    expect(server.refreshes).toBe(1);
+    expect(JSON.stringify(result)).not.toContain("refresh-ok");
+  });
+
+  it("a rejected token whose refresh also fails says needs login", async () => {
+    const server = await fake("token");
+    const { run } = await setup(server.url);
+    const result = await run(5000, storedProvider("access-expired", "refresh-revoked"));
+    expect(result.status).toBe("needs_login");
+    expect(server.refreshes).toBe(0);
   });
 
   it("without a stored sign-in (logged out) says needs login", async () => {
