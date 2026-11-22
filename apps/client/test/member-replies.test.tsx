@@ -30,10 +30,9 @@ for (const width of [1440, 390]) {
   });
 }
 
-test("the desktop composer can still stop the conversation", async () => {
+test("the desktop composer has no stop of its own; each member chip stops its reply", async () => {
   const app = await open("./fixtures/member-replies.tsx", { width: 1440 });
-  await app.press("Stop");
-  expect(app.texts()).toContain(
-    'conversations.stop {"conversationId":"group"}',
-  );
+  expect(app.shows("Stop")).toBe(false);
+  expect(app.enabled("Stop Ada")).toBe(true);
+  expect(app.enabled("Stop Lin")).toBe(true);
 });

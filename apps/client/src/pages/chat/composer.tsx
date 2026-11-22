@@ -714,14 +714,6 @@ export function Composer(props: {
               <Icon name="clip" size={props.phone ? 16 : 14} tone="muted" />
             </View>
             <View style={{ flex: props.phone ? 0 : 1 }} />
-            <If when={props.writing && !props.phone}>
-              <Button
-                icon="stop"
-                label={uiText("stop")}
-                size={28}
-                onPress={stopConversation}
-              />
-            </If>
             <Button
               label={uiText("send")}
               icon={props.phone ? "arrowUp" : undefined}
