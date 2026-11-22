@@ -23,7 +23,7 @@ import { pluginText as text } from "./labels";
 import { authStyle } from "./plugin-status";
 
 /** Whether the host sends the fields the servers panel reads (an older host does not). */
-export const hostKnowsHeaders = (item: PluginView): boolean =>
+const hostKnowsHeaders = (item: PluginView): boolean =>
   Array.isArray(item.headers) &&
   item.servers.every((server) => Array.isArray(server.headers));
 

@@ -7,7 +7,7 @@ import type { PluginTestResult } from "@eta/client-contracts";
 import type { AuthProviderFor, McpServerDefinition } from "@eta/mcp";
 import { ServerManager } from "@eta/mcp";
 
-export const TEST_TIMEOUT_MS = 15_000;
+const TEST_TIMEOUT_MS = 15_000;
 const MAX_TOOLS = 100;
 const MAX_TEXT = 300;
 const MAX_PARAMS = 12;
@@ -29,7 +29,7 @@ const empty = (status: PluginTestResult["status"], message: string, ms = 0): Plu
 export const notTested = empty;
 
 /** `text` with every secret value, and any bearer token, replaced; short enough to show. */
-export function mask(text: string, secrets: readonly string[]): string {
+function mask(text: string, secrets: readonly string[]): string {
   let out = text;
   for (const secret of secrets) if (secret.length >= 3) out = out.split(secret).join("***");
   return out.replace(/Bearer\s+[A-Za-z0-9._~+\/=-]{6,}/gi, "Bearer ***").slice(0, MAX_TEXT);
@@ -56,7 +56,7 @@ function reasonOf(error: unknown, timedOut: boolean): string {
 }
 
 /** What an unauthenticated request to the server says about sign-in: true when its 401 challenge is OAuth. */
-export async function declaresOauth(url: string, timeoutMs = 5000): Promise<boolean> {
+async function declaresOauth(url: string, timeoutMs = 5000): Promise<boolean> {
   try {
     const response = await fetch(url, {
       method: "POST",

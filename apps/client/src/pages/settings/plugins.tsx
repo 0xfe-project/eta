@@ -20,7 +20,7 @@ import { useHost } from "../../services/host";
 import { emptyStyle } from "./section";
 
 /** An address the market may read: http or https, and not in the list already. */
-export function sourceProblem(
+function sourceProblem(
   address: string,
   sources: readonly MarketSource[],
 ): string | undefined {
