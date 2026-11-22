@@ -3,6 +3,16 @@ import { mount, View } from "nsh";
 import { Plugins } from "../../src/pages/plugins/plugins";
 import { createHost, Host } from "../../src/services/host";
 
+const remote = {
+  name: "fc",
+  transport: "streamable-http" as const,
+  url: "https://example.com/mcp",
+  env: [],
+  headers: [],
+  plainHttp: false,
+  problem: null,
+};
+
 const plugin = (name: string, enabled: boolean): PluginView => ({
   name,
   version: "1.0.0",
@@ -34,7 +44,17 @@ function Fixture() {
         version: 1,
         revisions: {},
         sections: {
-          list: [plugin("on-plugin", true), plugin("off-plugin", false)],
+          list: [
+            plugin("on-plugin", true),
+            plugin("off-plugin", false),
+            { ...plugin("remote-plugin", true), servers: [remote] },
+            // An older host sends neither `headers` on the plugin nor on its servers.
+            {
+              ...plugin("old-host-plugin", true),
+              headers: undefined,
+              servers: [{ ...remote, headers: undefined, plainHttp: undefined }],
+            } as unknown as PluginView,
+          ],
           audit: [],
         },
       },

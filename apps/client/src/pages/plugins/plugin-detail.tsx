@@ -17,7 +17,7 @@ import { ToggleSwitch } from "../../components/toggle-switch";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 
-import { HeadersEditor } from "./headers-editor";
+import { ServerRows } from "./servers-panel";
 import { PluginEnabled } from "./plugin-name";
 import { pluginText as text } from "./labels";
 import { PluginGlyph, Status } from "./plugin-status";
@@ -314,69 +314,8 @@ export function PluginDetail(props: DetailProps) {
           </View>
           <View style={section(16)}>
             <Caption text={text("runs")} phone={props.phone} />
-            <View style={{ borderWidth: 1, borderColor: c().border }}>
-              <Each of={props.item.servers} key={(server) => server.name}>
-                {(server) => (
-                  <View
-                    style={{
-                      justifyContent: "center",
-                      paddingHorizontal: 10,
-                      paddingVertical: 4,
-                      minHeight: 36,
-                      borderBottomWidth: 1,
-                      borderColor: c().border,
-                    }}
-                  >
-                    <View
-                      style={{
-                        ...row,
-                        flexWrap: "wrap",
-                        gap: props.phone ? 8 : 10,
-                      }}
-                    >
-                      <Icon name="terminal" size={14} tone="muted" />
-                      <Label variant="small">{server().name}</Label>
-                      <Label
-                        variant="caption"
-                        tone={props.phone ? "ink" : "mutedInk"}
-                        style={{
-                          paddingHorizontal: 5,
-                          borderWidth: 1,
-                          borderColor: c().strong,
-                        }}
-                      >
-                        {server().transport}
-                      </Label>
-                      <Label variant="caption" tone="muted">
-                        {props.item.state === "needs_config" || server().problem
-                          ? uiText("serverNeedsSetup")
-                          : uiText("serverReady")}
-                      </Label>
-                      <View style={{ flex: 1 }} />
-                      <If when={server().env.length}>
-                        <Label
-                          variant="caption"
-                          tone="muted"
-                        >{`${text(props.phone ? "envShort" : "env")}: ${server().env.join(", ")}`}</Label>
-                      </If>
-                      <If when={server().headers.length}>
-                        <Label
-                          variant="caption"
-                          tone="muted"
-                        >{`${text("headers")}: ${server().headers.join(", ")}`}</Label>
-                      </If>
-                    </View>
-                    <If when={server().transport !== "stdio"}>
-                      <HeadersEditor
-                        item={props.item}
-                        server={server().name}
-                        plainHttp={server().plainHttp}
-                        phone={props.phone}
-                      />
-                    </If>
-                  </View>
-                )}
-              </Each>
+            <View style={{ gap: 12 }}>
+              <ServerRows item={props.item} phone={props.phone} />
               <Label
                 variant="small"
                 tone="muted"

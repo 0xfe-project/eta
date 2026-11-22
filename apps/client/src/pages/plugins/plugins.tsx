@@ -20,6 +20,7 @@ import { pluginText } from "./labels";
 import { Market } from "./market";
 import { PluginDetail } from "./plugin-detail";
 import { PluginEnabled, PluginName } from "./plugin-name";
+import { ServersDialog } from "./servers-panel";
 import { NoPlugins, PluginGlyph, Status } from "./plugin-status";
 import { Skills } from "./skills/list";
 import { PluginTablet } from "./tablet-list";
@@ -35,6 +36,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
   const warnings = signal("");
   const source = signal("");
   const remove = signal("");
+  const servers = signal("");
   const list = () => host.list<PluginView>("plugins");
   const plugin = () => list().find((item) => item.name === config());
   const phone = () => props.layout === "phone";
@@ -46,6 +48,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
     list().filter((item) => item.state === "needs_config");
   const installed = () =>
     list().filter((item) => item.state !== "needs_config");
+  const serversPlugin = () => list().find((item) => item.name === servers());
   const warningPlugin = () => list().find((item) => item.name === warnings());
   const sourcePlugin = () => list().find((item) => item.name === source());
   async function refreshPlugins() {
@@ -182,6 +185,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                 onUpdate={() => void update(item().name)}
                 onRemove={() => remove.set(item().name)}
                 onConfigure={() => config.set(item().name)}
+                onServers={() => servers.set(item().name)}
               />
             )}
           </Each>
@@ -331,6 +335,15 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
           />
         )}
       </If>
+      <If when={serversPlugin()}>
+        {(item) => (
+          <ServersDialog
+            item={item()}
+            phone={phone()}
+            onClose={() => servers.set("")}
+          />
+        )}
+      </If>
       <If when={sourcePlugin()}>
         {(item) => (
           <PluginSourceDialog item={item()} onClose={() => source.set("")} />
@@ -420,12 +433,16 @@ function PluginCard(props: {
   onUpdate: () => void;
   onRemove: () => void;
   onConfigure: () => void;
+  onServers: () => void;
 }) {
   const c = colors();
   const git = () =>
     props.item.source.kind === "git" ? props.item.source : undefined;
   return (
     <View
+      role="button"
+      accessibilityLabel={props.item.name}
+      onPress={props.onServers}
       style={{
         width: 267,
         padding: 12,
@@ -494,13 +511,27 @@ function PluginCard(props: {
             )}
           </If>
         </View>
-        <View style={{ ...row, height: 24, gap: 4 }}>
-          <Label variant="small" tone="muted">
+        <View style={{ ...row, height: 28, gap: 4 }}>
+          <Label
+            variant="small"
+            tone="muted"
+            lines={1}
+            style={{ flex: 1, minWidth: 0 }}
+          >
             {uiText("skillsMcpServers", {
               length: props.item.skills.length,
               value2: props.item.servers.length,
             })}
           </Label>
+          <If when={props.item.servers.length}>
+            <Button
+              label={uiText("serversButton")}
+              tone="ghost"
+              labelVariant="small"
+              style={{ flexShrink: 0 }}
+              onPress={props.onServers}
+            />
+          </If>
           <If when={pluginWarnings(props.item).length}>
             <Button
               label={uiText("warningsFor", { name: props.item.name })}
@@ -548,7 +579,7 @@ function PluginCard(props: {
           />
         </If>
         <If when={props.item.fields.length}>
-          <Button label={uiText("configure")} onPress={props.onConfigure} />
+          <Button label={uiText("cardValues")} onPress={props.onConfigure} />
         </If>
       </View>
     </View>

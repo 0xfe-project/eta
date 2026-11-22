@@ -1,6 +1,6 @@
 import type { PluginHeaderView, PluginView } from "@eta/client-contracts";
 import { signal, View } from "nsh";
-import { Button, Caption, colors, Field, Label, row } from "../../components";
+import { Button, colors, Field, Label, row } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -48,7 +48,7 @@ export function HeadersEditor(props: {
   const host = useHost();
   const c = colors();
   const mine = () =>
-    props.item.headers.filter((header) => header.server === props.server);
+    (props.item.headers ?? []).filter((header) => header.server === props.server);
   const drafts = signal<Draft[]>(mine().map(draftOf));
   const problem = signal("");
   const off = () => !props.item.enabled;
@@ -102,80 +102,80 @@ export function HeadersEditor(props: {
     });
   }
   return (
-    <View style={{ gap: 6, paddingTop: 6, opacity: off() ? 0.5 : 1 }}>
-      <Caption text={uiText("headersTitle", { name: props.server })} phone={props.phone} />
-      <Label variant="caption" tone="muted">
-        {off() ? uiText("headersOff") : uiText("headersHint")}
-      </Label>
+    <View style={{ gap: 12, opacity: off() ? 0.5 : 1 }}>
+      <View style={{ gap: 8 }}>
+        <Label variant="small" weight={600}>
+          {uiText("headersTitle")}
+        </Label>
+        <Label variant="small" tone="muted" style={{ lineHeight: 21 }}>
+          {off() ? uiText("headersOff") : uiText("headersHint")}
+        </Label>
+      </View>
       <Each of={drafts()} key={(draft) => draft.id}>
         {(draft) => (
-          <View style={{ gap: 4 }}>
-            <View style={{ ...row, gap: 6 }}>
-              <View style={{ flex: 1 }}>
-                <Field
-                  label={uiText("headerName")}
-                  value={draft().name}
-                  placeholder={uiText("headerName")}
-                  onChange={(name) =>
-                    patch(draft().id, {
-                      name,
-                      ...(draft().saved ? {} : { secret: looksSecret(name) }),
-                    })
-                  }
-                />
-              </View>
-              <View style={{ flex: 2 }}>
-                <Field
-                  label={uiText("headerValue")}
-                  value={draft().value}
-                  masked={draft().secret}
-                  placeholder={
-                    draft().secret && draft().saved && draft().value === ""
-                      ? uiText("valueSaved")
-                      : draft().bearer
-                        ? uiText("headerToken")
-                        : uiText("headerValue")
-                  }
-                  onChange={(value) => patch(draft().id, { value })}
-                />
-              </View>
-              <Button
-                label={uiText("headerRemove")}
-                tone="ghost"
-                labelVariant="caption"
-                disabled={off()}
-                onPress={() =>
-                  drafts.update((all) =>
-                    all.filter((other) => other.id !== draft().id),
-                  )
+          <View style={{ ...row, gap: 12, alignItems: "center" }}>
+            <View style={{ flex: 2, minWidth: 0 }}>
+              <Field
+                label={uiText("headerName")}
+                value={draft().name}
+                placeholder={uiText("headerName")}
+                onChange={(name) =>
+                  patch(draft().id, {
+                    name,
+                    ...(draft().saved ? {} : { secret: looksSecret(name) }),
+                  })
                 }
               />
             </View>
-            <View style={{ ...row, gap: 8 }}>
-              <ToggleSwitch
-                label={uiText("headerSecret")}
-                checked={draft().secret}
-                onChange={(secret) => patch(draft().id, { secret })}
+            <View style={{ flex: 3, minWidth: 0 }}>
+              <Field
+                label={uiText("headerValue")}
+                value={draft().value}
+                masked={draft().secret}
+                placeholder={
+                  draft().secret && draft().saved && draft().value === ""
+                    ? uiText("valueSaved")
+                    : draft().bearer
+                      ? uiText("headerToken")
+                      : uiText("headerValue")
+                }
+                onChange={(value) => patch(draft().id, { value })}
               />
-              <Label variant="caption" tone="muted">
-                {uiText("headerSecret")}
-              </Label>
-              <If when={props.plainHttp}>
-                <ToggleSwitch
-                  label={uiText("headerPlainOk")}
-                  checked={draft().plainOk}
-                  onChange={(plainOk) => patch(draft().id, { plainOk })}
-                />
-                <Label variant="caption" tone="muted">
-                  {uiText("headerPlainOk")}
-                </Label>
-              </If>
             </View>
+            <ToggleSwitch
+              label={uiText("headerSecret")}
+              checked={draft().secret}
+              onChange={(secret) => patch(draft().id, { secret })}
+            />
+            <If when={props.plainHttp}>
+              <ToggleSwitch
+                label={uiText("headerPlainOk")}
+                checked={draft().plainOk}
+                onChange={(plainOk) => patch(draft().id, { plainOk })}
+              />
+            </If>
+            <Button
+              label={uiText("headerRemove")}
+              tone="ghost"
+              labelVariant="small"
+              disabled={off()}
+              onPress={() =>
+                drafts.update((all) =>
+                  all.filter((other) => other.id !== draft().id),
+                )
+              }
+            />
           </View>
         )}
       </Each>
+      <If when={drafts().length}>
+        <Label variant="small" tone="muted">
+          {uiText("headerSecret") +
+            (props.plainHttp ? " · " + uiText("headerPlainOk") : "")}
+        </Label>
+      </If>
       <If when={problem()}>
-        <Label variant="caption" style={{ color: c().red }}>
+        <Label variant="small" style={{ color: c().red }}>
           {problem()}
         </Label>
       </If>
@@ -184,7 +184,7 @@ export function HeadersEditor(props: {
           <Button
             label={uiText("headerAddBearer")}
             tone="plain"
-            labelVariant="caption"
+            labelVariant="small"
             disabled={off()}
             onPress={() => add(defaultHeaderRow())}
           />
@@ -192,14 +192,16 @@ export function HeadersEditor(props: {
         <Button
           label={uiText("headerAddCustom")}
           tone="plain"
-          labelVariant="caption"
+          labelVariant="small"
           disabled={off()}
           onPress={() => add(customHeaderRow())}
         />
+      </View>
+      <View style={{ ...row, justifyContent: "flex-end", paddingTop: 4 }}>
         <Button
           label={uiText("headerSave")}
           tone="primary"
-          labelVariant="caption"
+          labelVariant="small"
           disabled={off()}
           onPress={save}
         />
