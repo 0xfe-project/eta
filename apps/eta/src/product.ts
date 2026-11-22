@@ -96,6 +96,7 @@ import { memoryPlugin } from "./memory/plugin";
 import { MachinePlaces, wireFailure } from "./places/on-machine";
 import { placesPlugin } from "./places/plugin";
 import { PlaceStore } from "./places/store";
+import { Market } from "./plugins/market";
 import { pluginsPlugin } from "./plugins/plugin";
 import { Plugins } from "./plugins/service";
 import { pluginSessionTools } from "./plugins/tools";
@@ -1060,7 +1061,14 @@ export function createProduct(options: {
       await plugins.start();
       server.mount(
         "plugins",
-        pluginsPlugin({ plugins, agents }, applied("plugins")),
+        pluginsPlugin(
+          {
+            plugins,
+            agents,
+            market: new Market({ settings: new SettingStore(db), plugins, dataDir }),
+          },
+          applied("plugins"),
+        ),
       );
       server.mount(
         "agents",

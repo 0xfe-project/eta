@@ -17,6 +17,7 @@ import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { AddPlugin, ConfigurePlugin, sheetEdge } from "./configure";
 import { pluginText } from "./labels";
+import { Market } from "./market";
 import { PluginDetail } from "./plugin-detail";
 import { NoPlugins, PluginGlyph, Status } from "./plugin-status";
 import { Skills } from "./skills/list";
@@ -60,9 +61,15 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
 
   const hoveredTab = signal("");
   function tabs(tablet = false) {
-    const items = ["Plugins", "Skills"];
+    const items = ["Plugins", "Skills", "Market"];
     const label = (item: string) =>
-      uiText(item === "Plugins" ? "plugins" : "skillsTab");
+      uiText(
+        item === "Plugins"
+          ? "plugins"
+          : item === "Skills"
+            ? "skillsTab"
+            : "pluginMarket",
+      );
     return (
       <View
         style={{
@@ -247,11 +254,22 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                 <If
                   when={tab() === "Plugins"}
                   else={
-                    <Skills
-                      layout={props.layout}
-                      onBack={props.onBack}
-                      tabs={() => tabs(props.layout === "tablet")}
-                    />
+                    <If
+                      when={tab() === "Skills"}
+                      else={
+                        <Market
+                          layout={props.layout}
+                          onBack={props.onBack}
+                          tabs={() => tabs(props.layout === "tablet")}
+                        />
+                      }
+                    >
+                      <Skills
+                        layout={props.layout}
+                        onBack={props.onBack}
+                        tabs={() => tabs(props.layout === "tablet")}
+                      />
+                    </If>
                   }
                 >
                   <If when={phone()} else={desktopList()}>

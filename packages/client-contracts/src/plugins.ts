@@ -141,3 +141,69 @@ export interface PluginResults {
   remove: { name: string };
   recheck: Record<string, never>;
 }
+
+/**
+ * The online market: a catalog (one JSON document at a URL the user can change) whose entries are
+ * git sources pinned to a commit. Installing one is adding that git source, after the user was
+ * shown what it would run. The catalog is not trusted: every field here was checked by the host.
+ */
+export interface MarketEntry {
+  name: string;
+  description: string;
+  author: string;
+  version: string;
+  repo: string;
+  path: string;
+  /** The commit to install, 40 hex digits; never a branch or a tag. */
+  rev: string;
+  homepage: string | null;
+  /** Commands it says it needs; only a hint, and the preview says what the plugin itself says. */
+  requires: string[];
+  /** Whether a plugin of this name is installed already, and from where. */
+  installed: "no" | "this" | "other";
+}
+
+/** An entry the host threw away, and why. */
+export interface MarketRejected {
+  /** Its place in the catalog, from 1. */
+  index: number;
+  name: string | null;
+  reason: string;
+}
+
+/** The catalog, or why there is none. Installed plugins are never touched by either. */
+export interface MarketCatalog {
+  /** The address in force; `""` when none is set. */
+  url: string;
+  /** Whether `url` is the default and not the user's own. */
+  isDefault: boolean;
+  /** Null when the catalog could not be read; `error` says why. */
+  entries: MarketEntry[] | null;
+  rejected: MarketRejected[];
+  error: string | null;
+}
+
+/** An MCP server as it would start: what the user must see before saying yes. */
+export interface MarketServerView extends PluginServerView {
+  /** Variables the plugin sets itself, as written in its `mcp.json`. */
+  fixedEnv: Record<string, string>;
+  cwd: string | null;
+}
+
+/** What installing an entry would put on the machine, read from the files at the pinned commit. */
+export interface MarketPreview {
+  name: string;
+  version: string | null;
+  description: string;
+  repo: string;
+  path: string;
+  /** The commit that was read, and the one that will be installed. */
+  sha: string;
+  requires: string[];
+  servers: MarketServerView[];
+  skills: { name: string; description: string }[];
+  /** What the loader found wrong and ignored. */
+  reports: string[];
+  /** The values it will ask for after it is installed. */
+  fields: { name: string; secret: boolean; required: boolean }[];
+}

@@ -41,9 +41,9 @@ import {
   pluginMcpSources,
   runtimeExtras,
   serversConfig,
-  serverSupported,
 } from "@eta/daemon";
 import { PluginRegistry } from "./registry";
+import { serverViews } from "./server-view";
 import { PluginRows } from "./store";
 
 export interface PluginsOptions {
@@ -365,22 +365,7 @@ export class Plugins {
         name,
         description,
       })),
-      servers: (plugin?.servers ?? []).map((server) => {
-        const binding = plugin?.bindings[server.name];
-        const { config } = server;
-        return {
-          name: server.name,
-          transport: config.type,
-          ...(config.type === "stdio"
-            ? { command: [config.command, ...config.args] }
-            : { url: config.url }),
-          env: Object.keys(binding?.env ?? {}),
-          headers: Object.keys(binding?.headers ?? {}),
-          problem: serverSupported(server)
-            ? null
-            : "legacy HTTP+SSE: external runtimes skip it; eta's own loop takes it",
-        };
-      }),
+      servers: serverViews(plugin),
       requires,
       machines: this.#machineViews(requires),
       fields: (plugin?.fields ?? []).map((field: PluginField) => {

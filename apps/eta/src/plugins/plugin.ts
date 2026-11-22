@@ -6,6 +6,7 @@
  */
 import type { PluginAuditView, PluginValue } from "@eta/client-contracts";
 import type { AgentStore } from "../agents/store";
+import type { Market } from "./market";
 import type { Plugins } from "./service";
 import { Args, productPlugin, publish } from "../wire";
 
@@ -13,10 +14,10 @@ const LEVELS = ["none", "read", "file", "value"] as const;
 const AUDIT_SHOWN = 200;
 
 export function pluginsPlugin(
-  deps: { plugins: Plugins; agents: AgentStore },
+  deps: { plugins: Plugins; agents: AgentStore; market: Market },
   applied: () => void,
 ) {
-  const { plugins, agents } = deps;
+  const { plugins, agents, market } = deps;
   return productPlugin(
     "plugins",
     ({ wire }) => {
@@ -82,6 +83,20 @@ export function pluginsPlugin(
         wire.handle("plugins", "remove", async (call) => {
           const name = new Args(call).string("name");
           await plugins.registry.remove(name);
+          return { result: { name } };
+        }),
+        wire.handle("plugins", "marketCatalog", async () => ({
+          result: await market.catalog(),
+        })),
+        wire.handle("plugins", "marketSetUrl", async (call) => ({
+          result: await market.setUrl(new Args(call).optionalString("url") ?? ""),
+        })),
+        wire.handle("plugins", "marketPreview", async (call) => ({
+          result: await market.preview(new Args(call).string("name")),
+        })),
+        wire.handle("plugins", "marketInstall", async (call) => {
+          const args = new Args(call);
+          const name = await market.install(args.string("name"), args.string("sha"));
           return { result: { name } };
         }),
         wire.handle("plugins", "recheck", async () => {

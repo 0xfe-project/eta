@@ -119,6 +119,17 @@ Before tool results and progress updates enter the model and journal, the built-
 
 This is only a safeguard against accidents: it matches exact text, cannot catch values encoded by scripts, and ignores values shorter than 4 characters. eta cannot see or control tool output inside external runtimes.
 
+## Market
+
+The host reads an online catalog and turns an entry into the git source `{repo, rev, path}` the plugin store already has. Nothing else installs.
+
+- Catalog address: setting `plugins.catalogUrl`, changed with `plugins.marketSetUrl`, applied without a restart. `DEFAULT_CATALOG_URL` is empty: no address, no catalog. The page says so and offers to set one.
+- Format: `{"plugins":[{name, description, author, version, repo, path, rev, homepage?, requires?}]}`. `rev` must be a 40-character lowercase commit hash, never a branch or tag.
+- Fetch: http(s) only, size cap, timeout, JSON and schema checks. An invalid entry is dropped with a reason, the rest are kept. Failure or offline returns an error and leaves installed plugins alone.
+- Wire (`plugins`): `marketCatalog` lists entries marked `installed` (`no`, `this`, `other`); `marketPreview {name}` fetches the pinned commit into a temporary directory and returns its MCP servers (command, env, headers), `requires`, repo, path and commit; `marketInstall {name, sha}` installs only if the catalog still pins `sha`.
+- Confirmation: the client shows the preview and requires an explicit confirm before `marketInstall`. Catalog text is rendered as text only.
+- Out of scope: publishing and automatic update.
+
 ## Security boundary
 
 A stdio server runs the author's code on the machine and is not a sandbox, so before enabling it, the command it runs or the address it connects to is shown. Servers like `npx` install packages themselves at runtime, bypassing our checks.
