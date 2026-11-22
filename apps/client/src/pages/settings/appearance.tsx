@@ -42,6 +42,7 @@ const paletteLabels = {
   tokyoNight: "paletteTokyoNight",
   solarized: "paletteSolarized",
   rosePine: "paletteRosePine",
+  one: "paletteOne",
 } as const;
 const flavorNames = {
   frappe: "Frappé",

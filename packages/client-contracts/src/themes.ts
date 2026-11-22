@@ -4,7 +4,8 @@
  * both. The names follow Catppuccin's roles; a theme that lacks a role uses its nearest color
  * (Rosé Pine has no green, so `green` is its foam). Dracula, Tokyo Night and Rosé Pine name their
  * light themes Alucard, Day and Dawn. Nord has no light theme: its light is the Snow Storm with the
- * accents darkened for text. A neutral step a theme does not define is a blend of its own colors.
+ * accents darkened for text. One is Atom's One Dark and One Light; it has no pink, so `pink` and
+ * `lavender` are blends of its red, blue and purple. A neutral step a theme does not define is a blend of its own colors.
  */
 export interface ThemeColors {
   base: string;
@@ -35,6 +36,7 @@ export const themeIds = [
   "tokyoNight",
   "solarized",
   "rosePine",
+  "one",
 ] as const;
 export type ThemeId = (typeof themeIds)[number];
 
@@ -310,6 +312,51 @@ export const themes: Record<
       mauve: "#907aa9",
       lavender: "#d7827e",
       pink: "#d7827e",
+    },
+  },
+  // https://github.com/atom/atom/tree/master/packages/one-dark-syntax and one-light-syntax
+  one: {
+    dark: {
+      base: "#282c34",
+      mantle: "#21252b",
+      surface0: "#2c313a",
+      surface2: "#4b5263",
+      overlay1: "#5c6370",
+      overlay2: "#7f848e",
+      subtext0: "#8b93a1",
+      subtext1: "#9da5b4",
+      text: "#abb2bf",
+      red: "#e06c75",
+      peach: "#d19a66",
+      yellow: "#e5c07b",
+      green: "#98c379",
+      teal: "#56b6c2",
+      sapphire: "#56b6c2",
+      blue: "#61afef",
+      mauve: "#c678dd",
+      lavender: "#9393e6",
+      pink: "#d372a9",
+    },
+    light: {
+      base: "#fafafa",
+      mantle: "#f0f0f0",
+      surface0: "#e5e5e6",
+      surface2: "#c2c2c6",
+      overlay1: "#a0a1a7",
+      overlay2: "#696c77",
+      subtext0: "#5c5f6a",
+      subtext1: "#4f525e",
+      text: "#383a42",
+      red: "#e45649",
+      peach: "#986801",
+      yellow: "#c18401",
+      green: "#50a14f",
+      teal: "#0184bc",
+      sapphire: "#0184bc",
+      blue: "#4078f2",
+      mauve: "#a626a4",
+      lavender: "#734fcb",
+      pink: "#c53e76",
     },
   },
 };
