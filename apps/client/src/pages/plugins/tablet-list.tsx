@@ -75,6 +75,7 @@ export function PluginTablet(props: {
                       ? c().selected
                       : c().canvas,
                   cursor: "pointer",
+                  opacity: item().enabled ? 1 : 0.55,
                 }}
               >
                 <PluginGlyph size={28} />

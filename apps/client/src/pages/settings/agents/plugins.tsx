@@ -46,7 +46,9 @@ export function AgentPlugins(props: { form: AgentForm }) {
       .map((server) => `${transports[server.transport]} · ${server.name}`)
       .join(", ");
   const status = (item: PluginView) =>
-    item.state === "ready"
+    !item.enabled
+      ? { label: uiText("pluginOffForAll"), color: c().faint }
+      : item.state === "ready"
       ? {
           label: phoneEditor()
             ? uiText("pluginCanBeEnabled")
@@ -106,6 +108,7 @@ export function AgentPlugins(props: { form: AgentForm }) {
                   borderBottomWidth: 1,
                   borderColor: c().border,
                   cursor: ready() || checked() ? "pointer" : "default",
+                  opacity: item().enabled ? 1 : 0.55,
                 }}
               >
                 <If

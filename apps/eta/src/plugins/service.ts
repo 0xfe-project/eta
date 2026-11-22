@@ -155,7 +155,10 @@ export class Plugins {
   #split(agentId: string): { active: PluginEntry[]; skipped: string[] } {
     const active: PluginEntry[] = [];
     const skipped: string[] = [];
+    // The user's switch comes first: a plugin that is off is no one's, and is not "skipped" either.
+    const off = this.rows.disabled();
     for (const name of this.rows.enabled(agentId)) {
+      if (off.has(name)) continue;
       const entry = this.registry.get(name);
       if (entry !== undefined && this.#usable(entry)) active.push(entry);
       else skipped.push(name);
@@ -348,12 +351,14 @@ export class Plugins {
     const { plugin } = entry;
     const values = this.rows.values(entry.name);
     const levels = this.rows.levels(entry.name);
+    const off = this.rows.disabled();
     const requires = plugin?.requires ?? [];
     return {
       name: entry.name,
       version: plugin?.manifest.version ?? null,
       description: plugin?.manifest.description ?? "",
       source: entry.source,
+      enabled: !off.has(entry.name),
       state: this.stateOf(entry),
       problem:
         entry.problem ??
@@ -488,6 +493,13 @@ export class Plugins {
       state: this.stateOf(entry),
       issues: configIssues(fields, values),
     };
+  }
+
+  /** Switch a plugin on or off for every agent. What each agent enabled is left as it is. */
+  setEnabled(name: string, enabled: boolean): void {
+    this.#existing(name);
+    this.rows.setDisabled(name, !enabled);
+    this.#changed();
   }
 
   /** Move a field's level; what the manifest declares is the most it can be. */

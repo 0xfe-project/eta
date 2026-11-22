@@ -69,6 +69,8 @@ When config is no longer valid after an upgrade, fall back to pending configurat
 
 ## What a session gets
 
+A plugin also has one global switch (table `plugin_disabled`, default on; `plugins.setEnabled`). Off, `Plugins.#split` leaves it out for every agent, so `skillDirsFor`, `runtimeExtrasFor`, `mcpSourcesFor` and `stampOf` all see nothing of it, whatever the agent enabled; it applies at read time and open sessions reopen. On does not enable it for an agent: each agent's own choice (`agent_plugin`) is never touched by the switch. An off plugin stays installed with its values; removing its git source clears the switch.
+
 | Runtime             | Skill                                                                                        | MCP                                                  |
 | ------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
 | Built-in kernel     | Directory wired into `skillDirsFor`, included in the skills block of the system prompt       | `McpHost`, source `plugin:<plugin>` (main node only) |
@@ -134,11 +136,12 @@ The host reads somebody else's `marketplace.json` (the Claude Code shape, or Cur
 
 ### Cursor and Claude Code layouts
 
-`loadPlugin` takes the manifest from `plugin.json`, else `.cursor-plugin/plugin.json`, else `.claude-plugin/plugin.json`. Both share `skills/<name>/SKILL.md` with the spec, so skills load. In those layouts only skills load:
+`loadPlugin` takes the manifest from `plugin.json`, else `.cursor-plugin/plugin.json`, else `.claude-plugin/plugin.json`. Both share `skills/<name>/SKILL.md` with the spec, so skills load. In those layouts skills and MCP servers load:
 
 - no `$schema` is required, and a field of the wrong type is dropped with a report instead of rejecting the plugin (the `name` rule still rejects);
-- `displayName`, `logo`, `category`, `tags` are silently ignored; `commands`, `agents`, `hooks`, `rules`, `mcpServers` and the like, and their folders and `.mcp.json`, are ignored and listed in `reports`, which the preview shows;
-- a `skills` path other than `skills/` is reported; only `skills/` is read.
+- `displayName`, `logo`, `category`, `tags` are silently ignored; `commands`, `agents`, `hooks`, `rules` and the like, and their folders, are ignored and listed in `reports`, which the preview shows;
+- a `skills` path other than `skills/` is reported; only `skills/` is read. A list that only names existing `./skills/<x>` directories is not reported.
+- MCP servers are read from Claude's `.mcp.json` and Cursor's root `mcp.json` (`{ "mcpServers": { ... } }`) and become the same servers the native `mcp.json` gives; there is no second launcher. `type: "http"` is `streamable-http`; `${CLAUDE_PLUGIN_ROOT}` is `${PLUGIN_ROOT}`. A `${VAR}` that is a whole env value, or inside a header, becomes a required string field (secret when its name has key, token, secret, auth, password or credential) bound to that env variable or header; the user fills it in after installing. A server is skipped, with its reason in `reports`, when it has an `auth` object (OAuth is not supported), a `${}` in its URL, a command or an argument, or text mixed with a variable in an env value. The preview says "N MCP servers will run after you confirm" and shows every server; nothing starts before the install is confirmed and the plugin is enabled for an agent.
 
 ## Security boundary
 

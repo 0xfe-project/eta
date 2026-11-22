@@ -138,6 +138,7 @@ describe("the seeds a release upgrades", () => {
       "0058-agent-avatar",
       "0059-pending-session-settings",
       "0060-interaction-context",
+      "0061-plugin-disabled",
     ]);
   });
 

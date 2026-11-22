@@ -18,6 +18,7 @@ import type {
 export const PLUGIN_ACTIONS = [
   "configure",
   "setLevel",
+  "setEnabled",
   "add",
   "update",
   "remove",
@@ -87,6 +88,8 @@ export interface PluginView {
   version: string | null;
   description: string;
   source: PluginSource;
+  /** The user's switch for every agent. Off: no agent gets its skills or servers, whatever each enabled. */
+  enabled: boolean;
   state: PluginState;
   /** Why the plugin cannot be used at all (a rejected manifest, a `config` that is invalid). */
   problem: string | null;
@@ -123,6 +126,8 @@ export interface PluginArgs {
   configure: { name: string; values: Record<string, PluginValue | null> };
   /** Lower what agents may do with a field; `level` cannot be above what the manifest allows. */
   setLevel: { name: string; field: string; level: PluginAgentLevel };
+  /** Switch an installed plugin on or off for every agent; each agent's own choice is kept. */
+  setEnabled: { name: string; enabled: boolean };
   /** Add a plugin from a git repository; `rev` is a branch, a tag or a commit. */
   add: { repo: string; rev?: string; path?: string };
   /** Fetch a git source again, resolving its `rev` anew. Without a name, every one. */
@@ -136,6 +141,7 @@ export interface PluginResults {
   /** `issues` is what still keeps it from being enabled. */
   configure: { name: string; state: PluginState; issues: FieldIssue[] };
   setLevel: { name: string };
+  setEnabled: { name: string; enabled: boolean };
   add: { name: string };
   update: { names: string[] };
   remove: { name: string };

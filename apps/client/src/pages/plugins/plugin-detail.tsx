@@ -13,6 +13,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
+import { ToggleSwitch } from "../../components/toggle-switch";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 
@@ -83,6 +84,23 @@ export function PluginDetail(props: DetailProps) {
       ? { gap: 6, paddingHorizontal: 16, paddingTop: top }
       : { gap: 6 };
   const needsConfig = () => props.item.state === "needs_config";
+  function setEnabled(enabled: boolean) {
+    void host.action(() =>
+      host.call("plugins", "setEnabled", { name: props.item.name, enabled }),
+    );
+  }
+  const enabledSwitch = () => (
+    <View style={{ ...row, gap: 8, flexShrink: 0 }}>
+      <ToggleSwitch
+        label={uiText("pluginSwitch")}
+        checked={props.item.enabled}
+        onChange={setEnabled}
+      />
+      <Label variant="caption" tone="muted" lines={1}>
+        {props.item.enabled ? uiText("pluginSwitch") : uiText("pluginOffForAll")}
+      </Label>
+    </View>
+  );
   function update() {
     if (updating()) return;
     updating.set(true);
@@ -119,6 +137,7 @@ export function PluginDetail(props: DetailProps) {
               </Label>
               <Status item={props.item} />
             </View>
+            {enabledSwitch()}
             <If when={git()}>
               <Button
                 label={updating() ? uiText("updating") : uiText("update")}
@@ -192,8 +211,18 @@ export function PluginDetail(props: DetailProps) {
                   </Label>
                 </View>
                 <Status item={props.item} phone />
+                {enabledSwitch()}
               </View>
             </View>
+          </If>
+          <If when={!props.item.enabled}>
+            <Label
+              variant="small"
+              tone="muted"
+              style={props.phone ? { paddingHorizontal: 16, paddingTop: 8 } : undefined}
+            >
+              {uiText("pluginSwitchHint")}
+            </Label>
           </If>
           <If
             when={

@@ -70,6 +70,27 @@ export class PluginRows {
 
   removeSource(name: string): void {
     this.#db.query("DELETE FROM plugin_source WHERE name = ?").run(name);
+    this.#db.query("DELETE FROM plugin_disabled WHERE plugin = ?").run(name);
+  }
+
+  /* --------------------------------------------------------------- the switch */
+
+  /** The plugins switched off for every agent. */
+  disabled(): Set<string> {
+    return new Set(
+      this.#db
+        .query<{ plugin: string }, []>("SELECT plugin FROM plugin_disabled")
+        .all()
+        .map((row) => row.plugin),
+    );
+  }
+
+  setDisabled(plugin: string, disabled: boolean): void {
+    if (disabled)
+      this.#db
+        .query("INSERT OR IGNORE INTO plugin_disabled (plugin) VALUES (?)")
+        .run(plugin);
+    else this.#db.query("DELETE FROM plugin_disabled WHERE plugin = ?").run(plugin);
   }
 
   /* ----------------------------------------------------------------- values */

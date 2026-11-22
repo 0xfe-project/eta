@@ -65,6 +65,14 @@ export function pluginsPlugin(
           );
           return { result: { name } };
         }),
+        wire.handle("plugins", "setEnabled", (call) => {
+          const args = new Args(call);
+          const name = args.string("name");
+          const enabled = args.optionalBoolean("enabled");
+          if (enabled === undefined) throw new Error("plugins.setEnabled needs enabled");
+          plugins.setEnabled(name, enabled);
+          return { result: { name, enabled } };
+        }),
         wire.handle("plugins", "add", async (call) => {
           const args = new Args(call);
           const name = await plugins.registry.add(

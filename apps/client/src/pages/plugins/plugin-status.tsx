@@ -43,7 +43,11 @@ export function Status(props: { item: PluginView; phone?: boolean }) {
         borderColor: c().warning,
       }}
     >
-      {missing() ? uiText("needsConfiguring") : uiText("canBeEnabled")}
+      {!props.item.enabled
+        ? uiText("pluginOffForAll")
+        : missing()
+          ? uiText("needsConfiguring")
+          : uiText("canBeEnabled")}
     </Label>
   );
 }
