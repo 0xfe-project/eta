@@ -20,7 +20,7 @@ afterEach(async () => {
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
 });
 
-async function setup() {
+async function setup(localEnv?: Record<string, string>) {
   const dataDir = await mkdtemp(join(tmpdir(), "eta-required-"));
   dirs.push(dataDir);
   const dir = join(dataDir, "plugins", "demo");
@@ -42,7 +42,8 @@ async function setup() {
   );
   await writeFile(
     join(dir, "mcp.json"),
-    JSON.stringify({ $schema: MCP, mcpServers: { local: { type: "stdio", command: "node" } } }),
+    JSON.stringify({ $schema: MCP, mcpServers: { local: { type: "stdio", command: "node", ...(localEnv ? { env: localEnv } : {}) } },
+    }),
   );
   const db = openDatabase(":memory:");
   applyMigrations(db, loadMigrations());
@@ -80,6 +81,32 @@ describe("a required field that is missing", () => {
     expect(servers["demo-local"]?.env?.DEMO_KEY).toBe(KEY);
 
     plugins.configure("demo", { api_key: null });
+    expect(plugins.stateOf(entry)).toBe("needs_config");
+    expect(plugins.mcpSourcesFor("ada")).toEqual([]);
+  });
+});
+
+describe("a stdio variable the file leaves empty", () => {
+  it("is a blank to fill: needs config and no server until the user sets it", async () => {
+    const { plugins, meta } = await setup({ SERVICE_TOKEN: "" });
+    plugins.configure("demo", { api_key: "s3cr3t-value-123" });
+    const entry = plugins.registry.get("demo")!;
+    // The field is filled; the blank variable still keeps the plugin from running.
+    expect(plugins.stateOf(entry)).toBe("needs_config");
+    expect(plugins.canEnable("demo")).toBe(false);
+    expect(plugins.mcpSourcesFor("ada")).toEqual([]);
+    expect(JSON.stringify(await plugins.runtimeExtrasFor(meta))).not.toContain("demo-local");
+
+    plugins.setEnv("demo", "local", [{ name: "SERVICE_TOKEN", value: KEY, secret: true }]);
+    expect(plugins.stateOf(entry)).toBe("ready");
+    const servers = plugins.mcpSourcesFor("ada")[0]?.servers as Record<
+      string,
+      { env?: Record<string, string> }
+    >;
+    expect(servers["demo-local"]?.env?.SERVICE_TOKEN).toBe(KEY);
+
+    // Taking it away again stops the server again.
+    plugins.setEnv("demo", "local", []);
     expect(plugins.stateOf(entry)).toBe("needs_config");
     expect(plugins.mcpSourcesFor("ada")).toEqual([]);
   });

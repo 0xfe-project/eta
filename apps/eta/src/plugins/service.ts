@@ -140,12 +140,28 @@ export class Plugins {
     );
   }
 
+  /**
+   * Variables a stdio server's file declares with an empty value: the author means "you fill this
+   * in". Until the user has set each one, the plugin is not usable and nothing is started.
+   */
+  #missingEnv(entry: PluginEntry): { server: string; name: string }[] {
+    const set = new Set(this.rows.env(entry.name).map((one) => `${one.server}\0${one.name}`));
+    return (entry.plugin?.servers ?? []).flatMap((def) =>
+      def.config.type !== "stdio"
+        ? []
+        : Object.entries((def.config as { env?: Record<string, string> }).env ?? {})
+            .filter(([name, value]) => value === "" && !set.has(`${def.name}\0${name}`))
+            .map(([name]) => ({ server: def.name, name })),
+    );
+  }
+
   #usable(entry: PluginEntry): boolean {
     return (
       entry.plugin !== undefined &&
       entry.problem === undefined &&
       entry.plugin.configProblems.length === 0 &&
-      this.#issues(entry).length === 0
+      this.#issues(entry).length === 0 &&
+      this.#missingEnv(entry).length === 0
     );
   }
 
@@ -175,7 +191,10 @@ export class Plugins {
     if (def === undefined || def.config.type !== "stdio") return [];
     return [
       ...new Set([
-        ...Object.keys((def.config as { env?: Record<string, string> }).env ?? {}),
+        // An empty value in the file is a blank for the user to fill, not a fixed one.
+        ...Object.entries((def.config as { env?: Record<string, string> }).env ?? {})
+          .filter(([, value]) => value !== "")
+          .map(([name]) => name),
         ...Object.keys(entry.plugin?.bindings[server]?.env ?? {}),
         "PLUGIN_ROOT",
         "PLUGIN_DATA",

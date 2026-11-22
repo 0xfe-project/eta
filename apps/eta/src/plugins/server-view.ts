@@ -18,7 +18,9 @@ export function serverViews(plugin: PluginPackage | undefined): PluginServerView
         ? {
             lockedEnv: [
               ...new Set([
-                ...Object.keys((config as { env?: Record<string, string> }).env ?? {}),
+                ...Object.entries((config as { env?: Record<string, string> }).env ?? {})
+                  .filter(([, value]) => value !== "")
+                  .map(([name]) => name),
                 ...Object.keys(binding?.env ?? {}),
                 "PLUGIN_ROOT",
                 "PLUGIN_DATA",
