@@ -1,6 +1,6 @@
 import { expect, open, test } from "nsh/test";
 
-// Settings > Archived > Task drafts: a draft nobody answers is accepted or discarded by the host after
+// Settings > Tasks > Task drafts: a draft nobody answers is accepted or discarded by the host after
 // a number of minutes. Off, 10 minutes and discard until the user says otherwise; a change goes to
 // the host at once and a number outside 1 to 1440 is refused before it is sent.
 const fixture = "./fixtures/task-draft-timeout.tsx";
