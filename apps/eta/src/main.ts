@@ -186,6 +186,31 @@ const host = await startHost({
   ...(publicUrl === undefined || publicUrl === "" ? {} : { publicUrl }),
 });
 
+// Said where another start looks before it opens the same database (`running.ts`).
+const forget = recordRunning(dataDir, {
+  pid: process.pid,
+  hostname: host.hostname,
+  port: host.port,
+  tokenFile: host.tokenFile ?? null,
+  version: VERSION,
+});
+process.on("exit", forget);
+
+/**
+ * A signal is a shutdown, not a crash: the sessions flush, the files close. Handled before the
+ * summary says the host is ready: whoever started it may ask it to stop as soon as it reads that
+ * line, and a SIGTERM with no handler yet ends the process on the spot.
+ */
+let closing = false;
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.on(signal, () => {
+    if (closing) return;
+    closing = true;
+    forget();
+    void host.close().then(() => process.exit(0));
+  });
+}
+
 console.log(
   JSON.stringify({
     pid: process.pid,
@@ -205,24 +230,4 @@ console.log(
   }),
 );
 
-// Said where another start looks before it opens the same database (`running.ts`).
-const forget = recordRunning(dataDir, {
-  pid: process.pid,
-  hostname: host.hostname,
-  port: host.port,
-  tokenFile: host.tokenFile ?? null,
-  version: VERSION,
-});
-process.on("exit", forget);
-
-/** A signal is a shutdown, not a crash: the sessions flush, the files close. */
-let closing = false;
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.on(signal, () => {
-    if (closing) return;
-    closing = true;
-    forget();
-    void host.close().then(() => process.exit(0));
-  });
-}
 listenForStop();
