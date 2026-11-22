@@ -83,7 +83,7 @@ const finished = async (r: { w: World; task: BoardTaskDetail }) => {
 const adaRuns = (r: { requests: Request[] }) =>
   r.requests.filter((request) => request.agent === "Ada" && onTask(request));
 
-const wakes = (r: { w: World; task: BoardTaskDetail }): string[] =>
+const wakeComments = (r: { w: World; task: BoardTaskDetail }): string[] =>
   r.w.host.product.board
     .activity(r.task.id)
     .filter(
@@ -102,8 +102,8 @@ describe("a finished task and the agent that made it", () => {
     expect(adaRuns(r)).toHaveLength(1);
     expect(adaRuns(r)[0]).toMatchObject({ agent: "Ada" });
     expect(JSON.stringify(adaRuns(r)[0])).toContain("Painted it teal.");
-    expect(wakes(r)).toHaveLength(1);
-    expect(wakes(r)[0]).toContain("Ada");
+    // The wake is Ada's one run; it leaves no system comment on the timeline.
+    expect(wakeComments(r)).toEqual([]);
     expect(r.w.host.product.board.detail(r.task.id)?.status).toBe("in_review");
   });
 
@@ -119,7 +119,7 @@ describe("a finished task and the agent that made it", () => {
     const r = await room();
     await finished(r);
     expect(adaRuns(r)).toHaveLength(0);
-    expect(wakes(r)).toEqual([]);
+    expect(wakeComments(r)).toEqual([]);
   });
 
   it("leaves a task its executor made itself, and the user's task, alone", async () => {
@@ -127,7 +127,7 @@ describe("a finished task and the agent that made it", () => {
       const r = await room({ react: true, by });
       await finished(r);
       expect(adaRuns(r)).toHaveLength(0);
-      expect(wakes(r)).toEqual([]);
+      expect(wakeComments(r)).toEqual([]);
     }
   });
 

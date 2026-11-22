@@ -650,7 +650,7 @@ export class TaskRunner implements TaskRuns {
     status: Submission["status"],
     summary: string,
   ): void {
-    const { agents, board } = this.#deps;
+    const { agents } = this.#deps;
     const makerId = task.createdBy.agentId;
     if (
       this.#deps.reactToResults?.() !== true ||
@@ -663,12 +663,6 @@ export class TaskRunner implements TaskRuns {
     const maker = agents.get(makerId);
     if (maker === undefined) return;
     const executor = agents.get(this.#executorOf(task) ?? "")?.name;
-    board.comment(
-      task.id,
-      `${maker.name} was woken to review this result: it made the task and "react to results" is on.`,
-      { kind: "system", agentId: null },
-      { deliver: false },
-    );
     this.consult(
       task.id,
       makerId,
