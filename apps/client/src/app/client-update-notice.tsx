@@ -22,10 +22,9 @@ export function ClientUpdateNotice() {
     if (update.failure()) return update.failure();
     if (offer.kind === "app" && !offer.update.canInstall)
       return uiText("appUpdateNeedsApk", { version: offer.version });
+    // The button says what comes next: a restart, or closing the app.
     if (update.ready())
-      return offer.kind === "package"
-        ? uiText("appUpdateReadyReopen", { version: offer.version })
-        : uiText("appUpdateReady", { version: offer.version });
+      return uiText("appUpdateReady", { version: offer.version });
     return uiText("appUpdateAvailable", { version: offer.version });
   };
   return (

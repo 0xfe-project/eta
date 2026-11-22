@@ -203,10 +203,6 @@ export const updatesMessages = {
     "Eta {{version}} 可以更新了。",
   ],
   appUpdateReady: ["Eta {{version}} is ready.", "Eta {{version}} 已下载好。"],
-  appUpdateReadyReopen: [
-    "Eta {{version}} is ready. Close Eta and open it again to use it.",
-    "Eta {{version}} 已下载好，关闭后再打开即可使用。",
-  ],
   appUpdateNeedsApk: [
     "Eta {{version}} needs a new APK.",
     "Eta {{version}} 需要安装新的 APK。",
