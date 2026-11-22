@@ -3,7 +3,10 @@ import type {
   SerializedDraft,
 } from "@eta/client-contracts/composer-doc";
 import type { PasteRange } from "@eta/client-contracts/composer-draft";
-import type { MentionRef } from "@eta/client-contracts/composer-markdown";
+import type {
+  MentionRef,
+  RestoreOptions,
+} from "@eta/client-contracts/composer-markdown";
 import type { RichNodeJSON, RichSchema } from "nsh/base";
 import { DOC_NODES } from "@eta/client-contracts/composer-doc";
 import {
@@ -34,7 +37,10 @@ export interface StoredText {
  * block again, each `@label` of `mentions` a mention block. Each line of a paragraph is a
  * paragraph, as a message's lines are lines.
  */
-export function markdownToDoc(input: StoredText): DocNode {
+export function markdownToDoc(
+  input: StoredText,
+  options?: RestoreOptions,
+): DocNode {
   const { source, stands } = markdownSource(input);
   schema ??= starterSchema();
   let parsed: DocNode;
@@ -52,7 +58,7 @@ export function markdownToDoc(input: StoredText): DocNode {
       ],
     };
   }
-  return restoreDoc(parsed, stands);
+  return restoreDoc(parsed, stands, options);
 }
 
 /** The mentions a document holds, as `markdownToDoc` needs them to read its Markdown back. */

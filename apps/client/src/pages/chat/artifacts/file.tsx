@@ -176,7 +176,12 @@ function FileTransfer(props: { job: Transfer }) {
   );
 }
 
-export function createArtifactFileSaver() {
+/**
+ * Saves files the app holds: through the share sheet where there is one, else into the app's
+ * storage (`savedPath` says where); files over NSH's direct write limit go through a WebView
+ * download (`writer` mounts it). One file at a time.
+ */
+export function createFileSaver() {
   const transfer = signal<Transfer | undefined>(undefined);
   const savedPath = signal("");
   let active = false;
@@ -191,16 +196,14 @@ export function createArtifactFileSaver() {
   });
   async function save(
     bytes: Uint8Array,
-    title: string,
-    version: number,
-    extension: Extension,
+    name: string,
+    mime: string,
     request?: AbortSignal,
   ) {
     if (closed || active)
       throw new Error("Another file export is in progress.");
     active = true;
     savedPath.set("");
-    const name = filename(title, version, extension);
     const id = crypto.randomUUID();
     let directory: string | undefined;
     let keep = false;
@@ -228,7 +231,7 @@ export function createArtifactFileSaver() {
           job = {
             bytes,
             name,
-            mime: extension === "pdf" ? "application/pdf" : "application/zip",
+            mime,
             destination: path,
             closed: false,
             resolve,
@@ -264,4 +267,25 @@ export function createArtifactFileSaver() {
     <If when={transfer()}>{(job) => <FileTransfer job={job()} />}</If>
   );
   return { save, writer, savedPath };
+}
+
+/** An artifact's export (PDF, ZIP) saved as `<title>-v<version>.<extension>`. */
+export function createArtifactFileSaver() {
+  const saver = createFileSaver();
+  return {
+    ...saver,
+    save: (
+      bytes: Uint8Array,
+      title: string,
+      version: number,
+      extension: Extension,
+      request?: AbortSignal,
+    ) =>
+      saver.save(
+        bytes,
+        filename(title, version, extension),
+        extension === "pdf" ? "application/pdf" : "application/zip",
+        request,
+      ),
+  };
 }

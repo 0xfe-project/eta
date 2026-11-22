@@ -4,7 +4,7 @@ import type {
   MessageView,
 } from "@eta/client-contracts";
 import type { Bounds, JSX, ListRef, ViewRef } from "nsh";
-import type { TextViewSelectionEvent } from "nsh/base";
+import type { ShownSelection } from "../../components/eta-editor";
 import { cleanup, computed, effect, List, Overlay, signal, View } from "nsh";
 import { onWindows } from "../../app/platform";
 import {
@@ -57,6 +57,8 @@ export function ConversationTimeline(props: {
   revealer?: (reveal: (replyId: string | null) => void) => void;
   /** Quote what the reader selected in a reply into the composer. */
   onQuote: (conversationId: string, text: string) => void;
+  /** A mention's press in a message: its member, by agent id. */
+  onMember?: (agentId: string) => void;
 }) {
   const host = useHost();
   const c = colors();
@@ -85,7 +87,7 @@ export function ConversationTimeline(props: {
   }>();
   function select(
     message: MessageView,
-    event: TextViewSelectionEvent,
+    event: ShownSelection,
     reply: ViewRef | undefined,
   ) {
     const text = event.text.trim();
@@ -314,6 +316,7 @@ export function ConversationTimeline(props: {
                 onSelectionChange={(event, reply) =>
                   select(message(), event, reply)
                 }
+                onMember={props.onMember}
               />
             );
             return onWindows ? <View onWheel={glide.onWheel}>{row}</View> : row;

@@ -6,7 +6,7 @@ import type {
 } from "@eta/client-contracts";
 import type { Signal } from "nsh";
 import { fullOutputOf } from "@eta/client-contracts/tool-shape";
-import { cleanup, computed, effect, Image, signal, View } from "nsh";
+import { computed, effect, Image, signal, View } from "nsh";
 import {
   Caption,
   colors,
@@ -15,9 +15,11 @@ import {
   Markdown,
   row,
 } from "../../../components";
+import { Chip } from "../../../components/eta-editor/chip";
 import { Lightbox, picturePreview } from "../../../components/picture-viewer";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { PictureModes } from "../../../services/picture-mode";
 import { toolDescription } from "./run-timing";
 
 export function TranscriptLine(props: {
@@ -223,21 +225,26 @@ function sizeLabel(image: RunImage): string {
 }
 
 /**
- * The pictures a step carried (a screenshot a tool read back, an image the user attached). Resting
- * on one shows it larger beside it (desktops); pressing it opens it over the window, where the
- * others of the step are a swipe or an arrow key away.
+ * The pictures a step carried (a screenshot a tool read back, an image the user attached), as
+ * Settings › Appearance › Images in messages says: compact, a chip each ("Screenshot 1 · PNG ·
+ * 84 KB") whose thumbnail shows when the pointer rests on it (desktops); expanded, 180-wide cards.
+ * A press opens it over the window, where the others of the step are a swipe or an arrow key away.
  */
 function TranscriptImages(props: {
   session: string;
   images: () => RunImage[];
 }) {
+  const host = useHost();
   const c = colors();
+  const modes = PictureModes();
   const open = signal<number>();
+  const asked = new Set<string>();
   const pictures = computed(() =>
-    props.images().map((image) => {
+    props.images().map((image, index) => {
       const { key, state } = runPicture(props.session, image);
       return {
         key,
+        name: uiText("screenshotNamed", { index: index + 1 }),
         caption: sizeLabel(image),
         src: () => state().src,
         failed: () => false,
@@ -246,80 +253,119 @@ function TranscriptImages(props: {
       };
     }),
   );
+  // Those the view left out are asked for once they are drawn, once each.
+  effect(() => {
+    if (host.state().status !== "open") return;
+    for (const picture of pictures()) {
+      if (picture.state().src || asked.has(picture.key)) continue;
+      asked.add(picture.key);
+      void host
+        .call<SessionImage>("sessions", "image", {
+          session: props.session,
+          entryId: picture.image.entryId,
+          index: picture.image.index,
+        })
+        .then(
+          (image) => {
+            if (image.data)
+              picture.state.set({
+                src: `data:${picture.image.mimeType};base64,${image.data}`,
+              });
+          },
+          () => asked.delete(picture.key),
+        );
+    }
+  });
+  const index = (key: string) =>
+    pictures().findIndex((other) => other.key === key);
   return (
     <>
-      <Each of={pictures()} key={(picture) => picture.key}>
-        {(picture) => {
-          const index = () =>
-            pictures().findIndex((other) => other.key === picture().key);
-          return (
-            <View
-              role="button"
-              accessibilityLabel={uiText("openImage", {
-                index: index() + 1,
-                count: pictures().length,
-              })}
-              tooltip={picturePreview(picture())}
-              onPress={() => open.set(index())}
-              focusVisibleStyle={focusRing(c())}
-              style={{ cursor: "zoom-in" }}
-            >
-              <TranscriptImage
-                session={props.session}
-                image={picture().image}
-                state={picture().state}
-              />
-            </View>
-          );
+      <View
+        style={{
+          ...row,
+          flexWrap: "wrap",
+          gap: modes.mode() === "expanded" ? 8 : 4,
         }}
-      </Each>
+      >
+        <Each of={pictures()} key={(picture) => picture.key}>
+          {(picture) => (
+            <If
+              when={modes.mode() === "expanded"}
+              else={
+                <Chip
+                  label={picture().name}
+                  thumbnail={picture().src()}
+                  icon="file"
+                  detail={picture().caption}
+                  cursor="zoom-in"
+                  tooltip={picturePreview(picture(), 248, 300)}
+                  accessibilityLabel={uiText("openImage", {
+                    index: index(picture().key) + 1,
+                    count: pictures().length,
+                  })}
+                  onPress={() => open.set(index(picture().key))}
+                />
+              }
+            >
+              <View
+                role="button"
+                testID="picture-card"
+                accessibilityLabel={uiText("openImage", {
+                  index: index(picture().key) + 1,
+                  count: pictures().length,
+                })}
+                onPress={() => open.set(index(picture().key))}
+                focusVisibleStyle={focusRing(c())}
+                hoverStyle={{ borderColor: c().strong }}
+                style={{
+                  width: 180,
+                  borderWidth: 1,
+                  borderColor: c().border,
+                  backgroundColor: c().canvas,
+                  cursor: "zoom-in",
+                }}
+              >
+                <View style={{ height: 96, backgroundColor: c().selected }}>
+                  <If
+                    when={picture().src()}
+                    else={
+                      <Label variant="caption" tone="muted">
+                        {uiText("imageUnavailable")}
+                      </Label>
+                    }
+                  >
+                    {(src) => (
+                      <Image
+                        src={src()}
+                        fadeDuration={0}
+                        style={{
+                          width: "100%",
+                          height: 96,
+                          objectFit: "cover",
+                        }}
+                      />
+                    )}
+                  </If>
+                </View>
+                <View
+                  style={{
+                    borderTopWidth: 1,
+                    borderColor: c().border,
+                    paddingVertical: 4,
+                    paddingHorizontal: 6,
+                  }}
+                >
+                  <Label variant="caption" tone="muted" lines={1}>
+                    {`${picture().name} · ${picture().caption}`}
+                  </Label>
+                </View>
+              </View>
+            </If>
+          )}
+        </Each>
+      </View>
       <Lightbox pictures={pictures} index={open} onIndex={open.set} />
     </>
-  );
-}
-
-function TranscriptImage(props: {
-  session: string;
-  image: RunImage;
-  state: RunPictureState;
-}) {
-  const host = useHost();
-  effect(() => {
-    if (props.state().src || host.state().status !== "open") return;
-    let active = true;
-    void host
-      .call<SessionImage>("sessions", "image", {
-        session: props.session,
-        entryId: props.image.entryId,
-        index: props.image.index,
-      })
-      .then(
-        (image) => {
-          if (active && image.data)
-            props.state.set({
-              src: `data:${props.image.mimeType};base64,${image.data}`,
-            });
-        },
-        () => {},
-      );
-    cleanup(() => {
-      active = false;
-    });
-  });
-  return (
-    <If
-      when={props.state().src}
-      else={
-        <Label variant="caption" tone="muted">
-          {uiText("imageUnavailable")}
-        </Label>
-      }
-    >
-      <Image
-        src={props.state().src}
-        style={{ width: "100%", height: 220, objectFit: "contain" }}
-      />
-    </If>
   );
 }
 

@@ -367,6 +367,7 @@ export const chatMessages = {
     "View picture {{name}} · {{size}}",
     "查看图片 {{name}} · {{size}}",
   ],
+  openPictureNamed: ["View picture {{name}}", "查看图片 {{name}}"],
   openImage: [
     "Open image {{index}} of {{count}}",
     "打开第 {{index}} 张图片，共 {{count}} 张",
@@ -381,4 +382,14 @@ export const chatMessages = {
   ],
   pictureFailed: ["Couldn't load the image", "图片加载失败"],
   removeAttachment: ["Remove {{name}}", "移除 {{name}}"],
+  openMember: ["Open {{name}}", "打开 {{name}}"],
+  yourMessage: ["Your message", "你的消息"],
+  insertedMessage: ["Inserted message", "插话"],
+  replyOf: ["{{name}}'s reply", "{{name}} 的回复"],
+  saveFile: ["Save {{name}} · {{size}}", "保存 {{name}} · {{size}}"],
+  fileSaved: ["Saved {{name}}", "已保存 {{name}}"],
+  saving: ["saving…", "保存中…"],
+  fileSaveFailed: ["Couldn't save {{name}}", "无法保存 {{name}}"],
+  pictureUnnamed: ["image", "图片"],
+  screenshotNamed: ["Screenshot {{index}}", "截图 {{index}}"],
 } as const;

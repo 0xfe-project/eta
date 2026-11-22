@@ -1,6 +1,7 @@
 import type { RoutineSummary, RunView } from "@eta/client-contracts";
 import { View } from "nsh";
-import { colors, Icon, Label, Markdown, row } from "../../components";
+import { colors, Icon, Label, row } from "../../components";
+import { ShownText, useAgentMentions } from "../../components/eta-editor";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { clockDistance, feedTime, runHistory, scheduleLabel } from "./schedule";
@@ -136,6 +137,7 @@ export function LatestReportCard(props: {
   onOpen: () => void;
 }) {
   const c = colors();
+  const agentMentions = useAgentMentions();
   const inset = () => (props.phone ? 12 : 16);
   return (
     <View style={{ borderWidth: 1, borderColor: c().border }}>
@@ -153,7 +155,13 @@ export function LatestReportCard(props: {
                 props.phone ? undefined : { maxHeight: 280, overflow: "hidden" }
               }
             >
-              <Markdown value={reportBody(props.run)} />
+              <ShownText
+                text={{
+                  text: reportBody(props.run),
+                  mentions: agentMentions(),
+                }}
+                label={runTitle(props.run)}
+              />
             </View>
           </If>
         </View>

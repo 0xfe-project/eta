@@ -10,7 +10,6 @@ import {
   grow,
   Icon,
   Label,
-  Markdown,
   Modal,
   row,
   SmoothScroll,
@@ -18,6 +17,7 @@ import {
   textStyle,
 } from "../../components";
 import { UserFace } from "../../components/agent-face";
+import { ShownText, useAgentMentions } from "../../components/eta-editor";
 import { StatusDot } from "../../components/status-dot";
 import { formatLocale, localizedText, uiText } from "../../i18n";
 import { reportBody, RoutineHistory } from "./history";
@@ -77,6 +77,7 @@ function recordedDuration(run: RunView) {
 
 function PhoneRoutineFailure(props: RoutineReportProps) {
   const c = colors();
+  const agentMentions = useAgentMentions();
   const previousIndex = () =>
     props.runs.findIndex(
       (run, index) =>
@@ -177,19 +178,23 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
             <Label>{error()}</Label>
             <If when={previous()}>
               {(run) => (
-                <Markdown
-                  value={localizedText(
-                    `Last good run (${runAgo(run().startedAt)}): ${
-                      run()
-                        .report?.split(/\n\s*\n/)[0]
-                        ?.trim() ?? ""
-                    }`,
-                    `上次成功运行（${runAgo(run().startedAt)}）：${
-                      run()
-                        .report?.split(/\n\s*\n/)[0]
-                        ?.trim() ?? ""
-                    }`,
-                  )}
+                <ShownText
+                  text={{
+                    text: localizedText(
+                      `Last good run (${runAgo(run().startedAt)}): ${
+                        run()
+                          .report?.split(/\n\s*\n/)[0]
+                          ?.trim() ?? ""
+                      }`,
+                      `上次成功运行（${runAgo(run().startedAt)}）：${
+                        run()
+                          .report?.split(/\n\s*\n/)[0]
+                          ?.trim() ?? ""
+                      }`,
+                    ),
+                    mentions: agentMentions(),
+                  }}
+                  label={uiText("report")}
                 />
               )}
             </If>
@@ -281,6 +286,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
 
 export function RoutineReport(props: RoutineReportProps) {
   const c = colors();
+  const agentMentions = useAgentMentions();
   const type = textFaces();
   const failed = () =>
     props.run.status === "failed" || props.run.status === "skipped";
@@ -398,14 +404,16 @@ export function RoutineReport(props: RoutineReportProps) {
                     <Label variant="subtitle" weight={600}>
                       {props.run.title ?? uiText("report")}
                     </Label>
-                    <Markdown
-                      value={
-                        props.run.report
+                    <ShownText
+                      text={{
+                        text: props.run.report
                           ? reportBody(props.run)
                           : props.run.status === "running"
                             ? "Routine running…"
-                            : "No report"
-                      }
+                            : "No report",
+                        mentions: agentMentions(),
+                      }}
+                      label={props.run.title ?? uiText("report")}
                     />
                   </>
                 }

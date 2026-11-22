@@ -126,6 +126,8 @@ function PictureCaption(props: { children: string }) {
 export function picturePreview(
   picture: ViewedPicture,
   size?: number,
+  /** How long the pointer rests before it shows (200ms; shown text waits 300). */
+  delay = 200,
 ): JSX.Element {
   const c = colors();
   const outer = () => Math.min(windowSize().width * 0.9, size ?? 720);
@@ -133,7 +135,7 @@ export function picturePreview(
   const height = () => (size ? size * 0.75 : windowSize().height * 0.7);
   return (
     <Tooltip
-      delay={200}
+      delay={delay}
       placement="top"
       align="start"
       offset={6}

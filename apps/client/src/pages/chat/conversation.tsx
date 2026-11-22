@@ -453,6 +453,11 @@ export function Conversation(props: {
               additions={indexed().additions}
               recipients={indexed().recipients}
               members={members()}
+              onMember={(agentId) => {
+                const named = members().find((m) => m.agentId === agentId);
+                if (named)
+                  member.set({ id: agentId, session: named.sessionId ?? "" });
+              }}
               loaded={Boolean(timeline())}
               noCachedMessages={noCachedMessages()}
               hasMessages={messages().length > 0}

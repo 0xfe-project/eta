@@ -16,7 +16,6 @@ import {
   grow,
   Icon,
   Label,
-  Markdown,
   monoFontFamily,
   PaneHandle,
   row,
@@ -24,6 +23,7 @@ import {
   textFaces,
   textStyle,
 } from "../../components";
+import { ShownText, useAgentMentions } from "../../components/eta-editor";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
@@ -262,6 +262,7 @@ function DesktopOverview(props: {
   state: TaskDetailState;
 }) {
   const host = useHost();
+  const agentMentions = useAgentMentions();
   const c = colors();
   const type = textFaces();
   const {
@@ -396,16 +397,13 @@ function DesktopOverview(props: {
                         {uiText("goal")}
                       </Label>
                     </If>
-                    <Markdown
-                      value={item().description}
-                      dense
-                      heading={{
-                        variant: "subtitle",
-                        weight: 700,
-                        space: 0,
-                        after: 0,
+                    <ShownText
+                      text={{
+                        text: item().description,
+                        mentions: agentMentions(),
                       }}
-                      compactHeadings
+                      label={uiText("description")}
+                      variant="small"
                     />
                     <View
                       role="button"
@@ -432,7 +430,10 @@ function DesktopOverview(props: {
             >
               <View style={{ gap: 6 }}>
                 <Label weight={600}>{uiText("description")}</Label>
-                <Markdown value={item().description} compactHeadings />
+                <ShownText
+                  text={{ text: item().description, mentions: agentMentions() }}
+                  label={uiText("description")}
+                />
               </View>
             </If>
           </If>
@@ -479,6 +480,7 @@ export function TaskOverview(props: {
   state: TaskDetailState;
 }) {
   const host = useHost();
+  const agentMentions = useAgentMentions();
   const c = colors();
   const {
     activity,
@@ -673,19 +675,12 @@ export function TaskOverview(props: {
                         : uiText("goal")}
                     </Label>
                   </If>
-                  <Markdown
-                    value={item().description}
-                    heading={
-                      phone()
-                        ? {
-                            variant: "body",
-                            weight: 600,
-                            space: 9,
-                            after: -5,
-                          }
-                        : undefined
-                    }
-                    compactHeadings={phone()}
+                  <ShownText
+                    text={{
+                      text: item().description,
+                      mentions: agentMentions(),
+                    }}
+                    label={uiText("description")}
                   />
                   <If when={phone()}>
                     <EditDescriptionLink

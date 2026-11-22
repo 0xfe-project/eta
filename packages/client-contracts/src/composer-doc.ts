@@ -34,6 +34,8 @@ export const DOC_NODES = {
   paste: "pasteBlock",
   file: "attachment",
   mention: "mention",
+  /** A picture in shown text (a Markdown image); never in an editor's. */
+  picture: "picture",
 } as const;
 
 /**

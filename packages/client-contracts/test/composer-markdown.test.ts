@@ -214,6 +214,33 @@ describe("markdownSource and restoreDoc", () => {
     );
   });
 
+  it("reads an image as its name for an editor, and as a picture where text is only shown", () => {
+    const image = {
+      type: "image",
+      attrs: {
+        src: "https://example.com/a.png",
+        alt: "after.png",
+        title: null,
+      },
+    };
+    const parsed = doc(p(text("see "), image, text(" here")));
+    expect(restoreDoc(parsed, [])).toEqual(
+      doc(p(text("see "), text("after.png"), text(" here"))),
+    );
+    expect(restoreDoc(parsed, [], { pictures: true })).toEqual(
+      doc(
+        p(
+          text("see "),
+          {
+            type: "picture",
+            attrs: { src: "https://example.com/a.png", alt: "after.png" },
+          },
+          text(" here"),
+        ),
+      ),
+    );
+  });
+
   it("keeps characters of the private use area the text already had", () => {
     const { source, stands } = markdownSource({ text: "icon \uE0A0 here" });
     const parsed = doc(p(text(source)));

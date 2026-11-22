@@ -281,4 +281,5 @@ export const updatesMessages = {
   whatsNew: ["What's new", "更新内容"],
   whereUpdatesComeFrom: ["Where updates come from", "从哪里下载"],
   whichVersions: ["Which versions", "接收哪些版本"],
+  releaseNotes: ["Release notes", "更新说明"],
 } as const;

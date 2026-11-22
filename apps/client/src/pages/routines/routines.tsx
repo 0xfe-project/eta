@@ -17,12 +17,12 @@ import {
   Header,
   Icon,
   Label,
-  Markdown,
   Modal,
   row,
   sizes,
   SmoothScroll,
 } from "../../components";
+import { ShownText, useAgentMentions } from "../../components/eta-editor";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { RoutineEditor } from "./editor";
@@ -39,6 +39,7 @@ export function Routines(props: {
   onBack?: () => void;
 }) {
   const host = useHost();
+  const agentMentions = useAgentMentions();
   const c = colors();
   const selected = signal(props.initialId ?? "");
   const editing = signal<"new" | "edit" | null>(null);
@@ -522,7 +523,13 @@ export function Routines(props: {
         >
           <SmoothScroll style={grow}>
             <View style={{ padding: 16 }}>
-              <Markdown value={briefs()[0]?.text ?? ""} />
+              <ShownText
+                text={{
+                  text: briefs()[0]?.text ?? "",
+                  mentions: agentMentions(),
+                }}
+                label={uiText("routineBrief")}
+              />
             </View>
           </SmoothScroll>
         </Modal>

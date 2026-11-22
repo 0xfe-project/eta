@@ -8,7 +8,7 @@ import type {
   ViewCore,
 } from "@eta/client-contracts";
 import type { JSX, ViewRef } from "nsh";
-import type { TextViewSelectionEvent } from "nsh/base";
+import type { ShownSelection } from "../../components/eta-editor";
 import {
   captainProposalOf,
   publishedRefs,
@@ -16,7 +16,9 @@ import {
   runFromOf,
   savedSteps,
 } from "@eta/client-contracts";
-import { computed, effect, signal, View } from "nsh";
+import { pasteBlocksOf } from "@eta/client-contracts/composer-draft";
+import { mentionLabel } from "@eta/client-contracts/composer-target";
+import { effect, signal, View } from "nsh";
 import { Popover } from "nsh/base";
 import {
   Button,
@@ -25,27 +27,19 @@ import {
   focusRing,
   Icon,
   Label,
-  Markdown,
   row,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
-import { Lightbox } from "../../components/picture-viewer";
+import { ShownText } from "../../components/eta-editor";
 import { uiText } from "../../i18n";
 import { clock, follow, useHost } from "../../services/host";
-import {
-  fileSize,
-  isPicture,
-  useAttachmentPictures,
-} from "../../services/pictures";
 import { subtasksOf, TaskSummary } from "../tasks/status";
 import { Proposal, Question } from "./approvals";
 import { ArtifactRow } from "./artifacts/row";
-import { AttachmentImage } from "./attachment-image";
 import { CaptainReview, reviewItemsOf } from "./captain-review";
 import { cardOpen, setCardOpen } from "./card-folds";
 import { activeReply } from "./member-status";
 import { messageTime } from "./message-time";
-import { PictureChip } from "./picture-chip";
 import { ProcessStep, ProcessWindow } from "./process-step";
 import { MemberRun } from "./run/member-run";
 import { RunPanel } from "./run/run-panel";
@@ -88,9 +82,11 @@ export function Message(props: {
   /** The reader selected part of the reply's text (`""`: nothing); `reply` is
    * the view around that text. */
   onSelectionChange?: (
-    event: TextViewSelectionEvent,
+    event: ShownSelection,
     reply: ViewRef | undefined,
   ) => void;
+  /** A mention's press: the member it names, by agent id. */
+  onMember?: (agentId: string) => void;
   onTask: (id: string) => void;
   onPending?: () => void;
   onReadDraft: (item: MessageView) => void;
@@ -152,6 +148,23 @@ export function Message(props: {
     Array.isArray(item().data.attachments)
       ? (item().data.attachments as AttachmentView[])
       : [];
+  /** The members as a message's text names them (`@label`), for its mentions. */
+  const mentionRefs = () => {
+    const named = props.members.map((member) => ({
+      id: member.agentId,
+      name: host.agent(member.agentId)?.name ?? member.agentId,
+    }));
+    return named.map((member) => ({
+      id: member.id,
+      label: mentionLabel(member, named),
+    }));
+  };
+  /** A sent message's text as kept: its folded pastes and mentions with it. */
+  const stored = (message: MessageView) => ({
+    text: message.text,
+    blocks: pasteBlocksOf(message.data, message.text),
+    mentions: mentionRefs(),
+  });
   const stamp = () => messageTime(item().createdAt, props.phone);
   const artifacts = () =>
     publishedRefs(active() ? [] : steps()).flatMap((ref) => {
@@ -234,7 +247,6 @@ export function Message(props: {
       <If when={item().author === "user"}>
         <View style={{ alignItems: "flex-end", gap: props.phone ? 4 : 6 }}>
           <View
-            selectable
             style={{
               maxWidth: props.phone ? "84%" : "72%",
               borderWidth: 1,
@@ -244,7 +256,12 @@ export function Message(props: {
               paddingHorizontal: 12,
             }}
           >
-            <Label>{item().text}</Label>
+            <ShownText
+              text={stored(item())}
+              files={attached()}
+              label={uiText("yourMessage")}
+              onMember={props.onMember}
+            />
             <Each of={props.additions} key={(addition) => addition.id}>
               {(addition) => (
                 <View
@@ -259,23 +276,13 @@ export function Message(props: {
                   <Label variant="caption" tone="muted">
                     {uiText("inserted", { clock: clock(addition().createdAt) })}
                   </Label>
-                  <Label>{addition().text}</Label>
+                  <ShownText
+                    text={stored(addition())}
+                    label={uiText("insertedMessage")}
+                    onMember={props.onMember}
+                  />
                 </View>
               )}
-            </Each>
-            <Each of={attached()} key={(file) => file.id}>
-              {(file) =>
-                file().contentType?.startsWith("image/") ? (
-                  <AttachmentImage
-                    conversationId={item().conversationId}
-                    file={file()}
-                  />
-                ) : (
-                  <Label>
-                    {`[${file().name} · ${(file().size / 1024).toFixed(1)} KB]`}
-                  </Label>
-                )
-              }
             </Each>
           </View>
           <View style={{ ...row, gap: 8 }}>
@@ -470,7 +477,11 @@ export function Message(props: {
                   borderColor: c().border,
                 }}
               >
-                <Markdown value={draftDescription()} />
+                <ShownText
+                  text={{ text: draftDescription(), mentions: mentionRefs() }}
+                  label={uiText("taskDraft")}
+                  onMember={props.onMember}
+                />
               </View>
             </If>
           </View>
@@ -649,8 +660,12 @@ export function Message(props: {
                   }}
                   style={{ paddingHorizontal: 2 }}
                 >
-                  <Markdown
-                    value={text()}
+                  <ShownText
+                    text={{ text: text(), mentions: mentionRefs() }}
+                    label={uiText("replyOf", {
+                      name: host.agent(item().agentId)?.name ?? uiText("agent"),
+                    })}
+                    onMember={props.onMember}
                     onSelectionChange={(event) =>
                       props.onSelectionChange?.(event, reply)
                     }
@@ -721,45 +736,5 @@ export function Message(props: {
         </RunPanel>
       </If>
     </View>
-  );
-}
-
-/**
- * A sent message's attachments, one "[name · size]" line each. A picture's line shows the picture
- * on hover and opens it over the window; the lightbox walks through the message's pictures.
- */
-function MessageAttachments(props: { files: () => AttachmentView[] }) {
-  const pictureOf = useAttachmentPictures();
-  const open = signal<number>();
-  const pictures = computed(() =>
-    props.files().filter(isPicture).map(pictureOf),
-  );
-  return (
-    <>
-      <Each of={props.files()} key={(file) => file.id}>
-        {(file) => (
-          <If
-            when={isPicture(file())}
-            else={
-              <Label>{`[${file().name} · ${fileSize(file().size)}]`}</Label>
-            }
-          >
-            <PictureChip
-              picture={pictureOf(file())}
-              name={file().name}
-              size={fileSize(file().size)}
-              text={`[${file().name} · ${fileSize(file().size)}]`}
-              style={{ alignSelf: "flex-start", maxWidth: "100%" }}
-              onOpen={() =>
-                open.set(
-                  pictures().findIndex((picture) => picture.key === file().id),
-                )
-              }
-            />
-          </If>
-        )}
-      </Each>
-      <Lightbox pictures={pictures} index={open} onIndex={open.set} />
-    </>
   );
 }

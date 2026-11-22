@@ -1,5 +1,5 @@
 import type { UploadState } from "@eta/client-contracts/composer-doc";
-import type { Signal } from "nsh";
+import type { JSX, Signal } from "nsh";
 import type { RichNodeViewProps } from "nsh/base";
 import type { EtaEditorHandle, EtaPlugin } from "../editor";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "@eta/client-contracts";
@@ -106,6 +106,48 @@ function FileView(input: {
   );
 }
 
+/** The file block (a file or a picture a message carries), drawn by `view`. */
+export function fileNode(view: (props: RichNodeViewProps) => JSX.Element) {
+  return defineExtension({
+    name: DOC_NODES.file,
+    node: {
+      group: "inline",
+      inline: true,
+      atom: true,
+      selectable: true,
+      attrs: {
+        id: { default: "" },
+        name: { default: "" },
+        contentType: { default: "" },
+        size: { default: 0 },
+      },
+      renderText: "[{name}]",
+      parseDOM: [
+        {
+          tag: "span[data-eta=file]",
+          getAttrs: {
+            id: "data-id",
+            name: "data-name",
+            contentType: "data-type",
+            size: "data-size",
+          },
+        },
+      ],
+      toDOM: [
+        "span",
+        {
+          "data-eta": "file",
+          "data-id": { attr: "id" },
+          "data-name": { attr: "name" },
+          "data-type": { attr: "contentType" },
+          "data-size": { attr: "size" },
+        },
+      ],
+    },
+    addNodeView: () => view,
+  });
+}
+
 /** How many attachment blocks the document holds. */
 function attachmentCount(editor: EtaEditorHandle) {
   return docToDraft(editor.doc()).draft.filter((part) => part.type === "file")
@@ -166,46 +208,9 @@ export function attachment(options: {
   return {
     name: "attachment",
     extensions: [
-      defineExtension({
-        name: DOC_NODES.file,
-        node: {
-          group: "inline",
-          inline: true,
-          atom: true,
-          selectable: true,
-          attrs: {
-            id: { default: "" },
-            name: { default: "" },
-            contentType: { default: "" },
-            size: { default: 0 },
-          },
-          renderText: "[{name}]",
-          parseDOM: [
-            {
-              tag: "span[data-eta=file]",
-              getAttrs: {
-                id: "data-id",
-                name: "data-name",
-                contentType: "data-type",
-                size: "data-size",
-              },
-            },
-          ],
-          toDOM: [
-            "span",
-            {
-              "data-eta": "file",
-              "data-id": { attr: "id" },
-              "data-name": { attr: "name" },
-              "data-type": { attr: "contentType" },
-              "data-size": { attr: "size" },
-            },
-          ],
-        },
-        addNodeView: () => (props: RichNodeViewProps) => (
-          <FileView view={props} uploads={uploads} onOpen={open.set} />
-        ),
-      }),
+      fileNode((props) => (
+        <FileView view={props} uploads={uploads} onOpen={open.set} />
+      )),
     ],
     files: insert,
     setup(editor) {

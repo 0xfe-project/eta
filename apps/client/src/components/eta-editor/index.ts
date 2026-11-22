@@ -10,4 +10,6 @@ export { plainText } from "./plugins/plain-text";
 export { quote } from "./plugins/quote";
 export { serialize } from "./plugins/serialize";
 export { submitKeys } from "./plugins/submit-keys";
+export type { ShownSelection } from "./shown-text";
+export { ShownText, useAgentMentions } from "./shown-text";
 export { chatText } from "./systems";

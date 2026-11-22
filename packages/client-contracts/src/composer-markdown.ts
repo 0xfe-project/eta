@@ -395,6 +395,13 @@ export interface MentionRef {
   label: string;
 }
 
+/** How a document is read back. */
+export interface RestoreOptions {
+  /** Images as picture blocks (`DOC_NODES.picture`), for text that is only shown; else their
+   * names, as an editor has no pictures in its text. */
+  pictures?: boolean;
+}
+
 /** What `markdownSource` stood in for: put back by `restoreDoc`. */
 export type Stand = DocNode;
 
@@ -535,7 +542,11 @@ const SUPPORTED_BLOCKS = new Set<string>([
 ]);
 
 /** Inline content back: stand-ins as their blocks (text where only text goes), marks kept. */
-function restoreInline(nodes: DocNode[], stands: readonly Stand[]): DocNode[] {
+function restoreInline(
+  nodes: DocNode[],
+  stands: readonly Stand[],
+  options: RestoreOptions = {},
+): DocNode[] {
   return nodes.flatMap((node) => {
     const marks = (node as MarkedNode).marks?.filter((mark) =>
       (MARK_ORDER as readonly string[]).includes(mark.type),
@@ -565,6 +576,17 @@ function restoreInline(nodes: DocNode[], stands: readonly Stand[]): DocNode[] {
     }
     if (node.type === RICH_NODES.hardBreak)
       return [{ type: RICH_NODES.hardBreak }];
+    // An image, where the text is only shown: a picture block, its source and its name.
+    if (node.type === "image" && options.pictures && node.attrs?.src)
+      return [
+        {
+          type: DOC_NODES.picture,
+          attrs: {
+            src: String(node.attrs.src),
+            alt: String(node.attrs.alt ?? ""),
+          },
+        },
+      ];
     // An image or anything else inline the editor does not have: its text.
     const alt = String(node.attrs?.alt ?? node.attrs?.src ?? textOf(node));
     return alt ? [{ type: DOC_NODES.text, text: alt }] : [];
@@ -615,20 +637,25 @@ const paragraphOf = (content: DocNode[]): DocNode =>
     ? { type: DOC_NODES.paragraph, content }
     : { type: DOC_NODES.paragraph };
 
-function restoreBlocks(nodes: DocNode[], stands: readonly Stand[]): DocNode[] {
+function restoreBlocks(
+  nodes: DocNode[],
+  stands: readonly Stand[],
+  options: RestoreOptions,
+): DocNode[] {
   return nodes.flatMap((node): DocNode[] => {
     const attrs = cleanAttrs(node);
     switch (node.type) {
       case DOC_NODES.paragraph:
-        return splitLines(restoreInline(node.content ?? [], stands)).map(
-          paragraphOf,
-        );
+        return splitLines(
+          restoreInline(node.content ?? [], stands, options),
+        ).map(paragraphOf);
       case RICH_NODES.heading: {
         const level = Math.min(MAX_HEADING, Number(attrs?.level ?? 1));
-        const content = restoreInline(node.content ?? [], stands).map((n) =>
-          n.type === RICH_NODES.hardBreak
-            ? { type: DOC_NODES.text, text: " " }
-            : n,
+        const content = restoreInline(node.content ?? [], stands, options).map(
+          (n) =>
+            n.type === RICH_NODES.hardBreak
+              ? { type: DOC_NODES.text, text: " " }
+              : n,
         );
         return [
           content.length
@@ -670,7 +697,7 @@ function restoreBlocks(nodes: DocNode[], stands: readonly Stand[]): DocNode[] {
                 )
             : [];
         }
-        let content = restoreBlocks(node.content ?? [], stands);
+        let content = restoreBlocks(node.content ?? [], stands, options);
         if (
           (node.type === RICH_NODES.listItem ||
             node.type === RICH_NODES.taskItem ||
@@ -695,8 +722,12 @@ function restoreBlocks(nodes: DocNode[], stands: readonly Stand[]): DocNode[] {
  * each line of a paragraph a paragraph of its own (a message's lines are lines), headings no
  * deeper than `MAX_HEADING`, and what the editor does not have (images, tables) as text.
  */
-export function restoreDoc(parsed: DocNode, stands: readonly Stand[]): DocNode {
-  const content = restoreBlocks(parsed.content ?? [], stands);
+export function restoreDoc(
+  parsed: DocNode,
+  stands: readonly Stand[],
+  options: RestoreOptions = {},
+): DocNode {
+  const content = restoreBlocks(parsed.content ?? [], stands, options);
   return {
     type: DOC_NODES.doc,
     content: content.length ? content : [{ type: DOC_NODES.paragraph }],

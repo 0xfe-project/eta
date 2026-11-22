@@ -6,6 +6,7 @@ import type {
 import type { JSX, TextStyle, ViewStyle } from "nsh";
 import type {
   RichEditorFile,
+  RichEditorSelection,
   RichEditorSession,
   RichEditorStyles,
   RichExtension,
@@ -295,6 +296,10 @@ export function EtaEditor(props: {
   /** The text's padding inside the box. */
   padding?: { top: number; bottom: number; left: number; right: number };
   variant?: "body" | "small";
+  /** Keeps the keyboard focus when it takes it (default: yes). Text only shown on a touch screen
+   * does not: a read-only editor there would still bring up the keyboard. */
+  focusable?: boolean;
+  onSelectionChange?: (selection: RichEditorSelection) => void;
   style?: ViewStyle;
 }) {
   const c = colors();
@@ -347,8 +352,17 @@ export function EtaEditor(props: {
           accessibilityLabel={props.label}
           placeholder={props.placeholder}
           editable={props.editable ?? true}
+          onSelectionChange={
+            props.onSelectionChange
+              ? ({ selection }) => props.onSelectionChange?.(selection)
+              : undefined
+          }
           autoFocus={props.autoFocus}
-          onFocus={() => editor.view.focused(true)}
+          onFocus={() => {
+            // Not a stop of the focus: given back at once, so no keyboard comes up.
+            if (props.focusable === false) editor.session.blur();
+            else editor.view.focused(true);
+          }}
           onBlur={() => editor.view.focused(false)}
           onCompositionChange={({ composing }) =>
             editor.view.composing(composing)

@@ -42,10 +42,41 @@ const PREFIXES = [
 ];
 const KEYS = ["ArrowUp", "ArrowDown", "Enter", "Tab"];
 
-function MentionView(props: RichNodeViewProps) {
+function MentionView(props: RichNodeViewProps, onOpen?: (id: string) => void) {
   const c = colors();
   const fonts = Fonts();
   const type = textFaces();
+  const label = () => String(props.node.attrs.label);
+  // Shown, a mention opens its member.
+  const open = onOpen && !props.editor.isEditable ? onOpen : undefined;
+  if (open)
+    return (
+      <View
+        role="button"
+        accessibilityLabel={uiText("openMember", { name: label() })}
+        onPress={() => open(String(props.node.attrs.id))}
+        hoverStyle={{ borderColor: c().blue }}
+        style={{
+          ...row,
+          paddingHorizontal: 2,
+          borderWidth: 1,
+          borderColor: c().blueFill,
+          backgroundColor: c().blueFill,
+          cursor: "pointer",
+        }}
+      >
+        <Text
+          style={{
+            fontFamily: fontFamily(fonts().interface),
+            fontSize: type("body").size,
+            lineHeight: type("body").line,
+            color: c().blue,
+          }}
+        >
+          {`@${label()}`}
+        </Text>
+      </View>
+    );
   return (
     <Text
       accessibilityLabel={uiText("mention", {
@@ -64,6 +95,39 @@ function MentionView(props: RichNodeViewProps) {
       {`@${String(props.node.attrs.label)}`}
     </Text>
   );
+}
+
+/**
+ * The mention block: `@label` in blue on its fill. Where the text is only shown, a press opens the
+ * member (`onOpen`, by id).
+ */
+export function mentionNode(onOpen?: (id: string) => void) {
+  return defineExtension({
+    name: DOC_NODES.mention,
+    node: {
+      group: "inline",
+      inline: true,
+      atom: true,
+      selectable: false,
+      attrs: { id: { default: "" }, label: { default: "" } },
+      renderText: "@{label}",
+      parseDOM: [
+        {
+          tag: "span[data-eta=mention]",
+          getAttrs: { id: "data-id", label: "data-label" },
+        },
+      ],
+      toDOM: [
+        "span",
+        {
+          "data-eta": "mention",
+          "data-id": { attr: "id" },
+          "data-label": { attr: "label" },
+        },
+      ],
+    },
+    addNodeView: () => (props: RichNodeViewProps) => MentionView(props, onOpen),
+  });
 }
 
 /**
@@ -152,32 +216,7 @@ export function mention(options: {
   return {
     name: "mention",
     extensions: [
-      defineExtension({
-        name: DOC_NODES.mention,
-        node: {
-          group: "inline",
-          inline: true,
-          atom: true,
-          selectable: false,
-          attrs: { id: { default: "" }, label: { default: "" } },
-          renderText: "@{label}",
-          parseDOM: [
-            {
-              tag: "span[data-eta=mention]",
-              getAttrs: { id: "data-id", label: "data-label" },
-            },
-          ],
-          toDOM: [
-            "span",
-            {
-              "data-eta": "mention",
-              "data-id": { attr: "id" },
-              "data-label": { attr: "label" },
-            },
-          ],
-        },
-        addNodeView: () => MentionView,
-      }),
+      mentionNode(),
       defineExtension({
         name: "mentionSuggestion",
         // Before the send key, so ⏎ picks while the list is open.

@@ -22,7 +22,7 @@ function unfold(props: RichNodeViewProps) {
       ),
     ),
   );
-  props.editor.focus();
+  if (props.editor.isEditable) props.editor.focus();
 }
 
 function PasteView(props: RichNodeViewProps) {
@@ -36,7 +36,7 @@ function PasteView(props: RichNodeViewProps) {
       accessibilityLabel={uiText("unfoldPaste", { count: lines() })}
       onPress={() => unfold(props)}
       removeLabel={uiText("removePaste")}
-      onRemove={() => props.deleteNode()}
+      onRemove={props.editor.isEditable ? () => props.deleteNode() : undefined}
     />
   );
 }
