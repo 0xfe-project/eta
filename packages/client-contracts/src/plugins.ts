@@ -171,7 +171,12 @@ export interface PluginArgs {
   remove: { name: string };
   /** Read the plugins again and look at the machines for the commands they require. */
   recheck: Record<string, never>;
+  /** A plugin's logo as the host finds it: its own address, else the icon of its homepage. */
+  logo: { own?: string | null; homepage?: string | null };
 }
+
+/** A logo the host found: the picture, base64, and its type; null when there is none. */
+export type PluginLogoResult = { type: string; data: string } | null;
 export interface PluginResults {
   /** `issues` is what still keeps it from being enabled. */
   configure: { name: string; state: PluginState; issues: FieldIssue[] };

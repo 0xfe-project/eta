@@ -9,6 +9,7 @@ import type { AgentStore } from "../agents/store";
 import type { Market } from "./market";
 import type { Plugins } from "./service";
 import { Args, productPlugin, publish } from "../wire";
+import { Logos } from "./logo";
 
 const LEVELS = ["none", "read", "file", "value"] as const;
 const AUDIT_SHOWN = 200;
@@ -18,6 +19,7 @@ export function pluginsPlugin(
   applied: () => void,
 ) {
   const { plugins, agents, market } = deps;
+  const logos = new Logos();
   return productPlugin(
     "plugins",
     ({ wire }) => {
@@ -163,6 +165,15 @@ export function pluginsPlugin(
             args.string("sha"),
           );
           return { result: { name } };
+        }),
+        wire.handle("plugins", "logo", async (call) => {
+          const args = new Args(call);
+          return {
+            result: await logos.find(
+              args.optionalString("own") ?? null,
+              args.optionalString("homepage") ?? null,
+            ),
+          };
         }),
         wire.handle("plugins", "recheck", async () => {
           await plugins.registry.refresh();

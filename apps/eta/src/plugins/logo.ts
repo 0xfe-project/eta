@@ -1,0 +1,219 @@
+/**
+ * Plugin logos for the market: the host fetches them, so the client never contacts a catalog's
+ * servers and a page cannot make the client's network reach anything. The address is untrusted:
+ * only http(s); the host name is resolved here and every address must be public; the connection
+ * goes to that very address (so a later DNS answer cannot move it); a redirect is checked again;
+ * the answer is capped in size and must be a picture by its first bytes. No third-party icon
+ * service is asked. A homepage on github.com or gitlab.com is not asked either: its icon is the
+ * site's, not the plugin's. A result, and a miss, is kept in memory for a day.
+ */
+import type { LookupAddress } from "node:dns";
+import type { IncomingMessage } from "node:http";
+import { lookup } from "node:dns/promises";
+import http from "node:http";
+import https from "node:https";
+import { isIP } from "node:net";
+import { viaProxy } from "./git";
+
+export interface Logo {
+  type: string;
+  /** The picture, base64. */
+  data: string;
+}
+
+const MAX_PAGE = 256 * 1024;
+const MAX_PICTURE = 256 * 1024;
+const TIMEOUT_MS = 5000;
+const MAX_REDIRECTS = 3;
+const KEEP_MS = 24 * 60 * 60 * 1000;
+const SKIPPED = new Set(["github.com", "www.github.com", "gitlab.com", "www.gitlab.com"]);
+
+/** Whether an address is one this host must not call: private, loopback, link-local, reserved. */
+export function isPrivateAddress(address: string): boolean {
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address);
+  if (mapped) return isPrivateAddress(mapped[1]!);
+  if (isIP(address) === 4) {
+    const [a, b] = address.split(".").map(Number) as [number, number];
+    return (
+      a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 192 && b === 0) ||
+      (a === 198 && (b === 18 || b === 19))
+    );
+  }
+  const low = address.toLowerCase();
+  return (
+    low === "::" || low === "::1" ||
+    low.startsWith("fc") || low.startsWith("fd") ||
+    /^fe[89ab]/.test(low) || low.startsWith("ff") || low.startsWith("2001:db8")
+  );
+}
+
+/** The picture type from its first bytes; SVG is not accepted (it can carry script). */
+export function pictureType(bytes: Uint8Array): string | null {
+  const is = (...head: number[]) => head.every((byte, i) => bytes[i] === byte);
+  if (is(0x89, 0x50, 0x4e, 0x47)) return "image/png";
+  if (is(0xff, 0xd8, 0xff)) return "image/jpeg";
+  if (is(0x47, 0x49, 0x46, 0x38)) return "image/gif";
+  if (is(0x00, 0x00, 0x01, 0x00)) return "image/x-icon";
+  if (is(0x52, 0x49, 0x46, 0x46) && bytes[8] === 0x57 && bytes[9] === 0x45) return "image/webp";
+  return null;
+}
+
+export interface LogoOptions {
+  /** Tests only: allow private addresses, so a local fake server can answer. */
+  allowPrivate?: boolean;
+  /** Tests only: the name resolver. */
+  resolve?: (host: string) => Promise<string[]>;
+  timeoutMs?: number;
+  now?: () => number;
+}
+
+class Refused extends Error {}
+
+export class Logos {
+  readonly #options: LogoOptions;
+  readonly #kept = new Map<string, { at: number; logo: Logo | null }>();
+  /** Requests made, for tests. */
+  requests = 0;
+
+  constructor(options: LogoOptions = {}) {
+    this.#options = options;
+  }
+
+  /** The first picture found among the plugin's own logo, then its homepage's icon; null when none. */
+  async find(own: string | null, homepage: string | null): Promise<Logo | null> {
+    const key = (own ?? "") + "\n" + (homepage ?? "");
+    const now = (this.#options.now ?? Date.now)();
+    const hit = this.#kept.get(key);
+    if (hit && now - hit.at < KEEP_MS) return hit.logo;
+    let logo: Logo | null = null;
+    try {
+      if (own) logo = await this.#picture(own);
+      if (!logo && homepage) logo = await this.#fromHomepage(homepage);
+    } catch {
+      logo = null;
+    }
+    this.#kept.set(key, { at: now, logo });
+    return logo;
+  }
+
+  async #fromHomepage(homepage: string): Promise<Logo | null> {
+    const page = this.#address(homepage);
+    if (SKIPPED.has(page.hostname.toLowerCase())) return null;
+    const html = await this.#get(page, MAX_PAGE).catch(() => null);
+    const candidates: string[] = [];
+    if (html) {
+      const text = new TextDecoder().decode(html.body);
+      for (const tag of text.match(/<link\b[^>]*>/gi) ?? []) {
+        const rel = /\brel\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1]?.toLowerCase() ?? "";
+        const href = /\bhref\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1];
+        if (href && /(^|\s)(icon|shortcut icon|apple-touch-icon)(\s|$)/.test(rel)) {
+          try {
+            candidates.push(new URL(href, html.url).href);
+          } catch {
+            // Not an address.
+          }
+        }
+      }
+    }
+    candidates.push(new URL("/favicon.ico", page).href);
+    for (const candidate of candidates.slice(0, 4)) {
+      const logo = await this.#picture(candidate).catch(() => null);
+      if (logo) return logo;
+    }
+    return null;
+  }
+
+  async #picture(address: string): Promise<Logo | null> {
+    const got = await this.#get(this.#address(address), MAX_PICTURE);
+    const type = pictureType(got.body);
+    return type ? { type, data: Buffer.from(got.body).toString("base64") } : null;
+  }
+
+  #address(value: string): URL {
+    const url = new URL(value);
+    if (url.protocol !== "https:" && url.protocol !== "http:")
+      throw new Refused("not an http(s) address");
+    if (url.username || url.password) throw new Refused("an address with credentials");
+    return url;
+  }
+
+  /** One GET with the redirects followed by hand, each hop checked; the body is capped. */
+  async #get(start: URL, cap: number): Promise<{ url: string; body: Uint8Array }> {
+    let url = start;
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      const response = await this.#once(url, cap);
+      const status = response.status;
+      if (status >= 300 && status < 400 && response.location) {
+        // The GitHub proxy is for GitHub hosts only; viaProxy leaves any other address alone.
+        url = this.#address(viaProxy(new URL(response.location, url).href));
+        continue;
+      }
+      if (status !== 200) throw new Error("HTTP " + status);
+      return { url: url.href, body: response.body };
+    }
+    throw new Refused("too many redirects");
+  }
+
+  async #once(
+    url: URL,
+    cap: number,
+  ): Promise<{ status: number; location: string | null; body: Uint8Array }> {
+    const host = url.hostname.replace(/^\[|\]$/g, "");
+    const found: string[] =
+      isIP(host) !== 0
+        ? [host]
+        : this.#options.resolve
+          ? await this.#options.resolve(host)
+          : (await lookup(host, { all: true })).map((one: LookupAddress) => one.address);
+    const usable = this.#options.allowPrivate ? found : found.filter((one) => !isPrivateAddress(one));
+    // One private answer is enough to refuse: a name must not be half inside the network.
+    if (!usable.length || usable.length !== found.length)
+      throw new Refused("the address is not a public one");
+    const pinned = usable[0]!;
+    const secure = url.protocol === "https:";
+    const timeoutMs = this.#options.timeoutMs ?? TIMEOUT_MS;
+    this.requests++;
+    return await new Promise((resolve, reject) => {
+      const request = (secure ? https : http).request(
+        {
+          host: pinned,
+          port: url.port || (secure ? 443 : 80),
+          path: url.pathname + url.search,
+          method: "GET",
+          servername: secure && isIP(host) === 0 ? host : undefined,
+          headers: { host: url.host, accept: "image/*,text/html;q=0.8", "user-agent": "eta-logo" },
+          timeout: timeoutMs,
+        },
+        (response: IncomingMessage) => {
+          const chunks: Buffer[] = [];
+          let size = 0;
+          const location = response.headers.location ?? null;
+          response.on("data", (chunk: Buffer) => {
+            size += chunk.length;
+            if (size > cap) {
+              reject(new Refused("too large"));
+              response.destroy();
+              request.destroy();
+              return;
+            }
+            chunks.push(chunk);
+          });
+          response.on("end", () =>
+            resolve({ status: response.statusCode ?? 0, location, body: Buffer.concat(chunks) }),
+          );
+          response.on("error", () => undefined);
+        },
+      );
+      const stop = setTimeout(() => request.destroy(new Error("no answer")), timeoutMs);
+      request.on("timeout", () => request.destroy(new Error("no answer")));
+      request.on("error", (error) => reject(error));
+      request.on("close", () => clearTimeout(stop));
+      request.end();
+    });
+  }
+}
