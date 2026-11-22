@@ -6,7 +6,7 @@ import type {
   ProvidersView,
 } from "@eta/client-contracts";
 import { providerLabel } from "@eta/client-contracts";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   Button,
   colors,
@@ -16,6 +16,7 @@ import {
   Label,
   Modal,
   row,
+  SmoothScroll,
   textFaces,
   textStyle,
 } from "../../../components";
@@ -298,7 +299,7 @@ export function ProviderDetail(props: {
         when={tab() === "models"}
         else={
           <>
-            <Scroll style={grow} scrollbar={false}>
+            <SmoothScroll style={grow} scrollbar={false}>
               <View style={preference}>
                 <Label style={{ flex: 1, minWidth: 0 }}>{uiText("name")}</Label>
                 <Field
@@ -380,7 +381,7 @@ export function ProviderDetail(props: {
                 </View>
               </If>
               <If when={props.phone}>{removeRow()}</If>
-            </Scroll>
+            </SmoothScroll>
             <If when={!props.phone}>{removeRow()}</If>
           </>
         }
@@ -438,7 +439,7 @@ export function ProviderDetail(props: {
             onPress={() => void refresh()}
           />
         </View>
-        <Scroll style={grow} scrollbar={false}>
+        <SmoothScroll style={grow} scrollbar={false}>
           <Each of={shown()} key={(model) => model.id}>
             {(model) => (
               <View
@@ -485,7 +486,7 @@ export function ProviderDetail(props: {
                 : uiText("refreshTheListToFindModels")}
             </Label>
           </If>
-        </Scroll>
+        </SmoothScroll>
       </If>
       <If when={connection() && provider()}>
         <ProviderEditor

@@ -1,6 +1,6 @@
 import type { ProvidersView } from "@eta/client-contracts";
 import type { Persona } from "./persona-step";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   Button,
   colors,
@@ -10,6 +10,7 @@ import {
   Label,
   Modal,
   row,
+  SmoothScroll,
 } from "../../components";
 import { useModels } from "../../components/model-select";
 import { StatusDot } from "../../components/status-dot";
@@ -193,7 +194,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
             </View>
           </View>
         </If>
-        <Scroll
+        <SmoothScroll
           style={props.phone ? grow : { flexShrink: 1, minHeight: 0 }}
           scrollbar={false}
         >
@@ -347,7 +348,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
               </Label>
             </View>
           </If>
-        </Scroll>
+        </SmoothScroll>
         <If when={step() === 2 && error()}>
           <View
             style={{

@@ -98,6 +98,23 @@ export default antfu(
     },
   },
   {
+    // A vertical scroll area is a SmoothScroll: it glides on the mouse wheel on
+    // Windows and is a plain Scroll elsewhere. Only a horizontal one stays a Scroll.
+    files: ["apps/client/src/**/*.tsx"],
+    ignores: ["apps/client/src/components/smooth-scroll.tsx"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "JSXOpeningElement[name.name='Scroll']:not(:has(JSXAttribute[name.name='horizontal']))",
+          message:
+            "Use SmoothScroll from components for a vertical scroll area; only a horizontal Scroll stays a Scroll.",
+        },
+      ],
+    },
+  },
+  {
     // The web tests name their cases in sentences that start with product names (Captain,
     // Markdown, Windows); lowercasing them reads wrong. They came from rstest, which this rule did
     // not see.

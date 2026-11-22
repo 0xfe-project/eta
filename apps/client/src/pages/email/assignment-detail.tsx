@@ -6,8 +6,16 @@ import type {
   ViewCore,
 } from "@eta/client-contracts";
 import { runBlocks, splitReply } from "@eta/client-contracts";
-import { Scroll, signal, View } from "nsh";
-import { Button, colors, Icon, Label, Modal, row } from "../../components";
+import { signal, View } from "nsh";
+import {
+  Button,
+  colors,
+  Icon,
+  Label,
+  Modal,
+  row,
+  SmoothScroll,
+} from "../../components";
 import { formatLocale, uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { EmailProposal } from "./proposal";
@@ -34,7 +42,7 @@ export function AssignmentDetail(props: {
       height={props.phone ? undefined : "100%"}
       onClose={props.onClose}
     >
-      <Scroll style={{ flexShrink: 1 }}>
+      <SmoothScroll style={{ flexShrink: 1 }}>
         <View
           style={{
             paddingHorizontal: 16,
@@ -78,7 +86,7 @@ export function AssignmentDetail(props: {
             value={props.message?.rfcMessageId ?? props.rootMessageId}
           />
         </View>
-      </Scroll>
+      </SmoothScroll>
       <View
         style={{
           paddingHorizontal: 16,

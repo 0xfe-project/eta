@@ -31,7 +31,6 @@ import {
   effect,
   keyboardFrame,
   keymap,
-  Scroll,
   signal,
   untracked,
   View,
@@ -46,6 +45,7 @@ import {
   Icon,
   Label,
   row,
+  SmoothScroll,
   textFaces,
 } from "../../components";
 
@@ -514,7 +514,7 @@ export function Composer(props: {
               text={uiText(menu()?.kind === "hash" ? "tasks" : "mentions")}
               style={{ paddingHorizontal: 10, paddingTop: 6, paddingBottom: 4 }}
             />
-            <Scroll
+            <SmoothScroll
               ref={(ref) => {
                 scroll = ref;
               }}
@@ -570,7 +570,7 @@ export function Composer(props: {
                   </View>
                 )}
               </Each>
-            </Scroll>
+            </SmoothScroll>
           </View>
         </If>
         <If when={prefix().length}>

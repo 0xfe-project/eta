@@ -7,7 +7,7 @@ import type {
 } from "@eta/client-contracts";
 import type { JSX } from "nsh";
 import { draftStatus } from "@eta/client-contracts";
-import { Scroll, signal, View, windowSize } from "nsh";
+import { signal, View, windowSize } from "nsh";
 import {
   Button,
   Caption,
@@ -17,6 +17,7 @@ import {
   Label,
   Modal,
   row,
+  SmoothScroll,
   textFaces,
   textStyle,
 } from "../../components";
@@ -159,7 +160,7 @@ export function TaskDraftDetail(props: {
           <Label tone="amber">{uiText("connectionLostReconnecting")}</Label>
         </View>
       </If>
-      <Scroll
+      <SmoothScroll
         ref={(node) => queueMicrotask(() => node.focus())}
         role="region"
         focusable
@@ -262,7 +263,7 @@ export function TaskDraftDetail(props: {
             </If>
           </If>
         </View>
-      </Scroll>
+      </SmoothScroll>
       <View
         style={{
           ...row,

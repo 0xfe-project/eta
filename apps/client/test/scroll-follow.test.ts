@@ -3,8 +3,9 @@ import {
   animateFollow,
   wheelDistance,
   wheelIsNotch,
+  wheelScroll,
   wheelTarget,
-} from "../src/pages/chat/scroll-follow";
+} from "../src/components/scroll-follow";
 
 test("reduced motion turns the animation off", () => {
   expect(animateFollow(false)).toBe(true);
@@ -46,4 +47,43 @@ test("a wheel target stays inside the content", () => {
   expect(
     wheelTarget({ ...base, max: Number.POSITIVE_INFINITY, distance: 100 }),
   ).toBe(120);
+});
+
+test("a glide area scrolls to where mouse notches add up, within its end", () => {
+  const calls: [number, boolean][] = [];
+  const glide = wheelScroll((offset, animated) =>
+    calls.push([offset, animated]),
+  );
+  glide.onScroll({
+    offset: { y: 0 },
+    contentSize: { height: 1000 },
+    size: { height: 800 },
+  });
+  const notch = { delta: { x: 0, y: 100 }, deltaMode: "points" } as never;
+  glide.onWheel(notch);
+  glide.onWheel(notch);
+  glide.onWheel(notch);
+  expect(calls).toEqual([
+    [100, true],
+    [200, true],
+    [200, true],
+  ]);
+});
+
+test("a glide area follows touchpad deltas without animating", () => {
+  const calls: [number, boolean][] = [];
+  const glide = wheelScroll((offset, animated) =>
+    calls.push([offset, animated]),
+  );
+  glide.onWheel({ delta: { x: 0, y: 7.5 }, deltaMode: "points" } as never);
+  expect(calls).toEqual([[7.5, false]]);
+});
+
+test("a glide area leaves sideways wheels alone", () => {
+  const calls: [number, boolean][] = [];
+  const glide = wheelScroll((offset, animated) =>
+    calls.push([offset, animated]),
+  );
+  glide.onWheel({ delta: { x: 100, y: 0 }, deltaMode: "points" } as never);
+  expect(calls).toEqual([]);
 });

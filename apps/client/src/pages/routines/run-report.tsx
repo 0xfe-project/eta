@@ -1,5 +1,5 @@
 import type { RoutineInfo, RunView } from "@eta/client-contracts";
-import { Scroll, View } from "nsh";
+import { View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -13,6 +13,7 @@ import {
   Markdown,
   Modal,
   row,
+  SmoothScroll,
   textFaces,
   textStyle,
 } from "../../components";
@@ -141,7 +142,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
         </ActionMenu>
       }
     >
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <View style={{ padding: 16, gap: 18 }}>
           <View style={{ gap: 8 }}>
             <View style={{ ...row, gap: 8 }}>
@@ -244,7 +245,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
             </View>
           </View>
         </View>
-      </Scroll>
+      </SmoothScroll>
       <View
         style={{
           ...row,
@@ -362,7 +363,7 @@ export function RoutineReport(props: RoutineReportProps) {
         {move(uiText("newer"), props.index > 0, -1)}
         {move(uiText("older"), props.index + 1 < props.count, 1)}
       </View>
-      <Scroll style={grow}>
+      <SmoothScroll style={grow}>
         <View
           style={{
             alignItems: "center",
@@ -522,7 +523,7 @@ export function RoutineReport(props: RoutineReportProps) {
             </View>
           </View>
         </If>
-      </Scroll>
+      </SmoothScroll>
     </View>
   );
   return (

@@ -1,7 +1,7 @@
 import type { ArtifactView } from "@eta/client-contracts";
 import type { ScrollRef, Signal, ViewRef } from "nsh";
 import type { ArtifactFilters, ArtifactSort } from "./filter";
-import { keymap, Scroll, View } from "nsh";
+import { keymap, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -14,6 +14,7 @@ import {
   Label,
   ListSkeleton,
   row,
+  SmoothScroll,
   textFaces,
   textStyle,
 } from "../../../components";
@@ -317,7 +318,7 @@ export function ArtifactBrowser(props: {
           </View>
         </If>
       </View>
-      <Scroll
+      <SmoothScroll
         ref={(node) => {
           list = node;
         }}
@@ -387,7 +388,7 @@ export function ArtifactBrowser(props: {
             )}
           </Each>
         </If>
-      </Scroll>
+      </SmoothScroll>
       <If when={shown().length}>
         <View
           role="navigation"
