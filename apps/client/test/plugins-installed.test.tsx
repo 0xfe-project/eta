@@ -111,7 +111,7 @@ test("sixty tools still list inside one scrolling region with a count header", a
 test("each installed card has exactly one avatar in its header, and no default plugin icon", async () => {
   const app = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 900 });
   // The fixture lists ten installed plugins; one avatar each, not two.
-  expect(app.count("id:plugin-avatar")).toBe(10);
+  expect(app.count("id:plugin-avatar")).toBe(11);
 });
 
 test("a card shows its login only with evidence: needs login, signed in, and nothing otherwise", async () => {
@@ -198,4 +198,32 @@ test("the Test connection button is never squeezed or wrapped, at a narrow width
   expect(app.count("id:server-head:gh >> id:test-slot:gh >> label:Test connection")).toBe(1);
   // The harness has no geometry, so the layout itself (no wrap on the title row, slots that do not
   // shrink) is only checked by reading the code; the buttons staying in the title row is checked here.
+});
+
+test("a 401 that names a header: the badge says the sign-in is saved, and both retest buttons appear", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 900 });
+  await app.press("label:header-plugin");
+  expect(app.shows("Sign-in saved; the server wants x-cursor-auth")).toBe(false);
+  await app.press("label:Test connection");
+  expect(app.shows("Sign-in saved; the server wants x-cursor-auth")).toBe(true);
+  expect(app.shows("Send sign-in token in x-cursor-auth and retest")).toBe(true);
+  expect(app.shows("Same, as Bearer <token>")).toBe(true);
+});
+
+test("pressing the retest button sets the header and tests again; the server then answers", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 900 });
+  await app.press("label:header-plugin");
+  await app.press("label:Test connection");
+  await app.press("label:Send sign-in token in x-cursor-auth and retest");
+  expect(app.shows("Connected · 12 ms")).toBe(true);
+  expect(app.shows("Send sign-in token in x-cursor-auth and retest")).toBe(false);
+  expect(app.shows("Sign-in saved; the server wants x-cursor-auth")).toBe(false);
+});
+
+test("a result that names no header has no retest button", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 900 });
+  await app.press("label:signed-plugin");
+  await app.press("label:Test connection");
+  expect(app.shows("Connected · 12 ms")).toBe(true);
+  expect(app.shows("and retest")).toBe(false);
 });

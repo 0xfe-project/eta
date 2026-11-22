@@ -32,6 +32,8 @@ const plugin = (name: string, enabled: boolean): PluginView => ({
 });
 
 (globalThis as { __calls?: unknown[] }).__calls = [];
+/** What the host would remember after setTokenHeader: the format, or null while nothing is set. */
+let tokenHeaderSet: string | null = null;
 
 function Fixture() {
   const host = createHost();
@@ -53,6 +55,8 @@ function Fixture() {
               skills: [{ name: "only-skill", description: "<b>x</b> does one thing" }],
             },
             { ...plugin("signed-plugin", true), servers: [{ ...remote, login: "signed_in" as const }] },
+            // Signed in, but the server wants a header eta cannot fill by itself (until the user sets it).
+            { ...plugin("header-plugin", true), servers: [{ ...remote, login: "signed_in" as const }] },
             { ...plugin("login-plugin", true), servers: [{ ...remote, login: "needs_login" as const }] },
             { ...plugin("expired-plugin", true), servers: [{ ...remote, login: "expired" as const }] },
             { ...plugin("setup-plugin", true), state: "needs_config" as const, servers: [remote] },
@@ -94,6 +98,17 @@ function Fixture() {
   const stub = Object.assign(host, {
     call: async (_target: string, method: string, args: unknown) => {
       (globalThis as { __calls?: unknown[] }).__calls?.push([method, args]);
+      if (method === "setTokenHeader") tokenHeaderSet = (args as { header: { format: string } | null }).header?.format ?? null;
+      if (method === "testServer" && (args as { name?: string }).name === "header-plugin" && tokenHeaderSet === null) {
+        return {
+          status: "needs_login",
+          message: "the server did not accept the stored sign-in (HTTP 401)",
+          ms: 5,
+          tools: [],
+          toolCount: 0,
+          requiredHeader: "x-cursor-auth",
+        };
+      }
       if (method === "testServer" && (args as { name?: string }).name === "github-plugin") {
         return {
           status: "needs_setup",
