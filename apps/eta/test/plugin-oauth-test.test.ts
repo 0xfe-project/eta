@@ -30,19 +30,30 @@ interface Rig {
   /** When set, every token gets this 401 challenge (a rejection that is not an expiry). */
   always: string | null;
   /** When set, every request is refused with this body and no challenge (a server wanting a header of its own). */
-  noChallenge: string | null;
+  noChallenge: string | ((carried: string) => string) | null;
   /** What each MCP request carried: whether an Authorization header, and how long. */
-  seen: { auth: boolean; length: number }[];
+  seen: { auth: boolean; length: number; headers: Record<string, number>; values: Record<string, string> }[];
 }
 
 function endpoint(auth: ReturnType<typeof createFakeAuthServer>, rig: Rig): FetchLike {
   return async (input, init) => {
     if (String(input) !== MCP_URL) return await auth.fetch(input, init);
     const bearer = new Headers(init?.headers).get("authorization");
-    rig.seen.push({ auth: bearer !== null, length: bearer?.length ?? 0 });
+    const all = new Headers(init?.headers);
+    // Names and lengths are what the assertions print; `values` is read by the tests that compare to a token.
+    rig.seen.push({
+      auth: bearer !== null,
+      length: bearer?.length ?? 0,
+      headers: Object.fromEntries([...all.entries()].map(([name, value]) => [name, value.length])),
+      values: Object.fromEntries(all.entries()),
+    });
     const token = bearer?.startsWith("Bearer access-") ? bearer.slice(7) : undefined;
     if (token === undefined) return await auth.fetch(input, init);
-    if (rig.noChallenge !== null) return new Response(rig.noChallenge, { status: 401 });
+    if (rig.noChallenge !== null)
+      return new Response(
+        typeof rig.noChallenge === "function" ? rig.noChallenge(all.get("x-cursor-auth") ?? "") : rig.noChallenge,
+        { status: 401 },
+      );
     const challenge =
       rig.always ?? (rig.dead.has(token) ? 'Bearer error="invalid_token", error_description="the access token expired"' : null);
     if (challenge !== null)
@@ -104,10 +115,10 @@ async function signedIn() {
       store,
       redirectUrl: `${ORIGIN}/mcp/oauth/callback`,
     });
-  const test = () => {
+  const test = (extra: Record<string, unknown> = {}) => {
     rig.seen.length = 0;
     return testConnection(
-      { name: "remote", url: MCP_URL, auth: "oauth", source: "plugin-test", hash: "plugin-test" } as never,
+      { name: "remote", url: MCP_URL, auth: "oauth", source: "plugin-test", hash: "plugin-test", ...extra } as never,
       [],
       5000,
       provider,
@@ -191,4 +202,72 @@ describe("the connection test right after a real sign-in", () => {
     expect(result.requiredHeader).toBeUndefined();
     expect(result.status).toBe("needs_login");
   }, 30_000);
+
+  it("sends a header the user added next to the sign-in, and the SDK keeps both", async () => {
+    const s = await signedIn();
+    const value = "manual-credential-0123456789";
+    const result = await s.test({ headers: { "x-cursor-auth": value } });
+    expect(result.status).toBe("ok");
+    const mcp = s.rig.seen.filter((one) => one.auth);
+    expect(mcp.length).toBeGreaterThan(0);
+    // Every request that carried the sign-in carried the header too, with its length (never printed).
+    for (const one of mcp) expect(one.headers["x-cursor-auth"]).toBe(value.length);
+    expect(JSON.stringify(result)).not.toContain(value);
+  }, 30_000);
+
+  describe("the sign-in token in a header the user chose", () => {
+    const NAME = "x-cursor-auth";
+    const carried = (s: Awaited<ReturnType<typeof signedIn>>) =>
+      s.rig.seen.filter((one) => one.auth).map((one) => one.values[NAME]);
+
+    it("sends the current access token as it is, on every request that carries the sign-in", async () => {
+      const s = await signedIn();
+      const token = (await s.access())!;
+      const result = await s.test({ tokenHeader: { name: NAME, format: "raw" } });
+      expect(result.status).toBe("ok");
+      const values = carried(s);
+      expect(values.length).toBeGreaterThan(0);
+      for (const value of values) expect(value).toBe(token);
+      expect(JSON.stringify(result)).not.toContain(token);
+    }, 30_000);
+
+    it("sends Bearer <token> when asked for that format", async () => {
+      const s = await signedIn();
+      const token = (await s.access())!;
+      const result = await s.test({ tokenHeader: { name: NAME, format: "bearer" } });
+      expect(result.status).toBe("ok");
+      for (const value of carried(s)) expect(value).toBe("Bearer " + token);
+    }, 30_000);
+
+    it("uses the new token after a refresh, not the one it started with", async () => {
+      const s = await signedIn();
+      const old = (await s.access())!;
+      s.rig.dead.add(old);
+      const result = await s.test({ tokenHeader: { name: NAME, format: "raw" } });
+      expect(result.status).toBe("ok");
+      expect(s.auth.tokenRequests("refresh_token")).toBe(1);
+      const fresh = (await s.access())!;
+      expect(fresh).not.toBe(old);
+      const values = carried(s);
+      expect(values).toContain(old);
+      // Once the refresh is done, every later request carries the new token in the header too.
+      expect(values.at(-1)).toBe(fresh);
+      expect(values.at(-1)).not.toBe(old);
+    }, 30_000);
+
+    it("sends nothing when no header is chosen", async () => {
+      const s = await signedIn();
+      const result = await s.test();
+      expect(result.status).toBe("ok");
+      for (const one of s.rig.seen) expect(Object.keys(one.headers)).not.toContain(NAME);
+    }, 30_000);
+
+    it("keeps the value out of what a refusal says", async () => {
+      const s = await signedIn();
+      const token = (await s.access())!;
+      s.rig.noChallenge = (carried) => "echo " + carried;
+      const result = await s.test({ tokenHeader: { name: NAME, format: "raw" } });
+      expect(JSON.stringify(result)).not.toContain(token);
+    }, 30_000);
+  });
 });

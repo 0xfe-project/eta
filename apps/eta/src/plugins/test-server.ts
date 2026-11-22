@@ -72,7 +72,7 @@ function missingHeader(text: string): string | undefined {
 }
 
 /** What a 401 said: its challenge's error, description and metadata address, and the start of its body. */
-async function rejectionOf(response: Response, sent: string | null): Promise<Rejection> {
+async function rejectionOf(response: Response, sent: readonly (string | null)[]): Promise<Rejection> {
   const challenge = response.headers.get("www-authenticate") ?? "";
   const field = (name: string) => new RegExp(name + '="?([^",]*)"?', "i").exec(challenge)?.[1];
   const parts = [
@@ -82,9 +82,11 @@ async function rejectionOf(response: Response, sent: string | null): Promise<Rej
     ),
   ];
   // A server may echo what it was sent: the token we sent never leaves here.
-  const token = sent?.replace(/^Bearer\s+/i, "") ?? "";
   let text = await response.clone().text().catch(() => "");
-  if (token.length >= 3) text = text.split(token).join("***");
+  for (const one of sent) {
+    const token = one?.replace(/^Bearer\s+/i, "") ?? "";
+    if (token.length >= 3) text = text.split(token).join("***");
+  }
   const body = text.replace(/[\u0000-\u001f]+/g, " ").trim().slice(0, 200);
   if (body !== "") parts.push("body: " + body);
   const header = missingHeader(text);
@@ -130,7 +132,10 @@ export async function testConnection(
   const recording = (async (input, init) => {
     const response = await base(input, init);
     if (response.status === 401 && definition.url !== undefined && String(input) === new URL(definition.url).href)
-      rejected = await rejectionOf(response, new Headers(init?.headers).get("authorization"));
+      rejected = await rejectionOf(response, [
+        new Headers(init?.headers).get("authorization"),
+        definition.tokenHeader === undefined ? null : new Headers(init?.headers).get(definition.tokenHeader.name),
+      ]);
     return response;
   }) as typeof fetch;
   // A server declared `oauth` is first reached without a sign-in: a 401 then says it needs one,

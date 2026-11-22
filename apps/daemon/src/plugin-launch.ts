@@ -41,6 +41,8 @@ interface ServerConfig {
   headers?: Record<string, string>;
   /** Some of `headers` were attached by the user, not by the plugin: no sign-in is offered instead. */
   userHeaders?: boolean;
+  /** The sign-in token goes in this header too (from the user's choice for this server). */
+  tokenHeader?: { name: string; format: "raw" | "bearer" };
 }
 
 /** A header the user attached to one remote server of a plugin. */
@@ -97,6 +99,7 @@ export function serversConfig(
   values: Readonly<Record<string, PluginValue | null | undefined>>,
   userHeaders: readonly UserHeaderInput[] = [],
   userEnv: readonly UserEnvInput[] = [],
+  tokenHeaders: readonly { server: string; name: string; format: "raw" | "bearer" }[] = [],
 ): ServersConfig {
   const texts: Record<string, string | undefined> = {};
   for (const field of plugin.fields as PluginField[]) {
@@ -132,6 +135,12 @@ export function serversConfig(
     headers[header.name] = header.value;
     entry.headers = headers;
     entry.userHeaders = true;
+  }
+  for (const one of tokenHeaders) {
+    const server = plugin.servers?.find((candidate) => candidate.name === one.server);
+    if (server === undefined || server.config.type === "stdio") continue;
+    const entry = (config[one.server] ??= { env: {}, headers: {} });
+    entry.tokenHeader = { name: one.name, format: one.format };
   }
   // The user's variables go on top of what the binding set, for a stdio server only.
   for (const one of userEnv) {
@@ -184,6 +193,7 @@ export type ResolvedServer = {
       auth?: false | "oauth";
       /** Some of `headers` are the user's: a 401 then means they were refused, not that a sign-in is due. */
       userHeaders?: boolean;
+      tokenHeader?: { name: string; format: "raw" | "bearer" };
     }
 );
 
@@ -342,6 +352,7 @@ export function resolvePluginServers(
         headers: { ...Object.fromEntries(fixed), ...given },
         ...(auth === undefined ? {} : { auth }),
         ...(userHeaders ? { userHeaders } : {}),
+        ...(config[server.name]?.tokenHeader === undefined ? {} : { tokenHeader: config[server.name]!.tokenHeader! }),
       });
     }
   }
@@ -403,8 +414,11 @@ function authOf(server: {
   headers: Record<string, string>;
   auth?: false | "oauth";
   userHeaders?: boolean;
+  tokenHeader?: unknown;
 }): false | "oauth" | undefined {
   if (server.auth !== undefined) return server.auth;
+  // A token header only means something with a sign-in.
+  if (server.tokenHeader !== undefined) return "oauth";
   // The user chose how to authenticate: a refusal is reported as such, with no sign-in offered.
   if (server.userHeaders === true) return undefined;
   return hasAuthorization(server.headers) ? undefined : "oauth";
@@ -441,6 +455,7 @@ export function toMcpEntries(
             ? {}
             : { headers: server.headers }),
           ...(auth === undefined ? {} : { auth }),
+          ...(server.tokenHeader === undefined ? {} : { tokenHeader: server.tokenHeader }),
         },
       ];
     }),

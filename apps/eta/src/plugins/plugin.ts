@@ -141,6 +141,19 @@ export function pluginsPlugin(
           );
           return { result: { name, server } };
         }),
+        wire.handle("plugins", "setTokenHeader", (call) => {
+          const args = new Args(call);
+          const name = args.string("name");
+          const server = args.string("server");
+          const { header } = (call.args ?? {}) as { header?: unknown };
+          if (header !== null && (typeof header !== "object" || header === undefined))
+            throw new Error("plugins.setTokenHeader needs header (or null)");
+          const one = header as { name?: unknown; format?: unknown } | null;
+          if (one !== null && (typeof one.name !== "string" || (one.format !== "raw" && one.format !== "bearer")))
+            throw new Error("a token header needs a name and a format (raw or bearer)");
+          plugins.setTokenHeader(name, server, one === null ? null : { name: one.name as string, format: one.format as "raw" | "bearer" });
+          return { result: { name, server } };
+        }),
         wire.handle("plugins", "setEnv", (call) => {
           const args = new Args(call);
           const name = args.string("name");

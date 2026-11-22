@@ -79,6 +79,12 @@ export const pluginsMessages = {
     "Sign-in saved; the server wants {{header}}",
     "登录已保存,但服务器要求 {{header}}",
   ],
+  useTokenHeader: ["Send sign-in token in {{header}} and retest", "用登录 token 填 {{header}} 并重测"],
+  useTokenHeaderBearer: ["Same, as Bearer <token>", "同上,加 Bearer 前缀"],
+  tokenHeaderHint: [
+    "Which value this header takes is not known: try the token as it is first, then Bearer. If both are refused it is likely a Cursor account credential, which eta does not read from Cursor.",
+    "该头要填什么值尚不确定:先试原样 token,再试 Bearer。两种都被拒,多半是 Cursor 账号凭据,eta 不会去读 Cursor 的凭据。",
+  ],
   serverExpired: ["Sign-in expired", "登录已过期"],
   serverNeedsLogin: ["Needs login", "需要登录"],
   serverNotChecked: ["Not checked", "未检测"],

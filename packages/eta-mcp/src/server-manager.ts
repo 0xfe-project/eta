@@ -566,12 +566,29 @@ export class ServerManager {
       }
       headers.Authorization = `Bearer ${token}`;
     }
+    const tokenHeader = authProvider ? definition.tokenHeader : undefined;
+    // The sign-in token as a header of the server's own choosing, read fresh on every request (a
+    // refresh in between is picked up), and only on a request to this server's origin.
+    const withToken = (base: FetchLike): FetchLike =>
+      tokenHeader === undefined
+        ? base
+        : async (input, init) => {
+            const tokens = await authProvider!.tokens();
+            if (tokens?.access_token === undefined || new URL(String(input)).origin !== url.origin)
+              return await base(input, init);
+            const next = new Headers(init?.headers);
+            next.set(
+              tokenHeader.name,
+              tokenHeader.format === "bearer" ? `Bearer ${tokens.access_token}` : tokens.access_token,
+            );
+            return await base(input, { ...init, headers: next });
+          };
     const transportOptions = {
       ...(Object.keys(headers).length > 0 ? { requestInit: { headers } } : {}),
       ...(authProvider ? { authProvider } : {}),
       // Headers configured for this server stay with it: no redirect may carry them elsewhere.
-      ...(Object.keys(headers).length > 0
-        ? { fetch: sameOriginFetch(this.options.fetch ?? fetch, url.origin) }
+      ...(Object.keys(headers).length > 0 || tokenHeader !== undefined
+        ? { fetch: sameOriginFetch(withToken(this.options.fetch ?? fetch), url.origin) }
         : this.options.fetch
           ? { fetch: this.options.fetch }
           : {}),

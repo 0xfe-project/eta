@@ -40,6 +40,13 @@ export interface UserHeader {
   plainOk: boolean;
 }
 
+/** A server told to send its sign-in token in a header: the choice only, never a token. */
+export interface UserTokenHeader {
+  server: string;
+  name: string;
+  format: "raw" | "bearer";
+}
+
 /** An environment variable the user set on one of a plugin's stdio servers. */
 export interface UserEnv {
   server: string;
@@ -91,6 +98,7 @@ export class PluginRows {
     this.#db.query("DELETE FROM plugin_disabled WHERE plugin = ?").run(name);
     this.#db.query("DELETE FROM plugin_header WHERE plugin = ?").run(name);
     this.#db.query("DELETE FROM plugin_env WHERE plugin = ?").run(name);
+    this.#db.query("DELETE FROM plugin_token_header WHERE plugin = ?").run(name);
   }
 
   /* --------------------------------------------------------------- the switch */
@@ -131,15 +139,39 @@ export class PluginRows {
   configuredAt(plugin: string): number {
     return (
       this.#db
-        .query<{ at: number | null }, [string, string, string]>(
+        .query<{ at: number | null }, [string, string, string, string]>(
           `SELECT MAX(
              COALESCE((SELECT updated_at FROM plugin_config WHERE plugin = ?), 0),
              COALESCE((SELECT MAX(updated_at) FROM plugin_header WHERE plugin = ?), 0),
-             COALESCE((SELECT MAX(updated_at) FROM plugin_env WHERE plugin = ?), 0)
+             COALESCE((SELECT MAX(updated_at) FROM plugin_env WHERE plugin = ?), 0),
+             COALESCE((SELECT MAX(updated_at) FROM plugin_token_header WHERE plugin = ?), 0)
            ) AS at`,
         )
-        .get(plugin, plugin, plugin)?.at ?? 0
+        .get(plugin, plugin, plugin, plugin)?.at ?? 0
     );
+  }
+
+  /* ----------------------------------------------------------- token headers */
+
+  tokenHeaders(plugin: string): UserTokenHeader[] {
+    return this.#db
+      .query<UserTokenHeader, [string]>(
+        "SELECT server, name, format FROM plugin_token_header WHERE plugin = ? ORDER BY server",
+      )
+      .all(plugin);
+  }
+
+  /** One server's choice; `null` removes it. */
+  saveTokenHeader(plugin: string, server: string, header: Omit<UserTokenHeader, "server"> | null): void {
+    this.#db.transaction(() => {
+      this.#db.query("DELETE FROM plugin_token_header WHERE plugin = ? AND server = ?").run(plugin, server);
+      if (header !== null)
+        this.#db
+          .query(
+            "INSERT INTO plugin_token_header (plugin, server, name, format, updated_at) VALUES (?, ?, ?, ?, ?)",
+          )
+          .run(plugin, server, header.name, header.format, Date.now());
+    })();
   }
 
   /* ---------------------------------------------------------------- headers */

@@ -63,7 +63,18 @@ function createTest(props: { item: PluginView; server: string }) {
       }
     });
   }
-  return { busy, result, at, run };
+  /** Send the sign-in token in the header the server asked for, then test again. */
+  function useToken(header: string, format: "raw" | "bearer") {
+    void host.action(async () => {
+      await host.call("plugins", "setTokenHeader", {
+        name: props.item.name,
+        server: props.server,
+        header: { name: header, format },
+      });
+      run();
+    });
+  }
+  return { busy, result, at, run, useToken };
 }
 
 type Test = ReturnType<typeof createTest>;
@@ -345,6 +356,29 @@ function TestResultView(props: { test: Test; stdio: boolean }) {
             <Label variant="small" tone="muted">
               {result()!.message}
             </Label>
+          </If>
+          <If when={result()!.requiredHeader}>
+            <Label variant="small" tone="muted">
+              {uiText("tokenHeaderHint")}
+            </Label>
+            <View style={{ ...row, gap: 8, flexWrap: "wrap" }}>
+              <Button
+                label={uiText("useTokenHeader", { header: result()!.requiredHeader! })}
+                tone="plain"
+                labelVariant="body"
+                size={28}
+                disabled={props.test.busy()}
+                onPress={() => props.test.useToken(result()!.requiredHeader!, "raw")}
+              />
+              <Button
+                label={uiText("useTokenHeaderBearer")}
+                tone="plain"
+                labelVariant="body"
+                size={28}
+                disabled={props.test.busy()}
+                onPress={() => props.test.useToken(result()!.requiredHeader!, "bearer")}
+              />
+            </View>
           </If>
           <If when={result()!.status === "ok"}>
             <ResultInfo result={result()!} />

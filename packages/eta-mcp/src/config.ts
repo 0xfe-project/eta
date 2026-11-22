@@ -308,6 +308,7 @@ export function computeServerHash(
     type: entry.type,
     auth: entry.auth,
     bearer: resolveBearerToken(entry, environment),
+    ...(entry.tokenHeader === undefined ? {} : { tokenHeader: entry.tokenHeader }),
     includeTools: entry.includeTools,
     excludeTools: entry.excludeTools,
   };

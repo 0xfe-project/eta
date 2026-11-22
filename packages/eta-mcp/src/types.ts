@@ -37,6 +37,12 @@ export interface McpServerEntry {
   auth?: McpAuthMode;
   bearerToken?: string;
   bearerTokenEnv?: string;
+  /**
+   * With `auth: "oauth"`: also send the current sign-in access token in this request header (its
+   * value is read from the OAuth store on every request, so a refreshed token is used at once).
+   * `raw` is the token as it is, `bearer` is "Bearer <token>". Sent only to the server's own origin.
+   */
+  tokenHeader?: { name: string; format: "raw" | "bearer" };
   lifecycle?: McpLifecycle;
   /** Minutes; overrides the manager's default, 0 disables idle shutdown. */
   idleTimeout?: number;

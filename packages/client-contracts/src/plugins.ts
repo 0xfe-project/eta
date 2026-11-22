@@ -20,6 +20,7 @@ export const PLUGIN_ACTIONS = [
   "setLevel",
   "setEnabled",
   "setHeaders",
+  "setTokenHeader",
   "setEnv",
   "add",
   "update",
@@ -135,6 +136,8 @@ export interface PluginView {
   fields: PluginFieldView[];
   /** The headers the user attached to its remote servers. */
   headers: PluginHeaderView[];
+  /** The servers told to send their sign-in token in a header. Absent from an older host. */
+  tokenHeaders?: { server: string; name: string; format: "raw" | "bearer" }[];
   /** The variables the user set on its stdio servers. Absent from an older host. */
   env?: PluginEnvView[];
   /** The agents that have it enabled; they skip it while its state is `needs_config`. */
@@ -176,6 +179,15 @@ export interface PluginArgs {
       secret: boolean;
       plainOk?: boolean;
     }[];
+  };
+  /**
+   * Send one remote server's sign-in token in a request header of the given name (`raw`: the token,
+   * `bearer`: "Bearer <token>"); `header: null` turns it off. The token is never stored here.
+   */
+  setTokenHeader: {
+    name: string;
+    server: string;
+    header: { name: string; format: "raw" | "bearer" } | null;
   };
   /** Replace the variables of one stdio server; a `value` of null keeps the saved one. */
   setEnv: {
@@ -245,6 +257,7 @@ export interface PluginResults {
   setLevel: { name: string };
   setEnabled: { name: string; enabled: boolean };
   setHeaders: { name: string; server: string };
+  setTokenHeader: { name: string; server: string };
   setEnv: { name: string; server: string };
   testServer: PluginTestResult;
   loginServer: { pendingId: string; authorizationUrl: string };

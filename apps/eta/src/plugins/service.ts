@@ -182,6 +182,7 @@ export class Plugins {
       this.rows.values(entry.name),
       this.rows.headers(entry.name),
       this.rows.env(entry.name),
+      this.rows.tokenHeaders(entry.name),
     );
   }
 
@@ -468,6 +469,7 @@ export class Plugins {
       requires,
       machines: this.#machineViews(requires),
       headers: this.#headerViews(entry),
+      tokenHeaders: this.rows.tokenHeaders(entry.name),
       env: this.#envViews(entry),
       fields: (plugin?.fields ?? []).map((field: PluginField) => {
         const saved = values[field.name];
@@ -676,6 +678,33 @@ export class Plugins {
       };
     });
     this.rows.saveHeaders(name, server, next);
+    this.#changed();
+  }
+
+  /**
+   * Tell one remote server to carry its sign-in token in a request header (`null` turns it off).
+   * Only the header's name and format are saved; the token is read from the sign-in store on each
+   * request. `Authorization` is refused: the sign-in already sends it there.
+   */
+  setTokenHeader(
+    name: string,
+    server: string,
+    header: { name: string; format: "raw" | "bearer" } | null,
+  ): void {
+    const entry = this.#existing(name);
+    const def = entry.plugin?.servers.find((one) => one.name === server);
+    if (def === undefined || def.config.type === "stdio")
+      throw new Error(`${name} has no remote server ${server}`);
+    if (header !== null) {
+      const clean = header.name.trim();
+      const problem = headerProblem(clean, "x");
+      if (problem !== undefined) throw new Error(problem);
+      if (clean.toLowerCase() === "authorization")
+        throw new Error("Authorization already carries the sign-in token");
+      if (header.format !== "raw" && header.format !== "bearer")
+        throw new Error("the format is raw or bearer");
+      this.rows.saveTokenHeader(name, server, { name: clean, format: header.format });
+    } else this.rows.saveTokenHeader(name, server, null);
     this.#changed();
   }
 
