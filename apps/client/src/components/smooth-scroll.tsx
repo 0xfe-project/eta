@@ -1,5 +1,5 @@
 import type { ScrollProps, WheelEvent } from "nsh";
-import { Scroll, View } from "nsh";
+import { Scroll, split, View } from "nsh";
 import { glideScroll } from "./scroll-follow";
 
 /**
@@ -42,12 +42,16 @@ export function smoothScrollProps(
  * stays a `Scroll`.
  */
 export function SmoothScroll(props: ScrollProps) {
+  // `split`, not a destructure: the rest keeps the getters of `props`, so a
+  // style that reads a signal (a menu's `maxHeight`, a layout's margin) is
+  // followed as it changes rather than frozen at its first value.
+  const [own, rest] = split(props, ["children", "onWheel", "contentStyle"]);
   // Read once: a second read of children would build them twice.
-  const { children, onWheel: _onWheel, contentStyle, ...rest } = props;
+  const children = own.children;
   const smooth = smoothScrollProps(props);
   if (!smooth)
     return (
-      <Scroll {...rest} onWheel={props.onWheel} contentStyle={contentStyle}>
+      <Scroll {...rest} onWheel={own.onWheel} contentStyle={own.contentStyle}>
         {children}
       </Scroll>
     );
@@ -59,9 +63,9 @@ export function SmoothScroll(props: ScrollProps) {
     <Scroll
       {...rest}
       {...smooth.scroll}
-      contentStyle={contentStyle ? { flexGrow: 1 } : undefined}
+      contentStyle={own.contentStyle ? { flexGrow: 1 } : undefined}
     >
-      <View onWheel={smooth.onWheel} style={contentStyle}>
+      <View onWheel={smooth.onWheel} style={own.contentStyle}>
         {children}
       </View>
     </Scroll>
