@@ -1,9 +1,9 @@
-import type { AcpAgentConfig } from "@eta/client-contracts";
+import type { AcpAgentConfig } from "./acp";
+import { ACP_AGENT_ID } from "./acp";
 
 // The external-agent form as text, and back: what the user types (args and env one per line) and
 // the config the host stores. Checked here as the host checks it; the host still has the last word.
-
-const ACP_ID = /^[a-z0-9][a-z0-9-]*$/;
+// Shared by apps/web and the NSH client so both check a draft the same way.
 
 export interface AcpDraft {
   label: string;
@@ -82,7 +82,7 @@ export type AcpDraftProblems = Partial<
 >;
 
 /**
- * What stops the draft from being saved, by field, as i18n keys of the `acp` namespace; the config
+ * What stops the draft from being saved, by field, as message keys (the web's `acp` namespace; the NSH client maps them to its own); the config
  * to send when nothing does. `taken` are the ids already in use on the same machine, apart from the one being edited:
  * another machine's agents are its own, and may have the same id.
  */
@@ -97,7 +97,7 @@ export function checkAcpDraft(
   if (draft.label.trim() === "")
     problems.label = { key: "errors.labelRequired" };
   if (id === "") problems.id = { key: "errors.idRequired" };
-  else if (!ACP_ID.test(id)) problems.id = { key: "errors.idFormat" };
+  else if (!ACP_AGENT_ID.test(id)) problems.id = { key: "errors.idFormat" };
   else if (taken.includes(id)) problems.id = { key: "errors.idTaken" };
   if (draft.command.trim() === "")
     problems.command = { key: "errors.commandRequired" };
