@@ -26,10 +26,6 @@ const states = [
   "lost",
 ];
 
-export function isHostRestart(status?: UpgradeStatusView) {
-  return status?.state === "running" && phases.indexOf(status.phase) >= 3;
-}
-
 function isUpgradeStatus(value: unknown): value is UpgradeStatusView {
   if (!value || typeof value !== "object") return false;
   const state = value as Partial<UpgradeStatusView>;

@@ -26,6 +26,7 @@ import {
   RenameMachine,
   RevokeMachine,
 } from "./machine-dialogs";
+import { useMachineUpdate } from "./machine-update";
 import { PhonePairing } from "./phone-pairing";
 
 export function machineStatus(item: MachineView) {
@@ -45,7 +46,9 @@ function MachineRow(props: {
   const host = useHost();
   const c = colors();
   const dialog = signal<"" | "menu" | "rename" | "runs" | "revoke">("");
-  const updating = signal(false);
+  const machineUpdate = useMachineUpdate(() => props.item);
+  const updating = machineUpdate.pressed;
+  const update = machineUpdate.start;
   const updatable = () =>
     props.item.kind === "daemon" &&
     props.item.install === "service" &&
@@ -70,23 +73,25 @@ function MachineRow(props: {
       style={{
         ...row,
         height: props.phone ? 16 : 20,
-        width: props.phone ? undefined : 100,
+        width: props.phone ? undefined : machineUpdate.state() ? 160 : 100,
         gap: 6,
       }}
     >
       <StatusDot
         color={
-          props.item.status === "offline"
-            ? c().strong
-            : props.item.status === "pending" ||
-                props.item.build === "outdated" ||
-                props.item.build === "updating"
-              ? c().amber
-              : c().green
+          machineUpdate.tone()
+            ? c()[machineUpdate.tone()!]
+            : props.item.status === "offline"
+              ? c().strong
+              : props.item.status === "pending" ||
+                  props.item.build === "outdated" ||
+                  props.item.build === "updating"
+                ? c().amber
+                : c().green
         }
       />
       <Label variant="small" tone="mutedInk">
-        {machineStatus(props.item)}
+        {machineUpdate.label() ?? machineStatus(props.item)}
       </Label>
     </View>
   );
@@ -115,14 +120,6 @@ function MachineRow(props: {
         },
       ] as (SheetAction | false)[]
     ).filter((action): action is SheetAction => !!action);
-  async function update() {
-    if (updating()) return;
-    updating.set(true);
-    await host.action(() =>
-      host.call("machines", "upgrade", { machineId: props.item.id }),
-    );
-    updating.set(false);
-  }
   return (
     <>
       {/* The hover is the whole row's and the button fills it, padding inside, up to the rule;
@@ -229,6 +226,38 @@ function MachineRow(props: {
             />
           </If>
         </View>
+        <If
+          when={
+            machineUpdate.state() === "failed"
+              ? props.item.updateError
+              : undefined
+          }
+        >
+          {(reason) => (
+            <View
+              testID="machine-update-failure"
+              style={{
+                paddingLeft: props.phone ? 54 : 50,
+                paddingRight: 16,
+                paddingBottom: 8,
+                gap: 8,
+                ...(props.phone ? {} : { ...row, alignItems: "flex-start" }),
+              }}
+            >
+              <Label variant="small" tone="mutedInk" style={{ flex: 1 }}>
+                {reason()}
+              </Label>
+              <If when={updatable() && host.can("machines.upgrade")}>
+                <Button
+                  label={uiText("updateTryAgain")}
+                  size={props.phone ? 40 : undefined}
+                  disabled={updating()}
+                  onPress={() => void update()}
+                />
+              </If>
+            </View>
+          )}
+        </If>
       </View>
       <If when={dialog() === "menu"}>
         <Modal
