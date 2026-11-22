@@ -1,6 +1,6 @@
 import type { PluginView } from "@eta/client-contracts";
 import { expect, test } from "nsh/test";
-import { cardLogin } from "../src/pages/plugins/plugin-status";
+import { authStyle, BADGE_EDGE_ALPHA, cardLogin } from "../src/pages/plugins/plugin-status";
 
 const view = (logins: (string | undefined)[], headers = 0): PluginView =>
   ({
@@ -17,4 +17,12 @@ test("no evidence, no servers, or header-only servers show nothing", () => {
   expect(cardLogin(view([]))).toBeUndefined();
   expect(cardLogin(view(["none", undefined]))).toBeUndefined();
   expect(cardLogin(view(["needs_login"], 1))).toBeUndefined();
+});
+
+test("the badge is a quiet tint: a soft fill token and a low-alpha edge, never a solid colour", () => {
+  expect(authStyle("signed_in")).toMatchObject({ tone: "green", fill: "greenFill", edge: "green" });
+  expect(authStyle("expired")).toMatchObject({ tone: "red", fill: "redFill", edge: "red" });
+  expect(authStyle("needs_login")).toMatchObject({ fill: "amberFill", edge: "warning" });
+  expect(authStyle("needs_setup")).toMatchObject({ fill: "amberFill", edge: "warning" });
+  expect(BADGE_EDGE_ALPHA).toBe("55");
 });

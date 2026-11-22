@@ -37,14 +37,23 @@ export type AuthState = "signed_in" | "needs_login" | "expired" | "needs_setup";
  */
 export const authStyle = (
   state: AuthState,
-): { text: "serverSignedIn" | "serverNeedsLogin" | "serverExpired" | "serverNeedsSetup"; tone: "green" | "warningInk" | "red" } =>
+): {
+  text: "serverSignedIn" | "serverNeedsLogin" | "serverExpired" | "serverNeedsSetup";
+  tone: "green" | "warningInk" | "red";
+  /** The quiet badge: a ~15% tint of the state colour as its background, and a low-alpha edge of the same hue. */
+  fill: "greenFill" | "amberFill" | "redFill";
+  edge: "green" | "warning" | "red";
+} =>
   state === "signed_in"
-    ? { text: "serverSignedIn", tone: "green" }
+    ? { text: "serverSignedIn", tone: "green", fill: "greenFill", edge: "green" }
     : state === "expired"
-      ? { text: "serverExpired", tone: "red" }
+      ? { text: "serverExpired", tone: "red", fill: "redFill", edge: "red" }
       : state === "needs_login"
-        ? { text: "serverNeedsLogin", tone: "warningInk" }
-        : { text: "serverNeedsSetup", tone: "warningInk" };
+        ? { text: "serverNeedsLogin", tone: "warningInk", fill: "amberFill", edge: "warning" }
+        : { text: "serverNeedsSetup", tone: "warningInk", fill: "amberFill", edge: "warning" };
+
+/** Alpha of the badge's edge, as the hex suffix of a #rrggbb token (about 33%). */
+export const BADGE_EDGE_ALPHA = "55";
 
 /** The login a card shows, from its servers' states: only with evidence, never for headers-only servers. */
 export function cardLogin(item: PluginView): "needs_login" | "signed_in" | "expired" | undefined {
