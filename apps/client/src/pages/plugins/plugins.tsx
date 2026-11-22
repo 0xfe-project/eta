@@ -19,6 +19,7 @@ import { AddPlugin, ConfigurePlugin, sheetEdge } from "./configure";
 import { pluginText } from "./labels";
 import { Market } from "./market";
 import { PluginDetail } from "./plugin-detail";
+import { PluginEnabled, PluginName } from "./plugin-name";
 import { NoPlugins, PluginGlyph, Status } from "./plugin-status";
 import { Skills } from "./skills/list";
 import { PluginTablet } from "./tablet-list";
@@ -432,6 +433,7 @@ function PluginCard(props: {
         borderWidth: 1,
         borderColor: c().border,
         gap: 8,
+        opacity: props.item.enabled ? 1 : 0.6,
       }}
     >
       <View style={{ ...row, alignItems: "flex-start", gap: 12 }}>
@@ -447,9 +449,7 @@ function PluginCard(props: {
           <Icon name="plugins" size={20} tone="muted" />
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-          <Label weight={500} lines={1}>
-            {props.item.name}
-          </Label>
+          <PluginName name={props.item.name} />
           <View style={{ ...row, height: 20, gap: 8 }}>
             <If when={props.item.version}>
               <Label variant="small" tone="muted">
@@ -494,6 +494,7 @@ function PluginCard(props: {
             )}
           </If>
         </View>
+        <PluginEnabled item={props.item} />
         <View style={{ ...row, height: 24, gap: 4 }}>
           <Label variant="small" tone="muted">
             {uiText("skillsMcpServers", {
@@ -630,7 +631,7 @@ function PluginRows(props: {
             >
               <PluginGlyph size={32} />
               <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-                <Label lines={1}>{item().name}</Label>
+                <PluginName name={item().name} />
                 <Label variant="caption" tone="muted" lines={1}>
                   {[
                     item().version,

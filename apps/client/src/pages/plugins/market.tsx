@@ -22,6 +22,7 @@ import {
   textStyle,
 } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
+import { PluginName } from "./plugin-name";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { sheetEdge } from "./configure";
@@ -263,13 +264,7 @@ export function Market(props: {
                       borderColor: c().border,
                     }}
                   >
-                    <Label
-                      variant="subtitle"
-                      weight={600}
-                      lines={1}
-                    >
-                      {item().name}
-                    </Label>
+                    <PluginName name={item().name} />
                     <Label variant="small" tone="muted" lines={1}>
                       {[item().version, item().author]
                         .filter((part) => part.trim() !== "")

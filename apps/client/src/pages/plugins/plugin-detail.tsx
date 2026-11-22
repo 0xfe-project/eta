@@ -18,6 +18,7 @@ import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 
 import { HeadersEditor } from "./headers-editor";
+import { PluginEnabled } from "./plugin-name";
 import { pluginText as text } from "./labels";
 import { PluginGlyph, Status } from "./plugin-status";
 import { PluginWarnings, pluginWarnings } from "./warnings";
@@ -85,23 +86,7 @@ export function PluginDetail(props: DetailProps) {
       ? { gap: 6, paddingHorizontal: 16, paddingTop: top }
       : { gap: 6 };
   const needsConfig = () => props.item.state === "needs_config";
-  function setEnabled(enabled: boolean) {
-    void host.action(() =>
-      host.call("plugins", "setEnabled", { name: props.item.name, enabled }),
-    );
-  }
-  const enabledSwitch = () => (
-    <View style={{ ...row, gap: 8, flexShrink: 0 }}>
-      <ToggleSwitch
-        label={uiText("pluginSwitch")}
-        checked={props.item.enabled}
-        onChange={setEnabled}
-      />
-      <Label variant="caption" tone="muted" lines={1}>
-        {props.item.enabled ? uiText("pluginSwitch") : uiText("pluginOffForAll")}
-      </Label>
-    </View>
-  );
+  const enabledSwitch = () => <PluginEnabled item={props.item} />;
   function update() {
     if (updating()) return;
     updating.set(true);
