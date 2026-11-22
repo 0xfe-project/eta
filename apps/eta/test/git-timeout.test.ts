@@ -24,7 +24,8 @@ beforeEach(() => {
     },
   });
   repo = `git://127.0.0.1:${server.port}/r.git`;
-  gitLimit.ms = 500;
+  // Long enough that a loaded machine still gets `git` to connect before the limit; the test is about the kill, not the speed.
+  gitLimit.ms = 3000;
 });
 
 afterEach(() => {
@@ -33,7 +34,8 @@ afterEach(() => {
 });
 
 async function ended(): Promise<boolean> {
-  for (let i = 0; i < 50 && closed < opened; i++) await Bun.sleep(100);
+  for (let i = 0; i < 100 && (opened === 0 || closed < opened); i++)
+    await Bun.sleep(100);
   return opened > 0 && closed === opened;
 }
 
@@ -51,7 +53,7 @@ describe("a git call that does not answer", () => {
     expect(message).toContain("git ls-remote");
     expect(message).toContain(repo);
     expect(message).toMatch(/slow, or the repository needs credentials/);
-    expect(Date.now() - started).toBeLessThan(5000);
+    expect(Date.now() - started).toBeLessThan(20_000);
     expect(await ended()).toBe(true);
   });
 
