@@ -15,6 +15,7 @@ import https from "node:https";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { isIP } from "node:net";
 import { extname, isAbsolute, resolve, sep } from "node:path";
+import type { IconCache } from "./icon-cache";
 import { viaProxy } from "./git";
 
 export interface Logo {
@@ -30,6 +31,9 @@ const MAX_REDIRECTS = 3;
 const KEEP_MS = 24 * 60 * 60 * 1000;
 /** A lookup that failed is not asked again for this long; it is never kept as "no picture". */
 const RETRY_MS = 2 * 60 * 1000;
+/** A logo read at a commit cannot change: kept long. A branch or HEAD is kept a day. */
+const PINNED_MS = 30 * 24 * 60 * 60 * 1000;
+const COMMIT = /^[0-9a-f]{40}$/;
 const SKIPPED = new Set(["github.com", "www.github.com", "gitlab.com", "www.gitlab.com"]);
 
 /** Whether an address is one this host must not call: private, loopback, link-local, reserved. */
@@ -121,6 +125,8 @@ export interface LogoOptions {
   now?: () => number;
   /** Tests only: where raw files are read from, in place of https://raw.githubusercontent.com. */
   rawBase?: string;
+  /** Where answers are kept between runs. */
+  store?: IconCache;
 }
 
 const RAW = "https://raw.githubusercontent.com";
@@ -234,6 +240,17 @@ export class Logos {
     if (hit && now < hit.until) return hit.logo;
     // After a failed lookup, wait before asking again; what was known before (even stale) still shows.
     if ((this.#repoBackoff.get(key) ?? 0) > now) return hit?.logo ?? null;
+    // Then what the database kept, checked again as if it had just come.
+    const row = this.#options.store?.get(repo, ref, path, now);
+    let old: Logo | null | undefined;
+    if (row !== undefined) {
+      old = row.status === "miss" ? null : this.#checked(row.mime, row.bytes);
+      if (old === undefined) this.#options.store?.delete(repo, ref, path);
+      else if (now < row.expiresAt) {
+        this.#repoKept.set(key, { until: row.expiresAt, logo: old });
+        return old;
+      }
+    }
     let logo: Logo | null = null;
     let failed = false;
     try {
@@ -255,11 +272,39 @@ export class Logos {
     if (failed) {
       // Not "no picture": a short backoff, and an earlier hit is neither dropped nor overwritten.
       this.#repoBackoff.set(key, now + RETRY_MS);
-      return hit?.logo ?? null;
+      return hit?.logo ?? old ?? null;
     }
     this.#repoBackoff.delete(key);
-    this.#repoKept.set(key, { until: now + (logo ? KEEP_MS : MISS_MS), logo });
+    const keep = logo ? (COMMIT.test(ref) ? PINNED_MS : KEEP_MS) : MISS_MS;
+    this.#repoKept.set(key, { until: now + keep, logo });
+    this.#options.store?.put(
+      repo,
+      ref,
+      path,
+      logo ? { mime: logo.type, bytes: Buffer.from(logo.data, "base64") } : null,
+      now + keep,
+      now,
+    );
     return logo;
+  }
+
+  /** Forget everything kept, in memory and in the database. */
+  clear(): number {
+    this.#kept.clear();
+    this.#repoKept.clear();
+    this.#repoBackoff.clear();
+    return this.#options.store?.clear() ?? 0;
+  }
+
+  /** A kept picture checked again: its type, its size and, for an SVG, the same rules as a fresh one. */
+  #checked(mime: string | null, bytes: Uint8Array | null): Logo | undefined {
+    if (mime === null || bytes === null || bytes.byteLength === 0 || bytes.byteLength > MAX_OWN) return undefined;
+    if (!Object.values(OWN_TYPES).includes(mime)) return undefined;
+    if (mime === "image/svg+xml") {
+      const text = Buffer.from(bytes).toString("utf8");
+      if (!SVG_HEAD.test(text) || SVG_UNSAFE.test(text)) return undefined;
+    } else if (pictureType(bytes) !== mime) return undefined;
+    return { type: mime, data: Buffer.from(bytes).toString("base64") };
   }
 
   async #repoLogo(repo: string, ref: string, path: string): Promise<Logo | null> {

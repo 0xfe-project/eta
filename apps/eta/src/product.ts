@@ -97,6 +97,7 @@ import { MachinePlaces, wireFailure } from "./places/on-machine";
 import { placesPlugin } from "./places/plugin";
 import { PlaceStore } from "./places/store";
 import { Market } from "./plugins/market";
+import { IconCache } from "./plugins/icon-cache";
 import { CatalogCache } from "./plugins/market-cache";
 import { pluginsPlugin } from "./plugins/plugin";
 import { Plugins } from "./plugins/service";
@@ -1077,6 +1078,7 @@ export function createProduct(options: {
               cache: new CatalogCache(db, { maxRowBytes: 1024 * 1024 }),
             }),
             mcp,
+            icons: new IconCache(db),
           },
           applied("plugins"),
         ),

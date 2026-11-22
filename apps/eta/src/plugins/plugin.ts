@@ -10,14 +10,21 @@ import type { McpService } from "../mcp/service";
 import type { Market } from "./market";
 import type { Plugins } from "./service";
 import { Args, productPlugin, publish } from "../wire";
-import { Logos, readOwnLogo } from "./logo";
+import { Logos, readOwnLogo } from "./logo";
+import type { IconCache } from "./icon-cache";
 import { testConnection } from "./test-server";
 
 const LEVELS = ["none", "read", "file", "value"] as const;
 const AUDIT_SHOWN = 200;
 
 export function pluginsPlugin(
-  deps: { plugins: Plugins; agents: AgentStore; market: Market; mcp?: McpService },
+  deps: {
+    plugins: Plugins;
+    agents: AgentStore;
+    market: Market;
+    mcp?: McpService;
+    icons?: IconCache;
+  },
   applied: () => void,
 ) {
   const { plugins, agents, market, mcp } = deps;
@@ -30,7 +37,7 @@ export function pluginsPlugin(
     if (url === undefined) throw new Error(`${server} has no URL to sign in to`);
     return url;
   };
-  const logos = new Logos();
+  const logos = new Logos(deps.icons === undefined ? {} : { store: deps.icons });
   return productPlugin(
     "plugins",
     ({ wire }) => {
@@ -213,7 +220,7 @@ export function pluginsPlugin(
           ),
         })),
         wire.handle("plugins", "marketClearCache", async () => ({
-          result: { cleared: market.clearCache() },
+          result: { cleared: market.clearCache(), icons: logos.clear() },
         })),
         wire.handle("plugins", "marketPreview", async (call) => {
           const args = new Args(call);
