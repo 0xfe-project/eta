@@ -18,13 +18,16 @@ afterEach(() => {
 /** Files by path under /cursor/plugins/main/; `delay` holds each answer, `seen` records every request. */
 async function raw(files: Record<string, string | Buffer>, delay = 0) {
   const seen: string[] = [];
-  const state = { now: 0, peak: 0 };
+  const state: { now: number; peak: number; fail: number | "hang" | null } = { now: 0, peak: 0, fail: null };
   const server = http.createServer((req, res) => {
     seen.push(String(req.url));
     state.now++;
     state.peak = Math.max(state.peak, state.now);
     setTimeout(() => {
       state.now--;
+      // No answer at all: the client times out. Cut it loose later so the server can close.
+      if (state.fail === "hang") return void setTimeout(() => req.socket.destroy(), 1000);
+      if (state.fail !== null) return void res.writeHead(state.fail).end();
       const prefix = "/cursor/plugins/main/";
       const file = req.url?.startsWith(prefix) ? files[req.url.slice(prefix.length)] : undefined;
       if (file === undefined) res.writeHead(404).end();
@@ -34,7 +37,9 @@ async function raw(files: Record<string, string | Buffer>, delay = 0) {
   servers.push(server);
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return { base, seen, state, logos: new Logos({ allowPrivate: true, rawBase: base }) };
+  const clock = { at: 1_000_000 };
+  const logos = new Logos({ allowPrivate: true, rawBase: base, now: () => clock.at, timeoutMs: 300 });
+  return { base, seen, state, clock, logos };
 }
 
 describe("a market entry's own logo from its repository", () => {
@@ -116,5 +121,54 @@ describe("a market entry's own logo from its repository", () => {
     expect(MAX_REPO_LOOKUPS).toBe(4);
     expect(logos.peak).toBe(4);
     expect(state.peak).toBeLessThanOrEqual(4);
+  });
+
+  describe("a failed lookup is not an answer", () => {
+    const files = { "p/.cursor-plugin/plugin.json": JSON.stringify({ logo: "l.png" }), "p/l.png": PNG };
+
+    it("a 5xx or no answer at all is not kept as \"no picture\": the next try after a short wait finds it", async () => {
+      for (const fail of [500, 503, "hang"] as const) {
+        const { logos, state, clock } = await raw(files);
+        state.fail = fail;
+        expect(await logos.fromRepo(REPO, "main", "p")).toBeNull();
+        state.fail = null;
+        // Inside the short backoff nothing is asked, so the failure is not hammered...
+        clock.at += 30_000;
+        expect(await logos.fromRepo(REPO, "main", "p")).toBeNull();
+        // ...and after it, long before a kept miss (an hour) would end, the picture is found.
+        let found = null as Awaited<ReturnType<typeof logos.fromRepo>>;
+        for (let tries = 0; tries < 3 && !found; tries++) {
+          clock.at += 2 * 60 * 1000 + 1000;
+          found = await logos.fromRepo(REPO, "main", "p");
+        }
+        expect(found?.type, String(fail)).toBe("image/png");
+      }
+    });
+
+    it("a 404 is an answer and is kept for an hour; a 429 or 408 is not", async () => {
+      const { logos, state, clock, seen } = await raw(files);
+      expect(await logos.fromRepo(REPO, "main", "none")).toBeNull();
+      const asked = seen.length;
+      clock.at += 10 * 60 * 1000;
+      expect(await logos.fromRepo(REPO, "main", "none")).toBeNull();
+      expect(seen.length).toBe(asked);
+      state.fail = 429;
+      expect(await logos.fromRepo(REPO, "main", "p")).toBeNull();
+      state.fail = null;
+      clock.at += 3 * 60 * 1000;
+      expect((await logos.fromRepo(REPO, "main", "p"))?.type).toBe("image/png");
+    });
+
+    it("a failure does not overwrite an earlier hit, even once it is stale", async () => {
+      const { logos, state, clock } = await raw(files);
+      const first = await logos.fromRepo(REPO, "main", "p");
+      expect(first?.type).toBe("image/png");
+      clock.at += 25 * 60 * 60 * 1000;
+      state.fail = 500;
+      expect((await logos.fromRepo(REPO, "main", "p"))?.data).toBe(first!.data);
+      state.fail = null;
+      clock.at += 3 * 60 * 1000;
+      expect((await logos.fromRepo(REPO, "main", "p"))?.data).toBe(first!.data);
+    });
   });
 });

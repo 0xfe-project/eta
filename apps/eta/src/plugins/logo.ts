@@ -28,6 +28,8 @@ const MAX_PICTURE = 256 * 1024;
 const TIMEOUT_MS = 5000;
 const MAX_REDIRECTS = 3;
 const KEEP_MS = 24 * 60 * 60 * 1000;
+/** A lookup that failed is not asked again for this long; it is never kept as "no picture". */
+const RETRY_MS = 2 * 60 * 1000;
 const SKIPPED = new Set(["github.com", "www.github.com", "gitlab.com", "www.gitlab.com"]);
 
 /** Whether an address is one this host must not call: private, loopback, link-local, reserved. */
@@ -142,6 +144,8 @@ function segments(path: string): string[] {
 }
 
 class Refused extends Error {}
+/** The answer could not be had (network, timeout, 5xx): not a statement that there is no picture. */
+class Failed extends Error {}
 
 /** Two-label public suffixes a site name can end in; a small fixed list, not the full public suffix list. */
 const SECOND_LEVEL = new Set([
@@ -178,6 +182,7 @@ export class Logos {
   readonly #options: LogoOptions;
   readonly #kept = new Map<string, { at: number; logo: Logo | null }>();
   readonly #repoKept = new Map<string, { until: number; logo: Logo | null }>();
+  readonly #repoBackoff = new Map<string, number>();
   #active = 0;
   readonly #waiting: (() => void)[] = [];
   /** Requests made, for tests. */
@@ -227,7 +232,10 @@ export class Logos {
     const now = (this.#options.now ?? Date.now)();
     const hit = this.#repoKept.get(key);
     if (hit && now < hit.until) return hit.logo;
+    // After a failed lookup, wait before asking again; what was known before (even stale) still shows.
+    if ((this.#repoBackoff.get(key) ?? 0) > now) return hit?.logo ?? null;
     let logo: Logo | null = null;
+    let failed = false;
     try {
       if (this.#active >= MAX_REPO_LOOKUPS) await new Promise<void>((go) => this.#waiting.push(go));
       else this.#active++;
@@ -239,9 +247,17 @@ export class Logos {
         if (next) next();
         else this.#active--;
       }
-    } catch {
+    } catch (error) {
+      // A refused address or path is an answer (nothing to show); anything else is a failure to ask.
+      if (!(error instanceof Refused)) failed = true;
       logo = null;
     }
+    if (failed) {
+      // Not "no picture": a short backoff, and an earlier hit is neither dropped nor overwritten.
+      this.#repoBackoff.set(key, now + RETRY_MS);
+      return hit?.logo ?? null;
+    }
+    this.#repoBackoff.delete(key);
     this.#repoKept.set(key, { until: now + (logo ? KEEP_MS : MISS_MS), logo });
     return logo;
   }
@@ -253,7 +269,7 @@ export class Logos {
     const base = `${this.#options.rawBase ?? RAW}/${match[1]}/${match[2]}/${ref}`;
     const raw = (parts: string[]) => this.#address(viaProxy([base, ...parts].join("/")));
     for (const manifest of MANIFESTS) {
-      const got = await this.#get(raw([...dir, manifest]), MAX_MANIFEST).catch(() => null);
+      const got = await this.#getRepo(raw([...dir, manifest]), MAX_MANIFEST);
       if (!got) continue;
       let rel: unknown;
       try {
@@ -270,7 +286,7 @@ export class Logos {
       }
       const mime = OWN_TYPES[extname(rel).toLowerCase()];
       if (!mime || !file.length) continue;
-      const picture = await this.#get(raw([...dir, ...file]), MAX_OWN).catch(() => null);
+      const picture = await this.#getRepo(raw([...dir, ...file]), MAX_OWN);
       if (!picture) continue;
       if (mime === "image/svg+xml") {
         const text = Buffer.from(picture.body).toString("utf8");
@@ -279,6 +295,25 @@ export class Logos {
       return { type: mime, data: Buffer.from(picture.body).toString("base64") };
     }
     return null;
+  }
+
+  /**
+   * One read for a repository lookup. A refusal, or a clear "not there" (a 4xx other than a timeout
+   * or a rate limit), is null: there is nothing to show. A network error, a timeout and a 5xx throw
+   * `Failed`, so the caller does not take them for an absent picture.
+   */
+  async #getRepo(url: URL, cap: number): Promise<{ url: string; body: Uint8Array } | null> {
+    try {
+      return await this.#get(url, cap);
+    } catch (error) {
+      if (error instanceof Refused) return null;
+      const status = /^HTTP (\d+)$/.exec(error instanceof Error ? error.message : "");
+      if (status) {
+        const code = Number(status[1]);
+        if (code >= 400 && code < 500 && code !== 408 && code !== 429) return null;
+      }
+      throw new Failed(error instanceof Error ? error.message : "request failed");
+    }
   }
 
   async #fromHomepage(homepage: string): Promise<Logo | null> {
@@ -383,9 +418,14 @@ export class Logos {
             }
             chunks.push(chunk);
           });
-          response.on("end", () =>
-            resolve({ status: response.statusCode ?? 0, location, body: Buffer.concat(chunks) }),
-          );
+          // An answer cut short is a failure, never a short body taken for the whole one.
+          response.on("end", () => {
+            if (!response.complete) reject(new Error("the connection closed early"));
+            else resolve({ status: response.statusCode ?? 0, location, body: Buffer.concat(chunks) });
+          });
+          response.on("close", () => {
+            if (!response.complete) reject(new Error("the connection closed early"));
+          });
           response.on("error", () => undefined);
         },
       );
