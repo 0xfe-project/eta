@@ -19,10 +19,16 @@ export function PluginName(props: { name: string }) {
 }
 
 /** The user's switch for one installed plugin, for every agent; not the market-source switch. */
-export function PluginEnabled(props: { item: PluginView }) {
+export function PluginEnabled(props: { item: PluginView; compact?: boolean }) {
   const host = useHost();
+  const c = colors();
+  const words = () =>
+    props.item.enabled ? uiText("pluginSwitch") : uiText("pluginOffForAll");
   return (
-    <View style={{ ...row, gap: 8, flexShrink: 0 }}>
+    <View
+      tooltip={props.compact ? hint(words(), c) : undefined}
+      style={{ ...row, gap: 8, flexShrink: 0 }}
+    >
       <ToggleSwitch
         label={uiText("pluginSwitch")}
         checked={props.item.enabled}
@@ -35,9 +41,11 @@ export function PluginEnabled(props: { item: PluginView }) {
           )
         }
       />
-      <Label variant="caption" tone="muted" lines={1}>
-        {props.item.enabled ? uiText("pluginSwitch") : uiText("pluginOffForAll")}
-      </Label>
+      <If when={!props.compact}>
+        <Label variant="caption" tone="muted" lines={1}>
+          {words()}
+        </Label>
+      </If>
     </View>
   );
 }

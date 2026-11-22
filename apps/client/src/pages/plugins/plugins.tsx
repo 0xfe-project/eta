@@ -494,7 +494,6 @@ function PluginCard(props: {
             )}
           </If>
         </View>
-        <PluginEnabled item={props.item} />
         <View style={{ ...row, height: 24, gap: 4 }}>
           <Label variant="small" tone="muted">
             {uiText("skillsMcpServers", {
@@ -527,9 +526,15 @@ function PluginCard(props: {
           borderColor: c().border,
           paddingTop: 8,
           gap: 4,
-          justifyContent: "flex-end",
+          alignItems: "center",
         }}
       >
+        {/* Switch at the left end; with all three buttons the row is tight, so the label becomes a tooltip. */}
+        <PluginEnabled
+          item={props.item}
+          compact={props.item.source.kind === "git" && props.item.fields.length > 0}
+        />
+        <View style={{ flex: 1 }} />
         <If when={props.item.source.kind === "git"}>
           <Button
             label={uiText("update")}

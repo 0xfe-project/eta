@@ -11,6 +11,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { uiText } from "../../i18n";
+import { PluginName } from "./plugin-name";
 import { NoPlugins, PluginGlyph, Status } from "./plugin-status";
 
 export function PluginTablet(props: {
@@ -80,9 +81,7 @@ export function PluginTablet(props: {
               >
                 <PluginGlyph size={28} />
                 <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                  <Label variant="small" lines={1}>
-                    {item().name}
-                  </Label>
+                  <PluginName name={item().name} />
                   <Label variant="caption" tone="muted" lines={1}>
                     {[
                       item().version,
