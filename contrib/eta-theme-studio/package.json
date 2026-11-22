@@ -1,0 +1,16 @@
+{
+  "name": "eta-theme-studio",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test/theme.test.js"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

@@ -6,7 +6,13 @@ export default {
   // System tools the scripts call (uv for the Python sidecar, hdiutil and ditto on macOS).
   ignoreBinaries: ["uv", "hutch", "nsh", "hdiutil", "ditto"],
   // `packages/TOBEREFR` holds plugins parked until the ESM rework is done (TODO.md there).
-  ignore: [".eta/**", "**/test/**/fixtures/**", "packages/TOBEREFR/**"],
+  ignore: [
+    ".eta/**",
+    "**/test/**/fixtures/**",
+    "packages/TOBEREFR/**",
+    // The optional browser extension has its own npm project and test script.
+    "contrib/eta-theme-studio/**",
+  ],
   // CSS files are part of the module graph: their @imports reference
   // packages (fonts, tw-animate-css, shadcn) and other stylesheets.
   compilers: {

@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Eta Theme Studio",
+  "version": "0.1.0",
+  "minimum_chrome_version": "111",
+  "description": "Customize the wallpaper, colors and surfaces of your Eta Web workspace.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Eta Theme Studio",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png"
+    }
+  },
+  "options_ui": {
+    "page": "editor.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  }
+}

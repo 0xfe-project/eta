@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Eta Theme Studio</title>
+  <link rel="icon" href="icons/32.png">
+  <link rel="stylesheet" href="editor.css">
+  <script src="editor.js" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="identity">
+      <img src="icons/48.png" width="40" height="40" alt="">
+      <h1>Eta Theme Studio</h1>
+    </div>
+    <div class="actions">
+      <label class="file-button secondary" for="theme-file">导入主题</label>
+      <input class="sr-only" id="theme-file" type="file" accept=".zip,.json">
+      <button class="secondary" id="export" type="button">导出主题 <span aria-hidden="true">↗</span></button>
+    </div>
+  </header>
+
+  <main>
+    <form class="site-strip" id="site-form">
+      <div>
+        <label for="site">Eta 站点</label>
+        <p id="site-status">仅在你启用的站点应用主题</p>
+      </div>
+      <div class="site-actions">
+        <input id="site" type="text" inputmode="url" autocomplete="url"
+          spellcheck="false" placeholder="http://localhost:8787" required>
+        <button id="site-toggle" class="primary" type="submit">启用主题</button>
+      </div>
+    </form>
+    <div class="workbench">
+      <section class="control-panel" aria-labelledby="editor-title">
+        <div class="section-title">
+          <h2 id="editor-title">编辑主题</h2>
+          <button type="button" id="reset" class="text-button">恢复预设</button>
+        </div>
+        <div class="theme-meta">
+          <label for="name">主题名称
+            <input id="name" type="text" maxlength="64" autocomplete="off">
+          </label>
+          <label for="base">基础配色
+            <select id="base">
+              <option value="dark">深色</option>
+              <option value="light">浅色</option>
+            </select>
+          </label>
+        </div>
+        <div class="tabs" role="tablist" aria-label="主题设置">
+          <button id="tab-colors" role="tab" aria-selected="true" aria-controls="colors" type="button">配色</button>
+          <button id="tab-wallpaper" role="tab" aria-selected="false" aria-controls="wallpaper" tabindex="-1" type="button">壁纸</button>
+          <button id="tab-components" role="tab" aria-selected="false" aria-controls="components" tabindex="-1" type="button">组件</button>
+        </div>
+        <section id="colors" role="tabpanel" aria-labelledby="tab-colors">
+          <div id="color-list"></div>
+          <details>
+            <summary>更多颜色</summary>
+            <div id="more-colors"></div>
+          </details>
+        </section>
+        <section id="wallpaper" role="tabpanel" aria-labelledby="tab-wallpaper" hidden>
+          <div id="wallpaper-thumb" class="wallpaper-thumb"><span id="wallpaper-name">尚未选择壁纸</span></div>
+          <div class="file-actions">
+            <label class="file-button secondary" for="wallpaper-file">选择图片</label>
+            <input class="sr-only" id="wallpaper-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
+            <button id="wallpaper-clear" type="button" class="text-button">清除</button>
+          </div>
+          <p class="help">PNG、JPEG、GIF 或 WebP，最大 4 MB。</p>
+          <div class="setting">
+            <label for="wallpaper-fit">填充方式</label>
+            <select id="wallpaper-fit">
+              <option value="cover">裁切铺满</option>
+              <option value="contain">保留完整图片</option>
+              <option value="fill">拉伸填满</option>
+            </select>
+          </div>
+          <div class="setting slider-row">
+            <label for="wallpaper-overlay">遮罩浓度</label>
+            <input id="wallpaper-overlay" type="range" min="0" max="100" step="1">
+            <output id="wallpaper-overlay-value" for="wallpaper-overlay"></output>
+          </div>
+        </section>
+        <section id="components" role="tabpanel" aria-labelledby="tab-components" hidden>
+          <div class="setting">
+            <label for="part">组件</label>
+            <select id="part">
+              <option value="sidebar">侧栏</option>
+              <option value="panel">面板</option>
+              <option value="messageBubble">消息气泡</option>
+              <option value="composer">输入框</option>
+              <option value="card">卡片</option>
+              <option value="button">按钮</option>
+              <option value="dialog">弹窗</option>
+            </select>
+          </div>
+          <div class="setting slider-row">
+            <label for="part-radius">圆角</label>
+            <input id="part-radius" type="range" min="0" max="32" step="1">
+            <output id="part-radius-value" for="part-radius"></output>
+          </div>
+          <div class="setting slider-row" id="part-opacity-row">
+            <label for="part-opacity">背景不透明度</label>
+            <input id="part-opacity" type="range" min="0" max="100" step="1">
+            <output id="part-opacity-value" for="part-opacity"></output>
+          </div>
+        </section>
+        <p class="feedback" id="feedback" role="status">更改会自动保存</p>
+      </section>
+
+      <section class="preview-panel" aria-labelledby="preview-title">
+        <div class="section-title">
+          <h2 id="preview-title">主题预览</h2>
+          <div class="view-tabs" role="tablist" aria-label="预览页面">
+            <button id="tab-chat-example" role="tab" aria-selected="true" aria-controls="chat-example" type="button">聊天</button>
+            <button id="tab-board-example" role="tab" aria-selected="false" aria-controls="board-example" tabindex="-1" type="button">任务看板</button>
+            <button id="tab-settings-example" role="tab" aria-selected="false" aria-controls="settings-example" tabindex="-1" type="button">设置</button>
+          </div>
+        </div>
+        <div id="preview" class="preview">
+          <aside class="sample-sidebar" aria-hidden="true">
+            <strong>Eta</strong>
+            <span class="sample-link active" data-preview-nav="chat-example">会话</span>
+            <span class="sample-link" data-preview-nav="board-example">任务</span>
+            <span class="sample-link" data-preview-nav="settings-example">设置</span>
+            <div class="sample-sidebar-footer">我的工作区</div>
+          </aside>
+          <section id="chat-example" class="sample-page" role="tabpanel" aria-labelledby="tab-chat-example">
+            <header>周末小记</header>
+            <div class="sample-chat">
+              <div class="bubble own">帮我把这周的灵感整理一下。</div>
+              <div class="sample-agent"><span>A</span> Ada</div>
+              <div class="bubble reply">可以。我会把零散的想法按主题归在一起，给每一组留一个可以接着做的小任务。</div>
+              <div class="sample-card">灵感清单 <span>待整理</span></div>
+            </div>
+            <div class="sample-composer">输入消息… <span class="sample-button">发送</span></div>
+          </section>
+          <section id="board-example" class="sample-page" role="tabpanel" aria-labelledby="tab-board-example" hidden>
+            <header>任务看板 <span class="sample-button">新建任务</span></header>
+            <div class="sample-board">
+              <div><h3>待办</h3><div class="sample-card">整理灵感清单</div><div class="sample-card">挑选参考资料</div></div>
+              <div><h3>进行中</h3><div class="sample-card">写下第一个草稿</div></div>
+            </div>
+          </section>
+          <section id="settings-example" class="sample-page" role="tabpanel" aria-labelledby="tab-settings-example" hidden>
+            <header>设置</header>
+            <div class="sample-preferences">
+              <div><strong>外观</strong><span>跟随系统</span></div>
+              <div><strong>聊天宽度</strong><span>标准</span></div>
+              <div><strong>通知</strong><span class="sample-button">已启用</span></div>
+            </div>
+            <div class="sample-dialog"><strong>对话框</strong><span>外观应用到当前工作区。</span><span class="sample-button">确定</span></div>
+          </section>
+        </div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
