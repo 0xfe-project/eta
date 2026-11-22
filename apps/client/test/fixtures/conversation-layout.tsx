@@ -158,6 +158,7 @@ function Fixture() {
         </If>
         <Conversation
           id="group"
+          rail={scenario === "short"}
           layout={layout()}
           onTask={noop}
           onRelatedTask={noop}

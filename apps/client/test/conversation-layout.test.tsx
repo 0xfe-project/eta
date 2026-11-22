@@ -40,6 +40,16 @@ for (const [name, width, height] of sizes)
       );
     });
 
+test("the chat rail offers a jump for both the prompt and the agent reply", async () => {
+  const app = await open(fixture, {
+    width: 1440,
+    height: 900,
+    urlScheme: "eta://fixture/short",
+  });
+  await app.press("label:Reply 1");
+  await app.press("label:Prompt 1");
+});
+
 test("a phone that lost the host before any message shows the error in the message area", async () => {
   const app = await open(fixture, {
     width: 390,
