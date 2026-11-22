@@ -242,6 +242,7 @@ export class TaskCards {
           draft.turnMessageId,
         ),
       })!;
+      this.#told(row, `created as task #${task.number}`, title, task);
       return {
         task,
         message,
@@ -270,7 +271,42 @@ export class TaskCards {
       throw new Error("that draft was already confirmed");
     if ((row.data as unknown as TaskDraftData).discarded)
       throw new Error("that draft was already discarded");
-    return timeline.setData(row.id, { ...row.data, discarded: true })!;
+    const message = timeline.setData(row.id, { ...row.data, discarded: true })!;
+    this.#told(
+      row,
+      "discarded, no task was made",
+      String(row.data.title ?? ""),
+    );
+    return message;
+  }
+
+  /**
+   * Tell the agent that proposed a draft what became of it. A system row, like the steward's: it
+   * wakes nobody, and the drafter reads it at its next wake with the rest of what it missed, so an
+   * agent that is gone or idle is not called back by it. A draft has one outcome (confirming twice
+   * makes no second row, a discarded one cannot be decided again), so it is told once. A draft
+   * with no agent behind it has nobody to tell.
+   */
+  #told(
+    row: MessageView,
+    outcome: string,
+    title: string,
+    task?: TaskRecord,
+  ): void {
+    if (row.agentId === null) return;
+    const { agents, timeline } = this.#deps;
+    const name = agents.get(row.agentId)?.name ?? "an agent that is gone";
+    timeline.system(
+      row.conversationId,
+      `The user decided on the task draft “${title}” by ${name}: ${outcome}.`,
+      {
+        event: "task_draft_decided",
+        draftId: row.id,
+        agentId: row.agentId,
+        outcome: task === undefined ? "discarded" : "created",
+        ...(task === undefined ? {} : { taskId: task.id, number: task.number }),
+      },
+    );
   }
 
   /**
