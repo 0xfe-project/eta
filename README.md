@@ -153,7 +153,7 @@ there; it shows a fingerprint, and the machine joins once you approve it. See
 ## Documentation
 
 - [Self-hosting](docs/self-hosting.md): flags, the token, reverse proxies, more machines, upgrades
-- [Development](docs/development.md): the layout, working from a checkout, checks
+- [Development](docs/development.md): the layout, the tools (Bun, Node 24 via `.nvmrc`), working from a checkout, checks
 - [Release](docs/release.md): how versions are built and published, checksums
 - [Architecture](docs/architecture/overview.md): processes, the wire protocol, data, access control
 

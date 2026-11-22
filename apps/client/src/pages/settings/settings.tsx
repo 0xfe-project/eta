@@ -7,7 +7,7 @@ import type { ViewRef } from "nsh";
 import type { Layout } from "../../components";
 import type { AppearanceProps } from "./appearance";
 import type { SettingsSection } from "./overview";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   ActionItem,
   Button,
@@ -18,6 +18,7 @@ import {
   Icon,
   Modal,
   row,
+  SmoothScroll,
 } from "../../components";
 import { CloseButton } from "../../components/navigation-buttons";
 import { uiText, useText } from "../../i18n";
@@ -39,6 +40,7 @@ import { sections, useSettingsOverview } from "./overview";
 import { RuntimeList } from "./runtimes/runtime-list";
 import { emptyStyle, EntityRow, SectionHeader } from "./section";
 import { AgentSetting } from "./setting-row";
+import { TaskSettings } from "./tasks";
 import { UpdateSettings } from "./updates/update";
 
 export function Settings(
@@ -201,7 +203,7 @@ export function Settings(
                   when={host.people().length}
                   else={info(uiText("settingsNoAgents"))}
                 >
-                  <Scroll style={grow} scrollbar={false}>
+                  <SmoothScroll style={grow} scrollbar={false}>
                     <Each of={host.people()} key={(item) => item.id}>
                       {(item) => (
                         <AgentSetting
@@ -212,7 +214,7 @@ export function Settings(
                         />
                       )}
                     </Each>
-                  </Scroll>
+                  </SmoothScroll>
                 </If>
               </If>
               <If when={current() === "Model services"}>
@@ -238,7 +240,7 @@ export function Settings(
                         </Empty>
                       }
                     >
-                      <Scroll style={grow} scrollbar={false}>
+                      <SmoothScroll style={grow} scrollbar={false}>
                         <ModelSourceList
                           phone={phone()}
                           onRef={sourceRef}
@@ -251,7 +253,7 @@ export function Settings(
                             connector.set(name);
                           }}
                         />
-                      </Scroll>
+                      </SmoothScroll>
                     </If>
                   }
                 >
@@ -303,7 +305,7 @@ export function Settings(
                     />
                   }
                 >
-                  <Scroll style={grow} scrollbar={false}>
+                  <SmoothScroll style={grow} scrollbar={false}>
                     <ExternalAgentList
                       lists={acpLists()}
                       machines={machines()}
@@ -311,11 +313,11 @@ export function Settings(
                         acpAgent.set({ machineId, id: item.id })
                       }
                     />
-                  </Scroll>
+                  </SmoothScroll>
                 </If>
               </If>
               <If when={current() === "Runtimes"}>
-                <Scroll style={grow} scrollbar={false}>
+                <SmoothScroll style={grow} scrollbar={false}>
                   <RuntimeList
                     listing={runtimes}
                     phone={phone()}
@@ -323,7 +325,7 @@ export function Settings(
                       acpAgent.set({ machineId, id })
                     }
                   />
-                </Scroll>
+                </SmoothScroll>
               </If>
               <If when={current() === "Email"}>
                 <If
@@ -343,7 +345,7 @@ export function Settings(
                         />
                       }
                     >
-                      <Scroll style={grow} scrollbar={false}>
+                      <SmoothScroll style={grow} scrollbar={false}>
                         <Each of={email()} key={(item) => item.id}>
                           {(item) => (
                             <EntityRow
@@ -388,7 +390,7 @@ export function Settings(
                             />
                           )}
                         </Each>
-                      </Scroll>
+                      </SmoothScroll>
                     </If>
                   }
                 >
@@ -404,6 +406,9 @@ export function Settings(
                     />
                   )}
                 </If>
+              </If>
+              <If when={current() === "Tasks"}>
+                <TaskSettings phone={phone()} />
               </If>
               <If when={current() === "Archived"}>
                 <ArchiveSettings phone={phone()} />

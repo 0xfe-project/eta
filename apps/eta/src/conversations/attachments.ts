@@ -85,12 +85,18 @@ const UNSENT_TTL_MS = 24 * 60 * 60 * 1000;
 /** The images a run carries are the first this many, up to this many bytes in all. */
 const MAX_IMAGES = 4;
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+/** The largest picture the transcript fetches; one reply carries it whole. */
+const MAX_PICTURE_BYTES = 8 * 1024 * 1024;
 const IMAGE_TYPES = new Set([
   "image/png",
   "image/jpeg",
   "image/gif",
   "image/webp",
 ]);
+/** How much of its width and height an image keeps, in turn, until it fits (1: re-encoded only). */
+const SHRINK_SCALES = [1, 0.75, 0.5, 0.35, 0.25, 0.15];
+/** Lossy formats are re-encoded at this quality; the stored file is never touched. */
+const SHRINK_QUALITY = 80;
 /** What one write over the link carries of a file. */
 const DELIVER_CHUNK_BYTES = 3 * 1024 * 1024;
 
@@ -101,6 +107,56 @@ interface Upload {
   /** The next chunk expected. */
   next: number;
   bytes: number;
+}
+
+const megabytes = (bytes: number): string =>
+  `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+
+/**
+ * The bytes of an image as a model can be given them: as they are when they fit in `limit`,
+ * else decoded, scaled down step by step and re-encoded (jpeg and webp stay what they are; png and
+ * gif, which has no encoder, become png) until they do. Throws why when the picture cannot be
+ * decoded or does not fit even at the smallest step. Uses the runtime's own `Bun.Image`.
+ */
+async function fitImage(
+  name: string,
+  mime: string,
+  bytes: Buffer,
+  limit: number,
+): Promise<{ mime: string; bytes: Buffer }> {
+  if (bytes.byteLength <= limit) return { mime, bytes };
+  const over = `${name} is ${megabytes(bytes.byteLength)}, over the ${megabytes(limit)} an image may be`;
+  let size: { width: number; height: number };
+  try {
+    size = await new Bun.Image(bytes).metadata();
+  } catch (error) {
+    throw new Error(
+      `${over}, and it could not be decoded to shrink it: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
+  const out =
+    mime === "image/jpeg" || mime === "image/webp" ? mime : "image/png";
+  let smallest = bytes.byteLength;
+  for (const scale of SHRINK_SCALES) {
+    let image = new Bun.Image(bytes);
+    if (scale < 1)
+      image = image.resize(
+        Math.max(1, Math.round(size.width * scale)),
+        Math.max(1, Math.round(size.height * scale)),
+      );
+    const encoded = await (out === "image/jpeg"
+      ? image.jpeg({ quality: SHRINK_QUALITY })
+      : out === "image/webp"
+        ? image.webp({ quality: SHRINK_QUALITY })
+        : image.png()
+    ).buffer();
+    if (encoded.byteLength <= limit) return { mime: out, bytes: encoded };
+    smallest = Math.min(smallest, encoded.byteLength);
+  }
+  throw new Error(
+    `${over}, and is still ${megabytes(smallest)} scaled down to ${SHRINK_SCALES.at(-1)! * 100}% of its size`,
+  );
 }
 
 export class AttachmentStore {
@@ -256,6 +312,32 @@ export class AttachmentStore {
   }
 
   /**
+   * A sent image of this conversation, to be shown in its transcript. Any image type a browser
+   * draws (the Windows client pastes bmp), not only those a model takes; unsent files, other
+   * conversations' files and other kinds of file are refused.
+   */
+  async picture(
+    conversationId: string,
+    id: string,
+  ): Promise<{ contentType: string; data: string }> {
+    const record = this.get(id);
+    if (
+      record === undefined ||
+      record.conversationId !== conversationId ||
+      record.messageId === null
+    )
+      throw new Error(`no such attachment: ${id}`);
+    if (!record.contentType.startsWith("image/"))
+      throw new Error(`${record.name} is not an image`);
+    if (record.size > MAX_PICTURE_BYTES)
+      throw new Error(
+        `${record.name} is over the ${MAX_PICTURE_BYTES / (1024 * 1024)} MB a picture may be`,
+      );
+    const bytes = await readFile(this.pathOf(record));
+    return { contentType: record.contentType, data: bytes.toString("base64") };
+  }
+
+  /**
    * The files a message is about to carry, checked: they exist, are this conversation's, have not
    * gone with another message, and are not too many. Call inside the transaction that writes the
    * message, then `claim` in it.
@@ -293,7 +375,8 @@ export class AttachmentStore {
 
   /**
    * The images among `records` a model can be given in the prompt: the common formats, few and
-   * small enough to travel (over the link they share one frame).
+   * small enough to travel (over the link they share one frame). One over what is left of the
+   * budget is scaled down to fit (see `image`); one that cannot be, or cannot be read, is left out.
    */
   async images(
     records: readonly AttachmentRecord[],
@@ -303,16 +386,43 @@ export class AttachmentStore {
     for (const record of records) {
       if (images.length >= MAX_IMAGES) break;
       if (!IMAGE_TYPES.has(record.contentType)) continue;
-      if (total + record.size > MAX_IMAGE_BYTES) continue;
       const bytes = await readFile(this.pathOf(record)).catch(() => undefined);
       if (bytes === undefined) continue;
-      total += bytes.byteLength;
+      const fitted = await fitImage(
+        record.name,
+        record.contentType,
+        bytes,
+        MAX_IMAGE_BYTES - total,
+      ).catch(() => undefined);
+      if (fitted === undefined) continue;
+      total += fitted.bytes.byteLength;
       images.push({
-        mime: record.contentType,
-        dataBase64: bytes.toString("base64"),
+        mime: fitted.mime,
+        dataBase64: fitted.bytes.toString("base64"),
       });
     }
     return images;
+  }
+
+  /**
+   * One image as a model can be given it, scaled down when it is over the limit; throws why it
+   * cannot be, for a tool to say. The stored file stays as it was uploaded.
+   */
+  async image(
+    record: AttachmentRecord,
+  ): Promise<{ mime: string; dataBase64: string }> {
+    if (!IMAGE_TYPES.has(record.contentType))
+      throw new Error(
+        `${record.name} is ${record.contentType}, not an image a model takes (${[...IMAGE_TYPES].join(", ")})`,
+      );
+    const bytes = await readFile(this.pathOf(record));
+    const fitted = await fitImage(
+      record.name,
+      record.contentType,
+      bytes,
+      MAX_IMAGE_BYTES,
+    );
+    return { mime: fitted.mime, dataBase64: fitted.bytes.toString("base64") };
   }
 
   /**
@@ -374,4 +484,43 @@ export class AttachmentStore {
     }
     return path;
   }
+}
+
+/**
+ * `GET /attachments/<id>`: an attached picture's bytes, for the page that shows it, behind the
+ * normal access. Only the image formats a browser draws as pictures: anything else (an SVG, a
+ * page) served from this origin could run as the app. It never changes, so it is kept.
+ */
+export function createAttachmentRoutes(
+  attachments: AttachmentStore,
+): (request: Request) => Promise<Response | undefined> {
+  return async (request) => {
+    const parts = new URL(request.url).pathname.split("/");
+    if (parts[1] !== "attachments" || parts.length !== 3) return undefined;
+    if (request.method !== "GET" && request.method !== "HEAD")
+      return new Response("method not allowed", {
+        status: 405,
+        headers: { allow: "GET, HEAD" },
+      });
+    const id = parts[2] ?? "";
+    const record = UPLOAD_ID.test(id) ? attachments.get(id) : undefined;
+    const bytes =
+      record === undefined || !IMAGE_TYPES.has(record.contentType)
+        ? undefined
+        : await readFile(attachments.pathOf(record)).catch(() => undefined);
+    if (record === undefined || bytes === undefined)
+      return new Response("not found", {
+        status: 404,
+        headers: { "cache-control": "no-store" },
+      });
+    return new Response(request.method === "HEAD" ? null : bytes, {
+      headers: {
+        "content-type": record.contentType,
+        "content-length": String(bytes.byteLength),
+        "cache-control": "private, max-age=31536000, immutable",
+        "content-security-policy": "sandbox",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  };
 }

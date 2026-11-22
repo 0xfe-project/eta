@@ -272,6 +272,19 @@ export class Timeline {
     return changed === 0 ? undefined : this.get(id);
   }
 
+  /** Drafts still waiting for a decision that were written at or before `cutoff`, oldest first. */
+  pendingDraftsBefore(cutoff: number): MessageView[] {
+    return this.#db
+      .query<Row, [number]>(
+        `SELECT * FROM message
+          WHERE kind = 'task_draft' AND created_at <= ?
+            AND COALESCE(json_extract(data, '$.discarded'), 0) = 0
+          ORDER BY created_at, seq`,
+      )
+      .all(cutoff)
+      .map(viewOf);
+  }
+
   /** The cards that show a task, one per conversation it was confirmed in. */
   cardsOf(taskId: string): MessageView[] {
     return this.#db

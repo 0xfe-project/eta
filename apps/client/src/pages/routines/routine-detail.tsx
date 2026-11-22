@@ -1,6 +1,6 @@
 import type { BriefView, RoutineInfo, RunView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
-import { Scroll, View } from "nsh";
+import { View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -9,6 +9,7 @@ import {
   grow,
   Label,
   row,
+  SmoothScroll,
 } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { uiText } from "../../i18n";
@@ -137,7 +138,7 @@ export function RoutineDetail(props: {
           </View>
         </View>
       </If>
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <If when={phone()}>
           <View
             style={{
@@ -293,7 +294,7 @@ export function RoutineDetail(props: {
             })}
           </Label>
         </View>
-      </Scroll>
+      </SmoothScroll>
     </View>
   );
 }

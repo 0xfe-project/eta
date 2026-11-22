@@ -80,6 +80,7 @@ import { TaskCardRow, TaskDraftRow } from "./task-rows";
 import { StatusIcon } from "./task-status-icon";
 import { TranscriptRail } from "./transcript-rail";
 import { AskBlock } from "./transcript/ask-block";
+import { AttachmentImages } from "./transcript/attachment-images";
 import { CopyMessage } from "./transcript/copy-message";
 import { InsertMessage } from "./transcript/insert-message";
 import { Message, SystemMessage } from "./transcript/message";
@@ -133,16 +134,29 @@ const chatWidths: Record<NonNullable<WorkspaceState["chatWidth"]>, string> = {
 };
 
 /** The files a message came with (`data.attachments`), under its text. */
-function MessageFiles({ data }: { data: Record<string, unknown> }) {
+function MessageFiles({
+  conversationId,
+  data,
+}: {
+  conversationId: string;
+  data: Record<string, unknown>;
+}) {
   const files = Array.isArray(data.attachments)
     ? (data.attachments as Partial<AttachmentView>[]).filter(
         (file): file is AttachmentView =>
           typeof file?.id === "string" && typeof file.name === "string",
       )
     : [];
+  const pictures = files.filter((file) =>
+    file.contentType?.startsWith("image/"),
+  );
+  const others = files.filter((file) => !pictures.includes(file));
   return files.length === 0 ? null : (
     <div className="flex flex-col items-start">
-      {files.map((file) => (
+      {pictures.length === 0 ? null : (
+        <AttachmentImages conversationId={conversationId} files={pictures} />
+      )}
+      {others.map((file) => (
         <AttachmentChip key={file.id} attachment={file} />
       ))}
     </div>
@@ -882,7 +896,10 @@ const Turn = memo(
               text={message.text}
               blocks={pasteBlocksOf(message.data, message.text)}
             />
-            <MessageFiles data={message.data} />
+            <MessageFiles
+              conversationId={message.conversationId}
+              data={message.data}
+            />
             {(inserts ?? []).map((insert) => (
               <div
                 key={insert.id}
@@ -898,7 +915,10 @@ const Turn = memo(
                   text={insert.text}
                   blocks={pasteBlocksOf(insert.data, insert.text)}
                 />
-                <MessageFiles data={insert.data} />
+                <MessageFiles
+                  conversationId={message.conversationId}
+                  data={insert.data}
+                />
               </div>
             ))}
           </Message>

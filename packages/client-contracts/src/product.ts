@@ -804,6 +804,7 @@ export const CONVERSATION_ACTIONS = [
   "history",
   "attach",
   "unattach",
+  "attachment",
 ] as const;
 export type ConversationAction = (typeof CONVERSATION_ACTIONS)[number];
 
@@ -895,6 +896,8 @@ export interface ConversationArgs {
   };
   /** Takes back an attachment that has not been sent. */
   unattach: { conversationId: string; attachmentId: string };
+  /** Reads a sent image attachment of the conversation, to show it in the transcript. */
+  attachment: { conversationId: string; attachmentId: string };
   /** One reply (`messageId`), or every reply in flight in the conversation. */
   stop: { conversationId: string; messageId?: string };
   /** Moves the user's read mark forward to `seq` (never back, never past the newest row). */
@@ -910,6 +913,25 @@ export interface AttachmentView {
   contentType: string;
   size: number;
 }
+
+/**
+ * The attachments the host gives back as pictures, at `attachmentPicturePath`: the image formats
+ * a browser draws as pictures and nothing that could run as a page (an SVG is a file like any other).
+ */
+const PICTURE_TYPES: ReadonlySet<string> = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+]);
+
+/** Whether the host shows an attachment of this type back as a picture. */
+export const isPictureType = (contentType: string | undefined) =>
+  PICTURE_TYPES.has(contentType ?? "");
+
+/** Where the host serves an attached picture's bytes (`GET`, behind the normal access). */
+export const attachmentPicturePath = (id: string) =>
+  `/attachments/${encodeURIComponent(id)}`;
 
 /** A file at most this large, and a message at most this many files. */
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
@@ -970,6 +992,7 @@ export interface ConversationResults {
   history: HistoryResult;
   attach: { attachment: AttachmentView | null };
   unattach: { removed: boolean };
+  attachment: { contentType: string; data: string };
 }
 export type ConversationCall = {
   [A in ConversationAction]: Omit<CallFrame, "target" | "action" | "args"> & {

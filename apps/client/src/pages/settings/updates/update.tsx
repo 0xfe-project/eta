@@ -1,6 +1,6 @@
 import type { Layout } from "../../../components";
-import { Scroll, View } from "nsh";
-import { Button, grow, Label, row } from "../../../components";
+import { View } from "nsh";
+import { Button, grow, Label, row, SmoothScroll } from "../../../components";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { canStartHost } from "../../connection/local-host";
@@ -53,7 +53,7 @@ export function UpdateSettings(props: {
           />
         </View>
       </GroupHeading>
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <If
           when={check()}
           else={
@@ -87,7 +87,7 @@ export function UpdateSettings(props: {
         <If when={canStartHost}>
           <DesktopAppUpdate work={check()?.busy ?? []} />
         </If>
-      </Scroll>
+      </SmoothScroll>
       <UpdateSourceEditor update={update} phone={phone()} />
       <ConfirmHostUpdate update={update} phone={phone()} />
     </View>

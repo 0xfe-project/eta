@@ -1,6 +1,6 @@
 import type { SettingsSection, useSettingsOverview } from "./overview";
-import { Scroll, View } from "nsh";
-import { colors, grow, Icon, Label, row } from "../../components";
+import { View } from "nsh";
+import { colors, grow, Icon, Label, row, SmoothScroll } from "../../components";
 import { StatusDot } from "../../components/status-dot";
 
 import { useText } from "../../i18n";
@@ -20,7 +20,7 @@ export function SettingsNavigation(props: {
     return tone === "red" ? "mutedInk" : (tone ?? "muted");
   };
   return (
-    <Scroll
+    <SmoothScroll
       style={
         props.phone
           ? grow
@@ -88,6 +88,6 @@ export function SettingsNavigation(props: {
           )}
         </Each>
       </View>
-    </Scroll>
+    </SmoothScroll>
   );
 }

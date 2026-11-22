@@ -12,6 +12,7 @@ import {
 } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { ArtifactPreview } from "../chat/artifacts/preview";
 import { TaskMenu, TaskMenuItem } from "./menu";
 import { TaskPlan } from "./plan";
 import { activeTaskRun } from "./run-log";
@@ -308,6 +309,16 @@ export function TaskDetail(props: {
         onClose={props.onClose}
         state={state}
       />
+      <If when={state.artifact()}>
+        {(selection) => (
+          <ArtifactPreview
+            artifact={selection().artifact}
+            initialVersion={selection().version}
+            layout={props.layout}
+            onClose={() => state.artifact.set(undefined)}
+          />
+        )}
+      </If>
     </View>
   );
 }

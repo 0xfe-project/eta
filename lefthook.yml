@@ -35,7 +35,7 @@ pre-commit:
             stage_fixed: true
 
     - name: format
-      run: bunx dprint fmt --allow-no-files {staged_files}
+      run: bunx --bun dprint fmt --allow-no-files {staged_files}
       stage_fixed: true
 
     - name: verify

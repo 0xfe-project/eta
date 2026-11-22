@@ -1,8 +1,17 @@
 import type { UpgradeCheckView } from "@eta/client-contracts";
 import type { AppUpdate, UpdateProgress } from "nsh/updater";
-import { appInfo, openUrl, Scroll, signal, View } from "nsh";
+import { appInfo, openUrl, signal, View } from "nsh";
 import { checkForUpdate, downloadUpdate, installAndRestart } from "nsh/updater";
-import { Button, colors, grow, Label, Modal, row } from "../../../components";
+import {
+  Button,
+  colors,
+  grow,
+  Label,
+  Modal,
+  row,
+  SmoothScroll,
+} from "../../../components";
+import { DownloadProgressBar } from "../../../components/download-progress";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 
@@ -132,6 +141,9 @@ export function DesktopAppUpdate(props: { work: UpgradeCheckView["busy"] }) {
           </View>
         )}
       </If>
+      <If when={busy() && !ready() ? percentage() : undefined}>
+        {(value) => <DownloadProgressBar value={value()} />}
+      </If>
       <If when={failure()}>
         <Label variant="small" tone="red">
           {failure()}
@@ -154,7 +166,7 @@ export function DesktopAppUpdate(props: { work: UpgradeCheckView["busy"] }) {
             <Label weight={500}>
               {uiText("updateTheDesktopAppTo", { version: update()!.version })}
             </Label>
-            <Scroll style={grow}>
+            <SmoothScroll style={grow}>
               <View style={{ gap: 10 }}>
                 <Label variant="small" tone="mutedInk">
                   {host.address()?.local
@@ -168,7 +180,7 @@ export function DesktopAppUpdate(props: { work: UpgradeCheckView["busy"] }) {
                   />
                 </If>
               </View>
-            </Scroll>
+            </SmoothScroll>
             <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>
               <Button
                 label={uiText("cancel")}

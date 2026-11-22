@@ -1,5 +1,5 @@
 import type { PluginAuditView, PluginView } from "@eta/client-contracts";
-import { Clipboard, Scroll, signal, View } from "nsh";
+import { Clipboard, signal, View } from "nsh";
 import {
   Button,
   Caption,
@@ -10,6 +10,7 @@ import {
   Label,
   Modal,
   row,
+  SmoothScroll,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { uiText } from "../../i18n";
@@ -161,7 +162,7 @@ export function PluginDetail(props: DetailProps) {
           </If>
         </Header>
       </If>
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <View
           style={props.phone ? { paddingBottom: 16 } : { padding: 20, gap: 20 }}
         >
@@ -390,7 +391,7 @@ export function PluginDetail(props: DetailProps) {
             </View>
           </If>
         </View>
-      </Scroll>
+      </SmoothScroll>
       <If when={props.phone && actions() && git()}>
         <Modal
           title={props.item.name}

@@ -1,6 +1,6 @@
 import type { MemberView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
-import { Scroll, signal, View, windowSize } from "nsh";
+import { signal, View, windowSize } from "nsh";
 import { Dialog } from "nsh/base";
 import {
   Button,
@@ -11,6 +11,7 @@ import {
   Label,
   Modal,
   row,
+  SmoothScroll,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { CheckControl } from "../../components/check-control";
@@ -196,7 +197,7 @@ export function InviteAgents(props: {
         <Label tone="muted" variant="caption">
           {uiText("membersCanReadTheGroupChat")}
         </Label>
-        <Scroll
+        <SmoothScroll
           style={
             phone()
               ? grow
@@ -248,7 +249,7 @@ export function InviteAgents(props: {
           <If when={!candidates().length}>
             <Label tone="muted">{uiText("allAgentsAreAlreadyMembers")}</Label>
           </If>
-        </Scroll>
+        </SmoothScroll>
       </View>
       <View
         style={{

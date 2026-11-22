@@ -345,7 +345,51 @@ export const settingsMessages = {
     "Done or cancelled tasks whose timeline has had nothing new for this long go to Archived. Anything new brings them back.",
     "已完成或已取消的任务，时间线在这段时间内没有新内容，就会移到「已归档」。有新内容时会自动回来。",
   ],
+  taskFollowUp: ["Task follow-up", "任务跟进"],
+  reactToResults: ["Review finished tasks", "任务完成后让负责人验收"],
+  reactToResultsHint: [
+    "When on, a finished task wakes the agent that made it to review the result and follow up.",
+    "开启后，任务完成时会叫醒创建任务的负责人去验收并跟进。",
+  ],
+  taskDraftTimeout: ["Task drafts", "任务草稿"],
+  draftTimeoutEnabled: [
+    "Handle unanswered drafts automatically",
+    "自动处理超时未答复的草稿",
+  ],
+  draftTimeoutEnabledHint: [
+    "A draft nobody confirms or discards in time is handled for you, and the card says it was automatic. Drafts already waiting count from when they were written.",
+    "超过设定时间仍没有被确认或丢弃的草稿会自动处理，卡片上会标明是自动处理。已在等待的草稿按它们创建的时间计算。",
+  ],
+  draftTimeoutMinutes: ["Wait before handling", "等待时间"],
+  draftTimeoutMinutesHint: [
+    "Whole minutes, {{min}} to {{max}}.",
+    "整数分钟，{{min}} 到 {{max}}。",
+  ],
+  draftTimeoutMinutesInvalid: [
+    "Enter a whole number of minutes from {{min}} to {{max}}.",
+    "请输入 {{min}} 到 {{max}} 之间的整数分钟。",
+  ],
+  draftTimeoutMinutesUnit: ["min", "分钟"],
+  draftTimeoutAction: ["When time is up", "超时后"],
+  draftTimeoutActionHint: [
+    "Accepting makes the task and starts it at once, with nobody watching. Discarding makes no task.",
+    "接受会直接创建任务并立刻开始执行，期间可能没人盯着；丢弃则不创建任务。",
+  ],
+  draftTimeoutAccept: ["Accept the draft", "接受草稿"],
+  draftTimeoutDiscard: ["Discard the draft", "丢弃草稿"],
+  draftDiscardedAuto: [
+    "Discarded automatically: nobody decided in time.",
+    "超时无人处理，已自动丢弃。",
+  ],
   autoArchiveDefault: ["{{label}} (default)", "{{label}}（默认）"],
+  taskAsksMakerFirst: [
+    "Let the task's maker answer first",
+    "先由创建任务的负责人回答",
+  ],
+  taskAsksHint: [
+    "When on, an agent's question in a task goes first to the agent that made the task. It answers if it can, and sends the rest to you. Each answer it gives is written on the task's timeline.",
+    "开启后，任务里 agent 的提问先由创建任务的负责人回答，答不了再转给你，自答会记在任务时间线。",
+  ],
   pluginsHint: [
     "Tick the plugins this agent may use.",
     "勾选这个智能体可以使用的插件。",
