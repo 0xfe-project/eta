@@ -31,7 +31,7 @@ const testLabel = (result: PluginTestResult): string =>
           : uiText("testFailed");
 
 /** One click connects to the server, lists what it offers, and closes; it never runs by itself. */
-function TestConnection(props: { item: PluginView; server: string; stdio: boolean }) {
+function createTest(props: { item: PluginView; server: string }) {
   const host = useHost();
   const busy = signal(false);
   const result = signal<PluginTestResult | undefined>(undefined);
@@ -50,22 +50,34 @@ function TestConnection(props: { item: PluginView; server: string; stdio: boolea
       }
     });
   }
+  return { busy, result, run };
+}
+
+type Test = ReturnType<typeof createTest>;
+
+/** The button, in the server's header row: a secondary (outlined, filled) one, so Save stays the primary. */
+function TestButton(props: { test: Test }) {
+  return (
+    <Button
+      label={props.test.busy() ? uiText("testing") : uiText("testConnection")}
+      tone="plain"
+      labelVariant="body"
+      size={28}
+      disabled={props.test.busy()}
+      onPress={props.test.run}
+    />
+  );
+}
+
+function TestResultView(props: { test: Test; stdio: boolean }) {
+  const result = props.test.result;
   return (
     <View style={{ gap: 8 }}>
-      <View style={{ ...row, gap: 12, flexWrap: "wrap" }}>
-        <Button
-          label={busy() ? uiText("testing") : uiText("testConnection")}
-          tone="ghost"
-          labelVariant="small"
-          disabled={busy()}
-          onPress={run}
-        />
-        <If when={props.stdio}>
-          <Label variant="small" tone="muted">
-            {uiText("testStdioHint")}
-          </Label>
-        </If>
-      </View>
+      <If when={props.stdio}>
+        <Label variant="small" tone="muted">
+          {uiText("testStdioHint")}
+        </Label>
+      </If>
       <If when={result()}>
         <View style={{ gap: 4 }}>
           <Label variant="small" weight={600}>
@@ -164,7 +176,9 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
         </Label>
       </If>
       <Each of={props.item.servers} key={(server) => server.name}>
-        {(server) => (
+        {(server) => {
+          const test = createTest({ item: props.item, server: server().name });
+          return (
           <View
             style={{
               gap: 12,
@@ -180,8 +194,7 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
                 gap: props.phone ? 8 : 10,
               }}
             >
-              <Icon name="terminal" size={14} tone="muted" />
-              <Label variant="subtitle" weight={600}>{server().name}</Label>
+                <Label variant="subtitle" weight={600}>{server().name}</Label>
               <Label
                 variant="small"
                 tone={props.phone ? "ink" : "mutedInk"}
@@ -211,12 +224,11 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
                   tone="muted"
                 >{`${text("headers")}: ${(server().headers ?? []).join(", ")}`}</Label>
               </If>
+              <View testID={"test-slot:" + server().name} style={{ flexShrink: 0 }}>
+                <TestButton test={test} />
+              </View>
             </View>
-            <TestConnection
-              item={props.item}
-              server={server().name}
-              stdio={server().transport === "stdio"}
-            />
+            <TestResultView test={test} stdio={server().transport === "stdio"} />
             <If when={server().transport !== "stdio" && hostKnowsHeaders(props.item)}>
               <HeadersEditor
                 item={props.item}
@@ -226,7 +238,8 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
               />
             </If>
           </View>
-        )}
+          );
+        }}
       </Each>
     </View>
   );

@@ -37,6 +37,8 @@ test("each server offers a Test connection button, and nothing is tested until i
   const app = await open("./fixtures/plugins-installed.tsx", { width: 1100, height: 800 });
   await app.press("label:remote-plugin");
   expect(app.shows("Test connection")).toBe(true);
+  expect(app.count("id:test-slot:fc")).toBe(1);
+  expect(app.count("id:test-slot:fc >> label:Test connection")).toBe(1);
   expect(app.shows("Connected")).toBe(false);
   expect(app.shows("Failed")).toBe(false);
 });
