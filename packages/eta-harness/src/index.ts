@@ -119,6 +119,7 @@ export {
 export {
   loadSkills,
   loadSourcedSkills,
+  formatSkillName,
   parseSkillText,
   type Skill,
   type SkillDiagnostic,

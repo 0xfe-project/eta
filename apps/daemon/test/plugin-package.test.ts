@@ -3,6 +3,7 @@
  * The spec's failure boundaries (§4.1, §5.2, §6.2, §7.1, §7.2.2, §8.1, §11.3): what rejects a
  * plugin, what turns one component type off, and what skips one entry and leaves the rest.
  */
+import * as fs from "node:fs/promises";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -728,5 +729,77 @@ describe("a Cursor or Claude Code layout", () => {
       await foreign(".claude-plugin", { name: "demo", skills: ["./skills/nope"] }, files),
     );
     expect(missing.reports.join("\n")).toContain("skills is not at skills/");
+  });
+});
+
+describe("skill names that are not legal", () => {
+  const load = async (files: Record<string, string>) => {
+    const loaded = await loadPlugin(await plugin(files));
+    return { names: loaded.skills.map((item) => item.name), loaded, reports: loaded.reports.join("\n") };
+  };
+
+  it("leaves a legal name alone", async () => {
+    const { names, reports } = await load({ "skills/good-one/SKILL.md": skill("good-one") });
+    expect(names).toEqual(["good-one"]);
+    expect(reports).not.toContain("renamed");
+  });
+
+  it("formats a space, uppercase, an underscore and edge symbols, and says so", async () => {
+    const { names, reports } = await load({
+      "skills/a/SKILL.md": skill("My Skill"),
+      "skills/b/SKILL.md": skill("Some_Thing"),
+      "skills/c/SKILL.md": skill("--edge!!case--"),
+    });
+    expect(names).toEqual(["my-skill", "some-thing", "edge-case"]);
+    expect(reports).toContain('renamed "My Skill" -> "my-skill"');
+    expect(reports).toContain('renamed "--edge!!case--" -> "edge-case"');
+  });
+
+  it("keeps the readable part of a mixed Chinese name and cuts a long one to 64", async () => {
+    const long = "x".repeat(80);
+    const { names } = await load({
+      "skills/a/SKILL.md": skill("代码 review"),
+      "skills/b/SKILL.md": skill(long),
+    });
+    expect(names).toEqual(["review", "x".repeat(64)]);
+  });
+
+  it("skips a name with nothing usable left, with the reason", async () => {
+    const { names, reports } = await load({ "skills/a/SKILL.md": skill("代码审查") });
+    expect(names).toEqual([]);
+    expect(reports).toContain("skills/a: skipped");
+    expect(reports).toContain("no usable characters");
+  });
+
+  it("gives a clash a stable -2: a legal name keeps its own, the first directory keeps the base", async () => {
+    const { names } = await load({
+      "skills/a/SKILL.md": skill("Foo Bar"),
+      "skills/b/SKILL.md": skill("foo_bar"),
+      "skills/foo-bar/SKILL.md": skill("foo-bar"),
+    });
+    expect(names).toEqual(["foo-bar-2", "foo-bar-3", "foo-bar"]);
+    const again = await load({
+      "skills/foo-bar/SKILL.md": skill("foo-bar"),
+      "skills/b/SKILL.md": skill("foo_bar"),
+      "skills/a/SKILL.md": skill("Foo Bar"),
+    });
+    expect([...again.names].sort()).toEqual([...names].sort());
+  });
+
+  it("shows the original name, and leaves the skill's text as it was", async () => {
+    const root = await plugin({ "skills/a/SKILL.md": skill("My Skill") });
+    const loaded = await loadPlugin(root);
+    expect(loaded.skills[0]).toMatchObject({ name: "my-skill", renamedFrom: "My Skill" });
+    expect(await fs.readFile(join(root, "skills/a/SKILL.md"), "utf8")).toBe(skill("My Skill"));
+  });
+
+  it("still skips what is not a naming fault: a legal name in the wrong directory, no description", async () => {
+    const { names, reports } = await load({
+      "skills/b/SKILL.md": skill("not-b"),
+      "skills/c/SKILL.md": "---\nname: Bad Name\n---\n\nBody.\n",
+    });
+    expect(names).toEqual([]);
+    expect(reports).toContain("skills/b: skipped");
+    expect(reports).toContain("skills/c: skipped");
   });
 });

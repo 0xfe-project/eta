@@ -23,7 +23,7 @@ import {
   ETA_EXTENSION,
   parseConfigFields,
 } from "@eta/client-contracts/plugin-fields";
-import { loadSkills } from "@eta/harness";
+import { formatSkillName, parseSkillText } from "@eta/harness";
 
 export class PluginError extends Error {
   override readonly name = "PluginError";
@@ -89,6 +89,8 @@ interface PluginSkill {
   description: string;
   /** Its directory: `<root>/skills/<name>`. */
   dir: string;
+  /** The name the file gave, when it was not a legal one and `name` is the formatted one. */
+  renamedFrom?: string;
 }
 
 type PluginServerConfig =
@@ -689,26 +691,61 @@ async function loadSkillDirs(
     reports.push("skills: not a directory inside the plugin; ignored");
     return [];
   }
-  const skills: PluginSkill[] = [];
-  for (const name of readdirSync(location).sort()) {
-    const dir = join(location, name);
+  type Found = { dirName: string; dir: string; file: string; raw: string; legal: boolean };
+  const found: Found[] = [];
+  for (const dirName of readdirSync(location).sort()) {
+    const dir = join(location, dirName);
     const file = join(dir, "SKILL.md");
     if (!statSync(file, { throwIfNoEntry: false })?.isFile()) continue;
     if (!isWithin(root, await resolvedPath(file))) {
-      reports.push(`skills/${name}: resolves outside the plugin; skipped`);
+      reports.push(`skills/${dirName}: resolves outside the plugin; skipped`);
       continue;
     }
     // One directory at a time: the spec looks at immediate children and goes no deeper.
-    const { skills: found, diagnostics } = await loadSkills([dir]);
-    const skill = found.find((candidate) => candidate.filePath === file);
-    if (skill === undefined || diagnostics.length > 0) {
-      const why =
-        diagnostics.map((item) => item.message).join("; ") ||
-        "it has no description";
-      reports.push(`skills/${name}: skipped: ${why}`);
+    const parsed = parseSkillText(readFileSync(file, "utf8"), file, dirName, true);
+    if (parsed.skill === null) {
+      const why = parsed.diagnostics.map((item) => item.message).join("; ") || "it has no description";
+      reports.push(`skills/${dirName}: skipped: ${why}`);
       continue;
     }
-    skills.push({ name: skill.name, description: skill.description, dir });
+    found.push({
+      dirName,
+      dir,
+      file,
+      raw: parsed.skill.name,
+      legal: parsed.diagnostics.length === 0,
+    });
+  }
+  // Legal names keep theirs. A name that is not legal is formatted; when two end up the same, the
+  // one whose directory sorts first keeps it and the next get -2, -3, so the result does not depend
+  // on the order the directories were read in.
+  const taken = new Set(found.filter((one) => one.legal).map((one) => one.raw));
+  const skills: PluginSkill[] = [];
+  for (const one of found) {
+    let name = one.raw;
+    if (!one.legal) {
+      const base = formatSkillName(one.raw);
+      if (base === "") {
+        reports.push(`skills/${one.dirName}: skipped: name "${one.raw}" has no usable characters`);
+        continue;
+      }
+      name = base;
+      for (let n = 2; taken.has(name); n++) {
+        const suffix = `-${n}`;
+        name = base.slice(0, 64 - suffix.length).replace(/-+$/, "") + suffix;
+      }
+      const checked = parseSkillText(readFileSync(one.file, "utf8"), one.file, one.dirName, true, name);
+      if (name === one.raw || checked.diagnostics.length > 0) {
+        // Not a naming fault we fix (a name that is legal but not the directory's, a bad description).
+        const why = checked.diagnostics.map((item) => item.message).join("; ") || "the name does not match its directory";
+        reports.push(`skills/${one.dirName}: skipped: ${why}`);
+        continue;
+      }
+      taken.add(name);
+      reports.push(`skills/${one.dirName}: renamed "${one.raw}" -> "${name}"`);
+    }
+    const description = parseSkillText(readFileSync(one.file, "utf8"), one.file, one.dirName, true, name).skill!.description;
+    skills.push({ name, description, dir: one.dir, ...(name === one.raw ? {} : { renamedFrom: one.raw }) });
   }
   return skills;
 }

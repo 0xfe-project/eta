@@ -397,6 +397,11 @@ export function parseSkillText(
   filePath: string,
   parentDirName: string,
   isDeclaredSkill = true,
+  /**
+   * Use this name instead of the one the document gives. The caller has formatted it, so it is not
+   * required to match the directory; the other name rules still apply. Without it nothing changes.
+   */
+  nameOverride?: string,
 ): {
   skill: Skill | null;
   diagnostics: SkillDiagnostic[];
@@ -440,8 +445,11 @@ export function parseSkillText(
 
   const frontmatterName =
     typeof frontmatter.name === "string" ? frontmatter.name : undefined;
-  const name = frontmatterName || parentDirName;
-  for (const error of validateName(name, parentDirName)) {
+  const name = nameOverride ?? (frontmatterName || parentDirName);
+  for (const error of validateName(
+    name,
+    nameOverride === undefined ? parentDirName : name,
+  )) {
     diagnostics.push({
       type: "warning",
       code: "invalid_metadata",
@@ -465,6 +473,18 @@ export function parseSkillText(
     },
     diagnostics,
   };
+}
+
+/**
+ * Make a skill name a legal one: lowercase, every run of other characters one hyphen, no hyphen at
+ * either end, at most 64 characters. Returns "" when nothing usable is left (e.g. all Chinese).
+ */
+export function formatSkillName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .slice(0, MAX_NAME_LENGTH)
+    .replace(/^-+|-+$/g, "");
 }
 
 function validateName(name: string, parentDirName: string): string[] {
