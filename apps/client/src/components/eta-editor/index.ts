@@ -7,5 +7,6 @@ export { limit } from "./plugins/limit";
 export { mention } from "./plugins/mention";
 export { pasteBlock } from "./plugins/paste-block";
 export { plainText } from "./plugins/plain-text";
+export { quote } from "./plugins/quote";
 export { serialize } from "./plugins/serialize";
 export { submitKeys } from "./plugins/submit-keys";

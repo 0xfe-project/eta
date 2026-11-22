@@ -22,6 +22,8 @@ export function indexInserts(messages: MessageView[]) {
   const additions = new Map<string, MessageView[]>();
   const recipients = new Map<string, string[]>();
   const rows = messages.filter((message) => {
+    // Written for the agent that drafted the task to read: not shown.
+    if (message.data.event === "task_draft_decided") return false;
     const { into } = message.data;
     if (
       message.author === "user" &&

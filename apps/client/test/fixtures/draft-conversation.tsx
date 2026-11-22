@@ -88,6 +88,7 @@ function Fixture() {
           onTask={noop}
           onArtifact={noop}
           onWidgetDraft={noop}
+          onQuote={noop}
         />
         <Text>{`Calls: ${calls().length}`}</Text>
         <Each of={calls()} key="index">

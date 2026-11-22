@@ -3,8 +3,9 @@ import type {
   MemberView,
   MessageView,
 } from "@eta/client-contracts";
-import type { JSX, ListRef, ViewRef } from "nsh";
-import { cleanup, computed, effect, List, signal, View } from "nsh";
+import type { Bounds, JSX, ListRef, ViewRef } from "nsh";
+import type { TextViewSelectionEvent } from "nsh/base";
+import { cleanup, computed, effect, List, Overlay, signal, View } from "nsh";
 import { onWindows } from "../../app/platform";
 import {
   Button,
@@ -54,6 +55,8 @@ export function ConversationTimeline(props: {
   onWidgetDraft: (conversationId: string, text: string) => void;
   /** Hands out the function that scrolls to the row of a question's reply. */
   revealer?: (reveal: (replyId: string | null) => void) => void;
+  /** Quote what the reader selected in a reply into the composer. */
+  onQuote: (conversationId: string, text: string) => void;
 }) {
   const host = useHost();
   const c = colors();
@@ -74,6 +77,30 @@ export function ConversationTimeline(props: {
       : undefined;
   };
   const actions = new Map<string, () => void>();
+  // The reply text the reader selected, and where: a Quote button floats above it.
+  const selection = signal<{
+    message: MessageView;
+    text: string;
+    at: Bounds | ViewRef;
+  }>();
+  function select(
+    message: MessageView,
+    event: TextViewSelectionEvent,
+    reply: ViewRef | undefined,
+  ) {
+    const text = event.text.trim();
+    // Where the platform gives no box around the selection (the web), the
+    // button goes over the reply instead. A phone has its own edit menu.
+    const at = event.pageBounds ?? reply;
+    if (text && at && !phone()) selection.set({ message, text, at });
+    else if (selection()?.message.id === message.id) selection.set(undefined);
+  }
+  function quote() {
+    const current = selection();
+    if (!current) return;
+    selection.set(undefined);
+    props.onQuote(current.message.conversationId, current.text);
+  }
   // On Windows the wheel scrolls the list itself, so mouse notches can glide;
   // elsewhere the system already scrolls smoothly and the list keeps it.
   const glide = wheelScroll((offset, animated) =>
@@ -213,7 +240,11 @@ export function ConversationTimeline(props: {
           estimatedItemSize={134}
           scrollbar={false}
           scrollEventThrottle={onWindows ? 16 : undefined}
-          onScroll={onWindows ? glide.onScroll : undefined}
+          onScroll={(event) => {
+            // The button was placed against the selection where it was.
+            if (selection()) selection.set(undefined);
+            if (onWindows) glide.onScroll(event);
+          }}
           contentStyle={{
             paddingLeft: 16,
             paddingRight: props.rail ? 60 : 16,
@@ -280,11 +311,39 @@ export function ConversationTimeline(props: {
                 onWidgetDraft={(text) =>
                   props.onWidgetDraft(message().conversationId, text)
                 }
+                onSelectionChange={(event, reply) =>
+                  select(message(), event, reply)
+                }
               />
             );
             return onWindows ? <View onWheel={glide.onWheel}>{row}</View> : row;
           }}
         </List>
+        <If when={selection()}>
+          {(current) => (
+            <Overlay
+              anchor={current().at}
+              placement="top"
+              align={"origin" in current().at ? "center" : "end"}
+              offset={6}
+            >
+              <Button
+                label={uiText("quoteSelection")}
+                icon="return"
+                size={28}
+                style={{
+                  paddingHorizontal: 10,
+                  gap: 6,
+                  backgroundColor: c().canvas,
+                  borderWidth: 1,
+                  borderColor: c().border,
+                  boxShadow: [{ x: 0, y: 4, blur: 16, color: "#0a0a0a14" }],
+                }}
+                onPress={quote}
+              />
+            </Overlay>
+          )}
+        </If>
         <If when={selected()}>
           {(message) => (
             <TaskDraftDetail
