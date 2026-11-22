@@ -287,19 +287,54 @@ class Writer {
   /** Sibling blocks: two paragraphs are two lines; anything else has a blank line between. */
   blocks(nodes: DocNode[], item = false): string[] {
     const lines: string[] = [];
+    const table = tableRows(nodes);
     nodes.forEach((node, index) => {
       const previous = nodes[index - 1];
       if (previous) {
+        // A table's rows (kept as lines of text) have a blank line around them, as written.
         const paragraphs =
           previous.type === DOC_NODES.paragraph &&
-          node.type === DOC_NODES.paragraph;
-        const nested = item && isList(node.type);
+          node.type === DOC_NODES.paragraph &&
+          table[index - 1] === table[index];
+        // A list in an item follows its line, except an ordered one not starting at 1: Markdown
+        // reads that as the line going on (it may not interrupt a paragraph), so it gets a blank
+        // line before it.
+        const nested =
+          item &&
+          isList(node.type) &&
+          !(
+            node.type === RICH_NODES.orderedList &&
+            Number(node.attrs?.start ?? 1) !== 1
+          );
         if (!paragraphs && !nested) lines.push("");
       }
       lines.push(...this.block(node));
     });
     return lines;
   }
+}
+
+/**
+ * Which of sibling blocks are the rows of a table kept as lines of text (`literals`): for each, the
+ * number of its table, counting from 1; 0 for any other block.
+ */
+function tableRows(nodes: DocNode[]): number[] {
+  const out = nodes.map(() => 0);
+  const line = (node: DocNode | undefined) =>
+    node?.type === DOC_NODES.paragraph ? textOf(node) : undefined;
+  let count = 0;
+  for (let at = 0; at < nodes.length; at++) {
+    const header = line(nodes[at]);
+    const next = line(nodes[at + 1]);
+    if (!header?.includes("|") || next === undefined || !isTableDelimiter(next))
+      continue;
+    count++;
+    let stop = at;
+    while (stop < nodes.length && line(nodes[stop])?.includes("|"))
+      out[stop++] = count;
+    at = stop - 1;
+  }
+  return out;
 }
 
 /** Neighbouring text with the same marks as one text node. */
@@ -339,13 +374,15 @@ export function docToMarkdown(
   const pastes: { text: string; range: boolean }[] = [];
   const mentions: string[] = [];
   const files: string[] = [];
+  const table = tableRows(blocks);
   blocks.forEach((node, index) => {
     const previous = blocks[index - 1];
     if (
       previous &&
       !(
         previous.type === DOC_NODES.paragraph &&
-        node.type === DOC_NODES.paragraph
+        node.type === DOC_NODES.paragraph &&
+        table[index - 1] === table[index]
       )
     )
       lines.push("");
@@ -468,7 +505,71 @@ export function markdownSource(input: {
     end = stop;
   }
   source += words(text.slice(end));
-  return { source, stands };
+  return { source: literals(source, stand), stands };
+}
+
+/** A GFM table's delimiter row: `| --- | :-: |`. */
+function isTableDelimiter(line: string): boolean {
+  if (!line.includes("|") || /^ {4}/.test(line)) return false;
+  const cells = line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|");
+  return cells.every((cell) => /^:?-+:?$/.test(cell.trim()));
+}
+/** Markdown's image: `![alt](src)`. */
+const IMAGE = /!\[[^\]\n]*\]\([^)\n]*\)/g;
+/** A code fence's opening or closing line. */
+const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+
+/**
+ * What the editor has no block for, kept as the text it was written as: each row of a table (the
+ * reader would flatten it into its cells) and each image (it would keep only the alt text), stood
+ * in for as their own text. Opened in the editor they show as their Markdown and are written back
+ * as they were, so a description with a table survives being edited. Code is left alone.
+ */
+function literals(
+  source: string,
+  stand: (node: Stand) => string | undefined,
+): string {
+  const lines = source.split("\n");
+  let fence: string | undefined;
+  for (let at = 0; at < lines.length; at++) {
+    const line = lines[at]!;
+    const opens = FENCE.exec(line);
+    if (fence) {
+      if (
+        opens &&
+        opens[1]![0] === fence[0] &&
+        opens[1]!.length >= fence.length
+      )
+        fence = undefined;
+      continue;
+    }
+    if (opens) {
+      fence = opens[1];
+      continue;
+    }
+    const next = lines[at + 1];
+    if (line.includes("|") && next !== undefined && isTableDelimiter(next)) {
+      let stop = at;
+      while (
+        stop < lines.length &&
+        lines[stop]!.trim() &&
+        lines[stop]!.includes("|")
+      )
+        stop++;
+      for (let row = at; row < stop; row++) {
+        const text = lines[row]!;
+        if ([...text].some((char) => isToken(char.charCodeAt(0)))) continue;
+        lines[row] = stand({ type: DOC_NODES.text, text }) ?? text;
+      }
+      at = stop - 1;
+      continue;
+    }
+    lines[at] = line.replace(
+      IMAGE,
+      (image) => stand({ type: DOC_NODES.text, text: image }) ?? image,
+    );
+  }
+  return lines.join("\n");
 }
 
 /** An inline block's text, where only text may go (a code block, inline code). */
