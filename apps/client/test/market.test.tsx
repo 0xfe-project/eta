@@ -35,3 +35,26 @@ test("the detail leaves out a version or author the catalog did not give, and sh
   expect(full.shows("Version")).toBe(true);
   expect(full.shows("Author")).toBe(true);
 });
+
+test("Install in the detail installs at once, at the commit the detail showed, with no confirmation", async () => {
+  const app = await open("./fixtures/market-install.tsx", { width: 900, height: 900 });
+  await app.press("label:one");
+  // What it would run is on show before anything is installed.
+  await app.waitFor("text:node run.js");
+  expect(app.shows("1 skills, 1 MCP servers") || app.shows("0 skills, 1 MCP servers")).toBe(true);
+  expect(app.shows("b".repeat(40))).toBe(true);
+  await app.press("label:Install");
+  expect(app.shows("Install one?")).toBe(false);
+  expect(app.shows("I have read this and want to install it")).toBe(false);
+  // The install ran (the fixture marks the entry installed only on a marketInstall call).
+  await app.waitFor("text:Installed");
+  expect(app.shows("Installed")).toBe(true);
+});
+
+test("a refused install says why in the detail", async () => {
+  const app = await open("./fixtures/market-install.tsx", { width: 900, height: 900 });
+  await app.press("label:bad");
+  await app.waitFor("text:node run.js");
+  await app.press("label:Install");
+  expect(app.shows("the plugin name is taken by a local plugin")).toBe(true);
+});

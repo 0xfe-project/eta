@@ -31,8 +31,10 @@ import { follow, useHost } from "../../services/host";
 import { sheetEdge } from "./configure";
 
 /**
- * The online market. Everything the catalog says is shown as text, never as markup, and an install
- * is only offered after the preview of what the plugin at the pinned commit would run.
+ * The online market. Everything the catalog says is shown as text, never as markup. The detail shows
+ * what the plugin at its pinned commit would run, and Install installs at once, at that commit (the
+ * user decided to drop the confirmation step; the host still pins the commit and refuses what it
+ * does not support).
  */
 export function Market(props: {
   layout: Layout;
@@ -47,11 +49,12 @@ export function Market(props: {
   const loading = signal(false);
   const query = signal("");
   const detail = signal("");
-  const preview = signal<MarketPreview>();
-  const agreed = signal(false);
+  /** What the open entry would run, read from its pinned commit: shown in the detail before installing. */
+  const info = signal<MarketPreview>();
+  const infoLoading = signal(false);
+  const infoError = signal("");
+  const installError = signal("");
   const busy = signal(false);
-  /** The source of the entry being previewed: what `install` is asked for. */
-  const from = signal("");
   const phone = () => props.layout === "phone";
   const key = (item: MarketEntry) => item.source + "\n" + item.name;
   const all = () =>
@@ -90,38 +93,60 @@ export function Market(props: {
     untracked(() => void load());
   });
 
-  async function look(entry: MarketEntry) {
+  const messageOf = (error: unknown) =>
+    error instanceof Error && error.message !== "" ? error.message : String(error);
+
+  /** Read what the entry would run. The same read an install pins its commit from; nothing is installed. */
+  async function readInfo(entry: MarketEntry): Promise<MarketPreview> {
+    return await host.call<MarketPreview>("plugins", "marketPreview", {
+      name: entry.name,
+      source: entry.source,
+    });
+  }
+  // Opening an entry reads what it would run, so the detail shows it before anyone installs.
+  effect(() => {
+    const open = detail();
+    untracked(() => {
+      info.set(undefined);
+      infoError.set("");
+      installError.set("");
+      const entry = all().find((item) => key(item) === open);
+      if (!entry || entry.unsupported !== null || entry.installed !== "no") return;
+      infoLoading.set(true);
+      readInfo(entry)
+        .then((result) => {
+          if (detail() === open) info.set(result);
+        })
+        .catch((error: unknown) => {
+          if (detail() === open) infoError.set(messageOf(error));
+        })
+        .finally(() => {
+          if (detail() === open) infoLoading.set(false);
+        });
+    });
+  });
+  /**
+   * Install at the commit the detail showed (read once more when it could not be read). The host
+   * still pins to that commit and refuses anything it does not support; a plugin that needs values
+   * stays "needs configuration" and starts nothing until they are filled in.
+   */
+  async function install(entry: MarketEntry) {
     if (busy()) return;
     busy.set(true);
-    const result = await host.action(() =>
-      host.call<MarketPreview>("plugins", "marketPreview", {
-        name: entry.name,
-        source: entry.source,
-      }),
-    );
-    busy.set(false);
-    if (!result) return;
-    from.set(entry.source);
-    agreed.set(false);
-    preview.set(result);
-  }
-  async function install() {
-    const shown = preview();
-    if (!shown || !agreed() || busy()) return;
-    busy.set(true);
-    const result = await host.action(() =>
-      host.call("plugins", "marketInstall", {
+    installError.set("");
+    try {
+      const shown = info() ?? (await readInfo(entry));
+      await host.call("plugins", "marketInstall", {
         name: shown.name,
-        source: from(),
+        source: entry.source,
         sha: shown.sha,
-      }),
-    );
-    busy.set(false);
-    if (!result) return;
-    preview.set(undefined);
-    detail.set("");
-    from.set("");
-    await load();
+      });
+      await load();
+    } catch (error) {
+      installError.set(messageOf(error));
+    } finally {
+      busy.set(false);
+    }
   }
   const field = (
     label: string,
@@ -167,6 +192,82 @@ export function Market(props: {
       <Label variant="small" style={{ userSelect: "text" }}>
         {value}
       </Label>
+    </View>
+  );
+  /** What the plugin would run, read from its pinned commit. Plain text; nothing here installs anything. */
+  const previewBlock = (shown: MarketPreview) => (
+    <View testID="market-info" style={{ gap: 10 }}>
+                <If when={shown.proxy}>
+                  {line(uiText("marketProxy"), shown.proxy ?? "")}
+                </If>
+                {line(uiText("marketPath"), shown.path || "/")}
+                {line(
+                  uiText("marketRequires"),
+                  shown.requires.length
+                    ? shown.requires.join(", ")
+                    : uiText("marketNone"),
+                )}
+                <Label variant="small" weight={500}>
+                  {uiText("marketSummary", {
+                    skills: shown.skills.length,
+                    servers: shown.servers.length,
+                  })}
+                </Label>
+                <Label variant="caption" tone="muted">
+                  {uiText("marketServers")}
+                </Label>
+                <If when={!shown.servers.length}>
+                  <Label variant="small">{uiText("marketNone")}</Label>
+                </If>
+                <Each of={shown.servers} key={(item) => item.name}>
+                  {(server) => (
+                    <View
+                      style={{ gap: 4, padding: 8, borderWidth: 1, borderColor: c().border }}
+                    >
+                      <Label variant="small" weight={500}>
+                        {server().name}
+                      </Label>
+                      <Label variant="small" style={{ userSelect: "text" }}>
+                        {server().transport === "stdio"
+                          ? (server().command ?? []).join(" ")
+                          : (server().url ?? "")}
+                      </Label>
+                      <If when={Object.keys(server().fixedEnv).length}>
+                        <Label variant="caption" tone="muted" style={{ userSelect: "text" }}>
+                          {uiText("marketFixedEnv") +
+                            ": " +
+                            Object.entries(server().fixedEnv)
+                              .map(([key, value]) => key + "=" + value)
+                              .join(" ")}
+                        </Label>
+                      </If>
+                      <If when={server().env.length}>
+                        <Label variant="caption" tone="muted" style={{ userSelect: "text" }}>
+                          {uiText("marketEnv") + ": " + server().env.join(", ")}
+                        </Label>
+                      </If>
+                      <If when={server().headers.length}>
+                        <Label variant="caption" tone="muted" style={{ userSelect: "text" }}>
+                          {uiText("marketHeaders") + ": " + server().headers.join(", ")}
+                        </Label>
+                      </If>
+                    </View>
+                  )}
+                </Each>
+                <If when={shown.fields.length}>
+                  {line(
+                    uiText("marketFields"),
+                    shown
+                      .fields.map((item) => item.name + (item.secret ? " *" : ""))
+                      .join(", "),
+                  )}
+                </If>
+                <If when={shown.layout}>
+                  {line(uiText("marketLayout"), shown.layout ?? "")}
+                </If>
+                <If when={shown.reports.length}>
+                  {line(uiText("marketReports"), shown.reports.join("; "))}
+                </If>
     </View>
   );
   const sheet = (title: string, width: number, onClose: () => void) => ({
@@ -313,9 +414,10 @@ export function Market(props: {
           </If>
         </View>
       </SmoothScroll>
-      <If when={current() && !preview()}>
+      <If when={current()}>
         <Modal {...sheet(current()!.name, 512, () => detail.set(""))} hideHeader>
-          <View style={{ gap: 10, paddingTop: 6, paddingBottom: phone() ? 24 : 0, ...inset() }}>
+          <SmoothScroll style={{ maxHeight: 440 }} scrollbar={false}>
+          <View style={{ gap: 10, paddingTop: 6, ...inset() }}>
             <View testID="market-detail-header" style={{ ...row, gap: 12, alignItems: "center" }}>
               <PluginLogo
                 name={current()!.name}
@@ -347,7 +449,7 @@ export function Market(props: {
             {line(uiText("marketRepository"), current()!.repo)}
             {line(
               uiText("marketCommit"),
-              current()!.rev ?? uiText("marketCommitLatest"),
+              current()!.rev ?? info()?.sha ?? uiText("marketCommitLatest"),
             )}
             <If when={current()!.unsupported}>
               {line(uiText("marketUnsupported"), current()!.unsupported ?? "")}
@@ -358,154 +460,47 @@ export function Market(props: {
             <If when={current()!.homepage}>
               {line(uiText("marketHomepage"), current()!.homepage ?? "")}
             </If>
-            <View style={{ ...row, justifyContent: "flex-end", paddingTop: 10 }}>
+            <If when={infoLoading()}>
+              <Label variant="small" tone="muted">
+                {uiText("marketReading")}
+              </Label>
+            </If>
+            <If when={infoError()}>
+              <Label variant="small" tone="red" style={{ userSelect: "text" }}>
+                {infoError()}
+              </Label>
+            </If>
+            <If when={info()}>{(shown) => previewBlock(shown())}</If>
+            <If when={installError()}>
+              <Label variant="small" tone="red" style={{ userSelect: "text" }}>
+                {installError()}
+              </Label>
+            </If>
+          </View>
+          </SmoothScroll>
+            <View
+              style={{
+                ...row,
+                justifyContent: "flex-end",
+                paddingTop: 10,
+                paddingBottom: phone() ? 24 : 0,
+                ...inset(),
+              }}
+            >
               <If
                 when={current()!.installed === "no" && current()!.unsupported === null}
                 else={<Label variant="small">{marker(current()!)}</Label>}
               >
                 <Button
-                  label={busy() ? uiText("marketReading") : uiText("marketInstall")}
+                  label={busy() ? uiText("adding") : uiText("marketInstall")}
                   tone="primary"
                   size={phone() ? 44 : 28}
                   disabled={busy()}
-                  onPress={() => void look(current()!)}
+                  onPress={() => void install(current()!)}
                 />
               </If>
             </View>
-          </View>
         </Modal>
-      </If>
-      <If when={preview()}>
-        {(shown) => (
-          <Modal
-            {...sheet(
-              uiText("marketConfirmTitle", { name: shown().name }),
-              560,
-              () => preview.set(undefined),
-            )}
-          >
-            <SmoothScroll style={{ maxHeight: 420 }} scrollbar={false}>
-              <View style={{ gap: 10, paddingTop: 6, ...inset() }}>
-                <PluginLogo
-                  name={shown().name}
-                  repo={{ repo: shown().repo, ref: shown().sha, path: shown().path }}
-                  size={40}
-                />
-                <Label variant="small" tone="muted">
-                  {uiText("marketConfirmDescription")}
-                </Label>
-                <If when={shown().proxy}>
-                  {line(uiText("marketProxy"), shown().proxy ?? "")}
-                </If>
-                {line(uiText("marketRepository"), shown().repo)}
-                {line(uiText("marketPath"), shown().path || "/")}
-                {line(uiText("marketCommit"), shown().sha)}
-                {line(
-                  uiText("marketRequires"),
-                  shown().requires.length
-                    ? shown().requires.join(", ")
-                    : uiText("marketNone"),
-                )}
-                <Label variant="small" weight={500}>
-                  {uiText("marketSummary", {
-                    skills: shown().skills.length,
-                    servers: shown().servers.length,
-                  })}
-                </Label>
-                <Label variant="caption" tone="muted">
-                  {uiText("marketServers")}
-                </Label>
-                <If when={!shown().servers.length}>
-                  <Label variant="small">{uiText("marketNone")}</Label>
-                </If>
-                <Each of={shown().servers} key={(item) => item.name}>
-                  {(server) => (
-                    <View
-                      style={{ gap: 4, padding: 8, borderWidth: 1, borderColor: c().border }}
-                    >
-                      <Label variant="small" weight={500}>
-                        {server().name}
-                      </Label>
-                      <Label variant="small" style={{ userSelect: "text" }}>
-                        {server().transport === "stdio"
-                          ? (server().command ?? []).join(" ")
-                          : (server().url ?? "")}
-                      </Label>
-                      <If when={Object.keys(server().fixedEnv).length}>
-                        <Label variant="caption" tone="muted" style={{ userSelect: "text" }}>
-                          {uiText("marketFixedEnv") +
-                            ": " +
-                            Object.entries(server().fixedEnv)
-                              .map(([key, value]) => key + "=" + value)
-                              .join(" ")}
-                        </Label>
-                      </If>
-                      <If when={server().env.length}>
-                        <Label variant="caption" tone="muted" style={{ userSelect: "text" }}>
-                          {uiText("marketEnv") + ": " + server().env.join(", ")}
-                        </Label>
-                      </If>
-                      <If when={server().headers.length}>
-                        <Label variant="caption" tone="muted" style={{ userSelect: "text" }}>
-                          {uiText("marketHeaders") + ": " + server().headers.join(", ")}
-                        </Label>
-                      </If>
-                    </View>
-                  )}
-                </Each>
-                <If when={shown().fields.length}>
-                  {line(
-                    uiText("marketFields"),
-                    shown()
-                      .fields.map((item) => item.name + (item.secret ? " *" : ""))
-                      .join(", "),
-                  )}
-                </If>
-                <If when={shown().layout}>
-                  {line(uiText("marketLayout"), shown().layout ?? "")}
-                </If>
-                <If when={shown().reports.length}>
-                  {line(uiText("marketReports"), shown().reports.join("; "))}
-                </If>
-              </View>
-            </SmoothScroll>
-            <View style={{ ...row, gap: 10, paddingTop: 12, ...inset() }}>
-              <ToggleSwitch
-                label={uiText("marketAgree")}
-                checked={agreed()}
-                onChange={agreed.set}
-              />
-              <Label variant="small" style={{ flex: 1 }}>
-                {uiText("marketAgree")}
-              </Label>
-            </View>
-            <View
-              style={{
-                ...row,
-                justifyContent: "flex-end",
-                gap: 8,
-                paddingTop: 12,
-                paddingBottom: phone() ? 24 : 0,
-                ...inset(),
-              }}
-            >
-              <Button
-                label={uiText("cancel")}
-                size={phone() ? 44 : 28}
-                onPress={() => preview.set(undefined)}
-              />
-              <Button
-                label={busy() ? uiText("adding") : uiText("marketInstall")}
-                tone="primary"
-                size={phone() ? 44 : 28}
-                dimDisabled={false}
-                style={{ opacity: agreed() && !busy() ? 1 : 0.5 }}
-                disabled={!agreed() || busy()}
-                onPress={() => void install()}
-              />
-            </View>
-          </Modal>
-        )}
       </If>
     </View>
   );
