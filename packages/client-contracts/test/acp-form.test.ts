@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { acpDraftOf, acpSlug, checkAcpDraft, parseAcpEnv } from "./acp-form";
+import {
+  acpDraftOf,
+  acpSlug,
+  checkAcpDraft,
+  parseAcpEnv,
+} from "../src/acp-form";
 
 describe("parseAcpEnv", () => {
   it("reads KEY=VALUE lines, keeping = in values, skipping blanks and comments", () => {

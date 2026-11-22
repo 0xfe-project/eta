@@ -27,6 +27,11 @@ import { AgentEditor } from "./agents/editor";
 import { Appearance } from "./appearance";
 import { ArchiveSettings } from "./archive";
 import { ExternalAgentDetail } from "./external-agent";
+import {
+  acpMachines,
+  acpWritable,
+  ExternalAgentForm,
+} from "./external-agent-form";
 import { ExternalAgentList } from "./external-agent-list";
 import { Machines } from "./machines/machines";
 import { MailboxEditor, mailboxProvider } from "./mailbox-editor";
@@ -76,6 +81,10 @@ export function Settings(
   const acpAgent = signal<{ machineId: string; id: string } | undefined>(
     undefined,
   );
+  /** The external-agent form: adding (no `agentId`) or editing that agent on `machineId`. */
+  const acpForm = signal<{ machineId: string; agentId?: string } | undefined>(
+    undefined,
+  );
   const mailbox = signal<EmailAccountView | "new" | undefined>(undefined);
   const phone = () => props.layout === "phone";
   const showingProvider = () =>
@@ -95,6 +104,11 @@ export function Settings(
   const { count: sourceCount } = useModelSources();
   const acpLists = () =>
     host.section<Record<string, AcpMachineList>>("acp", "machines") ?? {};
+  /** Where a new external agent goes unless another is chosen: the first machine that can take one. */
+  const acpTarget = () =>
+    acpMachines(machines()).find((item) => acpWritable(item, acpLists()));
+  const editAcp = (machineId: string, agentId: string) =>
+    acpForm.set({ machineId, agentId });
   const offlineMachines = () =>
     machines().filter((item) => item.status === "offline");
   const sectionCount = (name: SettingsSection) =>
@@ -144,6 +158,19 @@ export function Settings(
           style={actionStyle()}
           icon="plus"
           onPress={() => sources.set(true)}
+        />
+      </If>
+      <If when={name === "External agents" && host.can("acp.save")}>
+        <Button
+          label={uiText("acpAddAgent")}
+          size={actionSize()}
+          style={actionStyle()}
+          icon="plus"
+          disabled={!acpTarget()}
+          onPress={() => {
+            const target = acpTarget();
+            if (target) acpForm.set({ machineId: target.id });
+          }}
         />
       </If>
       <If when={name === "Email"}>
@@ -312,6 +339,11 @@ export function Settings(
                       onAgent={(machineId, item) =>
                         acpAgent.set({ machineId, id: item.id })
                       }
+                      onEdit={
+                        host.can("acp.save")
+                          ? (machineId, item) => editAcp(machineId, item.id)
+                          : undefined
+                      }
                     />
                   </SmoothScroll>
                 </If>
@@ -475,7 +507,46 @@ export function Settings(
               (machine) => machine.id === item().machineId,
             )}
             phone={phone()}
+            writable={acpWritable(
+              machines().find((machine) => machine.id === item().machineId),
+              acpLists(),
+            )}
+            onEdit={
+              host.can("acp.save")
+                ? () => editAcp(item().machineId, item().agent.id)
+                : undefined
+            }
             onClose={() => acpAgent.set(undefined)}
+          />
+        )}
+      </If>
+      <If when={acpForm()}>
+        {(form) => (
+          <ExternalAgentForm
+            machines={machines()}
+            lists={acpLists()}
+            machineId={form().machineId}
+            agent={
+              form().agentId === undefined
+                ? undefined
+                : acpLists()[form().machineId]?.agents?.find(
+                    (agent) => agent.id === form().agentId,
+                  )
+            }
+            phone={phone()}
+            onSaved={(machineId, id) => {
+              const edited = form().agentId;
+              const open = acpAgent();
+              // The open detail follows its agent to the id it was saved as.
+              if (
+                edited !== undefined &&
+                open?.machineId === machineId &&
+                open.id === edited
+              )
+                acpAgent.set({ machineId, id });
+              acpForm.set(undefined);
+            }}
+            onClose={() => acpForm.set(undefined)}
           />
         )}
       </If>

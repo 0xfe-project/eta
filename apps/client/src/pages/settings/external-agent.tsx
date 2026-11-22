@@ -26,6 +26,10 @@ export function ExternalAgentDetail(props: {
   machineId: string;
   machine?: MachineView;
   phone: boolean;
+  /** Whether its machine answers now; an offline machine's agent can't be edited. */
+  writable?: boolean;
+  /** Opens the edit form; absent when this client may not change agents. */
+  onEdit?: () => void;
   onClose: () => void;
 }) {
   const host = useHost();
@@ -92,7 +96,18 @@ export function ExternalAgentDetail(props: {
               {props.agent.label}
             </Label>
           </View>
-          <View style={{ width: 40, height: 40, flexShrink: 0 }} />
+          <If
+            when={props.onEdit && props.writable !== false}
+            else={<View style={{ width: 40, height: 40, flexShrink: 0 }} />}
+          >
+            <Button
+              label={uiText("settingsEdit")}
+              size={28}
+              style={{ paddingHorizontal: 10, flexShrink: 0 }}
+              disabled={testing() || removing()}
+              onPress={() => props.onEdit?.()}
+            />
+          </If>
         </View>
       </If>
       <View style={{ ...grow, minHeight: props.phone ? undefined : 240 }}>
@@ -178,6 +193,27 @@ export function ExternalAgentDetail(props: {
                   machineName: machineName(),
                 })}
             </Label>
+          </View>
+        </If>
+        <If when={!props.phone && props.onEdit && props.writable !== false}>
+          <View
+            style={{
+              ...row,
+              minHeight: 44,
+              gap: 16,
+              paddingHorizontal: 16,
+              paddingVertical: 8,
+              borderBottomWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <Label style={{ flex: 1 }}>{uiText("acpEditAgent")}</Label>
+            <Button
+              label={uiText("settingsEdit")}
+              style={{ gap: 6, paddingHorizontal: 10 }}
+              disabled={testing() || removing()}
+              onPress={() => props.onEdit?.()}
+            />
           </View>
         </If>
         <If when={host.can("acp.delete")}>

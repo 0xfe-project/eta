@@ -1,11 +1,19 @@
 import type {
   AcpAgentConfig,
   AcpAgentView,
+  AcpDraft,
+  AcpDraftProblems,
   AcpMachineList,
   AcpTestResult,
   MachineView,
 } from "@eta/client-contracts";
-import type { AcpDraft, AcpDraftProblems } from "./acp-form";
+import {
+  acpCommandLine,
+  acpDraftOf,
+  acpSlug,
+  checkAcpDraft,
+  emptyAcpDraft,
+} from "@eta/client-contracts";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
@@ -51,13 +59,6 @@ import {
 } from "@/queries/acp";
 import { useMachines } from "@/queries/projects";
 import { wireErrorMessage } from "@/queries/wire";
-import {
-  acpCommandLine,
-  acpDraftOf,
-  acpSlug,
-  checkAcpDraft,
-  emptyAcpDraft,
-} from "./acp-form";
 import { Select, SelectOption } from "./select-field";
 
 // Settings → External agents: every machine's ACP agents at once, grouped by machine. Each machine
