@@ -7,6 +7,11 @@ import type { ConversationKind } from "@eta/client-contracts";
  * shown the timeline. What was said lives in the timeline (`timeline.ts`).
  */
 import type { Database } from "bun:sqlite";
+import type { SessionSettings } from "./places";
+
+type PendingSettings = Omit<SessionSettings, "model"> & {
+  model?: string | null;
+};
 
 export interface ConversationRecord {
   id: string;
@@ -353,6 +358,71 @@ export class ConversationStore {
       )
       .all(agentId)
       .map((row) => row.session_id);
+  }
+
+  /** Stack edits to different settings while a session is busy or its machine is away. */
+  queueSessionSettings(
+    agentId: string,
+    settings: PendingSettings | null,
+  ): void {
+    if (settings === null) {
+      this.#db
+        .query(
+          "UPDATE participant SET pending_settings = NULL WHERE agent_id = ?",
+        )
+        .run(agentId);
+      return;
+    }
+    const rows = this.#db
+      .query<
+        { conversation_id: string; pending_settings: string | null },
+        [string]
+      >(
+        "SELECT conversation_id, pending_settings FROM participant WHERE agent_id = ?",
+      )
+      .all(agentId);
+    const update = this.#db.query(
+      "UPDATE participant SET pending_settings = ? WHERE conversation_id = ? AND agent_id = ?",
+    );
+    for (const row of rows) {
+      const pending = JSON.parse(
+        row.pending_settings ?? "{}",
+      ) as PendingSettings;
+      update.run(
+        JSON.stringify({ ...pending, ...settings }),
+        row.conversation_id,
+        agentId,
+      );
+    }
+  }
+
+  pendingSessionSettings(
+    sessionId: string,
+  ): { saved: string; settings: PendingSettings } | undefined {
+    const saved = this.#db
+      .query<{ pending_settings: string | null }, [string]>(
+        "SELECT pending_settings FROM participant WHERE session_id = ?",
+      )
+      .get(sessionId)?.pending_settings;
+    if (saved === null || saved === undefined) return undefined;
+    return { saved, settings: JSON.parse(saved) as PendingSettings };
+  }
+
+  /** Clear only the settings that were tried. A newer edit may have arrived during the call. */
+  finishSessionSettings(
+    sessionId: string,
+    saved: string,
+    remaining: PendingSettings,
+  ): void {
+    this.#db
+      .query(
+        "UPDATE participant SET pending_settings = ? WHERE session_id = ? AND pending_settings = ?",
+      )
+      .run(
+        Object.keys(remaining).length === 0 ? null : JSON.stringify(remaining),
+        sessionId,
+        saved,
+      );
   }
 
   /** The sessions that run on a machine, by the participants that hold them. */

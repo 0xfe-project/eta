@@ -170,10 +170,10 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             checkAgentName(agents, fields.name, id);
           checkMachine(machines, fields.machineId);
           checkPlugins(plugins, id, fields.plugins);
-          const agent = agents.update(id, {
+          const { agent, sessions } = deps.engine.saveAgent(before, {
             ...fields,
             ...(avatarSeed === undefined ? {} : { avatarSeed }),
-          })!;
+          });
           if (fields.plugins !== undefined)
             plugins.rows.setEnabled(id, fields.plugins);
           if (agent.instructions !== before.instructions)
@@ -191,19 +191,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
               actorAgentId: null,
             });
           if (agent.name !== before.name) renameHome(agent);
-          // The model and thinking level belong to a session once it exists; an edit of the agent
-          // is the one thing that overrides what the user chose there. An agent that moved to
-          // another runtime gets new sessions instead (`places.ts`), so there is nothing to set.
-          if (!moved)
-            await deps.engine.applySettings(id, {
-              ...(agent.model !== null && agent.model !== before.model
-                ? { model: agent.model }
-                : {}),
-              // Back to the model's default is a change too: the sessions drop the old level.
-              ...(agent.thinkingLevel !== before.thinkingLevel
-                ? { thinkingLevel: agent.thinkingLevel }
-                : {}),
-            });
+          await deps.engine.applySettings(sessions);
           deps.changed("all");
           return { result: { agent: viewOf(agent) } };
         }),
