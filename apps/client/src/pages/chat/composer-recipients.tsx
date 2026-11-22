@@ -59,14 +59,11 @@ export function ComposerRecipients(props: {
   recipients: string[];
   /** The members whose reply is still running. */
   running: string[];
-  /** How many of the user's messages wait for a running reply to end. */
-  held: number;
   names: string;
   /** The recipients a new message would wait for, by name. */
   waitsFor: string;
   onChangeMentions: (mentions: string[] | null) => void;
   onToggleRecipient: (agentId: string) => void;
-  onToggleHeld: () => void;
   conversationId: string;
 }) {
   const c = colors();
@@ -81,11 +78,6 @@ export function ComposerRecipients(props: {
   const offset = signal(0);
   const more = () => content() - offset() - viewport() > 1;
   const everyone = () => props.mentions?.length === props.members.length;
-  // The queued count sits on the first running chip only.
-  const heldOn = () =>
-    props.running.find((id) =>
-      props.members.some((member) => member.agentId === id),
-    );
   return (
     <View
       style={{
@@ -211,24 +203,6 @@ export function ComposerRecipients(props: {
                       </If>
                     </View>
                     <If when={running()}>
-                      <If when={props.held && heldOn() === id()}>
-                        <View
-                          role="button"
-                          accessibilityLabel={uiText("queuedMessages", {
-                            count: props.held,
-                          })}
-                          onPress={props.onToggleHeld}
-                          style={{ cursor: "pointer" }}
-                        >
-                          <Label
-                            variant="caption"
-                            tone="mutedInk"
-                            style={{ textDecorationLine: "underline" }}
-                          >
-                            {uiText("queuedMessages", { count: props.held })}
-                          </Label>
-                        </View>
-                      </If>
                       <Each
                         of={
                           member().activeReplyId

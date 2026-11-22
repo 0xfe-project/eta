@@ -193,13 +193,33 @@ test("reconnecting drains a saved message even when another chat is open", async
   expect(app.value(input)).toBe("draft in beta");
 });
 
-test("the member queue link focuses its held message and E recalls it above the draft", async () => {
+test("a queued message waits above the box and pulls back above the draft", async () => {
   const app = await fixture();
   await app.type(input, "current");
   await app.press("label:Queue one");
-  await app.press("label:1 queued");
-  await app.keyboard.press("e");
+  expect(app.shows("label:Queued message: earlier")).toBe(true);
+  expect(app.shows("text:Queued · waits for Ada to finish")).toBe(true);
+  await app.press("label:Pull back into the box: earlier");
+  expect(app.shows("label:Queued message: earlier")).toBe(false);
   expect(app.value(input)).toBe("earlier\n\ncurrent");
+});
+
+test("a queued message the host had already handed on stays out of the box", async () => {
+  const app = await fixture();
+  await app.type(input, "current");
+  await app.press("label:Queue one");
+  await app.press("label:Hand it on");
+  await app.press("label:Pull back into the box: earlier");
+  await app.waitFor("text:Ada already read this one");
+  expect(app.value(input)).toBe("current");
+});
+
+test("inserting a queued message that failed says why", async () => {
+  const app = await fixture();
+  await app.press("label:Queue one");
+  await app.press("label:Insert into this turn: earlier");
+  await app.waitFor("text:Could not insert it: lane closed");
+  expect(app.shows("label:Queued message: earlier")).toBe(true);
 });
 
 test("a second pasted file waits for the first upload in the same draft", async () => {

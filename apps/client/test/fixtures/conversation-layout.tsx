@@ -5,6 +5,7 @@ import type {
 } from "@eta/client-contracts";
 import type { Layout } from "../../src/components";
 import { mount, UrlScheme, View, windowSize } from "nsh";
+import { Button } from "../../src/components";
 import { Conversation } from "../../src/pages/chat/conversation";
 import { createHost, Host } from "../../src/services/host";
 
@@ -50,10 +51,44 @@ const message = (
   data: {},
 });
 
+/** Ada answering "ping", "Queued words" waiting for her, and its reply row. */
+function heldTimeline(delivered: boolean): TimelineSection {
+  const waiting: MessageView = {
+    ...message(3, "user", "Queued words"),
+    data: delivered ? { woke: ["Ada"] } : { held: true, woke: ["Ada"] },
+  };
+  const reply: MessageView = {
+    ...message(4, "agent", ""),
+    status: "queued",
+    rootMessageId: waiting.id,
+    replyToId: waiting.id,
+  };
+  const working: MessageView = {
+    ...message(2, "agent", ""),
+    status: delivered ? "done" : "working",
+    text: delivered ? "Pong." : "",
+    rootMessageId: "m1",
+    replyToId: "m1",
+  };
+  return delivered
+    ? {
+        messages: [message(1, "user", "ping"), working, waiting, reply],
+        hasMore: false,
+        held: [],
+      }
+    : {
+        messages: [message(1, "user", "ping"), working, reply],
+        hasMore: false,
+        held: [waiting],
+      };
+}
+
 /**
  * The conversation page in one of its states, picked by the opening URL:
  * eta://fixture/loading (no timeline yet), /empty, /short, /offline (a phone
- * that lost the host before any message arrived).
+ * that lost the host before any message arrived), /held (Ada busy, one message
+ * waiting for her, with the reply the host queued for it; "Deliver" hands it
+ * to her lane as the host does).
  */
 function Fixture() {
   const host = createHost();
@@ -70,7 +105,9 @@ function Fixture() {
             hasMore: false,
             held: [],
           }
-        : undefined;
+        : scenario === "held"
+          ? heldTimeline(false)
+          : undefined;
   host.state.update((s) => ({
     ...s,
     status: scenario === "offline" ? "reconnecting" : "open",
@@ -93,6 +130,18 @@ function Fixture() {
     },
   }));
   host.address.set({ origin: "http://example.invalid" });
+  const deliver = () =>
+    host.state.update((s) => ({
+      ...s,
+      targets: {
+        ...s.targets,
+        "conversations.group": {
+          sections: { timeline: heldTimeline(true) },
+          revisions: {},
+          version: 0,
+        },
+      },
+    }));
   host.call = async <T,>() => undefined as T;
   const layout = (): Layout =>
     windowSize().width < 600
@@ -104,6 +153,9 @@ function Fixture() {
   return (
     <Host.Provider value={host}>
       <View style={{ flex: 1 }}>
+        <If when={scenario === "held"}>
+          <Button label="Deliver" onPress={deliver} />
+        </If>
         <Conversation
           id="group"
           layout={layout()}
