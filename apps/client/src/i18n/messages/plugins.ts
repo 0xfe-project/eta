@@ -5,6 +5,12 @@ export const pluginsMessages = {
   pluginAboveMaximum: ["Maximum {{value}}", "最大值为 {{value}}"],
   pluginMarket: ["Market", "市场"],
   marketUnavailable: ["The catalog could not be read", "无法读取目录"],
+  marketUpdatedAt: ["Updated {{time}}", "更新于 {{time}}"],
+  marketKeptCopy: [
+    "{{name}}: showing the copy kept from {{time}}; reading again failed: {{reason}}",
+    "{{name}}:显示 {{time}} 保存的副本;重新读取失败:{{reason}}",
+  ],
+  marketClearCache: ["Clear cache", "清除缓存"],
   marketNoSources: ["No plugin sources", "没有插件来源"],
   marketNoSourcesHint: [
     "Add a source, or switch one on, in Settings → Plugins to browse it. Installed plugins are not affected.",

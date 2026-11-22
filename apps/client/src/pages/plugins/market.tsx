@@ -77,11 +77,31 @@ export function Market(props: {
     (catalog()?.sources ?? []).flatMap((item) =>
       item.rejected.map((one) => ({ ...one, from: item.source.name || item.source.url })),
     );
+  const stale = () =>
+    (catalog()?.sources ?? []).filter((item) => item.stale != null);
+  /** The oldest time among the catalogs shown: when the whole list was last confirmed. */
+  const updated = () => {
+    const times = (catalog()?.sources ?? []).flatMap((item) =>
+      item.entries !== null && item.updatedAt != null ? [item.updatedAt] : [],
+    );
+    return times.length === 0 ? undefined : new Date(Math.min(...times)).toLocaleString();
+  };
+  async function clearCache() {
+    await host.action(() => host.call("plugins", "marketClearCache", {}));
+    await load();
+  }
   follow(() => "plugins");
 
   async function load() {
     if (loading()) return;
     loading.set(true);
+    // What the host kept shows at once; the read that asks the servers follows and replaces it.
+    if (catalog() === undefined) {
+      const kept = await host.action(() =>
+        host.call<MarketCatalog>("plugins", "marketCatalog", { mode: "cached" }),
+      );
+      if (kept?.sources.some((item) => item.entries !== null)) catalog.set(kept);
+    }
     const result = await host.action(() =>
       host.call<MarketCatalog>("plugins", "marketCatalog", {}),
     );
@@ -339,6 +359,29 @@ export function Market(props: {
               </View>
             )}
           </Each>
+          <Each of={stale()} key={(item) => item.source.url}>
+            {(item) => (
+              <Label variant="small" tone="muted" style={{ userSelect: "text" }}>
+                {uiText("marketKeptCopy", {
+                  name: item().source.name || item().source.url,
+                  time: new Date(item().updatedAt ?? 0).toLocaleString(),
+                  reason: item().stale ?? "",
+                })}
+              </Label>
+            )}
+          </Each>
+          <If when={updated() !== undefined}>
+            <View style={{ ...row, gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <Label variant="small" tone="muted">
+                {uiText("marketUpdatedAt", { time: updated() ?? "" })}
+              </Label>
+              <Button
+                label={uiText("marketClearCache")}
+                tone="ghost"
+                onPress={() => void clearCache()}
+              />
+            </View>
+          </If>
           <If when={all().length}>
             <View style={{ maxWidth: 480 }}>
               {field(uiText("marketSearch"), query, query.set)}
