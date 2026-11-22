@@ -96,6 +96,7 @@ import { memoryPlugin } from "./memory/plugin";
 import { MachinePlaces, wireFailure } from "./places/on-machine";
 import { placesPlugin } from "./places/plugin";
 import { PlaceStore } from "./places/store";
+import { Composio } from "./plugins/composio";
 import { Market } from "./plugins/market";
 import { IconCache } from "./plugins/icon-cache";
 import { CatalogCache } from "./plugins/market-cache";
@@ -1065,6 +1066,13 @@ export function createProduct(options: {
       };
       const shared = { agents, machines, projects, conversations, timeline };
       await plugins.start();
+      const catalogCache = new CatalogCache(db, { maxRowBytes: 1024 * 1024 });
+      const composio = new Composio({
+        db,
+        key: secretKey,
+        settings: new SettingStore(db),
+        cache: catalogCache,
+      });
       server.mount(
         "plugins",
         pluginsPlugin(
@@ -1075,8 +1083,10 @@ export function createProduct(options: {
               settings: new SettingStore(db),
               plugins,
               dataDir,
-              cache: new CatalogCache(db, { maxRowBytes: 1024 * 1024 }),
+              cache: catalogCache,
+              composio,
             }),
+            composio,
             mcp,
             icons: new IconCache(db),
           },

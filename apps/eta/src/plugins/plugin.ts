@@ -7,6 +7,7 @@
 import type { PluginAuditView, PluginValue } from "@eta/client-contracts";
 import type { AgentStore } from "../agents/store";
 import type { McpService } from "../mcp/service";
+import type { Composio } from "./composio";
 import type { Market } from "./market";
 import type { Plugins } from "./service";
 import { Args, productPlugin, publish } from "../wire";
@@ -22,12 +23,17 @@ export function pluginsPlugin(
     plugins: Plugins;
     agents: AgentStore;
     market: Market;
+    composio?: Composio;
     mcp?: McpService;
     icons?: IconCache;
   },
   applied: () => void,
 ) {
-  const { plugins, agents, market, mcp } = deps;
+  const { plugins, agents, market, composio, mcp } = deps;
+  const needComposio = (): Composio => {
+    if (composio === undefined) throw new Error("Composio is not available");
+    return composio;
+  };
   /** Servers a test or a connection found to ask for a sign-in, by URL. */
   const asked = new Set<string>();
   const remoteUrl = (name: string, server: string): string => {
@@ -237,6 +243,21 @@ export function pluginsPlugin(
           );
           return { result: { name } };
         }),
+        // The key goes in and is never read back: only whether one is set.
+        wire.handle("plugins", "composioSetKey", async (call) => {
+          needComposio().setKey(new Args(call).string("key"));
+          return { result: { hasKey: true } };
+        }),
+        wire.handle("plugins", "composioClearKey", async () => {
+          needComposio().clearKey();
+          return { result: { hasKey: false } };
+        }),
+        wire.handle("plugins", "composioStatus", async () => ({
+          result: { hasKey: needComposio().hasKey() },
+        })),
+        wire.handle("plugins", "composioLink", async (call) => ({
+          result: { redirectUrl: await needComposio().link(new Args(call).string("slug")) },
+        })),
         wire.handle("plugins", "testServer", async (call) => {
           const args = new Args(call);
           const name = args.string("name");
@@ -294,6 +315,12 @@ export function pluginsPlugin(
               (server) => server.url !== undefined,
             )?.url;
             return { result: await logos.find(null, found?.manifest.homepage ?? null, remote ?? null) };
+          }
+          // A Composio toolkit: the address comes from the host's own list, over https only.
+          const toolkit = args.optionalString("composio");
+          if (toolkit !== undefined) {
+            const address = composio?.logoOf(toolkit) ?? null;
+            return { result: address === null ? null : await logos.fromUrl(address) };
           }
           // A market entry that is a path in a GitHub repository: the plugin's own logo from its manifest.
           const repo = args.optionalString("repo");

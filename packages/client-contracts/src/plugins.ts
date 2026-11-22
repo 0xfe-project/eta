@@ -211,7 +211,15 @@ export interface PluginArgs {
     repo?: string | null;
     ref?: string | null;
     path?: string | null;
+    /** A Composio toolkit's slug: the host looks up the logo address in its own list, and fetches it over https only. */
+    composio?: string | null;
   };
+  /** Keep the Composio API key, sealed. It is never sent back: `composioStatus` only says that one is set. */
+  composioSetKey: { key: string };
+  composioClearKey: Record<string, never>;
+  composioStatus: Record<string, never>;
+  /** Start connecting one toolkit with Composio's own sign-in page; the user finishes it in the browser. */
+  composioLink: { slug: string };
 }
 
 /** What a connection test found. Secrets are never in it. */
@@ -251,6 +259,11 @@ export interface PluginResults {
   update: { names: string[] };
   remove: { name: string };
   recheck: Record<string, never>;
+  composioSetKey: { hasKey: boolean };
+  composioClearKey: { hasKey: boolean };
+  composioStatus: { hasKey: boolean };
+  /** An https address on Composio's side; open it in the browser. */
+  composioLink: { redirectUrl: string };
 }
 
 /**
@@ -297,6 +310,8 @@ export interface MarketSource {
   name: string;
   /** A source that is off stays in the list, but is not read and shows no entries. */
   enabled: boolean;
+  /** `composio`: the Composio toolkit list (built in, can be switched off, not removed). Absent: a git catalog. */
+  kind?: "git" | "composio";
 }
 
 /** The sources and the GitHub proxy, as set. */
@@ -317,6 +332,42 @@ export interface MarketSourceCatalog {
   updatedAt?: number | null;
   /** Set when what is shown is a kept copy because reading again failed: why. */
   stale?: string | null;
+  /**
+   * Only for `source.kind === "composio"`: the toolkits are in `toolkits` (null when none is known yet);
+   * `entries` is empty, or null when there is no answer.
+   * `needs_key` and `key_rejected` are answers, not failures: `error` stays null.
+   */
+  status?: ComposioStatus;
+  toolkits?: ComposioToolkit[] | null;
+}
+
+export type ComposioStatus = "ready" | "needs_key" | "key_rejected" | "error";
+
+/** How a toolkit signs in, from the schemes Composio lists: `unknown` for one eta does not know. */
+export type ComposioAuth = "api_key" | "oauth" | "none" | "unknown";
+
+/**
+ * A Composio toolkit. Installing it is not `marketInstall`: no git source is added. The user
+ * connects it with `composioLink`.
+ */
+export interface ComposioToolkit {
+  kind: "composio";
+  slug: string;
+  name: string;
+  description: string;
+  auth: ComposioAuth;
+  /** The schemes as Composio names them, for display. */
+  authSchemes: string[];
+  /** Whether Composio offers its own sign-in for it (no OAuth app of the user's own is needed). */
+  managed: boolean;
+  categories: string[];
+  /** An https address, or null; the picture is fetched by the host (`logo` with `composio`). */
+  logo: string | null;
+  appUrl: string | null;
+  toolsCount: number | null;
+  /** The source's address and its display name, as on a git entry. */
+  source: string;
+  sourceName: string;
 }
 
 /** Every source's catalog. Installed plugins are never touched by any of them. */

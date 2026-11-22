@@ -227,6 +227,21 @@ export class Logos {
   }
 
   /**
+   * A picture at one https address (a Composio toolkit's logo), every redirect https too. Same checks
+   * as any other fetch here; no header of the host or the user goes with it. An answer, and a miss,
+   * is kept in memory for a day; null when there is no picture.
+   */
+  async fromUrl(address: string): Promise<Logo | null> {
+    const key = "https\n" + address;
+    const now = (this.#options.now ?? Date.now)();
+    const hit = this.#kept.get(key);
+    if (hit && now - hit.at < KEEP_MS) return hit.logo;
+    const logo = await this.#picture(address, true).catch(() => null);
+    this.#kept.set(key, { at: now, logo });
+    return logo;
+  }
+
+  /**
    * The own logo of a catalog entry that is a path in a GitHub repository, read from the plugin's
    * manifest (`.cursor-plugin/plugin.json`, else `.claude-plugin/plugin.json`) on
    * raw.githubusercontent.com: nothing is cloned. `logo` is a path inside the plugin; the picture
@@ -388,29 +403,29 @@ export class Logos {
     return null;
   }
 
-  async #picture(address: string): Promise<Logo | null> {
-    const got = await this.#get(this.#address(address), MAX_PICTURE);
+  async #picture(address: string, httpsOnly = false): Promise<Logo | null> {
+    const got = await this.#get(this.#address(address, httpsOnly), MAX_PICTURE, httpsOnly);
     const type = pictureType(got.body);
     return type ? { type, data: Buffer.from(got.body).toString("base64") } : null;
   }
 
-  #address(value: string): URL {
+  #address(value: string, httpsOnly = false): URL {
     const url = new URL(value);
-    if (url.protocol !== "https:" && url.protocol !== "http:")
-      throw new Refused("not an http(s) address");
+    if (url.protocol !== "https:" && (httpsOnly || url.protocol !== "http:"))
+      throw new Refused(httpsOnly ? "not an https address" : "not an http(s) address");
     if (url.username || url.password) throw new Refused("an address with credentials");
     return url;
   }
 
   /** One GET with the redirects followed by hand, each hop checked; the body is capped. */
-  async #get(start: URL, cap: number): Promise<{ url: string; body: Uint8Array }> {
+  async #get(start: URL, cap: number, httpsOnly = false): Promise<{ url: string; body: Uint8Array }> {
     let url = start;
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       const response = await this.#once(url, cap);
       const status = response.status;
       if (status >= 300 && status < 400 && response.location) {
         // The GitHub proxy is for GitHub hosts only; viaProxy leaves any other address alone.
-        url = this.#address(viaProxy(new URL(response.location, url).href));
+        url = this.#address(viaProxy(new URL(response.location, url).href), httpsOnly);
         continue;
       }
       if (status !== 200) throw new Error("HTTP " + status);
