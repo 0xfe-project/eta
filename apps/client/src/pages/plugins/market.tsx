@@ -22,6 +22,7 @@ import {
   textStyle,
 } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
+import { PluginLogo } from "./plugin-logo";
 import { PluginName } from "./plugin-name";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
@@ -264,7 +265,12 @@ export function Market(props: {
                       borderColor: c().border,
                     }}
                   >
-                    <PluginName name={item().name} />
+                    <View style={{ ...row, gap: 8 }}>
+                      <PluginLogo name={item().name} homepage={item().homepage} />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <PluginName name={item().name} />
+                      </View>
+                    </View>
                     <Label variant="small" tone="muted" lines={1}>
                       {[item().version, item().author]
                         .filter((part) => part.trim() !== "")

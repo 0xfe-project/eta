@@ -19,6 +19,7 @@ import { AddPlugin, ConfigurePlugin, sheetEdge } from "./configure";
 import { pluginText } from "./labels";
 import { Market } from "./market";
 import { PluginDetail } from "./plugin-detail";
+import { PluginLogo } from "./plugin-logo";
 import { PluginEnabled, PluginName } from "./plugin-name";
 import { ServersDialog } from "./servers-panel";
 import { NoPlugins, PluginGlyph, Status } from "./plugin-status";
@@ -466,7 +467,12 @@ function PluginCard(props: {
           <Icon name="plugins" size={20} tone="muted" />
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-          <PluginName name={props.item.name} />
+          <View style={{ ...row, gap: 8 }}>
+            <PluginLogo name={props.item.name} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <PluginName name={props.item.name} />
+            </View>
+          </View>
           <View style={{ ...row, height: 20, gap: 8 }}>
             <If when={props.item.version}>
               <Label variant="small" tone="muted">
