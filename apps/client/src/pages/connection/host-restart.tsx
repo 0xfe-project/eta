@@ -1,13 +1,15 @@
 import type { UpgradePhase, UpgradeStatusView } from "@eta/client-contracts";
 import type { light } from "../../components/theme";
+import type { UpgradeResult } from "../settings/updates/progress";
 import { cleanup, computed, effect, signal, untracked, View } from "nsh";
 import { Dialog } from "nsh/base";
 import { Button, colors, fill, Label, row } from "../../components";
 import { screenInsets } from "../../components/safe-area";
 import { StatusDot } from "../../components/status-dot";
+import { showToast } from "../../components/toast";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-import { megabytes } from "../settings/updates/progress";
+import { megabytes, resultNotice } from "../settings/updates/progress";
 
 // What covers the whole window while the Host is replaced (Paper: Eta · Settings › Supplement /
 // Update flow, full-window screens). Downloading and waiting for work leave the app alone; from
@@ -170,7 +172,12 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
     const connected = open();
     clearTimeout(doneTimer);
     if (id && connected)
-      doneTimer = setTimeout(() => dismissed.set(id), DONE_MS);
+      doneTimer = setTimeout(() => {
+        dismissed.set(id);
+        // Back in the app, the result is a toast over it, not a notice in Settings.
+        const result = untracked(status);
+        if (result?.id === id) showToast(resultNotice(result as UpgradeResult));
+      }, DONE_MS);
   });
   cleanup(() => {
     clearInterval(tick);

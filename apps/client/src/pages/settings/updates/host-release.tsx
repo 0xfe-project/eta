@@ -310,7 +310,14 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
           </If>
         </View>
       </If>
-      <If when={!active() && !starting() ? result() : undefined}>
+      {/* A new version is told by a toast (host-restart.tsx); what went wrong stays here. */}
+      <If
+        when={
+          !active() && !starting() && result()?.state !== "done"
+            ? result()
+            : undefined
+        }
+      >
         {(ended) => (
           <View
             style={{

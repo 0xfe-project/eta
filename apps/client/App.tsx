@@ -33,6 +33,7 @@ import {
   ElementPickerOverlay,
   ElementPicking,
 } from "./src/components/element-picker";
+import { ToastLayer } from "./src/components/toast";
 import { createLanguagePreference, LanguageSettings, uiText } from "./src/i18n";
 import { resumeComposerOutbox } from "./src/pages/chat/composer-draft";
 import { Connection, WorkspaceSkeleton } from "./src/pages/connection";
@@ -251,6 +252,7 @@ function App() {
                       }}
                     />
                   </If>
+                  <ToastLayer />
                   <If when={!forcedConnect()}>
                     <HostRestartScreen
                       onConnect={() => {

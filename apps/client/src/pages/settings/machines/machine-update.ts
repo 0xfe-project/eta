@@ -1,11 +1,12 @@
 import type { MachineView } from "@eta/client-contracts";
 import { effect, signal, untracked } from "nsh";
+import { showToast } from "../../../components/toast";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 
 // A machine's update as its row and its detail tell it (Paper: Eta · Settings › Supplement /
 // Settings / Update flow, 9 and P7): pressed or being replaced → "Updating to 0.9.1…", then
-// "Updated to 0.9.1" once it is back on another build, or "Update failed" with why.
+// a toast "gpu-box updated to 0.9.1" once it is back on another build, or "Update failed" with why.
 
 /** The build each machine was on when this window saw its update begin. */
 const before = signal<Record<string, string | null>>({});
@@ -38,6 +39,23 @@ export function useMachineUpdate(item: () => MachineView) {
       return "updated";
     return undefined;
   };
+  // Back on another build: a toast says so once and the row is an ordinary row again.
+  effect(() => {
+    if (state() !== "updated") return;
+    const now = untracked(item);
+    // A row and its detail both watch the machine: one toast between them.
+    if (!(now.id in untracked(before))) return;
+    before.update((all) => {
+      const { [now.id]: _, ...rest } = all;
+      return rest;
+    });
+    showToast({
+      title: uiText("machineUpdatedToast", {
+        name: now.name,
+        version: now.version ?? "",
+      }),
+    });
+  });
   const label = () => {
     const now = item();
     switch (state()) {
