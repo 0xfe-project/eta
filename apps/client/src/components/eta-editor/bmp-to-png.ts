@@ -132,8 +132,11 @@ function bmpToPng(bmp: Uint8Array): Uint8Array<ArrayBuffer> {
 }
 
 /** BMP files (by type, or by name when the runtime gives no type) become PNG; every other file is returned as is. */
+export const isBmp = (file: File) =>
+  file.type === "image/bmp" || /\.bmp$/i.test(file.name);
+
 export async function pastedFile(file: File): Promise<File> {
-  if (file.type !== "image/bmp" && !/\.bmp$/i.test(file.name)) return file;
+  if (!isBmp(file)) return file;
   const png = bmpToPng(new Uint8Array(await file.arrayBuffer()));
   return new File([png], `${file.name.replace(/\.bmp$/i, "")}.png`, {
     type: "image/png",

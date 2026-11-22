@@ -24,7 +24,6 @@ export function createTaskDetailState(props: {
   follow(target);
   const task = () => host.section<BoardTaskDetail>(target(), "task");
   const activity = () => host.list<TaskActivityView>(target(), "activity");
-  const comment = signal("");
   const posting = signal(false);
   const archive = signal(false);
   const editing = signal(false);
@@ -84,23 +83,25 @@ export function createTaskDetailState(props: {
   let feedbackId: string | undefined;
   const phone = () => props.layout === "phone";
   const side = () => props.layout === "desktop" && !props.docked;
-  let commentId: string | undefined;
-  async function post() {
-    if (!comment().trim() || posting()) return;
+  /** The last comment tried, with its id: a retry of the same words is the same comment. */
+  let attempt: { body: string; id: string } | undefined;
+  /** Posts a comment; whether the host took it (the box empties then). */
+  async function post(text: string, mentions: string[] = []): Promise<boolean> {
+    const body = text.trim();
+    if (!body || posting()) return false;
     posting.set(true);
-    commentId ??= crypto.randomUUID();
+    if (attempt?.body !== body) attempt = { body, id: crypto.randomUUID() };
     const result = await host.action(() =>
       host.call("tasks", "comment", {
         taskId: props.id,
-        body: comment().trim(),
-        clientId: commentId,
+        body,
+        clientId: attempt!.id,
+        mentions: mentions.length ? mentions : undefined,
       }),
     );
     posting.set(false);
-    if (result) {
-      comment.set("");
-      commentId = undefined;
-    }
+    if (result) attempt = undefined;
+    return !!result;
   }
   async function mutate(work: () => Promise<void>) {
     if (submitting()) return;
@@ -190,12 +191,6 @@ export function createTaskDetailState(props: {
       replacing.set(false);
     });
   }
-  function updateComment(value: string) {
-    if (!posting() && value !== comment()) {
-      commentId = undefined;
-      comment.set(value);
-    }
-  }
   function updateFeedback(value: string) {
     if (!submitting() && value !== feedback()) {
       feedbackId = undefined;
@@ -211,9 +206,9 @@ export function createTaskDetailState(props: {
     });
   }
   return {
+    id: props.id,
     activity,
     task,
-    comment,
     posting,
     archive,
     editing,
@@ -247,7 +242,6 @@ export function createTaskDetailState(props: {
     submitReview,
     resolveBlock,
     stop,
-    updateComment,
     updateFeedback,
   };
 }

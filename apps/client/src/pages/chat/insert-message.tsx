@@ -1,6 +1,17 @@
 import type { ConversationResults, MessageView } from "@eta/client-contracts";
 import { effect, signal, View } from "nsh";
-import { Button, Field, Label, row } from "../../components";
+import { Button, colors, Label, row } from "../../components";
+import {
+  createEtaEditor,
+  draft,
+  EtaEditor,
+  limit,
+  openDocDraft,
+  pasteBlock,
+  plainText,
+  serialize,
+  submitKeys,
+} from "../../components/eta-editor";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -37,16 +48,11 @@ export function indexInserts(messages: MessageView[]) {
   return { rows, additions, recipients };
 }
 
-interface Draft {
-  text: string;
-  clientId: string;
-}
-const drafts = new Map<string, Draft>();
-
 /**
  * The words to add to a turn that is still running, in the popover under the
- * user message it answers: a 72-high field, who it goes to and the Insert
- * button.
+ * user message it answers: the chat's editor (`EtaEditor`, no files: a steer
+ * carries text), who it goes to and the Insert button. Its draft is kept per
+ * message, so closing the popover loses nothing.
  */
 export function InsertMessage(props: {
   message: MessageView;
@@ -57,12 +63,34 @@ export function InsertMessage(props: {
   onLate: () => void;
 }) {
   const host = useHost();
-  const key = JSON.stringify([
-    host.address()?.origin,
-    props.message.conversationId,
-    props.message.id,
-  ]);
-  const draft = signal(drafts.get(key)?.text ?? "");
+  const store = openDocDraft(
+    `eta.insert.v1.${JSON.stringify([
+      host.address()?.origin,
+      props.message.conversationId,
+      props.message.id,
+    ])}`,
+  );
+  return (
+    <If
+      when={store.ready()}
+      else={<View style={{ width: 288, height: 120 }} />}
+    >
+      {() => <InsertBody {...props} store={store} />}
+    </If>
+  );
+}
+
+function InsertBody(props: {
+  message: MessageView;
+  recipients: () => string[];
+  initialRecipients: string[];
+  phone: boolean;
+  onClose: () => void;
+  onLate: () => void;
+  store: ReturnType<typeof openDocDraft>;
+}) {
+  const host = useHost();
+  const c = colors();
   const sending = signal(false);
   const error = signal("");
   const targets = signal(props.initialRecipients);
@@ -70,17 +98,33 @@ export function InsertMessage(props: {
     const live = props.recipients();
     if (live.length) targets.set(live);
   });
-  function edit(text: string) {
-    if (text === draft()) return;
-    if (text) drafts.set(key, { text, clientId: crypto.randomUUID() });
-    else drafts.delete(key);
-    error.set("");
-    draft.set(text);
-  }
+  const limits = limit();
+  const out = serialize();
+  /** One id per wording, so a retry of the same words is the same message. */
+  let attempt: { text: string; id: string } | undefined;
+  const editor = createEtaEditor({
+    doc: props.store.doc(),
+    plugins: [
+      plainText(),
+      submitKeys({ onSubmit: () => void send() }),
+      pasteBlock(),
+      draft({ save: props.store.save }),
+      limits,
+      out,
+    ],
+  });
+  editor.session.on("revision", () => error.set(""));
   async function send() {
-    const pending = drafts.get(key);
-    if (!pending?.text.trim() || sending() || host.state().status !== "open")
+    if (
+      out.state().blank ||
+      limits.tooLong() ||
+      sending() ||
+      host.state().status !== "open"
+    )
       return;
+    const sent = out.read();
+    if (attempt?.text !== sent.text)
+      attempt = { text: sent.text, id: crypto.randomUUID() };
     sending.set(true);
     error.set("");
     try {
@@ -89,14 +133,16 @@ export function InsertMessage(props: {
         "send",
         {
           conversationId: props.message.conversationId,
-          text: pending.text.trim(),
+          text: sent.text,
+          blocks: sent.blocks.length ? sent.blocks : undefined,
           into: props.message.id,
           mentions: targets(),
           mode: "steer",
-          clientId: pending.clientId,
+          clientId: attempt.id,
         },
       );
-      if (drafts.get(key) === pending) drafts.delete(key);
+      editor.clear();
+      attempt = undefined;
       if (result.message.data.into !== props.message.id) props.onLate();
       props.onClose();
     } catch (cause) {
@@ -110,19 +156,28 @@ export function InsertMessage(props: {
       .map((id) => host.agent(id)?.name ?? id)
       .join(", ");
   const ready = () =>
-    Boolean(draft().trim()) && !sending() && host.state().status === "open";
+    !out.state().blank &&
+    !limits.tooLong() &&
+    !sending() &&
+    host.state().status === "open";
   return (
     <View style={{ width: 288 }}>
-      <View style={{ padding: 8 }}>
-        <Field
+      <View style={{ padding: 8, gap: 6 }}>
+        <If when={limits.tooLong()}>
+          <Label variant="caption" tone="amber">
+            {uiText("composerTooLong")}
+          </Label>
+        </If>
+        <EtaEditor
+          editor={editor}
           label={uiText("insertMessage")}
           placeholder={uiText("addToThisTurn")}
-          multiline
-          value={draft()}
-          inputRef={(node) => queueMicrotask(() => node.focus())}
-          onChange={edit}
-          onSubmit={props.phone ? undefined : () => void send()}
-          style={{ height: 72, paddingVertical: 6 }}
+          autoFocus
+          variant="small"
+          minHeight={72}
+          maxHeight={200}
+          padding={{ top: 6, bottom: 6, left: 8, right: 8 }}
+          style={{ borderWidth: 1, borderColor: c().border }}
         />
       </View>
       <If when={error()}>
