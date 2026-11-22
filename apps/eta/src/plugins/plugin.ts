@@ -28,8 +28,11 @@ export function pluginsPlugin(
   applied: () => void,
 ) {
   const { plugins, agents, market, mcp } = deps;
-  /** Servers a test or a connection found to ask for a sign-in, by URL. */
-  const asked = new Set<string>();
+  /**
+   * Servers a test found to refuse their stored sign-in, by URL, with the stamp of the sign-in it
+   * refused: a login made later (from any entry) has another stamp, so it is not shown as expired.
+   */
+  const asked = new Map<string, string>();
   const remoteUrl = (name: string, server: string): string => {
     const plan = plugins.testPlan(name, server);
     if ("result" in plan) throw new Error(plan.result.message);
@@ -53,7 +56,7 @@ export function pluginsPlugin(
                       ...server,
                       // One source: a 401 seen after the token was stored (a test said so) beats the
                       // token's mere presence; a login that starts clears that evidence.
-                      login: asked.has(server.url)
+                      login: asked.has(server.url) && asked.get(server.url) === (mcp.signInStamp(server.url) ?? "")
                         ? mcp.signedIn(server.url)
                           ? ("expired" as const)
                           : ("needs_login" as const)
@@ -258,7 +261,7 @@ export function pluginsPlugin(
           );
           const url = (plan.entry as { url?: string }).url;
           if (url !== undefined) {
-            if (result.status === "needs_login") asked.add(url);
+            if (result.status === "needs_login") asked.set(url, mcp?.signInStamp(url) ?? "");
             else if (result.status === "ok") asked.delete(url);
             wire.pushNow?.("plugins");
           }

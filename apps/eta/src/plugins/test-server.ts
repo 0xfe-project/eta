@@ -55,6 +55,29 @@ function reasonOf(error: unknown, timedOut: boolean): string {
   return "the connection failed";
 }
 
+interface Rejection {
+  text: string;
+}
+
+/** What a 401 said: its challenge's error, description and metadata address, and the start of its body. */
+async function rejectionOf(response: Response, sent: string | null): Promise<Rejection> {
+  const challenge = response.headers.get("www-authenticate") ?? "";
+  const field = (name: string) => new RegExp(name + '="?([^",]*)"?', "i").exec(challenge)?.[1];
+  const parts = [
+    "HTTP 401",
+    ...[["error", "error"], ["error_description", "description"], ["resource_metadata", "metadata"]].flatMap(
+      ([key, label]) => (field(key!) === undefined ? [] : [label + "=" + field(key!)]),
+    ),
+  ];
+  // A server may echo what it was sent: the token we sent never leaves here.
+  const token = sent?.replace(/^Bearer\s+/i, "") ?? "";
+  let text = await response.clone().text().catch(() => "");
+  if (token.length >= 3) text = text.split(token).join("***");
+  const body = text.replace(/[\u0000-\u001f]+/g, " ").trim().slice(0, 200);
+  if (body !== "") parts.push("body: " + body);
+  return { text: parts.join(", ") };
+}
+
 /** What an unauthenticated request to the server says about sign-in: true when its 401 challenge is OAuth. */
 async function declaresOauth(url: string, timeoutMs = 5000): Promise<boolean> {
   try {
@@ -84,8 +107,19 @@ export async function testConnection(
   secrets: readonly string[],
   timeoutMs = TEST_TIMEOUT_MS,
   stored?: AuthProviderFor,
+  /** Tests only: the fetch the connection goes through, in place of the network. */
+  fetchImpl?: typeof fetch,
 ): Promise<PluginTestResult> {
   const started = Date.now();
+  // The server's own 401 (what it said, never the token we sent), so the result can say why.
+  let rejected: Rejection | undefined;
+  const base = fetchImpl ?? fetch;
+  const recording = (async (input, init) => {
+    const response = await base(input, init);
+    if (response.status === 401 && definition.url !== undefined && String(input) === new URL(definition.url).href)
+      rejected = await rejectionOf(response, new Headers(init?.headers).get("authorization"));
+    return response;
+  }) as typeof fetch;
   // A server declared `oauth` is first reached without a sign-in: a 401 then says it needs one,
   // and nothing is requested on the user's behalf by a test.
   const declaredOauth = definition.auth === "oauth";
@@ -98,6 +132,7 @@ export async function testConnection(
     checkIntervalMs: 0,
     idleTimeoutMs: 0,
     requestTimeoutMs: timeoutMs,
+    fetch: recording as never,
     ...(stored === undefined ? {} : { authProviderFor: stored }),
   });
   let timedOut = false;
@@ -120,7 +155,7 @@ export async function testConnection(
         return empty(
           "needs_login",
           stored !== undefined
-            ? "the stored sign-in was not accepted; sign in again"
+            ? `the server did not accept the stored sign-in${rejected === undefined ? "" : " (" + mask(rejected.text, secrets) + ")"}; sign in again`
             : sent
               ? "credential rejected; this server also supports login"
               : "this server needs a sign-in",

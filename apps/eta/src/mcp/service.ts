@@ -362,6 +362,11 @@ export class McpService {
   }
 
   /** Whether a sign-in is stored for this URL. */
+  /** Which stored sign-in this URL has now (a stamp, not the token); undefined when none. */
+  signInStamp(url: string): string | undefined {
+    return this.credentials.stamp(mcpServerKey(url), "tokens");
+  }
+
   signedIn(url: string): boolean {
     return this.credentials.has(mcpServerKey(url), "tokens");
   }
