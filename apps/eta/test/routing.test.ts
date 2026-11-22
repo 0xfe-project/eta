@@ -449,6 +449,38 @@ describe("conversations", () => {
     expect(back.conversation.readSeq).toBe(2);
   });
 
+  it("cannot be renamed to the name of another live group in the same project", async () => {
+    const w = await world({ models: replying() });
+    const ada = await w.agent("Ada");
+    const project = await w.project();
+    const elsewhere = await w.project();
+    const launch = await w.group(project.id, [ada.id], "launch");
+    const docs = await w.group(project.id, [ada.id], "docs");
+    const old = await w.group(project.id, [ada.id], "old");
+    await w.group(elsewhere.id, [ada.id], "website");
+    await w.client.call("conversations", "update", {
+      conversationId: old.id,
+      archived: true,
+    });
+    const rename = (conversationId: string, name: string) =>
+      w.client.call("conversations", "update", {
+        conversationId,
+        name,
+      }) as Promise<{ conversation: ConversationSummary }>;
+
+    await expect(rename(docs.id, " launch ")).rejects.toThrow(
+      /already exists in this project/,
+    );
+    // An archived group's name, another project's, and its own are free.
+    expect((await rename(docs.id, "old")).conversation.name).toBe("old");
+    expect((await rename(launch.id, "website")).conversation.name).toBe(
+      "website",
+    );
+    expect((await rename(launch.id, "website")).conversation.name).toBe(
+      "website",
+    );
+  });
+
   it("keep their facts, and page back through their history", async () => {
     const w = await world({ models: replying() });
     const ada = await w.agent("Ada");

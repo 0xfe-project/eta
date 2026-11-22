@@ -39,6 +39,7 @@ describe("shared themes", () => {
       "tokyoNight",
       "solarized",
       "rosePine",
+      "one",
     ]);
     expect(Object.keys(themes).sort()).toEqual([...themeIds].sort());
   });

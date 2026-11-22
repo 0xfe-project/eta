@@ -1,4 +1,4 @@
-import type { JSX, ViewRef } from "nsh";
+import type { JSX, Point, ViewRef } from "nsh";
 import type { IconName } from "../components/icons";
 import { View } from "nsh";
 import { colors, focusRing, Icon, Label } from "../components";
@@ -77,6 +77,8 @@ export function RailEntry(props: {
   selected?: boolean;
   status?: "active" | "waiting" | "idle";
   onPress: () => void;
+  onContextMenu?: (event: { position: Point }) => void;
+  onLongPress?: (event: { position: Point }) => void;
   children: JSX.Element;
 }) {
   const c = colors();
@@ -86,6 +88,8 @@ export function RailEntry(props: {
       accessibilityLabel={props.label}
       accessibilityState={{ selected: props.selected }}
       onPress={props.onPress}
+      onContextMenu={props.onContextMenu}
+      onLongPress={props.onLongPress}
       hoverStyle={{ backgroundColor: c().selected }}
       focusVisibleStyle={focusRing(c())}
       style={{

@@ -1,3 +1,4 @@
+import type { Point } from "nsh";
 import type { Layout } from "../components";
 import { signal, View } from "nsh";
 import {
@@ -16,6 +17,7 @@ import {
 import { useText } from "../i18n";
 import { useHost } from "../services/host";
 import { AgentRow, GroupRow } from "./chat-list-rows";
+import { ArchiveGroup, GroupMenu, RenameGroup } from "./group-actions";
 import { RailButton } from "./rail-controls";
 
 export interface ChatListProps {
@@ -25,6 +27,8 @@ export interface ChatListProps {
   onAgent: (id: string) => void;
   onCreate: () => void;
   onCreateAgent: () => void;
+  /** A group was archived from its menu: it left the list. */
+  onArchived: (id: string) => void;
 }
 
 export function ChatList(
@@ -36,6 +40,12 @@ export function ChatList(
   const expanded = signal(true);
   const searching = signal(false);
   const query = signal("");
+  // The group whose menu is open, and where in its row; then the dialog it chose.
+  const menu = signal<{ id: string; at: Point } | undefined>(undefined);
+  const renaming = signal("");
+  const archiving = signal("");
+  const named = (id: string) =>
+    host.conversations().find((group) => group.id === id);
   const phone = () => props.layout === "phone";
   const groups = () =>
     host
@@ -170,7 +180,20 @@ export function ChatList(
               collapsed={props.collapsed}
               selected={props.selected === group().id}
               onPress={() => props.onConversation(group().id)}
-            />
+              onMenu={(at) => menu.set({ id: group().id, at })}
+            >
+              <If when={menu()?.id === group().id ? menu() : undefined}>
+                {(open) => (
+                  <GroupMenu
+                    group={group()}
+                    at={open().at}
+                    onClose={() => menu.set(undefined)}
+                    onRename={() => renaming.set(group().id)}
+                    onArchive={() => archiving.set(group().id)}
+                  />
+                )}
+              </If>
+            </GroupRow>
           )}
         </Each>
         <If when={!props.collapsed && groups().length === 0}>
@@ -283,6 +306,25 @@ export function ChatList(
             </SmoothScroll>
           </View>
         </If>
+      </If>
+      <If when={named(renaming())}>
+        {(group) => (
+          <RenameGroup
+            group={group()}
+            phone={phone()}
+            onClose={() => renaming.set("")}
+          />
+        )}
+      </If>
+      <If when={named(archiving())}>
+        {(group) => (
+          <ArchiveGroup
+            group={group()}
+            phone={phone()}
+            onClose={() => archiving.set("")}
+            onArchived={props.onArchived}
+          />
+        )}
       </If>
     </View>
   );

@@ -57,11 +57,21 @@ async function stage(version: string): Promise<void> {
   console.log(`built ${version}`);
 }
 
+/**
+ * Replace a line of code in main.ts that is there exactly once. Code, never a comment: a comment
+ * is reworded without anything it describes changing (#782 did, and this build failed on it).
+ */
 function patch(from: string, to: string): void {
-  const text = readFileSync(main, "utf8");
-  if (!text.includes(from)) throw new Error(`main.ts has no: ${from}`);
-  writeFileSync(main, text.replace(from, to));
+  const parts = readFileSync(main, "utf8").split(from);
+  if (parts.length !== 2)
+    throw new Error(
+      `main.ts has ${parts.length - 1} of: ${from} (it needs exactly one)`,
+    );
+  writeFileSync(main, parts.join(to));
 }
+
+// Where main.ts handles SIGINT and SIGTERM, once the host is up.
+const signals = 'for (const signal of ["SIGINT", "SIGTERM"] as const) {';
 
 try {
   await stage("0.9.0");
@@ -77,10 +87,7 @@ INSERT INTO e2e_mark (note) VALUES ('0.9.1 was here');
   await stage("0.9.2");
 
   writeFileSync(migration, "ALTER TABLE project DROP COLUMN archived;\n");
-  patch(
-    "/** A signal is a shutdown",
-    "setTimeout(() => process.exit(1), 2000);\n\n/** A signal is a shutdown",
-  );
+  patch(signals, `setTimeout(() => process.exit(1), 2000);\n${signals}`);
   await stage("0.9.3");
   writeFileSync(main, original);
 

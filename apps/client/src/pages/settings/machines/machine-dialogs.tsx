@@ -1,124 +1,9 @@
 import type { MachineView } from "@eta/client-contracts";
-import type { JSX } from "nsh";
 import { signal, View } from "nsh";
-import {
-  Button,
-  colors,
-  Field,
-  Label,
-  Modal,
-  row,
-  textFaces,
-  textStyle,
-} from "../../../components";
+import { Button, Label, Modal } from "../../../components";
+import { FieldDialog } from "../../../components/field-dialog";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
-
-/**
- * The machine row's small dialogs: one field and Cancel / Save. Off phones it is the design's
- * 480pt dialog (14pt padding, a 14/500 title); on a phone it is a bottom sheet with full-width
- * Save and Cancel.
- */
-function MachineFieldDialog(props: {
-  title: string;
-  label: string;
-  value: string;
-  phone: boolean;
-  busy: boolean;
-  valid: boolean;
-  saveLabel?: string;
-  description?: JSX.Element;
-  onChange: (value: string) => void;
-  onSave: () => void;
-  onClose: () => void;
-}) {
-  const c = colors();
-  const type = textFaces();
-  const field = () => (
-    <Field
-      label={props.label}
-      value={props.value}
-      onChange={props.onChange}
-      onSubmit={props.onSave}
-      inputRef={(node) => setTimeout(() => node.focus(), 50)}
-      style={{
-        height: props.phone ? 36 : 30,
-        ...textStyle(type("small")),
-        paddingHorizontal: 10,
-        borderColor: c().strong,
-      }}
-    />
-  );
-  return (
-    <Modal
-      title={props.title}
-      phone={props.phone}
-      sheet={props.phone}
-      plainSheetHeader={props.phone}
-      compact={!props.phone}
-      titleWeight={500}
-      overPhoneNavigation
-      dismissible={!props.busy}
-      onClose={props.onClose}
-    >
-      <If
-        when={props.phone}
-        else={
-          <>
-            <View style={{ paddingTop: 12, gap: 8 }}>
-              {props.description}
-              {field()}
-            </View>
-            <View
-              style={{
-                ...row,
-                justifyContent: "flex-end",
-                gap: 8,
-                paddingTop: 20,
-              }}
-            >
-              <Button
-                label={uiText("cancel")}
-                size={28}
-                style={{ paddingHorizontal: 8 }}
-                disabled={props.busy}
-                onPress={props.onClose}
-              />
-              <Button
-                label={props.saveLabel ?? uiText("save")}
-                tone="primary"
-                size={28}
-                style={{ paddingHorizontal: 8 }}
-                disabled={props.busy || !props.valid}
-                onPress={props.onSave}
-              />
-            </View>
-          </>
-        }
-      >
-        <View style={{ paddingHorizontal: 16, paddingTop: 12, gap: 8 }}>
-          {props.description}
-          {field()}
-        </View>
-        <View style={{ padding: 16, gap: 8 }}>
-          <Button
-            label={props.saveLabel ?? uiText("save")}
-            tone="primary"
-            size={40}
-            disabled={props.busy || !props.valid}
-            onPress={props.onSave}
-          />
-          <Button
-            label={uiText("cancel")}
-            size={40}
-            disabled={props.busy}
-            onPress={props.onClose}
-          />
-        </View>
-      </If>
-    </Modal>
-  );
-}
 
 export function RenameMachine(props: {
   item: MachineView;
@@ -142,7 +27,7 @@ export function RenameMachine(props: {
     if (result !== undefined) props.onClose();
   }
   return (
-    <MachineFieldDialog
+    <FieldDialog
       title={uiText("machineRenameTitle", { name: props.item.name })}
       label={uiText("machineName")}
       value={name()}
@@ -180,7 +65,7 @@ export function MachineRunsLimit(props: {
     if (result !== undefined) props.onClose();
   }
   return (
-    <MachineFieldDialog
+    <FieldDialog
       title={uiText("machineRunsTitle", { name: props.item.name })}
       label={uiText("maximumTaskRuns")}
       value={limit()}

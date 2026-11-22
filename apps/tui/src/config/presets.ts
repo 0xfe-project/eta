@@ -107,4 +107,6 @@ export const THEME_PRESETS = {
   "solarized-light": palette(themes.solarized.light),
   "rose-pine-dark": palette(themes.rosePine.dark),
   "rose-pine-light": palette(themes.rosePine.light),
+  "one-dark": palette(themes.one.dark),
+  "one-light": palette(themes.one.light),
 } as const satisfies Record<string, Theme>;

@@ -226,6 +226,7 @@ export function DesktopSidebar(
         onAgent={props.onAgent}
         onCreate={props.onCreate}
         onCreateAgent={props.onCreateAgent}
+        onArchived={props.onArchived}
       />
       <View
         style={{
