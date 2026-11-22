@@ -2,14 +2,17 @@ import type {
   AttachmentView,
   ConversationResults,
 } from "@eta/client-contracts";
-import type {
-  Draft as DraftParts,
-  PasteRange,
-} from "@eta/client-contracts/composer-draft";
+import type { DocNode, UploadState } from "@eta/client-contracts/composer-doc";
+import type { PasteRange } from "@eta/client-contracts/composer-draft";
 import type { StickyTarget } from "@eta/client-contracts/composer-target";
+import type { Uploads } from "../../components/eta-editor";
 import type { useHost } from "../../services/host";
+import { ATTACH_CHUNK_BYTES } from "@eta/client-contracts";
+import { legacyDraftToDoc } from "@eta/client-contracts/composer-doc";
 import { WireError } from "@eta/client-contracts/wire";
 import { cleanup, computed, effect, signal, Storage } from "nsh";
+import { uiText } from "../../i18n";
+import { forgetPicture, rememberPicture } from "../../services/pictures";
 
 export interface Outgoing {
   id: string;
@@ -19,36 +22,38 @@ export interface Outgoing {
   blocks?: PasteRange[];
   failure?: string;
 }
+/** What a chat keeps between visits: the editor's document, its finished uploads, the outbox. */
 interface Draft {
-  text: string;
-  attachments: AttachmentView[];
-  prefix: DraftParts;
+  doc: DocNode | null;
+  /** Uploaded attachments by block id (the document's attachment blocks name them). */
+  uploads: Record<string, AttachmentView>;
   sticky?: StickyTarget;
   outgoing: Outgoing[];
 }
-const empty = (): Draft => ({
-  text: "",
-  attachments: [],
-  outgoing: [],
-  prefix: [],
-});
+const empty = (): Draft => ({ doc: null, uploads: {}, outgoing: [] });
+
+type Host = ReturnType<typeof useHost>;
 
 const opened = new Map<string, ReturnType<typeof createDraft>>();
-function createDraft(key: string) {
+function createDraft(key: string, legacyKey: string) {
   const value = signal<Draft>(empty());
   const ready = signal(false);
   const busy = signal(false);
-  const uploading = signal(false);
-  const failedUploads = signal<{ file: File; error: string }[]>([]);
+  /** Upload states of this session's blocks: uploading, failed, done (the done ones persist). */
+  const states = signal<Record<string, UploadState>>({});
+  const bytes = new Map<string, File>();
+  const thumbnails = new Map<string, string>();
   let users = 0;
-  let fileJobs = Promise.resolve();
-  let fileJobCount = 0;
+  let uploadJobs = Promise.resolve();
+  let uploadCount = 0;
   let writes = Promise.resolve();
+  const uploading = signal(false);
   const unused = () =>
     !users &&
     !busy() &&
     !uploading() &&
-    !failedUploads().length &&
+    // A failed upload keeps its bytes here for a retry, in this chat, while the app runs.
+    !Object.values(states()).some((upload) => upload.state === "failed") &&
     ready() &&
     !value().outgoing.some((item) => !item.failure);
   function release() {
@@ -59,48 +64,192 @@ function createDraft(key: string) {
         opened.delete(key);
     });
   }
+  function adopt(saved: Draft) {
+    value.set(saved);
+    states.set(
+      Object.fromEntries(
+        Object.entries(saved.uploads).map(([id, attachment]) => [
+          id,
+          { state: "done", attachment } satisfies UploadState,
+        ]),
+      ),
+    );
+  }
   const loaded = Storage.getItem(key)
-    .then((raw) => {
-      if (!raw) return;
-      const saved = JSON.parse(raw) as Draft;
-      if (typeof saved.text === "string" && Array.isArray(saved.attachments))
-        value.set({
-          ...saved,
-          prefix: Array.isArray(saved.prefix) ? saved.prefix : [],
+    .then(async (raw) => {
+      if (raw) {
+        const saved = JSON.parse(raw) as Partial<Draft>;
+        adopt({
+          doc: saved.doc ?? null,
+          uploads: saved.uploads ?? {},
+          sticky: saved.sticky,
           outgoing: Array.isArray(saved.outgoing) ? saved.outgoing : [],
         });
+        return;
+      }
+      // The composer before the editor kept `{ text, prefix, attachments }`: read it once.
+      const old = await Storage.getItem(legacyKey);
+      if (!old) return;
+      const saved = JSON.parse(old) as Record<string, unknown>;
+      const { doc, uploads } = legacyDraftToDoc(saved);
+      adopt({
+        doc,
+        uploads: Object.fromEntries(
+          Object.entries(uploads).flatMap(([id, state]) =>
+            state.state === "done" ? [[id, state.attachment]] : [],
+          ),
+        ),
+        sticky: saved.sticky as StickyTarget | undefined,
+        outgoing: Array.isArray(saved.outgoing)
+          ? (saved.outgoing as Outgoing[])
+          : [],
+      });
+      await edit({});
+      await Storage.removeItem(legacyKey);
     })
     .catch(() => {})
     .finally(() => {
       ready.set(true);
       release();
     });
+  function edit(patch: Partial<Draft>) {
+    const next = { ...value(), ...patch };
+    value.set(next);
+    // Coalesce queued keystrokes while preserving the order of writes on native storage.
+    writes = writes
+      .then(async () => {
+        if (value() !== next) return;
+        const blank =
+          !next.doc ||
+          !JSON.stringify(next.doc).match(
+            /"(text|attachment|pasteBlock|mention)"/,
+          );
+        if (
+          !blank ||
+          Object.keys(next.uploads).length ||
+          next.sticky ||
+          next.outgoing.length
+        )
+          await Storage.setItem(key, JSON.stringify(next));
+        else await Storage.removeItem(key);
+      })
+      .catch(() => {});
+    return writes;
+  }
+  function setState(id: string, state: UploadState) {
+    states.update((all) => ({ ...all, [id]: state }));
+    if (state.state === "done")
+      edit({ uploads: { ...value().uploads, [id]: state.attachment } });
+  }
+  /** Uploads one file in chunks as the attachment `id`, after the uploads before it. */
+  function queue(id: string, file: File, host: Host, conversationId: string) {
+    const origin = host.address()?.origin;
+    uploadCount++;
+    uploading.set(true);
+    setState(id, { state: "uploading" });
+    const job = async () => {
+      try {
+        const data = new Uint8Array(await file.arrayBuffer());
+        for (
+          let offset = 0, index = 0;
+          offset < data.length || index === 0;
+          offset += ATTACH_CHUNK_BYTES, index++
+        ) {
+          if (host.address()?.origin !== origin)
+            throw new Error(uiText("connectionLostReconnecting"));
+          const result = await host.call<ConversationResults["attach"]>(
+            "conversations",
+            "attach",
+            {
+              conversationId,
+              uploadId: id,
+              name: file.name,
+              contentType: file.type || undefined,
+              index,
+              last: offset + ATTACH_CHUNK_BYTES >= data.length,
+              data: Buffer.from(
+                data.subarray(offset, offset + ATTACH_CHUNK_BYTES),
+              ).toString("base64"),
+            },
+          );
+          if (result.attachment) {
+            // The draft shows the picture from the bytes it sent, not the host's copy (#735).
+            if (origin)
+              rememberPicture(
+                origin,
+                result.attachment.id,
+                data,
+                result.attachment.contentType,
+              );
+            setState(id, { state: "done", attachment: result.attachment });
+          }
+        }
+      } catch (error) {
+        if (host.address()?.origin === origin)
+          await host
+            .call("conversations", "unattach", {
+              conversationId,
+              attachmentId: id,
+            })
+            .catch(() => {});
+        setState(id, {
+          state: "failed",
+          error: error instanceof Error ? error.message : String(error),
+          retry: true,
+        });
+      }
+    };
+    uploadJobs = uploadJobs.then(job).finally(() => {
+      if (--uploadCount === 0) {
+        uploading.set(false);
+        release();
+      }
+    });
+  }
+  /** The attachment plugin's view of this draft's uploads, for one host and chat. */
+  function uploads(host: Host, conversationId: string): Uploads {
+    return {
+      state: (id) => states()[id],
+      thumbnail: (id) => {
+        // Read with the states: a thumbnail made later shows on the block.
+        states();
+        return thumbnails.get(id);
+      },
+      start(id, file, error) {
+        if (error) {
+          setState(id, { state: "failed", error });
+          return;
+        }
+        bytes.set(id, file);
+        if (file.type.startsWith("image/") && file.size <= 4 * 1024 * 1024)
+          void file.arrayBuffer().then((data) => {
+            thumbnails.set(
+              id,
+              `data:${file.type};base64,${Buffer.from(new Uint8Array(data)).toString("base64")}`,
+            );
+            // The block reads its thumbnail with its state: tell it.
+            states.update((all) => ({ ...all }));
+          });
+        queue(id, file, host, conversationId);
+      },
+      retry(id) {
+        const file = bytes.get(id);
+        if (!file) return false;
+        queue(id, file, host, conversationId);
+        return true;
+      },
+    };
+  }
   const entry = {
     value,
     loaded,
     ready,
     busy,
     uploading,
-    failedUploads,
+    states,
+    uploads,
     release,
     flushed: () => writes,
-    async updateAttachments(job: () => Promise<unknown>) {
-      fileJobCount++;
-      uploading.set(true);
-      const next = fileJobs.then(job);
-      fileJobs = next.then(
-        () => {},
-        () => {},
-      );
-      try {
-        await next;
-      } finally {
-        if (--fileJobCount === 0) {
-          uploading.set(false);
-          release();
-        }
-      }
-    },
     retain() {
       users++;
       cleanup(() => {
@@ -108,51 +257,58 @@ function createDraft(key: string) {
         release();
       });
     },
-    edit(patch: Partial<Draft>) {
-      const next = { ...value(), ...patch };
-      value.set(next);
-      // Coalesce queued keystrokes while preserving the order of writes on native storage.
-      writes = writes
-        .then(async () => {
-          if (value() !== next) return;
-          if (
-            next.text ||
-            next.prefix.length ||
-            next.attachments.length ||
-            next.sticky ||
-            next.outgoing.length
-          )
-            await Storage.setItem(key, JSON.stringify(next));
-          else await Storage.removeItem(key);
-        })
-        .catch(() => {});
-      return writes;
+    edit,
+    /** Attachments of a message brought back to edit: uploaded already. */
+    remember(attachments: readonly AttachmentView[]) {
+      for (const attachment of attachments)
+        setState(attachment.id, { state: "done", attachment });
+    },
+    /** Takes back uploads the sent message did not carry (blocks taken out before sending). */
+    forget(host: Host, conversationId: string, kept: readonly string[]) {
+      const left = Object.keys(value().uploads).filter(
+        (id) => !kept.includes(id),
+      );
+      const origin = host.address()?.origin;
+      for (const id of left) {
+        void host
+          .call("conversations", "unattach", {
+            conversationId,
+            attachmentId: id,
+          })
+          .catch(() => {});
+        // A picture taken out of the draft goes with it (#735).
+        if (origin) forgetPicture(origin, id);
+      }
+      edit({ uploads: {} });
+      states.set({});
+      bytes.clear();
+      thumbnails.clear();
     },
   };
   return entry;
 }
 
-const storagePrefix = "eta.composer.v1.";
-function getDraft(key: string) {
+const storagePrefix = "eta.composer.v2.";
+const legacyPrefix = "eta.composer.v1.";
+function getDraft(name: string) {
+  const key = storagePrefix + name;
   let draft = opened.get(key);
   if (!draft) {
-    draft = createDraft(key);
+    draft = createDraft(key, legacyPrefix + name);
     opened.set(key, draft);
   }
   return draft;
 }
 
 export function openComposerDraft(origin: string, conversationId: string) {
-  const draft = getDraft(
-    storagePrefix + JSON.stringify([origin, conversationId]),
-  );
+  const draft = getDraft(JSON.stringify([origin, conversationId]));
   draft.retain();
   return draft;
 }
 
 export async function drainOutbox(
   store: ReturnType<typeof openComposerDraft>,
-  host: ReturnType<typeof useHost>,
+  host: Host,
   origin: string,
   conversationId: string,
 ) {
@@ -220,27 +376,31 @@ export async function drainOutbox(
 }
 
 // A queued send belongs to its conversation even when another chat is on screen.
-export function resumeComposerOutbox(host: ReturnType<typeof useHost>) {
+export function resumeComposerOutbox(host: Host) {
   const connected = computed(() =>
     host.state().status === "open" ? host.address()?.origin : undefined,
   );
   effect(() => {
     const origin = connected();
     if (!origin) return;
-    const prefix = `${storagePrefix + JSON.stringify([origin]).slice(0, -1)},`;
+    const scope = `${JSON.stringify([origin]).slice(0, -1)},`;
     void Storage.keys()
       .then(async (keys) => {
-        for (const key of new Set([...keys, ...opened.keys()])) {
-          if (!key.startsWith(prefix) || host.address()?.origin !== origin)
-            continue;
+        const names = new Set<string>();
+        for (const key of [...keys, ...opened.keys()])
+          for (const prefix of [storagePrefix, legacyPrefix])
+            if (key.startsWith(prefix + scope))
+              names.add(key.slice(prefix.length));
+        for (const name of names) {
+          if (host.address()?.origin !== origin) continue;
           let id: unknown;
           try {
-            [, id] = JSON.parse(key.slice(storagePrefix.length));
+            [, id] = JSON.parse(name);
           } catch {
             continue;
           }
           if (typeof id !== "string") continue;
-          const store = getDraft(key);
+          const store = getDraft(name);
           await store.loaded;
           await drainOutbox(store, host, origin, id);
         }

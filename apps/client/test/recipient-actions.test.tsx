@@ -15,12 +15,12 @@ test("choosing a busy member, pulling back a queued message and stopping their r
   await app.press("label:Pull back into the box: earlier");
   expect(app.shows("text:Waits until Ada finishes this turn")).toBe(true);
   expect(app.enabled(stop)).toBe(true);
-  expect(app.value("role:combobox")).toBe("earlier");
+  expect(app.texts()).toContain("earlier");
   await app.press("Queue one");
   await app.press(stop);
   expect(app.shows("text:stopped alpha/alpha-Ada")).toBe(true);
   expect(app.shows("text:Waits until Ada finishes this turn")).toBe(true);
   expect(app.shows(queued)).toBe(true);
-  expect(app.value("role:combobox")).toBe("earlier");
+  expect(app.texts()).toContain("earlier");
   expect(app.enabled(stop)).toBe(false);
 });
