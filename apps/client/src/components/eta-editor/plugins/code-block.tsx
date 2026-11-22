@@ -6,7 +6,7 @@ import {
   lineCount,
   normalizeNewlines,
 } from "@eta/client-contracts/composer-doc";
-import { Clipboard, platform, Text, View } from "nsh";
+import { Clipboard, Text, View } from "nsh";
 import {
   defineExtension,
   insertContent,
@@ -16,11 +16,9 @@ import {
 import { uiText } from "../../../i18n";
 import { canHover } from "../../menu";
 import { colors, row, textFaces } from "../../theme";
+import { modKey } from "../keys";
 import { blocksOf } from "../positions";
 import { oneStep } from "../step";
-
-/** The modifier of ⌘⏎ as this platform names it. */
-const modKey = platform.os === "macos" || platform.os === "ios" ? "⌘" : "Ctrl+";
 
 /** A code block longer than this folds when it is pasted in. */
 const FOLD_LINES = 12;

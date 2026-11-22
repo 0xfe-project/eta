@@ -124,7 +124,12 @@ function Fixture(props: { surface: string; state: string }) {
       agents: {
         version: 1,
         revisions: {},
-        sections: { list: [{ id: "ada", name: "Ada" }] },
+        sections: {
+          list: [
+            { id: "lin", name: "Lin" },
+            { id: "ada", name: "Ada" },
+          ],
+        },
       },
       tasks: { version: 1, revisions: {}, sections: { list: [task] } },
       "tasks.t2": {
@@ -135,8 +140,17 @@ function Fixture(props: { surface: string; state: string }) {
     },
   }));
   host.call = (async (target: string, action: string, args: unknown) => {
-    const { taskId, body } = args as { taskId?: string; body?: string };
-    sent.set([...sent(), `${target}.${action} ${taskId ?? ""} ${body ?? ""}`]);
+    const { taskId, body, mentions } = args as {
+      taskId?: string;
+      body?: string;
+      mentions?: string[];
+    };
+    sent.set([
+      ...sent(),
+      `${target}.${action} ${taskId ?? ""} ${body ?? ""}${
+        mentions?.length ? ` mentions=${mentions.join("+")}` : ""
+      }`,
+    ]);
     if (action !== "comment" || !body) return undefined;
     const entry: TaskActivityView = {
       id: `c${sent().length}`,

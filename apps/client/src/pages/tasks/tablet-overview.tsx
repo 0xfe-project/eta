@@ -144,7 +144,6 @@ export function TabletOverview(props: {
               tablet
               value={editDescription()}
               disabled={submitting()}
-              onChange={editDescription.set}
               onCancel={() => describing.set(false)}
               onSave={saveDescription}
             />
@@ -200,7 +199,7 @@ export function TabletOverview(props: {
       </SmoothScroll>
       <View style={{ paddingHorizontal: 20, paddingBottom: 14, gap: 12 }}>
         <RunLine item={item()} state={props.state} tablet />
-        <TaskCommentBox state={props.state} tablet />
+        <TaskCommentBox state={props.state} />
       </View>
     </View>
   );

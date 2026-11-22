@@ -1,7 +1,6 @@
 import { codeBlock } from "./plugins/code-block";
 import { pasteBlock } from "./plugins/paste-block";
 import { pictures } from "./plugins/picture";
-import { plainText } from "./plugins/plain-text";
 import { richText } from "./plugins/rich-text";
 import { createTextSystem } from "./text-system";
 
@@ -9,7 +8,7 @@ import { createTextSystem } from "./text-system";
  * The text of a chat: formatted (Markdown as you type), long pastes folded, code from an editor
  * as a code block; shown, its pictures as Settings › Appearance says. Each place adds its own:
  * mentions and files in the composer, neither in the insert popover; a sent message its mentions
- * (`shownMentions`) and files (`shownFiles`).
+ * (`shownMentions`) and files (`shownFiles`); `@` for the task's agents in a task's comment box.
  */
 export const chatText = createTextSystem([
   richText(),
@@ -18,5 +17,8 @@ export const chatText = createTextSystem([
   pictures(),
 ]);
 
-/** A task's comment: plain text, long pastes folded. `@` is the place's (the task's agents). */
-export const commentText = createTextSystem([plainText(), pasteBlock()]);
+/**
+ * A task's description: formatted, code as code. No folded pastes: a description is kept as its
+ * Markdown alone (nowhere to keep where a paste was), so a paste goes in as the text it is.
+ */
+export const descriptionText = createTextSystem([richText(), codeBlock()]);

@@ -16,7 +16,8 @@ for (const width of [1440, 834, 390]) {
       await app.press("label:Edit and confirm");
       expect(app.shows("label:Confirm and start")).toBe(true);
       expect(app.value("label:Title")).toBe("Legacy title");
-      expect(app.value("label:Description")).toContain("Keep the order.");
+      // The description shows formatted in its editor.
+      expect(app.texts()).toContain("Keep the order.");
       const text = app.texts().join(" ");
       for (const part of ["Ada (proposer)", "starts when ready"])
         expect(text).toContain(part);
@@ -73,7 +74,7 @@ test("shows the relationships already in the draft", async () => {
   });
   await app.press("label:Edit and confirm");
   expect(app.value("label:Title")).toBe("Exhibit labels");
-  expect(app.value("label:Description")).toContain("Paragraph 120");
+  expect(app.texts()).toContain("Paragraph 1");
   const text = app.texts().join(" ");
   for (const part of [
     "Lin",
@@ -107,4 +108,57 @@ test("a discarded draft says so and offers no way to confirm it", async () => {
   expect(app.texts()).not.toContain("Needs confirming");
   expect(app.shows("label:Edit and confirm")).toBe(false);
   expect(app.shows("label:Discard")).toBe(false);
+});
+
+const legacy =
+  "Goal: the login page lays out right in Safari.\n\n### Steps\n* reproduce on Safari 18\n* fix `login_form` padding\n\n| browser | ok |\n| --- | --- |\n| Safari | no |\n\n1) keep snake_case names\n2) ship";
+
+test("a description written before opens as its text and, untouched, is confirmed as it was", async () => {
+  const app = await open("./fixtures/draft-conversation.tsx", {
+    urlScheme: "eta://fixture/legacy",
+    locale: "en-US",
+  });
+  await app.press("label:Edit and confirm");
+  // Formatted: the heading and the list items are text of their own, not Markdown source.
+  for (const text of ["Steps", "reproduce on Safari 18", "ship"])
+    expect(app.texts()).toContain(text);
+  expect(app.texts().join(" ")).not.toContain("### Steps");
+  await app.press("label:Confirm and start");
+  await app.waitFor("text:Calls: 1");
+  const call = app
+    .texts()
+    .find((text) => text.startsWith("tasks.confirmDraft"))!;
+  expect(
+    JSON.parse(call.slice("tasks.confirmDraft ".length)).edits.description,
+  ).toBe(legacy);
+});
+
+test("a description written before and edited is kept as Markdown that reads the same", async () => {
+  const app = await open("./fixtures/draft-conversation.tsx", {
+    urlScheme: "eta://fixture/legacy",
+    locale: "en-US",
+  });
+  await app.press("label:Edit and confirm");
+  // A line of its own at the top: ⏎ is a new line, never the confirmation.
+  await app.type("label:Description", "Done when it is reviewed");
+  await app.keyboard.press("enter");
+  expect(app.texts()).toContain("Calls: 0");
+  await app.keyboard.press("mod+enter");
+  await app.waitFor("text:Calls: 1");
+  const call = app
+    .texts()
+    .find((text) => text.startsWith("tasks.confirmDraft"))!;
+  const description = JSON.parse(call.slice("tasks.confirmDraft ".length)).edits
+    .description as string;
+  expect(description.startsWith("Done when it is reviewed\nGoal:")).toBe(true);
+  for (const part of [
+    "### Steps",
+    "reproduce on Safari 18",
+    "`login_form`",
+    // The table, which the editor shows as its Markdown, is kept row for row.
+    "| browser | ok |\n| --- | --- |\n| Safari | no |",
+    "snake_case",
+    "Done when it is reviewed",
+  ])
+    expect(description).toContain(part);
 });

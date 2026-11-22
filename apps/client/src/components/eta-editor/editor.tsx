@@ -243,6 +243,11 @@ export function EtaEditor(props: {
   autoFocus?: boolean;
   maxHeight?: number;
   minHeight?: number;
+  /**
+   * Its text clipped to the box: what scrolls inside it is not counted in the size of a scroll
+   * view around it (a fixed-height box in a dialog's scroll; #290's lesson for a multiline field).
+   */
+  clip?: boolean;
   /** The text's padding inside the box. */
   padding?: { top: number; bottom: number; left: number; right: number };
   variant?: "body" | "small";
@@ -303,6 +308,7 @@ export function EtaEditor(props: {
             root: {
               maxHeight: props.maxHeight,
               minHeight: props.minHeight,
+              overflow: props.clip ? "hidden" : undefined,
             },
             content: {
               paddingTop: pad().top,

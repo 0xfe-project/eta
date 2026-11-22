@@ -3,7 +3,12 @@ import type { RichNodeJSON } from "nsh/base";
 import { serializeDoc } from "@eta/client-contracts/composer-doc";
 import { sameDoc } from "@eta/client-contracts/composer-markdown";
 import { expect, test } from "nsh/test";
-import { attachment, chatText, mention } from "../src/components/eta-editor";
+import {
+  attachment,
+  chatText,
+  descriptionText,
+  mention,
+} from "../src/components/eta-editor";
 
 // Markdown is what a message keeps: what is written in the editor goes out as Markdown and reads
 // back as the same text. Each document is put through a real editor of the chat's text first, so
@@ -155,4 +160,45 @@ test("only what would read as formatting is escaped", () => {
   const typed = held(doc(p(t("2*3*4 in src/a_b.ts"))));
   // `*3*` would be emphasis; one escape is enough, the rest stays as typed.
   expect(chatText.write(typed).text).toBe("2*3\\*4 in src/a_b.ts");
+});
+
+test("a list in an item that starts past 1 keeps its place, and the rest stays unescaped", () => {
+  const edited = held(
+    doc(p(t("Steps with snake_case")), {
+      type: "orderedList",
+      attrs: { start: 1 },
+      content: [
+        { type: "listItem", content: [p(t("check"))] },
+        {
+          type: "listItem",
+          content: [
+            p(t("ship")),
+            {
+              type: "orderedList",
+              attrs: { start: 3 },
+              content: [
+                { type: "listItem", content: [p(t("verify", "bold"))] },
+              ],
+            },
+          ],
+        },
+      ],
+    }),
+  );
+  const written = chatText.write(edited);
+  expect(sameDoc(chatText.read({ text: written.text }), edited)).toBe(true);
+  expect(written.text).toBe(
+    "Steps with snake_case\n\n1. check\n2. ship\n\n   3. **verify**",
+  );
+});
+
+test("a description's table and image survive an edit, row for row", () => {
+  const old =
+    "Intro\n\n| browser | ok |\n| --- | :-: |\n| `Safari` | no |\n\nSee ![shot](https://example.com/s.png) there";
+  const editor = descriptionText.createEditor({ text: { text: old } });
+  editor.session.setContent({
+    type: "doc",
+    content: [...(editor.doc().content ?? []), p(t("Added"))],
+  } as RichNodeJSON);
+  expect(descriptionText.write(editor.doc()).text).toBe(`${old}\nAdded`);
 });
