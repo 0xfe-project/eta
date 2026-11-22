@@ -169,6 +169,25 @@ Besides the headers a plugin file declares (and the ones eta fills from fields),
 - Order for a market card: own logo (now also for uninstalled entries) -> homepage icon (github.com and gitlab.com skipped) -> first-letter avatar. **For Cursor entries the homepage is github.com, so the own logo is the only real source.** Anthropic entries with a relative `source` (55 of 317) use the same path; those with `url`/`git-subdir` on github.com use their pinned commit as `ref`. The ref of a relative entry is `HEAD`.
 - Tests use a local fake server (`rawBase` option); the real Cursor repository is not fetched in tests.
 
+## Environment variables (stdio)
+
+The user can set environment variables on any stdio MCP server of an installed plugin, next to the ones its file declares. They reach that server only.
+
+- Storage: table `plugin_env` (migration 0063), per plugin and per server, the value sealed like every other plugin secret. A secret's value is never sent back: the view carries `secret: true` and a null value, and saving with a null value keeps what is saved. Removing the plugin removes its rows.
+- Merge: the file's `env` and field bindings first, then `PLUGIN_ROOT` / `PLUGIN_DATA`, then the user's. A name the plugin fixes (a non-empty value in the file, a field binding, `PLUGIN_ROOT`, `PLUGIN_DATA`) cannot be set by the user; the server view lists them as `lockedEnv` and the page shows them read-only.
+- A variable the file declares with an **empty value** is a blank for the user to fill. Until each one is set, the plugin is `needs_config`: it cannot be enabled, and no server of it is started or handed to an agent. Filling it (`plugins.setEnv`) makes the plugin usable at read time; removing the row makes it unusable again.
+- Checks: a name is `[A-Za-z_][A-Za-z0-9_]*`, at most 32 variables per server, a value is non-empty with no NUL and a length cap. Error messages never contain a value. Secret values are added to the redaction list, so they do not reach the model context or the journal.
+- A globally disabled plugin starts nothing; its variables are kept and the editor is dimmed.
+
+### Known limits
+
+- **Relative-path entries use ref `HEAD`.** A catalog entry whose `source` is a directory inside the catalog's own repository has no pinned commit in the catalog, so the market asks for its logo at `HEAD`, not at a commit; the picture can change between the time it is shown and the commit an install pins. Entries on github.com with a pinned commit use that commit. (Cursor: all 155 entries are relative; Claude: 55 of 317 are relative, 262 are on github.com.)
+- A logo is read from the manifest's `logo` only for `github.com` repositories; other hosts get the homepage icon or the initial.
+- The market list does not carry `version` or `author` for Cursor entries (0 of 155 have them in the catalog); the detail dialog leaves out a row whose value is empty.
+- Not done on purpose: plural forms in counts such as "1 prompts", an assertion of the badge colour tokens, and a test that fails before the 198.18 address change.
+- `apps/eta/test/plugins.test.ts` fails on Windows (38 of 42): its fixture path comes from `new URL(...).pathname` (`/C:/...`). It fails the same way without these changes. The tests added for env, required values and logos build their fixtures in a temporary directory and run on Windows.
+- No screenshots, contrast measurement or real third-party sign-in were done for this work.
+
 ## Connection test
 
 - `plugins.testServer { name, server }` connects to one server once, lists tools (names, descriptions, parameter names) and the counts of resources and prompts, and closes. It never calls a tool. It runs only on the click of "Test connection" in the plugin's Settings panel.
