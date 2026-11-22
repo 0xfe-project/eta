@@ -4,7 +4,6 @@ import { signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
-  Caption,
   colors,
   Icon,
   Label,
@@ -24,6 +23,7 @@ import {
 } from "../tasks/status";
 import { cardUsage, UsageLine, usageShown, useLiveRate } from "../tasks/usage";
 import { setTaskPanelSort, taskPanelSort } from "./panel-sort";
+import { SectionHeading, ViewAll } from "./section-heading";
 
 const closed = (task: BoardTaskView) =>
   task.status === "done" || task.status === "cancelled";
@@ -47,27 +47,22 @@ function taskTree(tasks: BoardTaskView[]) {
 export function ContextTasks(props: {
   tasks: BoardTaskView[];
   onTask: (id: string) => void;
+  /** To the Tasks tab, which also lists the closed ones and those past the first few. */
+  onViewAll: () => void;
 }) {
   const host = useHost();
   const c = colors();
   const open = () => props.tasks.filter((task) => !closed(task));
+  // The Tasks tab lists every unarchived task: offered when that is more than shown here.
+  const listed = () => props.tasks.filter((task) => !task.archivedAt);
   const rows = () => taskTree(open()).slice(0, 6);
   return (
     <View>
-      <View
-        style={{
-          ...row,
-          gap: 6,
-          paddingTop: 10,
-          paddingBottom: 4,
-          paddingHorizontal: 12,
-        }}
-      >
-        <Caption text={uiText("tasks2")} />
-        <Label variant="caption" tone="muted">
-          {open().length}
-        </Label>
-      </View>
+      <SectionHeading label={uiText("tasks2")} count={open().length}>
+        <If when={listed().length > rows().length}>
+          <ViewAll label={uiText("tasksViewAll")} onPress={props.onViewAll} />
+        </If>
+      </SectionHeading>
       <Each of={rows()} key={(entry) => entry.task.id}>
         {(entry) => (
           <View
@@ -112,7 +107,12 @@ export function ContextTasks(props: {
         <Label
           variant="small"
           tone="muted"
-          style={{ paddingHorizontal: 12, paddingBottom: 8 }}
+          style={{
+            paddingHorizontal: 12,
+            paddingBottom: 8,
+            borderBottomWidth: 1,
+            borderColor: c().border,
+          }}
         >
           {uiText("noTasksYet")}
         </Label>

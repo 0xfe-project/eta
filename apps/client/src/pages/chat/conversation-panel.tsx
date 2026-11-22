@@ -274,7 +274,11 @@ export function ConversationPanel(props: {
                       </View>
                     </If>
                     <If when={panel() === "Context" && !props.captain}>
-                      <ContextTasks tasks={tasks()} onTask={props.onTask} />
+                      <ContextTasks
+                        tasks={tasks()}
+                        onTask={props.onTask}
+                        onViewAll={() => panel.set("Tasks")}
+                      />
                     </If>
                     <If when={panel() === "Tasks"}>
                       <TasksTab
