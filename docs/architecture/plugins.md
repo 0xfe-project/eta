@@ -162,9 +162,9 @@ Besides the headers a plugin file declares (and the ones eta fills from fields),
 
 ## Logos
 
-- `plugins.logo` finds a picture for a market card: the plugin's own logo, else the icon of its homepage, else the client shows the first letter. No third-party icon service is used.
-- The host fetches it (`plugins/logo.ts`): public addresses only, the connection pinned to the address it checked, every redirect checked again, picture bytes only (no SVG), size and time caps, cached. github.com and gitlab.com homepages are skipped.
-- An installed plugin carries no homepage, so its card shows the first letter. The market preview does not show a logo yet.
+- `plugins.logo` finds a picture, in this order: the plugin's own logo (`logo` in its manifest, a path inside the plugin) -> its homepage's icon (github.com and gitlab.com homepages are skipped) -> the icon of its first remote MCP server's **parent site** (firecrawl.dev for mcp.firecrawl.dev) -> the icon of the server's own origin -> the client shows the first letter, on a colour taken from that letter. No third-party icon service is used.
+- The parent site is the registrable name: the last two labels, or three when the last two are a known second-level suffix (a small fixed list such as co.uk; not the full public suffix list). A host with no more labels than that, and an IP, has no parent. Each site is probed for `<link rel="icon" | "apple-touch-icon">` in its HTML, then `/favicon.ico`. The server's configured headers and tokens are never sent; stdio servers are skipped.
+- The host fetches it (`plugins/logo.ts`): public addresses only, the connection pinned to the address it checked, every redirect checked again, picture bytes only, size and time caps, cached in memory (a miss too, for a day; nothing is persisted, so a restart looks again). An installed plugin's card asks at list time. The market preview does not show a logo yet.
 
 ## Connection test
 

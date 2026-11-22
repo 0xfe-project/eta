@@ -130,9 +130,22 @@ describe("plugin logos", () => {
     expect(await new Logos().find(null, null, site + "/mcp")).toBeNull();
   });
 
-  it("asks the origin, then the parent of an mcp. or api. host", () => {
-    expect(siteOf("https://mcp.firecrawl.dev/v2/mcp")).toEqual(["https://mcp.firecrawl.dev", "https://firecrawl.dev"]);
+  it("asks the parent site first, then the origin; handles co.uk style suffixes", () => {
+    expect(siteOf("https://mcp.firecrawl.dev/v2/mcp")).toEqual(["https://firecrawl.dev", "https://mcp.firecrawl.dev"]);
     expect(siteOf("https://example.com/mcp")).toEqual(["https://example.com"]);
+    expect(siteOf("https://api.foo.co.uk/x")).toEqual(["https://foo.co.uk", "https://api.foo.co.uk"]);
+    expect(siteOf("https://foo.co.uk/x")).toEqual(["https://foo.co.uk"]);
+    expect(siteOf("http://127.0.0.1:9/mcp")).toEqual(["http://127.0.0.1:9"]);
     expect(siteOf("stdio:foo")).toEqual([]);
+  });
+
+  it("the parent site's icon wins over the origin's; a parent miss falls to the origin; both miss gives nothing", async () => {
+    const parent = await serve((_req, res) => res.end(Buffer.from([0, 0, 1, 0, 9])));
+    const origin = await serve((_req, res) => res.end(PNG));
+    const miss = await serve((_req, res) => res.writeHead(404).end());
+    const sites = (list: string[]) => () => list;
+    expect((await new Logos({ allowPrivate: true, sites: sites([parent, origin]) }).find(null, null, "x://s"))?.type).toBe("image/x-icon");
+    expect((await new Logos({ allowPrivate: true, sites: sites([miss, origin]) }).find(null, null, "x://s"))?.type).toBe("image/png");
+    expect(await new Logos({ allowPrivate: true, sites: sites([miss, miss]) }).find(null, null, "x://s")).toBeNull();
   });
 });

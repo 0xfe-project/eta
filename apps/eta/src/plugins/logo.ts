@@ -111,20 +111,39 @@ export interface LogoOptions {
   allowPrivate?: boolean;
   /** Tests only: the name resolver. */
   resolve?: (host: string) => Promise<string[]>;
+  /** Tests only: the sites asked for a server's icon, in order (a local fake has no parent host). */
+  sites?: (server: string) => string[];
   timeoutMs?: number;
   now?: () => number;
 }
 
 class Refused extends Error {}
 
-/** The sites to ask for an MCP server's icon: its origin, then without a leading "mcp." or "api." label. */
+/** Two-label public suffixes a site name can end in; a small fixed list, not the full public suffix list. */
+const SECOND_LEVEL = new Set([
+  "co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au", "co.nz", "co.jp", "ne.jp", "or.jp",
+  "com.cn", "net.cn", "org.cn", "com.hk", "com.tw", "com.sg", "com.br", "com.mx", "com.tr", "co.in",
+  "co.kr", "co.za", "com.ar", "com.my", "com.ua",
+]);
+
+/**
+ * The sites to ask for an MCP server's icon: its parent site first (an API host such as
+ * mcp.firecrawl.dev has no icon page, firecrawl.dev does), then the server's own origin. The parent
+ * is the registrable name: the last two labels, or the last three when the last two are a known
+ * second-level suffix (co.uk). A host with fewer labels than that has no parent; an IP has none.
+ */
 export function siteOf(server: string): string[] {
   try {
     const url = new URL(server);
     if (url.protocol !== "https:" && url.protocol !== "http:") return [];
-    const sites = [url.origin];
-    const parent = /^(?:mcp|api)\.(.+\..+)$/i.exec(url.hostname);
-    if (parent && isIP(url.hostname) === 0) sites.push(`${url.protocol}//${parent[1]}`);
+    const host = url.hostname.toLowerCase();
+    const sites: string[] = [];
+    if (isIP(host.replace(/^\[|\]$/g, "")) === 0) {
+      const labels = host.split(".");
+      const take = SECOND_LEVEL.has(labels.slice(-2).join(".")) ? 3 : 2;
+      if (labels.length > take) sites.push(`${url.protocol}//${labels.slice(-take).join(".")}`);
+    }
+    sites.push(url.origin);
     return sites;
   } catch {
     return [];
@@ -155,7 +174,7 @@ export class Logos {
       if (own) logo = await this.#picture(own);
       if (!logo && homepage) logo = await this.#fromHomepage(homepage).catch(() => null);
       if (!logo && origin) {
-        for (const site of siteOf(origin)) {
+        for (const site of (this.#options.sites ?? siteOf)(origin)) {
           logo = await this.#fromHomepage(site).catch(() => null);
           if (logo) break;
         }
