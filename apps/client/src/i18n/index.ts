@@ -59,6 +59,7 @@ const messages = {
   paletteTokyoNight: ["Tokyo Night", "Tokyo Night"],
   paletteSolarized: ["Solarized", "Solarized"],
   paletteRosePine: ["Rosé Pine", "Rosé Pine"],
+  paletteOne: ["One", "One"],
   flavor: ["Dark flavor", "深色风味"],
   flavorHint: [
     "Used in dark mode. Light mode uses Latte.",
