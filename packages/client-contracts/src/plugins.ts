@@ -171,8 +171,31 @@ export interface PluginArgs {
   remove: { name: string };
   /** Read the plugins again and look at the machines for the commands they require. */
   recheck: Record<string, never>;
+  /**
+   * Connect to one server once, list what it offers (tools, and the counts of resources and
+   * prompts), and close. Lists only: no tool is ever called. Runs on this click, never by itself.
+   */
+  testServer: { name: string; server: string };
   /** A plugin's logo as the host finds it: its own address, else the icon of its homepage. */
   logo: { own?: string | null; homepage?: string | null };
+}
+
+/** What a connection test found. Secrets are never in it. */
+export interface PluginTestResult {
+  status: "ok" | "failed" | "needs_setup" | "needs_login" | "off";
+  /** Why, in words; empty when ok. */
+  message: string;
+  /** Milliseconds from start to the last answer. */
+  ms: number;
+  /** From the server's initialize answer. */
+  serverName: string | null;
+  serverVersion: string | null;
+  tools: { name: string; description: string; params: string[] }[];
+  /** How many tools the server listed, when more than are shown. */
+  toolCount: number;
+  /** Null when the server does not offer them. */
+  resourceCount: number | null;
+  promptCount: number | null;
 }
 
 /** A logo the host found: the picture, base64, and its type; null when there is none. */
@@ -183,6 +206,7 @@ export interface PluginResults {
   setLevel: { name: string };
   setEnabled: { name: string; enabled: boolean };
   setHeaders: { name: string; server: string };
+  testServer: PluginTestResult;
   add: { name: string };
   update: { names: string[] };
   remove: { name: string };

@@ -10,6 +10,7 @@ import type { Market } from "./market";
 import type { Plugins } from "./service";
 import { Args, productPlugin, publish } from "../wire";
 import { Logos } from "./logo";
+import { testConnection } from "./test-server";
 
 const LEVELS = ["none", "read", "file", "value"] as const;
 const AUDIT_SHOWN = 200;
@@ -165,6 +166,24 @@ export function pluginsPlugin(
             args.string("sha"),
           );
           return { result: { name } };
+        }),
+        wire.handle("plugins", "testServer", async (call) => {
+          const args = new Args(call);
+          const name = args.string("name");
+          const server = args.string("server");
+          const plan = plugins.testPlan(name, server);
+          if ("result" in plan) return { result: plan.result };
+          return {
+            result: await testConnection(
+              {
+                ...plan.entry,
+                name: server,
+                source: "plugin-test",
+                hash: "plugin-test",
+              },
+              plan.secrets,
+            ),
+          };
         }),
         wire.handle("plugins", "logo", async (call) => {
           const args = new Args(call);

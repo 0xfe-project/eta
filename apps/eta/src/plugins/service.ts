@@ -16,11 +16,12 @@ import type {
   PluginField,
   PluginHeaderView,
   PluginState,
+  PluginTestResult,
   PluginValue,
   PluginView,
   Redaction,
 } from "@eta/client-contracts";
-import type { McpConfigSource } from "@eta/mcp";
+import type { McpConfigSource, McpServerEntry } from "@eta/mcp";
 import type { RuntimeExtras, SessionMeta } from "@eta/server";
 import type { Database } from "bun:sqlite";
 import type { Buffer } from "node:buffer";
@@ -41,11 +42,14 @@ import {
   pluginChunks,
   plainRemote,
   pluginMcpSources,
+  resolvePluginServers,
+  toMcpEntries,
   runtimeExtras,
   serversConfig,
 } from "@eta/daemon";
 import { headerProblem, MAX_HEADERS_PER_SERVER } from "./headers";
 import { PluginRegistry } from "./registry";
+import { notTested, secretsOf } from "./test-server";
 import { serverViews } from "./server-view";
 import { PluginRows } from "./store";
 
@@ -161,6 +165,35 @@ export class Plugins {
       this.rows.values(entry.name),
       this.rows.headers(entry.name),
     );
+  }
+
+  /**
+   * What a connection test of one server needs: the server as a session would get it, or the
+   * reason there is nothing to connect to. Nothing here connects.
+   */
+  testPlan(
+    name: string,
+    server: string,
+  ):
+    | { result: PluginTestResult }
+    | { entry: McpServerEntry; secrets: string[] } {
+    const entry = this.#existing(name);
+    if (this.rows.disabled().has(name))
+      return { result: notTested("off", "the plugin is off") };
+    const def = entry.plugin?.servers.find((one) => one.name === server);
+    if (entry.plugin === undefined || def === undefined)
+      throw new Error(`${name} has no server ${server}`);
+    if (!this.#usable(entry))
+      return { result: notTested("needs_setup", "required values are missing") };
+    const resolved = resolvePluginServers(
+      [{ plugin: entry.plugin, config: this.#config(entry) }],
+      this.#dataDir,
+      this.#warn,
+    ).filter((one) => one.server === server);
+    const [mcp] = Object.values(toMcpEntries(resolved));
+    if (mcp === undefined)
+      return { result: notTested("failed", "the server could not be resolved") };
+    return { entry: mcp, secrets: secretsOf(mcp) };
   }
 
   /** The plugins an agent's sessions load, and the ones it enabled that they skip. */
