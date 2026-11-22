@@ -191,6 +191,10 @@ export function TabletOverview(props: {
             runs={item().runs}
             createdBy={item().createdBy}
             onLog={(run) => props.state.log.set(run)}
+            onTask={props.onTask}
+            onArtifact={(artifact, version) =>
+              props.state.artifact.set({ artifact, version })
+            }
           />
         </View>
       </SmoothScroll>

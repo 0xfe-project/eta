@@ -1,6 +1,15 @@
 import type { BoardTaskStatus, BoardTaskView } from "@eta/client-contracts";
+import type { TaskPanelSort } from "./panel-sort";
 import { signal, View } from "nsh";
-import { Caption, colors, Icon, Label, row, Screen } from "../../components";
+import {
+  ActionItem,
+  ActionMenu,
+  colors,
+  Icon,
+  Label,
+  row,
+  Screen,
+} from "../../components";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -13,6 +22,8 @@ import {
   TaskStatus,
 } from "../tasks/status";
 import { cardUsage, UsageLine, usageShown, useLiveRate } from "../tasks/usage";
+import { setTaskPanelSort, taskPanelSort } from "./panel-sort";
+import { SectionHeading, ViewAll } from "./section-heading";
 
 const closed = (task: BoardTaskView) =>
   task.status === "done" || task.status === "cancelled";
@@ -36,27 +47,22 @@ function taskTree(tasks: BoardTaskView[]) {
 export function ContextTasks(props: {
   tasks: BoardTaskView[];
   onTask: (id: string) => void;
+  /** To the Tasks tab, which also lists the closed ones and those past the first few. */
+  onViewAll: () => void;
 }) {
   const host = useHost();
   const c = colors();
   const open = () => props.tasks.filter((task) => !closed(task));
+  // The Tasks tab lists every unarchived task: offered when that is more than shown here.
+  const listed = () => props.tasks.filter((task) => !task.archivedAt);
   const rows = () => taskTree(open()).slice(0, 6);
   return (
     <View>
-      <View
-        style={{
-          ...row,
-          gap: 6,
-          paddingTop: 10,
-          paddingBottom: 4,
-          paddingHorizontal: 12,
-        }}
-      >
-        <Caption text={uiText("tasks2")} />
-        <Label variant="caption" tone="muted">
-          {open().length}
-        </Label>
-      </View>
+      <SectionHeading label={uiText("tasks2")} count={open().length}>
+        <If when={listed().length > rows().length}>
+          <ViewAll label={uiText("tasksViewAll")} onPress={props.onViewAll} />
+        </If>
+      </SectionHeading>
       <Each of={rows()} key={(entry) => entry.task.id}>
         {(entry) => (
           <View
@@ -101,7 +107,12 @@ export function ContextTasks(props: {
         <Label
           variant="small"
           tone="muted"
-          style={{ paddingHorizontal: 12, paddingBottom: 8 }}
+          style={{
+            paddingHorizontal: 12,
+            paddingBottom: 8,
+            borderBottomWidth: 1,
+            borderColor: c().border,
+          }}
         >
           {uiText("noTasksYet")}
         </Label>
@@ -127,7 +138,16 @@ const folded = [
   ["cancelled", "taskCancelledCount"],
 ] as const;
 
-/** The Tasks tab: this group's tasks (or every group's) by what they need. */
+const sortNames = {
+  needs: "tasksSortNeedsYou",
+  updated: "tasksSortUpdated",
+} as const satisfies Record<TaskPanelSort, Parameters<typeof uiText>[0]>;
+
+/**
+ * The Tasks tab: this group's tasks (or every group's) by what they need, or, sorted by Recently
+ * updated, the open ones in one list by when they last changed. Done and cancelled stay folded
+ * under either sort.
+ */
 export function TasksTab(props: {
   conversationId: string;
   conversationName: string;
@@ -174,12 +194,49 @@ export function TasksTab(props: {
   return (
     // No side padding here: each part carries its own, so the rows can reach both edges.
     <View style={{ paddingTop: 12 }}>
-      <Label
-        weight={600}
-        style={{ paddingBottom: 8, paddingHorizontal: inset }}
+      <View
+        style={{
+          ...row,
+          justifyContent: "space-between",
+          gap: 8,
+          paddingBottom: 8,
+          paddingHorizontal: inset,
+        }}
       >
-        {uiText("tasks2")}
-      </Label>
+        <Label weight={600} style={{ flexShrink: 0 }}>
+          {uiText("tasks2")}
+        </Label>
+        {/* The /tasks list's "Group: …" menu, on the title's line so the scopes keep their row. */}
+        <ActionMenu
+          label={uiText("tasksSortBy")}
+          sheetTitle={uiText("tasksSortBy")}
+          value={uiText("tasksSorting", {
+            name: uiText(sortNames[taskPanelSort()]),
+          })}
+          valueTone="muted"
+          truncateValue
+          triggerStyle={{
+            borderWidth: 0,
+            height: 23,
+            marginVertical: -4,
+            marginRight: -6,
+            paddingHorizontal: 6,
+            gap: 5,
+            flexShrink: 1,
+            minWidth: 0,
+          }}
+        >
+          <Each of={["needs", "updated"] as const}>
+            {(sort) => (
+              <ActionItem
+                label={uiText(sortNames[sort()])}
+                checked={taskPanelSort() === sort()}
+                onSelect={() => setTaskPanelSort(sort())}
+              />
+            )}
+          </Each>
+        </ActionMenu>
+      </View>
       <View
         style={{ ...row, gap: 6, paddingBottom: 12, paddingHorizontal: inset }}
       >
@@ -188,7 +245,22 @@ export function TasksTab(props: {
         )}
         {scope(uiText("allGroups"), everywhere(), () => everywhere.set(true))}
       </View>
-      <Each of={sections}>
+      <If when={taskPanelSort() === "updated"}>
+        <View style={{ height: 2 }} />
+        <Each
+          of={tasks().filter((task) => !closed(task))}
+          key={(task) => task.id}
+        >
+          {(task) => (
+            <TaskRow
+              task={task()}
+              timeFirst
+              onPress={() => props.onTask(task().id)}
+            />
+          )}
+        </Each>
+      </If>
+      <Each of={taskPanelSort() === "needs" ? sections : []}>
         {(section, index) => {
           const items = () =>
             tasks().filter((task) =>
@@ -262,6 +334,7 @@ export function TasksTab(props: {
                   {(task) => (
                     <TaskRow
                       task={task()}
+                      timeFirst={taskPanelSort() === "updated"}
                       onPress={() => props.onTask(task().id)}
                     />
                   )}
@@ -300,7 +373,12 @@ function PanelRate(props: { task: BoardTaskView }) {
   );
 }
 
-function TaskRow(props: { task: BoardTaskView; onPress: () => void }) {
+function TaskRow(props: {
+  task: BoardTaskView;
+  /** Sorted by Recently updated: the time leads the second line, in ink. */
+  timeFirst?: boolean;
+  onPress: () => void;
+}) {
   const layout = Screen();
   const host = useHost();
   const c = colors();
@@ -310,7 +388,10 @@ function TaskRow(props: { task: BoardTaskView; onPress: () => void }) {
   // `taskTime`, not the routines' `runAgo`: that one needs `Intl.RelativeTimeFormat`, which the
   // native runtime (macOS, Linux, Windows, phones) does not have, and its throw took the line.
   const meta = () =>
-    [`#${task().number}`, executor(), taskTime(task())]
+    (props.timeFirst
+      ? [`#${task().number}`, executor()]
+      : [`#${task().number}`, executor(), taskTime(task())]
+    )
       .filter(Boolean)
       .join(" · ");
   const waitingFor = () =>
@@ -338,6 +419,18 @@ function TaskRow(props: { task: BoardTaskView; onPress: () => void }) {
           {task().title}
         </Label>
         <View style={{ ...row, minWidth: 0 }}>
+          <If when={props.timeFirst}>
+            <Label variant="caption" lines={1} style={{ flexShrink: 0 }}>
+              {taskTime(task())}
+            </Label>
+            <Label
+              variant="caption"
+              tone="muted"
+              style={{ flexShrink: 0, marginHorizontal: 4 }}
+            >
+              ·
+            </Label>
+          </If>
           <Label
             variant="caption"
             tone="muted"

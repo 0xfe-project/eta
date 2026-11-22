@@ -622,6 +622,12 @@
   }
 }
 
+@keyframes picture-preview-in {
+  from {
+    opacity: 0;
+  }
+}
+
 @keyframes upload-pulse {
   50% {
     opacity: 0.45;
@@ -1565,6 +1571,53 @@
     font-family: var(--font-mono);
     font-size: 10px;
     color: var(--faint);
+  }
+  /* A picture shown beside its chip or thumbnail while the pointer rests there: it takes no
+     pointer, so moving onto it is leaving the chip. The popper's wrapper neither: while it is
+     being placed it can lie over the chip, and taking the pointer there would close it. */
+  [data-radix-popper-content-wrapper]:has(> .picture-preview) {
+    pointer-events: none;
+  }
+  .picture-preview {
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: min(90vw, 720px);
+    /* Radix flips it to the side with room, which can still be short of the picture's height. */
+    max-height: var(--radix-tooltip-content-available-height);
+    padding: 4px;
+    border: 1px solid var(--border-strong);
+    background: var(--popover);
+    box-shadow: var(--shadow-md);
+    pointer-events: none;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .picture-preview {
+      animation: picture-preview-in 120ms ease-out;
+    }
+  }
+  .picture-preview img {
+    display: block;
+    max-width: 100%;
+    /* Room left for the caption line under it. */
+    max-height: min(70vh, calc(var(--radix-tooltip-content-available-height) - 32px));
+    object-fit: contain;
+  }
+  .picture-preview .image-pending {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 160px;
+    min-height: 96px;
+  }
+  .picture-preview-caption {
+    overflow: hidden;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
   .lightbox {
     display: flex;

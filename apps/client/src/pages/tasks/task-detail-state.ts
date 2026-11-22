@@ -1,4 +1,5 @@
 import type {
+  ArtifactView,
   BoardTaskDetail,
   BoardTaskStatus,
   BoardTaskView,
@@ -35,6 +36,10 @@ export function createTaskDetailState(props: {
   const renaming = signal(false);
   const describing = signal(false);
   const log = signal<TaskRunView | undefined>(undefined);
+  /** The artifact the timeline opened, at the version its entry names. */
+  const artifact = signal<
+    { artifact: ArtifactView; version?: number } | undefined
+  >(undefined);
   const status = signal(false);
   /** The status a change is on its way to, until the host answers. */
   const changing = signal<BoardTaskStatus | undefined>(undefined);
@@ -221,6 +226,7 @@ export function createTaskDetailState(props: {
     saveTitle,
     saveDescription,
     log,
+    artifact,
     status,
     changing,
     statusError,

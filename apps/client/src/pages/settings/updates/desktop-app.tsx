@@ -11,6 +11,7 @@ import {
   row,
   SmoothScroll,
 } from "../../../components";
+import { DownloadProgressBar } from "../../../components/download-progress";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 
@@ -139,6 +140,9 @@ export function DesktopAppUpdate(props: { work: UpgradeCheckView["busy"] }) {
             />
           </View>
         )}
+      </If>
+      <If when={busy() && !ready() ? percentage() : undefined}>
+        {(value) => <DownloadProgressBar value={value()} />}
       </If>
       <If when={failure()}>
         <Label variant="small" tone="red">

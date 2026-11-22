@@ -987,6 +987,27 @@ export class Engine {
     };
   }
 
+  /**
+   * An image of this conversation for the `read_image` tool. `ref` is an attachment id or the
+   * path the agent was told, which starts with the id; only this conversation's files can be named.
+   */
+  async image(
+    conversationId: string,
+    agentId: string,
+    ref: string,
+  ): Promise<{ mime: string; dataBase64: string }> {
+    const running = this.#running.get(keyOf(conversationId, agentId));
+    if (running === undefined || !(await this.#takesImages(running.handle)))
+      throw new Error("The model you run on does not support images.");
+    const id = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/i.exec(
+      ref.split(/[\\/]/).pop()!,
+    )?.[0];
+    const record = id === undefined ? undefined : this.#attachments.get(id);
+    if (record === undefined || record.conversationId !== conversationId)
+      throw new Error(`No such attachment in this conversation: ${ref}`);
+    return await this.#attachments.image(record);
+  }
+
   /** The room an agent is in, as the `conversation_info` tool tells it. */
   describe(conversationId: string, me: string): string {
     const conversation = this.#requireConversation(conversationId);
@@ -1484,6 +1505,7 @@ export class Engine {
     if (files.size > 0) {
       const all = [...files.values()].flat();
       const placed = await this.#place(all, conversation, machine);
+      const sees = await this.#takesImages(handle);
       for (const [rowId, carried] of files) {
         lines.set(
           rowId,
@@ -1491,11 +1513,15 @@ export class Engine {
             const path = placed.paths.get(file.id);
             return path === undefined
               ? `[attachment ${file.name} could not be put where you can read it: ${placed.failed.get(file.id) ?? "unknown error"}]`
-              : `[attachment: ${path} (${file.contentType}, ${file.size} bytes)]`;
+              : `[attachment: ${path} (${file.contentType}, ${file.size} bytes)${
+                  !sees && file.contentType.startsWith("image/")
+                    ? "; not shown: the model you run on does not support images"
+                    : ""
+                }]`;
           }),
         );
       }
-      if (await this.#takesImages(handle))
+      if (sees)
         images = await this.#attachments.images(
           all.filter((file) => placed.paths.has(file.id)),
         );
