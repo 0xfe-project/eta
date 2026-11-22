@@ -165,15 +165,27 @@ for (const [name, width, height] of [
     const app = await open(fixture, { width, height, locale: "en-US" });
     if (name === "tablet") await app.press("label:Panel");
     expect(rows(app)).toEqual(["#5 Guided review", ...plans.slice(0, 4)]);
-    await app.press("label:View all →");
+    await app.press("label:View all artifacts");
     expect(app.texts()).toContain("1–15 / 23");
   });
+
+test("the context tab's View all tasks opens the Tasks tab, closed tasks included", async () => {
+  const app = await open(fixture, {
+    width: 1440,
+    height: 900,
+    locale: "en-US",
+  });
+  expect(app.texts()).not.toContain("Completed 1");
+  await app.press("label:View all tasks");
+  expect(app.texts()).toContain("Sort: Needs you first");
+  expect(app.texts()).toContain("Completed 1");
+});
 
 test("on a phone the info sheet lists the latest five and View all opens the whole list", async () => {
   const app = await open(fixture, { width: 390, height: 844, locale: "en-US" });
   await app.press("label:Conversation info");
   expect(rows(app)).toEqual(["#5 Guided review", ...plans.slice(0, 4)]);
-  await app.press("label:View all →");
+  await app.press("label:View all artifacts");
   expect(app.texts()).toContain("1–15 / 23");
 
   await app.type("label:Search artifacts", "guided");

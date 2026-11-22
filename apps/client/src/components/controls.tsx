@@ -29,6 +29,8 @@ import {
 
 export function Button(props: {
   label: string;
+  /** What a screen reader says when the label alone is ambiguous; `label` by default. */
+  accessibilityLabel?: string;
   controlRef?: (node: ViewRef) => void;
   icon?: IconName;
   end?: IconName;
@@ -69,7 +71,7 @@ export function Button(props: {
         props.controlRef?.(node);
       }}
       role="button"
-      accessibilityLabel={props.label}
+      accessibilityLabel={props.accessibilityLabel ?? props.label}
       accessibilityState={{
         disabled: props.disabled ?? false,
         selected: props.selected,
