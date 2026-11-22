@@ -50,13 +50,14 @@ afterEach(async () => {
 });
 
 describe("手机底部栏", () => {
-  it("includes Plugins after Routines, with the plus between the two groups", async () => {
+  it("includes Runtimes and Plugins after Routines, with the plus between the two groups", async () => {
     const container = await render();
     expect(links(container)).toEqual([
       "/",
       "/tasks",
       "/email",
       "/routines",
+      "/runtimes",
       "/plugins",
       "/settings",
     ]);

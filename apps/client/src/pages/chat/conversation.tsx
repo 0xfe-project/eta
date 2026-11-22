@@ -112,7 +112,7 @@ export function Conversation(props: {
       .filter((op) => op.requiresApproval && op.status === "pending");
   const asking = () =>
     host.pending().filter((entry) => entry.conversationId === props.id);
-  const messages = () =>
+  const messages = computed(() =>
     withoutHeldReplies(
       [
         ...new Map(
@@ -123,7 +123,8 @@ export function Conversation(props: {
         ).values(),
       ],
       timeline()?.held ?? [],
-    );
+    ),
+  );
   const indexed = computed(() => indexInserts(messages()));
   const inserting = signal<
     { message: MessageView; recipients: string[] } | undefined

@@ -7,7 +7,7 @@ import type {
 } from "@eta/client-contracts";
 import type { JSX } from "nsh";
 import type { Layout } from "../../components";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -21,6 +21,7 @@ import {
   Modal,
   row,
   sizes,
+  SmoothScroll,
 } from "../../components";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
@@ -325,7 +326,7 @@ export function Email(props: {
                 </If>
               }
             >
-              <Scroll style={grow} scrollbar={false}>
+              <SmoothScroll style={grow} scrollbar={false}>
                 <Each of={threads()} key={(item) => item.id}>
                   {(item) => (
                     <ThreadRow
@@ -345,7 +346,7 @@ export function Email(props: {
                     />
                   )}
                 </Each>
-              </Scroll>
+              </SmoothScroll>
             </If>
           </View>
         </If>

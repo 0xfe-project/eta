@@ -1,4 +1,4 @@
-import type { AgentUsage } from "@eta/client-contracts";
+import type { AgentUsage, ProviderUsage } from "@eta/client-contracts";
 import { useTarget } from "@/queries/wire";
 
 // What the models were used for, as the host counts it: the `usage` target's `agents` section,
@@ -19,4 +19,19 @@ export function useAgentUsage(agentId: string | undefined): {
     usage: agents?.find((entry) => entry.agentId === agentId),
     loaded: agents !== undefined,
   };
+}
+
+/**
+ * Every provider's usage over the rolling windows, by provider id (an external runtime's runs are
+ * under the runtime's id); undefined until the host has said anything.
+ */
+export function useProviderUsage():
+  | ReadonlyMap<string, ProviderUsage>
+  | undefined {
+  const providers = useTarget("usage")?.sections.providers as
+    | readonly ProviderUsage[]
+    | undefined;
+  return providers === undefined
+    ? undefined
+    : new Map(providers.map((entry) => [entry.provider, entry]));
 }

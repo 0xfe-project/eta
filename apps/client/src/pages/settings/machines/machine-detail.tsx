@@ -3,7 +3,7 @@ import type {
   BoardTaskView,
   MachineView,
 } from "@eta/client-contracts";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   Button,
   colors,
@@ -12,6 +12,7 @@ import {
   Label,
   Modal,
   row,
+  SmoothScroll,
 } from "../../../components";
 import { StatusDot } from "../../../components/status-dot";
 import { uiText } from "../../../i18n";
@@ -20,6 +21,7 @@ import { TaskGlyph } from "../../tasks/status";
 import { EntityRow, SectionHeader } from "../section";
 import { SettingRow } from "../setting-row";
 import { MachineRunsLimit, RevokeMachine } from "./machine-dialogs";
+import { useMachineUpdate } from "./machine-update";
 import { machineStatus } from "./machines";
 
 export function MachineDetail(props: {
@@ -34,6 +36,7 @@ export function MachineDetail(props: {
   const editing = signal(false);
   const removing = signal(false);
   const busy = signal(false);
+  const machineUpdate = useMachineUpdate(() => props.item);
   const pending = () => props.item.status === "pending";
   const candidates = () =>
     host.tasks().filter((item) => item.status === "in_progress");
@@ -85,10 +88,11 @@ export function MachineDetail(props: {
     borderColor: c().border,
   });
   const upgrade = () =>
-    props.item.kind === "daemon" &&
-    props.item.install === "service" &&
-    props.item.status === "online" &&
-    (props.item.build === "outdated" || !!props.item.updateError);
+    (props.item.kind === "daemon" &&
+      props.item.install === "service" &&
+      props.item.status === "online" &&
+      (props.item.build === "outdated" || !!props.item.updateError)) ||
+    machineUpdate.state() === "updating";
   async function act(action: () => Promise<unknown>, onSuccess?: () => void) {
     if (busy()) return;
     busy.set(true);
@@ -106,7 +110,7 @@ export function MachineDetail(props: {
       height={props.phone ? "100%" : 490}
       onClose={props.onClose}
     >
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <If
           when={pending()}
           else={
@@ -298,7 +302,7 @@ export function MachineDetail(props: {
             {props.item.updateError}
           </Label>
         </If>
-      </Scroll>
+      </SmoothScroll>
       <If when={pending() || upgrade()}>
         <View
           style={{
@@ -313,23 +317,19 @@ export function MachineDetail(props: {
             else={
               <Button
                 label={
-                  props.phone && host.upgradeCheck()?.version
-                    ? uiText("updateMachineTo", {
-                        version: host.upgradeCheck()!.version,
-                      })
-                    : uiText("updateMachine")
+                  machineUpdate.state() === "updating"
+                    ? machineUpdate.label()!
+                    : props.phone && host.upgradeCheck()?.version
+                      ? uiText("updateMachineTo", {
+                          version: host.upgradeCheck()!.version,
+                        })
+                      : uiText("updateMachine")
                 }
                 tone="primary"
                 size={props.phone ? 32 : undefined}
                 style={props.phone ? { alignSelf: "stretch" } : undefined}
-                disabled={busy()}
-                onPress={() =>
-                  void act(() =>
-                    host.call("machines", "upgrade", {
-                      machineId: props.item.id,
-                    }),
-                  )
-                }
+                disabled={busy() || machineUpdate.state() === "updating"}
+                onPress={() => void machineUpdate.start()}
               />
             }
           >

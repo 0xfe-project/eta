@@ -1,4 +1,5 @@
 import type {
+  BoardTaskView,
   TaskActor,
   TaskArchivedFilter,
   TaskWorkspaceMode,
@@ -32,7 +33,10 @@ export interface TasksDeps {
   board: TaskBoard;
   runner: TaskRunner;
   /** What the tasks' runs used, in tokens (`tasks.usage`, and each task's `usage` section). */
-  usage?: Pick<TaskUsageStore, "ofTask" | "onChange" | "ancestorsOf">;
+  usage?: Pick<
+    TaskUsageStore,
+    "ofTask" | "onChange" | "ancestorsOf" | "briefs"
+  >;
   /** The workspace a task made in a conversation gets, when its parent does not say. */
   workspaceFor?: WorkspaceChoice;
   /** Where the board's settings (how soon quiet tasks are archived) are kept. */
@@ -128,6 +132,18 @@ function newTasksOf(call: CallFrame): NewTaskInput[] {
 
 export function tasksPlugin(deps: TasksDeps, applied: () => void) {
   const { board, runner, workspaceFor, settings, usage } = deps;
+  // The board's tasks with their usage in brief, read in one pass for the whole list.
+  const listed = (tasks: BoardTaskView[]): BoardTaskView[] => {
+    if (usage === undefined) return tasks;
+    const { own, withSubtasks } = usage.briefs();
+    return tasks.map((task) => ({
+      ...task,
+      usage: own.get(task.id) ?? null,
+      ...(withSubtasks.has(task.id)
+        ? { usageWithSubtasks: withSubtasks.get(task.id)! }
+        : {}),
+    }));
+  };
 
   return productPlugin(
     "tasks",
@@ -155,8 +171,8 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
           wire,
           "tasks",
           {
-            list: () => board.list(),
-            archived: () => board.list({ archived: "only" }),
+            list: () => listed(board.list()),
+            archived: () => listed(board.list({ archived: "only" })),
             settings: () => boardSettings(settings),
           },
           { eager: true },
@@ -165,6 +181,7 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
         // A run's tokens were counted: its task's page moved, and so did every task above it,
         // whose section adds its subtasks in. Paced: a busy run is counted on every request.
         usage?.onChange((taskId) => {
+          wire.push("tasks");
           for (const id of [taskId, ...usage.ancestorsOf(taskId)])
             if (targets.has(id)) wire.push(`tasks.${id}`);
         }) ?? (() => undefined),
@@ -191,7 +208,7 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
             (call.args as Record<string, unknown> | undefined)?.archived,
             "tasks.list",
           );
-          return { result: { tasks: board.list({ archived }) } };
+          return { result: { tasks: listed(board.list({ archived })) } };
         }),
 
         wire.handle("tasks", "archive", (call) => {
@@ -218,6 +235,9 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
           const raw = (call.args ?? {}) as Record<string, unknown>;
           const saved = saveBoardSettings(settings, {
             archiveAfterDays: raw.archiveAfterDays,
+            reactToResults: raw.reactToResults,
+            autoAnswerAsks: raw.autoAnswerAsks,
+            draftTimeout: raw.draftTimeout,
           });
           wire.pushNow("tasks");
           deps.settingsChanged?.();
@@ -377,6 +397,16 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
               conversationId: args.string("conversationId"),
               messageId: args.string("messageId"),
               edits: editsOf(call),
+            }),
+          };
+        }),
+
+        wire.handle("tasks", "discardDraft", (call) => {
+          const args = new Args(call);
+          return {
+            result: board.discardDraft({
+              conversationId: args.string("conversationId"),
+              messageId: args.string("messageId"),
             }),
           };
         }),

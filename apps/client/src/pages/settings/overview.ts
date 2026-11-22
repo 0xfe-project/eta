@@ -12,6 +12,7 @@ import type { AppearanceProps } from "./appearance";
 import { effect } from "nsh";
 import { formatLocale, uiText, useText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { createRuntimeListing } from "./runtimes/listing";
 
 export const sections = [
   ["Agents", "robot", "agents"],
@@ -19,6 +20,8 @@ export const sections = [
   ["Machines", "monitor", "machines"],
   ["MCP servers", "plug", "mcpServers"],
   ["External agents", "terminal", "externalAgents"],
+  ["Tasks", "tasks", "tasks"],
+  ["Runtimes", "cpu", "runtimes"],
   ["Email", "email", "email"],
   ["Archived", "archive", "archived"],
   ["Appearance", "palette", "appearance"],
@@ -43,6 +46,25 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
   follow(() => "mcp");
   follow(() => "acp");
   follow(() => "email");
+  // A daemon's external agents are in the `acp` section only once it was asked while online:
+  // ask each online daemon once, and again after it was offline.
+  const askedAcp = new Set<string>();
+  effect(() => {
+    if (host.state().status !== "open" || !host.can("acp.refresh")) return;
+    for (const machine of machines()) {
+      if (machine.kind !== "daemon") continue;
+      if (machine.status !== "online") {
+        askedAcp.delete(machine.id);
+        continue;
+      }
+      if (askedAcp.has(machine.id)) continue;
+      askedAcp.add(machine.id);
+      void host
+        .call("acp", "refresh", { machineId: machine.id })
+        .catch(() => askedAcp.delete(machine.id));
+    }
+  });
+  const runtimes = createRuntimeListing();
   // The Update row says which build runs, so read it once the host allows
   // it rather than waiting for the Update pane to be opened.
   let checking = false;
@@ -97,6 +119,14 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
       }
       case "External agents":
         return { text: String(externalAgents().length) };
+      case "Tasks":
+        return { text: "" };
+      case "Runtimes":
+        return {
+          text: uiText("runtimesAvailableCount", {
+            count: runtimes.available(),
+          }),
+        };
       case "Email": {
         const errors = email().filter((item) => item.status === "error").length;
         return errors
@@ -136,5 +166,5 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
     }
   };
 
-  return { providers, machines, email, externalAgents, summary };
+  return { providers, machines, email, externalAgents, runtimes, summary };
 }

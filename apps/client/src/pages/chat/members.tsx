@@ -1,7 +1,7 @@
 import type { MemberView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
-import { Scroll, signal, View, windowSize } from "nsh";
-import { Dialog, Menu, MenuItem, MenuSeparator } from "nsh/base";
+import { signal, View, windowSize } from "nsh";
+import { Dialog } from "nsh/base";
 import {
   Button,
   colors,
@@ -11,9 +11,19 @@ import {
   Label,
   Modal,
   row,
+  SmoothScroll,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { CheckControl } from "../../components/check-control";
+import {
+  canHover,
+  inSheet,
+  MenuFrame,
+  MenuRow,
+  MenuRule,
+  touchRow,
+  touchScreen,
+} from "../../components/menu";
 import { CloseButton } from "../../components/navigation-buttons";
 import { formatLocale, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -34,12 +44,15 @@ export function StewardMenu(props: {
       }),
     );
   }
-  const itemStyle = { ...row, gap: 8, paddingHorizontal: 10, height: 30 };
+  const itemStyle = () => ({
+    ...row,
+    gap: 8,
+    paddingHorizontal: inSheet() ? 16 : 10,
+    height: inSheet() ? 52 : touchScreen ? touchRow : 30,
+  });
+  const hover = canHover ? { backgroundColor: c().selected } : undefined;
   return (
-    <Menu
-      placement="bottom"
-      align="start"
-      offset={3}
+    <MenuFrame
       popupStyle={{
         width: 172,
         borderWidth: 1,
@@ -49,7 +62,8 @@ export function StewardMenu(props: {
       trigger={
         <View
           accessibilityLabel={uiText("steward2")}
-          hoverStyle={{ backgroundColor: c().selected }}
+          hitSlop={touchScreen ? 11 : undefined}
+          hoverStyle={hover}
           style={{
             ...row,
             height: 22,
@@ -72,15 +86,11 @@ export function StewardMenu(props: {
     >
       <Each of={props.members} key={(member) => member.agentId}>
         {(member) => (
-          <MenuItem
+          <MenuRow
             role="menuitemradio"
             checked={member().agentId === props.current}
-            accessibilityLabel={
-              host.agent(member().agentId)?.name ?? uiText("agent")
-            }
-            style={itemStyle}
-            hoverStyle={{ backgroundColor: c().selected }}
-            indicatorStyle={{ width: 0 }}
+            label={host.agent(member().agentId)?.name ?? uiText("agent")}
+            style={itemStyle()}
             onSelect={() => void choose(member().agentId)}
           >
             <AgentFace id={member().agentId} size={10} />
@@ -90,16 +100,15 @@ export function StewardMenu(props: {
             <If when={member().agentId === props.current}>
               <Icon name="check" size={10} />
             </If>
-          </MenuItem>
+          </MenuRow>
         )}
       </Each>
-      <MenuSeparator style={{ height: 1, backgroundColor: c().border }} />
-      <MenuItem
+      <MenuRule style={{ height: 1, backgroundColor: c().border }} />
+      <MenuRow
         role="menuitemradio"
         checked={!props.current}
-        indicatorStyle={{ width: 0 }}
-        style={itemStyle}
-        hoverStyle={{ backgroundColor: c().selected }}
+        label={uiText("noSteward")}
+        style={itemStyle()}
         onSelect={() => void choose(null)}
       >
         <Label variant="caption" style={{ flex: 1 }}>
@@ -108,8 +117,8 @@ export function StewardMenu(props: {
         <If when={!props.current}>
           <Icon name="check" size={10} />
         </If>
-      </MenuItem>
-    </Menu>
+      </MenuRow>
+    </MenuFrame>
   );
 }
 
@@ -188,7 +197,7 @@ export function InviteAgents(props: {
         <Label tone="muted" variant="caption">
           {uiText("membersCanReadTheGroupChat")}
         </Label>
-        <Scroll
+        <SmoothScroll
           style={
             phone()
               ? grow
@@ -240,7 +249,7 @@ export function InviteAgents(props: {
           <If when={!candidates().length}>
             <Label tone="muted">{uiText("allAgentsAreAlreadyMembers")}</Label>
           </If>
-        </Scroll>
+        </SmoothScroll>
       </View>
       <View
         style={{

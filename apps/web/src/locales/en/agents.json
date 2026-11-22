@@ -19,7 +19,13 @@
       "instructions": "Instructions",
       "plugins": "Plugins"
     },
-    "sectionsLabel": "Agent settings sections"
+    "sectionsLabel": "Agent settings sections",
+    "avatar": {
+      "draw": "Draw another face",
+      "recent": "Recent faces",
+      "current": "Current face",
+      "wear": "Wear this face again"
+    }
   },
   "models": {
     "loading": "Loading models…",
@@ -111,8 +117,14 @@
     "status": {
       "unauthenticated": " (not signed in)",
       "missing": " (not installed)",
-      "error": " (unavailable)"
-    }
+      "error": " (unavailable)",
+      "timeout": " (probe timed out after 30s)",
+      "failed": " (probe failed)"
+    },
+    "details": "Details",
+    "retrying": "Checking again…",
+    "signIn": "{{runtime}} isn't signed in: run <code>{{command}}</code> in a terminal, then retry.",
+    "openRuntimes": "See it on Runtimes"
   },
   "plugins": {
     "empty": "No plugins yet.",

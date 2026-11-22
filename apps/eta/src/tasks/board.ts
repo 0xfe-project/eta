@@ -9,6 +9,7 @@ import type {
   TaskArchivedFilter,
   TaskArtifactRef,
   TaskDependencyView,
+  TaskDraftTimeoutAction,
   TaskRefView,
   TaskWaitView,
   TaskWorkspaceMode,
@@ -1072,6 +1073,8 @@ export class TaskBoard {
     conversationId: string;
     messageId: string;
     edits?: FieldsInput | undefined;
+    /** The host confirms it, after the draft waited this many minutes; the user did not. */
+    auto?: { minutes: number } | undefined;
   }): { task: BoardTaskDetail; message: MessageView } {
     // The draft's dependencies were checked when it was drafted; much can change before it is
     // confirmed, so they are checked again here, in the same write that makes the task.
@@ -1081,9 +1084,15 @@ export class TaskBoard {
           conversationId: input.conversationId,
           messageId: input.messageId,
           fields: this.#fieldsOf(input.edits ?? {}),
+          auto: input.auto === undefined ? undefined : "timeout",
         });
         const edges = confirmed.created ? confirmed.dependsOn : [];
-        const actor: TaskActor = { kind: "user", agentId: null };
+        const actor: TaskActor =
+          input.auto === undefined ? { kind: "user", agentId: null } : SYSTEM;
+        if (confirmed.created && input.auto !== undefined)
+          this.#deps.tasks.record(confirmed.task.id, "comment", SYSTEM, {
+            body: `Accepted automatically: the draft waited ${input.auto.minutes} minute(s) without a decision.`,
+          });
         if (confirmed.created && confirmed.parentId !== undefined)
           this.#setParent(confirmed.task.id, confirmed.parentId, actor);
         for (const edge of edges)
@@ -1109,6 +1118,50 @@ export class TaskBoard {
       if (parentId !== null) this.#graphChanged();
     }
     return { task: this.#detailOf(this.#existing(task.id)), message };
+  }
+
+  /** The user discards a draft: no task is made and the card says so. */
+  discardDraft(input: {
+    conversationId: string;
+    messageId: string;
+    /** The host discards it, not the user. */
+    auto?: "timeout" | undefined;
+  }): {
+    message: MessageView;
+  } {
+    const message = this.#deps.cards.discard(input);
+    this.#deps.changed([input.conversationId]);
+    return { message };
+  }
+
+  /**
+   * The host's own decision for drafts that waited too long: every draft still pending that was
+   * written at or before `cutoff` is confirmed as it stands or discarded. One the host cannot
+   * confirm (a dependency changed, say) stays pending, keeps the reason, and is not tried again.
+   */
+  settleExpiredDrafts(input: {
+    cutoff: number;
+    action: TaskDraftTimeoutAction;
+    minutes: number;
+  }): { settled: string[]; failed: { messageId: string; error: string }[] } {
+    const settled: string[] = [];
+    const failed: { messageId: string; error: string }[] = [];
+    for (const row of this.#deps.cards.pendingBefore(input.cutoff)) {
+      if (row.data.autoFailure !== undefined) continue;
+      const target = { conversationId: row.conversationId, messageId: row.id };
+      try {
+        if (input.action === "accept")
+          this.confirmDraft({ ...target, auto: { minutes: input.minutes } });
+        else this.discardDraft({ ...target, auto: "timeout" });
+        settled.push(row.id);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        this.#deps.cards.failAuto(row.id, reason);
+        this.#deps.changed([row.conversationId]);
+        failed.push({ messageId: row.id, error: reason });
+      }
+    }
+    return { settled, failed };
   }
 
   /* ---------------------------------------------------------------- inside */

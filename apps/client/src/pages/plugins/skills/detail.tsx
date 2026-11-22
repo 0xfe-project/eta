@@ -7,7 +7,7 @@ import type {
 import type { ScrollRef, ViewRef } from "nsh";
 import type { Layout } from "../../../components";
 import type { SkillReadingPosition } from "./reader";
-import { cleanup, effect, openUrl, Scroll, signal, untracked, View } from "nsh";
+import { cleanup, effect, openUrl, signal, untracked, View } from "nsh";
 import {
   Button,
   colors,
@@ -17,6 +17,7 @@ import {
   Icon,
   Label,
   row,
+  SmoothScroll,
 } from "../../../components";
 import { uiText } from "../../../i18n";
 import { SkillFileTree } from "./file-tree";
@@ -280,7 +281,7 @@ export function SkillDetail(props: {
   };
 
   const filePreview = () => (
-    <Scroll
+    <SmoothScroll
       ref={scroll.set}
       style={grow}
       scrollbar={false}
@@ -375,7 +376,7 @@ export function SkillDetail(props: {
           )}
         </If>
       </View>
-    </Scroll>
+    </SmoothScroll>
   );
 
   const diagnosticList = () => (

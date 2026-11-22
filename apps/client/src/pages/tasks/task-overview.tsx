@@ -5,7 +5,8 @@ import type {
 } from "@eta/client-contracts";
 import type { Layout, TextVariant } from "../../components";
 import type { TaskDetailState } from "./task-detail-state";
-import { Scroll, View } from "nsh";
+import { View } from "nsh";
+import { paneWidth } from "../../app/pane-width";
 import {
   Button,
   Caption,
@@ -17,7 +18,9 @@ import {
   Label,
   Markdown,
   monoFontFamily,
+  PaneHandle,
   row,
+  SmoothScroll,
   textFaces,
   textStyle,
 } from "../../components";
@@ -25,6 +28,7 @@ import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 import { TaskActivity } from "./activity";
+import { actorLabel, CreatorChip } from "./creator";
 import {
   NeighbourStrip,
   Prerequisites,
@@ -36,6 +40,7 @@ import { activeTaskRun, runCaption, runElapsed } from "./run-log";
 import { statusName, TaskGlyph } from "./status";
 import { TabletOverview } from "./tablet-overview";
 import { TaskCommentBox, TaskFields, TaskRail } from "./task-fields";
+import { PhoneRunTokens, TaskUsageSection } from "./usage-section";
 
 function RunSummary(props: { item: BoardTaskDetail; state: TaskDetailState }) {
   const c = colors();
@@ -108,6 +113,7 @@ function RunSummary(props: { item: BoardTaskDetail; state: TaskDetailState }) {
 /** One run on the phone's task page: its state and how long, the whole row opening its log. */
 function RunRow(props: {
   run: TaskRunView;
+  taskId: string;
   index: number;
   last: boolean;
   executor: string;
@@ -169,6 +175,11 @@ function RunRow(props: {
           {`${state()} · ${runElapsed(props.run)}`}
         </Label>
       </View>
+      <PhoneRunTokens
+        taskId={props.taskId}
+        runId={props.run.id}
+        session={props.run.sessionId}
+      />
       <Icon name="right" size={14} tone="muted" />
     </View>
   );
@@ -272,7 +283,7 @@ function DesktopOverview(props: {
   const opensWithHeading = () => /^\s*#/.test(item().description);
   return (
     <View style={{ ...row, ...grow, alignItems: "stretch" }}>
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <View
           style={{
             paddingTop: parent() ? 16 : 14,
@@ -289,16 +300,12 @@ function DesktopOverview(props: {
               {parent()
                 ? uiText("parentCreatedBy", {
                     number: item().number,
-                    name:
-                      host.agent(item().createdBy.agentId)?.name ??
-                      uiText("taskMe"),
+                    name: actorLabel(item().createdBy, host.agent),
                   })
                 : uiText("createdBy", {
                     number: item().number,
                     value2: "",
-                    value3:
-                      host.agent(item().createdBy.agentId)?.name ??
-                      uiText("taskMe"),
+                    value3: actorLabel(item().createdBy, host.agent),
                     relativeTime: taskMoment(item().createdAt),
                     value5: item().ancestors?.at(-1)
                       ? ` · Part of #${item().ancestors!.at(-1)!.number}`
@@ -365,6 +372,7 @@ function DesktopOverview(props: {
           </If>
           <If when={parent()}>
             <Subtasks item={item()} onTask={props.onTask} />
+            <TaskUsageSection item={item()} layout="desktop" />
           </If>
           <If when={item().description}>
             <If
@@ -428,20 +436,27 @@ function DesktopOverview(props: {
               </View>
             </If>
           </If>
+          <If when={!parent()}>
+            <TaskUsageSection item={item()} layout="desktop" />
+          </If>
           <TaskActivity
             heading="desktop"
             entries={activity()}
             runs={item().runs}
             createdBy={item().createdBy}
             onLog={(run) => props.state.log.set(run)}
+            onTask={props.onTask}
+            onArtifact={(artifact, version) =>
+              props.state.artifact.set({ artifact, version })
+            }
           />
           <RunLine item={item()} state={props.state} />
           <TaskCommentBox state={props.state} />
         </View>
-      </Scroll>
+      </SmoothScroll>
       <View
         style={{
-          width: 280,
+          width: paneWidth("task"),
           paddingVertical: 20,
           paddingHorizontal: 16,
           borderLeftWidth: 1,
@@ -450,6 +465,7 @@ function DesktopOverview(props: {
         }}
       >
         <TaskRail item={item()} state={props.state} onTask={props.onTask} />
+        <PaneHandle pane="task" />
       </View>
     </View>
   );
@@ -548,7 +564,7 @@ export function TaskOverview(props: {
         }
       >
         <View style={{ ...row, ...grow, alignItems: "stretch" }}>
-          <Scroll style={grow} scrollbar={false}>
+          <SmoothScroll style={grow} scrollbar={false}>
             <View
               style={{
                 paddingHorizontal: phone() ? 16 : 20,
@@ -565,9 +581,7 @@ export function TaskOverview(props: {
                   {uiText("createdBy", {
                     number: item().number,
                     value2: item().subtasks?.total ? " · Parent" : "",
-                    value3:
-                      host.agent(item().createdBy.agentId)?.name ??
-                      uiText("taskMe"),
+                    value3: actorLabel(item().createdBy, host.agent),
                     relativeTime: phone()
                       ? taskWhen(item().createdAt)
                       : relativeTime(item().createdAt),
@@ -607,6 +621,7 @@ export function TaskOverview(props: {
                   </View>
                 </If>
               </View>
+              <CreatorChip creator={item().createdBy} />
               <If when={phone()}>
                 <RunSummary item={item()} state={props.state} />
               </If>
@@ -683,6 +698,10 @@ export function TaskOverview(props: {
                   </If>
                 </View>
               </If>
+              <TaskUsageSection
+                item={item()}
+                layout={phone() ? "phone" : props.layout}
+              />
               <If
                 when={
                   item().waitingOn?.length ||
@@ -783,6 +802,7 @@ export function TaskOverview(props: {
                       >
                         <RunRow
                           run={run()}
+                          taskId={item().id}
                           index={index()}
                           last={index() === item().runs.length - 1}
                           executor={executor()?.name ?? uiText("executor")}
@@ -799,6 +819,10 @@ export function TaskOverview(props: {
                 runs={item().runs}
                 createdBy={item().createdBy}
                 onLog={(run) => log.set(run)}
+                onTask={props.onTask}
+                onArtifact={(artifact, version) =>
+                  props.state.artifact.set({ artifact, version })
+                }
               />
               <If when={!phone()}>
                 <TaskCommentBox state={props.state} />
@@ -807,7 +831,7 @@ export function TaskOverview(props: {
                 <TaskFields item={item()} state={props.state} />
               </If>
             </View>
-          </Scroll>
+          </SmoothScroll>
         </View>
       </If>
     </If>

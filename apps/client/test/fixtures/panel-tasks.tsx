@@ -32,6 +32,7 @@ const tasks = [
   task(2, "Write the login API tests", "in_progress", 185, "ada"),
   task(5, "Build the login API", "in_review", 12, "bo"),
   task(7, "Wire up the login page", "todo", 0, "ada"),
+  task(9, "Design the login flow", "done", 1, "bo"),
 ];
 
 function Fixture() {

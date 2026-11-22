@@ -34,10 +34,14 @@ function Fixture() {
       },
     ]);
   }
+  // A lane took the queued message before the user pressed anything.
+  let handedOn = false;
   const failed = new Set<string>();
   let finishUpload: (() => void) | undefined;
   const uploadFailures = new Set<string>();
   const resultBlocks = signal("");
+  const uploadNames = new Map<string, string>();
+  const resultFiles = signal("");
   Object.assign(host, {
     agent: (id: string) => ({ id, name: id }),
     tasks: () => [
@@ -63,6 +67,7 @@ function Fixture() {
           uploadFailures.add(String(args.name));
           throw new Error("upload interrupted");
         }
+        uploadNames.set(String(args.uploadId), String(args.name));
         return {
           attachment: {
             id: args.uploadId,
@@ -79,6 +84,12 @@ function Fixture() {
           throw new Error("delivery failed");
         }
         resultBlocks.set(JSON.stringify(args.blocks));
+        const sentFiles = (args.attachments as string[] | undefined) ?? [];
+        resultFiles.set(
+          sentFiles.length
+            ? `attachments ${sentFiles.map((id) => uploadNames.get(id)).join(",")}`
+            : "",
+        );
         result.set(
           `sent ${JSON.stringify([
             args.conversationId,
@@ -91,8 +102,9 @@ function Fixture() {
       }
       if (action === "recall") {
         held.set([]);
-        return { recalled: true };
+        return { recalled: !handedOn };
       }
+      if (action === "steerHeld") throw new Error("lane closed");
       if (action === "stop")
         result.set(
           args.messageId
@@ -123,6 +135,12 @@ function Fixture() {
         />
         <Button label="Finish upload" onPress={() => finishUpload?.()} />
         <Button label="Queue one" onPress={queueOne} />
+        <Button
+          label="Hand it on"
+          onPress={() => {
+            handedOn = true;
+          }}
+        />
         <Each of={[group()]}>
           {(id) => (
             <Composer
@@ -144,6 +162,7 @@ function Fixture() {
         </Each>
         <Text>{result()}</Text>
         <Text>{resultBlocks()}</Text>
+        <Text>{resultFiles()}</Text>
       </View>
     </Host.Provider>
   );

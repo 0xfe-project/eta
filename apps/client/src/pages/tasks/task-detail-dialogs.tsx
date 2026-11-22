@@ -2,7 +2,7 @@ import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import type { TaskDetailState } from "./task-detail-state";
 import { TASK_STATUSES } from "@eta/client-contracts";
-import { Scroll, View } from "nsh";
+import { View } from "nsh";
 import {
   Button,
   colors,
@@ -12,6 +12,7 @@ import {
   Label,
   Modal,
   row,
+  SmoothScroll,
 } from "../../components";
 import { CloseButton } from "../../components/navigation-buttons";
 import { uiText } from "../../i18n";
@@ -179,7 +180,7 @@ export function TaskDetailDialogs(props: {
               value={search()}
               onChange={search.set}
             />
-            <Scroll style={grow}>
+            <SmoothScroll style={grow}>
               <Each
                 of={host
                   .tasks()
@@ -209,7 +210,7 @@ export function TaskDetailDialogs(props: {
                   />
                 )}
               </Each>
-            </Scroll>
+            </SmoothScroll>
           </View>
         </Modal>
       </If>

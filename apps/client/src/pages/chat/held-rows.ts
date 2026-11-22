@@ -17,6 +17,11 @@ export function withoutHeldReplies(
   if (held.length === 0) return rows;
   const waiting = new Set(held.map((row) => row.id));
   return rows.filter(
-    (row) => row.author !== "agent" || !waiting.has(row.rootMessageId ?? ""),
+    (row) =>
+      row.author !== "agent" ||
+      !(
+        waiting.has(row.rootMessageId ?? "") ||
+        waiting.has(row.replyToId ?? "")
+      ),
   );
 }

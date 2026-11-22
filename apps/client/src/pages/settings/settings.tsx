@@ -7,7 +7,7 @@ import type { ViewRef } from "nsh";
 import type { Layout } from "../../components";
 import type { AppearanceProps } from "./appearance";
 import type { SettingsSection } from "./overview";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   ActionItem,
   Button,
@@ -18,6 +18,7 @@ import {
   Icon,
   Modal,
   row,
+  SmoothScroll,
 } from "../../components";
 import { CloseButton } from "../../components/navigation-buttons";
 import { uiText, useText } from "../../i18n";
@@ -26,6 +27,11 @@ import { AgentEditor } from "./agents/editor";
 import { Appearance } from "./appearance";
 import { ArchiveSettings } from "./archive";
 import { ExternalAgentDetail } from "./external-agent";
+import {
+  acpMachines,
+  acpWritable,
+  ExternalAgentForm,
+} from "./external-agent-form";
 import { ExternalAgentList } from "./external-agent-list";
 import { Machines } from "./machines/machines";
 import { MailboxEditor, mailboxProvider } from "./mailbox-editor";
@@ -36,8 +42,10 @@ import { ModelSourceList, useModelSources } from "./models/source-list";
 import { SubscriptionDetail } from "./models/subscription-detail";
 import { SettingsNavigation } from "./navigation";
 import { sections, useSettingsOverview } from "./overview";
+import { RuntimeList } from "./runtimes/runtime-list";
 import { emptyStyle, EntityRow, SectionHeader } from "./section";
 import { AgentSetting } from "./setting-row";
+import { TaskSettings } from "./tasks";
 import { UpdateSettings } from "./updates/update";
 
 export function Settings(
@@ -73,13 +81,16 @@ export function Settings(
   const acpAgent = signal<{ machineId: string; id: string } | undefined>(
     undefined,
   );
+  /** The external-agent form: adding (no `agentId`) or editing that agent on `machineId`. */
+  const acpForm = signal<{ machineId: string; agentId?: string } | undefined>(
+    undefined,
+  );
   const mailbox = signal<EmailAccountView | "new" | undefined>(undefined);
   const phone = () => props.layout === "phone";
   const showingProvider = () =>
     section() === "Model services" && (connector() || provider());
-  const { machines, email, externalAgents, summary } = useSettingsOverview(
-    () => props.theme,
-  );
+  const { machines, email, externalAgents, runtimes, summary } =
+    useSettingsOverview(() => props.theme);
   const selectedAcp = () => {
     const selected = acpAgent();
     return externalAgents().find(
@@ -93,6 +104,11 @@ export function Settings(
   const { count: sourceCount } = useModelSources();
   const acpLists = () =>
     host.section<Record<string, AcpMachineList>>("acp", "machines") ?? {};
+  /** Where a new external agent goes unless another is chosen: the first machine that can take one. */
+  const acpTarget = () =>
+    acpMachines(machines()).find((item) => acpWritable(item, acpLists()));
+  const editAcp = (machineId: string, agentId: string) =>
+    acpForm.set({ machineId, agentId });
   const offlineMachines = () =>
     machines().filter((item) => item.status === "offline");
   const sectionCount = (name: SettingsSection) =>
@@ -108,9 +124,11 @@ export function Settings(
   const sectionHint = (name: SettingsSection) =>
     name === "External agents"
       ? uiText("externalAgentsHint")
-      : name === "Email"
-        ? uiText("settingsEmailHint")
-        : undefined;
+      : name === "Runtimes"
+        ? uiText("runtimesHint")
+        : name === "Email"
+          ? uiText("settingsEmailHint")
+          : undefined;
   /** Panes that draw their own header instead of the section header. */
   const ownHeader = (name: SettingsSection) =>
     name === "Machines" ||
@@ -140,6 +158,19 @@ export function Settings(
           style={actionStyle()}
           icon="plus"
           onPress={() => sources.set(true)}
+        />
+      </If>
+      <If when={name === "External agents" && host.can("acp.save")}>
+        <Button
+          label={uiText("acpAddAgent")}
+          size={actionSize()}
+          style={actionStyle()}
+          icon="plus"
+          disabled={!acpTarget()}
+          onPress={() => {
+            const target = acpTarget();
+            if (target) acpForm.set({ machineId: target.id });
+          }}
         />
       </If>
       <If when={name === "Email"}>
@@ -199,7 +230,7 @@ export function Settings(
                   when={host.people().length}
                   else={info(uiText("settingsNoAgents"))}
                 >
-                  <Scroll style={grow} scrollbar={false}>
+                  <SmoothScroll style={grow} scrollbar={false}>
                     <Each of={host.people()} key={(item) => item.id}>
                       {(item) => (
                         <AgentSetting
@@ -210,7 +241,7 @@ export function Settings(
                         />
                       )}
                     </Each>
-                  </Scroll>
+                  </SmoothScroll>
                 </If>
               </If>
               <If when={current() === "Model services"}>
@@ -236,7 +267,7 @@ export function Settings(
                         </Empty>
                       }
                     >
-                      <Scroll style={grow} scrollbar={false}>
+                      <SmoothScroll style={grow} scrollbar={false}>
                         <ModelSourceList
                           phone={phone()}
                           onRef={sourceRef}
@@ -249,7 +280,7 @@ export function Settings(
                             connector.set(name);
                           }}
                         />
-                      </Scroll>
+                      </SmoothScroll>
                     </If>
                   }
                 >
@@ -301,16 +332,32 @@ export function Settings(
                     />
                   }
                 >
-                  <Scroll style={grow} scrollbar={false}>
+                  <SmoothScroll style={grow} scrollbar={false}>
                     <ExternalAgentList
                       lists={acpLists()}
                       machines={machines()}
                       onAgent={(machineId, item) =>
                         acpAgent.set({ machineId, id: item.id })
                       }
+                      onEdit={
+                        host.can("acp.save")
+                          ? (machineId, item) => editAcp(machineId, item.id)
+                          : undefined
+                      }
                     />
-                  </Scroll>
+                  </SmoothScroll>
                 </If>
+              </If>
+              <If when={current() === "Runtimes"}>
+                <SmoothScroll style={grow} scrollbar={false}>
+                  <RuntimeList
+                    listing={runtimes}
+                    phone={phone()}
+                    onExternalAgent={(machineId, id) =>
+                      acpAgent.set({ machineId, id })
+                    }
+                  />
+                </SmoothScroll>
               </If>
               <If when={current() === "Email"}>
                 <If
@@ -330,7 +377,7 @@ export function Settings(
                         />
                       }
                     >
-                      <Scroll style={grow} scrollbar={false}>
+                      <SmoothScroll style={grow} scrollbar={false}>
                         <Each of={email()} key={(item) => item.id}>
                           {(item) => (
                             <EntityRow
@@ -375,7 +422,7 @@ export function Settings(
                             />
                           )}
                         </Each>
-                      </Scroll>
+                      </SmoothScroll>
                     </If>
                   }
                 >
@@ -391,6 +438,9 @@ export function Settings(
                     />
                   )}
                 </If>
+              </If>
+              <If when={current() === "Tasks"}>
+                <TaskSettings phone={phone()} />
               </If>
               <If when={current() === "Archived"}>
                 <ArchiveSettings phone={phone()} />
@@ -432,6 +482,10 @@ export function Settings(
               agent.set(undefined);
               section.set("Model services");
             }}
+            onRuntimes={() => {
+              agent.set(undefined);
+              section.set("Runtimes");
+            }}
           />
         )}
       </If>
@@ -453,7 +507,46 @@ export function Settings(
               (machine) => machine.id === item().machineId,
             )}
             phone={phone()}
+            writable={acpWritable(
+              machines().find((machine) => machine.id === item().machineId),
+              acpLists(),
+            )}
+            onEdit={
+              host.can("acp.save")
+                ? () => editAcp(item().machineId, item().agent.id)
+                : undefined
+            }
             onClose={() => acpAgent.set(undefined)}
+          />
+        )}
+      </If>
+      <If when={acpForm()}>
+        {(form) => (
+          <ExternalAgentForm
+            machines={machines()}
+            lists={acpLists()}
+            machineId={form().machineId}
+            agent={
+              form().agentId === undefined
+                ? undefined
+                : acpLists()[form().machineId]?.agents?.find(
+                    (agent) => agent.id === form().agentId,
+                  )
+            }
+            phone={phone()}
+            onSaved={(machineId, id) => {
+              const edited = form().agentId;
+              const open = acpAgent();
+              // The open detail follows its agent to the id it was saved as.
+              if (
+                edited !== undefined &&
+                open?.machineId === machineId &&
+                open.id === edited
+              )
+                acpAgent.set({ machineId, id });
+              acpForm.set(undefined);
+            }}
+            onClose={() => acpForm.set(undefined)}
           />
         )}
       </If>

@@ -223,7 +223,8 @@ export class DaemonNode {
     });
     this.#manager = new SessionManager({
       store: this.#store,
-      // Claude Code, Codex, OpenCode, Pi: an agent on one of them runs it on this machine.
+      // Claude Code, Codex, OpenCode, Pi, Grok Build: an agent on one of them runs
+      // it on this machine.
       runtimes: this.#runtimes,
       // Generation is the primary's: this is a model layer that asks it.
       modelsFor: (meta) =>
@@ -419,6 +420,13 @@ export class DaemonNode {
     peer.handle("runtimes", async (raw) => {
       const { fresh } = (raw ?? {}) as DaemonServiceParams["runtimes"];
       return { runtimes: await this.#runtimes.catalog.list(fresh === true) };
+    });
+    peer.handle("runtimeAccount", async (raw) => {
+      const { runtime } = raw as DaemonServiceParams["runtimeAccount"];
+      const account = await this.#runtimes.catalog.account?.(runtime);
+      if (account === undefined)
+        throw new Error(`no such runtime here: ${runtime}`);
+      return account;
     });
     // The settings page's ACP agents, this machine's own. Agents (and so who still runs on an id)
     // are the primary's: it checks that before it asks for a rename or a delete.

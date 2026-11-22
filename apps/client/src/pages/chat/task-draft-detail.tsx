@@ -7,7 +7,7 @@ import type {
 } from "@eta/client-contracts";
 import type { JSX } from "nsh";
 import { draftStatus } from "@eta/client-contracts";
-import { Scroll, signal, View, windowSize } from "nsh";
+import { signal, View, windowSize } from "nsh";
 import {
   Button,
   Caption,
@@ -17,6 +17,7 @@ import {
   Label,
   Modal,
   row,
+  SmoothScroll,
   textFaces,
   textStyle,
 } from "../../components";
@@ -77,7 +78,8 @@ export function TaskDraftDetail(props: {
   const description = signal(data().description ?? "");
   const status = signal<TaskDraftStatus>(draftStatus(data()));
   const busy = signal(false);
-  const pending = () => props.message.kind === "task_draft";
+  const discarded = () => data().discarded === true;
+  const pending = () => props.message.kind === "task_draft" && !discarded();
   const canConfirm = () =>
     pending() &&
     Boolean(title().trim()) &&
@@ -158,7 +160,7 @@ export function TaskDraftDetail(props: {
           <Label tone="amber">{uiText("connectionLostReconnecting")}</Label>
         </View>
       </If>
-      <Scroll
+      <SmoothScroll
         ref={(node) => queueMicrotask(() => node.focus())}
         role="region"
         focusable
@@ -170,7 +172,15 @@ export function TaskDraftDetail(props: {
             when={pending()}
             else={
               <View role="alert">
-                <Label>{uiText("draftCreated")}</Label>
+                <Label>
+                  {uiText(
+                    !discarded()
+                      ? "draftCreated"
+                      : data().autoHandled === "timeout"
+                        ? "draftDiscardedAuto"
+                        : "draftDiscarded",
+                  )}
+                </Label>
               </View>
             }
           >
@@ -253,7 +263,7 @@ export function TaskDraftDetail(props: {
             </If>
           </If>
         </View>
-      </Scroll>
+      </SmoothScroll>
       <View
         style={{
           ...row,

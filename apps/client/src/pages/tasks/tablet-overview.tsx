@@ -1,10 +1,19 @@
 import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { TaskDetailState } from "./task-detail-state";
-import { Scroll, View } from "nsh";
-import { colors, grow, Icon, Label, Markdown, row } from "../../components";
+import { View } from "nsh";
+import {
+  colors,
+  grow,
+  Icon,
+  Label,
+  Markdown,
+  row,
+  SmoothScroll,
+} from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "./activity";
+import { actorLabel, CreatorChip } from "./creator";
 import { NeighbourStrip, Prerequisites, Subtasks } from "./dependencies";
 import { taskMoment } from "./facts";
 import { activeTaskRun } from "./run-log";
@@ -18,6 +27,7 @@ import {
   RunLine,
   TitleInPlace,
 } from "./task-overview";
+import { TaskUsageSection } from "./usage-section";
 
 /** A task's page on tablet: its properties under the title, the run line and the reply box pinned below. */
 export function TabletOverview(props: {
@@ -40,11 +50,10 @@ export function TabletOverview(props: {
   } = props.state;
   const item = () => props.item;
   const parent = () => !!item().children?.length;
-  const creator = () =>
-    host.agent(item().createdBy.agentId)?.name ?? uiText("taskMe");
+  const creator = () => actorLabel(item().createdBy, host.agent);
   return (
     <View style={grow}>
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <View
           style={{
             paddingHorizontal: 20,
@@ -109,6 +118,7 @@ export function TabletOverview(props: {
               />
             </If>
           </View>
+          <CreatorChip creator={item().createdBy} />
           <Prerequisites
             item={item()}
             compact
@@ -174,15 +184,20 @@ export function TabletOverview(props: {
               </View>
             </View>
           </If>
+          <TaskUsageSection item={item()} layout="tablet" />
           <TaskActivity
             heading="tablet"
             entries={activity()}
             runs={item().runs}
             createdBy={item().createdBy}
             onLog={(run) => props.state.log.set(run)}
+            onTask={props.onTask}
+            onArtifact={(artifact, version) =>
+              props.state.artifact.set({ artifact, version })
+            }
           />
         </View>
-      </Scroll>
+      </SmoothScroll>
       <View style={{ paddingHorizontal: 20, paddingBottom: 14, gap: 12 }}>
         <RunLine item={item()} state={props.state} tablet />
         <TaskCommentBox state={props.state} tablet />

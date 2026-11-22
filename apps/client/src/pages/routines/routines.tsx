@@ -6,7 +6,7 @@ import type {
   RunView,
 } from "@eta/client-contracts";
 import type { Layout } from "../../components";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -21,6 +21,7 @@ import {
   Modal,
   row,
   sizes,
+  SmoothScroll,
 } from "../../components";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
@@ -375,7 +376,7 @@ export function Routines(props: {
                 </Empty>
               }
             >
-              <Scroll style={grow} scrollbar={false}>
+              <SmoothScroll style={grow} scrollbar={false}>
                 <View
                   style={
                     props.layout === "desktop"
@@ -408,7 +409,7 @@ export function Routines(props: {
                     )}
                   </Each>
                 </View>
-              </Scroll>
+              </SmoothScroll>
             </If>
           </View>
         </If>
@@ -519,11 +520,11 @@ export function Routines(props: {
           phone={phone()}
           onClose={() => readingBrief.set(false)}
         >
-          <Scroll style={grow}>
+          <SmoothScroll style={grow}>
             <View style={{ padding: 16 }}>
               <Markdown value={briefs()[0]?.text ?? ""} />
             </View>
-          </Scroll>
+          </SmoothScroll>
         </Modal>
       </If>
       <If when={drawer()}>

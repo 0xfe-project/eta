@@ -1,6 +1,7 @@
 import type { AttachmentView } from "@eta/client-contracts";
+import type { ViewedPicture } from "./picture-viewer";
 import type { DraftPart } from "@/lib/composer";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +13,9 @@ import {
 } from "@/components/ui/dialog";
 import { charCount, fileSize } from "@/lib/composer";
 import { cn } from "@/lib/utils";
+import { isPicture, useAttachmentPicture } from "@/queries/attachment-pictures";
 import { dropUpload, retryUpload, useOutbox } from "@/queries/outbox";
+import { Lightbox, PicturePreview } from "./picture-viewer";
 // Blocks as the composer and the transcript show them: one bracketed line,
 // like the terminals' own `[Pasted text #1 +42 lines]`, that opens what it
 // stands for.
@@ -134,14 +137,24 @@ function FileBlock({
   const uploading = upload?.attachment === undefined && failure === undefined;
   return (
     <span className={CHIP}>
-      <span
-        className={cn(
-          "min-w-0 truncate",
-          uploading && "motion-safe:animate-upload-pulse",
-        )}
-      >
-        [{part.name} · {fileSize(part.size)}]
-      </span>
+      {isPicture(part.contentType) ? (
+        <PictureLabel
+          id={part.id}
+          name={part.name}
+          size={part.size}
+          wanted={upload?.attachment !== undefined}
+          className={cn(uploading && "motion-safe:animate-upload-pulse")}
+        />
+      ) : (
+        <span
+          className={cn(
+            "min-w-0 truncate",
+            uploading && "motion-safe:animate-upload-pulse",
+          )}
+        >
+          [{part.name} · {fileSize(part.size)}]
+        </span>
+      )}
       {uploading ? (
         <span role="status">{translateText("common:states.uploading")}</span>
       ) : null}
@@ -190,17 +203,95 @@ export function ComposerBlock({
   return null;
 }
 
-/** A sent (or sending) message's attachment: its name and size, on one line. */
+/**
+ * An attached picture's `[name · size]`: resting on it or focusing it shows the picture, clicking
+ * it opens the picture over the window. The picture is the composer's own file while this page has
+ * it, else the host's copy, fetched once `wanted` (`useAttachmentPicture`).
+ */
+function PictureLabel({
+  id,
+  name,
+  size,
+  wanted,
+  className,
+}: {
+  id: string;
+  name: string;
+  size: number;
+  wanted: boolean;
+  className?: string;
+}) {
+  const { t: translateText } = useTranslation("chat");
+  const { src, failed } = useAttachmentPicture(id, wanted);
+  const [open, setOpen] = useState<number>();
+  const caption = `${name} · ${fileSize(size)}`;
+  const picture: ViewedPicture = {
+    key: id,
+    caption,
+    view:
+      src === undefined ? (
+        <span className="image-pending">
+          {failed ? translateText("images.failed") : caption}
+        </span>
+      ) : (
+        <img src={src} alt="" draggable={false} />
+      ),
+  };
+  return (
+    <>
+      <PicturePreview picture={picture}>
+        <button
+          type="button"
+          className={cn(LINK, "cursor-zoom-in", className)}
+          aria-label={translateText("attachments.openPicture", {
+            name,
+            size: fileSize(size),
+          })}
+          onClick={() => setOpen(0)}
+        >
+          [{caption}]
+        </button>
+      </PicturePreview>
+      <Lightbox pictures={[picture]} open={open} onOpen={setOpen} />
+    </>
+  );
+}
+
+/**
+ * A sent (or sending) message's attachment: its name and size, on one line. A picture's is fetched
+ * from the host once the chip is on screen, so resting on it shows it at once.
+ */
 export function AttachmentChip({
   attachment,
 }: {
-  attachment: Pick<AttachmentView, "name" | "size">;
+  attachment: Pick<AttachmentView, "id" | "name" | "size" | "contentType">;
 }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [seen, setSeen] = useState(typeof IntersectionObserver === "undefined");
+  const picture = isPicture(attachment.contentType);
+  useEffect(() => {
+    const element = ref.current;
+    if (!picture || seen || element === null) return undefined;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) setSeen(true);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [picture, seen]);
   return (
-    <span className={CHIP}>
-      <span className="min-w-0 truncate">
-        [{attachment.name} · {fileSize(attachment.size)}]
-      </span>
+    <span ref={ref} className={CHIP}>
+      {picture ? (
+        <PictureLabel
+          id={attachment.id}
+          name={attachment.name}
+          size={attachment.size}
+          wanted={seen}
+        />
+      ) : (
+        <span className="min-w-0 truncate">
+          [{attachment.name} · {fileSize(attachment.size)}]
+        </span>
+      )}
     </span>
   );
 }

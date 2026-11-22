@@ -1,13 +1,22 @@
 import type { BoardTaskStatus, BoardTaskView } from "@eta/client-contracts";
 import type { Signal } from "nsh";
 import type { Layout } from "../../components";
-import { computed, Scroll, View } from "nsh";
-import { Button, colors, grow, Icon, Label, row } from "../../components";
+import { computed, View } from "nsh";
+import {
+  Button,
+  colors,
+  grow,
+  Icon,
+  Label,
+  row,
+  SmoothScroll,
+} from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskTableRow } from "./list";
 import { TaskPlanBoard } from "./plan";
 import { progressColor, statusName, TaskGlyph } from "./status";
+import { UsageLine } from "./usage";
 import { visibleStatuses } from "./workspace-board";
 
 export function TaskWorkspaceList(props: {
@@ -48,7 +57,7 @@ export function TaskWorkspaceList(props: {
     };
   });
   return (
-    <Scroll style={grow}>
+    <SmoothScroll style={grow}>
       <View
         style={{
           padding: props.groupByParent || props.view === "Plan" ? 0 : 22,
@@ -141,6 +150,11 @@ export function TaskWorkspaceList(props: {
                           value4: group().parent.subtasks?.total ?? 0,
                         })}
                       </Label>
+                      <UsageLine
+                        task={group().parent}
+                        variant="caption"
+                        style={{ flexShrink: 0, marginRight: 8 }}
+                      />
                       <View
                         style={{
                           ...row,
@@ -249,6 +263,6 @@ export function TaskWorkspaceList(props: {
           </Each>
         </If>
       </View>
-    </Scroll>
+    </SmoothScroll>
   );
 }

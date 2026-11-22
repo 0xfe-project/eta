@@ -54,6 +54,10 @@ export interface AgentView {
   skippedPlugins: string[];
   /** `captain` for the one El Capitan agent; null for every ordinary agent. */
   systemRole: "captain" | null;
+  /** The seed its avatar is drawn from; null draws it from `id`, the face every agent starts with. */
+  avatarSeed: string | null;
+  /** The last few seeds it wore, newest first: the current one, then the ones it can go back to. */
+  avatarSeeds: string[];
   /** The agent's workspace directory (on the primary machine). */
   home: string;
   homeProjectId: string;
@@ -332,13 +336,14 @@ export const AGENT_ACTIONS = [
   "delete",
   "direct",
   "runtimes",
+  "runtimeAccount",
 ] as const;
 export type AgentAction = (typeof AGENT_ACTIONS)[number];
 
 /**
  * What can answer for an agent. `eta` is eta's own loop on eta's models; the others are agent
- * runtimes installed on the machine (Claude Code, Codex, OpenCode, Pi), each with its own tools,
- * context and models, that the agent's sessions hand their runs to.
+ * runtimes installed on the machine (Claude Code, Codex, OpenCode, Pi, Grok Build), each
+ * with its own tools, context and models, that the agent's sessions hand their runs to.
  */
 export const AGENT_RUNTIMES = [
   "eta",
@@ -346,8 +351,9 @@ export const AGENT_RUNTIMES = [
   "codex",
   "opencode",
   "pi",
+  "grok",
 ] as const;
-/** The built-in runtimes: eta's own loop and the four reached through oar. */
+/** The built-in runtimes: eta's own loop and the ones reached through oar. */
 export type BuiltinAgentRuntime = (typeof AGENT_RUNTIMES)[number];
 /**
  * A runtime id. Beyond the built-in ones, every ACP agent the host's `acp.json` lists is a
@@ -388,6 +394,46 @@ export interface AgentRuntimeInfo {
   models: AgentRuntimeModel[];
 }
 
+/**
+ * Who a runtime is signed in as and how much of its plan is used, as the runtime itself reports
+ * it. Read only: asking never signs it in or out. A part is absent when the runtime has no way to
+ * say it (OpenCode and Pi have neither).
+ */
+export interface AgentRuntimeAccount {
+  /** From the runtime's own status query, which may refresh its stored sign-in. */
+  auth?:
+    | {
+        kind: "logged_in";
+        email?: string;
+        /** `max`, `pro`, ... */
+        plan?: string;
+        /** How it is signed in, in the runtime's words (`claude.ai`, `chatgpt`, `apiKey`, ...). */
+        method?: string;
+      }
+    | { kind: "logged_out"; detail?: string }
+    /** The query failed or could not tell. */
+    | { kind: "unknown"; detail?: string };
+  usage?:
+    | {
+        kind: "available";
+        plan?: string;
+        email?: string;
+        rateLimited: boolean;
+        windows: {
+          label: string;
+          /** From 0 to 1. */
+          usedRatio: number;
+          /** ISO 8601, when the runtime says. */
+          resetsAt?: string;
+        }[];
+      }
+    /** Signed out, or its sign-in cannot read usage: `reason` is the runtime's code. */
+    | { kind: "reauth_required"; reason?: string }
+    | { kind: "unsupported"; reason?: string }
+    /** Asking failed. */
+    | { kind: "error"; detail: string };
+}
+
 export interface AgentFields {
   name: string;
   instructions?: string;
@@ -407,7 +453,8 @@ export interface AgentFields {
 export interface AgentArgs {
   /** Makes the agent, its workspace directory and its home project. */
   create: AgentFields;
-  update: { agentId: string } & Partial<AgentFields>;
+  /** `avatarSeed` draws its avatar from that seed and puts it at the front of `avatarSeeds`. */
+  update: { agentId: string; avatarSeed?: string } & Partial<AgentFields>;
   /** Clears it as steward, archives the chats it was alone in, and leaves its directory on disk. */
   delete: { agentId: string };
   /** The private chat with the agent, made the first time and found every time after. */
@@ -417,6 +464,8 @@ export interface AgentArgs {
    * has to be online to be asked). `fresh` asks the runtimes again.
    */
   runtimes: { fresh?: boolean; machineId?: string };
+  /** A built-in runtime's sign-in and plan usage on the primary or `machineId` (online). */
+  runtimeAccount: { runtime: string; machineId?: string };
 }
 export interface AgentResults {
   create: { agent: AgentView };
@@ -424,6 +473,7 @@ export interface AgentResults {
   delete: { agentId: string };
   direct: { conversation: ConversationSummary };
   runtimes: { runtimes: AgentRuntimeInfo[] };
+  runtimeAccount: { account: AgentRuntimeAccount };
 }
 export type AgentCall = {
   [A in AgentAction]: Omit<CallFrame, "target" | "action" | "args"> & {
@@ -754,6 +804,7 @@ export const CONVERSATION_ACTIONS = [
   "history",
   "attach",
   "unattach",
+  "attachment",
 ] as const;
 export type ConversationAction = (typeof CONVERSATION_ACTIONS)[number];
 
@@ -845,6 +896,8 @@ export interface ConversationArgs {
   };
   /** Takes back an attachment that has not been sent. */
   unattach: { conversationId: string; attachmentId: string };
+  /** Reads a sent image attachment of the conversation, to show it in the transcript. */
+  attachment: { conversationId: string; attachmentId: string };
   /** One reply (`messageId`), or every reply in flight in the conversation. */
   stop: { conversationId: string; messageId?: string };
   /** Moves the user's read mark forward to `seq` (never back, never past the newest row). */
@@ -860,6 +913,25 @@ export interface AttachmentView {
   contentType: string;
   size: number;
 }
+
+/**
+ * The attachments the host gives back as pictures, at `attachmentPicturePath`: the image formats
+ * a browser draws as pictures and nothing that could run as a page (an SVG is a file like any other).
+ */
+const PICTURE_TYPES: ReadonlySet<string> = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+]);
+
+/** Whether the host shows an attachment of this type back as a picture. */
+export const isPictureType = (contentType: string | undefined) =>
+  PICTURE_TYPES.has(contentType ?? "");
+
+/** Where the host serves an attached picture's bytes (`GET`, behind the normal access). */
+export const attachmentPicturePath = (id: string) =>
+  `/attachments/${encodeURIComponent(id)}`;
 
 /** A file at most this large, and a message at most this many files. */
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
@@ -920,6 +992,7 @@ export interface ConversationResults {
   history: HistoryResult;
   attach: { attachment: AttachmentView | null };
   unattach: { removed: boolean };
+  attachment: { contentType: string; data: string };
 }
 export type ConversationCall = {
   [A in ConversationAction]: Omit<CallFrame, "target" | "action" | "args"> & {

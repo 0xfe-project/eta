@@ -5,8 +5,11 @@ import { View } from "nsh";
 import { ActionItem, ActionMenu, Field, Label, row } from "../../../components";
 import { ModelSelect } from "../../../components/model-select";
 import { localizedText, uiText } from "../../../i18n";
+import { RuntimeHints } from "../runtimes/runtime-hints";
+import { reasonText, runtimeReason } from "../runtimes/status";
 import { WarningLine } from "../section";
 
+import { AvatarRow } from "./avatar";
 import { EditorRow, focusOnOpen } from "./editor-row";
 import { PersonaField } from "./instructions";
 import { MachineField } from "./machine-field";
@@ -25,6 +28,7 @@ const thinkingOptions: ThinkingLevel[] = [
 export function AgentGeneral(props: {
   form: AgentForm;
   onModelServices: () => void;
+  onRuntimes?: (() => void) | undefined;
 }) {
   const {
     creating,
@@ -39,11 +43,17 @@ export function AgentGeneral(props: {
     chooseRuntime,
     runtime,
     external,
+    installed,
+    explained,
+    probing,
+    probeError,
+    reprobe,
     model,
     chooseModel,
     thinking,
     missingModel,
     noModels,
+    avatar,
   } = props.form;
   const goToModelServices = (
     variant: TextVariant,
@@ -109,6 +119,12 @@ export function AgentGeneral(props: {
       </If>
     );
   }
+  /** Why a runtime cannot be picked, in a few words; its own words are under Details. */
+  const reasonOf = (id: string) => {
+    const info = installed()?.find((item) => item.id === id);
+    const reason = info && runtimeReason(info);
+    return reason ? uiText(reasonText[reason]) : undefined;
+  };
   return (
     <View
       style={
@@ -117,6 +133,9 @@ export function AgentGeneral(props: {
           : undefined
       }
     >
+      <If when={avatar}>
+        <AvatarRow draw={avatar!} stacked={stacked()} phone={phoneEditor()} />
+      </If>
       <EditorRow
         label={uiText("name")}
         stack={stacked()}
@@ -144,16 +163,32 @@ export function AgentGeneral(props: {
         label={uiText("runtime")}
         stack={stacked()}
         phone={phoneEditor()}
+        hint={
+          <RuntimeHints
+            runtimes={installed()}
+            explained={explained()}
+            chosen={external()}
+            probing={probing()}
+            error={probeError()}
+            onRetry={() => void reprobe()}
+            onRuntimes={props.onRuntimes}
+          />
+        }
       >
         <ActionMenu
           label={uiText("runtime")}
           value={runtimeLabel(runtime())}
           triggerStyle={selectStyle()}
+          // Wide enough for a name and its reason on one line ("OpenCode  Probe timed out (30s)").
+          popupWidth={260}
         >
           <Each of={runtimeList()}>
             {(item) => (
               <ActionItem
                 label={runtimeLabel(item())}
+                detail={reasonOf(item())}
+                // One that cannot run stays selectable only while it is the agent's own.
+                disabled={!!reasonOf(item()) && runtime() !== item()}
                 checked={runtime() === item()}
                 onSelect={() => chooseRuntime(item())}
               />

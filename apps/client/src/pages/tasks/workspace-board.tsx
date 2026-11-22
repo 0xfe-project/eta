@@ -1,8 +1,8 @@
 import type { BoardTaskStatus, BoardTaskView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import type { taskDropZones } from "./drag";
-import { Scroll, View } from "nsh";
-import { colors, grow, Label, row } from "../../components";
+import { View } from "nsh";
+import { colors, grow, Label, row, SmoothScroll } from "../../components";
 import { BoardCard } from "./board-card";
 import { statusName, TaskGlyph } from "./status";
 
@@ -115,7 +115,7 @@ export function TaskWorkspaceBoard(props: {
                 </If>
               </View>
               <If when={!folded()}>
-                <Scroll
+                <SmoothScroll
                   style={{ ...grow, marginTop: tablet() ? 8 : 7 }}
                   scrollbar={false}
                 >
@@ -134,7 +134,7 @@ export function TaskWorkspaceBoard(props: {
                       )}
                     </Each>
                   </View>
-                </Scroll>
+                </SmoothScroll>
               </If>
             </View>
           );

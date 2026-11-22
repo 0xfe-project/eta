@@ -1,6 +1,14 @@
 import type { AgentEditorProps } from "./form";
-import { Scroll, signal, View } from "nsh";
-import { Button, colors, grow, Label, Modal, row } from "../../../components";
+import { signal, View } from "nsh";
+import {
+  Button,
+  colors,
+  grow,
+  Label,
+  Modal,
+  row,
+  SmoothScroll,
+} from "../../../components";
 import { AgentFace } from "../../../components/agent-face";
 import {
   BackButton,
@@ -114,7 +122,7 @@ export function AgentEditor(props: AgentEditorProps) {
           style={{ ...row, flex: 1, minWidth: 0, gap: phoneEditor() ? 8 : 10 }}
         >
           <If when={!creating}>
-            <AgentFace id={props.id} size={24} />
+            <AgentFace id={props.id} seed={form.avatar?.worn()} size={24} />
           </If>
           <If
             when={phoneEditor()}
@@ -218,11 +226,12 @@ export function AgentEditor(props: AgentEditorProps) {
               </Each>
             </View>
             <View style={grow}>
-              <Scroll style={grow} scrollbar={false}>
+              <SmoothScroll style={grow} scrollbar={false}>
                 <If when={tab() === "general"}>
                   <AgentGeneral
                     form={form}
                     onModelServices={props.onModelServices}
+                    onRuntimes={props.onRuntimes}
                   />
                   {deleteRow()}
                 </If>
@@ -233,7 +242,7 @@ export function AgentEditor(props: AgentEditorProps) {
                   <AgentPlugins form={form} />
                 </If>
                 <If when={!pinned() && tab() !== "general"}>{deleteRow()}</If>
-              </Scroll>
+              </SmoothScroll>
               <If when={pinned()}>{deleteRow()}</If>
             </View>
           </View>
@@ -290,14 +299,18 @@ export function AgentEditor(props: AgentEditorProps) {
             />
           </View>
         </View>
-        <Scroll
+        <SmoothScroll
           style={props.phone ? grow : { flexShrink: 1 }}
           scrollbar={false}
         >
           <If when={step() === 1} else={<AgentInstructions form={form} />}>
-            <AgentGeneral form={form} onModelServices={props.onModelServices} />
+            <AgentGeneral
+              form={form}
+              onModelServices={props.onModelServices}
+              onRuntimes={props.onRuntimes}
+            />
           </If>
-        </Scroll>
+        </SmoothScroll>
       </If>
       <View
         style={{

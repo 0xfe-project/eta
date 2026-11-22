@@ -6,8 +6,8 @@ import type {
 } from "@eta/client-contracts";
 import type { JSX, ViewStyle } from "nsh";
 import { HOURLY_STEPS } from "@eta/client-contracts";
-import { platform, Scroll, signal, View } from "nsh";
-import { Menu, MenuItem, TimeField } from "nsh/base";
+import { signal, View } from "nsh";
+import { TimeField } from "nsh/base";
 import {
   ActionItem,
   ActionMenu,
@@ -21,12 +21,26 @@ import {
   Label,
   Modal,
   row,
+  SmoothScroll,
   textFaces,
   textStyle,
 } from "../../components";
+import {
+  canHover,
+  MenuFrame,
+  MenuRow,
+  touchRow,
+  touchScreen,
+} from "../../components/menu";
 import { formatLocale, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { upcomingTimes, weekday } from "./schedule";
+
+interface ScheduleOption {
+  label: string;
+  checked: boolean;
+  onSelect: () => void;
+}
 
 /**
  * The phone form's select: a 36pt trigger with 14pt text, opening the
@@ -36,28 +50,28 @@ function PhoneSelect(props: {
   label: string;
   title: string;
   value: string;
-  options: { label: string; checked: boolean; onSelect: () => void }[];
+  options: ScheduleOption[];
   triggerStyle?: ViewStyle;
 }) {
   const c = colors();
   return (
-    <Menu
-      placement="bottom"
-      align="start"
-      offset={3}
+    <MenuFrame
       popupStyle={{
-        width: "100%",
-        maxHeight: "80%",
-        paddingBottom: 24,
-        borderTopWidth: 1,
+        width: 240,
+        borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
       }}
-      backdropStyle={{ backgroundColor: c().sheetShade }}
+      sheetStyle={{ paddingBottom: 24 }}
+      sheetHeader={
+        <View style={{ ...row, height: 44, paddingHorizontal: 16 }}>
+          <Label weight={600}>{props.title}</Label>
+        </View>
+      }
       trigger={
         <View
           accessibilityLabel={props.label}
-          hoverStyle={{ backgroundColor: c().selected }}
+          hoverStyle={canHover ? { backgroundColor: c().selected } : undefined}
           focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
           style={{
             ...row,
@@ -78,18 +92,12 @@ function PhoneSelect(props: {
         </View>
       }
     >
-      <View style={{ alignItems: "center", paddingTop: 8, paddingBottom: 4 }}>
-        <View style={{ width: 36, height: 4, backgroundColor: c().strong }} />
-      </View>
-      <View style={{ ...row, height: 44, paddingHorizontal: 16 }}>
-        <Label weight={600}>{props.title}</Label>
-      </View>
       <Each of={props.options}>
         {(option) => (
-          <MenuItem
+          <MenuRow
             role="menuitemradio"
             checked={option().checked}
-            accessibilityLabel={option().label}
+            label={option().label}
             style={{
               ...row,
               height: 48,
@@ -99,8 +107,6 @@ function PhoneSelect(props: {
               borderColor: c().border,
               backgroundColor: option().checked ? c().selected : undefined,
             }}
-            hoverStyle={{ backgroundColor: c().selected }}
-            indicatorStyle={{ width: 0 }}
             onSelect={option().onSelect}
           >
             <Label style={{ flex: 1 }}>{option().label}</Label>
@@ -109,25 +115,25 @@ function PhoneSelect(props: {
                 <Icon name="check" size={16} />
               </If>
             </View>
-          </MenuItem>
+          </MenuRow>
         )}
       </Each>
-    </Menu>
+    </MenuFrame>
   );
 }
 
 /**
- * The form's selects. With a pointer they open as the design's popover under
- * the trigger's left edge (so they never cover the routine list); a touch
- * screen keeps the shared menu, which is a bottom sheet there, and a phone
- * has its own titled sheet.
+ * The form's selects. In the tablet and desktop layouts they open as the
+ * design's popover under the trigger's left edge (so they never cover the
+ * routine list), whatever the platform; the phone form has its own titled
+ * sheet.
  */
 function ScheduleSelect(props: {
   label: string;
   /** The phone sheet's title. */
   title?: string;
   value: string;
-  options: { label: string; checked: boolean; onSelect: () => void }[];
+  options: ScheduleOption[];
   tablet?: boolean;
   phone?: boolean;
   triggerStyle?: ViewStyle;
@@ -135,42 +141,18 @@ function ScheduleSelect(props: {
   const c = colors();
   return (
     <If
-      when={platform.desktop && !props.phone}
+      when={!props.phone}
       else={
-        <If
-          when={props.phone}
-          else={
-            <ActionMenu
-              label={props.label}
-              value={props.value}
-              triggerStyle={props.triggerStyle}
-            >
-              <Each of={props.options}>
-                {(option) => (
-                  <ActionItem
-                    label={option().label}
-                    checked={option().checked}
-                    onSelect={option().onSelect}
-                  />
-                )}
-              </Each>
-            </ActionMenu>
-          }
-        >
-          <PhoneSelect
-            label={props.label}
-            title={props.title ?? props.label}
-            value={props.value}
-            options={props.options}
-            triggerStyle={props.triggerStyle}
-          />
-        </If>
+        <PhoneSelect
+          label={props.label}
+          title={props.title ?? props.label}
+          value={props.value}
+          options={props.options}
+          triggerStyle={props.triggerStyle}
+        />
       }
     >
-      <Menu
-        placement="bottom"
-        align="start"
-        offset={3}
+      <MenuFrame
         popupStyle={{
           width: props.tablet ? 200 : 180,
           borderWidth: 1,
@@ -180,7 +162,10 @@ function ScheduleSelect(props: {
         trigger={
           <View
             accessibilityLabel={props.label}
-            hoverStyle={{ backgroundColor: c().selected }}
+            hitSlop={touchScreen ? 6 : undefined}
+            hoverStyle={
+              canHover ? { backgroundColor: c().selected } : undefined
+            }
             focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
             style={{
               ...row,
@@ -202,19 +187,17 @@ function ScheduleSelect(props: {
       >
         <Each of={props.options}>
           {(option) => (
-            <MenuItem
+            <MenuRow
               role="menuitemradio"
               checked={option().checked}
-              accessibilityLabel={option().label}
+              label={option().label}
               style={{
                 ...row,
-                height: props.tablet ? 34 : 30,
+                height: touchScreen ? touchRow : props.tablet ? 34 : 30,
                 gap: 8,
                 paddingHorizontal: 10,
                 backgroundColor: option().checked ? c().selected : undefined,
               }}
-              hoverStyle={{ backgroundColor: c().selected }}
-              indicatorStyle={{ width: 0 }}
               onSelect={option().onSelect}
             >
               <Label variant="small" style={{ flex: 1 }}>
@@ -225,10 +208,10 @@ function ScheduleSelect(props: {
                   <Icon name="check" size={12} />
                 </If>
               </View>
-            </MenuItem>
+            </MenuRow>
           )}
         </Each>
-      </Menu>
+      </MenuFrame>
     </If>
   );
 }
@@ -727,12 +710,12 @@ export function RoutineEditor(props: {
           width={540}
           onClose={props.onClose}
         >
-          <Scroll style={{ flexShrink: 1 }}>{form()}</Scroll>
+          <SmoothScroll style={{ flexShrink: 1 }}>{form()}</SmoothScroll>
           <If when={sheet()}>{actions()}</If>
         </Modal>
       }
     >
-      <Scroll style={grow}>{form()}</Scroll>
+      <SmoothScroll style={grow}>{form()}</SmoothScroll>
     </If>
   );
 }

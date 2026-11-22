@@ -410,3 +410,90 @@ describe("an agent's model", () => {
     expect(renamed).toMatchObject({ name: "Ada L", model: null });
   });
 });
+
+describe("an agent's avatar", () => {
+  const draw = async (
+    w: Awaited<ReturnType<typeof world>>,
+    agentId: string,
+    avatarSeed: string,
+  ) =>
+    (
+      (await w.client.call("agents", "update", {
+        agentId,
+        avatarSeed,
+      })) as { agent: AgentView }
+    ).agent;
+
+  it("is drawn from the id until another is drawn, which goes first with the id behind it", async () => {
+    const w = await world();
+    const agent = await w.agent("Ada");
+    expect(agent).toMatchObject({ avatarSeed: null, avatarSeeds: [] });
+
+    const drawn = await draw(w, agent.id, "s1");
+    expect(drawn).toMatchObject({
+      avatarSeed: "s1",
+      avatarSeeds: ["s1", agent.id],
+    });
+    // Saved, not only answered: the list a client loads has it.
+    await until(
+      () =>
+        w.client
+          .section<AgentView[]>("agents", "list")
+          ?.find((entry) => entry.id === agent.id)?.avatarSeed === "s1",
+    );
+  });
+
+  it("keeps each face once, newest first: going back moves it to the front", async () => {
+    const w = await world();
+    const agent = await w.agent("Ada");
+    await draw(w, agent.id, "s1");
+    await draw(w, agent.id, "s2");
+    expect(await draw(w, agent.id, "s1")).toMatchObject({
+      avatarSeed: "s1",
+      avatarSeeds: ["s1", "s2", agent.id],
+    });
+    expect(await draw(w, agent.id, agent.id)).toMatchObject({
+      avatarSeed: agent.id,
+      avatarSeeds: [agent.id, "s1", "s2"],
+    });
+  });
+
+  it("keeps the last 8: the oldest are gone from the record", async () => {
+    const w = await world();
+    const agent = await w.agent("Ada");
+    for (let n = 1; n <= 12; n++) await draw(w, agent.id, `s${n}`);
+    const seeds = ["s12", "s11", "s10", "s9", "s8", "s7", "s6", "s5"];
+    expect(
+      w.client
+        .section<AgentView[]>("agents", "list")
+        ?.find((entry) => entry.id === agent.id),
+    ).toMatchObject({ avatarSeed: "s12", avatarSeeds: seeds });
+    const row = w.host.db
+      .query<{ avatar_seeds: string }, [string]>(
+        "SELECT avatar_seeds FROM agent WHERE id = ?",
+      )
+      .get(agent.id)!;
+    expect(JSON.parse(row.avatar_seeds)).toEqual(seeds);
+  });
+
+  it("leaves the faces alone on other edits, and refuses a seed that is not a short word", async () => {
+    const w = await world();
+    const agent = await w.agent("Ada");
+    await draw(w, agent.id, "s1");
+    const { agent: renamed } = (await w.client.call("agents", "update", {
+      agentId: agent.id,
+      name: "Ada L",
+    })) as { agent: AgentView };
+    expect(renamed).toMatchObject({
+      avatarSeed: "s1",
+      avatarSeeds: ["s1", agent.id],
+    });
+    for (const seed of ["", "a b", "x".repeat(65), 7])
+      await expect(
+        w.client.call("agents", "update", {
+          agentId: agent.id,
+          avatarSeed: seed,
+        }),
+      ).rejects.toThrow(/avatarSeed/);
+  });
+});

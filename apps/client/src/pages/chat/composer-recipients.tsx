@@ -59,14 +59,11 @@ export function ComposerRecipients(props: {
   recipients: string[];
   /** The members whose reply is still running. */
   running: string[];
-  /** How many of the user's messages wait for a running reply to end. */
-  held: number;
   names: string;
   /** The recipients a new message would wait for, by name. */
   waitsFor: string;
   onChangeMentions: (mentions: string[] | null) => void;
   onToggleRecipient: (agentId: string) => void;
-  onToggleHeld: () => void;
   conversationId: string;
 }) {
   const c = colors();
@@ -74,12 +71,13 @@ export function ComposerRecipients(props: {
   const expanded = signal(false);
   const collapsed = () =>
     props.tablet && props.members.length > 3 && !expanded();
+  // With no scrollbar, a right-edge fade says the row goes on: it shows
+  // while chips are hidden past the right edge.
+  const viewport = signal(0);
+  const content = signal(0);
+  const offset = signal(0);
+  const more = () => content() - offset() - viewport() > 1;
   const everyone = () => props.mentions?.length === props.members.length;
-  // The queued count sits on the first running chip only.
-  const heldOn = () =>
-    props.running.find((id) =>
-      props.members.some((member) => member.agentId === id),
-    );
   return (
     <View
       style={{
@@ -89,157 +87,165 @@ export function ComposerRecipients(props: {
         gap: 6,
       }}
     >
-      <Scroll
-        horizontal
+      <View
         style={{ minWidth: 0, flex: props.phone ? undefined : 1, height: 28 }}
       >
-        <View style={{ ...row, gap: 6 }}>
+        <Scroll
+          horizontal
+          scrollbar={false}
+          style={{ flex: 1 }}
+          scrollEventThrottle={16}
+          onLayout={(event) => viewport.set(event.bounds.size.width)}
+          onScroll={(event) => offset.set(event.offset.x)}
+        >
           <View
-            role="button"
-            accessibilityLabel={uiText("everyone")}
-            accessibilityState={{ selected: everyone() }}
-            onPress={() =>
-              props.onChangeMentions(
-                everyone()
-                  ? null
-                  : props.members.map((member) => member.agentId),
-              )
-            }
-            hoverStyle={{ backgroundColor: c().selected }}
-            style={{
-              ...row,
-              height: 28,
-              gap: 6,
-              paddingLeft: 8,
-              paddingRight: 10,
-              flexShrink: 0,
-              borderWidth: 1,
-              borderColor: c().border,
-              cursor: "pointer",
-            }}
+            style={{ ...row, gap: 6 }}
+            onLayout={(event) => content.set(event.bounds.size.width)}
           >
             <View
+              role="button"
+              accessibilityLabel={uiText("everyone")}
+              accessibilityState={{ selected: everyone() }}
+              onPress={() =>
+                props.onChangeMentions(
+                  everyone()
+                    ? null
+                    : props.members.map((member) => member.agentId),
+                )
+              }
+              hoverStyle={{ backgroundColor: c().selected }}
               style={{
                 ...row,
-                justifyContent: "center",
-                width: 14,
-                height: 14,
+                height: 28,
+                gap: 6,
+                paddingLeft: 8,
+                paddingRight: 10,
+                flexShrink: 0,
                 borderWidth: 1,
-                borderColor: c().strong,
-                backgroundColor: c().canvas,
+                borderColor: c().border,
+                cursor: "pointer",
               }}
             >
-              <If when={everyone()}>
-                <Icon name="check" size={10} />
-              </If>
+              <View
+                style={{
+                  ...row,
+                  justifyContent: "center",
+                  width: 14,
+                  height: 14,
+                  borderWidth: 1,
+                  borderColor: c().strong,
+                  backgroundColor: c().canvas,
+                }}
+              >
+                <If when={everyone()}>
+                  <Icon name="check" size={10} />
+                </If>
+              </View>
+              <Label variant="small" tone="mutedInk">
+                {uiText("everyone")}
+              </Label>
             </View>
-            <Label variant="small" tone="mutedInk">
-              {uiText("everyone")}
-            </Label>
-          </View>
-          <Each
-            of={collapsed() ? props.members.slice(0, 3) : props.members}
-            key={(member) => member.agentId}
-          >
-            {(member) => {
-              const id = () => member().agentId;
-              const selected = () => props.recipients.includes(id());
-              const running = () => props.running.includes(id());
-              const name = () => host.agent(id())?.name ?? uiText("agent");
-              return (
-                <View
-                  style={{
-                    ...row,
-                    height: 28,
-                    gap: 6,
-                    paddingLeft: 6,
-                    paddingRight: running() ? 4 : props.phone ? 8 : 10,
-                    flexShrink: 0,
-                    borderWidth: 1,
-                    borderColor: selected() ? c().ink : c().border,
-                    cursor: "pointer",
-                    backgroundColor: selected() ? c().canvas : "transparent",
-                  }}
-                >
+            <Each
+              of={collapsed() ? props.members.slice(0, 3) : props.members}
+              key={(member) => member.agentId}
+            >
+              {(member) => {
+                const id = () => member().agentId;
+                const selected = () => props.recipients.includes(id());
+                const running = () => props.running.includes(id());
+                const name = () => host.agent(id())?.name ?? uiText("agent");
+                return (
                   <View
-                    role="button"
-                    accessibilityLabel={name()}
-                    accessibilityState={{ selected: selected() }}
-                    onPress={() => props.onToggleRecipient(id())}
-                    hoverStyle={{ backgroundColor: c().selected }}
                     style={{
                       ...row,
+                      height: 28,
                       gap: 6,
-                      alignSelf: "stretch",
+                      paddingLeft: 6,
+                      paddingRight: running() ? 4 : props.phone ? 8 : 10,
+                      flexShrink: 0,
+                      borderWidth: 1,
+                      borderColor: selected() ? c().ink : c().border,
                       cursor: "pointer",
+                      backgroundColor: selected() ? c().canvas : "transparent",
                     }}
                   >
-                    <AgentFace id={id()} size={16} />
-                    <Label
-                      variant="small"
-                      lines={1}
-                      tone={selected() ? "ink" : "mutedInk"}
-                      weight={selected() ? 600 : 400}
+                    <View
+                      role="button"
+                      accessibilityLabel={name()}
+                      accessibilityState={{ selected: selected() }}
+                      onPress={() => props.onToggleRecipient(id())}
+                      hoverStyle={{ backgroundColor: c().selected }}
+                      style={{
+                        ...row,
+                        gap: 6,
+                        alignSelf: "stretch",
+                        cursor: "pointer",
+                      }}
                     >
-                      {running()
-                        ? uiText("memberWriting", { name: name() })
-                        : name()}
-                    </Label>
-                    <If when={running()}>
-                      <StatusDot color={c().blue} />
-                    </If>
-                    <If when={!props.phone && id() === props.steward}>
-                      <Label variant="caption" tone="muted">
-                        {uiText("steward")}
+                      <AgentFace id={id()} size={16} />
+                      <Label
+                        variant="small"
+                        lines={1}
+                        tone={selected() ? "ink" : "mutedInk"}
+                        weight={selected() ? 600 : 400}
+                      >
+                        {running()
+                          ? uiText("memberWriting", { name: name() })
+                          : name()}
                       </Label>
+                      <If when={running()}>
+                        <StatusDot color={c().blue} />
+                      </If>
+                      <If when={!props.phone && id() === props.steward}>
+                        <Label variant="caption" tone="muted">
+                          {uiText("steward")}
+                        </Label>
+                      </If>
+                    </View>
+                    <If when={running()}>
+                      <Each
+                        of={
+                          member().activeReplyId
+                            ? [member().activeReplyId!]
+                            : []
+                        }
+                      >
+                        {(replyId) => (
+                          <StopMemberReply
+                            conversationId={props.conversationId}
+                            messageId={replyId()}
+                            name={name()}
+                          />
+                        )}
+                      </Each>
                     </If>
                   </View>
-                  <If when={running()}>
-                    <If when={props.held && heldOn() === id()}>
-                      <View
-                        role="button"
-                        accessibilityLabel={uiText("queuedMessages", {
-                          count: props.held,
-                        })}
-                        onPress={props.onToggleHeld}
-                        style={{ cursor: "pointer" }}
-                      >
-                        <Label
-                          variant="caption"
-                          tone="mutedInk"
-                          style={{ textDecorationLine: "underline" }}
-                        >
-                          {uiText("queuedMessages", { count: props.held })}
-                        </Label>
-                      </View>
-                    </If>
-                    <Each
-                      of={
-                        member().activeReplyId ? [member().activeReplyId!] : []
-                      }
-                    >
-                      {(replyId) => (
-                        <StopMemberReply
-                          conversationId={props.conversationId}
-                          messageId={replyId()}
-                          name={name()}
-                        />
-                      )}
-                    </Each>
-                  </If>
-                </View>
-              );
+                );
+              }}
+            </Each>
+            <If when={collapsed()}>
+              <Button
+                label={`+${props.members.length - 3}`}
+                size={28}
+                onPress={() => expanded.set(true)}
+              />
+            </If>
+          </View>
+        </Scroll>
+        <If when={more()}>
+          <View
+            style={{
+              position: "absolute",
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: 32,
+              pointerEvents: "none",
+              backgroundImage: `linear-gradient(90deg, ${c().canvas}00 0%, ${c().canvas} 100%)`,
             }}
-          </Each>
-          <If when={collapsed()}>
-            <Button
-              label={`+${props.members.length - 3}`}
-              size={28}
-              onPress={() => expanded.set(true)}
-            />
-          </If>
-        </View>
-      </Scroll>
+          />
+        </If>
+      </View>
       <View style={{ ...row, gap: 6 }}>
         <StatusDot color={props.waitsFor ? c().blue : c().green} />
         <Label variant="small" tone={props.waitsFor ? "blue" : "mutedInk"}>

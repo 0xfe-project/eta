@@ -4,7 +4,7 @@ import type {
   EmailProposalView,
   EmailThreadView,
 } from "@eta/client-contracts";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -14,6 +14,7 @@ import {
   Icon,
   Label,
   row,
+  SmoothScroll,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { uiText } from "../../i18n";
@@ -63,7 +64,7 @@ export function ThreadDetail(props: {
     );
   return (
     <View style={grow}>
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <View
           style={
             props.phone
@@ -299,7 +300,7 @@ export function ThreadDetail(props: {
             )}
           </Each>
         </View>
-      </Scroll>
+      </SmoothScroll>
       <If when={props.phone}>
         <View
           style={{

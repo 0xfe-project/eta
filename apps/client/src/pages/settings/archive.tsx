@@ -2,25 +2,31 @@ import type {
   BoardTaskView,
   ConversationSummary,
   TaskBoardSettings,
+  TaskDraftTimeout,
 } from "@eta/client-contracts";
 import type { ViewStyle } from "nsh";
 import {
   DEFAULT_TASK_ARCHIVE_DAYS,
   TASK_ARCHIVE_DAYS,
+  TASK_DRAFT_TIMEOUT_ACTIONS,
+  TASK_DRAFT_TIMEOUT_MINUTES,
 } from "@eta/client-contracts";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
   Button,
   colors,
   Empty,
+  Field,
   grow,
   Icon,
   Label,
   row,
+  SmoothScroll,
 } from "../../components";
 import { formatLocale, uiText, useText } from "../../i18n";
+import { ToggleSwitch } from "../../components/toggle-switch";
 import { useHost } from "../../services/host";
 import { messageTime } from "../chat/message-time";
 import { TaskGlyph } from "../tasks/status";
@@ -49,6 +55,53 @@ export function ArchiveSettings(props: { phone?: boolean }) {
     );
     saving.set(false);
   }
+  const timeout = (): TaskDraftTimeout =>
+    host.section<TaskBoardSettings>("tasks", "settings")?.draftTimeout ?? {
+      enabled: false,
+      minutes: TASK_DRAFT_TIMEOUT_MINUTES.default,
+      action: "discard",
+    };
+  async function saveTimeout(change: Partial<TaskDraftTimeout>) {
+    if (saving()) return;
+    saving.set(true);
+    await host.action(() =>
+      host.call("tasks", "setSettings", { draftTimeout: change }),
+    );
+    saving.set(false);
+  }
+  // The minutes field keeps what is typed until it is committed; what the host kept is shown again.
+  const typed = signal<string | undefined>(undefined);
+  const minutesInvalid = signal(false);
+  const range = {
+    min: TASK_DRAFT_TIMEOUT_MINUTES.min,
+    max: TASK_DRAFT_TIMEOUT_MINUTES.max,
+  };
+  async function commitMinutes() {
+    const text = (typed() ?? "").trim();
+    typed.set(undefined);
+    if (text === "") {
+      minutesInvalid.set(false);
+      return;
+    }
+    const value = Number(text);
+    if (!Number.isInteger(value) || value < range.min || value > range.max) {
+      minutesInvalid.set(true);
+      return;
+    }
+    minutesInvalid.set(false);
+    if (value !== timeout().minutes) await saveTimeout({ minutes: value });
+  }
+  const actionLabel = (action: TaskDraftTimeout["action"]) =>
+    uiText(action === "accept" ? "draftTimeoutAccept" : "draftTimeoutDiscard");
+  const timeoutRowStyle = {
+    ...row,
+    minHeight: 40,
+    gap: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderColor: c().border,
+  };
   const conversations = () =>
     host.conversations().filter((item) => item.archived);
   const tasks = () => host.list<BoardTaskView>("tasks", "archived");
@@ -127,8 +180,79 @@ export function ArchiveSettings(props: { phone?: boolean }) {
             </Label>
           </View>
         </If>
+        <SectionHeader title={uiText("taskDraftTimeout")} phone={props.phone} />
+        <View style={timeoutRowStyle}>
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <Label>{uiText("draftTimeoutEnabled")}</Label>
+            <Label variant="small" tone="muted">
+              {uiText("draftTimeoutEnabledHint")}
+            </Label>
+          </View>
+          <ToggleSwitch
+            label={uiText("draftTimeoutEnabled")}
+            checked={timeout().enabled}
+            disabled={saving()}
+            onChange={(value) => void saveTimeout({ enabled: value })}
+          />
+        </View>
+        <View style={timeoutRowStyle}>
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <Label>{uiText("draftTimeoutMinutes")}</Label>
+            <Label variant="small" tone={minutesInvalid() ? "red" : "muted"}>
+              {uiText(
+                minutesInvalid()
+                  ? "draftTimeoutMinutesInvalid"
+                  : "draftTimeoutMinutesHint",
+                range,
+              )}
+            </Label>
+          </View>
+          <Field
+            label={uiText("draftTimeoutMinutes")}
+            value={typed() ?? String(timeout().minutes)}
+            maxLength={4}
+            style={{ width: 72, height: 28 }}
+            onChange={(value) => typed.set(value)}
+            onSubmit={() => void commitMinutes()}
+            onBlur={() => void commitMinutes()}
+          />
+          <Label variant="small" tone="muted">
+            {uiText("draftTimeoutMinutesUnit")}
+          </Label>
+        </View>
+        <View style={timeoutRowStyle}>
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <Label>{uiText("draftTimeoutAction")}</Label>
+            <Label variant="small" tone="muted">
+              {uiText("draftTimeoutActionHint")}
+            </Label>
+          </View>
+          <ActionMenu
+            label={uiText("draftTimeoutAction")}
+            value={actionLabel(timeout().action)}
+            triggerStyle={{
+              width: 160,
+              height: 24,
+              paddingLeft: 10,
+              paddingRight: 8,
+            }}
+          >
+            <Each of={[...TASK_DRAFT_TIMEOUT_ACTIONS]}>
+              {(choice) => (
+                <ActionItem
+                  label={actionLabel(choice())}
+                  checked={choice() === timeout().action}
+                  onSelect={() => {
+                    if (choice() !== timeout().action)
+                      void saveTimeout({ action: choice() });
+                  }}
+                />
+              )}
+            </Each>
+          </ActionMenu>
+        </View>
       </If>
-      <Scroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow} scrollbar={false}>
         <SectionHeader
           title={text("archived")}
           count={conversations().length || undefined}
@@ -223,7 +347,7 @@ export function ArchiveSettings(props: { phone?: boolean }) {
             )}
           </Each>
         </If>
-      </Scroll>
+      </SmoothScroll>
     </View>
   );
 }

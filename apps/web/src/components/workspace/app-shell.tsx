@@ -5,6 +5,7 @@ import type { PaneWidth } from "./pane";
 import { ArrowsClockwiseIcon } from "@phosphor-icons/react/ArrowsClockwise";
 import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
+import { CpuIcon } from "@phosphor-icons/react/Cpu";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/EnvelopeSimple";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
@@ -74,6 +75,13 @@ const sections = [
       return translate("navigation:sections.routines");
     },
     icon: ClockIcon,
+  },
+  {
+    to: "/runtimes",
+    get label() {
+      return translate("navigation:sections.runtimes");
+    },
+    icon: CpuIcon,
   },
   {
     to: "/plugins",
@@ -503,6 +511,11 @@ export function BottomNav() {
                 icon={ClockIcon}
               />
             ) : null}
+            <Tab
+              to="/runtimes"
+              label={translateText("sections.runtimes")}
+              icon={CpuIcon}
+            />
             <Tab
               to="/plugins"
               label={translateText("sections.plugins")}

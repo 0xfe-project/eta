@@ -1,36 +1,37 @@
-import type { TaskDependencyView } from "@eta/client-contracts";
+import type { ArtifactView, TaskDependencyView } from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
 import type { Layout } from "../../components";
-import { Scroll, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
   colors,
   DetailSkeleton,
-  Field,
   grow,
-  Icon,
   Label,
   Markdown,
   row,
-  textFaces,
-  textStyle,
+  SmoothScroll,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "../tasks/activity";
+import { actorLabel, CreatorChip } from "../tasks/creator";
 import { activeTaskRun } from "../tasks/run-log";
 import { statusName, TaskGlyph } from "../tasks/status";
 import { StatusSelect } from "../tasks/status-select";
 import { TaskDetailDialogs } from "../tasks/task-detail-dialogs";
 import { createTaskDetailState } from "../tasks/task-detail-state";
-import { TaskCommentHint } from "../tasks/task-fields";
+import { TaskCommentBox, TaskCommentHint } from "../tasks/task-fields";
 import { messageTime } from "./message-time";
 
 /** How long a goal shows before "Expand full text". */
 const goalPreview = 600;
+
+/** The detail's side inset, on each part rather than the whole, so rows can reach both edges. */
+const inset = 11;
 
 /** A task opened in the conversation panel: under its tabs, compact. */
 export function PanelTask(props: {
@@ -38,12 +39,13 @@ export function PanelTask(props: {
   layout: Layout;
   onClose: () => void;
   onTask: (id: string) => void;
+  /** The conversation's preview, which the timeline's artifacts open in. */
+  onArtifact: (artifact: ArtifactView, version?: number) => void;
 }) {
   const c = colors();
-  const type = textFaces();
   const host = useHost();
   const state = createTaskDetailState({ ...props, docked: true });
-  const { task, activity, comment, post, posting, log } = state;
+  const { task, activity, log } = state;
   const fullGoal = signal(false);
   // Once, when the task and its timeline first show: later replies do not pull the reader down.
   let opened = false;
@@ -59,10 +61,6 @@ export function PanelTask(props: {
           const last = item().runs.at(-1);
           return last && activeTaskRun(last) ? last : undefined;
         };
-        const author = () =>
-          item().createdBy.kind === "agent"
-            ? host.agent(item().createdBy.agentId)
-            : undefined;
         const goal = () =>
           fullGoal() || item().description.length <= goalPreview
             ? item().description
@@ -70,8 +68,23 @@ export function PanelTask(props: {
         const replies = () =>
           activity().filter((entry) => entry.kind === "comment").length;
         return (
-          <View style={{ ...grow, padding: 11, backgroundColor: c().canvas }}>
-            <View style={{ ...row, height: 26, gap: 8, flexShrink: 0 }}>
+          // Side insets sit on each part, not here: the dependency rows reach both edges so their hover does.
+          <View
+            style={{
+              ...grow,
+              paddingVertical: 11,
+              backgroundColor: c().surface,
+            }}
+          >
+            <View
+              style={{
+                ...row,
+                height: 26,
+                gap: 8,
+                flexShrink: 0,
+                paddingHorizontal: inset,
+              }}
+            >
               <View
                 role="button"
                 accessibilityLabel={uiText("backToTasks")}
@@ -112,14 +125,19 @@ export function PanelTask(props: {
                 />
               </ActionMenu>
             </View>
-            <Scroll style={grow} scrollbar={false}>
+            <SmoothScroll style={grow} scrollbar={false}>
               <Label
                 variant="subtitle"
                 weight={700}
-                style={{ paddingTop: 4, paddingBottom: 7 }}
+                style={{
+                  paddingTop: 4,
+                  paddingBottom: 7,
+                  paddingHorizontal: inset,
+                }}
               >
                 {item().title}
               </Label>
+              <CreatorChip creator={item().createdBy} />
               <Edges
                 label={uiText("tasksBefore", {
                   count: item().dependsOn?.length ?? 0,
@@ -142,13 +160,14 @@ export function PanelTask(props: {
                   alignItems: "flex-start",
                   gap: 15,
                   paddingTop: 7,
+                  paddingHorizontal: inset,
                 }}
               >
-                <AgentFace id={author()?.id ?? "user"} size={20} />
+                <AgentFace id={item().createdBy.agentId ?? "user"} size={20} />
                 <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
                   <View style={{ ...row, gap: 8 }}>
                     <Label variant="small" weight={600}>
-                      {author()?.name ?? uiText("you")}
+                      {actorLabel(item().createdBy, host.agent)}
                     </Label>
                     <Label variant="caption" tone="muted">
                       {messageTime(item().createdAt, false)}
@@ -175,7 +194,14 @@ export function PanelTask(props: {
                 </View>
               </View>
               <If when={replies()}>
-                <View style={{ ...row, gap: 8, paddingTop: 14 }}>
+                <View
+                  style={{
+                    ...row,
+                    gap: 8,
+                    paddingTop: 14,
+                    paddingHorizontal: inset,
+                  }}
+                >
                   <Label variant="caption" tone="muted">
                     {uiText(replies() === 1 ? "oneTaskReply" : "taskReplies", {
                       count: replies(),
@@ -186,21 +212,31 @@ export function PanelTask(props: {
                   />
                 </View>
               </If>
-              <View style={{ paddingBottom: 11 }}>
+              <View style={{ paddingBottom: 11, paddingHorizontal: inset }}>
                 <TaskActivity
                   entries={activity()}
                   runs={item().runs}
                   createdBy={item().createdBy}
                   gap={15}
                   onLog={(entry) => log.set(entry)}
+                  onTask={props.onTask}
+                  onArtifact={props.onArtifact}
                 />
               </View>
               {/* A thread opens on its latest reply, next to the box to answer it, as on the web. */}
               <View ref={end} />
-            </Scroll>
+            </SmoothScroll>
             <If when={run()}>
               {(entry) => (
-                <View style={{ ...row, height: 24, gap: 8, flexShrink: 0 }}>
+                <View
+                  style={{
+                    ...row,
+                    height: 24,
+                    gap: 8,
+                    flexShrink: 0,
+                    paddingHorizontal: inset,
+                  }}
+                >
                   <StatusDot color={c().blue} />
                   <Label variant="caption" weight={600} style={{ flex: 1 }}>
                     {uiText("agentIsWorking", {
@@ -237,44 +273,11 @@ export function PanelTask(props: {
                 </View>
               )}
             </If>
-            <TaskCommentHint state={state} />
-            <View
-              style={{
-                ...row,
-                height: 38,
-                gap: 8,
-                paddingHorizontal: 10,
-                flexShrink: 0,
-                borderWidth: 1,
-                borderColor: c().border,
-              }}
-            >
-              <Field
-                label={uiText("comment")}
-                placeholder={uiText("replyARunningTaskReadsIt")}
-                value={comment()}
-                onChange={state.updateComment}
-                onSubmit={() => void post()}
-                style={{
-                  flex: 1,
-                  height: 36,
-                  paddingHorizontal: 0,
-                  borderWidth: 0,
-                  ...textStyle(type("small")),
-                }}
-              />
-              <View
-                role="button"
-                accessibilityLabel={uiText("sendComment")}
-                onPress={() => void post()}
-                style={{
-                  opacity: posting() || !comment().trim() ? 0.45 : 1,
-                  cursor: "pointer",
-                }}
-              >
-                <Icon name="send" size={14} tone="muted" />
-              </View>
-            </View>
+            <TaskCommentHint
+              state={state}
+              style={{ paddingHorizontal: inset }}
+            />
+            <TaskCommentBox state={state} panelInset={inset} />
             <TaskDetailDialogs
               id={props.id}
               layout={props.layout}
@@ -300,7 +303,11 @@ function Edges(props: {
       <Label
         variant="small"
         tone="muted"
-        style={{ paddingTop: props.before ? 0 : 14, paddingBottom: 4 }}
+        style={{
+          paddingTop: props.before ? 0 : 14,
+          paddingBottom: 4,
+          paddingHorizontal: inset,
+        }}
       >
         {props.label}
       </Label>
@@ -315,8 +322,10 @@ function Edges(props: {
               ...row,
               height: 30,
               gap: 8,
-              paddingHorizontal: 10,
-              borderWidth: 1,
+              // Edge to edge, so the hover does too; the text stays where the bordered box put it.
+              paddingHorizontal: inset + 1 + 10,
+              borderTopWidth: 1,
+              borderBottomWidth: 1,
               borderColor: c().border,
               cursor: "pointer",
             }}

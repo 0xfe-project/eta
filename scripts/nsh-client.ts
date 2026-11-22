@@ -66,10 +66,17 @@ const target = option("--target");
 const desktop =
   packaging &&
   (target === "macos" || target === "windows" || target === "linux");
+// Android updates by signed packages of the app's code (`nsh publish`), and
+// by a new APK when the code needs a newer shell. iOS goes through the store.
+const android = packaging && target === "android";
+// `nsh publish` with a key signs an OTA package; `publish ios|android` uploads
+// a store build, which needs nothing generated here.
+const storeUpload =
+  args[0] === "publish" && ["ios", "android"].includes(args[1] ?? "");
 const name = option("--name") ?? meta.name;
 const out = resolve(cwd, option("--out", "-o") ?? ".nsh/out");
 
-if (args[0] !== "publish" && args[0] !== "update-manifest") {
+if (!storeUpload && args[0] !== "update-manifest") {
   copyFileSync(
     fromClient.resolve("jsqr"),
     join(cwd, "assets", "qr-decoder.txt"),
@@ -91,7 +98,29 @@ if (args[0] !== "update-manifest") await writeClientIcons(root);
 
 const updateUrl = process.env.ETA_CLIENT_UPDATE_URL;
 const updateKey = process.env.ETA_CLIENT_UPDATE_PUBLIC_KEY;
-const updateEnabled = desktop && !!(updateUrl || updateKey);
+// `stable=<manifest URL>,rc=<manifest URL>`: the channels the app's settings
+// choose between by name (`checkForUpdate({ channel })`).
+const updateChannels = Object.fromEntries(
+  (process.env.ETA_CLIENT_UPDATE_CHANNELS ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const at = entry.indexOf("=");
+      if (at < 1)
+        throw new Error(
+          `ETA_CLIENT_UPDATE_CHANNELS: expected name=url, got ${entry}`,
+        );
+      return [entry.slice(0, at), entry.slice(at + 1)];
+    }),
+);
+// The OTA root public keys (`nsh keygen`'s root.pub) whose certified release
+// keys may sign the app's packages; comma separated, to rotate one.
+const packageRoots = (process.env.ETA_CLIENT_PACKAGE_ROOT ?? "")
+  .split(",")
+  .map((root) => root.trim())
+  .filter(Boolean);
+const updateEnabled = (desktop || android) && !!(updateUrl || updateKey);
 const manifest =
   args[0] === "update-manifest" &&
   !option("--entry") &&
@@ -106,18 +135,37 @@ try {
       throw new Error(
         "ETA_CLIENT_UPDATE_URL and ETA_CLIENT_UPDATE_PUBLIC_KEY must be set together.",
       );
-    const endpoint = new URL(updateUrl);
-    const local =
-      endpoint.protocol === "http:" &&
-      ["127.0.0.1", "localhost"].includes(endpoint.hostname);
-    if (
-      (endpoint.protocol !== "https:" && !local) ||
-      endpoint.username ||
-      endpoint.password
-    )
-      throw new Error(
-        "Use an HTTPS manifest URL without embedded credentials.",
-      );
+    const manifestUrl = (url: string) => {
+      const endpoint = new URL(url);
+      const local =
+        endpoint.protocol === "http:" &&
+        ["127.0.0.1", "localhost"].includes(endpoint.hostname);
+      if (
+        (endpoint.protocol !== "https:" && !local) ||
+        endpoint.username ||
+        endpoint.password
+      )
+        throw new Error(
+          "Use an HTTPS manifest URL without embedded credentials.",
+        );
+      return endpoint.href;
+    };
+    const endpoint = manifestUrl(updateUrl);
+    // The app's settings always name a channel: a build given only a URL has
+    // that as `stable`.
+    const channels = Object.fromEntries(
+      Object.entries(
+        Object.keys(updateChannels).length
+          ? updateChannels
+          : { stable: updateUrl },
+      ).map(([name, url]) => [name, manifestUrl(url)]),
+    );
+    // The roots go into Android builds, and into the manifest's own check of
+    // the package it lists; the desktops update the whole app.
+    const packages =
+      (android || manifest) && packageRoots.length
+        ? { packages: { roots: packageRoots } }
+        : {};
     const generated = join(cwd, ".nsh");
     mkdirSync(generated, { recursive: true });
     staging = mkdtempSync(join(generated, "desktop-source-"));
@@ -134,7 +182,7 @@ try {
       const entry = command.indexOf("App.tsx", 1);
       if (entry === -1)
         throw new Error(
-          "Use the Eta client App.tsx entry for desktop packages.",
+          "Use the Eta client App.tsx entry for updatable packages.",
         );
       command[entry] = join(staging, "App.tsx");
       if (!option("--out", "-o")) command.push("--out", out);
@@ -158,7 +206,12 @@ try {
               version: process.env.ETA_CLIENT_VERSION ?? meta.version,
             }
           : {}),
-        updater: { url: endpoint.href, publicKey: updateKey },
+        updater: {
+          url: endpoint,
+          publicKey: updateKey,
+          channels,
+          ...packages,
+        },
       }),
     );
   }

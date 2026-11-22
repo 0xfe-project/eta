@@ -1,15 +1,30 @@
 import type {
+  ArtifactView,
   BoardTaskStatus,
+  BoardTaskView,
   TaskActivityView,
   TaskActor,
   TaskRunView,
 } from "@eta/client-contracts";
-import { dependencyEntry, subtaskEntry } from "@eta/client-contracts";
+import {
+  dependencyEntry,
+  parentEntry,
+  subtaskEntry,
+} from "@eta/client-contracts";
 import { signal, View } from "nsh";
-import { Caption, Icon, Label, Markdown, row } from "../../components";
+import {
+  Caption,
+  colors,
+  focusRing,
+  Icon,
+  Label,
+  Markdown,
+  row,
+} from "../../components";
 import { AgentFace, UserFace } from "../../components/agent-face";
+import { canHover, touchScreen } from "../../components/menu";
 import { uiText } from "../../i18n";
-import { useHost } from "../../services/host";
+import { follow, useHost } from "../../services/host";
 import { taskMoment } from "./facts";
 import { isActiveRunStatus } from "./run-log";
 import { statusKeys, statusName } from "./status";
@@ -37,8 +52,69 @@ function inlineBody(entry: TaskActivityView) {
   );
 }
 
-/** What an entry says on a desktop task page: a sentence, the task at the other end quoted. */
-function taskActivitySentence(entry: TaskActivityView): string {
+/**
+ * What an entry's sentence names that can be opened: another task (a prerequisite, the parent, a
+ * subtask), or the version of an artifact it published. An entry written before the host kept the
+ * other task's id names only its number.
+ */
+type ActivityTarget =
+  | { kind: "task"; taskId: string | null; number: number; title: string }
+  | {
+      kind: "artifact";
+      artifactId: string;
+      /** The version the entry was written for; absent on an entry that did not say. */
+      version: number | undefined;
+      title: string;
+    };
+
+function activityTarget(entry: TaskActivityView): ActivityTarget | undefined {
+  if (entry.kind === "dependency") {
+    const edge = dependencyEntry(entry.data);
+    if (!edge || edge.number === null || edge.action === "unblocked")
+      return undefined;
+    return {
+      kind: "task",
+      taskId: edge.taskId,
+      number: edge.number,
+      title: edge.title,
+    };
+  }
+  if (entry.kind === "parent") {
+    const parent = parentEntry(entry.data);
+    const ref = parent?.to ?? parent?.from;
+    return ref ? { kind: "task", ...ref } : undefined;
+  }
+  if (entry.kind === "subtask") {
+    const subtask = subtaskEntry(entry.data);
+    return subtask && subtask.action !== "all_cancelled"
+      ? { kind: "task", ...subtask.task }
+      : undefined;
+  }
+  if (
+    entry.kind === "artifact" &&
+    typeof entry.data.artifactId === "string" &&
+    typeof entry.data.title === "string"
+  )
+    return {
+      kind: "artifact",
+      artifactId: entry.data.artifactId,
+      version:
+        typeof entry.data.version === "number" ? entry.data.version : undefined,
+      title: entry.data.title,
+    };
+  return undefined;
+}
+
+/** How a target reads in its sentence: its title, or a task's number when it has none. */
+const targetName = (target: ActivityTarget) =>
+  target.title || (target.kind === "task" ? `#${target.number}` : "");
+
+/**
+ * What an entry says on a desktop task page: a sentence, the task at the other end quoted.
+ * `name` stands in for the quoted title, so a caller can find where it goes.
+ */
+function taskActivitySentence(entry: TaskActivityView, name?: string): string {
+  const quoted = (title: string) => name ?? title;
   if (inlineBody(entry))
     return uiText(
       entry.kind === "run_failed"
@@ -58,7 +134,7 @@ function taskActivitySentence(entry: TaskActivityView): string {
   if (entry.kind === "dependency") {
     const edge = dependencyEntry(entry.data);
     if (edge) {
-      const title = edge.title || `#${edge.number}`;
+      const title = quoted(edge.title || `#${edge.number}`);
       if (edge.action === "added")
         return uiText("activityPrerequisiteAdded", { title });
       if (edge.action === "removed" || edge.action === "deleted")
@@ -69,11 +145,15 @@ function taskActivitySentence(entry: TaskActivityView): string {
     }
   }
   if (entry.kind === "parent") {
-    const to = entry.data.to as { title?: string } | null;
-    const from = entry.data.from as { title?: string } | null;
-    if (to?.title) return uiText("activityParent", { title: to.title });
-    if (from?.title)
-      return uiText("activityParentRemoved", { title: from.title });
+    const parent = parentEntry(entry.data);
+    if (parent?.to)
+      return uiText("activityParent", {
+        title: quoted(parent.to.title || `#${parent.to.number}`),
+      });
+    if (parent?.from)
+      return uiText("activityParentRemoved", {
+        title: quoted(parent.from.title || `#${parent.from.number}`),
+      });
   }
   if (entry.kind === "subtask") {
     const subtask = subtaskEntry(entry.data);
@@ -84,13 +164,13 @@ function taskActivitySentence(entry: TaskActivityView): string {
         subtask.action === "added"
           ? "activitySubtaskAdded"
           : "activitySubtaskRemoved",
-        { title: subtask.task.title || `#${subtask.task.number}` },
+        { title: quoted(subtask.task.title || `#${subtask.task.number}`) },
       );
   }
   if (entry.kind === "title" && typeof entry.data.to === "string")
     return uiText("activityRenamed", { title: entry.data.to });
   if (entry.kind === "artifact" && typeof entry.data.title === "string")
-    return uiText("activityArtifact", { title: entry.data.title });
+    return uiText("activityArtifact", { title: quoted(entry.data.title) });
   if (entry.kind === "conversation")
     return uiText(
       entry.data.to ? "activityConversation" : "activityConversationRemoved",
@@ -98,6 +178,25 @@ function taskActivitySentence(entry: TaskActivityView): string {
   if (entry.kind === "created") return uiText("activityCreated");
   if (entry.kind === "comment") return uiText("activityCommented");
   return uiText(activityKeys[entry.kind] ?? "activityChanged");
+}
+
+/** Stands in for a target's title while a sentence is split around it. */
+const slot = "\u0000";
+
+/** An entry's sentence in three parts, its target's name in the middle; undefined when it has none. */
+function sentenceAround(
+  entry: TaskActivityView,
+): [string, string, string] | undefined {
+  const target = activityTarget(entry);
+  if (!target) return undefined;
+  const sentence = taskActivitySentence(entry, slot);
+  const at = sentence.indexOf(slot);
+  if (at < 0) return undefined;
+  return [
+    sentence.slice(0, at),
+    targetName(target),
+    sentence.slice(at + slot.length),
+  ];
 }
 
 // --- the thread -------------------------------------------------------------------------
@@ -184,8 +283,15 @@ export function TaskActivity(props: {
   /** The space between a face and its text; a line's text starts at 20 + this. */
   gap?: number;
   onLog?: (run: TaskRunView) => void;
+  /** Go to another task the timeline names, the way its task links go there. */
+  onTask?: (id: string) => void;
+  /** Open an artifact the timeline names, at the version the entry was written for. */
+  onArtifact?: (artifact: ArtifactView, version?: number) => void;
 }) {
   const host = useHost();
+  // What a named task or artifact is now: one gone, or out of this board's reach, cannot be opened.
+  follow(() => (props.onTask ? "tasks" : undefined));
+  follow(() => (props.onArtifact ? "artifacts" : undefined));
   const gap = () => props.gap ?? 8;
   const indent = () => 20 + gap();
   const name = (actor: TaskActor) =>
@@ -198,6 +304,85 @@ export function TaskActivity(props: {
   const runOf = (entry: TaskActivityView) =>
     entry.runId ? props.runs.find((run) => run.id === entry.runId) : undefined;
   const items = () => taskThread(props.entries, props.runs);
+  /** What a target is now: open it, it is gone, or nothing is known yet (the lists are loading). */
+  const resolve = (
+    target: ActivityTarget,
+  ): { open: () => void } | "gone" | undefined => {
+    if (target.kind === "artifact") {
+      const open = props.onArtifact;
+      const list = host.section<ArtifactView[]>("artifacts", "list");
+      if (!open || !list) return undefined;
+      const artifact = list.find((item) => item.id === target.artifactId);
+      if (!artifact) return "gone";
+      // The version it was written for, or the newest once that one is gone.
+      const version = artifact.versions.some(
+        (item) => item.number === target.version,
+      )
+        ? target.version
+        : undefined;
+      return { open: () => open(artifact, version) };
+    }
+    const open = props.onTask;
+    const list = host.section<BoardTaskView[]>("tasks", "list");
+    if (!open || !list) return undefined;
+    const tasks = [...list, ...host.list<BoardTaskView>("tasks", "archived")];
+    const task =
+      target.taskId === null
+        ? tasks.find((item) => item.number === target.number)
+        : tasks.find((item) => item.id === target.taskId);
+    return task ? { open: () => open(task.id) } : "gone";
+  };
+  /** A target's name in its sentence: a link while it can be opened, marked once it is gone. */
+  const TargetLink = (link: { target: ActivityTarget; name: string }) => {
+    const c = colors();
+    const hovered = signal(false);
+    const state = () => resolve(link.target);
+    const label = () =>
+      link.target.kind === "artifact"
+        ? uiText("activityOpenArtifact", { title: link.name })
+        : uiText("activityOpenTask", {
+            number: link.target.number,
+            title: link.target.title || `#${link.target.number}`,
+          });
+    return (
+      <If
+        when={typeof state() === "object" ? state() : undefined}
+        else={
+          <Label variant="caption" tone="muted">
+            {link.name}
+          </Label>
+        }
+      >
+        {(target) => (
+          <View
+            role="link"
+            accessibilityLabel={label()}
+            onPress={() => (target() as { open: () => void }).open()}
+            onMouseEnter={() => hovered.set(canHover)}
+            onMouseLeave={() => hovered.set(false)}
+            focusVisibleStyle={focusRing(c())}
+            hitSlop={
+              touchScreen
+                ? { top: 12, bottom: 12, left: 6, right: 6 }
+                : undefined
+            }
+            style={{ flexShrink: 1, minWidth: 0, cursor: "pointer" }}
+          >
+            <Label
+              variant="caption"
+              tone={hovered() ? "blue" : "ink"}
+              style={{
+                textDecorationLine: hovered() ? "underline" : "none",
+                textDecorationThickness: 1,
+              }}
+            >
+              {link.name}
+            </Label>
+          </View>
+        )}
+      </If>
+    );
+  };
   const Line = (line: { entry: TaskActivityView }) => {
     const mark = () =>
       line.entry.kind === "dependency"
@@ -206,6 +391,12 @@ export function TaskActivity(props: {
           ? { name: "appWindow" as const, tone: "muted" as const }
           : undefined;
     const run = () => runOf(line.entry);
+    const parts = () => sentenceAround(line.entry);
+    /** An artifact deleted since says so; a task gone is only no longer a link. */
+    const gone = () => {
+      const target = activityTarget(line.entry);
+      return target?.kind === "artifact" && resolve(target) === "gone";
+    };
     return (
       <View style={{ ...row, gap: 4, flexWrap: "wrap" }}>
         <Label variant="caption" tone="muted">
@@ -214,12 +405,42 @@ export function TaskActivity(props: {
         <If when={mark()}>
           {(icon) => <Icon name={icon().name} size={10} tone={icon().tone} />}
         </If>
-        <Label
-          variant="caption"
-          tone={line.entry.kind === "run_failed" ? "red" : "muted"}
+        <If
+          when={parts()}
+          else={
+            <Label
+              variant="caption"
+              tone={line.entry.kind === "run_failed" ? "red" : "muted"}
+            >
+              {taskActivitySentence(line.entry)}
+            </Label>
+          }
         >
-          {taskActivitySentence(line.entry)}
-        </Label>
+          {(part) => (
+            // The sentence around its target's name, the name alone pressable.
+            <View style={{ ...row, flexWrap: "wrap", flexShrink: 1 }}>
+              <If when={part()[0]}>
+                <Label variant="caption" tone="muted">
+                  {part()[0]}
+                </Label>
+              </If>
+              <TargetLink
+                target={activityTarget(line.entry)!}
+                name={part()[1]}
+              />
+              <If when={part()[2]}>
+                <Label variant="caption" tone="muted">
+                  {part()[2]}
+                </Label>
+              </If>
+            </View>
+          )}
+        </If>
+        <If when={gone()}>
+          <Label variant="caption" tone="faint">
+            {uiText("activityArtifactDeleted")}
+          </Label>
+        </If>
         <Label variant="caption" tone="muted">
           {taskMoment(line.entry.createdAt)}
         </Label>

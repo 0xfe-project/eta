@@ -1,7 +1,14 @@
 import type { McpServerView } from "@eta/client-contracts";
 import type { Layout } from "../../../components";
-import { Scroll, signal } from "nsh";
-import { ActionItem, colors, Empty, grow, Icon } from "../../../components";
+import { signal } from "nsh";
+import {
+  ActionItem,
+  colors,
+  Empty,
+  grow,
+  Icon,
+  SmoothScroll,
+} from "../../../components";
 import { uiText, useText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 
@@ -75,7 +82,7 @@ export function McpSettings(props: { layout: Layout; onBack: () => void }) {
               />
             }
           >
-            <Scroll style={grow} scrollbar={false}>
+            <SmoothScroll style={grow} scrollbar={false}>
               <Each of={groups()} key={([agentId]) => agentId}>
                 {(group) => (
                   <>
@@ -117,7 +124,7 @@ export function McpSettings(props: { layout: Layout; onBack: () => void }) {
                   </>
                 )}
               </Each>
-            </Scroll>
+            </SmoothScroll>
           </If>
         </>
       }

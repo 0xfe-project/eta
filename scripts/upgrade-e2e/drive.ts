@@ -940,7 +940,8 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
       .click();
     try {
       await page
-        .getByText("Last update failed", { exact: true })
+        // The window says so over everything, then Settings keeps it (#292).
+        .getByText("The update to 0.9.3 didn't hold", { exact: true })
         .waitFor({ timeout: 180_000 });
       await shot("5-rolled-back");
       want("it went back", await fileVersion(), "0.9.1");

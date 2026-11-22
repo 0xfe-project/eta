@@ -1,7 +1,15 @@
 import type { PluginView } from "@eta/client-contracts";
 import type { JSX } from "nsh";
-import { Scroll, View } from "nsh";
-import { Button, colors, grow, Header, Label, row } from "../../components";
+import { View } from "nsh";
+import {
+  Button,
+  colors,
+  grow,
+  Header,
+  Label,
+  row,
+  SmoothScroll,
+} from "../../components";
 import { uiText } from "../../i18n";
 import { NoPlugins, PluginGlyph, Status } from "./plugin-status";
 
@@ -43,7 +51,7 @@ export function PluginTablet(props: {
           />
         </Header>
         {props.tabs}
-        <Scroll style={grow} scrollbar={false}>
+        <SmoothScroll style={grow} scrollbar={false}>
           <Each of={props.items} key={(item) => item.name}>
             {(item) => (
               <View
@@ -93,7 +101,7 @@ export function PluginTablet(props: {
           <If when={!props.items.length}>
             <NoPlugins width={240} />
           </If>
-        </Scroll>
+        </SmoothScroll>
         <View
           style={{
             borderTopWidth: 1,

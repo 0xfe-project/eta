@@ -12,6 +12,7 @@ import type {
 } from "./types";
 
 export * from "./acp";
+export * from "./acp-form";
 export * from "./artifacts";
 export * from "./captain";
 export * from "./context-usage";

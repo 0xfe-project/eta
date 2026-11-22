@@ -173,6 +173,35 @@ export interface BoardTaskView {
   archivedAt?: number | null;
   /** Who archived it: `auto` (the host, for a quiet done or cancelled task), `user`, or an agent's id. */
   archivedBy?: string | null;
+  /**
+   * What its own runs used, in brief: what a card or a row says. Null before its first run that
+   * got a session (it used nothing, and says nothing). Absent from a host older than this field.
+   * The whole breakdown is the task's `usage` section.
+   */
+  usage?: TaskUsageBrief | null;
+  /**
+   * The same with every task under it, at any depth, for a task that has subtasks: a parent does
+   * no work of its own, so its card says this. Null when none of them has run; absent for a task
+   * without subtasks (and from an older host).
+   */
+  usageWithSubtasks?: TaskUsageBrief | null;
+}
+
+/** A task's usage, as a card or a list row says it. */
+export interface TaskUsageBrief {
+  /** Null: not one of its runs reported tokens ("no token data", never 0). */
+  tokens: TaskTokenTotals | null;
+  /** The model that answered with the most tokens; null without data. */
+  model: string | null;
+  /** How many models answered: a card says the first, and `+N` for the rest. */
+  models: number;
+  runs: number;
+  runsWithoutData: number;
+  /**
+   * The session of a run going now, where its live rate is (`sessions.<id>.metrics`); null when
+   * none is. Only eta's own loop measures one.
+   */
+  liveSessionId: string | null;
 }
 
 /** Which tasks a list holds: those on the board (the default), only the archived ones, or both. */
@@ -184,10 +213,36 @@ export const TASK_ARCHIVE_DAYS = [3, 7, 30] as const;
 export type TaskArchiveDays = (typeof TASK_ARCHIVE_DAYS)[number];
 export const DEFAULT_TASK_ARCHIVE_DAYS: TaskArchiveDays = 7;
 
+/** What a draft nobody decided on is made into when its wait runs out: a task, or nothing. */
+export const TASK_DRAFT_TIMEOUT_ACTIONS = ["accept", "discard"] as const;
+export type TaskDraftTimeoutAction =
+  (typeof TASK_DRAFT_TIMEOUT_ACTIONS)[number];
+/** How many minutes a draft may wait, as the setting offers. */
+export const TASK_DRAFT_TIMEOUT_MINUTES = {
+  min: 1,
+  max: 1440,
+  default: 10,
+} as const;
+
+/** The host's own decision for a draft that waited too long; off by default. */
+export interface TaskDraftTimeout {
+  enabled: boolean;
+  /** Whole minutes from `TASK_DRAFT_TIMEOUT_MINUTES.min` to `.max`. */
+  minutes: number;
+  /** `accept` confirms it as it stands, so the task starts; `discard` makes no task. */
+  action: TaskDraftTimeoutAction;
+}
+
 /** The board's own settings, on `tasks`. */
 export interface TaskBoardSettings {
   /** Days a done or cancelled task stays quiet before the host archives it; null never does. */
   archiveAfterDays: TaskArchiveDays | null;
+  /** Whether a finished task's result wakes the agent that made it, to review and follow up. Off by default. */
+  reactToResults: boolean;
+  /** Whether the agent that made a task answers its executor's questions before the user is asked. */
+  autoAnswerAsks: boolean;
+  /** What happens to a draft nobody confirmed or discarded in time. Absent from a host that predates it. */
+  draftTimeout?: TaskDraftTimeout | undefined;
 }
 
 /** The newest version of an artifact published for a task. */
@@ -315,6 +370,8 @@ export interface TaskDependencyEntry {
     | "unblocked";
   /** The task at the other end; absent for `unblocked`. */
   number: number | null;
+  /** Its id; null for `unblocked`, and for an entry written before the host kept it. */
+  taskId: string | null;
   title: string;
   requireDone: boolean;
 }
@@ -340,6 +397,7 @@ export function dependencyEntry(
   return {
     action: action as TaskDependencyEntry["action"],
     number,
+    taskId: typeof data.taskId === "string" ? data.taskId : null,
     title: typeof data.title === "string" ? data.title : "",
     requireDone: data.requireDone === true,
   };
@@ -348,14 +406,20 @@ export function dependencyEntry(
 /** A task at the other end of a graph entry, as the entry names it. */
 export interface TaskEntryRef {
   number: number;
+  /** Its id; null for an entry written before the host kept it, which only names the number. */
+  taskId: string | null;
   title: string;
 }
 
 const entryRef = (value: unknown): TaskEntryRef | null => {
   if (typeof value !== "object" || value === null) return null;
-  const { number, title } = value as Record<string, unknown>;
+  const { number, taskId, title } = value as Record<string, unknown>;
   return typeof number === "number"
-    ? { number, title: typeof title === "string" ? title : "" }
+    ? {
+        number,
+        taskId: typeof taskId === "string" ? taskId : null,
+        title: typeof title === "string" ? title : "",
+      }
     : null;
 };
 
@@ -504,6 +568,15 @@ export interface TaskDraftData {
   dependsOn?: { taskId: string; requireDone: boolean }[] | undefined;
   /** The task it will be a subtask of, checked like `dependsOn`. Absent is none. */
   parentId?: string | undefined;
+  /** The user discarded it: it waits for nothing and makes no task. Absent is still waiting. */
+  discarded?: boolean | undefined;
+  /**
+   * The host decided it, not the user: the draft waited past the `draftTimeout` setting. Set on a
+   * draft the host discarded; a draft it confirmed says so on its task's timeline.
+   */
+  autoHandled?: "timeout" | undefined;
+  /** Why the host's own confirmation failed; it keeps the draft waiting and does not try again. */
+  autoFailure?: string | undefined;
   /** The Captain instruction that authorized this draft, when it came from one. */
   captainAssignmentId?: string | undefined;
   captainMessageId?: string | undefined;
@@ -642,6 +715,7 @@ export const TASK_ACTIONS = [
   "delete",
   "link",
   "confirmDraft",
+  "discardDraft",
   "interrupt",
   "rerun",
   "addDependency",
@@ -740,6 +814,11 @@ export interface TaskArgs {
     messageId: string;
     edits?: TaskFields;
   };
+  /**
+   * Discard a `task_draft` row of the conversation: no task is made and the row stays, marked
+   * `discarded`. Refused for a draft already confirmed or discarded.
+   */
+  discardDraft: { conversationId: string; messageId: string };
   /** Stop a run: a queued one never starts, a going one is told to stop and ends `interrupted`. */
   interrupt: { taskId: string; runId: string };
   /**
@@ -789,6 +868,7 @@ export interface TaskResults {
   delete: { taskId: string };
   link: { task: BoardTaskDetail };
   confirmDraft: { task: BoardTaskDetail; message: MessageView };
+  discardDraft: { message: MessageView };
   interrupt: { task: BoardTaskDetail };
   rerun: { task: BoardTaskDetail; run: TaskRunView };
   addDependency: { task: BoardTaskDetail };
