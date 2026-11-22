@@ -89,7 +89,7 @@ test("test results list each tool as a card with chips, fold long text, and coun
   expect(app.shows("Tools (3)")).toBe(true);
   expect(app.count("id:tool-card:tool_0")).toBe(1);
   expect(app.count("id:tool-card:tool_2")).toBe(1);
-  expect(app.shows("fake 1.0 · 3 tools · 2 resources · 1 prompts")).toBe(true);
+  expect(app.shows("fake 1.0 · 3 tools · 2 resources · 1 prompt")).toBe(true);
   expect(app.shows("+3")).toBe(true);
   expect(app.count("id:tool-param:p0")).toBe(1);
   expect(app.shows("Show more")).toBe(true);

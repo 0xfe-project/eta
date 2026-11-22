@@ -148,6 +148,10 @@ function LoginButton(props: { item: PluginView; server: PluginServerView; test: 
   );
 }
 
+/** "1 tool", "3 tools", "–" when the server did not say; the singular is its own string. */
+const counted = (key: "countTool" | "countResource" | "countPrompt", n: number | null | undefined): string =>
+  n == null ? "–" : n === 1 ? uiText((key + "1") as never, { n: "1" }) : uiText((key + "s") as never, { n: String(n) });
+
 const MAX_CHIPS = 12;
 const LONG_TOOL_TEXT = 140;
 
@@ -253,9 +257,9 @@ function TestResultView(props: { test: Test; stdio: boolean }) {
                   ? `${result()!.serverName} ${result()!.serverVersion ?? ""}`.trim()
                   : "",
                 uiText("testCounts", {
-                  tools: String(result()!.toolCount),
-                  resources: String(result()!.resourceCount ?? "–"),
-                  prompts: String(result()!.promptCount ?? "–"),
+                  tools: counted("countTool", result()!.toolCount),
+                  resources: counted("countResource", result()!.resourceCount),
+                  prompts: counted("countPrompt", result()!.promptCount),
                 }),
               ]
                 .filter(Boolean)
