@@ -5,10 +5,19 @@ import {
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS,
 } from "@eta/client-contracts";
-import { Picker, View } from "nsh";
-import { Button, Label, row } from "../../components";
+import { computed, Picker, signal, View } from "nsh";
+import { Button, colors, Label, row } from "../../components";
+import { Lightbox } from "../../components/picture-viewer";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import {
+  fileSize,
+  forgetPicture,
+  isPicture,
+  rememberPicture,
+  useAttachmentPictures,
+} from "../../services/pictures";
+import { PictureChip } from "./picture-chip";
 
 export function composerAttachments(
   store: ReturnType<typeof openComposerDraft>,
@@ -77,8 +86,17 @@ export function composerAttachments(
                   ).toString("base64"),
                 },
               );
-              if (result.attachment)
+              if (result.attachment) {
+                // The draft shows the picture from the bytes it sent, not the host's copy.
+                if (origin)
+                  rememberPicture(
+                    origin,
+                    result.attachment.id,
+                    bytes,
+                    result.attachment.contentType,
+                  );
                 edit({ attachments: [...attachments(), result.attachment] });
+              }
             }
           } catch (error) {
             if (host.address()?.origin === origin)
@@ -109,10 +127,17 @@ export function composerAttachments(
           attachmentId: id,
         });
         edit({ attachments: attachments().filter((file) => file.id !== id) });
+        if (origin) forgetPicture(origin, id);
       }),
     );
   }
   function AttachmentChips() {
+    const c = colors();
+    const pictureOf = useAttachmentPictures();
+    const open = signal<number>();
+    const pictures = computed(() =>
+      attachments().filter(isPicture).map(pictureOf),
+    );
     return (
       <>
         <Each of={failedUploads()}>
@@ -147,16 +172,68 @@ export function composerAttachments(
           <View style={{ ...row, flexWrap: "wrap", gap: 5 }}>
             <Each of={attachments()} key={(file) => file.id}>
               {(file) => (
-                <Button
-                  label={file().name}
-                  end="close"
-                  disabled={uploading()}
-                  onPress={() => void detach(file().id)}
-                />
+                <If
+                  when={isPicture(file())}
+                  else={
+                    <Button
+                      label={file().name}
+                      end="close"
+                      disabled={uploading()}
+                      onPress={() => void detach(file().id)}
+                    />
+                  }
+                >
+                  {/* A picture opens on a press, so taking it out is a button of its own. */}
+                  <View
+                    style={{
+                      ...row,
+                      flexShrink: 0,
+                      height: 24,
+                      maxWidth: "100%",
+                      borderWidth: 1,
+                      borderColor: c().strong,
+                      backgroundColor: c().canvas,
+                    }}
+                  >
+                    <PictureChip
+                      picture={pictureOf(file())}
+                      name={file().name}
+                      size={fileSize(file().size)}
+                      text={file().name}
+                      variant="small"
+                      style={{
+                        height: "100%",
+                        justifyContent: "center",
+                        paddingLeft: 8,
+                        paddingRight: 2,
+                      }}
+                      onOpen={() =>
+                        open.set(
+                          pictures().findIndex(
+                            (picture) => picture.key === file().id,
+                          ),
+                        )
+                      }
+                    />
+                    <Button
+                      label={uiText("removeAttachment", { name: file().name })}
+                      icon="close"
+                      iconOnly
+                      iconSize={10}
+                      tone="ghost"
+                      labelTone="muted"
+                      size={22}
+                      disabled={uploading()}
+                      style={{ paddingHorizontal: 5 }}
+                      onPress={() => void detach(file().id)}
+                    />
+                  </View>
+                </If>
               )}
             </Each>
           </View>
         </If>
+        <Lightbox pictures={pictures} index={open} onIndex={open.set} />
       </>
     );
   }

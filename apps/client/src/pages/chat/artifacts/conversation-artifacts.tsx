@@ -6,7 +6,6 @@ import {
   ActionItem,
   ActionMenu,
   Button,
-  Caption,
   colors,
   Empty,
   Field,
@@ -20,6 +19,7 @@ import {
 } from "../../../components";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { SectionHeading, ViewAll } from "../section-heading";
 import {
   applyFilters,
   cleared,
@@ -144,22 +144,27 @@ export function ConversationArtifacts(props: {
     onViewAll?: () => void;
   }) {
     return (
-      <View
-        style={{
-          paddingTop: 12,
-          borderBottomWidth: 1,
-          borderColor: c().border,
-        }}
-      >
-        <Caption
-          text={uiText("artifacts", { length: recent.artifacts.length })}
-          style={{ marginHorizontal: 12, marginBottom: 4 }}
-        />
+      <View>
+        <SectionHeading
+          label={uiText("artifacts", { length: recent.artifacts.length })}
+        >
+          <If when={recent.artifacts.length > RECENT}>
+            <ViewAll
+              label={uiText("artifactsViewAll")}
+              onPress={() => recent.onViewAll?.()}
+            />
+          </If>
+        </SectionHeading>
         <If when={!recent.artifacts.length}>
           <Label
             variant="small"
             tone="muted"
-            style={{ marginHorizontal: 12, marginBottom: 12 }}
+            style={{
+              paddingHorizontal: 12,
+              paddingBottom: 8,
+              borderBottomWidth: 1,
+              borderColor: c().border,
+            }}
           >
             {uiText("noArtifactsYet")}
           </Label>
@@ -175,44 +180,9 @@ export function ConversationArtifacts(props: {
             />
           )}
         </Each>
-        <If when={recent.artifacts.length > RECENT}>
-          <ViewAllRow onViewAll={recent.onViewAll} />
-        </If>
       </View>
     );
   }
-}
-
-/** "View all →" under a short list of artifacts. */
-export function ViewAllRow(props: { phone?: boolean; onViewAll?: () => void }) {
-  const c = colors();
-  return (
-    <View
-      style={{
-        ...row,
-        justifyContent: "flex-end",
-        minHeight: props.phone ? 48 : 32,
-        paddingLeft: props.phone ? 16 : 12,
-        paddingRight: props.phone ? 12 : 12,
-        borderTopWidth: props.phone ? 0 : 1,
-        borderBottomWidth: props.phone ? 1 : 0,
-        borderColor: c().border,
-      }}
-    >
-      <View
-        role="button"
-        accessibilityLabel={uiText("artifactsViewAll")}
-        onPress={() => props.onViewAll?.()}
-        hoverStyle={{ opacity: 0.7 }}
-        hitSlop={
-          props.phone ? { top: 12, bottom: 12, left: 8, right: 8 } : undefined
-        }
-        style={{ flexShrink: 0, cursor: "pointer" }}
-      >
-        <Label variant="small">{uiText("artifactsViewAll")}</Label>
-      </View>
-    </View>
-  );
 }
 
 /** Every artifact of a group: search, filter, sort and pages over the list the host sent. */

@@ -13,7 +13,9 @@ import {
   taskDay,
   taskTime,
 } from "./facts";
+import { ownerLine } from "./creator";
 import { progressColor, SubtreeGlyph, TaskGlyph, tones } from "./status";
+import { UsageLine } from "./usage";
 
 export function BoardCard(props: {
   task: BoardTaskView;
@@ -372,15 +374,19 @@ export function BoardCard(props: {
             }}
           >
             <Label variant="small" tone="faint" lines={1}>
-              {host.agent(
-                props.task.assigneeAgentId ?? props.task.createdBy.agentId,
-              )?.name ?? ""}
+              {ownerLine(props.task, host.agent)}
             </Label>
             <Label variant="small" tone="faint" lines={1}>
               {footer()}
             </Label>
           </View>
         </If>
+        <UsageLine
+          task={props.task}
+          model={!tablet()}
+          rate
+          style={{ justifyContent: "space-between" }}
+        />
       </View>
     </View>
   );

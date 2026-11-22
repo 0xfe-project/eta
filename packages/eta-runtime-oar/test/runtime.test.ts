@@ -1087,6 +1087,120 @@ describe("a session on an external runtime", () => {
     await manager.closeAll();
   });
 
+  it("ends a run whose prompt the runtime handled without a turn", async () => {
+    const { prompts, say, patch } = handDriven();
+    const { manager } = setup(() => undefined, { patch });
+    const managed = await manager.create({ cwd: "/work", runtime: "claude" });
+    const running = run(managed, "/handled");
+    await tick();
+    // A Pi extension's input handler took it: no turn starts, and none ends.
+    say({
+      kind: "input_handled",
+      requestId: "request-1",
+      inputId: prompts[0]!.id,
+    });
+    expect((await running).status).toBe("completed");
+    await manager.closeAll();
+  });
+
+  it("leaves a drop named only by its request alone", async () => {
+    const { prompts, steers, say, patch } = handDriven();
+    const { manager } = setup(() => undefined, { patch });
+    const managed = await manager.create({ cwd: "/work", runtime: "claude" });
+    const running = run(managed, "start");
+    await tick();
+    managed.session.kernel.steer("and this");
+    await tick();
+    expect(steers).toHaveLength(1);
+    say({
+      kind: "input_dropped",
+      requestId: "someone-else",
+      reason: "turn_interrupted",
+    });
+    say({
+      kind: "turn_ended",
+      outcome: { kind: "completed" },
+      inputIds: [prompts[0]!.id, steers[0]!.id],
+    });
+    expect((await running).status).toBe("completed");
+    expect(prompts).toHaveLength(1);
+    await manager.closeAll();
+  });
+
+  it("resumes a conversation the runtime lost under its process, and prompts it again", async () => {
+    const { prompts, say, patch } = handDriven();
+    let lost = true;
+    const { manager, opened } = setup(() => undefined, {
+      patch: (session) => {
+        const base = patch();
+        return {
+          ...base,
+          prompt: async (input, options) => {
+            if (!lost) return await base.prompt!(input, options);
+            lost = false;
+            return {
+              kind: "rejected",
+              code: "session_not_found",
+              reason: "thread not found",
+            } as never;
+          },
+          id: session.id,
+        };
+      },
+    });
+    const managed = await manager.create({ cwd: "/work", runtime: "claude" });
+    const running = run(managed, "start");
+    await tick(60);
+    expect(opened).toHaveLength(2);
+    expect(opened[1]!.options.resume).toBe(opened[0]!.session.id);
+    expect(prompts.map((prompt) => prompt.input)).toEqual(["start"]);
+    say({ kind: "turn_ended", outcome: { kind: "completed" } });
+    expect((await running).status).toBe("completed");
+    await manager.closeAll();
+  });
+
+  it("does not take a compaction's own turn for one the runtime began", async () => {
+    const { prompts, say, patch } = handDriven();
+    const { manager } = setup(() => undefined, {
+      manualCompaction: SUPPORTED,
+      patch: (session) => ({
+        ...patch(),
+        // Claude Code's /compact, as oar 0.128 reports it: a turn of its own, active, then ended.
+        compact: async () => {
+          say({ kind: "turn_active", sessionId: session.id, seq: 50 });
+          await tick();
+          say({
+            kind: "compaction_ended",
+            sessionId: session.id,
+            seq: 51,
+            outcome: "completed",
+          });
+          say({
+            kind: "turn_ended",
+            sessionId: session.id,
+            seq: 52,
+            outcome: { kind: "completed" },
+          });
+          return outcome({ kind: "completed" });
+        },
+      }),
+    });
+    const managed = await manager.create({ cwd: "/work", runtime: "claude" });
+    const first = run(managed, "before");
+    await tick();
+    say({ kind: "turn_ended", outcome: { kind: "completed" } });
+    expect((await first).status).toBe("completed");
+    expect((await manager.compactRuntime(managed)).outcome).toBe("completed");
+    await tick();
+    expect(managed.session.runner.running).toBe(false);
+    const after = run(managed, "after");
+    await tick();
+    expect(prompts.map((prompt) => prompt.input)).toEqual(["before", "after"]);
+    say({ kind: "turn_ended", outcome: { kind: "completed" } });
+    expect((await after).status).toBe("completed");
+    await manager.closeAll();
+  });
+
   it("aborts the runtime's turn", async () => {
     const { manager } = setup(
       async (turn) =>

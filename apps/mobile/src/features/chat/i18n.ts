@@ -147,6 +147,7 @@ export const i18n = {
       "确认后创建任务，由提出它的智能体在项目目录里执行。",
     "chat.draft.submit": "确认并开始",
     "chat.draft.waitingBacklog": "积压 · 待确认",
+    "chat.draft.discarded": "已丢弃",
     "chat.draft.subtitleBacklog":
       "编辑内容后确认，任务放入积压，不会立即执行。",
     "chat.draft.backlogHint":
@@ -330,6 +331,7 @@ export const i18n = {
       "Confirming creates the task; the agent that proposed it works in the project's directory.",
     "chat.draft.submit": "Confirm and start",
     "chat.draft.waitingBacklog": "Backlog · to confirm",
+    "chat.draft.discarded": "Discarded",
     "chat.draft.subtitleBacklog":
       "Edit it and confirm; it goes to the backlog and does not run yet.",
     "chat.draft.backlogHint":

@@ -97,7 +97,7 @@ export function ArtifactRow(props: {
     <View
       style={{
         position: "relative",
-        borderBottomWidth: list() ? 1 : 0,
+        borderBottomWidth: 1,
         borderColor: c().border,
       }}
       hoverStyle={{ backgroundColor: c().selected }}
@@ -121,8 +121,7 @@ export function ArtifactRow(props: {
           gap: list() ? 10 : 8,
           minHeight: props.phone ? 44 : undefined,
           paddingHorizontal: list() ? 10 : 12,
-          paddingTop: list() ? 10 : 2,
-          paddingBottom: 10,
+          paddingVertical: list() ? 10 : 8,
           pointerEvents: "box-none",
         }}
       >

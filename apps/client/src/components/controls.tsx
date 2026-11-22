@@ -29,6 +29,8 @@ import {
 
 export function Button(props: {
   label: string;
+  /** What a screen reader says when the label alone is ambiguous; `label` by default. */
+  accessibilityLabel?: string;
   controlRef?: (node: ViewRef) => void;
   icon?: IconName;
   end?: IconName;
@@ -69,7 +71,7 @@ export function Button(props: {
         props.controlRef?.(node);
       }}
       role="button"
-      accessibilityLabel={props.label}
+      accessibilityLabel={props.accessibilityLabel ?? props.label}
       accessibilityState={{
         disabled: props.disabled ?? false,
         selected: props.selected,
@@ -221,6 +223,11 @@ export function Field(
         borderWidth: 1,
         borderColor: color().border,
         borderRadius: 0,
+        // A multiline field scrolls its own text, but nsh's layout still counts
+        // all of that text in the content size of the `Scroll` around it, so a
+        // long value made the page scroll on into blank space. Clipping the
+        // field keeps its text out of that size.
+        ...(props.multiline ? { overflow: "hidden" as const } : {}),
         ...props.style,
       }}
     />
@@ -239,6 +246,8 @@ export function ActionMenu(props: {
   valueTone?: keyof typeof light;
   truncateValue?: boolean;
   triggerStyle?: ViewStyle;
+  /** The trigger's hover, for a trigger on a row whose own hover is the default one. */
+  triggerHoverStyle?: ViewStyle;
   /** The size of the "more" glyph of a menu without a value. */
   iconSize?: number;
   /** As a sheet: a title row with a close button under the grabber. */
@@ -303,7 +312,11 @@ export function ActionMenu(props: {
           accessibilityLabel={props.label}
           // A finger's tap area, without changing the 30pt trigger.
           hitSlop={touchScreen ? 7 : undefined}
-          hoverStyle={canHover ? { backgroundColor: c().selected } : undefined}
+          hoverStyle={
+            canHover
+              ? (props.triggerHoverStyle ?? { backgroundColor: c().selected })
+              : undefined
+          }
           style={{
             ...row,
             justifyContent: props.value ? "space-between" : "center",

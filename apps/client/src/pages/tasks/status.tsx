@@ -3,6 +3,7 @@ import type { ViewRef } from "nsh";
 import { Image, View } from "nsh";
 import { Caption, colors, focusRing, Icon, Label, row } from "../../components";
 import { uiText } from "../../i18n";
+import { UsageLine } from "./usage";
 
 export const statusKeys = {
   backlog: "backlog",
@@ -376,17 +377,34 @@ export function TaskSummary(props: {
           <If
             when={subtasks().length}
             else={
-              <Label
-                variant="small"
-                tone="muted"
-                style={{ paddingVertical: 8, paddingHorizontal: 10 }}
+              <View
+                style={{
+                  ...row,
+                  paddingVertical: 8,
+                  paddingHorizontal: 10,
+                  gap: 12,
+                  justifyContent: "space-between",
+                }}
               >
-                {runText(props.task)}
-              </Label>
+                <Label variant="small" tone="muted" style={{ flexShrink: 0 }}>
+                  {runText(props.task)}
+                </Label>
+                <UsageLine
+                  task={props.task}
+                  model={!props.phone}
+                  rate
+                  tone="mutedInk"
+                />
+              </View>
             }
           >
             <View style={{ paddingVertical: 8, paddingHorizontal: 10, gap: 6 }}>
-              <SubtaskSegments subtasks={subtasks()} width={44} gap={4} />
+              <View
+                style={{ ...row, gap: 12, justifyContent: "space-between" }}
+              >
+                <SubtaskSegments subtasks={subtasks()} width={44} gap={4} />
+                <UsageLine task={props.task} tone="mutedInk" />
+              </View>
               <If when={plan()}>
                 <Label variant="caption" tone="muted">
                   {plan()}

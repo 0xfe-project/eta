@@ -122,6 +122,7 @@ export default defineConfig(({ mode }) => {
         "/preview/": hostOrigin,
         "/share/": hostOrigin,
         "/artifacts/": hostOrigin,
+        "/attachments/": hostOrigin,
       },
     },
     preview: {

@@ -350,6 +350,7 @@ describe("the setting", () => {
       archiveAfterDays: 7,
       reactToResults: false,
       autoAnswerAsks: false,
+      draftTimeout: { enabled: false, minutes: 10, action: "discard" },
     });
     expect(
       await r.w.client.call("tasks", "setSettings", { archiveAfterDays: 30 }),
@@ -358,6 +359,7 @@ describe("the setting", () => {
         archiveAfterDays: 30,
         reactToResults: false,
         autoAnswerAsks: false,
+        draftTimeout: { enabled: false, minutes: 10, action: "discard" },
       },
     });
     expect(
@@ -367,6 +369,7 @@ describe("the setting", () => {
         archiveAfterDays: null,
         reactToResults: false,
         autoAnswerAsks: false,
+        draftTimeout: { enabled: false, minutes: 10, action: "discard" },
       },
     });
     await expect(

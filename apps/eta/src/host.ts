@@ -112,8 +112,9 @@ export interface HostOptions {
   /** Whether this host starts El Capitan. Tests that are not about Captain leave it off. */
   captain?: boolean;
   /**
-   * The external agent runtimes (Claude Code, Codex, OpenCode, Pi) agents may run on: oar's, on
-   * this machine, by default. A test hands in scripted ones; `false` runs none.
+   * The external agent runtimes (Claude Code, Codex, OpenCode, Pi, Grok Build)
+   * agents may run on: oar's, on this machine, by default. A test hands in scripted ones; `false`
+   * runs none.
    */
   runtimes?: ListedRuntimes | false;
   /**

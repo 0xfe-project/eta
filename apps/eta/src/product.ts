@@ -57,7 +57,10 @@ import { CaptainService } from "./captain/service";
 import { CaptainStore } from "./captain/store";
 import { CaptainSupervisor } from "./captain/supervisor";
 import { captainSessionTools } from "./captain/tools";
-import { AttachmentStore } from "./conversations/attachments";
+import {
+  AttachmentStore,
+  createAttachmentRoutes,
+} from "./conversations/attachments";
 import {
   combineRunHooks,
   Engine,
@@ -118,6 +121,7 @@ import { boardSettings, TaskArchiver } from "./tasks/archiver";
 import { TaskAsks } from "./tasks/asks";
 import { TaskBoard } from "./tasks/board";
 import { TaskCards } from "./tasks/cards";
+import { TaskDraftExpirer } from "./tasks/draft-timeout";
 import { tasksPlugin } from "./tasks/plugin";
 import { TaskRunner } from "./tasks/runner";
 import { TaskRunStore } from "./tasks/runs";
@@ -166,6 +170,7 @@ export interface Product {
   readonly board: TaskBoard;
   /** What puts quiet finished tasks away; `sweep()` for a test whose timer is off. */
   readonly archiver: TaskArchiver;
+  readonly draftExpirer: TaskDraftExpirer;
   /** The links to other machines. */
   readonly hub: MachineHub;
   /** El Capitan's product service and its supervisor. */
@@ -778,6 +783,14 @@ export function createProduct(options: {
     warn,
   });
   archiver.start();
+  // Drafts nobody answered are settled as the user's setting says, looked at every half minute.
+  const draftExpirer = new TaskDraftExpirer({
+    board,
+    settings: taskSettings,
+    timer: options.routines?.timer ?? true,
+    warn,
+  });
+  draftExpirer.start();
 
   const limits = { ...DEFAULT_LIMITS, ...options.artifactLimits };
   const artifactsRoot = join(dataDir, "artifacts");
@@ -790,6 +803,7 @@ export function createProduct(options: {
     changed: () => wire?.pushNow("artifacts"),
   });
   const artifactRoutes = createArtifactRoutes(artifacts);
+  const attachmentRoutes = createAttachmentRoutes(attachments);
 
   const answerCaptainInbox: Parameters<
     typeof captainSessionTools
@@ -964,6 +978,7 @@ export function createProduct(options: {
     engine,
     board,
     archiver,
+    draftExpirer,
     hub,
     captain,
     captainSupervisor,
@@ -980,12 +995,14 @@ export function createProduct(options: {
       (await hub.route(request)) ??
       (await mcp.route(request)) ??
       (await artifactRoutes(request)) ??
+      (await attachmentRoutes(request)) ??
       upgradeRoutes(request, dataDir),
     remote: router,
     endpoints: [hub.endpoint],
     close: async () => {
       // The runs stop first: they work through the links and the session host.
       archiver.stop();
+      draftExpirer.stop();
       captainSupervisor.stop();
       await taskRunner.detach();
       hub.close();
@@ -1181,7 +1198,10 @@ export function createProduct(options: {
             usage: taskUsage,
             workspaceFor: taskWorkspaceFor,
             settings: taskSettings,
-            settingsChanged: () => void archiver.sweep(),
+            settingsChanged: () => {
+              archiver.sweep();
+              draftExpirer.sweep();
+            },
           },
           applied("tasks"),
         ),

@@ -47,7 +47,6 @@ import {
   defaultAddress,
   Host,
 } from "./src/services/host";
-import { isHostRestart } from "./src/services/upgrade-watch";
 
 const connectKey = "eta.host";
 
@@ -252,16 +251,13 @@ function App() {
                       }}
                     />
                   </If>
-                  <If
-                    when={
-                      !forcedConnect() &&
-                      (isHostRestart(host.upgrade()) ||
-                        (host.upgrade()?.state === "running" &&
-                          host.upgradeUnreachable() &&
-                          host.state().status !== "open"))
-                    }
-                  >
-                    <HostRestartScreen />
+                  <If when={!forcedConnect()}>
+                    <HostRestartScreen
+                      onConnect={() => {
+                        forcedConnect.set(true);
+                        host.start(null);
+                      }}
+                    />
                   </If>
                   <If
                     when={

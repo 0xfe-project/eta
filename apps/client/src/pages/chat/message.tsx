@@ -15,7 +15,7 @@ import {
   runFromOf,
   savedSteps,
 } from "@eta/client-contracts";
-import { effect, signal, View } from "nsh";
+import { computed, effect, signal, View } from "nsh";
 import { Popover } from "nsh/base";
 import {
   Button,
@@ -28,8 +28,14 @@ import {
   row,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
+import { Lightbox } from "../../components/picture-viewer";
 import { uiText } from "../../i18n";
 import { clock, follow, useHost } from "../../services/host";
+import {
+  fileSize,
+  isPicture,
+  useAttachmentPictures,
+} from "../../services/pictures";
 import { subtasksOf, TaskSummary } from "../tasks/status";
 import { Proposal, Question } from "./approvals";
 import { ArtifactRow } from "./artifacts/row";
@@ -37,6 +43,7 @@ import { CaptainReview, reviewItemsOf } from "./captain-review";
 import { cardOpen, setCardOpen } from "./card-folds";
 import { activeReply } from "./member-status";
 import { messageTime } from "./message-time";
+import { PictureChip } from "./picture-chip";
 import { ProcessStep, ProcessWindow } from "./process-step";
 import { MemberRun } from "./run/member-run";
 import { RunPanel } from "./run/run-panel";
@@ -180,6 +187,19 @@ export function Message(props: {
     const detail = code === "restart" || !item().text ? "" : ` ${item().text}`;
     return `${uiText(reason)}${detail}`;
   };
+  const discarded = () => item().data.discarded === true;
+  const busy = signal(false);
+  async function discard() {
+    if (busy()) return;
+    busy.set(true);
+    await host.action(() =>
+      host.call("tasks", "discardDraft", {
+        conversationId: item().conversationId,
+        messageId: item().id,
+      }),
+    );
+    busy.set(false);
+  }
   const card = () =>
     item().kind === "task_card" || item().kind === "task_draft";
   // A draft is one folded line from the moment it exists; a card, which is here because the reader
@@ -233,12 +253,8 @@ export function Message(props: {
                 </View>
               )}
             </Each>
-            <Each of={attached()} key={(file) => file.id}>
-              {(file) => (
-                <Label>
-                  {`[${file().name} · ${(file().size / 1024).toFixed(1)} KB]`}
-                </Label>
-              )}
+            <Each of={[item().id]}>
+              {() => <MessageAttachments files={attached} />}
             </Each>
           </View>
           <View style={{ ...row, gap: 8 }}>
@@ -377,29 +393,53 @@ export function Message(props: {
               >
                 {draftTitle(item())}
               </Label>
-              <View
-                style={{
-                  flexShrink: 0,
-                  paddingHorizontal: 5,
-                  borderWidth: 1,
-                  borderColor: c().warning,
-                }}
+              <If
+                when={!discarded()}
+                else={
+                  <View
+                    style={{
+                      flexShrink: 0,
+                      paddingHorizontal: 5,
+                      borderWidth: 1,
+                      borderColor: c().border,
+                    }}
+                  >
+                    <Label variant="caption" tone="faint">
+                      {uiText("draftDiscarded")}
+                    </Label>
+                  </View>
+                }
               >
-                <Label variant="caption" tone="warningInk">
-                  {uiText("draftNeedsConfirming")}
-                </Label>
-              </View>
-              {/* The draft's one action, as in the design and apps/web: it
-               * opens the form, and only the form's own confirm creates the
-               * task. */}
-              <Button
-                label={uiText("editAndConfirm")}
-                size={22}
-                controlRef={(node) => {
-                  action = node;
-                }}
-                onPress={() => props.onReadDraft(item())}
-              />
+                <View
+                  style={{
+                    flexShrink: 0,
+                    paddingHorizontal: 5,
+                    borderWidth: 1,
+                    borderColor: c().warning,
+                  }}
+                >
+                  <Label variant="caption" tone="warningInk">
+                    {uiText("draftNeedsConfirming")}
+                  </Label>
+                </View>
+                {/* The draft's actions, as in the design and apps/web: one
+                 * opens the form, and only the form's own confirm creates the
+                 * task; the other discards the draft, as the proposals' does. */}
+                <Button
+                  label={uiText("editAndConfirm")}
+                  size={22}
+                  controlRef={(node) => {
+                    action = node;
+                  }}
+                  onPress={() => props.onReadDraft(item())}
+                />
+                <Button
+                  label={uiText("discard")}
+                  size={22}
+                  disabled={busy() || host.state().status !== "open"}
+                  onPress={() => void discard()}
+                />
+              </If>
             </View>
             <If when={cardIsOpen() && draftDescription()}>
               <View
@@ -649,5 +689,45 @@ export function Message(props: {
         </RunPanel>
       </If>
     </View>
+  );
+}
+
+/**
+ * A sent message's attachments, one "[name · size]" line each. A picture's line shows the picture
+ * on hover and opens it over the window; the lightbox walks through the message's pictures.
+ */
+function MessageAttachments(props: { files: () => AttachmentView[] }) {
+  const pictureOf = useAttachmentPictures();
+  const open = signal<number>();
+  const pictures = computed(() =>
+    props.files().filter(isPicture).map(pictureOf),
+  );
+  return (
+    <>
+      <Each of={props.files()} key={(file) => file.id}>
+        {(file) => (
+          <If
+            when={isPicture(file())}
+            else={
+              <Label>{`[${file().name} · ${fileSize(file().size)}]`}</Label>
+            }
+          >
+            <PictureChip
+              picture={pictureOf(file())}
+              name={file().name}
+              size={fileSize(file().size)}
+              text={`[${file().name} · ${fileSize(file().size)}]`}
+              style={{ alignSelf: "flex-start", maxWidth: "100%" }}
+              onOpen={() =>
+                open.set(
+                  pictures().findIndex((picture) => picture.key === file().id),
+                )
+              }
+            />
+          </If>
+        )}
+      </Each>
+      <Lightbox pictures={pictures} index={open} onIndex={open.set} />
+    </>
   );
 }

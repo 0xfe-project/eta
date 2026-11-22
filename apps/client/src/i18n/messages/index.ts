@@ -13,6 +13,7 @@ import { settingsMessages } from "./settings";
 import { skillsMessages } from "./skills";
 import { tasksMessages } from "./tasks";
 import { updatesMessages } from "./updates";
+import { usageMessages } from "./usage";
 
 export const clientMessages = {
   ...artifactsMessages,
@@ -30,4 +31,5 @@ export const clientMessages = {
   ...skillsMessages,
   ...tasksMessages,
   ...updatesMessages,
+  ...usageMessages,
 };

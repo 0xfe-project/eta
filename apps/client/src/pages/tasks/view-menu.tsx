@@ -1,0 +1,175 @@
+import { signal, View } from "nsh";
+import {
+  Button,
+  Caption,
+  colors,
+  grow,
+  Icon,
+  Label,
+  row,
+} from "../../components";
+import { canHover, inSheet, MenuFrame, MenuRow } from "../../components/menu";
+import { uiText } from "../../i18n";
+import { setUsageShown, usageShown } from "./usage";
+
+/**
+ * The Tasks page's View menu: how the board draws its tasks, for now whether cards and rows say
+ * their token usage. On desktop and tablet a toolbar button with a popup; on a phone a button at
+ * the top right with a sheet at the bottom.
+ */
+export function ViewMenu(props: { phone?: boolean; tablet?: boolean }) {
+  const c = colors();
+  const open = signal(false);
+  const on = () => usageShown();
+  return (
+    <MenuFrame
+      align="end"
+      margin={8}
+      open={open()}
+      onOpenChange={open.set}
+      popupStyle={{
+        width: 260,
+        paddingVertical: 4,
+        borderWidth: 1,
+        borderColor: c().strong,
+        backgroundColor: c().canvas,
+      }}
+      sheetHeader={
+        <View
+          style={{
+            ...row,
+            height: 44,
+            paddingLeft: 16,
+            paddingRight: 8,
+            borderBottomWidth: 1,
+            borderColor: c().border,
+          }}
+        >
+          <Label weight={600} lines={1} style={grow}>
+            {uiText("usageView")}
+          </Label>
+          <Button
+            label={uiText("close")}
+            icon="close"
+            iconOnly
+            iconSize={16}
+            tone="ghost"
+            size={32}
+            onPress={() => open.set(false)}
+          />
+        </View>
+      }
+      trigger={
+        <If
+          when={props.phone}
+          else={
+            <View
+              accessibilityLabel={uiText("usageView")}
+              hoverStyle={
+                canHover ? { backgroundColor: c().selected } : undefined
+              }
+              expandedStyle={{ backgroundColor: c().selected }}
+              style={{
+                ...row,
+                height: 25,
+                paddingHorizontal: props.tablet ? 6 : 8,
+                gap: 5,
+                flexShrink: 0,
+                cursor: "pointer",
+                backgroundColor: open() ? c().selected : undefined,
+              }}
+            >
+              <Icon name="sliders" size={12} tone={open() ? "ink" : "muted"} />
+              <Label
+                variant="small"
+                weight={props.tablet ? 500 : 400}
+                tone={open() ? "ink" : "muted"}
+              >
+                {uiText("usageView")}
+              </Label>
+            </View>
+          }
+        >
+          <View
+            accessibilityLabel={uiText("usageView")}
+            style={{
+              width: 40,
+              height: 40,
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+            }}
+          >
+            <Icon name="sliders" size={20} />
+          </View>
+        </If>
+      }
+    >
+      <If when={!props.phone}>
+        <View
+          style={{ paddingTop: 6, paddingBottom: 2, paddingHorizontal: 10 }}
+        >
+          <Caption text={uiText("usageView")} />
+        </View>
+      </If>
+      <UsageRow phone={props.phone} on={on()} />
+    </MenuFrame>
+  );
+}
+
+/** The one row: what it does, under its name, and a switch that says whether it is on. */
+function UsageRow(props: { phone?: boolean; on: boolean }) {
+  const c = colors();
+  const sheet = () => inSheet() || !!props.phone;
+  return (
+    <MenuRow
+      role="menuitemradio"
+      checked={props.on}
+      label={uiText("usageShowTokens")}
+      description={uiText(
+        props.phone ? "usageShowTokensPhoneHint" : "usageShowTokensHint",
+      )}
+      style={{
+        ...row,
+        alignItems: "flex-start",
+        paddingVertical: sheet() ? 14 : 6,
+        paddingHorizontal: sheet() ? 16 : 10,
+        gap: 12,
+      }}
+      onSelect={() => setUsageShown(!props.on)}
+    >
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Label variant={sheet() ? "body" : "small"}>
+          {uiText("usageShowTokens")}
+        </Label>
+        <Label variant={sheet() ? "small" : "caption"} tone="muted">
+          {uiText(
+            props.phone ? "usageShowTokensPhoneHint" : "usageShowTokensHint",
+          )}
+        </Label>
+      </View>
+      <View
+        style={{
+          ...row,
+          marginTop: 2,
+          width: 28,
+          height: 16,
+          paddingHorizontal: 2,
+          flexShrink: 0,
+          justifyContent: props.on ? "flex-end" : "flex-start",
+          borderWidth: 1,
+          borderColor: props.on ? c().button : c().strong,
+          backgroundColor: props.on ? c().button : c().canvas,
+        }}
+      >
+        <View
+          style={{
+            width: 10,
+            height: 10,
+            backgroundColor: props.on ? c().buttonInk : c().muted,
+          }}
+        />
+      </View>
+    </MenuRow>
+  );
+}

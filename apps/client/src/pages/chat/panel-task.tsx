@@ -1,4 +1,4 @@
-import type { TaskDependencyView } from "@eta/client-contracts";
+import type { ArtifactView, TaskDependencyView } from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
 import type { Layout } from "../../components";
 import { Scroll, signal, View } from "nsh";
@@ -21,6 +21,7 @@ import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "../tasks/activity";
+import { actorLabel, CreatorChip } from "../tasks/creator";
 import { activeTaskRun } from "../tasks/run-log";
 import { statusName, TaskGlyph } from "../tasks/status";
 import { StatusSelect } from "../tasks/status-select";
@@ -41,6 +42,8 @@ export function PanelTask(props: {
   layout: Layout;
   onClose: () => void;
   onTask: (id: string) => void;
+  /** The conversation's preview, which the timeline's artifacts open in. */
+  onArtifact: (artifact: ArtifactView, version?: number) => void;
 }) {
   const c = colors();
   const type = textFaces();
@@ -62,10 +65,6 @@ export function PanelTask(props: {
           const last = item().runs.at(-1);
           return last && activeTaskRun(last) ? last : undefined;
         };
-        const author = () =>
-          item().createdBy.kind === "agent"
-            ? host.agent(item().createdBy.agentId)
-            : undefined;
         const goal = () =>
           fullGoal() || item().description.length <= goalPreview
             ? item().description
@@ -142,6 +141,7 @@ export function PanelTask(props: {
               >
                 {item().title}
               </Label>
+              <CreatorChip creator={item().createdBy} />
               <Edges
                 label={uiText("tasksBefore", {
                   count: item().dependsOn?.length ?? 0,
@@ -167,11 +167,11 @@ export function PanelTask(props: {
                   paddingHorizontal: inset,
                 }}
               >
-                <AgentFace id={author()?.id ?? "user"} size={20} />
+                <AgentFace id={item().createdBy.agentId ?? "user"} size={20} />
                 <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
                   <View style={{ ...row, gap: 8 }}>
                     <Label variant="small" weight={600}>
-                      {author()?.name ?? uiText("you")}
+                      {actorLabel(item().createdBy, host.agent)}
                     </Label>
                     <Label variant="caption" tone="muted">
                       {messageTime(item().createdAt, false)}
@@ -223,6 +223,8 @@ export function PanelTask(props: {
                   createdBy={item().createdBy}
                   gap={15}
                   onLog={(entry) => log.set(entry)}
+                  onTask={props.onTask}
+                  onArtifact={props.onArtifact}
                 />
               </View>
               {/* A thread opens on its latest reply, next to the box to answer it, as on the web. */}

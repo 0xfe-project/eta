@@ -80,7 +80,7 @@ export function ConversationPanel(props: {
   onCloseTask: () => void;
   onCloseDrawer: () => void;
   onRoutines: (id?: string) => void;
-  onArtifact: (artifact: ArtifactView) => void;
+  onArtifact: (artifact: ArtifactView, version?: number) => void;
   reloadArtifacts: () => void;
 }) {
   const host = useHost();
@@ -189,12 +189,18 @@ export function ConversationPanel(props: {
         </View>
         <If when={props.taskId}>
           {(id) => (
-            <PanelTask
-              id={id()}
-              layout={props.layout}
-              onClose={props.onCloseTask}
-              onTask={props.onRelatedTask}
-            />
+            // Keyed by the task: a related task opened from this one is a new detail, not this one renamed.
+            <Each of={[id()]}>
+              {(task) => (
+                <PanelTask
+                  id={task()}
+                  layout={props.layout}
+                  onClose={props.onCloseTask}
+                  onTask={props.onRelatedTask}
+                  onArtifact={props.onArtifact}
+                />
+              )}
+            </Each>
           )}
         </If>
         <If
@@ -268,7 +274,11 @@ export function ConversationPanel(props: {
                       </View>
                     </If>
                     <If when={panel() === "Context" && !props.captain}>
-                      <ContextTasks tasks={tasks()} onTask={props.onTask} />
+                      <ContextTasks
+                        tasks={tasks()}
+                        onTask={props.onTask}
+                        onViewAll={() => panel.set("Tasks")}
+                      />
                     </If>
                     <If when={panel() === "Tasks"}>
                       <TasksTab

@@ -1,18 +1,14 @@
 import type { RunImage } from "@eta/client-contracts";
+import type { ViewedPicture } from "../picture-viewer";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { useSessionImage } from "@/queries/sessions";
+import { Lightbox, PicturePreview } from "../picture-viewer";
 
 /**
  * The pictures a message carried (a screenshot a tool read back, an image the user attached), as
- * thumbnails. A thumbnail opens the picture over the whole window, where it is fitted to the
- * screen; clicking it there shows it at its own size, and the arrow keys walk through the rest.
+ * thumbnails. Resting on a thumbnail shows the picture larger beside it; clicking it opens the
+ * picture over the whole window (`Lightbox`).
  */
 export function ImageStrip({
   sessionId,
@@ -23,112 +19,34 @@ export function ImageStrip({
 }) {
   const { t: translateText } = useTranslation("chat");
   const [open, setOpen] = useState<number>();
+  const pictures = images.map(
+    (image): ViewedPicture => ({
+      key: `${image.entryId}:${image.index}`,
+      caption: sizeLabel(image),
+      view: <Picture sessionId={sessionId} image={image} />,
+    }),
+  );
   return (
     <>
       <div className="image-strip">
-        {images.map((image, index) => (
-          <button
-            key={`${image.entryId}:${image.index}`}
-            type="button"
-            className="image-thumb"
-            aria-label={translateText("images.open", {
-              index: index + 1,
-              count: images.length,
-            })}
-            onClick={() => setOpen(index)}
-          >
-            <Picture sessionId={sessionId} image={image} />
-          </button>
+        {pictures.map((picture, index) => (
+          <PicturePreview key={picture.key} picture={picture}>
+            <button
+              type="button"
+              className="image-thumb"
+              aria-label={translateText("images.open", {
+                index: index + 1,
+                count: images.length,
+              })}
+              onClick={() => setOpen(index)}
+            >
+              {picture.view}
+            </button>
+          </PicturePreview>
         ))}
       </div>
-      <Dialog
-        open={open !== undefined}
-        onOpenChange={(next) => {
-          if (!next) setOpen(undefined);
-        }}
-      >
-        {open === undefined ? null : (
-          <Lightbox
-            sessionId={sessionId}
-            images={images}
-            index={open}
-            onIndex={setOpen}
-          />
-        )}
-      </Dialog>
+      <Lightbox pictures={pictures} open={open} onOpen={setOpen} />
     </>
-  );
-}
-
-function Lightbox({
-  sessionId,
-  images,
-  index,
-  onIndex,
-}: {
-  sessionId: string | null | undefined;
-  images: readonly RunImage[];
-  index: number;
-  onIndex: (index: number) => void;
-}) {
-  const { t: translateText } = useTranslation("chat");
-  const [actual, setActual] = useState(false);
-  const image = images[index]!;
-  const step = (by: number) => {
-    const next = index + by;
-    if (next < 0 || next >= images.length) return;
-    setActual(false);
-    onIndex(next);
-  };
-  return (
-    <DialogContent
-      className="lightbox inset-0 h-dvh w-screen max-h-none max-w-none translate-x-0 translate-y-0 gap-0 p-0 sm:max-w-none"
-      onKeyDown={(event) => {
-        if (event.key === "ArrowRight") step(1);
-        else if (event.key === "ArrowLeft") step(-1);
-      }}
-    >
-      <DialogTitle className="sr-only">
-        {translateText("images.title", {
-          index: index + 1,
-          count: images.length,
-        })}
-      </DialogTitle>
-      <DialogDescription className="sr-only">
-        {translateText("images.hint")}
-      </DialogDescription>
-      <div
-        className="lightbox-stage"
-        data-actual={actual ? "true" : undefined}
-        onClick={() => setActual((was) => !was)}
-      >
-        <Picture sessionId={sessionId} image={image} />
-      </div>
-      <div className="lightbox-bar">
-        <span>
-          {images.length > 1 ? `${index + 1} / ${images.length} · ` : ""}
-          {sizeLabel(image)}
-        </span>
-        {images.length > 1 ? (
-          <span className="flex gap-3">
-            <button
-              type="button"
-              disabled={index === 0}
-              onClick={() => step(-1)}
-            >
-              {translateText("images.previous")}
-            </button>
-            <button
-              type="button"
-              disabled={index === images.length - 1}
-              onClick={() => step(1)}
-            >
-              {translateText("images.next")}
-            </button>
-          </span>
-        ) : null}
-      </div>
-    </DialogContent>
   );
 }
 

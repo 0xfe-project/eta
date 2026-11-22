@@ -12,7 +12,13 @@ import type {
 } from "@botiverse/oar";
 
 /** The runtimes eta offers, in the order a picker shows them. */
-export const RUNTIME_IDS = ["claude", "codex", "opencode", "pi"] as const;
+export const RUNTIME_IDS = [
+  "claude",
+  "codex",
+  "opencode",
+  "pi",
+  "grok",
+] as const;
 
 export type RuntimeId = (typeof RUNTIME_IDS)[number];
 
@@ -21,7 +27,14 @@ const LABELS: Record<RuntimeId, string> = {
   codex: "Codex",
   opencode: "OpenCode",
   pi: "Pi",
+  grok: "Grok Build",
 };
+
+/**
+ * The runtimes whose model listing answers signed out as well (Grok Build 1.0.89 lists its
+ * built-in models without an account): their own sign-in query says whether one can run.
+ */
+const LISTS_SIGNED_OUT: ReadonlySet<RuntimeId> = new Set(["grok"]);
 
 export function isRuntimeId(value: string): value is RuntimeId {
   return (RUNTIME_IDS as readonly string[]).includes(value);
@@ -196,7 +209,11 @@ export class RuntimeCatalog {
                     })),
                   }
                 : {
-                    kind: snapshot.kind,
+                    // oar's `unavailable` is an expired access token: a sign-in to renew, as said.
+                    kind:
+                      snapshot.kind === "unavailable"
+                        ? "reauth_required"
+                        : snapshot.kind,
                     ...(snapshot.reason === undefined
                       ? {}
                       : { reason: snapshot.reason }),
@@ -233,27 +250,42 @@ export class RuntimeCatalog {
       const runtime = this.#registry.require(id);
       const snapshot = await runtime.installation?.();
       if (snapshot === undefined || snapshot.kind !== "available") {
+        // Installed but not usable here (a version oar does not run, say): say why, not "missing".
+        const detail =
+          snapshot?.kind === "unsupported"
+            ? `cannot run here: ${snapshot.reason}`
+            : "is not installed";
         return {
-          info: { ...base, status: "missing", detail: "is not installed" },
+          info: { ...base, status: "missing", detail },
           installation: undefined,
           at,
         };
       }
       const version =
         snapshot.via === "executable" ? snapshot.version : undefined;
-      const listed = await runtime.listModels?.(snapshot, {
-        timeoutMs: this.#timeoutMs,
-      });
+      const options = { timeoutMs: this.#timeoutMs };
+      const [listed, signedOut] = await Promise.all([
+        runtime.listModels?.(snapshot, options),
+        // Asked apart only where the listing cannot tell; a sign-in it cannot read is no answer.
+        LISTS_SIGNED_OUT.has(id) && runtime.authStatus !== undefined
+          ? runtime.authStatus(snapshot, options).then(
+              (status) => status.kind === "logged_out",
+              () => false,
+            )
+          : false,
+      ]);
+      const unauthenticated = listed?.kind === "unauthenticated" || signedOut;
       const info: RuntimeInfo = {
         ...base,
-        status:
-          listed?.kind === "unauthenticated" ? "unauthenticated" : "available",
+        status: unauthenticated ? "unauthenticated" : "available",
         ...(version === undefined ? {} : { version }),
         ...(listed?.kind === "unauthenticated"
           ? { detail: listed.detail ?? "is not signed in" }
-          : listed?.kind === "unsupported"
-            ? { detail: listed.reason }
-            : {}),
+          : signedOut
+            ? { detail: "is not signed in" }
+            : listed?.kind === "unsupported"
+              ? { detail: listed.reason }
+              : {}),
         models:
           listed?.kind === "ok"
             ? listed.models

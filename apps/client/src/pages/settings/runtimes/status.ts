@@ -42,6 +42,7 @@ export function reasonTone(reason: RuntimeReason | undefined) {
 export const LOGIN_COMMANDS: Partial<Record<string, string>> = {
   claude: "claude",
   codex: "codex login",
+  grok: "grok login",
 };
 
 /**

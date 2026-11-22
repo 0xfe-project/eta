@@ -362,9 +362,14 @@ function systemText(context: Context, row: MessageView): string {
 
 function taskDraftText(context: Context, row: MessageView): string {
   const title = typeof row.data.title === "string" ? row.data.title : "";
-  // A draft that does not say (an older one) starts when confirmed, as they all did.
+  // Discarded by the user, it waits for nothing. A draft that does not say (an older one) starts
+  // when confirmed, as they all did.
   return context.t(
-    row.data.status === "backlog" ? "taskDraftBacklog" : "taskDraft",
+    row.data.discarded === true
+      ? "taskDraftDiscarded"
+      : row.data.status === "backlog"
+        ? "taskDraftBacklog"
+        : "taskDraft",
     { title },
   );
 }

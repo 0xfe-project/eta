@@ -40,3 +40,14 @@ test("dragging the sidebar's right edge right widens it, the panel's left edge l
   expect(draggedPaneWidth("panel", 400, 500)).toBe(320);
   expect(draggedPaneWidth("panel", 400, -500)).toBe(720);
 });
+
+test("the task page's rail is held to 240–480, 280 by default, and widens as its left edge is dragged left", () => {
+  expect(paneLimits.task.fallback).toBe(280);
+  expect(clampPaneWidth("task", 100)).toBe(240);
+  expect(clampPaneWidth("task", 9999)).toBe(480);
+  expect(clampPaneWidth("task", Number.NaN)).toBe(280);
+  expect(parsePaneWidth("task", "360")).toBe(360);
+  expect(draggedPaneWidth("task", 280, -60)).toBe(340);
+  expect(draggedPaneWidth("task", 280, 500)).toBe(240);
+  expect(draggedPaneWidth("task", 280, -500)).toBe(480);
+});

@@ -9,6 +9,7 @@ import { RuntimeHints } from "../runtimes/runtime-hints";
 import { reasonText, runtimeReason } from "../runtimes/status";
 import { WarningLine } from "../section";
 
+import { AvatarRow } from "./avatar";
 import { EditorRow, focusOnOpen } from "./editor-row";
 import { PersonaField } from "./instructions";
 import { MachineField } from "./machine-field";
@@ -52,6 +53,7 @@ export function AgentGeneral(props: {
     thinking,
     missingModel,
     noModels,
+    avatar,
   } = props.form;
   const goToModelServices = (
     variant: TextVariant,
@@ -131,6 +133,9 @@ export function AgentGeneral(props: {
           : undefined
       }
     >
+      <If when={avatar}>
+        <AvatarRow draw={avatar!} stacked={stacked()} phone={phoneEditor()} />
+      </If>
       <EditorRow
         label={uiText("name")}
         stack={stacked()}

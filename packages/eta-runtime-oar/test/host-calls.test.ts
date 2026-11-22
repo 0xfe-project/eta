@@ -108,7 +108,26 @@ function setup(runtime: RuntimeId) {
           block.type === "toolCall" ? [block.name] : [],
         ),
       );
-  return { see, calls, translator, codexCall, end, resultOf, callNames, ended };
+  /** The arguments a call is written with. */
+  const argsOf = (callId: string): unknown =>
+    pushed
+      .filter((entry): entry is Assistant => entry.role === "assistant")
+      .flatMap((message) => message.content)
+      .find(
+        (block): block is Extract<typeof block, { type: "toolCall" }> =>
+          block.type === "toolCall" && block.id === callId,
+      )?.arguments;
+  return {
+    see,
+    calls,
+    translator,
+    codexCall,
+    end,
+    resultOf,
+    callNames,
+    argsOf,
+    ended,
+  };
 }
 
 const published = (version: number) => ({
@@ -186,6 +205,99 @@ describe("the name of a host tool's call", () => {
     end("exec-1", "ok");
     end("exec-2", "ok");
     expect(callNames()).toEqual(["mcpToolCall", "mcpToolCall"]);
+  });
+
+  it("is the host's on grok, which calls every MCP tool through use_tool", () => {
+    const { see, calls, resultOf, callNames, argsOf, ended } = setup("grok");
+    const input = { title: "Page 1" };
+    answer(calls, "publish_artifact", input, "published", published(1));
+    // As Grok Build 1.0.89 reported it: the tool and its arguments inside use_tool's, the MCP
+    // answer wrapped in an `other` part.
+    see({
+      kind: "tool_call_started",
+      callId: "g1",
+      tool: "use_tool",
+      input: JSON.stringify({
+        tool_name: "eta__publish_artifact",
+        tool_input: input,
+      }),
+    });
+    see({
+      kind: "tool_call_input",
+      callId: "g1",
+      input: JSON.stringify({
+        variant: "UseTool",
+        tool_name: "eta__publish_artifact",
+        tool_input: input,
+      }),
+    });
+    see({
+      kind: "tool_call_ended",
+      callId: "g1",
+      content: [
+        {
+          type: "other",
+          value: {
+            type: "MCP",
+            tool_name: "publish_artifact",
+            server_name: "eta",
+            output: { OkayOutput: "published" },
+          },
+        },
+      ],
+      result: "ok",
+    });
+    expect(callNames()).toEqual(["publish_artifact"]);
+    expect(argsOf("g1")).toEqual(input);
+    const result = resultOf("g1");
+    expect(result.toolName).toBe("publish_artifact");
+    expect(result.content).toEqual([{ type: "text", text: "published" }]);
+    expect(result.details).toMatchObject(published(1));
+    expect(ended[0]!.toolName).toBe("publish_artifact");
+  });
+
+  it("is the name grok gave a plugin's tool through use_tool, its answer unwrapped", () => {
+    const { see, resultOf, callNames } = setup("grok");
+    for (const [callId, named] of [
+      ["p1", "docs__search"],
+      ["p2", "eta__not_served"],
+    ] as const) {
+      see({
+        kind: "tool_call_started",
+        callId,
+        tool: "use_tool",
+        input: JSON.stringify({ tool_name: named, tool_input: { q: 1 } }),
+      });
+      see({
+        kind: "tool_call_ended",
+        callId,
+        content: [
+          {
+            type: "other",
+            value: {
+              type: "MCP",
+              tool_name: named,
+              server_name: "docs",
+              output: { OkayOutput: "found" },
+            },
+          },
+        ],
+        result: "ok",
+      });
+    }
+    see({ kind: "tool_call_started", callId: "s1", tool: "search_tool" });
+    see({
+      kind: "tool_call_ended",
+      callId: "s1",
+      content: [{ type: "text", text: "listed" }],
+      result: "ok",
+    });
+    expect(callNames()).toEqual([
+      "docs__search",
+      "eta__not_served",
+      "search_tool",
+    ]);
+    expect(resultOf("p1").content).toEqual([{ type: "text", text: "found" }]);
   });
 
   it("does not read one runtime's spelling on another", () => {

@@ -184,6 +184,8 @@ export class TaskCards {
     conversationId: string;
     messageId: string;
     fields: ConfirmFields;
+    /** Set when the host confirms a draft nobody decided on; the task's first entry says so. */
+    auto?: "timeout" | undefined;
   }): {
     task: TaskRecord;
     message: MessageView;
@@ -208,6 +210,7 @@ export class TaskCards {
     }
 
     const draft = row.data as unknown as TaskDraftData;
+    if (draft.discarded) throw new Error("that draft was discarded");
     const title = (input.fields.title ?? draft.title).trim();
     if (title === "") throw new Error("a task needs a title");
     // Resolved again: a draft written before assignees were resolved may hold a name, and the
@@ -230,7 +233,10 @@ export class TaskCards {
           ?.projectId,
         workspaceMode: draft.workspace ?? "local",
         conversationId: input.conversationId,
-        origin: { draftId: row.id },
+        origin: {
+          draftId: row.id,
+          ...(input.auto === undefined ? {} : { auto: input.auto }),
+        },
       });
       // The card keeps the draft's place in the conversation, including the turn it belongs to.
       const message = timeline.retype(row.id, "task_card", {
@@ -249,6 +255,51 @@ export class TaskCards {
         parentId: draft.parentId,
       };
     })();
+  }
+
+  /**
+   * Discard a draft: the row stays where it is, marked, and no task is made. Only a draft that
+   * still waits is discarded; a confirmed or an already discarded one is refused, so confirming
+   * and discarding exclude each other.
+   */
+  discard(input: {
+    conversationId: string;
+    messageId: string;
+    /** Set when the host discards a draft nobody decided on, so the card does not say the user did. */
+    auto?: "timeout" | undefined;
+  }): MessageView {
+    const { timeline } = this.#deps;
+    const row = timeline.get(input.messageId);
+    if (
+      row === undefined ||
+      row.conversationId !== input.conversationId ||
+      (row.kind !== "task_draft" && row.kind !== "task_card")
+    )
+      throw new Error("no such task draft");
+    if (row.kind === "task_card")
+      throw new Error("that draft was already confirmed");
+    if ((row.data as unknown as TaskDraftData).discarded)
+      throw new Error("that draft was already discarded");
+    return timeline.setData(row.id, {
+      ...row.data,
+      discarded: true,
+      ...(input.auto === undefined ? {} : { autoHandled: input.auto }),
+    })!;
+  }
+
+  /** The drafts still waiting that were written at or before `cutoff`. */
+  pendingBefore(cutoff: number): MessageView[] {
+    return this.#deps.timeline.pendingDraftsBefore(cutoff);
+  }
+
+  /** Keep why the host could not confirm a draft on the draft; it stays pending. */
+  failAuto(messageId: string, error: string): MessageView | undefined {
+    const row = this.#deps.timeline.get(messageId);
+    if (row === undefined || row.kind !== "task_draft") return undefined;
+    return this.#deps.timeline.setData(row.id, {
+      ...row.data,
+      autoFailure: error,
+    });
   }
 
   /**
