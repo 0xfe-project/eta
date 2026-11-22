@@ -42,6 +42,17 @@ export class IconCache {
     return { status: row.status, mime: row.mime, bytes: row.data, expiresAt: row.expires_at };
   }
 
+  /** Like `get`, but writes nothing (not even the last-used time): for a read that must stay a pure read. */
+  peek(repo: string, ref: string, path: string): IconRow | undefined {
+    const row = this.#db
+      .query("SELECT status, mime, data, expires_at FROM plugin_icon WHERE repo = ? AND ref = ? AND path = ?")
+      .get(repo, ref, path) as
+      | { status: string; mime: string | null; data: Uint8Array | null; expires_at: number }
+      | null;
+    if (row === null || (row.status !== "hit" && row.status !== "miss")) return undefined;
+    return { status: row.status, mime: row.mime, bytes: row.data, expiresAt: row.expires_at };
+  }
+
   put(repo: string, ref: string, path: string, picture: { mime: string; bytes: Uint8Array } | null, expiresAt: number, now: number): void {
     const size = picture?.bytes.byteLength ?? 0;
     this.#db

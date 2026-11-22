@@ -330,6 +330,29 @@ export function pluginsPlugin(
             ),
           };
         }),
+        wire.handle("plugins", "logosCached", (call) => {
+          const { entries } = (call.args ?? {}) as { entries?: unknown };
+          if (!Array.isArray(entries)) throw new Error("plugins.logosCached needs entries");
+          const text = (value: unknown): string => (typeof value === "string" ? value : "");
+          const asked = entries.map((raw) => {
+            const one = (raw ?? {}) as Record<string, unknown>;
+            return {
+              repo: text(one.repo),
+              ref: text(one.ref) || "HEAD",
+              path: text(one.path),
+              homepage: text(one.homepage) || null,
+            };
+          });
+          return {
+            result: {
+              logos: logos.cached(asked).map((one) =>
+                one.status === "hit"
+                  ? { status: "hit", type: one.logo.type, data: one.logo.data }
+                  : { status: one.status },
+              ),
+            },
+          };
+        }),
         wire.handle("plugins", "recheck", async () => {
           await plugins.registry.refresh();
           await plugins.recheck();

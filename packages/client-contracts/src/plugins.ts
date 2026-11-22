@@ -249,6 +249,26 @@ export interface PluginTestResult {
   requiredHeader?: string;
 }
 
+/**
+ * What the host has kept for market entries, asked for many at once. Only memory and the database are
+ * read: nothing is fetched, so it answers at once. The answer has one item per entry asked, in order;
+ * at most PLUGIN_LOGOS_CACHED_MAX entries are looked at (the rest are "unknown"), and hits past about
+ * 2 MB of picture data are "unknown" too. Asked of a host without it, the call fails: treat all as unknown.
+ */
+export interface PluginLogosCachedArgs {
+  entries: { repo: string; ref: string; path: string; homepage?: string | null }[];
+}
+export const PLUGIN_LOGOS_CACHED_MAX = 200;
+export type PluginLogoCached =
+  | { status: "hit"; type: string; data: string }
+  /** Known: no picture (a letter is right). */
+  | { status: "miss" }
+  /** Not known: ask `logo` for it. */
+  | { status: "unknown" };
+export interface PluginLogosCachedResult {
+  logos: PluginLogoCached[];
+}
+
 /** A logo the host found: the picture, base64, and its type; null when there is none. */
 export type PluginLogoResult = { type: string; data: string } | null;
 export interface PluginResults {

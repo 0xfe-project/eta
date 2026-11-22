@@ -187,6 +187,13 @@ export function siteOf(server: string): string[] {
   }
 }
 
+/** Entries `cached` answers per call; the ones after it are answered "unknown" without a look. */
+export const MAX_CACHED_LOGOS = 200;
+/** The most picture data (base64) one `cached` answer carries; hits past it are answered "unknown". */
+export const MAX_CACHED_BYTES = 2 * 1024 * 1024;
+
+export type CachedLogo = { status: "hit"; logo: Logo } | { status: "miss" } | { status: "unknown" };
+
 export class Logos {
   readonly #options: LogoOptions;
   readonly #kept = new Map<string, { at: number; logo: Logo | null }>();
@@ -329,6 +336,38 @@ export class Logos {
       now,
     );
     return logo;
+  }
+
+  /**
+   * What is kept for entries, and nothing else: memory and the database only, no network, and not
+   * in the queue of lookups. `hit` is a picture (checked again as if it had just come, a stale one
+   * too: better than a letter), `miss` a recent answer that there is none, `unknown` anything not
+   * known (including entries past MAX_CACHED_LOGOS and hits past MAX_CACHED_BYTES).
+   */
+  cached(entries: { repo: string; ref: string; path: string; homepage: string | null }[]): CachedLogo[] {
+    const now = (this.#options.now ?? Date.now)();
+    let total = 0;
+    return entries.map((one, index): CachedLogo => {
+      if (index >= MAX_CACHED_LOGOS) return { status: "unknown" };
+      let got = this.#peek(one.repo, one.ref, one.path, now);
+      // An own logo that is known not to exist: the homepage's icon, kept under the entry's key, is next.
+      if (got === null && one.homepage) got = this.#peek(one.repo, one.ref, "#site:" + one.homepage, now);
+      if (got === undefined) return { status: "unknown" };
+      if (got === null) return { status: "miss" };
+      if (total + got.data.length > MAX_CACHED_BYTES) return { status: "unknown" };
+      total += got.data.length;
+      return { status: "hit", logo: got };
+    });
+  }
+
+  /** A picture, null (known: none), or undefined (not known). Reads only. */
+  #peek(repo: string, ref: string, path: string, now: number): Logo | null | undefined {
+    const hit = this.#repoKept.get(repo + "\n" + ref + "\n" + path);
+    if (hit && now < hit.until) return hit.logo;
+    const row = this.#options.store?.peek(repo, ref, path);
+    if (row === undefined) return undefined;
+    if (row.status === "miss") return now < row.expiresAt ? null : undefined;
+    return this.#checked(row.mime, row.bytes);
   }
 
   /** Forget everything kept, in memory and in the database. */
