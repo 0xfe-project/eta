@@ -211,9 +211,6 @@ export function Market(props: {
             gap: 12,
           }}
         >
-          <Label variant="small" tone="muted" style={{ maxWidth: 1000 }}>
-            {uiText("marketIntro")}
-          </Label>
           <If when={catalog() && !catalog()!.sources.length}>
             <View style={{ gap: 8 }}>
               <Label weight={500}>{uiText("marketNoSources")}</Label>

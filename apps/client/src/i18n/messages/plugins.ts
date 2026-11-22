@@ -4,7 +4,6 @@ export const pluginsMessages = {
   pluginBelowMinimum: ["Minimum {{value}}", "最小值为 {{value}}"],
   pluginAboveMaximum: ["Maximum {{value}}", "最大值为 {{value}}"],
   pluginMarket: ["Market", "市场"],
-  marketIntro: ["Plugins from an online catalog. Each one is pinned to a commit, and you see what it would run before it is installed.", "来自在线目录的插件。每个都固定在一个提交上，安装前会先展示它要运行的内容。"],
   marketUnavailable: ["The catalog could not be read", "无法读取目录"],
   marketNoSources: ["No plugin sources", "没有插件来源"],
   marketNoSourcesHint: [
