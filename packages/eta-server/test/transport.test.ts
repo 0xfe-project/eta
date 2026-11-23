@@ -190,6 +190,146 @@ describe("calls", () => {
   });
 });
 
+describe("an unordered call", () => {
+  const call = (target: string, action: string, requestId: string) =>
+    JSON.stringify({ op: "call", target, action, requestId });
+  const gate = () => {
+    let open!: () => void;
+    const opened = new Promise<void>((resolve) => (open = resolve));
+    return { open, opened };
+  };
+  const ids = (frames: ServerFrame[]) =>
+    replies(frames).map((frame) => (frame as { requestId: string }).requestId);
+
+  it("does not hold up the calls behind it", async () => {
+    const { connection, frames, wire } = harness();
+    const slow = gate();
+    wire.handle(
+      "lookup",
+      "slow",
+      async () => {
+        await slow.opened;
+        return { result: "late" };
+      },
+      { unordered: true },
+    );
+    const first = connection.handle(call("lookup", "slow", "r1"));
+    await connection.handle(call("sessions", "prompt", "r2"));
+    expect(ids(frames)).toEqual(["r2"]);
+    slow.open();
+    await first;
+    expect(ids(frames)).toEqual(["r2", "r1"]);
+    expect(replies(frames).at(-1)).toEqual({
+      type: "reply",
+      requestId: "r1",
+      ok: true,
+      result: "late",
+    });
+  });
+
+  it("is not held up by an ordered call that is still running", async () => {
+    const { connection, frames, wire, order } = harness();
+    wire.handle("lookup", "fast", () => ({ result: "now" }), {
+      unordered: true,
+    });
+    const running = connection.handle(call("sessions", "prompt", "r1"));
+    await connection.handle(call("lookup", "fast", "r2"));
+    expect(order).toEqual(["start:prompt"]);
+    expect(ids(frames)).toEqual(["r2"]);
+    await running;
+    expect(ids(frames)).toEqual(["r2", "r1"]);
+  });
+
+  it("leaves the ordered calls in arrival order, with one in flight beside them", async () => {
+    const { connection, wire, order } = harness();
+    const slow = gate();
+    wire.handle(
+      "lookup",
+      "slow",
+      async () => {
+        await slow.opened;
+        return {};
+      },
+      { unordered: true },
+    );
+    const lookup = connection.handle(call("lookup", "slow", "r0"));
+    const prompt = connection.handle(call("sessions", "prompt", "r1"));
+    const abort = connection.handle(call("sessions", "abort", "r2"));
+    await Promise.all([prompt, abort]);
+    expect(order).toEqual(["start:prompt", "end:prompt", "abort"]);
+    slow.open();
+    await lookup;
+  });
+
+  it("answers a failure with its own requestId, and the ordered calls go on", async () => {
+    const { connection, frames, wire } = harness();
+    const slow = gate();
+    wire.handle(
+      "lookup",
+      "fails",
+      async () => {
+        await slow.opened;
+        throw new Error("no such site");
+      },
+      { unordered: true },
+    );
+    const failing = connection.handle(call("lookup", "fails", "r1"));
+    await connection.handle(call("sessions", "prompt", "r2"));
+    slow.open();
+    await failing;
+    expect(replies(frames)).toEqual([
+      { type: "reply", requestId: "r2", ok: true, result: { queued: true } },
+      { type: "reply", requestId: "r1", ok: false, error: "no such site" },
+    ]);
+  });
+
+  it("settling after close() neither throws nor sends to the closed socket", async () => {
+    const { connection, frames, wire } = harness();
+    const slow = gate();
+    wire.handle(
+      "lookup",
+      "slow",
+      async () => {
+        await slow.opened;
+        return { result: "late" };
+      },
+      { unordered: true },
+    );
+    wire.handle(
+      "lookup",
+      "fails",
+      async () => {
+        await slow.opened;
+        throw new Error("late failure");
+      },
+      { unordered: true },
+    );
+    const a = connection.handle(call("lookup", "slow", "r1"));
+    const b = connection.handle(call("lookup", "fails", "r2"));
+    connection.close();
+    const sent = frames.length;
+    slow.open();
+    await expect(Promise.all([a, b])).resolves.toBeDefined();
+    expect(frames).toHaveLength(sent);
+  });
+
+  it("is a choice of the op: an op that did not ask for it stays in line", async () => {
+    const { connection, frames, wire } = harness();
+    const slow = gate();
+    wire.handle("lookup", "plain", async () => {
+      await slow.opened;
+      return {};
+    });
+    const plain = connection.handle(call("lookup", "plain", "r1"));
+    const behind = connection.handle(call("sessions", "abort", "r2"));
+    await Promise.resolve();
+    expect(ids(frames)).toEqual([]);
+    slow.open();
+    await Promise.all([plain, behind]);
+    expect(ids(frames)).toEqual(["r1", "r2"]);
+  });
+});
+
 describe("subscriptions", () => {
   it("hands a subscription to the state sender, in place", async () => {
     const { connection, frames, wire } = harness();
