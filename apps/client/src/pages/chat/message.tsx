@@ -8,7 +8,7 @@ import type {
   ViewCore,
 } from "@eta/client-contracts";
 import type { JSX, ViewRef } from "nsh";
-import type { TextViewSelectionEvent } from "nsh/base";
+import type { TextSelection } from "../../components/eta-editor";
 import {
   captainProposalOf,
   publishedRefs,
@@ -86,7 +86,7 @@ export function Message(props: {
   /** The reader selected part of the reply's text (`""`: nothing); `reply` is
    * the view around that text. */
   onSelectionChange?: (
-    event: TextViewSelectionEvent,
+    event: TextSelection,
     reply: ViewRef | undefined,
   ) => void;
   /** A mention's press: the member it names, by agent id. */

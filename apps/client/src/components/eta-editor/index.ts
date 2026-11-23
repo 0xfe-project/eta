@@ -10,4 +10,5 @@ export { quote } from "./plugins/quote";
 export { serialize } from "./plugins/serialize";
 export { submitKeys } from "./plugins/submit-keys";
 export { chatText, codeText, descriptionText } from "./systems";
+export type { TextSelection } from "./text-system";
 export { createTextSystem } from "./text-system";

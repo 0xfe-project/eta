@@ -18,6 +18,7 @@ import { TextView } from "nsh/base";
 import { createEtaEditor, EtaEditor } from "./editor";
 import { baseText, partsOf, useTextTheme, viewLook } from "./look";
 import { docToStoredMarkdown, markdownToDoc } from "./markdown";
+import { selectedText } from "./selected-text";
 import {
   lineEnds,
   neededExtensions,
@@ -45,8 +46,15 @@ interface TextViewProps {
   /** Its text can be selected and copied (default true). */
   selectable?: boolean;
   /** The selection changed (to quote a part of it). */
-  onSelectionChange?: (event: TextViewSelectionEvent) => void;
+  onSelectionChange?: (event: TextSelection) => void;
   style?: ViewStyle;
+}
+
+/** A selection in a shown text. */
+export interface TextSelection extends TextViewSelectionEvent {
+  /** The selected text as the text reads: a mention is `@Ada` (a platform's selection leaves
+   * such blocks out), lines are the text's own (not where it wrapped), no list markers. */
+  read: () => string;
 }
 
 /** What a place's text is made with: its plugins, and Markdown in and out. */
@@ -206,6 +214,16 @@ export function createTextSystem(plugins: TextPlugin[]): TextSystem {
         for (const part of shown) if (part.document) doc = part.document(doc);
         return doc;
       });
+      function readSelection(text: string) {
+        const { markdown, stands } = source();
+        const whole = direct()
+          ? viewDocument(
+              TextView.parse(markdown, { html: false }, extensions),
+              stands,
+            )
+          : read();
+        return selectedText(text, whole) ?? text;
+      }
       return (
         <View
           accessibilityLabel={props.label}
@@ -222,7 +240,12 @@ export function createTextSystem(plugins: TextPlugin[]): TextSystem {
             }
             options={{ html: false, streaming: props.streaming }}
             selectable={props.selectable ?? true}
-            onSelectionChange={props.onSelectionChange}
+            onSelectionChange={(event) =>
+              props.onSelectionChange?.({
+                ...event,
+                read: () => untracked(() => readSelection(event.text)),
+              })
+            }
             links="open"
             styles={styles(own.plugins, theme(), props.variant ?? "body")}
             renderCustom={(read) => {
