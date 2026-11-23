@@ -79,13 +79,14 @@ export async function createAgent(
   deps: AgentCreateDeps,
   input: NewAgent,
   actorAgentId: string | null,
+  within?: (agent: AgentRecord) => void,
 ): Promise<{ agent: AgentRecord; project: ProjectRecord }> {
   checkNewAgent(deps, input);
   // Only `createCaptainIdentity` gives an agent a system role, whatever `input` carries.
   return await writeAgent(
     deps,
     { ...input, systemRole: null },
-    { actorAgentId },
+    { actorAgentId, within },
   );
 }
 
@@ -149,6 +150,7 @@ async function writeAgent(
     // The agent and its workspace appear together or not at all.
     return deps.db.transaction(() => {
       const { plugins: wanted, ...fields } = input;
+      if (input.systemRole !== "captain") checkAgentName(agents, name);
       const agent = agents.create({ ...fields, name }, id);
       const project = projects.create({
         machineId: primary.id,

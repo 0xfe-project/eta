@@ -364,6 +364,7 @@ export function Workspace(props: {
                     captain
                     onPending={() => navigate("pending")}
                     onTask={openTask}
+                    onModelServices={() => showSettings("Model services")}
                     onAccessLost={leaveUnavailableChat}
                     onRelatedTask={openRelatedTask}
                     onRoutines={showRoutine}
@@ -385,6 +386,7 @@ export function Workspace(props: {
                     layout={props.layout}
                     onPending={() => navigate("pending")}
                     onTask={openTask}
+                    onModelServices={() => showSettings("Model services")}
                     onAccessLost={leaveUnavailableChat}
                     onRelatedTask={openRelatedTask}
                     onRoutines={showRoutine}

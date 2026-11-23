@@ -142,6 +142,47 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
           return { result: { agent: viewOf(existing(agent.id)) } };
         }),
 
+        wire.handle("agents", "createInGroup", async (call) => {
+          const args = new Args(call);
+          const group = args.string("conversationId");
+          const key = args.string("clientId");
+          const lookup = () =>
+            deps.db
+              .query<{ agent_id: string }, [string, string]>(
+                "SELECT agent_id FROM group_agent_creation WHERE conversation_id = ? AND client_id = ?",
+              )
+              .get(group, key);
+          const replay = lookup();
+          if (replay)
+            return { result: { agent: viewOf(existing(replay.agent_id)) } };
+          const fields = fieldsOf(call, true);
+          try {
+            const { agent } = await createAgent(
+              deps,
+              { ...fields, name: fields.name! },
+              null,
+              (created) => {
+                const conversation = conversations.get(group);
+                if (conversation?.kind !== "group" || conversation.archived)
+                  throw new Error("Choose an active group to add this agent.");
+                conversations.addParticipants(group, [created.id]);
+                deps.db.run(
+                  "INSERT INTO group_agent_creation (conversation_id, client_id, agent_id) VALUES (?, ?, ?)",
+                  [group, key, created.id],
+                );
+              },
+            );
+            deps.changed([group]);
+            return { result: { agent: viewOf(agent) } };
+          } catch (error) {
+            // A concurrent submit may have committed while this one made its workspace.
+            const winner = lookup();
+            if (winner)
+              return { result: { agent: viewOf(existing(winner.agent_id)) } };
+            throw error;
+          }
+        }),
+
         wire.handle("agents", "update", async (call) => {
           const args = new Args(call);
           const id = args.string("agentId");

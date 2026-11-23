@@ -17,6 +17,7 @@ import { createAvatarDraw } from "./avatar";
 
 export interface AgentEditorProps {
   id?: string;
+  groupDraft?: { conversationId: string; name: string; instructions: string };
   phone: boolean;
   tablet?: boolean;
   onClose: () => void;
@@ -28,9 +29,17 @@ export interface AgentEditorProps {
 export function createAgentForm(props: AgentEditorProps) {
   const host = useHost();
   const saved = props.id ? host.agent(props.id) : undefined;
-  const name = signal(saved?.name ?? "");
-  const instructions = signal(saved?.instructions ?? "");
-  const model = signal(saved?.model ?? "");
+  const draft = props.groupDraft;
+  const clientId = draft ? crypto.randomUUID() : undefined;
+  const name = signal(saved?.name ?? draft?.name ?? "");
+  const instructions = signal(saved?.instructions ?? draft?.instructions ?? "");
+  const models = useModels();
+  const available = models();
+  const model = signal(
+    saved?.model ??
+      (draft && available.length === 1 ? available[0]?.id : "") ??
+      "",
+  );
   const runtime = signal<AgentRuntime>(saved?.runtime ?? "eta");
   const persona = signal(saved?.persona ?? "");
   const plugins = signal(saved?.plugins ?? []);
@@ -43,7 +52,6 @@ export function createAgentForm(props: AgentEditorProps) {
   /** A retry under way, and why the last one failed. */
   const probing = signal(false);
   const probeError = signal<string | undefined>(undefined);
-  const models = useModels();
   const creating = !props.id;
   /** An agent's face is drawn and saved apart from the form: it needs no Save. */
   const avatar = props.id ? createAvatarDraw(props.id) : undefined;
@@ -236,7 +244,17 @@ export function createAgentForm(props: AgentEditorProps) {
             agentId: props.id,
             ...patch,
           })
-        : host.call<AgentResults["create"]>("agents", "create", fields),
+        : draft && clientId
+          ? host.call<AgentResults["createInGroup"]>(
+              "agents",
+              "createInGroup",
+              {
+                ...fields,
+                conversationId: draft.conversationId,
+                clientId,
+              },
+            )
+          : host.call<AgentResults["create"]>("agents", "create", fields),
     );
     busy.set(false);
     if (result) close();

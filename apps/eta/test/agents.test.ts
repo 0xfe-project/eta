@@ -8,7 +8,7 @@ import type {
   MessageView,
   ProjectView,
 } from "@eta/client-contracts";
-import { access, writeFile } from "node:fs/promises";
+import { access, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { until } from "./support/client";
@@ -65,6 +65,35 @@ describe("creating an agent", () => {
           .section<AgentView[]>("agents", "list")
           ?.some((entry) => entry.id === agent.id) === true,
     );
+  });
+
+  it("rolls back a failed group install and replays concurrent submits once", async () => {
+    const w = await world();
+    const member = await w.agent("Member");
+    const group = await w.group((await w.project()).id, [member.id]);
+    const fields = {
+      name: "Issue triager",
+      model: "fake:model",
+      clientId: "install-1",
+    };
+    const install = (conversationId: string) =>
+      w.client.call("agents", "createInGroup", { ...fields, conversationId });
+    const homes = () => readdir(join(w.host.dataDir, "agents"));
+    const before = await homes();
+    await expect(install("missing")).rejects.toThrow(/active group/);
+    expect(await homes()).toEqual(before);
+    const [a, b] = await Promise.all([install(group.id), install(group.id)]);
+    expect(a).toEqual(b);
+    expect(await install(group.id)).toEqual(a);
+    expect(await homes()).toHaveLength(before.length + 1);
+    const { agent } = a as { agent: AgentView };
+    await w.watch(group.id);
+    expect(
+      w.client
+        .section<{ agentId: string }[]>(`conversations.${group.id}`, "members")
+        ?.map((p) => p.agentId)
+        .sort(),
+    ).toEqual([member.id, agent.id].sort());
   });
 
   it("refuses what cannot be an agent", async () => {

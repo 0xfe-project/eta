@@ -25,7 +25,7 @@ import {
   touchScreen,
 } from "../../components/menu";
 import { CloseButton } from "../../components/navigation-buttons";
-import { formatLocale, uiText } from "../../i18n";
+import { formatLocale, localizedText, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
 export function StewardMenu(props: {
@@ -126,6 +126,7 @@ export function InviteAgents(props: {
   conversationId: string;
   members: MemberView[];
   layout: Layout;
+  onTemplates: () => void;
   onClose: () => void;
 }) {
   const host = useHost();
@@ -197,6 +198,12 @@ export function InviteAgents(props: {
         <Label tone="muted" variant="caption">
           {uiText("membersCanReadTheGroupChat")}
         </Label>
+        <If when={host.can("agents.createInGroup")}>
+          <Button
+            label={localizedText("Browse bot templates", "浏览 Bot 模板")}
+            onPress={props.onTemplates}
+          />
+        </If>
         <SmoothScroll
           style={
             phone()

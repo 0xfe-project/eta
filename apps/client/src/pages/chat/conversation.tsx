@@ -11,6 +11,7 @@ import type {
 } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import type { ArtifactFilters } from "./artifacts/filter";
+import type { botTemplates } from "./bot-templates";
 import type { PanelTab } from "./conversation-panel";
 import { computed, effect, signal, View, windowSize } from "nsh";
 import { paneWidth } from "../../app/pane-width";
@@ -30,10 +31,13 @@ import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { CaptainFace } from "../../navigation/captain";
 import { follow, useHost } from "../../services/host";
+import { AgentEditor } from "../settings/agents/editor";
 import { isActiveRunStatus } from "../tasks/run-log";
 import { PendingStrip } from "./approvals";
 import { defaultFilters } from "./artifacts/filter";
 import { ArtifactPreview } from "./artifacts/preview";
+import { BotLibrary } from "./bot-library";
+import { groupInstructions } from "./bot-templates";
 import { Composer } from "./composer";
 import { PhoneConversationInfo } from "./conversation-info";
 import { ConversationPanel, panelAttention } from "./conversation-panel";
@@ -59,6 +63,7 @@ export function Conversation(props: {
   onTask: (id: string) => void;
   onRelatedTask: (id: string) => void;
   onReadDraft?: () => void;
+  onModelServices?: () => void;
   onAccessLost: () => void;
   onRoutines: (id?: string) => void;
   /** Opens the Pending tab, from Captain's approvals strip on a phone. */
@@ -74,6 +79,8 @@ export function Conversation(props: {
   const panel = signal<PanelTab>("Context");
   const drawer = signal(false);
   const invite = signal(false);
+  const library = signal(false);
+  const template = signal<ReturnType<typeof botTemplates>[number]>();
   const removing = signal<string | undefined>(undefined);
   const projectInfo = signal(false);
   const member = signal<{ id: string; session: string }>();
@@ -582,7 +589,14 @@ export function Conversation(props: {
         </View>
       </If>
       <If
-        when={drawer() && !invite() && !preview() && props.layout !== "desktop"}
+        when={
+          drawer() &&
+          !invite() &&
+          !library() &&
+          !template() &&
+          !preview() &&
+          props.layout !== "desktop"
+        }
       >
         <Modal
           title={phone() ? uiText("conversationInfo") : uiText("panel")}
@@ -660,8 +674,43 @@ export function Conversation(props: {
           conversationId={props.id}
           members={members()}
           layout={props.layout}
+          onTemplates={() => {
+            invite.set(false);
+            library.set(true);
+          }}
           onClose={() => invite.set(false)}
         />
+      </If>
+      <If when={library()}>
+        <BotLibrary
+          phone={phone()}
+          onClose={() => {
+            library.set(false);
+            invite.set(true);
+          }}
+          onChoose={(bot) => {
+            library.set(false);
+            template.set(bot);
+          }}
+        />
+      </If>
+      <If when={template()}>
+        {(bot) => (
+          <AgentEditor
+            phone={phone()}
+            tablet={props.layout === "tablet"}
+            groupDraft={{
+              conversationId: props.id,
+              name: bot().name,
+              instructions: groupInstructions(bot().instructions),
+            }}
+            onClose={() => template.set(undefined)}
+            onModelServices={() => {
+              template.set(undefined);
+              props.onModelServices?.();
+            }}
+          />
+        )}
       </If>
       <If when={member()}>
         <RunPanel

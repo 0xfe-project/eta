@@ -332,6 +332,7 @@ export interface ConversationSections {
 /** The actions this target has. One list, so the wire and the plugin cannot disagree. */
 export const AGENT_ACTIONS = [
   "create",
+  "createInGroup",
   "update",
   "delete",
   "direct",
@@ -453,6 +454,7 @@ export interface AgentFields {
 export interface AgentArgs {
   /** Makes the agent, its workspace directory and its home project. */
   create: AgentFields;
+  createInGroup: AgentFields & { conversationId: string; clientId: string };
   /** `avatarSeed` draws its avatar from that seed and puts it at the front of `avatarSeeds`. */
   update: { agentId: string; avatarSeed?: string } & Partial<AgentFields>;
   /** Clears it as steward, archives the chats it was alone in, and leaves its directory on disk. */
@@ -469,6 +471,7 @@ export interface AgentArgs {
 }
 export interface AgentResults {
   create: { agent: AgentView };
+  createInGroup: { agent: AgentView };
   update: { agent: AgentView };
   delete: { agentId: string };
   direct: { conversation: ConversationSummary };

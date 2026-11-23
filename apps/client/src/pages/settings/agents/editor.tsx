@@ -353,7 +353,11 @@ export function AgentEditor(props: AgentEditorProps) {
           else={
             <Button
               label={
-                creating ? localizedText("Create", "创建") : uiText("save")
+                props.groupDraft
+                  ? localizedText("Add to group", "添加到群聊")
+                  : creating
+                    ? localizedText("Create", "创建")
+                    : uiText("save")
               }
               tone="primary"
               disabled={!canSave()}
