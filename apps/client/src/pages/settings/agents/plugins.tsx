@@ -61,6 +61,8 @@ export function AgentPlugins(props: { form: AgentForm }) {
               : uiText("pluginNeedsSetup"),
             color: c().amber,
           };
+  /** What the row of a toolkit switched off for every agent says: the words and the mark of an installed plugin's. */
+  const off = () => ({ label: uiText("pluginOffForAll"), color: c().faint });
   return (
     <View>
       <If when={!phoneEditor()}>
@@ -196,9 +198,29 @@ export function AgentPlugins(props: { form: AgentForm }) {
               >
                 <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                   <Label weight={500}>{item().name}</Label>
-                  <Label variant="small" tone="muted">
-                    {uiText("composioToolkit")}
-                  </Label>
+                  {/* The same mark and words as an installed plugin's row: the phone's status line under the name; otherwise the lane, at the right end of the line of "Composio toolkit". */}
+                  <If when={phoneEditor() && !item().enabled}>
+                    <View testID="composio-plugin-off">
+                      <StatusLine status={off()} />
+                    </View>
+                  </If>
+                  <View style={{ ...row, alignItems: "center", gap: 10 }}>
+                    <Label
+                      variant="small"
+                      tone="muted"
+                      style={{ flex: 1, minWidth: 0 }}
+                    >
+                      {uiText("composioToolkit")}
+                    </Label>
+                    <If when={!phoneEditor() && !item().enabled}>
+                      <View
+                        testID="composio-plugin-off"
+                        style={{ flexShrink: 0 }}
+                      >
+                        <StatusLane width={108} status={off()} />
+                      </View>
+                    </If>
+                  </View>
                   <If when={item().state !== "ready"}>
                     <View testID="composio-plugin-error">
                       <WarningLine text={uiText("composioPluginError")} />
@@ -207,13 +229,6 @@ export function AgentPlugins(props: { form: AgentForm }) {
                   <If when={runtime() !== "eta"}>
                     <View testID="composio-plugin-external">
                       <WarningLine text={uiText("composioPluginExternal")} />
-                    </View>
-                  </If>
-                  <If when={!item().enabled}>
-                    <View testID="composio-plugin-off">
-                      <Label variant="small" tone="muted">
-                        {uiText("pluginOffForAll")}
-                      </Label>
                     </View>
                   </If>
                 </View>
