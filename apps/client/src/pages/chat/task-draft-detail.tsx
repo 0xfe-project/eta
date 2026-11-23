@@ -21,8 +21,10 @@ import {
   textFaces,
   textStyle,
 } from "../../components";
+import { sendShortcut } from "../../components/eta-editor";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { createDescription, DescriptionBox } from "../tasks/description-box";
 import { Segmented } from "../tasks/segmented";
 
 export function draftTitle(message: MessageView) {
@@ -75,14 +77,22 @@ export function TaskDraftDetail(props: {
       ? props.message.data.title
       : props.message.text;
   const title = signal(initialTitle.trim());
-  const description = signal(data().description ?? "");
   const status = signal<TaskDraftStatus>(draftStatus(data()));
   const busy = signal(false);
   const discarded = () => data().discarded === true;
   const pending = () => props.message.kind === "task_draft" && !discarded();
+  const description = createDescription({
+    text: data().description ?? "",
+    agents: () =>
+      [data().assignee, props.message.agentId].filter(
+        (id): id is string => !!id,
+      ),
+    onSubmit: () => void confirm(),
+  });
   const canConfirm = () =>
     pending() &&
     Boolean(title().trim()) &&
+    !description.tooLong() &&
     !busy() &&
     host.state().status === "open";
   async function confirm() {
@@ -94,7 +104,7 @@ export function TaskDraftDetail(props: {
         messageId: props.message.id,
         edits: {
           title: title().trim(),
-          description: description().trim(),
+          description: description.read(),
           status: status(),
         },
       }),
@@ -198,18 +208,11 @@ export function TaskDraftDetail(props: {
               />
             </FormRow>
             <FormRow label={uiText("description")}>
-              <Field
+              <DescriptionBox
+                description={description}
                 label={uiText("description")}
                 placeholder={uiText("draftNoDescription")}
-                value={description()}
-                multiline
-                maxLength={20000}
-                onChange={description.set}
-                style={{
-                  ...input,
-                  height: props.phone ? 200 : 240,
-                  paddingVertical: 8,
-                }}
+                phone={props.phone}
               />
             </FormRow>
             <FormRow label={uiText("status")}>
@@ -285,6 +288,7 @@ export function TaskDraftDetail(props: {
                 : uiText("confirmAndStart")
             }
             tone="primary"
+            shortcut={props.phone ? undefined : sendShortcut}
             disabled={!canConfirm()}
             onPress={() => void confirm()}
           />

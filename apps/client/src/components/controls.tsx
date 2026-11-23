@@ -47,6 +47,8 @@ export function Button(props: {
    * "muted" for a filter trigger that reads as secondary. */
   labelTone?: keyof typeof light;
   dimDisabled?: boolean;
+  /** The key that does the same, after the label (`⌘⏎` on a form's button). */
+  shortcut?: string;
   style?: ViewStyle;
   onPress: () => void;
 }) {
@@ -124,6 +126,15 @@ export function Button(props: {
           tone={textTone()}
         >
           {props.label}
+        </Label>
+      </If>
+      <If when={props.shortcut}>
+        <Label
+          variant="caption"
+          tone={textTone()}
+          style={{ opacity: 0.55, marginLeft: 4 }}
+        >
+          {props.shortcut}
         </Label>
       </If>
       <If when={props.end !== undefined}>
@@ -268,6 +279,10 @@ export function ActionMenu(props: {
   // Open, for the pressed trigger; a titled sheet closes itself from its
   // close button.
   const open = signal(false);
+  // A trigger that draws its own border (the Artifacts tab's Filter) keeps
+  // it while open.
+  const pressed = () =>
+    open() && !props.value && props.triggerStyle?.borderWidth === undefined;
   const layout = Screen();
   const titled = () =>
     menuPresentation(layout()) === "sheet" && !!props.sheetTitle;
@@ -325,9 +340,19 @@ export function ActionMenu(props: {
             paddingHorizontal: 7,
             gap: 7,
             cursor: "pointer",
-            borderWidth: props.value || open() ? 1 : 0,
+            borderWidth: props.value ? 1 : 0,
             borderColor: c().strong,
-            // A "more" menu stays pressed while it is open.
+            // A "more" menu stays pressed while it is open: its frame is an
+            // outline drawn over its edge, which takes no space, so opening
+            // it does not widen it and shift the row.
+            ...(pressed()
+              ? {
+                  outlineWidth: 1,
+                  outlineStyle: "solid" as const,
+                  outlineColor: c().strong,
+                  outlineOffset: -1,
+                }
+              : {}),
             backgroundColor: open() && !props.value ? c().selected : undefined,
             ...props.triggerStyle,
           }}

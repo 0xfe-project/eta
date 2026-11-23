@@ -12,6 +12,11 @@ import {
   LONG_PASTE,
   MAX_MESSAGE_CHARS,
 } from "./composer-draft";
+import {
+  hasMarkdownBlocks,
+  isEditorCode,
+  looksLikeMarkdown,
+} from "./composer-paste";
 
 /** A node of the editor's document, in ProseMirror's JSON shape. */
 export interface DocNode {
@@ -74,6 +79,10 @@ export type ClipboardAction =
   | { kind: "textFile"; text: string }
   /** Long text: one folded block. */
   | { kind: "block"; text: string }
+  /** Code copied from an editor or an IDE (a rich editor): a code block, folded when long. */
+  | { kind: "code"; text: string }
+  /** Text written in Markdown (a rich editor): read as Markdown, formatted. */
+  | { kind: "markdown"; text: string }
   /** Short text, typed in as plain text. */
   | { kind: "text"; text: string }
   | { kind: "nothing" };
@@ -85,13 +94,17 @@ export type ClipboardAction =
  *   rendered image of the copied text beside it, and the text is what was copied. A file manager's
  *   copy (`uris`) is always files, though it carries the names as text too.
  * - Without attachments (`files: false`), files are ignored and the text, if any, pastes.
- * - Text longer than a message can be is a `.txt` attachment, when attachments are allowed; text
- *   over `LONG_PASTE` folds into a block; anything else is typed in. Formatting never pastes: the
- *   HTML only tells a rich copy from a plain one.
+ * - Text longer than a message can be is a `.txt` attachment, when attachments are allowed.
+ * - In a rich editor (`rich`), code copied from an editor or an IDE (its HTML says so) of two
+ *   lines or more is a code block, and text written in Markdown is read as Markdown: short text
+ *   with any of it, long text only with a heading, a fence, a quote or a task in it (a log with
+ *   dashes is still a log).
+ * - Text over `LONG_PASTE` folds into a block; anything else is typed in. HTML formatting never
+ *   pastes: the HTML only tells a rich copy from a plain one, and code from prose.
  */
 export function classifyClipboard(
   input: ClipboardInput,
-  options: { files: boolean },
+  options: { files: boolean; rich?: boolean },
 ): ClipboardAction {
   const text = normalizeNewlines(input.text ?? "");
   const files = input.files ?? [];
@@ -110,6 +123,15 @@ export function classifyClipboard(
     charCount(text) > MAX_MESSAGE_CHARS
   )
     return { kind: "textFile", text };
+  if (options.rich) {
+    if (isEditorCode(input.html) && lineCount(text) >= 2)
+      return { kind: "code", text };
+    if (
+      looksLikeMarkdown(text) &&
+      (!isLongText(text) || hasMarkdownBlocks(text))
+    )
+      return { kind: "markdown", text };
+  }
   if (isLongText(text)) return { kind: "block", text };
   return { kind: "text", text };
 }

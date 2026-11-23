@@ -13,8 +13,10 @@ import {
   textFaces,
   textStyle,
 } from "../../components";
+import { sendShortcut } from "../../components/eta-editor";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { createDescription, DescriptionBox } from "./description-box";
 import { Segmented } from "./segmented";
 
 export function NewTask(props: {
@@ -27,7 +29,6 @@ export function NewTask(props: {
   const c = colors();
   const type = textFaces();
   const title = signal("");
-  const description = signal("");
   const agent = signal("");
   const conversation = signal(props.conversation ?? "");
   const parent = signal("");
@@ -43,8 +44,14 @@ export function NewTask(props: {
     host.tasks().filter((task) => task.status !== "cancelled");
   const titleOf = (id: string) =>
     host.tasks().find((task) => task.id === id)?.title ?? "";
+  const description = createDescription({
+    text: "",
+    onSubmit: () => void save(),
+  });
+  const ready = () =>
+    !!title().trim() && !!executor() && !busy() && !description.tooLong();
   async function save() {
-    if (busy() || !executor() || !title().trim()) return;
+    if (!ready()) return;
     busy.set(true);
     const result = await host.action(() =>
       host.call<TaskResults["create"]>("tasks", "create", {
@@ -52,7 +59,7 @@ export function NewTask(props: {
         tasks: [
           {
             title: title().trim(),
-            description: description().trim(),
+            description: description.read(),
             assignee: executor(),
             dependsOn: waitsFor().map((task) => ({ task })),
           },
@@ -82,33 +89,31 @@ export function NewTask(props: {
           props.phone ? { padding: 14, gap: 14 } : { paddingTop: 14, gap: 14 }
         }
       >
-        <View style={{ gap: 12 }}>
-          <Field
-            label={uiText("title")}
-            placeholder={uiText("newTaskTitlePlaceholder")}
-            value={title()}
-            onChange={title.set}
-            style={{
-              height: 30,
-              paddingHorizontal: 10,
-              ...textStyle(type("small")),
-              borderColor: c().strong,
-            }}
-          />
-          <Field
-            label={uiText("description")}
-            placeholder={uiText("newTaskDescriptionPlaceholder")}
-            value={description()}
-            multiline
-            onChange={description.set}
-            style={{
-              height: 72,
-              paddingHorizontal: 10,
-              paddingVertical: 8,
-              ...textStyle(type("small")),
-              borderColor: c().strong,
-            }}
-          />
+        <View style={{ gap: 14 }}>
+          <View style={{ gap: 6 }}>
+            <Label variant="caption">{uiText("title")}</Label>
+            <Field
+              label={uiText("title")}
+              placeholder={uiText("newTaskTitlePlaceholder")}
+              value={title()}
+              onChange={title.set}
+              style={{
+                height: 30,
+                paddingHorizontal: 10,
+                ...textStyle(type("small")),
+                borderColor: c().strong,
+              }}
+            />
+          </View>
+          <View style={{ gap: 6 }}>
+            <Label variant="caption">{uiText("description")}</Label>
+            <DescriptionBox
+              description={description}
+              label={uiText("description")}
+              placeholder={uiText("newTaskDescriptionPlaceholder")}
+              phone={props.phone}
+            />
+          </View>
         </View>
         <View style={{ gap: 10 }}>
           <NewTaskRow label={uiText("executor")}>
@@ -226,7 +231,8 @@ export function NewTask(props: {
           <Button
             label={uiText("newTaskCreate")}
             tone="primary"
-            disabled={!title().trim() || !executor() || busy()}
+            shortcut={props.phone ? undefined : sendShortcut}
+            disabled={!ready()}
             onPress={() => void save()}
           />
         </View>

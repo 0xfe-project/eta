@@ -2,7 +2,7 @@ import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import type { TaskDetailState } from "./task-detail-state";
 import { TASK_STATUSES } from "@eta/client-contracts";
-import { View } from "nsh";
+import { untracked, View } from "nsh";
 import {
   Button,
   colors,
@@ -14,9 +14,11 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { sendShortcut } from "../../components/eta-editor";
 import { CloseButton } from "../../components/navigation-buttons";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { createDescription, DescriptionBox } from "./description-box";
 import { TaskReviewDialog } from "./review-dialog";
 import { TaskRunLog } from "./run-log";
 import { statusHint, statusName, TaskGlyph } from "./status";
@@ -35,8 +37,6 @@ export function TaskDetailDialogs(props: {
     cancelling,
     change,
     editing,
-    editDescription,
-    editTitle,
     executor,
     feedback,
     log,
@@ -267,41 +267,12 @@ export function TaskDetailDialogs(props: {
           sheet={phone()}
           onClose={() => editing.set(false)}
         >
-          <View style={{ padding: 16, gap: 10 }}>
-            <Field
-              label={uiText("taskTitle")}
-              value={editTitle()}
-              onChange={editTitle.set}
-            />
-            <Field
-              label={uiText("taskDescription")}
-              value={editDescription()}
-              onChange={editDescription.set}
-              multiline
-              style={{ height: 136 }}
-            />
-            <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>
-              <Button
-                label={uiText("cancel")}
-                onPress={() => editing.set(false)}
-              />
-              <Button
-                label={uiText("saveTask")}
-                tone="primary"
-                disabled={submitting() || !editTitle().trim()}
-                onPress={() =>
-                  void mutate(async () => {
-                    await host.call("tasks", "update", {
-                      taskId: props.id,
-                      title: editTitle().trim(),
-                      description: editDescription(),
-                    });
-                    editing.set(false);
-                  })
-                }
-              />
-            </View>
-          </View>
+          <EditTask
+            state={props.state}
+            id={props.id}
+            phone={phone()}
+            onClose={() => editing.set(false)}
+          />
         </Modal>
       </If>
       <If when={archive()}>
@@ -537,6 +508,58 @@ function TaskContextPanel(props: {
           </Label>
           <Label variant="small">{group()}</Label>
         </If>
+      </View>
+    </View>
+  );
+}
+
+/** The task's title and description edited together (the panel's ⋯ › Edit). */
+function EditTask(props: {
+  state: TaskDetailState;
+  id: string;
+  phone: boolean;
+  onClose: () => void;
+}) {
+  const host = useHost();
+  const { editDescription, editTitle, mutate, submitting } = props.state;
+  const description = createDescription({
+    text: untracked(() => editDescription()),
+    onSubmit: () => save(),
+  });
+  const ready = () =>
+    !submitting() && !!editTitle().trim() && !description.tooLong();
+  function save() {
+    if (!ready()) return;
+    void mutate(async () => {
+      await host.call("tasks", "update", {
+        taskId: props.id,
+        title: editTitle().trim(),
+        description: description.read(),
+      });
+      props.onClose();
+    });
+  }
+  return (
+    <View style={{ padding: 16, gap: 10 }}>
+      <Field
+        label={uiText("taskTitle")}
+        value={editTitle()}
+        onChange={editTitle.set}
+      />
+      <DescriptionBox
+        description={description}
+        label={uiText("taskDescription")}
+        phone={props.phone}
+      />
+      <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>
+        <Button label={uiText("cancel")} onPress={props.onClose} />
+        <Button
+          label={uiText("saveTask")}
+          tone="primary"
+          shortcut={props.phone ? undefined : sendShortcut}
+          disabled={!ready()}
+          onPress={save}
+        />
       </View>
     </View>
   );

@@ -5,18 +5,16 @@ import type {
 } from "@eta/client-contracts";
 import type { Layout, TextVariant } from "../../components";
 import type { TaskDetailState } from "./task-detail-state";
-import { View } from "nsh";
+import { untracked, View } from "nsh";
 import { paneWidth } from "../../app/pane-width";
 import {
   Button,
   Caption,
   colors,
   Field,
-  Fonts,
   grow,
   Icon,
   Label,
-  Markdown,
   monoFontFamily,
   PaneHandle,
   row,
@@ -24,8 +22,14 @@ import {
   textFaces,
   textStyle,
 } from "../../components";
+import {
+  chatText,
+  sendShortcut,
+  shownMentions,
+} from "../../components/eta-editor";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
+import { useAgentMentions } from "../../services/agent-mentions";
 import { relativeTime, useHost } from "../../services/host";
 import { TaskActivity } from "./activity";
 import { actorLabel, CreatorChip } from "./creator";
@@ -35,6 +39,7 @@ import {
   Subtasks,
   TaskLink,
 } from "./dependencies";
+import { createDescription, DescriptionBox } from "./description-box";
 import { runningFor, taskMoment, taskWhen } from "./facts";
 import { activeTaskRun, runCaption, runElapsed } from "./run-log";
 import { statusName, TaskGlyph } from "./status";
@@ -261,6 +266,7 @@ function DesktopOverview(props: {
   onTask: (id: string) => void;
   state: TaskDetailState;
 }) {
+  const agentMentions = useAgentMentions();
   const host = useHost();
   const c = colors();
   const type = textFaces();
@@ -385,7 +391,6 @@ function DesktopOverview(props: {
                       <DescriptionEditor
                         value={editDescription()}
                         disabled={submitting()}
-                        onChange={editDescription.set}
                         onCancel={() => describing.set(false)}
                         onSave={saveDescription}
                       />
@@ -396,16 +401,14 @@ function DesktopOverview(props: {
                         {uiText("goal")}
                       </Label>
                     </If>
-                    <Markdown
-                      value={item().description}
-                      dense
-                      heading={{
-                        variant: "subtitle",
-                        weight: 700,
-                        space: 0,
-                        after: 0,
+                    <chatText.View
+                      plugins={[shownMentions()]}
+                      text={{
+                        text: item().description,
+                        mentions: agentMentions(),
                       }}
-                      compactHeadings
+                      label={uiText("description")}
+                      variant="small"
                     />
                     <View
                       role="button"
@@ -432,7 +435,11 @@ function DesktopOverview(props: {
             >
               <View style={{ gap: 6 }}>
                 <Label weight={600}>{uiText("description")}</Label>
-                <Markdown value={item().description} compactHeadings />
+                <chatText.View
+                  plugins={[shownMentions()]}
+                  text={{ text: item().description, mentions: agentMentions() }}
+                  label={uiText("description")}
+                />
               </View>
             </If>
           </If>
@@ -478,6 +485,7 @@ export function TaskOverview(props: {
   onTask: (id: string) => void;
   state: TaskDetailState;
 }) {
+  const agentMentions = useAgentMentions();
   const host = useHost();
   const c = colors();
   const {
@@ -644,7 +652,6 @@ export function TaskOverview(props: {
                   phone
                   value={editDescription()}
                   disabled={submitting()}
-                  onChange={editDescription.set}
                   onCancel={() => describing.set(false)}
                   onSave={saveDescription}
                 />
@@ -673,19 +680,13 @@ export function TaskOverview(props: {
                         : uiText("goal")}
                     </Label>
                   </If>
-                  <Markdown
-                    value={item().description}
-                    heading={
-                      phone()
-                        ? {
-                            variant: "body",
-                            weight: 600,
-                            space: 9,
-                            after: -5,
-                          }
-                        : undefined
-                    }
-                    compactHeadings={phone()}
+                  <chatText.View
+                    plugins={[shownMentions()]}
+                    text={{
+                      text: item().description,
+                      mentions: agentMentions(),
+                    }}
+                    label={uiText("description")}
                   />
                   <If when={phone()}>
                     <EditDescriptionLink
@@ -839,23 +840,30 @@ export function TaskOverview(props: {
 }
 
 /**
- * The description edited in place: its raw markdown in a box outlined in ink,
- * Cancel and Save under it. 240px high at 13px on desktop and tablet; on a
- * phone 200px at 14/20 with 32px buttons.
+ * The description edited in place: the WYSIWYG editor (`DescriptionBox`, 240 high, 200 on a
+ * phone, scrolling inside), Cancel and Save under it. ⏎ is a new line; ⌘⏎ saves.
  */
 export function DescriptionEditor(props: {
+  /** The description as kept (Markdown). */
   value: string;
   disabled: boolean;
+  /** The task's own agents, offered first by `@`. */
+  agents?: () => readonly string[];
   /** Tablet's 24px buttons. */
   tablet?: boolean;
   phone?: boolean;
-  onChange: (value: string) => void;
   onCancel: () => void;
-  onSave: () => void;
+  onSave: (text: string) => void;
 }) {
-  const c = colors();
-  const fonts = Fonts();
-  const type = textFaces();
+  const description = createDescription({
+    text: untracked(() => props.value),
+    agents: props.agents,
+    onSubmit: () => save(),
+  });
+  function save() {
+    if (props.disabled || description.tooLong()) return;
+    props.onSave(description.read());
+  }
   const button = () =>
     props.phone
       ? { size: 32, padding: 14 }
@@ -864,21 +872,11 @@ export function DescriptionEditor(props: {
         : { size: undefined, padding: 10 };
   return (
     <View style={{ gap: props.phone ? 16 : 8 }}>
-      <Field
+      <DescriptionBox
+        description={description}
         label={uiText("editDescription")}
-        value={props.value}
-        onChange={props.onChange}
-        multiline
-        inputRef={(ref) => queueMicrotask(() => ref.focus())}
-        style={{
-          minHeight: props.phone ? 200 : 240,
-          height: undefined,
-          paddingVertical: 10,
-          paddingHorizontal: 12,
-          borderColor: c().ink,
-          fontFamily: monoFontFamily(fonts()),
-          ...textStyle(type("body"), "prose"),
-        }}
+        phone={!!props.phone}
+        autoFocus
       />
       <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>
         <Button
@@ -891,10 +889,11 @@ export function DescriptionEditor(props: {
         <Button
           label={uiText("save")}
           tone="primary"
-          disabled={props.disabled}
+          shortcut={props.phone ? undefined : sendShortcut}
+          disabled={props.disabled || description.tooLong()}
           size={button().size}
           style={{ paddingHorizontal: button().padding }}
-          onPress={props.onSave}
+          onPress={save}
         />
       </View>
     </View>

@@ -1,12 +1,13 @@
 export { openDocDraft } from "./doc-draft";
-export { createEtaEditor, EtaEditor } from "./editor";
+export { sendShortcut } from "./keys";
+export type { TextPlugin } from "./plugin";
 export type { Uploads } from "./plugins/attachment";
-export { attachment } from "./plugins/attachment";
+export { attachment, shownFiles } from "./plugins/attachment";
 export { draft } from "./plugins/draft";
 export { limit } from "./plugins/limit";
-export { mention } from "./plugins/mention";
-export { pasteBlock } from "./plugins/paste-block";
-export { plainText } from "./plugins/plain-text";
+export { mention, shownMentions } from "./plugins/mention";
 export { quote } from "./plugins/quote";
 export { serialize } from "./plugins/serialize";
 export { submitKeys } from "./plugins/submit-keys";
+export { chatText, descriptionText } from "./systems";
+export { createTextSystem } from "./text-system";

@@ -43,6 +43,10 @@ import {
   canStartHost,
   startLocalHost,
 } from "./src/pages/connection/local-host";
+import {
+  AttachmentFiles,
+  createAttachmentFiles,
+} from "./src/services/attachment-files";
 import { clientUpdate } from "./src/services/client-update";
 import {
   addressFrom,
@@ -50,6 +54,7 @@ import {
   defaultAddress,
   Host,
 } from "./src/services/host";
+import { createPictureMode, PictureModes } from "./src/services/picture-mode";
 
 const connectKey = "eta.host";
 
@@ -69,6 +74,8 @@ function pairingAddress(
 function App() {
   const host = createHost();
   resumeComposerOutbox(host);
+  const pictureMode = createPictureMode();
+  const attachmentFiles = createAttachmentFiles(host);
   const language = createLanguagePreference();
   const elementPicker = createElementPicker();
   const initial = defaultAddress();
@@ -208,135 +215,142 @@ function App() {
     <LanguageSettings.Provider value={language}>
       <ElementPicking.Provider value={elementPicker}>
         <Host.Provider value={host}>
-          <Palette.Provider value={c}>
-            <Fonts.Provider value={fonts}>
-              <Screen.Provider value={layout}>
-                <SafeArea
-                  testID="app-safe-area"
-                  style={{ backgroundColor: c().canvas }}
-                >
-                  <If
-                    when={
-                      host.hasConnected() && !host.paused() && !forcedConnect()
-                    }
-                    else={
+          <PictureModes.Provider value={pictureMode}>
+            <AttachmentFiles.Provider value={attachmentFiles}>
+              <Palette.Provider value={c}>
+                <Fonts.Provider value={fonts}>
+                  <Screen.Provider value={layout}>
+                    <SafeArea
+                      testID="app-safe-area"
+                      style={{ backgroundColor: c().canvas }}
+                    >
                       <If
-                        when={loadingWebWorkspace()}
+                        when={
+                          host.hasConnected() &&
+                          !host.paused() &&
+                          !forcedConnect()
+                        }
                         else={
-                          <Connection
-                            initial={offeredAddress() ?? host.address()}
-                            layout={layout()}
-                            resuming={startingLocal()}
-                            openingWeb={openingWeb()}
-                            onConnect={connect}
-                          />
+                          <If
+                            when={loadingWebWorkspace()}
+                            else={
+                              <Connection
+                                initial={offeredAddress() ?? host.address()}
+                                layout={layout()}
+                                resuming={startingLocal()}
+                                openingWeb={openingWeb()}
+                                onConnect={connect}
+                              />
+                            }
+                          >
+                            <WorkspaceSkeleton layout={layout()} />
+                          </If>
                         }
                       >
-                        <WorkspaceSkeleton layout={layout()} />
+                        <Workspace
+                          layout={layout()}
+                          theme={theme()}
+                          onTheme={changeTheme}
+                          paletteId={paletteId()}
+                          onPalette={changePalette}
+                          flavor={flavor()}
+                          onFlavor={changeFlavor}
+                          chatWidth={chatWidth()}
+                          onChatWidth={changeChatWidth}
+                          chatRail={chatRail()}
+                          onChatRail={changeChatRail}
+                          onFonts={changeFonts}
+                          onConnect={() => {
+                            forcedConnect.set(true);
+                            host.start(null);
+                          }}
+                        />
                       </If>
-                    }
-                  >
-                    <Workspace
-                      layout={layout()}
-                      theme={theme()}
-                      onTheme={changeTheme}
-                      paletteId={paletteId()}
-                      onPalette={changePalette}
-                      flavor={flavor()}
-                      onFlavor={changeFlavor}
-                      chatWidth={chatWidth()}
-                      onChatWidth={changeChatWidth}
-                      chatRail={chatRail()}
-                      onChatRail={changeChatRail}
-                      onFonts={changeFonts}
-                      onConnect={() => {
-                        forcedConnect.set(true);
-                        host.start(null);
-                      }}
-                    />
-                  </If>
-                  <ToastLayer />
-                  <If when={!forcedConnect()}>
-                    <HostRestartScreen
-                      onConnect={() => {
-                        forcedConnect.set(true);
-                        host.start(null);
-                      }}
-                    />
-                  </If>
-                  <If
-                    when={
-                      canStartHost &&
-                      host.hasConnected() &&
-                      !dismissCompatibility() &&
-                      desktopTooOld(applicationVersion)
-                    }
-                  >
-                    <View
-                      role="alert"
-                      style={{
-                        ...row,
-                        flexShrink: 0,
-                        minHeight: 40,
-                        paddingLeft: 16,
-                        paddingRight: 4,
-                        borderTopWidth: 1,
-                        borderColor: c().border,
-                        backgroundColor: c().canvas,
-                        gap: 8,
-                      }}
-                    >
-                      <Label style={{ flex: 1 }}>
-                        {uiText("thisHostNeedsTheEtaDesktop", {
-                          MIN_DESKTOP,
-                          applicationVersion,
-                        })}
-                      </Label>
-                      <Button
-                        label={uiText("dismissCompatibilityWarning")}
-                        icon="close"
-                        iconOnly
-                        size={32}
-                        iconSize={16}
-                        tone="ghost"
-                        onPress={() => dismissCompatibility.set(true)}
-                      />
-                    </View>
-                  </If>
-                  <ClientUpdateNotice />
-                  <If when={host.error()}>
-                    <View
-                      style={{
-                        ...row,
-                        position: "absolute",
-                        zIndex: 1000,
-                        bottom: 16,
-                        right: 16,
-                        left: 16,
-                        padding: 8,
-                        gap: 8,
-                        backgroundColor: c().redFill,
-                        borderWidth: 1,
-                        borderColor: c().red,
-                      }}
-                    >
-                      <Label variant="small" tone="red" style={{ flex: 1 }}>
-                        {host.error()}
-                      </Label>
-                      <Button
-                        label={uiText("dismissError")}
-                        icon="close"
-                        iconOnly
-                        tone="ghost"
-                        onPress={() => host.error.set("")}
-                      />
-                    </View>
-                  </If>
-                </SafeArea>
-                <ElementPickerOverlay />
-              </Screen.Provider>
-            </Fonts.Provider>
-          </Palette.Provider>
+                      <ToastLayer />
+                      <If when={!forcedConnect()}>
+                        <HostRestartScreen
+                          onConnect={() => {
+                            forcedConnect.set(true);
+                            host.start(null);
+                          }}
+                        />
+                      </If>
+                      <If
+                        when={
+                          canStartHost &&
+                          host.hasConnected() &&
+                          !dismissCompatibility() &&
+                          desktopTooOld(applicationVersion)
+                        }
+                      >
+                        <View
+                          role="alert"
+                          style={{
+                            ...row,
+                            flexShrink: 0,
+                            minHeight: 40,
+                            paddingLeft: 16,
+                            paddingRight: 4,
+                            borderTopWidth: 1,
+                            borderColor: c().border,
+                            backgroundColor: c().canvas,
+                            gap: 8,
+                          }}
+                        >
+                          <Label style={{ flex: 1 }}>
+                            {uiText("thisHostNeedsTheEtaDesktop", {
+                              MIN_DESKTOP,
+                              applicationVersion,
+                            })}
+                          </Label>
+                          <Button
+                            label={uiText("dismissCompatibilityWarning")}
+                            icon="close"
+                            iconOnly
+                            size={32}
+                            iconSize={16}
+                            tone="ghost"
+                            onPress={() => dismissCompatibility.set(true)}
+                          />
+                        </View>
+                      </If>
+                      <ClientUpdateNotice />
+                      <If when={host.error()}>
+                        <View
+                          style={{
+                            ...row,
+                            position: "absolute",
+                            zIndex: 1000,
+                            bottom: 16,
+                            right: 16,
+                            left: 16,
+                            padding: 8,
+                            gap: 8,
+                            backgroundColor: c().redFill,
+                            borderWidth: 1,
+                            borderColor: c().red,
+                          }}
+                        >
+                          <Label variant="small" tone="red" style={{ flex: 1 }}>
+                            {host.error()}
+                          </Label>
+                          <Button
+                            label={uiText("dismissError")}
+                            icon="close"
+                            iconOnly
+                            tone="ghost"
+                            onPress={() => host.error.set("")}
+                          />
+                        </View>
+                      </If>
+                    </SafeArea>
+                    <ElementPickerOverlay />
+                    {attachmentFiles.writer()}
+                  </Screen.Provider>
+                </Fonts.Provider>
+              </Palette.Provider>
+            </AttachmentFiles.Provider>
+          </PictureModes.Provider>
         </Host.Provider>
       </ElementPicking.Provider>
     </LanguageSettings.Provider>

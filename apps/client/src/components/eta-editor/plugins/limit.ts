@@ -1,4 +1,4 @@
-import type { EtaPlugin } from "../editor";
+import type { TextPlugin } from "../plugin";
 import { docText } from "@eta/client-contracts/composer-doc";
 import {
   charCount,
@@ -14,19 +14,21 @@ import { characterCount } from "nsh/base";
  */
 export function limit(
   max = MAX_MESSAGE_CHARS,
-): EtaPlugin & { tooLong: () => boolean } {
+): TextPlugin & { tooLong: () => boolean } {
   const tooLong = signal(false);
   return {
     name: "limit",
-    plugins: [characterCount()],
     tooLong,
-    setup(editor) {
-      const check = () => {
-        const text = docText(editor.doc());
-        tooLong.set(text.length > max && charCount(text) > max);
-      };
-      check();
-      return editor.session.on("revision", check);
+    editor: {
+      plugins: [characterCount()],
+      setup(editor) {
+        const check = () => {
+          const text = docText(editor.doc());
+          tooLong.set(text.length > max && charCount(text) > max);
+        };
+        check();
+        return editor.session.on("revision", check);
+      },
     },
   };
 }

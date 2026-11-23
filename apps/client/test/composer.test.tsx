@@ -147,6 +147,8 @@ test("removing a folded paste keeps the words on both sides", async () => {
   await app.type(input, "left");
   await app.paste(input, { text: "1\n2\n3\n4" });
   await app.type(input, "right");
+  // Its × shows while the pointer is over it.
+  await app.hover("label:Unfold pasted text (4 lines)");
   await app.press("label:Remove pasted text");
   await app.keyboard.press("enter");
   await app.waitFor(sent(["alpha", "leftright", "queue", []]));
@@ -343,4 +345,55 @@ test("one undo takes a quote back out", async () => {
   expect(screen(app)).not.toContain("Line one");
   await app.keyboard.press("enter");
   await app.waitFor(sent(["alpha", "keep", "queue", []]));
+});
+
+test("Markdown typed turns into formatting and goes out as Markdown; Enter is a list's and a code block's own", async () => {
+  const app = await fixture();
+  await app.type(input, "## Plan");
+  await app.keyboard.press("shift+enter");
+  await app.type(input, "- keep the **band** ");
+  // In a list ⏎ is a new item, and on an empty item it leaves the list: nothing is sent.
+  await app.keyboard.press("enter");
+  await app.type(input, "two");
+  await app.keyboard.press("enter");
+  await app.keyboard.press("enter");
+  expect(screen(app)).not.toContain("sent [");
+  // A fence and ⏎ make a code block; ⏎ in it is a new line, ⌘⏎ leaves it.
+  await app.type(input, "```ts");
+  await app.keyboard.press("enter");
+  await app.type(input, "a = 1");
+  await app.keyboard.press("enter");
+  await app.type(input, "b = 2");
+  await app.keyboard.press("mod+enter");
+  await app.type(input, "done");
+  expect(screen(app)).not.toContain("sent [");
+  await app.keyboard.press("enter");
+  await app.waitFor(
+    sent([
+      "alpha",
+      "## Plan\n\n- keep the **band**\n- two\n\n```ts\na = 1\nb = 2\n```\n\ndone",
+      "queue",
+      [],
+    ]),
+  );
+});
+
+test("Markdown pasted is formatted, and code from an editor is a code block", async () => {
+  const app = await fixture();
+  await app.paste(input, { text: "## Rollout\n- week 1: **team**" });
+  await app.keyboard.press("enter");
+  await app.keyboard.press("enter");
+  await app.paste(input, {
+    text: "const a = 1;\nconst b = 2;\n",
+    html: '<div style="font-family: Menlo, monospace; white-space: pre;"><div>const a = 1;</div><div>const b = 2;</div></div>',
+  });
+  await app.keyboard.press("enter");
+  await app.waitFor(
+    sent([
+      "alpha",
+      "## Rollout\n\n- week 1: **team**\n\n```\nconst a = 1;\nconst b = 2;\n```",
+      "queue",
+      [],
+    ]),
+  );
 });

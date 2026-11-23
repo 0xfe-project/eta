@@ -1,14 +1,8 @@
 import type { UpgradePhase } from "@eta/client-contracts";
 import type { HostUpdate } from "./host-update";
 import { openUrl, View } from "nsh";
-import {
-  Button,
-  colors,
-  Icon,
-  Label,
-  Markdown,
-  row,
-} from "../../../components";
+import { Button, colors, Icon, Label, row } from "../../../components";
+import { chatText } from "../../../components/eta-editor";
 import { StatusDot } from "../../../components/status-dot";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
@@ -266,7 +260,10 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
               borderColor: c().border,
             }}
           >
-            <Markdown value={release().text} compactHeadings />
+            <chatText.View
+              text={{ text: release().text }}
+              label={uiText("releaseNotes")}
+            />
             <If when={release().url}>
               {(url) => (
                 <Button

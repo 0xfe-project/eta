@@ -18,7 +18,7 @@ import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "../tasks/activity";
-import { actorLabel, CreatorChip } from "../tasks/creator";
+import { actorLabel } from "../tasks/creator";
 import { activeTaskRun } from "../tasks/run-log";
 import { statusName, TaskGlyph } from "../tasks/status";
 import { StatusSelect } from "../tasks/status-select";
@@ -137,7 +137,6 @@ export function PanelTask(props: {
               >
                 {item().title}
               </Label>
-              <CreatorChip creator={item().createdBy} />
               <Edges
                 label={uiText("tasksBefore", {
                   count: item().dependsOn?.length ?? 0,
