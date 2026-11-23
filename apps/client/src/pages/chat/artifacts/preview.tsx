@@ -58,7 +58,7 @@ export function ArtifactPreview(props: {
   const host = useHost();
   const c = colors();
   const phone = () => props.layout === "phone";
-  const printsInFrame = platform.os === "web" || platform.os === "macos";
+  const printsInFrame = platform.os === "web";
   const version = signal(
     props.initialVersion ?? props.artifact.versions[0]?.number,
   );
