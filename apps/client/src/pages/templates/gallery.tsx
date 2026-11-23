@@ -1,4 +1,5 @@
 import type { AgentResults } from "@eta/client-contracts";
+import type { ScrollRef } from "nsh";
 import type { AgentTemplate } from "./template";
 import { computed, signal, View } from "nsh";
 import {
@@ -26,6 +27,9 @@ import {
   placeholdersOf,
   templateCategories,
 } from "./template";
+
+/** A row of the template list, fixed so the list can scroll to one by its index. */
+const rowHeight = 52;
 
 export interface TemplateGalleryProps {
   phone: boolean;
@@ -166,9 +170,26 @@ export function TemplateGallery(props: TemplateGalleryProps) {
     );
   }
 
+  let listScroll: ScrollRef | undefined;
+  /** The template a link opened on, brought into the list's view (rows are `rowHeight` tall). */
+  function revealInitial() {
+    const index = shown().findIndex(
+      (template) => template.id === props.initialId,
+    );
+    if (index > 2)
+      listScroll?.scrollTo({ y: (index - 2) * rowHeight, animated: false });
+  }
+
   function list() {
     return (
-      <SmoothScroll style={grow} contentStyle={{ paddingVertical: 4 }}>
+      <SmoothScroll
+        ref={(node) => {
+          listScroll = node;
+          revealInitial();
+        }}
+        style={grow}
+        contentStyle={{ paddingVertical: 4 }}
+      >
         <If
           when={shown().length}
           else={
@@ -190,8 +211,8 @@ export function TemplateGallery(props: TemplateGalleryProps) {
                 hoverStyle={{ backgroundColor: c().surface }}
                 style={{
                   ...row,
+                  height: rowHeight,
                   gap: 10,
-                  paddingVertical: 8,
                   paddingHorizontal: 12,
                   backgroundColor:
                     chosen()?.id === template().id ? c().selected : undefined,

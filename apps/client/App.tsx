@@ -47,6 +47,11 @@ import {
   startLocalHost,
 } from "./src/pages/connection/local-host";
 import {
+  requestedTemplate,
+  takeTemplateFromPage,
+  templateLinkId,
+} from "./src/pages/templates/link";
+import {
   AttachmentFiles,
   createAttachmentFiles,
 } from "./src/services/attachment-files";
@@ -105,6 +110,7 @@ function App() {
   const openedWith =
     platform.os === "web" ? undefined : pairingAddress(UrlScheme.url());
   const forcedConnect = signal(Boolean(openedWith));
+  requestedTemplate.set(takeTemplateFromPage());
   const userConnecting = signal(false);
   const openingWeb = signal(false);
   const loadingWebWorkspace = () => {
@@ -203,6 +209,11 @@ function App() {
   if (platform.os !== "web")
     cleanup(
       UrlScheme.on("open", ({ url }) => {
+        const template = templateLinkId(url);
+        if (template) {
+          requestedTemplate.set(template);
+          return;
+        }
         const address = pairingAddress(url);
         if (!address) return;
         offeredAddress.set(address);

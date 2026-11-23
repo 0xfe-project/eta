@@ -42,6 +42,7 @@ import { NewTask } from "../pages/tasks/new-task";
 import { TaskDetail } from "../pages/tasks/task-detail";
 import { TaskWorkspace } from "../pages/tasks/task-workspace";
 import { TemplateGallery } from "../pages/templates/gallery";
+import { requestedTemplate } from "../pages/templates/link";
 import { follow, useHost } from "../services/host";
 
 /** The conversation list on a tablet narrower than 960. */
@@ -150,6 +151,16 @@ export function Workspace(props: {
   const newGroup = signal(false);
   /** The template gallery, open on a template id ("" for none in particular). */
   const templateGallery = signal<string | undefined>(undefined);
+  // A template link (`eta://template?id=…`, `?template=…`) opens the gallery on it.
+  effect(() => {
+    const id = requestedTemplate();
+    if (!id) return;
+    requestedTemplate.set(undefined);
+    // An agent is made in Settings › Agents now: a link gets out of Settings first.
+    const section = settings();
+    if (section) closeSettings(section);
+    templateGallery.set(id);
+  });
   const newTask = signal(false);
   const setup = signal(start.page === "onboard");
   let checkedSetup = false;

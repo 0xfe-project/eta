@@ -1,5 +1,6 @@
 import { expect, test } from "nsh/test";
 import { templates, templateSource } from "../src/pages/templates/catalog";
+import { templateLinkId } from "../src/pages/templates/link";
 import { parseRoleCard, unwrap } from "../src/pages/templates/role-card";
 import {
   fillTemplate,
@@ -95,4 +96,20 @@ test("search matches every word in the name, summary or category, Chinese catego
   expect(ids("销售").length).toBe(16);
   expect(ids("", "Customer support").length).toBe(4);
   expect(ids("nothing matches this")).toEqual([]);
+});
+
+test("a template link names a template of the catalog, and nothing else", () => {
+  expect(templateLinkId("eta://template?id=chief-of-staff")).toBe(
+    "chief-of-staff",
+  );
+  expect(templateLinkId("https://host.example/?template=pr-reviewer")).toBe(
+    "pr-reviewer",
+  );
+  expect(templateLinkId("eta://template?id=not-a-template")).toBeUndefined();
+  expect(
+    templateLinkId("eta://connect?address=h&id=chief-of-staff"),
+  ).toBeUndefined();
+  expect(templateLinkId("https://host.example/")).toBeUndefined();
+  expect(templateLinkId("not a url")).toBeUndefined();
+  expect(templateLinkId(undefined)).toBeUndefined();
 });
