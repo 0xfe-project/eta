@@ -15,7 +15,7 @@ import {
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
-import { control, icon, space, weight } from "../../components/tokens";
+import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "../tasks/activity";
@@ -74,7 +74,7 @@ export function PanelTask(props: {
           <View
             style={{
               ...grow,
-              paddingBottom: 11,
+              paddingBottom: space[12],
               backgroundColor: c().surface,
             }}
           >
@@ -151,12 +151,15 @@ export function PanelTask(props: {
                 style={{
                   ...row,
                   alignItems: "flex-start",
-                  gap: 15,
-                  paddingTop: 7,
+                  gap: space[16],
+                  paddingTop: space[8],
                   paddingHorizontal: inset,
                 }}
               >
-                <AgentFace id={item().createdBy.agentId ?? "user"} size={20} />
+                <AgentFace
+                  id={item().createdBy.agentId ?? "user"}
+                  size={avatar.sm}
+                />
                 <View style={{ flex: 1, minWidth: 0, gap: space[4] }}>
                   <View style={{ ...row, gap: space[8] }}>
                     <Label variant="small" weight={weight.strong}>
@@ -191,7 +194,7 @@ export function PanelTask(props: {
                   style={{
                     ...row,
                     gap: space[8],
-                    paddingTop: 14,
+                    paddingTop: space[16],
                     paddingHorizontal: inset,
                   }}
                 >
@@ -205,7 +208,9 @@ export function PanelTask(props: {
                   />
                 </View>
               </If>
-              <View style={{ paddingBottom: 11, paddingHorizontal: inset }}>
+              <View
+                style={{ paddingBottom: space[12], paddingHorizontal: inset }}
+              >
                 <TaskActivity
                   entries={activity()}
                   runs={item().runs}
@@ -301,7 +306,7 @@ function Edges(props: {
         variant="small"
         tone="muted"
         style={{
-          paddingTop: props.before ? 0 : 14,
+          paddingTop: props.before ? 0 : space[16],
           paddingBottom: space[4],
           paddingHorizontal: inset,
         }}

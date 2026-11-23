@@ -25,7 +25,14 @@ import {
   touchScreen,
 } from "../../components/menu";
 import { CloseButton } from "../../components/navigation-buttons";
-import { control, shadow, space, weight } from "../../components/tokens";
+import {
+  avatar,
+  control,
+  icon,
+  shadow,
+  space,
+  weight,
+} from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -48,7 +55,7 @@ export function StewardMenu(props: {
   const itemStyle = () => ({
     ...row,
     gap: space[8],
-    paddingHorizontal: inSheet() ? 16 : 10,
+    paddingHorizontal: inSheet() ? space[16] : space[12],
     height: inSheet() ? 52 : touchScreen ? touchRow : 30,
   });
   const hover = canHover ? { backgroundColor: c().selected } : undefined;
@@ -68,20 +75,20 @@ export function StewardMenu(props: {
           style={{
             ...row,
             height: 22,
-            gap: 6,
-            paddingHorizontal: 6,
+            gap: space[4],
+            paddingHorizontal: space[8],
             borderWidth: 1,
             borderColor: c().border,
             cursor: "pointer",
           }}
         >
           <If when={props.current}>
-            <AgentFace id={props.current} size={10} />
+            <AgentFace id={props.current} size={avatar.sm} />
           </If>
           <Label variant="small" tone="muted">
             {host.agent(props.current)?.name ?? uiText("steward2")}
           </Label>
-          <Icon name="down" size={8} tone="muted" />
+          <Icon name="down" size={icon.sm} tone="muted" />
         </View>
       }
     >
@@ -94,12 +101,12 @@ export function StewardMenu(props: {
             style={itemStyle()}
             onSelect={() => void choose(member().agentId)}
           >
-            <AgentFace id={member().agentId} size={10} />
+            <AgentFace id={member().agentId} size={avatar.sm} />
             <Label variant="caption" style={{ flex: 1 }}>
               {host.agent(member().agentId)?.name ?? uiText("agent")}
             </Label>
             <If when={member().agentId === props.current}>
-              <Icon name="check" size={10} />
+              <Icon name="check" size={icon.sm} />
             </If>
           </MenuRow>
         )}
@@ -116,7 +123,7 @@ export function StewardMenu(props: {
           {uiText("noSteward")}
         </Label>
         <If when={!props.current}>
-          <Icon name="check" size={10} />
+          <Icon name="check" size={icon.sm} />
         </If>
       </MenuRow>
     </MenuFrame>
@@ -174,13 +181,13 @@ export function InviteAgents(props: {
             ...row,
             justifyContent: "space-between",
             minHeight: 38,
-            paddingHorizontal: 14,
+            paddingHorizontal: space[16],
           }}
         >
           <Label weight={weight.regular}>{title()}</Label>
           <CloseButton
             size={18}
-            iconSize={14}
+            iconSize={icon.sm}
             disabled={saving()}
             onPress={props.onClose}
             style={{ marginRight: -space[2] }}
@@ -189,7 +196,7 @@ export function InviteAgents(props: {
       </If>
       <View
         style={{
-          paddingHorizontal: phone() ? 16 : 14,
+          paddingHorizontal: space[16],
           paddingTop: phone() ? space[16] : space[2],
           gap: space[12],
           ...(phone() ? grow : {}),
@@ -214,7 +221,7 @@ export function InviteAgents(props: {
           <Each of={candidates()} key={(agent) => agent.id}>
             {(agent, index) => (
               <CheckControl
-                size={14}
+                size={icon.md}
                 checked={selected().includes(agent().id)}
                 label={agent().name}
                 onChange={(checked) =>
@@ -235,7 +242,10 @@ export function InviteAgents(props: {
                   cursor: "pointer",
                 }}
               >
-                <AgentFace id={agent().id} size={phone() ? 24 : 12} />
+                <AgentFace
+                  id={agent().id}
+                  size={phone() ? avatar.md : avatar.sm}
+                />
                 <Label style={{ flex: phone() ? 1 : undefined }}>
                   {agent().name}
                 </Label>
@@ -258,7 +268,7 @@ export function InviteAgents(props: {
           justifyContent: "flex-end",
           ...(phone()
             ? { height: 56, paddingHorizontal: space[16] }
-            : { padding: 14 }),
+            : { padding: space[16] }),
           gap: space[8],
           marginTop: phone() ? 0 : space[4],
           borderTopWidth: phone() ? 1 : 0,

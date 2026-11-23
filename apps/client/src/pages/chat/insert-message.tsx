@@ -161,7 +161,7 @@ function InsertBody(props: {
     host.state().status === "open";
   return (
     <View style={{ width: 288 }}>
-      <View style={{ padding: space[8], gap: 6 }}>
+      <View style={{ padding: space[8], gap: space[4] }}>
         <If when={limits.tooLong()}>
           <Label variant="caption" tone="warning">
             {uiText("composerTooLong")}

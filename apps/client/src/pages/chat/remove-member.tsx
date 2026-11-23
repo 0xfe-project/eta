@@ -43,7 +43,7 @@ export function RemoveMember(props: {
       dismissible={!busy()}
       onClose={props.onClose}
     >
-      <View style={{ padding: space[16], gap: 10 }}>
+      <View style={{ padding: space[16], gap: space[8] }}>
         <Label>
           {uiText("removeFrom", {
             memberName: host.agent(props.agentId)?.name ?? props.agentId,

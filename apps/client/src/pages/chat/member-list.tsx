@@ -12,7 +12,7 @@ import { AgentFace } from "../../components/agent-face";
 import { ContextRing, useContextUsage } from "../../components/context-ring";
 import { hint } from "../../components/controls";
 import { StatusDot } from "../../components/status-dot";
-import { space } from "../../components/tokens";
+import { avatar, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { followSession, useHost } from "../../services/host";
 import { tokens } from "../tasks/usage";
@@ -70,7 +70,7 @@ export function ConversationMembers(props: {
                 ...row,
                 paddingVertical: space[8],
                 paddingHorizontal: space[12],
-                gap: 10,
+                gap: space[8],
               }}
             >
               <MemberFace
@@ -78,7 +78,7 @@ export function ConversationMembers(props: {
                 session={entry().sessionId}
               />
               <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
-                <View style={{ ...row, gap: 6 }}>
+                <View style={{ ...row, gap: space[4] }}>
                   <Label lines={1}>
                     {host.agent(entry().agentId)?.name ?? uiText("agent")}
                   </Label>
@@ -106,7 +106,7 @@ export function ConversationMembers(props: {
                   )}
                 </If>
               </View>
-              <View style={{ ...row, gap: 6, flexShrink: 0 }}>
+              <View style={{ ...row, gap: space[4], flexShrink: 0 }}>
                 <If when={entry().sessionId}>
                   {(session) => (
                     <>
@@ -211,12 +211,12 @@ function MemberFace(props: { agentId: string; session: string | null }) {
             flexShrink: 0,
           }}
         >
-          <AgentFace id={props.agentId} size={22} />
+          <AgentFace id={props.agentId} size={avatar.md} />
         </View>
       }
     >
-      <ContextRing usage={usage} size={36}>
-        <AgentFace id={props.agentId} size={22} />
+      <ContextRing usage={usage} size={avatar.xl}>
+        <AgentFace id={props.agentId} size={avatar.md} />
       </ContextRing>
     </If>
   );

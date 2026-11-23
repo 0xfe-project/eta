@@ -81,7 +81,11 @@ export function MemberStepsLedger(props: { session: string }) {
       <If
         when={!!steps()?.length}
         else={
-          <Label variant="small" tone="muted" style={{ paddingVertical: 3 }}>
+          <Label
+            variant="small"
+            tone="muted"
+            style={{ paddingVertical: space[4] }}
+          >
             {host.state().missing[target()]
               ? uiText("sessionUnavailable")
               : !steps()
@@ -98,7 +102,7 @@ export function MemberStepsLedger(props: { session: string }) {
               role="text"
               accessible
               accessibilityLabel={`${uiText(statuses[step().status].label)} · ${step().content}`}
-              style={{ ...row, height: space[24], gap: 6 }}
+              style={{ ...row, height: space[24], gap: space[4] }}
             >
               <View
                 style={{

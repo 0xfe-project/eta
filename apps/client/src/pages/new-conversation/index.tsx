@@ -188,11 +188,7 @@ export function NewConversation(props: {
           }}
         >
           <View style={{ ...row, ...grow, gap: space[8] }}>
-            <Label
-              variant="caption"
-              tone="muted"
-              style={{ letterSpacing: 0.8 }}
-            >
+            <Label tracking="caps" variant="caption" tone="muted">
               {directory() ? "2/2" : "1/2"}
             </Label>
             <Label variant="small" weight={weight.strong}>
@@ -265,8 +261,8 @@ export function NewConversation(props: {
           variant="caption"
           tone="muted"
           style={{
-            paddingHorizontal: 14,
-            paddingVertical: 5,
+            paddingHorizontal: space[16],
+            paddingVertical: space[4],
             borderTopWidth: 1,
             borderColor: c().border,
           }}

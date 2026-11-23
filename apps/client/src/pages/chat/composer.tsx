@@ -369,7 +369,7 @@ function ComposerBody(
         onDiscard={(id) => edit({ outgoing: removeOutgoing(id) })}
       />
       <If when={props.blocked}>
-        <View style={{ ...row, gap: 6 }}>
+        <View style={{ ...row, gap: space[4] }}>
           <Label variant="small">
             {uiText(
               props.blocked === "archived"
@@ -426,7 +426,7 @@ function ComposerBody(
           position: "relative",
           borderWidth: 1,
           borderColor: c().ink,
-          opacity: offline() ? 0.45 : 1,
+          opacity: offline() ? opacity.disabled : 1,
           pointerEvents: offline() ? "none" : undefined,
         }}
       >
@@ -459,8 +459,8 @@ function ComposerBody(
               ...row,
               height: space[40],
               paddingLeft: props.phone ? 0 : space[12],
-              paddingRight: 6,
-              gap: props.phone ? 6 : 12,
+              paddingRight: space[8],
+              gap: props.phone ? space[4] : space[12],
               backgroundColor: props.phone ? c().canvas : c().surface,
               borderTopWidth: props.phone ? 0 : 1,
               borderColor: c().border,
@@ -486,11 +486,11 @@ function ComposerBody(
                 width: props.phone ? 32 : 14,
                 height: props.phone ? 32 : 14,
                 flexShrink: 0,
-                opacity: attachDisabled() ? 0.45 : 1,
+                opacity: attachDisabled() ? opacity.disabled : 1,
                 cursor: attachDisabled() ? "default" : "pointer",
               }}
             >
-              <Icon name="plus" size={props.phone ? 16 : 14} tone="muted" />
+              <Icon name="plus" size={icon.md} tone="muted" />
             </View>
             <View style={{ flex: props.phone ? 0 : 1 }} />
             <Button
@@ -505,7 +505,7 @@ function ComposerBody(
               style={
                 props.phone
                   ? undefined
-                  : { paddingHorizontal: 10, gap: space[8] }
+                  : { paddingHorizontal: space[12], gap: space[8] }
               }
               tone="primary"
               dimDisabled={

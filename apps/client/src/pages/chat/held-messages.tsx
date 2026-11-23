@@ -6,7 +6,7 @@ import type {
 import { effect, keymap, signal, View } from "nsh";
 import { colors, Label, row } from "../../components";
 import { StatusDot } from "../../components/status-dot";
-import { space } from "../../components/tokens";
+import { opacity, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -133,10 +133,10 @@ export function HeldMessages(props: {
       <View
         role="list"
         accessibilityLabel={uiText("queueLane")}
-        style={{ gap: 6 }}
+        style={{ gap: space[4] }}
       >
         <If when={notice()}>
-          <View role="alert" style={{ ...row, gap: 6 }}>
+          <View role="alert" style={{ ...row, gap: space[4] }}>
             <StatusDot color={c().warning} />
             <Label variant="small" tone="warningInk" style={{ flex: 1 }}>
               {notice()}
@@ -198,7 +198,7 @@ export function HeldMessages(props: {
                 style={{
                   paddingHorizontal: space[8],
                   paddingVertical: props.phone ? space[8] : space[2],
-                  opacity: mine() ? 0.4 : 1,
+                  opacity: mine() ? opacity.disabled : 1,
                   cursor: mine() ? undefined : "pointer",
                 }}
               >
@@ -233,9 +233,9 @@ export function HeldMessages(props: {
                 <View
                   style={{
                     ...row,
-                    gap: 6,
-                    paddingHorizontal: 10,
-                    paddingTop: 6,
+                    gap: space[4],
+                    paddingHorizontal: space[12],
+                    paddingTop: space[8],
                   }}
                 >
                   <If when={mine() === "steer"}>
@@ -260,7 +260,7 @@ export function HeldMessages(props: {
                     <View
                       style={{
                         maxWidth: 520,
-                        paddingHorizontal: 10,
+                        paddingHorizontal: space[12],
                         paddingVertical: space[8],
                         backgroundColor: c().ink,
                       }}
@@ -270,7 +270,7 @@ export function HeldMessages(props: {
                       </Label>
                     </View>
                   }
-                  style={{ paddingHorizontal: 10, paddingTop: space[2] }}
+                  style={{ paddingHorizontal: space[12], paddingTop: space[2] }}
                 >
                   <Label lines={2}>{message().text}</Label>
                 </View>
@@ -280,7 +280,7 @@ export function HeldMessages(props: {
                     gap: space[2],
                     paddingHorizontal: space[2],
                     paddingTop: space[2],
-                    paddingBottom: props.phone ? 2 : 6,
+                    paddingBottom: props.phone ? space[2] : space[8],
                   }}
                 >
                   {action(

@@ -67,7 +67,7 @@ export function SystemNotice(props: { item: MessageView; phone: boolean }) {
         ...row,
         alignSelf: "stretch",
         gap: space[12],
-        paddingVertical: props.phone ? 6 : 8,
+        paddingVertical: space[8],
         paddingHorizontal: props.phone ? 0 : space[16],
       }}
     >

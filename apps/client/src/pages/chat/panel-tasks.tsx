@@ -74,15 +74,15 @@ export function ContextTasks(props: {
             style={{
               ...row,
               height: 30,
-              paddingLeft: entry().depth ? 22 : 10,
-              paddingRight: 10,
+              paddingLeft: entry().depth ? space[12] + icon.sm : space[12],
+              paddingRight: space[12],
               gap: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
               cursor: "pointer",
             }}
           >
-            <TaskGlyph status={entry().task.status} size={14} />
+            <TaskGlyph status={entry().task.status} size={icon.sm} />
             <Label variant="caption" tone="muted">
               {`#${entry().task.number}`}
             </Label>
@@ -100,7 +100,7 @@ export function ContextTasks(props: {
                 {`${entry().task.subtasks?.done ?? 0}/${entry().task.subtasks?.total ?? 0}`}
               </Label>
             </If>
-            <Icon name="right" size={10} tone="muted" />
+            <Icon name="right" size={icon.sm} tone="muted" />
           </View>
         )}
       </Each>
@@ -176,7 +176,7 @@ export function TasksTab(props: {
       hoverStyle={{ backgroundColor: c().selected }}
       style={{
         paddingVertical: space[2],
-        paddingHorizontal: 6,
+        paddingHorizontal: space[8],
         borderWidth: 1,
         borderColor: selected ? c().ink : c().border,
         cursor: "pointer",
@@ -220,9 +220,9 @@ export function TasksTab(props: {
             borderWidth: 0,
             height: 23,
             marginVertical: -space[4],
-            marginRight: -6,
-            paddingHorizontal: 6,
-            gap: 5,
+            marginRight: -space[8],
+            paddingHorizontal: space[8],
+            gap: space[4],
             flexShrink: 1,
             minWidth: 0,
           }}
@@ -241,7 +241,7 @@ export function TasksTab(props: {
       <View
         style={{
           ...row,
-          gap: 6,
+          gap: space[4],
           paddingBottom: space[12],
           paddingHorizontal: inset,
         }}
@@ -280,8 +280,8 @@ export function TasksTab(props: {
                 variant="small"
                 tone="muted"
                 style={{
-                  paddingTop: index() ? 10 : 2,
-                  paddingBottom: 6,
+                  paddingTop: index() ? space[12] : space[2],
+                  paddingBottom: space[8],
                   paddingHorizontal: inset,
                 }}
               >
@@ -320,14 +320,14 @@ export function TasksTab(props: {
                   ...row,
                   height: control.md,
                   gap: space[8],
-                  paddingTop: index() ? 0 : 6,
+                  paddingTop: index() ? 0 : space[8],
                   paddingHorizontal: inset,
                   cursor: "pointer",
                 }}
               >
                 <Icon
                   name={expanded() ? "down" : "right"}
-                  size={8}
+                  size={icon.sm}
                   tone="muted"
                 />
                 <TaskGlyph status={group()[0]} size={icon.sm} />
@@ -413,13 +413,13 @@ function TaskRow(props: {
       style={{
         ...row,
         height: 52,
-        gap: 10,
+        gap: space[8],
         flexShrink: 0,
         paddingHorizontal: inset,
         cursor: "pointer",
       }}
     >
-      <TaskGlyph status={task().status} size={14} />
+      <TaskGlyph status={task().status} size={icon.sm} />
       <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
         <Label variant="small" lines={1}>
           {task().title}
@@ -481,7 +481,7 @@ function TaskRow(props: {
             <View
               style={{ ...row, gap: space[4], flexShrink: 1, maxWidth: 160 }}
             >
-              <Icon name="lock" size={11} tone="muted" />
+              <Icon name="lock" size={icon.sm} tone="muted" />
               <Label variant="small" tone="muted" lines={1}>
                 {wait().title}
               </Label>

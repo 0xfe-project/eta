@@ -20,7 +20,7 @@ import {
   row,
   textFaces,
 } from "../../components";
-import { space } from "../../components/tokens";
+import { icon, opacity, space } from "../../components/tokens";
 import { localizedText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -106,7 +106,7 @@ export function DirectoryOptions(props: {
             borderColor: c().ink,
           }}
         >
-          <Icon name="search" size={14} />
+          <Icon name="search" size={icon.md} />
           <Each of={[pageKey(page())]}>
             {() => (
               <Input
@@ -140,13 +140,13 @@ export function DirectoryOptions(props: {
             gap: space[8],
             minHeight: phone() ? space[32] : space[24],
             marginTop: phone() ? space[12] : 0,
-            paddingHorizontal: phone() ? 16 : 14,
+            paddingHorizontal: space[16],
             borderBottomWidth: phone() ? 0 : 1,
             borderColor: c().border,
           }}
         >
           <If when={phone()}>
-            <Icon name="monitor" size={14} />
+            <Icon name="monitor" size={icon.md} />
           </If>
           <Label variant="small">{machineName()}</Label>
         </View>
@@ -172,7 +172,7 @@ export function DirectoryOptions(props: {
             style={{
               height: space[40],
               justifyContent: "center",
-              paddingHorizontal: 14,
+              paddingHorizontal: space[16],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
@@ -191,7 +191,7 @@ export function DirectoryOptions(props: {
           style={{
             ...row,
             paddingHorizontal: space[16],
-            gap: 5,
+            gap: space[4],
             flexWrap: "wrap",
           }}
         >
@@ -227,14 +227,14 @@ export function DirectoryOptions(props: {
         when={kind() === "search" && query() && !loading() && rows().length > 0}
       >
         <Label
+          tracking="caps"
           variant="caption"
           tone="muted"
           style={{
             paddingHorizontal: space[16],
             // 16pt below the field, whose own margin gives the first 8.
-            paddingTop: phone() ? 8 : 6,
-            paddingBottom: phone() ? 8 : 6,
-            letterSpacing: 0.8,
+            paddingTop: space[8],
+            paddingBottom: space[8],
             borderBottomWidth: phone() ? 0 : 1,
             borderColor: c().border,
           }}
@@ -265,19 +265,19 @@ export function DirectoryOptions(props: {
               ...row,
               minHeight: phone() ? 56 : 29,
               marginHorizontal: phone() ? space[16] : 0,
-              paddingHorizontal: phone() ? 4 : 14,
-              gap: phone() ? 12 : 10,
+              paddingHorizontal: phone() ? space[4] : space[16],
+              gap: phone() ? space[12] : space[8],
               borderTopWidth: phone() && index() === 0 ? 1 : 0,
               borderBottomWidth: phone() ? 1 : 0,
               borderColor: c().border,
               backgroundColor:
                 selected() === index() ? c().selected : c().canvas,
               cursor: entry().disabled ? "default" : "pointer",
-              opacity: entry().disabled ? 0.5 : 1,
+              opacity: entry().disabled ? opacity.disabled : 1,
             }}
           >
             <If when={phone()}>
-              <Icon name={entry().icon} size={18} />
+              <Icon name={entry().icon} size={icon.md} />
             </If>
             <View
               style={{
@@ -307,8 +307,8 @@ export function DirectoryOptions(props: {
               </If>
             </View>
             <If when={phone()}>
-              <View style={{ opacity: 0.5 }}>
-                <Icon name="right" size={14} />
+              <View style={{ opacity: opacity.disabled }}>
+                <Icon name="right" size={icon.md} />
               </View>
             </If>
           </View>

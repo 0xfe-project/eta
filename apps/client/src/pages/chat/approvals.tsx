@@ -18,7 +18,7 @@ import {
   textFaces,
   textStyle,
 } from "../../components";
-import { control, space, weight } from "../../components/tokens";
+import { control, icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 
@@ -106,7 +106,7 @@ function SheetQuestion(props: {
             style={
               props.sheet
                 ? { gap: space[8] }
-                : { ...row, flexWrap: "wrap", gap: 6 }
+                : { ...row, flexWrap: "wrap", gap: space[4] }
             }
           >
             <Each of={props.item.options}>
@@ -254,7 +254,7 @@ function SheetProposal(props: {
           style={{
             paddingTop: space[4],
             paddingHorizontal: space[16],
-            gap: 14,
+            gap: space[12],
           }}
         >
           <View style={{ gap: space[4] }}>
@@ -432,7 +432,7 @@ function Choice(props: {
       style={{
         ...row,
         height: control.md,
-        paddingHorizontal: 10,
+        paddingHorizontal: space[12],
         borderWidth: 1,
         borderColor: props.selected
           ? c().button
@@ -440,14 +440,15 @@ function Choice(props: {
             ? c().border
             : c().strong,
         backgroundColor: props.selected ? c().button : "transparent",
-        opacity: props.disabled ? 0.45 : 1,
+        opacity: props.disabled ? opacity.disabled : 1,
         cursor: props.disabled ? "default" : "pointer",
       }}
     >
       <Label
+        tracking="caps"
         variant="caption"
         tone={props.selected ? "buttonInk" : props.quiet ? "muted" : "ink"}
-        style={{ letterSpacing: 0.9, textTransform: "uppercase" }}
+        style={{ textTransform: "uppercase" }}
       >
         {props.label}
       </Label>
@@ -497,28 +498,32 @@ function QuestionCard(props: { item: InteractionView }) {
           ...row,
           gap: space[8],
           paddingVertical: space[4],
-          paddingHorizontal: 10,
+          paddingHorizontal: space[12],
           backgroundColor: c().overlay,
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
       >
         <Label
+          tracking="caps"
           variant="caption"
           tone="warning"
-          style={{ letterSpacing: 1.4, textTransform: "uppercase" }}
+          style={{ textTransform: "uppercase" }}
         >
           {uiText("confirmationRequestCaption")}
         </Label>
         <Label
+          tracking="caps"
           variant="caption"
           lines={1}
-          style={{ letterSpacing: 1.4, textTransform: "uppercase" }}
+          style={{ textTransform: "uppercase" }}
         >
           {name()}
         </Label>
       </View>
-      <Label style={{ paddingVertical: space[8], paddingHorizontal: 10 }}>
+      <Label
+        style={{ paddingVertical: space[8], paddingHorizontal: space[12] }}
+      >
         {props.item.prompt}
       </Label>
       <If when={props.item.context}>
@@ -526,7 +531,7 @@ function QuestionCard(props: { item: InteractionView }) {
           <Label
             variant="small"
             tone="muted"
-            style={{ paddingHorizontal: 10, paddingBottom: space[8] }}
+            style={{ paddingHorizontal: space[12], paddingBottom: space[8] }}
           >
             {text()}
           </Label>
@@ -536,9 +541,9 @@ function QuestionCard(props: { item: InteractionView }) {
         style={{
           ...row,
           flexWrap: "wrap",
-          gap: 6,
-          paddingHorizontal: 10,
-          paddingBottom: 10,
+          gap: space[4],
+          paddingHorizontal: space[12],
+          paddingBottom: space[12],
         }}
       >
         <If when={freeform()}>
@@ -609,7 +614,7 @@ export function PendingStrip(props: {
           role="button"
           accessibilityLabel={item().prompt}
           onPress={() => props.onOpen?.(item())}
-          hoverStyle={{ opacity: 0.85 }}
+          hoverStyle={{ opacity: opacity.muted }}
           focusVisibleStyle={focusRing(c())}
           style={{
             cursor: "pointer",
@@ -623,9 +628,10 @@ export function PendingStrip(props: {
         >
           <View style={{ ...row, gap: space[8], paddingVertical: space[2] }}>
             <Label
+              tracking="caps"
               variant="caption"
               tone="warning"
-              style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
+              style={{ textTransform: "uppercase" }}
             >
               {host.agent(item().agentId)?.name ?? uiText("agent")}
             </Label>
@@ -717,16 +723,21 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
         style={{
           ...row,
           height: 30,
-          gap: 6,
+          gap: space[4],
           paddingHorizontal: space[8],
           cursor: "pointer",
         }}
       >
-        <Icon name={expanded() ? "down" : "right"} size={8} tone="muted" />
+        <Icon
+          name={expanded() ? "down" : "right"}
+          size={icon.sm}
+          tone="muted"
+        />
         <Label
+          tracking="caps"
           variant="caption"
           tone="muted"
-          style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
+          style={{ textTransform: "uppercase" }}
         >
           {kindName(op().kind)}
         </Label>
@@ -740,7 +751,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
         </Label>
         <View
           style={{
-            paddingHorizontal: pending() ? 5 : 0,
+            paddingHorizontal: pending() ? space[4] : 0,
             borderWidth: pending() ? 1 : 0,
             borderColor: c().strong,
             flexShrink: 0,
@@ -754,8 +765,8 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
       <If when={expanded() && pending()}>
         <View
           style={{
-            padding: 10,
-            gap: 6,
+            padding: space[12],
+            gap: space[4],
             borderTopWidth: 1,
             borderColor: c().border,
           }}
@@ -764,12 +775,12 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
             {(field) => (
               <View style={{ ...row, alignItems: "flex-start", gap: space[8] }}>
                 <Label
+                  tracking="caps"
                   variant="caption"
                   tone="muted"
                   style={{
                     width: 72,
                     flexShrink: 0,
-                    letterSpacing: 0.8,
                     textTransform: "uppercase",
                   }}
                 >
@@ -787,7 +798,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
               tone="primary"
               size={22}
               labelVariant="caption"
-              style={{ paddingHorizontal: 10 }}
+              style={{ paddingHorizontal: space[12] }}
               disabled={working()}
               onPress={() => void decide("approve")}
             />
@@ -801,7 +812,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
               style={{
                 ...row,
                 height: 22,
-                paddingHorizontal: 10,
+                paddingHorizontal: space[12],
                 cursor: "pointer",
               }}
             >
@@ -818,7 +829,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
           tone={op().status === "failed" ? "mutedInk" : "ink"}
           style={{
             paddingVertical: space[8],
-            paddingHorizontal: 10,
+            paddingHorizontal: space[12],
             borderTopWidth: 1,
             borderColor: c().border,
           }}

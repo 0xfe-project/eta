@@ -60,7 +60,7 @@ export function QuestionDialog(props: {
           flexShrink: 0,
         }}
       >
-        <AgentFace id={props.item.agentId} size={20} />
+        <AgentFace id={props.item.agentId} size={avatar.md} />
         <Label weight={weight.strong} style={{ flex: 1 }}>
           {uiText("questionFromWithCount", { value1: name() })}
         </Label>
@@ -207,7 +207,7 @@ export function Pending(props: {
         style={{
           ...row,
           height: 30,
-          gap: 6,
+          gap: space[4],
           paddingHorizontal: space[16],
           marginTop: props.gap ? space[8] : 0,
           flexShrink: 0,
@@ -260,7 +260,7 @@ export function Pending(props: {
         style={{
           ...row,
           height: 52,
-          gap: 10,
+          gap: space[8],
           paddingHorizontal: space[12],
           flexShrink: 0,
           borderBottomWidth: 1,
@@ -303,7 +303,7 @@ export function Pending(props: {
         >
           {props.action}
         </Label>
-        <Icon name="right" size={10} tone="muted" />
+        <Icon name="right" size={icon.sm} tone="muted" />
       </View>
     );
   }
@@ -319,9 +319,9 @@ export function Pending(props: {
             <View
               style={{
                 ...row,
-                gap: 6,
-                paddingTop: 14,
-                paddingBottom: 10,
+                gap: space[4],
+                paddingTop: space[16],
+                paddingBottom: space[12],
                 paddingHorizontal: space[12],
                 borderBottomWidth: 1,
                 borderColor: c().border,
@@ -383,7 +383,7 @@ export function Pending(props: {
                   actionLink
                   onPress={() => props.onTask?.(item().id)}
                 >
-                  <TaskGlyph status={item().status} size={14} />
+                  <TaskGlyph status={item().status} size={icon.md} />
                 </PanelRow>
               )}
             </Each>
@@ -417,7 +417,7 @@ export function Pending(props: {
                 >
                   <Icon
                     name="routines"
-                    size={14}
+                    size={icon.md}
                     tone={routine().unseenFailures ? "red" : "muted"}
                   />
                 </PanelRow>
@@ -440,8 +440,8 @@ export function Pending(props: {
         onPress={props.onPress}
         hoverStyle={{ backgroundColor: c().selected }}
         style={{
-          gap: 3,
-          paddingVertical: 10,
+          gap: space[2],
+          paddingVertical: space[12],
           paddingHorizontal: space[12],
           borderBottomWidth: 1,
           borderColor: c().border,
@@ -449,10 +449,11 @@ export function Pending(props: {
         }}
       >
         <Label
+          tracking="caps"
           variant="caption"
           tone="warning"
           lines={1}
-          style={{ letterSpacing: 1, textTransform: "uppercase" }}
+          style={{ textTransform: "uppercase" }}
         >
           {props.caption}
         </Label>
@@ -679,7 +680,7 @@ export function Pending(props: {
                 flexShrink: 0,
               }}
             >
-              <CaptainFace size={20} />
+              <CaptainFace size={avatar.md} />
               <Label weight={weight.strong} style={{ flex: 1 }}>
                 {uiText("proposalFromCaptain")}
               </Label>

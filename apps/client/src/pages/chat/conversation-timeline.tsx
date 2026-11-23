@@ -19,6 +19,7 @@ import {
 import { wheelScroll } from "../../components/scroll-follow";
 import {
   control,
+  icon,
   opacity,
   shadow,
   space,
@@ -217,7 +218,7 @@ export function ConversationTimeline(props: {
             title={uiText("lostTheConnectionToTheHost")}
             description={uiText("agentsKeepRunningOnTheHost")}
             icon="linkBreak"
-            iconSize={28}
+            iconSize={icon.xl}
             iconTone="ink"
             titleWeight={weight.strong}
           >
@@ -228,7 +229,7 @@ export function ConversationTimeline(props: {
               style={{
                 marginTop: space[8],
                 paddingHorizontal: space[12],
-                gap: 6,
+                gap: space[4],
               }}
               onPress={host.reconnect}
             />
@@ -266,7 +267,7 @@ export function ConversationTimeline(props: {
           }}
           contentStyle={{
             paddingLeft: space[16],
-            paddingRight: props.rail ? 60 : 16,
+            paddingRight: props.rail ? space[64] : space[16],
             // The header's slot stays, empty, with a gap after it: take that
             // gap back while there is nothing older to load.
             paddingTop: (phone() ? 16 : 12) - (props.hasOlder ? 0 : 12),
@@ -287,7 +288,7 @@ export function ConversationTimeline(props: {
                   focusVisibleStyle={focusRing(c())}
                   style={{
                     paddingVertical: space[4],
-                    opacity: props.paging ? 0.45 : 1,
+                    opacity: props.paging ? opacity.disabled : 1,
                     cursor: props.paging ? "default" : "pointer",
                   }}
                 >
@@ -357,8 +358,8 @@ export function ConversationTimeline(props: {
                 icon="return"
                 size={control.md}
                 style={{
-                  paddingHorizontal: 10,
-                  gap: 6,
+                  paddingHorizontal: space[12],
+                  gap: space[4],
                   backgroundColor: c().canvas,
                   borderWidth: 1,
                   borderColor: c().border,
@@ -386,7 +387,7 @@ export function ConversationTimeline(props: {
               top: 10,
               right: 10,
               flexDirection: "row",
-              gap: 3,
+              gap: space[2],
             }}
           >
             <Each of={["agent", "user"] as const}>
@@ -397,7 +398,7 @@ export function ConversationTimeline(props: {
                     .filter((entry) => entry.message.author === author())
                     .slice(-12);
                 return (
-                  <View style={{ gap: 3 }}>
+                  <View style={{ gap: space[2] }}>
                     <Each of={entries()} key={(entry) => entry.message.id}>
                       {(entry, index) => (
                         <Button

@@ -114,7 +114,7 @@ export function ConversationPanel(props: {
               ...row,
               justifyContent: docked() ? "space-between" : "center",
               gap: space[2],
-              paddingLeft: docked() ? 10 : 0,
+              paddingLeft: docked() ? space[12] : 0,
               paddingRight: docked() ? space[8] : 0,
               height: space[40],
               flexShrink: 0,
@@ -147,9 +147,9 @@ export function ConversationPanel(props: {
                       focusVisibleStyle={focusRing(c())}
                       style={{
                         ...row,
-                        gap: 6,
+                        gap: space[4],
                         height: space[24],
-                        paddingHorizontal: 10,
+                        paddingHorizontal: space[12],
                         cursor: "pointer",
                         backgroundColor: selected() ? c().canvas : c().selected,
                       }}
@@ -185,7 +185,7 @@ export function ConversationPanel(props: {
             </View>
             <If when={docked()}>
               <CloseButton
-                iconSize={14}
+                iconSize={icon.sm}
                 style={{ backgroundColor: "transparent" }}
                 onPress={props.onCloseDrawer}
               />
@@ -219,7 +219,7 @@ export function ConversationPanel(props: {
                         <View
                           style={{
                             padding: space[12],
-                            gap: 6,
+                            gap: space[4],
                             borderBottomWidth: 1,
                             borderColor: c().border,
                           }}
@@ -253,7 +253,7 @@ export function ConversationPanel(props: {
                         <View
                           style={{
                             padding: space[12],
-                            gap: 6,
+                            gap: space[4],
                             borderBottomWidth: 1,
                             borderColor: c().border,
                           }}
