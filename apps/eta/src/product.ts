@@ -1069,6 +1069,10 @@ export function createProduct(options: {
         settings: new SettingStore(db),
         cache: catalogCache,
       });
+      // A connected toolkit is a plugin of the agents; the sessions behind them are made from what
+      // Composio says is connected, without holding up the start.
+      plugins.setVirtual(composio);
+      void composio.follow().catch(() => undefined);
       server.mount(
         "plugins",
         pluginsPlugin(

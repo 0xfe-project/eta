@@ -273,6 +273,8 @@ export interface PluginArgs {
   composioLink: { slug: string };
   /** Delete this host's accounts of one toolkit on Composio; it cannot be undone there. */
   composioDisconnect: { slug: string };
+  /** The connected toolkits as plugins of their own (read only). */
+  composioPlugins: Record<string, never>;
 }
 
 /** What a connection test found. Secrets are never in it. */
@@ -368,6 +370,7 @@ export interface PluginResults {
   composioLink: { redirectUrl: string };
   /** Only a status; `removed` counts the accounts deleted. */
   composioDisconnect: { status: ComposioStatus; removed: number };
+  composioPlugins: { plugins: ComposioPluginView[] };
 }
 
 /**
@@ -446,6 +449,18 @@ export interface MarketSourceCatalog {
 }
 
 export type ComposioStatus = "ready" | "needs_key" | "key_rejected" | "error";
+
+/**
+ * A connected Composio toolkit as a plugin: `@composio/<slug>`. It is not a `PluginView` (it has no
+ * files, skills or fields). `ready`: its session checked out and agents may use it; `error`: it did
+ * not, and nothing is offered. `enabled` is the user's switch for every agent, as for any plugin.
+ */
+export interface ComposioPluginView {
+  name: string;
+  slug: string;
+  state: "ready" | "error";
+  enabled: boolean;
+}
 
 /** How a toolkit signs in, from the schemes Composio lists: `unknown` for one eta does not know. */
 export type ComposioAuth = "api_key" | "oauth" | "none" | "unknown";

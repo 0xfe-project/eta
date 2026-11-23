@@ -431,6 +431,10 @@ export function pluginsPlugin(
         // The key goes in and is never read back: only whether one is set.
         wire.handle("plugins", "composioSetKey", async (call) => {
           needComposio().setKey(new Args(call).string("key"));
+          // The sessions of the old key are gone: make them again, for what is connected.
+          void needComposio()
+            .follow()
+            .catch(() => undefined);
           return { result: { hasKey: true } };
         }),
         wire.handle("plugins", "composioClearKey", async () => {
@@ -444,13 +448,23 @@ export function pluginsPlugin(
           },
         })),
         wire.handle("plugins", "composioConnected", async () => ({
-          result: await needComposio().connected(),
+          result: await needComposio().follow(),
         })),
         wire.handle("plugins", "composioDisconnect", async (call) => ({
           result: await needComposio().disconnect(
             new Args(call).string("slug"),
           ),
         })),
+        wire.handle("plugins", "composioPlugins", async () => {
+          const off = plugins.rows.disabled();
+          return {
+            result: {
+              plugins: needComposio()
+                .virtuals()
+                .map((one) => ({ ...one, enabled: !off.has(one.name) })),
+            },
+          };
+        }),
         wire.handle("plugins", "composioToolkits", (call) => {
           const { slugs } = (call.args ?? {}) as { slugs?: unknown };
           if (!Array.isArray(slugs))

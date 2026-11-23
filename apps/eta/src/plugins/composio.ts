@@ -15,11 +15,14 @@
  */
 import type {
   ComposioAuth,
+  ComposioPluginView,
   ComposioStatus,
   ComposioToolkit,
   MarketSource,
   MarketSourceCatalog,
+  Redaction,
 } from "@eta/client-contracts";
+import type { McpConfigSource } from "@eta/mcp";
 import type { Database } from "bun:sqlite";
 import type { SettingStore } from "../settings/store";
 import type { CatalogCache } from "./market-cache";
@@ -36,6 +39,18 @@ const COMPOSIO_ENABLED_KEY = "plugins.composioEnabled";
 const USER_ID_KEY = "plugins.composioUserId";
 /** Where the key is kept: the same row shape as another market source's credential (see PluginStore). */
 const CREDENTIAL = { integration: "market", key: "composio", kind: "secret" };
+/** The kept id of one toolkit's session is a row of its own beside the key's: `composio-session:<slug>`. */
+const SESSION_PREFIX = "composio-session:";
+
+/** The plugin name of a connected toolkit: `@composio/<slug>`. */
+const VIRTUAL_PREFIX = "@composio/";
+/** The sessions kept, as slugs only (the ids are sealed rows of their own): to erase them all. */
+const SESSIONS_KEY = "plugins.composioSessions";
+const SESSION_PATH = "/api/v3.1/tool_router/session";
+const SESSION_ID = /^[\w.-]{1,200}$/;
+/** How many sessions are made at once, and how long a failed one waits before one more try. */
+const MAKE_AT_ONCE = 3;
+const RETRY_MS = 5 * 60_000;
 
 const BASE = "https://backend.composio.dev";
 const PAGE = 100;
@@ -56,7 +71,17 @@ export interface ComposioOptions {
   baseUrl?: string;
   timeoutMs?: number;
   maxBytes?: number;
+  /** Tests only: the clock the retry pause is read from. */
+  now?: () => number;
 }
+
+/** What Composio said was not what was asked for, or not where it must be: no retry in this run. */
+class Unchecked extends Error {}
+
+/** One toolkit's session: usable, or why not yet (`retryAt`: when one more try may be made). */
+type Session =
+  | { state: "ready"; id: string; url: string }
+  | { state: "error"; retryAt: number };
 
 /** The server answered, and said no (`status`), or did not answer (`null`). */
 class Refused extends Error {
@@ -214,6 +239,12 @@ export class Composio {
   readonly #base: string;
   readonly #timeoutMs: number;
   readonly #maxBytes: number;
+  readonly #now: () => number;
+  readonly #sessions = new Map<string, Session>();
+  readonly #making = new Map<string, Promise<void>>();
+  readonly #listeners: (() => void)[] = [];
+  /** Moves when the key goes, so a session still being made for the old one is thrown away. */
+  #epoch = 0;
   /** The managed auth config found or made for a toolkit; asked once per run. */
   readonly #configs = new Map<string, string>();
   /** Logo addresses of the list last read, by slug: the client names a slug, never an address. */
@@ -226,6 +257,7 @@ export class Composio {
     this.#base = options.baseUrl ?? BASE;
     this.#timeoutMs = options.timeoutMs ?? TIMEOUT_MS;
     this.#maxBytes = options.maxBytes ?? MAX_BYTES;
+    this.#now = options.now ?? Date.now;
   }
 
   /**
@@ -246,6 +278,7 @@ export class Composio {
   setEnabled(enabled: boolean): void {
     if (enabled) this.#settings.delete(COMPOSIO_ENABLED_KEY);
     else this.#settings.set(COMPOSIO_ENABLED_KEY, false);
+    this.#notify();
   }
 
   /* -------------------------------------------------------------------- key */
@@ -268,6 +301,7 @@ export class Composio {
     );
     // Another key may be another project: what was found for the old one is not known for this.
     this.#configs.clear();
+    this.#dropAll();
   }
 
   clearKey(): void {
@@ -277,6 +311,7 @@ export class Composio {
       CREDENTIAL.kind,
     );
     this.#configs.clear();
+    this.#dropAll();
   }
 
   /** The key, only for the header of a call to Composio. A row that does not open, or is no string, reads as no key. */
@@ -442,6 +477,318 @@ export class Composio {
     return this.#logos?.get(slug) ?? null;
   }
 
+  /* ------------------------------------------------------ virtual plugins */
+
+  /**
+   * A connected toolkit is a plugin of its own, `@composio/<slug>`, with one tool_router session of
+   * Composio's behind it. There is no file of it on disk: this source says what exists, `Plugins`
+   * asks it (see `VirtualPlugins`), and the agents' own choice and the user's switch work as they do
+   * for any plugin. The session is made when the toolkit is connected, kept as its id only (sealed,
+   * one row each, and the slugs in a setting so they can all be erased), and what Composio says it
+   * made is checked before it is used: one toolkit, no removal of connections, no workbench.
+   */
+  owns(name: string): boolean {
+    return (
+      name.startsWith(VIRTUAL_PREFIX) &&
+      SLUG.test(name.slice(VIRTUAL_PREFIX.length))
+    );
+  }
+
+  /** Called when what the plugins are changed (a session made, dropped, or the source switched). */
+  onChange(listener: () => void): void {
+    this.#listeners.push(listener);
+  }
+
+  #notify(): void {
+    for (const listener of this.#listeners) listener();
+  }
+
+  #slugOf(name: string): string | undefined {
+    return this.owns(name) ? name.slice(VIRTUAL_PREFIX.length) : undefined;
+  }
+
+  /** Nothing while the source is off or has no key. Never anything of the key or of Composio's words. */
+  virtuals(): Pick<ComposioPluginView, "name" | "slug" | "state">[] {
+    if (!this.source().enabled) return [];
+    return [...this.#sessions]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([slug, one]) => ({
+        name: VIRTUAL_PREFIX + slug,
+        slug,
+        state: one.state,
+      }));
+  }
+
+  /** Whether this plugin has a session that checked out, and the source is on. */
+  has(name: string): boolean {
+    return this.#readyOf(name) !== undefined;
+  }
+
+  #readyOf(name: string): (Session & { state: "ready" }) | undefined {
+    const slug = this.#slugOf(name);
+    const one = slug === undefined ? undefined : this.#sessions.get(slug);
+    return one?.state === "ready" && this.source().enabled ? one : undefined;
+  }
+
+  /** What an agent's session is given for this plugin: the server, with the key as its header. */
+  mcpSource(name: string): McpConfigSource | undefined {
+    const one = this.#readyOf(name);
+    const key = this.#apiKey();
+    if (one === undefined || key === undefined) return undefined;
+    const slug = this.#slugOf(name)!;
+    return {
+      name: `composio:${slug}`,
+      servers: {
+        [`composio-${slug}`]: {
+          type: "http",
+          url: one.url,
+          headers: { "x-api-key": key },
+        },
+      },
+    };
+  }
+
+  /** The id of the session behind a plugin: another one reopens the sessions of its agents. */
+  identity(name: string): string | undefined {
+    return this.#readyOf(name)?.id;
+  }
+
+  /** What no session may pass on. */
+  secrets(): Redaction[] {
+    const key = this.#apiKey();
+    return key === undefined
+      ? []
+      : [{ value: key, label: "[secret composio api key]" }];
+  }
+
+  /**
+   * Bring the sessions in line with the connected toolkits: one for each, none for the others. Calls
+   * overlap safely (a toolkit's session is made once), at most three are made at a time, and a
+   * failure is a toolkit's own: it is tried again only after a pause, or never in this run when
+   * Composio's answer was not what was asked for.
+   */
+  async sync(slugs: readonly string[]): Promise<void> {
+    const key = this.#apiKey();
+    if (key === undefined) {
+      this.#dropAll();
+      return;
+    }
+    if (!this.source().enabled) return;
+    const wanted = [...new Set(slugs.filter((slug) => SLUG.test(slug)))];
+    const before = this.#snapshot();
+    for (const slug of new Set([
+      ...this.#sessions.keys(),
+      ...this.#keptSlugs(),
+    ]))
+      if (!wanted.includes(slug)) this.#drop(slug);
+    let next = 0;
+    const worker = async (): Promise<void> => {
+      while (next < wanted.length) {
+        const slug = wanted[next++]!;
+        await this.#ensure(slug, key).catch(() => undefined);
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(MAKE_AT_ONCE, wanted.length) }, worker),
+    );
+    if (this.#snapshot() !== before) this.#notify();
+  }
+
+  #snapshot(): string {
+    return JSON.stringify(
+      [...this.#sessions].map(([slug, one]) => [
+        slug,
+        one.state,
+        one.state === "ready" ? one.id : "",
+      ]),
+    );
+  }
+
+  #ensure(slug: string, key: string): Promise<void> {
+    const known = this.#sessions.get(slug);
+    if (known?.state === "ready") return Promise.resolve();
+    if (known !== undefined && this.#now() < known.retryAt)
+      return Promise.resolve();
+    const running = this.#making.get(slug);
+    if (running !== undefined) return running;
+    const made = this.#make(slug, key, this.#epoch).finally(() =>
+      this.#making.delete(slug),
+    );
+    this.#making.set(slug, made);
+    return made;
+  }
+
+  async #make(slug: string, key: string, epoch: number): Promise<void> {
+    let opened: { id: string; url: string } | undefined;
+    try {
+      const kept = this.#keptId(slug);
+      if (kept !== undefined) {
+        try {
+          opened = await this.#read(slug, key, kept);
+        } catch (error) {
+          // Composio does not know it any more, or says something else of it: one new session.
+          if (
+            error instanceof Unchecked ||
+            (error instanceof Refused &&
+              (error.status === 401 || error.status === 404))
+          )
+            this.#forget(slug);
+          else throw error;
+        }
+      }
+      opened ??= await this.#create(slug, key);
+      // The key was replaced or cleared while this was made: it belongs to the old one.
+      if (epoch !== this.#epoch) return;
+      this.#credentials.write(
+        CREDENTIAL.integration,
+        SESSION_PREFIX + slug,
+        CREDENTIAL.kind,
+        opened.id,
+      );
+      this.#settings.set(SESSIONS_KEY, [
+        ...new Set([...this.#keptSlugs(), slug]),
+      ]);
+      this.#sessions.set(slug, { state: "ready", ...opened });
+    } catch (error) {
+      if (epoch !== this.#epoch) return;
+      this.#sessions.set(slug, {
+        state: "error",
+        retryAt:
+          error instanceof Unchecked
+            ? Number.POSITIVE_INFINITY
+            : this.#now() + RETRY_MS,
+      });
+    }
+  }
+
+  async #create(
+    slug: string,
+    key: string,
+  ): Promise<{ id: string; url: string }> {
+    const body = await this.#call("POST", SESSION_PATH, key, {
+      user_id: this.#userId(),
+      toolkits: { enable: [slug] },
+      manage_connections: { enable_connection_removal: false },
+      workbench: { enable: false },
+    });
+    return this.#checked(slug, body, undefined);
+  }
+
+  async #read(
+    slug: string,
+    key: string,
+    id: string,
+  ): Promise<{ id: string; url: string }> {
+    const body = await this.#call(
+      "GET",
+      `${SESSION_PATH}/${encodeURIComponent(id)}`,
+      key,
+    );
+    return this.#checked(slug, body, id);
+  }
+
+  /** The id and address of an answer, if the address is Composio's and the config says what was asked. */
+  #checked(
+    slug: string,
+    body: unknown,
+    id: string | undefined,
+  ): { id: string; url: string } {
+    if (!isPlain(body)) throw new Unchecked();
+    const got = body.session_id;
+    if (
+      typeof got !== "string" ||
+      !SESSION_ID.test(got) ||
+      (id !== undefined && got !== id)
+    )
+      throw new Unchecked();
+    const url = isPlain(body.mcp) ? body.mcp.url : undefined;
+    let there = false;
+    try {
+      const address = new URL(String(url));
+      there =
+        address.origin === new URL(this.#base).origin &&
+        address.username === "" &&
+        address.password === "";
+    } catch {
+      there = false;
+    }
+    if (!there || typeof url !== "string") throw new Unchecked();
+    const config = isPlain(body.config) ? body.config : {};
+    const toolkits = isPlain(config.toolkits) ? config.toolkits.enabled : [];
+    const removal = isPlain(config.manage_connections)
+      ? config.manage_connections.enable_connection_removal
+      : undefined;
+    const bench = isPlain(config.workbench)
+      ? config.workbench.enable
+      : undefined;
+    if (
+      !Array.isArray(toolkits) ||
+      toolkits.length !== 1 ||
+      toolkits[0] !== slug ||
+      removal !== false ||
+      bench !== false
+    )
+      throw new Unchecked();
+    return { id: got, url };
+  }
+
+  #keptId(slug: string): string | undefined {
+    const value = this.#credentials.read(
+      CREDENTIAL.integration,
+      SESSION_PREFIX + slug,
+      CREDENTIAL.kind,
+    );
+    return typeof value === "string" && SESSION_ID.test(value)
+      ? value
+      : undefined;
+  }
+
+  #keptSlugs(): string[] {
+    const saved = this.#settings.get(SESSIONS_KEY);
+    return Array.isArray(saved)
+      ? saved.filter(
+          (one): one is string => typeof one === "string" && SLUG.test(one),
+        )
+      : [];
+  }
+
+  /** Erase the kept id of one toolkit, and its place in the list. */
+  #forget(slug: string): void {
+    this.#credentials.erase(
+      CREDENTIAL.integration,
+      SESSION_PREFIX + slug,
+      CREDENTIAL.kind,
+    );
+    const rest = this.#keptSlugs().filter((one) => one !== slug);
+    if (rest.length === 0) this.#settings.delete(SESSIONS_KEY);
+    else this.#settings.set(SESSIONS_KEY, rest);
+  }
+
+  #drop(slug: string): void {
+    const had = this.#sessions.delete(slug);
+    this.#forget(slug);
+    if (had) this.#notify();
+  }
+
+  /** Every session and every kept id goes: the key they were made with is no more. */
+  #dropAll(): void {
+    this.#epoch++;
+    const had = this.#sessions.size > 0;
+    for (const slug of new Set([
+      ...this.#sessions.keys(),
+      ...this.#keptSlugs(),
+    ]))
+      this.#credentials.erase(
+        CREDENTIAL.integration,
+        SESSION_PREFIX + slug,
+        CREDENTIAL.kind,
+      );
+    this.#sessions.clear();
+    this.#making.clear();
+    this.#settings.delete(SESSIONS_KEY);
+    if (had) this.#notify();
+  }
+
   /* ------------------------------------------------------------------- link */
 
   /**
@@ -496,6 +843,18 @@ export class Composio {
   }
 
   /**
+   * `connected`, and then the sessions of what is connected, which the answer does not wait for: a
+   * toolkit is a plugin of the agents once its session checked out. A failed reading leaves the
+   * sessions as they are, since it says nothing of what is connected.
+   */
+  async follow(): Promise<{ status: ComposioStatus; slugs: string[] }> {
+    const read = await this.connected();
+    if (read.status === "ready")
+      void this.sync(read.slugs).catch(() => undefined);
+    return read;
+  }
+
+  /**
    * Disconnects one toolkit: deletes, on Composio, the ACTIVE accounts of that toolkit under this
    * host's own `user_id` and no others (an account that names another user is left alone even if
    * Composio ignored the filter). It cannot be undone there. Only a status and a count come back
@@ -527,6 +886,7 @@ export class Composio {
           throw new Error("Composio did not confirm the delete");
         removed++;
       }
+      this.#drop(slug);
       return { status: "ready", removed };
     } catch (error) {
       return { status: this.#failure(error), removed };

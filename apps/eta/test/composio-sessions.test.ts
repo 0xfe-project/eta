@@ -359,7 +359,7 @@ describe("a session for a connected toolkit", () => {
   it("is made when the connected accounts are read, without the reading waiting for it", async () => {
     const { composio } = open();
     accounts = ["gmail"];
-    const read = await composio.connected();
+    const read = await composio.follow();
     expect(read).toEqual({ status: "ready", slugs: ["gmail"] });
     await vi.waitFor(() => expect(composio.has("@composio/gmail")).toBe(true));
   });
@@ -371,7 +371,7 @@ describe("a session for a connected toolkit", () => {
     server.stop(true);
     server = Bun.serve({ port: 0, fetch: () => json({}, 500) });
     // The fake moved to another port: the base no longer answers, as if Composio were silent.
-    const read = await composio.connected();
+    const read = await composio.follow();
     expect(read.status).not.toBe("ready");
     expect(composio.has("@composio/gmail")).toBe(true);
   });
