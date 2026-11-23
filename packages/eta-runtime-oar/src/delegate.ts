@@ -79,7 +79,7 @@ export interface OarDelegateOptions {
    */
   agentPrompt: () => string | undefined;
   /** The runtime opened a session of its own: the eta session remembers it. */
-  remember: (nativeSession: string) => void;
+  remember: (nativeSession: string) => void | Promise<void>;
   /** The tools the host gave the session, by name: what is served to the runtime. */
   hostTools: () => readonly string[];
   /** MCP servers the runtime starts itself, beside the one serving the host's tools. */
@@ -288,19 +288,20 @@ export class OarDelegate implements RunDelegate {
       context.recordThinking(opened.effort);
       // The host's tools as they are now: a set that changed since the last run is served anew.
       await this.#host.refresh(context);
-      this.#calls = new HostCalls(this.#options.runtime, this.#host.names);
-      const translator = new Translator(
-        context,
-        {
-          provider: this.#options.runtime,
-          model:
-            settings.model ??
-            opened.session.model().value ??
-            this.#options.runtime,
-        },
-        this.#charged,
-        this.#calls,
-      );
+      const calls = new HostCalls(this.#options.runtime, this.#host.names);
+      this.#calls = calls;
+      const translatorFor = (session: Session) =>
+        new Translator(
+          context,
+          {
+            provider: this.#options.runtime,
+            model:
+              session.model().value ?? settings.model ?? this.#options.runtime,
+          },
+          this.#charged,
+          calls,
+        );
+      let translator = translatorFor(opened.session);
       let input = joined([
         ...this.#undelivered.splice(0),
         inputOf(context.opening),
@@ -328,6 +329,7 @@ export class OarDelegate implements RunDelegate {
           // prompt came back: resume the conversation in a new process and prompt it again.
           reopened = true;
           opened = await this.#ensure(context, settings);
+          translator = translatorFor(opened.session);
           input = joined([...this.#undelivered.splice(0), input]);
           continue;
         }
@@ -418,6 +420,7 @@ export class OarDelegate implements RunDelegate {
         emit("context:invalidated", {
           reason: event.kind === "model" ? "model" : "compacted",
           at: event.receivedAt,
+          nativeSessionId: session.id,
           ...(event.kind === "model" ? { model: event.model } : {}),
           ...(event.kind === "compaction_ended" && event.outcome === "completed"
             ? { compactedAt: event.receivedAt }
@@ -722,7 +725,7 @@ export class OarDelegate implements RunDelegate {
     this.#resume = session.id;
     // A new runtime session counts its usage from zero.
     this.#charged = undefined;
-    this.#options.remember(session.id);
+    await this.#options.remember(session.id);
     return {
       session,
       ...settings,
@@ -779,6 +782,15 @@ export class OarDelegate implements RunDelegate {
     start: TurnStart,
     context: RunDelegateContext,
   ): Promise<TurnOutcome | "gone"> {
+    const model = session.model().value;
+    if (model !== null)
+      context.emit("context:invalidated", {
+        reason: "model",
+        model,
+        nativeSessionId: session.id,
+        runId: context.runId,
+        at: Date.now(),
+      });
     const prompt =
       "prompt" in start
         ? await this.#deliverable(session, start.prompt)

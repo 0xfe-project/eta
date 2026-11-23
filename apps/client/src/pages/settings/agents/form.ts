@@ -130,6 +130,7 @@ export function createAgentForm(props: AgentEditorProps) {
             opencode: "OpenCode",
             pi: "Pi",
             grok: "Grok Build",
+            qwen: "Qwen Code",
           } as Record<string, string>
         )[id] ??
         id);

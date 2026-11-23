@@ -339,6 +339,7 @@ export class Translator {
   ): void {
     this.#target.emit("context:observed", {
       runId: this.#target.runId,
+      nativeSessionId: event.sessionId,
       model: this.#model,
       observedAt: event.receivedAt,
       ...(event.kind === "compaction_ended" && event.outcome === "completed"

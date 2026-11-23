@@ -14,6 +14,8 @@ const RUNTIMES: Record<Exclude<AgentView["runtime"], "eta">, string> = {
   codex: "Codex",
   opencode: "OpenCode",
   pi: "Pi",
+  grok: "Grok Build",
+  qwen: "Qwen Code",
 };
 
 function Fact(props: { label: string; value: string }) {

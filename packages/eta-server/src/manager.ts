@@ -454,6 +454,7 @@ export class SessionManager {
         at,
         ...(result.outcome === "completed" ? { compactedAt: at } : {}),
       });
+      await managed.session.journaling.flush();
     }
     return result;
   }
@@ -603,7 +604,7 @@ export class SessionManager {
     }
     const tools = this.sessionTools?.({ meta, session }) ?? [];
     registerSessionTools(session, tools);
-    await attachSessionContext(session, meta);
+    await attachSessionContext(session, meta, this.warn);
     await this.sessionAttach?.({ meta, session });
     // A session the host opened is a session whose inbox becomes runs: the pump is what
     // decides that, and leaving it off would make "prompt a session nobody attached yet"
@@ -633,6 +634,8 @@ export class SessionManager {
     const agentPrompt = this.agentPromptFor?.(meta);
     const platform = this.platformFor?.(meta);
     const extras = await this.runtimeExtrasFor?.(meta);
+    let runtimeSession = meta.runtimeSession;
+    let setContextSession: ((nativeSessionId: string) => void) | undefined;
     const runtime = this.runtimes?.open({
       sessionId: meta.id,
       runtime: runtimeId,
@@ -653,13 +656,18 @@ export class SessionManager {
         ].filter((part) => part.length > 0);
         return parts.length === 0 ? undefined : parts.join("\n\n");
       },
-      remember: (nativeSession) => {
-        if (nativeSession === meta.runtimeSession) return;
-        void this.setMeta(meta.id, { runtimeSession: nativeSession }).catch(
-          (error: unknown) =>
-            this.warn(
-              `[eta-server] session ${meta.id}: could not remember ${runtimeId} session: ${String(error)}`,
-            ),
+      remember: async (nativeSession) => {
+        if (nativeSession === runtimeSession) return;
+        runtimeSession = nativeSession;
+        setContextSession?.(nativeSession);
+        try {
+          if (await this.setMeta(meta.id, { runtimeSession: nativeSession }))
+            return;
+        } catch {
+          // A metadata failure must not fail the runtime's turn.
+        }
+        this.warn(
+          `[eta-server] could not remember the native session for ${runtimeId}`,
         );
       },
       hostTools: () => tools.names,
@@ -703,7 +711,7 @@ export class SessionManager {
       // The host attaches its tools and starts the pump, here as in an eta session.
       const hostTools = this.sessionTools?.({ meta, session }) ?? [];
       registerSessionTools(session, hostTools);
-      await attachSessionContext(session, meta);
+      setContextSession = await attachSessionContext(session, meta, this.warn);
       await this.sessionAttach?.({ meta, session });
       session.pump.start();
       tools.names = hostTools.map((tool) => tool.name);

@@ -1,5 +1,5 @@
 /**
- * Claude Code, Codex, OpenCode, Pi and Grok Build as runtimes an eta session can run on, through
+ * Claude Code, Codex, OpenCode, Pi, Grok Build and Qwen Code as runtimes an eta session can run on, through
  * oar.
  *
  * `createOarRuntimes` is what a session host is given (`SessionRuntimes`): for a session whose

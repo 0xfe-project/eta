@@ -5,6 +5,7 @@ import type { OpenSession } from "@eta/harness";
 import type { SessionMeta } from "./store";
 import { contextReason } from "@eta/client-contracts";
 import { kernelOn, reportedField } from "@eta/core";
+import { deleteValue, setValue, value } from "@eta/core/storage";
 import { estimateContextTokens } from "@eta/harness";
 import { formatModelId } from "./model-id";
 
@@ -69,11 +70,26 @@ class SpendLedger {
   }
 }
 
-/** Installed before a session's pump starts. Every listener belongs to that session's kernel. */
+interface SessionContextRecord {
+  reading: ContextReading;
+  configuredModel: string;
+  nativeSessionId: string | null;
+  journalCompactionId: string | null;
+}
+
+const CONTEXT_VALUE = value<SessionContextRecord>("eta.session-context");
+const WRITE_INTERVAL = 5_000;
+
+function sameMeasurement(a: ContextReading, b: ContextReading): boolean {
+  return a.used === b.used && a.window === b.window && a.model === b.model;
+}
+
+/** Installed before the pump starts. The returned callback follows the runtime's resume id. */
 export async function attachSessionContext(
   session: OpenSession,
   meta: SessionMeta,
-): Promise<void> {
+  warn: (message: string) => void,
+): Promise<(nativeSessionId: string) => void> {
   const on = kernelOn(session.kernel.ctx);
   const runtime = meta.runtime ?? "eta";
   const source =
@@ -88,33 +104,81 @@ export async function attachSessionContext(
     source !== "harness" && session.config.model.provider !== runtime
       ? `${runtime}:default`
       : formatModelId(session.config.model);
-  let model = configured();
+  let configuredModel = configured();
+  let nativeSessionId = meta.runtimeSession ?? null;
   let active: string | null = null;
+  let accepting = false;
   let runtimeModel: string | undefined;
   let latestRuntimeAt = 0;
   const history = session.log.graph.pathOldestFirst().reverse();
+  const compaction = history.find((entry) => entry.type === "compaction");
+  let journalCompactionId = compaction?.id ?? null;
   let reading: ContextReading = {
     session: meta.id,
     source,
-    model,
+    model: configuredModel,
     runId: null,
     used: null,
     window: null,
     observedAt: Date.now(),
-    compactedAt:
-      history.find((entry) => entry.type === "compaction")?.timestamp ?? null,
+    compactedAt: compaction?.timestamp ?? null,
     reason: "missing",
   };
-  function reset(reason: ContextReading["reason"], at = Date.now()) {
+  let pending: SessionContextRecord | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let lastQueued = reading;
+  function clearPending() {
+    const final = pending;
+    pending = undefined;
+    clearTimeout(timer);
+    timer = undefined;
+    return final;
+  }
+  function record(): SessionContextRecord {
+    return {
+      reading,
+      configuredModel,
+      nativeSessionId,
+      journalCompactionId,
+    };
+  }
+  async function write(snapshot: SessionContextRecord) {
+    await session.journaling.writeValues([setValue(CONTEXT_VALUE, snapshot)]);
+  }
+  function observe(next: ContextReading) {
+    reading = next;
+    pending = record();
+    if (timer !== undefined || sameMeasurement(lastQueued, next)) return;
+    timer = setTimeout(() => {
+      timer = undefined;
+      if (pending === undefined) return;
+      lastQueued = pending.reading;
+      // Keep the run's last snapshot for its durability boundary.
+      void write(pending);
+    }, WRITE_INTERVAL);
+    timer.unref?.();
+  }
+  function invalidate(
+    reason: NonNullable<ContextReading["reason"]>,
+    at = Date.now(),
+    model = configuredModel,
+    compactedAt = reading.compactedAt,
+  ) {
     reading = {
-      ...reading,
+      session: meta.id,
+      source,
       model,
       runId: active,
       used: null,
       window: null,
       observedAt: at,
+      compactedAt,
       reason,
     };
+    clearPending();
+    lastQueued = reading;
+    // A boundary must survive even when it has no next sample or occurs between runs.
+    return write(record());
   }
   function estimate() {
     const { provider, modelId } = session.config.model;
@@ -124,60 +188,125 @@ export async function attachSessionContext(
         ? (resolved.contextWindow ?? null)
         : null;
     const used = estimateContextTokens(session.runner.getTranscript()).tokens;
-    reading = {
+    const next: ContextReading = {
       ...reading,
-      model,
+      model: configuredModel,
       runId: active,
+      observation: active === null ? "last-observed" : "live",
       used,
       window,
       observedAt: Date.now(),
       reason: null,
     };
-    reading.reason = contextReason(reading);
+    next.reason = contextReason(next);
+    if (active === null) reading = next;
+    else observe(next);
   }
-  if (source === "harness") {
-    // A retained tail may contain the previous model call. On reopen, only a completion
-    // written after the last compaction can establish a new baseline.
+
+  const stored = await session.log.storage.getValue(CONTEXT_VALUE).catch(() => {
+    warn("[eta-session-context] journal read failed");
+    return undefined;
+  });
+  const saved = stored?.value;
+  const previous = saved?.reading;
+  if (stored !== undefined) {
+    if (
+      !previous ||
+      previous.session !== meta.id ||
+      previous.source !== source ||
+      typeof previous.model !== "string" ||
+      !previous.model ||
+      (source !== "harness" && !previous.model.startsWith(`${runtime}:`)) ||
+      !Number.isFinite(previous.observedAt) ||
+      previous.observedAt > Date.now()
+    ) {
+      await session.journaling.writeValues([deleteValue(CONTEXT_VALUE)]);
+    } else if (saved.journalCompactionId !== journalCompactionId) {
+      await invalidate("compacted", compaction?.timestamp);
+    } else if (saved.nativeSessionId !== nativeSessionId) {
+      await invalidate("nativeSession");
+    } else if (saved.configuredModel !== configuredModel) {
+      await invalidate(
+        "model",
+        Date.now(),
+        configuredModel,
+        previous.compactedAt,
+      );
+    } else if (previous.reason !== null) {
+      const { observation: _observation, ...fields } = previous;
+      reading = { ...fields, reason: contextReason(previous) ?? "unverified" };
+    } else if (
+      (source === "harness" || nativeSessionId !== null) &&
+      previous.observedAt >= (previous.compactedAt ?? 0) &&
+      previous.observedAt >= (compaction?.timestamp ?? 0) &&
+      (source !== "harness" || previous.model === configuredModel) &&
+      contextReason({ ...previous, observation: "last-observed" }) === null
+    ) {
+      reading = { ...previous, observation: "last-observed" };
+    } else {
+      await session.journaling.writeValues([deleteValue(CONTEXT_VALUE)]);
+    }
+  } else if (source === "harness") {
+    // A retained tail can predate compaction. A completion after the cut can seed an estimate.
     const last = history.find(
       (entry) =>
         entry.type === "compaction" ||
         (entry.type === "message" && entry.message.role === "assistant"),
     );
-    if (last?.type === "compaction") reset("compacted", last.timestamp);
+    if (last?.type === "compaction")
+      await invalidate("compacted", last.timestamp);
     else if (
       last?.type === "message" &&
       last.message.role === "assistant" &&
       formatModelId({
         provider: last.message.provider,
         modelId: last.message.model,
-      }) !== model
+      }) !== configuredModel
     )
-      reset("model");
+      await invalidate("model");
     else estimate();
   }
+  latestRuntimeAt = reading.reason === "missing" ? 0 : reading.observedAt;
+  lastQueued = reading;
+
   on("state:config-update", () => {
-    if (model === configured()) return;
-    model = configured();
-    active = null;
-    reset("model");
+    if (configuredModel === configured()) return;
+    configuredModel = configured();
+    runtimeModel = undefined;
+    if (source !== "harness") accepting = false;
+    const at = Date.now();
+    latestRuntimeAt = Math.max(latestRuntimeAt, at);
+    void invalidate("model", at);
   });
   on("turn:run-start", ({ runId }) => {
     active = runId;
+    accepting = true;
     runtimeModel = undefined;
-    if (source !== "harness")
-      reset(
-        reading.reason === "compacted" || reading.reason === "model"
-          ? reading.reason
-          : "missing",
-      );
+    if (reading.observation === "live")
+      reading = { ...reading, observation: "last-observed" };
+  });
+  session.journaling.onRunEnd(async (runId) => {
+    if (active !== runId) return;
+    accepting = false;
+    const final = clearPending();
+    if (final?.reading.runId === runId) {
+      lastQueued = final.reading;
+      await write(final);
+    }
   });
   on("turn:run-end", ({ runId }) => {
-    if (active === runId) active = null;
+    if (active !== runId) return;
+    active = null;
+    accepting = false;
+    if (reading.observation === "live")
+      reading = { ...reading, observation: "last-observed" };
   });
   on("context:observed", (sample) => {
     if (
       source === "harness" ||
+      !accepting ||
       sample.runId !== active ||
+      sample.nativeSessionId !== nativeSessionId ||
       sample.observedAt < latestRuntimeAt ||
       (runtimeModel !== undefined &&
         sample.model !== runtimeModel &&
@@ -186,55 +315,97 @@ export async function attachSessionContext(
       return;
     latestRuntimeAt = sample.observedAt;
     runtimeModel = sample.model;
-    const { reason, ...fields } = sample;
-    reading = {
+    const model = `${runtime}:${sample.model}`;
+    // An empty report carries no replacement for a compatible observation.
+    if (
+      sample.reason === undefined &&
+      reading.reason === null &&
+      reading.model === model &&
+      (sample.used === null || sample.window === null) &&
+      (sample.used === null || sample.used === reading.used) &&
+      (sample.window === null || sample.window === reading.window)
+    )
+      return;
+    const next: ContextReading = {
       ...reading,
-      ...fields,
-      model: `${runtime}:${sample.model}`,
-      reason:
-        reason ??
-        (sample.used === null && reading.reason === "compacted"
-          ? "compacted"
-          : null),
+      runId: sample.runId,
+      model,
+      used: sample.used,
+      window: sample.window,
+      observedAt: sample.observedAt,
+      observation: "live",
+      reason: sample.reason ?? null,
     };
-    reading.reason = contextReason(reading);
+    const reason = contextReason(next);
+    if (reason === null) {
+      observe(next);
+    } else if (reason === "compacted" || reason === "model") {
+      void invalidate(reason, sample.observedAt, model, sample.compactedAt);
+    } else if (
+      reason === "inconsistent" ||
+      (reading.reason !== "compacted" &&
+        reading.reason !== "model" &&
+        reading.reason !== "nativeSession")
+    ) {
+      const { observation: _observation, ...fields } = next;
+      observe({ ...fields, reason });
+    }
   });
-  on(
-    "context:invalidated",
-    ({ reason, at, compactedAt, model: nativeModel }) => {
+  on("context:invalidated", (event) => {
+    if (
+      event.at < latestRuntimeAt ||
+      (event.nativeSessionId !== undefined &&
+        event.nativeSessionId !== nativeSessionId) ||
+      (event.runId !== undefined && (event.runId !== active || !accepting))
+    )
+      return;
+    if (event.model !== undefined) {
+      runtimeModel = event.model;
       if (
-        at < latestRuntimeAt ||
-        (nativeModel && reading.model === `${runtime}:${nativeModel}`)
+        reading.model === `${runtime}:${event.model}` ||
+        (event.runId !== undefined &&
+          (reading.reason === "missing" || reading.reason === "nativeSession"))
       )
         return;
-      latestRuntimeAt = at;
-      if (nativeModel) runtimeModel = nativeModel;
-      reset(reason, at);
-      if (nativeModel) reading.model = `${runtime}:${nativeModel}`;
-      if (compactedAt !== undefined) reading.compactedAt = compactedAt;
-    },
-  );
-  on("compaction:start", () => reset("compacted"));
+    }
+    latestRuntimeAt = event.at;
+    void invalidate(
+      event.reason,
+      event.at,
+      event.model === undefined ? reading.model : `${runtime}:${event.model}`,
+      event.compactedAt,
+    );
+  });
+  on("compaction:start", () => {
+    void invalidate("compacted");
+  });
   on("compaction:end", ({ status, endedAt }) => {
     if (status !== "completed") return;
-    reset("compacted", endedAt);
-    reading.compactedAt = endedAt;
+    journalCompactionId =
+      session.log.graph
+        .pathOldestFirst()
+        .reverse()
+        .find((entry) => entry.type === "compaction")?.id ?? null;
+    void invalidate("compacted", endedAt, configuredModel, endedAt);
   });
   if (source === "harness") {
     on("message:end", ({ message, runId }) => {
-      // A retained completion on the old model must not seed the new model's estimate.
+      if (active !== null && (!accepting || runId !== active)) return;
       if (reading.reason === "model" || reading.reason === "compacted") {
         if (
+          active === null ||
           message.role !== "assistant" ||
           message.model !== session.config.model.modelId ||
-          message.provider !== session.config.model.provider ||
-          runId !== active
+          message.provider !== session.config.model.provider
         )
           return;
       }
       estimate();
     });
   }
+  session.kernel.ctx.effect(() => () => {
+    clearPending();
+  });
   session.view.contribute({
     name: "context",
     project: () => reading,
@@ -252,4 +423,13 @@ export async function attachSessionContext(
     project: () => spend,
     revision: () => JSON.stringify(spend),
   });
+  return (next) => {
+    if (nativeSessionId === next) return;
+    const previous = nativeSessionId;
+    nativeSessionId = next;
+    runtimeModel = undefined;
+    latestRuntimeAt = 0;
+    if (previous !== null)
+      void invalidate("nativeSession", Date.now(), configuredModel, null);
+  };
 }

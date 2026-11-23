@@ -271,10 +271,13 @@ export interface UsageEvents {
     at: number;
     compactedAt?: number;
     model?: string;
+    nativeSessionId?: string;
+    runId?: string;
   };
   /** A root runtime observation, bound to the run that subscribed to the native stream. */
   "context:observed": {
     runId: string;
+    nativeSessionId: string;
     model: string;
     observedAt: number;
     compactedAt?: number;

@@ -18,6 +18,7 @@ export const RUNTIME_IDS = [
   "opencode",
   "pi",
   "grok",
+  "qwen",
 ] as const;
 
 export type RuntimeId = (typeof RUNTIME_IDS)[number];
@@ -28,6 +29,7 @@ const LABELS: Record<RuntimeId, string> = {
   opencode: "OpenCode",
   pi: "Pi",
   grok: "Grok Build",
+  qwen: "Qwen Code",
 };
 
 /**

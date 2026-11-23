@@ -35,7 +35,7 @@ export interface SessionRuntimeInput {
    */
   agentPrompt: () => string | undefined;
   /** The runtime opened a session of its own: remember it, so the next open picks it up. */
-  remember: (nativeSession: string) => void;
+  remember: (nativeSession: string) => void | Promise<void>;
   /**
    * The tools the host gave this session, by name: what the runtime is offered beyond its own
    * (a task board, a way to reach other agents). Read when the runtime opens, after they exist.

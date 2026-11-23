@@ -3,6 +3,8 @@ import type {
   MemberSpend,
 } from "../../packages/client-contracts/src/context-usage";
 
+export const lastObservedAt = Date.UTC(2024, 5, 15, 12);
+
 /** Wire replays shared by the three member views. */
 export const memberReadings = {
   acp: { source: "acp", used: 64000 },
@@ -16,6 +18,12 @@ export const memberReadings = {
   full: { used: 128000 },
   switched: { model: "next", used: null, reason: "model" },
   estimated: { source: "harness", used: 16000 },
+  lastObserved: {
+    observation: "last-observed",
+    runId: null,
+    used: 19_010,
+    observedAt: lastObservedAt,
+  },
 } satisfies Record<string, Partial<ContextReading>>;
 
 export type Replay = keyof typeof memberReadings;
