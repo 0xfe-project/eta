@@ -49,9 +49,10 @@ export function Header(props: {
   const back = () => props.onBack !== undefined;
   // A phone top bar: 8pt insets around 40pt buttons, a `body` semibold title.
   const phoneBar = () => phone() && !props.compact && !props.dialog;
-  const fallbackInset = () => (phone() ? (back() ? 8 : 16) : 22);
+  const fallbackInset = () =>
+    phone() ? (back() ? space[8] : space[16]) : space[24];
   const paddingLeft = () => {
-    if (phone() && back()) return props.compact ? 0 : 8;
+    if (phone() && back()) return props.compact ? 0 : space[8];
     return props.inset ?? fallbackInset();
   };
   const titleVariant = (): TextVariant =>

@@ -160,14 +160,20 @@ export function Modal(props: {
             subtitleTone={props.subtitleTone}
             layout={props.phone ? "phone" : "desktop"}
             inset={
-              sheetChrome() ? 16 : sideDrawer() ? 12 : stepHeader() ? 20 : 14
+              sheetChrome()
+                ? space[16]
+                : sideDrawer()
+                  ? space[12]
+                  : stepHeader()
+                    ? space[20]
+                    : space[16]
             }
             end={
               sheetChrome() || sideDrawer() || props.phonePage
-                ? 8
+                ? space[8]
                 : stepHeader()
-                  ? 16
-                  : 6
+                  ? space[16]
+                  : space[8]
             }
             height={
               sheetChrome()

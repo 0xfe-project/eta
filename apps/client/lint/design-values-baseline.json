@@ -1,4 +1,0 @@
-{
-  "$comment": "Design values written before the lint, per rule and file. Only shrinks: `bun run lint:baseline` after moving some to tokens (scripts/check-design-values.ts).",
-  "counts": {}
-}

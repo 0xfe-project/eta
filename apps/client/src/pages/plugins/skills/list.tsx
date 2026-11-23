@@ -610,7 +610,11 @@ export function Skills(props: {
             {props.tabs()}
           </If>
           <If when={!phone()}>
-            <Header title={uiText("plugins")} layout={props.layout} inset={10}>
+            <Header
+              title={uiText("plugins")}
+              layout={props.layout}
+              inset={space[12]}
+            >
               <View style={{ flex: 1 }} />
               <If when={!showing()}>
                 <View style={{ ...row, gap: space[12] }}>
@@ -650,8 +654,8 @@ export function Skills(props: {
             count={entries().length}
             layout="tablet"
             background="canvas"
-            inset={14}
-            end={10}
+            inset={space[16]}
+            end={space[12]}
           >
             <View style={{ flex: 1 }} />
             <Button

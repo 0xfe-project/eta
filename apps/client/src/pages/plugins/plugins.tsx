@@ -238,7 +238,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                   <Header
                     title={uiText("plugins")}
                     layout={props.layout}
-                    inset={10}
+                    inset={space[12]}
                   >
                     <View style={{ flex: 1 }} />
                     <View style={{ ...row, gap: space[12] }}>

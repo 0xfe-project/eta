@@ -18,11 +18,11 @@ import { paneWidth } from "../../app/pane-width";
 import {
   Button,
   colors,
+  dialogWidth,
   grow,
   Header,
   Icon,
   Label,
-  dialogWidth,
   Modal,
   PaneHandle,
   row,
@@ -298,8 +298,8 @@ export function Conversation(props: {
           title={title()}
           layout={props.layout}
           onBack={props.onBack}
-          inset={phone() ? (props.captain ? 16 : undefined) : 10}
-          end={phone() && !props.captain ? 4 : undefined}
+          inset={phone() ? (props.captain ? space[16] : undefined) : space[12]}
+          end={phone() && !props.captain ? space[4] : undefined}
           compact={phone() && !props.captain}
           leading={
             phone() && props.captain ? (

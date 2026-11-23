@@ -172,8 +172,8 @@ export function TaskDetail(props: {
             }
             layout={props.layout}
             onBack={paned() ? undefined : props.onClose}
-            inset={props.docked ? 8 : paned() ? 16 : undefined}
-            end={paned() ? 10 : undefined}
+            inset={props.docked ? space[8] : paned() ? space[16] : undefined}
+            end={paned() ? space[12] : undefined}
             titleVariant={
               props.layout === "desktop" && !props.docked ? "small" : undefined
             }
@@ -230,7 +230,7 @@ export function TaskDetail(props: {
       >
         <TaskTopBar
           number={task()?.number}
-          inset={16}
+          inset={space[16]}
           touch
           background="canvas"
           onBack={props.onClose}

@@ -472,7 +472,7 @@ export function Settings(
             title={text("settings")}
             layout="tablet"
             background="canvas"
-            inset={16}
+            inset={space[16]}
             leading={
               <Button
                 label={text("back")}

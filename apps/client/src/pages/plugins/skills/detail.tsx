@@ -464,7 +464,7 @@ export function SkillDetail(props: {
         <Header title={props.skill.name} layout="phone" onBack={previousFile} />
       </If>
       <If when={tablet()}>
-        <Header title={props.skill.name} layout="tablet" inset={14}>
+        <Header title={props.skill.name} layout="tablet" inset={space[16]}>
           <Label
             variant="small"
             tone="muted"

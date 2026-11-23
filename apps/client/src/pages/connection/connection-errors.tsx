@@ -74,7 +74,7 @@ export function ConnectionError(
       <Header
         title={lost() ? uiText("lostTheConnectionToTheHost") : props.message[0]}
         layout={props.layout}
-        inset={16}
+        inset={space[16]}
         dialog
       />
       <View style={{ padding: space[16], gap: lost() ? space[8] : space[12] }}>

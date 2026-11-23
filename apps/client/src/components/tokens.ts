@@ -2,7 +2,9 @@ import type { TextVariant } from "./theme";
 
 // The design's numbers, said once (#356, the plan in "NSH 客户端设计值盘点与收敛方案" v3).
 // Every length is 1, 2 or a multiple of 4. Colours are the palette's (theme.ts `light` / `dark`),
-// text sizes the type scale's (theme.ts `typeScale`). A number written anywhere else needs a
+// text sizes the type scale's (theme.ts `typeScale`). What is not a token (a row's height, a
+// column's or a dialog's width) is a named constant in its component, on the same grid
+// (`dialogWidth`, `const rowHeight = 52`). A number written anywhere else needs a
 // `// design-value: <reason>` (scripts/check-design-values.ts).
 
 /** The one scale of lengths: spacing, offsets and the height of a row (its text's line height

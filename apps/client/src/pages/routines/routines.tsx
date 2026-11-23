@@ -160,7 +160,7 @@ export function Routines(props: {
               : uiText("routines2")
       }
       layout={props.layout}
-      inset={tablet() ? 10 : undefined}
+      inset={tablet() ? space[12] : undefined}
       onBack={
         phone() && current()
           ? () => openReport("")
@@ -376,8 +376,8 @@ export function Routines(props: {
                 count={list().length || undefined}
                 layout="tablet"
                 background="none"
-                inset={14}
-                end={10}
+                inset={space[16]}
+                end={space[12]}
               >
                 <View style={{ flex: 1 }} />
                 <Button
