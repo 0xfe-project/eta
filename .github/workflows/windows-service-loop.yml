@@ -65,12 +65,6 @@ jobs:
           fi
           build . this
 
-      # eta-daemon.exe runs the same Windows code as the host, from a build of its own.
-      - name: Ask the daemon build about its service
-        run: |
-          (cd apps/daemon && bun scripts/build.ts > /dev/null)
-          apps/daemon/out/dist/eta-daemon-win32-x64.exe uninstall-service
-
       - name: Give the account a password
         shell: pwsh
         run: |
