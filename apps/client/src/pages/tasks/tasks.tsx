@@ -5,7 +5,7 @@ import type {
 } from "@eta/client-contracts";
 import type { JSX, Signal } from "nsh";
 import type { Layout } from "../../components";
-import { signal, View } from "nsh";
+import { computed, signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -95,16 +95,17 @@ export function Tasks(props: {
       return agent ? [agent] : [];
     });
   };
-  const filtered = () =>
-    shown().filter(
+  // Read by every row, card and plan below: filtered once per change, not on each read.
+  const filtered = computed(() => {
+    const words = query().trim().toLowerCase();
+    return shown().filter(
       (task) =>
         (!executor() ||
           (task.assigneeAgentId ?? task.createdBy.agentId) === executor()) &&
         (!part() || task.parentId === part() || task.id === part()) &&
-        `${task.title} #${task.number}`
-          .toLowerCase()
-          .includes(query().trim().toLowerCase()),
+        `${task.title} #${task.number}`.toLowerCase().includes(words),
     );
+  });
   const groupByParent = () =>
     view() === "List" &&
     !archive() &&

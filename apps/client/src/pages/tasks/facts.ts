@@ -40,14 +40,38 @@ export function runningFor(task: BoardTaskView) {
   });
 }
 
+/**
+ * An index built once per task list and kept while that list is the one in use: the host sends a
+ * new array whenever the board changes, so the same array always means the same tasks.
+ */
+function perList<T>(build: (tasks: BoardTaskView[]) => T) {
+  const built = new WeakMap<BoardTaskView[], T>();
+  return (tasks: BoardTaskView[]) => {
+    let index = built.get(tasks);
+    if (index === undefined) {
+      index = build(tasks);
+      built.set(tasks, index);
+    }
+    return index;
+  };
+}
+
+const waitingOn = perList((tasks) => {
+  const dependents = new Map<string, BoardTaskView[]>();
+  for (const other of tasks) {
+    if (other.status === "done" || other.status === "cancelled") continue;
+    for (const id of new Set(other.dependsOn?.map((edge) => edge.taskId))) {
+      const list = dependents.get(id);
+      if (list) list.push(other);
+      else dependents.set(id, [other]);
+    }
+  }
+  return dependents;
+});
+
 /** The tasks that wait for this one and are not over. */
 export function dependentsOf(task: BoardTaskView, tasks: BoardTaskView[]) {
-  return tasks.filter(
-    (other) =>
-      other.status !== "done" &&
-      other.status !== "cancelled" &&
-      other.dependsOn?.some((edge) => edge.taskId === task.id),
-  );
+  return waitingOn(tasks).get(task.id) ?? [];
 }
 
 export function isWaiting(task: BoardTaskView) {
@@ -88,11 +112,25 @@ export function planLevels(
   return { levels, parents };
 }
 
+const stepsByParent = perList((tasks) => {
+  const siblings = new Map<string, BoardTaskView[]>();
+  for (const task of tasks) {
+    if (!task.parentId) continue;
+    const group = siblings.get(task.parentId);
+    if (group) group.push(task);
+    else siblings.set(task.parentId, [task]);
+  }
+  const steps = new Map<string, number>();
+  for (const group of siblings.values())
+    for (const [id, level] of planLevels(group).levels)
+      steps.set(id, level + 1);
+  return steps;
+});
+
 /** A subtask's step in its parent's plan, from 1; undefined for a task without a parent. */
 export function stepOf(task: BoardTaskView, tasks: BoardTaskView[]) {
   if (!task.parentId) return undefined;
-  const siblings = tasks.filter((other) => other.parentId === task.parentId);
-  return (planLevels(siblings).levels.get(task.id) ?? 0) + 1;
+  return stepsByParent(tasks).get(task.id) ?? 1;
 }
 
 /** What a list row or a plan card says of a task after its number. */
