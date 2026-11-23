@@ -1,3 +1,10 @@
+/**
+ * Frozen: the host has no email any more, and nothing it serves speaks these types.
+ *
+ * They stay only because `apps/web` and `apps/mobile` (no longer released, and not changed until
+ * someone decides what happens to them) still compile against them. Delete this file together
+ * with their email code.
+ */
 import type { CallFrame } from "@eta/client-wire-proto";
 
 export type EmailAccountStatus = "unverified" | "ready" | "error";

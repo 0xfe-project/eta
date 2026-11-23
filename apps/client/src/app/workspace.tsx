@@ -25,7 +25,6 @@ import { Conversation } from "../pages/chat/conversation";
 import { ConversationEmpty } from "../pages/chat/conversation-empty";
 import { Pending } from "../pages/chat/pending";
 import { ReconnectingBanner } from "../pages/connection/reconnecting-banner";
-import { Email } from "../pages/email/inbox";
 import { More } from "../pages/more";
 import { NewConversation } from "../pages/new-conversation";
 import { Onboard } from "../pages/onboarding";
@@ -120,7 +119,6 @@ export function Workspace(props: {
   follow(() => "providers");
   follow(() => (host.can("llm.refresh") ? "llm" : undefined));
   follow(() => "plugins");
-  follow(() => (page() === "more" || page() === "email" ? "email" : undefined));
   if (platform.os === "web")
     cleanup(
       UrlScheme.on("change", () => {
@@ -391,14 +389,6 @@ export function Workspace(props: {
               onRelatedTask={openRelatedTask}
               onClose={closeTask}
               onCreate={() => newTask.set(true)}
-            />
-          </If>
-          <If when={page() === "email"}>
-            <Email
-              layout={props.layout}
-              onBack={phone() ? () => navigate("more") : undefined}
-              onSettings={() => showSettings("Email")}
-              onConversation={open}
             />
           </If>
           <If when={page() === "routines"}>

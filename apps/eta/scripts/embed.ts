@@ -136,10 +136,6 @@ export async function writeEmbedded(options: {
   const daemons = await compressDaemons(options.daemons, join(out, "daemon"));
   const files = [
     ...filesIn(join(eta, "src", "migrations"), "migrations"),
-    {
-      name: "Eta-Logo.png",
-      path: join(eta, "src", "assets", "Eta-Logo.png"),
-    },
     ...filesIn(options.web, "web"),
     ...cpa,
     ...daemons,

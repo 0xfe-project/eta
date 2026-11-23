@@ -1,8 +1,4 @@
-import type {
-  AcpMachineList,
-  EmailAccountView,
-  ProviderSummary,
-} from "@eta/client-contracts";
+import type { AcpMachineList, ProviderSummary } from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
 import type { Layout } from "../../components";
 import type { AppearanceProps } from "./appearance";
@@ -34,7 +30,6 @@ import {
 } from "./external-agent-form";
 import { ExternalAgentList } from "./external-agent-list";
 import { Machines } from "./machines/machines";
-import { MailboxEditor, mailboxProvider } from "./mailbox-editor";
 import { McpSettings } from "./mcp/server-list";
 import { AddSource } from "./models/add-source";
 import { ProviderDetail } from "./models/provider-detail";
@@ -86,12 +81,12 @@ export function Settings(
   const acpForm = signal<{ machineId: string; agentId?: string } | undefined>(
     undefined,
   );
-  const mailbox = signal<EmailAccountView | "new" | undefined>(undefined);
   const phone = () => props.layout === "phone";
   const showingProvider = () =>
     section() === "Model services" && (connector() || provider());
-  const { machines, email, externalAgents, runtimes, summary } =
-    useSettingsOverview(() => props.theme);
+  const { machines, externalAgents, runtimes, summary } = useSettingsOverview(
+    () => props.theme,
+  );
   const selectedAcp = () => {
     const selected = acpAgent();
     return externalAgents().find(
@@ -119,23 +114,16 @@ export function Settings(
         ? sourceCount()
         : name === "External agents"
           ? externalAgents().length
-          : name === "Email"
-            ? email().length
-            : undefined) || undefined;
+          : undefined) || undefined;
   const sectionHint = (name: SettingsSection) =>
     name === "External agents"
       ? uiText("externalAgentsHint")
       : name === "Runtimes"
         ? uiText("runtimesHint")
-        : name === "Email"
-          ? uiText("settingsEmailHint")
-          : undefined;
+        : undefined;
   /** Panes that draw their own header instead of the section header. */
   const ownHeader = (name: SettingsSection) =>
-    name === "Machines" ||
-    name === "MCP servers" ||
-    (name === "Email" && !!mailbox()) ||
-    !!showingProvider();
+    name === "Machines" || name === "MCP servers" || !!showingProvider();
   /** The phone and the tablet page draw the section header's row and buttons 28px tall. */
   const tall = () => phone() || props.layout === "tablet";
   const actionSize = () => (tall() ? 28 : undefined);
@@ -174,15 +162,6 @@ export function Settings(
           }}
         />
       </If>
-      <If when={name === "Email"}>
-        <Button
-          label={uiText("connectMailbox")}
-          size={actionSize()}
-          style={actionStyle()}
-          icon="plus"
-          onPress={() => mailbox.set("new")}
-        />
-      </If>
     </>
   );
   const content = () => (
@@ -193,10 +172,7 @@ export function Settings(
             current={section()}
             phone={phone()}
             summary={summary}
-            onSelect={(next) => {
-              mailbox.set(undefined);
-              section.set(next);
-            }}
+            onSelect={(next) => section.set(next)}
           />
         </If>
         <If when={section()}>
@@ -359,86 +335,6 @@ export function Settings(
                     }
                   />
                 </SmoothScroll>
-              </If>
-              <If when={current() === "Email"}>
-                <If
-                  when={mailbox()}
-                  else={
-                    <If
-                      when={email().length}
-                      else={
-                        <Empty
-                          icon="email"
-                          iconSize={24}
-                          title={uiText("emailEmptyTitle")}
-                          titleWeight={500}
-                          description={uiText("emailEmptyHint")}
-                          descriptionWidth={320}
-                          style={emptyStyle}
-                        />
-                      }
-                    >
-                      <SmoothScroll style={grow} scrollbar={false}>
-                        <Each of={email()} key={(item) => item.id}>
-                          {(item) => (
-                            <EntityRow
-                              title={item().name}
-                              leading={
-                                <Icon name="email" size={16} tone="muted" />
-                              }
-                              leadingSize={phone() ? 28 : undefined}
-                              meta={`${item().address} · ${
-                                phone()
-                                  ? (mailboxProvider(item()) ??
-                                    uiText("mailCustom"))
-                                  : item().imapHost
-                              }`}
-                              laneWidth={112}
-                              stacked={phone()}
-                              caret={phone()}
-                              status={
-                                item().status === "ready"
-                                  ? {
-                                      label: uiText("mailConnected"),
-                                      color: c().green,
-                                    }
-                                  : item().status === "error"
-                                    ? {
-                                        label: uiText("mailConnectionError"),
-                                        color: c().red,
-                                      }
-                                    : {
-                                        label: uiText("mailNotChecked"),
-                                        color: c().faint,
-                                      }
-                              }
-                              menuLabel={item().name}
-                              menu={
-                                <ActionItem
-                                  label={uiText("settingsEdit")}
-                                  onSelect={() => mailbox.set(item())}
-                                />
-                              }
-                              onPress={() => mailbox.set(item())}
-                            />
-                          )}
-                        </Each>
-                      </SmoothScroll>
-                    </If>
-                  }
-                >
-                  {(value) => (
-                    <MailboxEditor
-                      item={
-                        value() === "new"
-                          ? undefined
-                          : (value() as EmailAccountView)
-                      }
-                      layout={props.layout}
-                      onClose={() => mailbox.set(undefined)}
-                    />
-                  )}
-                </If>
               </If>
               <If when={current() === "Tasks"}>
                 <TaskSettings phone={phone()} />

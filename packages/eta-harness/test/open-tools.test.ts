@@ -224,8 +224,8 @@ describe("the journal and the toolset", () => {
       storage,
       models: fakeModels([]) as never,
     });
-    // A journal from before the ESM refactor and the GitHub connection's removal: file, shell,
-    // state, subagent and GitHub tools are gone.
+    // A journal from before the ESM refactor and the GitHub connection's and mailbox's removal:
+    // file, shell, state, subagent, GitHub and email tools are gone.
     first.kernel.config.update({
       activeToolNames: [
         "read",
@@ -234,6 +234,9 @@ describe("the journal and the toolset", () => {
         "Agent",
         "open_pull_request",
         "draft_issue",
+        "list_emails",
+        "send_email",
+        "reply",
         "list_steps",
       ],
     });

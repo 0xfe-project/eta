@@ -1,5 +1,5 @@
 /**
- * Captain keeps its own tools and has the task board's and email's withheld. The withheld half is
+ * Captain keeps its own tools and has the task board's withheld. The withheld half is
  * a pin in the session's journal, though, and a pin outlives the build that wrote it: one data
  * directory opened by a build that does not know Captain gets those tools installed and pinned,
  * and the runner then fails every Captain run with `configured_tools_unavailable`. These are the
@@ -75,7 +75,7 @@ describe("captain's tool pin", () => {
         })
         .map((tool) => tool.name);
 
-    // The two features withhold exactly these, so an agent gets every one of them …
+    // The board withholds exactly these, so an agent gets every one of them …
     const agentTools = toolsOf({
       id: "session-agent",
       agentId: ada.id,

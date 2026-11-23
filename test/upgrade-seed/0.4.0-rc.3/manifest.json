@@ -13,8 +13,6 @@
     "artifact": 1,
     "artifact_version": 2,
     "machine_enrollment": 1,
-    "credential": 1,
-    "email_account": 1,
     "plugin_config": 1,
     "message": 8,
     "captain_prompt_version": 7,
@@ -63,13 +61,6 @@
         "number": 2
       }
     ],
-    "SELECT name, address, smtp_host FROM email_account ORDER BY name": [
-      {
-        "name": "Seed mail",
-        "address": "seed@example.invalid",
-        "smtp_host": "smtp.example.invalid"
-      }
-    ],
     "SELECT name FROM routine ORDER BY name": [
       {
         "name": "Seed routine"
@@ -93,10 +84,6 @@
     "replied": "Heard: [conversation: Seed talk]\nthe user says:\n@Ada Is this thing on?"
   },
   "sealed": [
-    {
-      "query": "SELECT value AS sealed FROM credential WHERE kind = 'password'",
-      "plain": "{\"password\":\"fake-mail-password\"}"
-    },
     {
       "query": "SELECT sealed FROM plugin_config WHERE plugin = 'seed-plugin'",
       "plain": "{\"api_key\":\"sk-fakefakefake\",\"team\":\"seed team\"}"

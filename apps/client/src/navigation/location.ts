@@ -3,7 +3,6 @@ import { platform, UrlScheme } from "nsh";
 const pages: Page[] = [
   "chat",
   "tasks",
-  "email",
   "routines",
   "plugins",
   "settings",
