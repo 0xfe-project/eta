@@ -13,7 +13,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
-import { weight } from "../../components/tokens";
+import { icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 
@@ -81,7 +81,7 @@ export function PluginDetail(props: DetailProps) {
   // On a phone each block carries the design's own top spacing.
   const section = (top: number) =>
     props.phone
-      ? { gap: 6, paddingHorizontal: 16, paddingTop: top }
+      ? { gap: 6, paddingHorizontal: space[16], paddingTop: top }
       : { gap: 6 };
   const needsConfig = () => props.item.state === "needs_config";
   function update() {
@@ -102,16 +102,16 @@ export function PluginDetail(props: DetailProps) {
           <View
             style={{
               ...row,
-              height: 40,
+              height: space[40],
               flexShrink: 0,
-              gap: 8,
+              gap: space[8],
               paddingHorizontal: 14,
               borderBottomWidth: 1,
               borderColor: c().border,
               backgroundColor: c().surface,
             }}
           >
-            <View style={{ ...row, flex: 1, minWidth: 0, gap: 8 }}>
+            <View style={{ ...row, flex: 1, minWidth: 0, gap: space[8] }}>
               <Label weight={weight.strong} lines={1} style={{ flexShrink: 1 }}>
                 {props.item.name}
               </Label>
@@ -156,7 +156,7 @@ export function PluginDetail(props: DetailProps) {
               icon="more"
               iconOnly
               size={40}
-              iconSize={20}
+              iconSize={icon.lg}
               tone="ghost"
               onPress={() => actions.set(true)}
             />
@@ -165,21 +165,25 @@ export function PluginDetail(props: DetailProps) {
       </If>
       <SmoothScroll style={grow} scrollbar={false}>
         <View
-          style={props.phone ? { paddingBottom: 16 } : { padding: 20, gap: 20 }}
+          style={
+            props.phone
+              ? { paddingBottom: space[16] }
+              : { padding: space[20], gap: space[20] }
+          }
         >
           <If when={props.phone}>
             <View
               style={{
                 ...row,
-                gap: 12,
-                paddingHorizontal: 16,
-                paddingTop: 16,
-                paddingBottom: 4,
+                gap: space[12],
+                paddingHorizontal: space[16],
+                paddingTop: space[16],
+                paddingBottom: space[4],
               }}
             >
               <PluginGlyph size={40} />
-              <View style={{ gap: 4, flex: 1 }}>
-                <View style={{ ...row, gap: 8 }}>
+              <View style={{ gap: space[4], flex: 1 }}>
+                <View style={{ ...row, gap: space[8] }}>
                   <Label
                     variant="subtitle"
                     weight={weight.strong}
@@ -211,9 +215,9 @@ export function PluginDetail(props: DetailProps) {
                   style={
                     props.phone
                       ? {
-                          paddingHorizontal: 16,
-                          paddingTop: 8,
-                          paddingBottom: 12,
+                          paddingHorizontal: space[16],
+                          paddingTop: space[8],
+                          paddingBottom: space[12],
                         }
                       : undefined
                   }
@@ -227,7 +231,7 @@ export function PluginDetail(props: DetailProps) {
                   tone={needsConfig() ? "primary" : "plain"}
                   size={40}
                   labelVariant="body"
-                  style={{ marginHorizontal: 16 }}
+                  style={{ marginHorizontal: space[16] }}
                   onPress={props.onConfigure}
                 />
               </If>
@@ -238,8 +242,8 @@ export function PluginDetail(props: DetailProps) {
                   style={
                     props.phone
                       ? {
-                          marginHorizontal: 16,
-                          marginTop: configure() ? 16 : 0,
+                          marginHorizontal: space[16],
+                          marginTop: configure() ? space[16] : 0,
                         }
                       : undefined
                   }
@@ -253,7 +257,7 @@ export function PluginDetail(props: DetailProps) {
             <View
               style={{
                 ...row,
-                gap: 8,
+                gap: space[8],
                 minHeight: props.phone ? 36 : undefined,
                 paddingHorizontal: 10,
                 paddingVertical: props.phone ? 6 : 8,
@@ -282,8 +286,8 @@ export function PluginDetail(props: DetailProps) {
                 focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
                 style={{
                   // The hit area stays 24px while the drawn glyph is 14px, like the design.
-                  width: 24,
-                  height: 24,
+                  width: space[24],
+                  height: space[24],
                   margin: -5,
                   alignItems: "center",
                   justifyContent: "center",
@@ -307,7 +311,7 @@ export function PluginDetail(props: DetailProps) {
                     style={{
                       justifyContent: "center",
                       paddingHorizontal: 10,
-                      paddingVertical: 4,
+                      paddingVertical: space[4],
                       minHeight: 36,
                       borderBottomWidth: 1,
                       borderColor: c().border,
@@ -442,16 +446,16 @@ function ActionRow(props: {
       hoverStyle={{ backgroundColor: c().selected }}
       style={{
         ...row,
-        gap: 12,
+        gap: space[12],
         minHeight: 52,
         borderTopWidth: 1,
         borderColor: c().border,
-        paddingHorizontal: 16,
+        paddingHorizontal: space[16],
         cursor: "pointer",
       }}
     >
       <Icon name={props.icon} size={18} />
-      <View style={{ flex: 1, gap: 2 }}>
+      <View style={{ flex: 1, gap: space[2] }}>
         <Label>{props.label}</Label>
         <Label variant="caption" tone="muted">
           {props.hint}

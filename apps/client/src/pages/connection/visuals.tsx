@@ -1,7 +1,7 @@
 import { Image, View } from "nsh";
 import photo from "../../../assets/onboard.jpg";
 import { colors, fill, Label } from "../../components";
-import { weight } from "../../components/tokens";
+import { space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 export function ConnectionIntro(props: { phone: boolean }) {
@@ -18,7 +18,7 @@ export function ConnectionIntro(props: { phone: boolean }) {
 export function ConnectionMessage(props: { error: string; detail?: string }) {
   return (
     <If when={props.error}>
-      <View style={{ gap: 2, paddingVertical: 4 }}>
+      <View style={{ gap: space[2], paddingVertical: space[4] }}>
         <Label>{props.error}</Label>
         <If when={props.detail}>
           <Label variant="small" tone="muted">
@@ -53,9 +53,9 @@ export function LocationOption(props: {
       style={{
         borderColor: props.selected ? c().ink : c().strong,
         borderWidth: 1,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        gap: 2,
+        paddingHorizontal: space[12],
+        paddingVertical: space[8],
+        gap: space[2],
         cursor: props.disabled ? "default" : "pointer",
         opacity: props.disabled ? 0.5 : 1,
       }}
@@ -75,8 +75,8 @@ export function PhoneHero() {
         height: 295,
         flexShrink: 0,
         justifyContent: "flex-end",
-        padding: 16,
-        gap: 8,
+        padding: space[16],
+        gap: space[8],
       }}
     >
       <Image

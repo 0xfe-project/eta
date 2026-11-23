@@ -1,5 +1,6 @@
 import { View } from "nsh";
 import { colors, Field, Label, row, textFaces } from "../../components";
+import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 export function HostFields(props: {
@@ -26,25 +27,25 @@ export function HostFields(props: {
       : props.tablet
         ? {
             flex: 1,
-            height: 44,
-            paddingHorizontal: 12,
+            height: control.touch,
+            paddingHorizontal: space[12],
           }
-        : { flex: 1, height: 32 };
+        : { flex: 1, height: space[32] };
   const line = () =>
     props.plain
       ? {
           ...row,
           height: 56,
-          paddingHorizontal: 16,
-          gap: 16,
+          paddingHorizontal: space[16],
+          gap: space[16],
           borderBottomWidth: 1,
           borderColor: c().border,
         }
-      : { ...row, gap: 8 };
+      : { ...row, gap: space[8] };
   return (
     <View
       style={{
-        gap: props.plain ? 0 : 8,
+        gap: props.plain ? 0 : space[8],
         borderTopWidth: props.plain ? 1 : 0,
         borderColor: c().border,
       }}
@@ -53,7 +54,7 @@ export function HostFields(props: {
         <Label
           variant={props.plain ? "caption" : "body"}
           tone="muted"
-          style={{ width: props.plain ? 44 : 64 }}
+          style={{ width: props.plain ? control.touch : space[64] }}
         >
           {uiText("address")}
         </Label>
@@ -70,7 +71,7 @@ export function HostFields(props: {
         <Label
           variant={props.plain ? "caption" : "body"}
           tone="muted"
-          style={{ width: props.plain ? 44 : 64 }}
+          style={{ width: props.plain ? control.touch : space[64] }}
         >
           {uiText("token")}
         </Label>

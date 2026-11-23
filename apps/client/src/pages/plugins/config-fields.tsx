@@ -1,6 +1,7 @@
 import { View } from "nsh";
 import { colors, Icon, Label, row, textFaces } from "../../components";
 import { LayoutSelect } from "../../components/select";
+import { control, space } from "../../components/tokens";
 import { formatLocale } from "../../i18n";
 
 const pluginConfigCopy = {
@@ -57,8 +58,8 @@ export function PluginSelect(props: {
         backgroundColor: c().canvas,
       }}
       itemStyle={{
-        minHeight: 28,
-        paddingHorizontal: 8,
+        minHeight: control.md,
+        paddingHorizontal: space[8],
         color: c().ink,
         fontSize: type("small").size,
       }}
@@ -69,11 +70,11 @@ export function PluginSelect(props: {
             gap: props.compact ? 6 : 8,
             minHeight: props.phone
               ? props.compact
-                ? 28
-                : 40
+                ? control.md
+                : space[40]
               : props.compact
-                ? 24
-                : 28,
+                ? space[24]
+                : control.md,
             paddingHorizontal: props.phone && !props.compact ? 10 : 8,
             borderWidth: 1,
             borderColor: c().strong,

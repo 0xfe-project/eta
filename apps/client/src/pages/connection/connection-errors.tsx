@@ -12,6 +12,7 @@ import {
   monoFontFamily,
   row,
 } from "../../components";
+import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 function Mono(props: { children?: string }) {
@@ -75,7 +76,7 @@ export function ConnectionError(
         inset={16}
         dialog
       />
-      <View style={{ padding: 16, gap: lost() ? 8 : 12 }}>
+      <View style={{ padding: space[16], gap: lost() ? space[8] : space[12] }}>
         <If
           when={lost()}
           else={
@@ -108,9 +109,9 @@ export function ConnectionError(
           justifyContent: "flex-end",
           borderTopWidth: 1,
           borderColor: c().border,
-          gap: 8,
-          padding: 12,
-          paddingHorizontal: 16,
+          gap: space[8],
+          padding: space[12],
+          paddingHorizontal: space[16],
         }}
       >
         <If
@@ -120,14 +121,14 @@ export function ConnectionError(
               <Button
                 label={uiText("retry")}
                 tone="primary"
-                size={24}
-                style={{ paddingHorizontal: 12 }}
+                size={control.sm}
+                style={{ paddingHorizontal: space[12] }}
                 onPress={props.onRetry}
               />
               <Button
                 label={uiText("changeConnection")}
-                size={24}
-                style={{ paddingHorizontal: 12 }}
+                size={control.sm}
+                style={{ paddingHorizontal: space[12] }}
                 onPress={props.onChange}
               />
             </>
@@ -135,17 +136,17 @@ export function ConnectionError(
         >
           <Button
             label={uiText("useAnotherHost")}
-            size={44}
+            size={control.touch}
             labelVariant="body"
-            style={{ paddingHorizontal: 24 }}
+            style={{ paddingHorizontal: space[24] }}
             onPress={props.onChange}
           />
           <Button
             label={uiText("retry")}
             tone="primary"
-            size={44}
+            size={control.touch}
             labelVariant="body"
-            style={{ paddingHorizontal: 24 }}
+            style={{ paddingHorizontal: space[24] }}
             onPress={props.onRetry}
           />
         </If>
@@ -163,9 +164,9 @@ export function LostPhoneConnection(
         style={{
           ...grow,
           justifyContent: "flex-end",
-          gap: 8,
-          paddingHorizontal: 16,
-          paddingBottom: 32,
+          gap: space[8],
+          paddingHorizontal: space[16],
+          paddingBottom: space[32],
         }}
       >
         <Label variant="display" style={{ letterSpacing: -1.28 }}>
@@ -179,10 +180,10 @@ export function LostPhoneConnection(
       </View>
       <View
         style={{
-          paddingHorizontal: 16,
-          paddingTop: 8,
+          paddingHorizontal: space[16],
+          paddingTop: space[8],
           paddingBottom: 34,
-          gap: 8,
+          gap: space[8],
         }}
       >
         <Button

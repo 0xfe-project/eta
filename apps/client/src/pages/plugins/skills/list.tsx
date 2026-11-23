@@ -24,7 +24,7 @@ import {
   SmoothScroll,
   textFaces,
 } from "../../../components";
-import { weight } from "../../../components/tokens";
+import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
 import { SkillDetail } from "./detail";
@@ -204,8 +204,8 @@ export function Skills(props: {
           truncateValue
           triggerStyle={{
             width,
-            height: 32,
-            paddingHorizontal: 8,
+            height: space[32],
+            paddingHorizontal: space[8],
             borderColor: c().border,
           }}
         >
@@ -237,7 +237,7 @@ export function Skills(props: {
         ...(tablet() || phone() ? {} : { ...row }),
         alignItems: tablet() || phone() ? "stretch" : "center",
         flexWrap: tablet() || phone() ? "nowrap" : "wrap",
-        gap: tablet() || phone() ? 8 : 12,
+        gap: tablet() || phone() ? space[8] : space[12],
         paddingHorizontal: tablet() ? 14 : phone() ? 16 : 24,
         paddingTop: tablet() ? 10 : 8,
         paddingBottom: tablet() ? 10 : phone() ? 12 : 16,
@@ -251,7 +251,7 @@ export function Skills(props: {
           ...row,
           alignSelf: "flex-start",
           backgroundColor: c().selected,
-          padding: 2,
+          padding: space[2],
         }}
       >
         <Each of={["personal", "project"] as const}>
@@ -264,7 +264,7 @@ export function Skills(props: {
               accessibilityState={{ selected: scope() === item() }}
               onPress={() => changeScope(item())}
               style={{
-                paddingHorizontal: 12,
+                paddingHorizontal: space[12],
                 paddingVertical: 5,
                 borderWidth: 1,
                 borderColor: scope() === item() ? c().strong : "transparent",
@@ -310,7 +310,11 @@ export function Skills(props: {
                 : uiText("skillChooseProject")
             }
             truncateValue
-            triggerStyle={{ width: "100%", height: 28, paddingHorizontal: 8 }}
+            triggerStyle={{
+              width: "100%",
+              height: control.md,
+              paddingHorizontal: space[8],
+            }}
           >
             <Each of={projects()} key={(item) => item.id}>
               {(item) => (
@@ -338,7 +342,7 @@ export function Skills(props: {
           onChange={query.set}
           style={{
             width: "100%",
-            height: phone() ? 32 : 28,
+            height: phone() ? space[32] : control.md,
             fontSize: type("small").size,
             paddingRight: 25,
           }}
@@ -351,7 +355,7 @@ export function Skills(props: {
             pointerEvents: "none",
           }}
         >
-          <Icon name="search" size={12} />
+          <Icon name="search" size={icon.sm} />
         </View>
       </View>
     </View>
@@ -390,7 +394,7 @@ export function Skills(props: {
   const emptyStyle = {
     flex: undefined,
     justifyContent: "flex-start",
-    paddingVertical: 40,
+    paddingVertical: space[40],
   } as const;
   const emptyWidth = () => (tablet() ? 220 : phone() ? 240 : 260);
   const emptyState = () => (
@@ -410,7 +414,7 @@ export function Skills(props: {
             title={emptyCopy().title}
             description={emptyCopy().hint}
             icon="book"
-            iconSize={32}
+            iconSize={icon.xl}
             titleWeight={weight.regular}
             titleTone="ink"
             descriptionWidth={emptyWidth()}
@@ -422,12 +426,12 @@ export function Skills(props: {
           title={uiText("unableToLoadSkills")}
           description={failure()}
           icon="warning"
-          iconSize={32}
+          iconSize={icon.xl}
           iconTone="red"
           descriptionWidth={emptyWidth()}
           style={emptyStyle}
         >
-          <Button label={uiText("retry")} size={28} onPress={refresh} />
+          <Button label={uiText("retry")} size={control.md} onPress={refresh} />
         </Empty>
       </If>
     </If>
@@ -447,8 +451,8 @@ export function Skills(props: {
                       ...row,
                       flexWrap: "wrap",
                       alignItems: "stretch",
-                      paddingHorizontal: 24,
-                      gap: 12,
+                      paddingHorizontal: space[24],
+                      gap: space[12],
                     }
             }
           >
@@ -474,12 +478,12 @@ export function Skills(props: {
                       : phone()
                         ? {
                             ...row,
-                            paddingHorizontal: 16,
-                            height: 64,
+                            paddingHorizontal: space[16],
+                            height: space[64],
                             borderTopWidth: 1,
-                            gap: 12,
+                            gap: space[12],
                           }
-                        : { width: 267, padding: 12, borderWidth: 1 }),
+                        : { width: 267, padding: space[12], borderWidth: 1 }),
                     borderColor: c().border,
                     backgroundColor:
                       selectedPath() === entry().path
@@ -491,8 +495,8 @@ export function Skills(props: {
                   <If when={tablet() || phone()}>
                     <View
                       style={{
-                        width: phone() ? 32 : 28,
-                        height: phone() ? 32 : 28,
+                        width: phone() ? space[32] : control.md,
+                        height: phone() ? space[32] : control.md,
                         alignItems: "center",
                         justifyContent: "center",
                         borderWidth: 1,
@@ -513,7 +517,7 @@ export function Skills(props: {
                     style={{
                       flex: 1,
                       minWidth: 0,
-                      gap: tablet() || phone() ? 2 : 4,
+                      gap: tablet() || phone() ? space[2] : space[4],
                     }}
                   >
                     <Label weight={weight.regular} lines={1}>
@@ -523,13 +527,15 @@ export function Skills(props: {
                       variant="small"
                       tone="muted"
                       lines={tablet() || phone() ? 1 : 2}
-                      style={{ height: tablet() || phone() ? undefined : 32 }}
+                      style={{
+                        height: tablet() || phone() ? undefined : space[32],
+                      }}
                     >
                       {entry().description}
                     </Label>
                   </View>
                   <If when={phone()}>
-                    <Icon name="right" size={16} />
+                    <Icon name="right" size={icon.md} />
                   </If>
                 </View>
               )}
@@ -573,7 +579,7 @@ export function Skills(props: {
                 icon="refresh"
                 iconOnly
                 iconSize={14}
-                size={32}
+                size={control.lg}
                 onPress={refresh}
               />
             </Header>
@@ -583,13 +589,13 @@ export function Skills(props: {
             <Header title={uiText("plugins")} layout={props.layout} inset={10}>
               <View style={{ flex: 1 }} />
               <If when={!showing()}>
-                <View style={{ ...row, gap: 12 }}>
+                <View style={{ ...row, gap: space[12] }}>
                   {deviceMenu(160)}
                   <Button
                     label={uiText("skillReload")}
                     icon="refresh"
                     iconOnly
-                    iconSize={16}
+                    iconSize={icon.md}
                     size={16}
                     style={{ paddingHorizontal: 0 }}
                     tone="ghost"
@@ -644,7 +650,7 @@ export function Skills(props: {
                   // Nothing listed: the detail pane keeps only its blank header bar.
                   <View
                     style={{
-                      height: 40,
+                      height: space[40],
                       flexShrink: 0,
                       backgroundColor: c().surface,
                       borderBottomWidth: 1,
