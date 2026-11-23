@@ -160,6 +160,8 @@ export interface LogoOptions {
   allowPrivate?: boolean;
   /** Tests only: the name resolver. */
   resolve?: (host: string) => Promise<string[]>;
+  /** Tests only: a certificate (PEM) trusted for https, so a local fake server with its own can answer. */
+  ca?: string;
   /** Tests only: the sites asked for a server's icon, in order (a local fake has no parent host). */
   sites?: (server: string) => string[];
   timeoutMs?: number;
@@ -793,6 +795,7 @@ export class Logos {
           path: url.pathname + url.search,
           method: "GET",
           servername: secure && isIP(host) === 0 ? host : undefined,
+          ca: this.#options.ca,
           headers: {
             host: url.host,
             accept: "image/*,text/html;q=0.8",
