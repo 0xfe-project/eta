@@ -1,6 +1,6 @@
 import type { PluginEnvView, PluginView } from "@eta/client-contracts";
 import { signal, View } from "nsh";
-import { Button, colors, Field, Label, row } from "../../components";
+import { Button, colors, Field, Label, row, textFaces } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -29,6 +29,7 @@ const draftOf = (one: PluginEnvView): Draft => ({
 export function EnvEditor(props: { item: PluginView; server: string }) {
   const host = useHost();
   const c = colors();
+  const type = textFaces();
   const mine = () =>
     (props.item.env ?? []).filter((one) => one.server === props.server);
   const drafts = signal<Draft[]>(mine().map(draftOf));
@@ -79,7 +80,11 @@ export function EnvEditor(props: { item: PluginView; server: string }) {
         <Label variant="small" weight={600}>
           {uiText("envTitle")}
         </Label>
-        <Label variant="small" tone="muted" style={{ lineHeight: 21 }}>
+        <Label
+          variant="small"
+          tone="muted"
+          style={{ lineHeight: type("small").prose }}
+        >
           {off() ? uiText("envOff") : uiText("envHint")}
         </Label>
         <If when={locked().length}>

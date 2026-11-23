@@ -1,6 +1,6 @@
 import type { PluginHeaderView, PluginView } from "@eta/client-contracts";
 import { signal, View } from "nsh";
-import { Button, colors, Field, Label, row } from "../../components";
+import { Button, colors, Field, Label, row, textFaces } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -47,6 +47,7 @@ export function HeadersEditor(props: {
 }) {
   const host = useHost();
   const c = colors();
+  const type = textFaces();
   const mine = () =>
     (props.item.headers ?? []).filter(
       (header) => header.server === props.server,
@@ -109,7 +110,11 @@ export function HeadersEditor(props: {
         <Label variant="small" weight={600}>
           {uiText("headersTitle")}
         </Label>
-        <Label variant="small" tone="muted" style={{ lineHeight: 21 }}>
+        <Label
+          variant="small"
+          tone="muted"
+          style={{ lineHeight: type("small").prose }}
+        >
           {off() ? uiText("headersOff") : uiText("headersHint")}
         </Label>
       </View>

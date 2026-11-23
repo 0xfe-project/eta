@@ -12,6 +12,7 @@ import {
   Modal,
   row,
   SmoothScroll,
+  textFaces,
 } from "../../components";
 import { hint } from "../../components/controls";
 import { uiText } from "../../i18n";
@@ -518,6 +519,7 @@ function CursorLoginRow(props: {
   server: PluginServerView;
   test: Test;
 }) {
+  const type = textFaces();
   const result = props.test.result;
   const isCursor = () =>
     props.server.cursorServer === true || result()?.cursorServer === true;
@@ -533,7 +535,11 @@ function CursorLoginRow(props: {
     <>
       <If when={offered()}>
         <View style={{ gap: 8 }}>
-          <Label variant="small" tone="muted" style={{ lineHeight: 20 }}>
+          <Label
+            variant="small"
+            tone="muted"
+            style={{ lineHeight: type("small").prose }}
+          >
             {signedIn()
               ? uiText("cursorReloginNote")
               : uiText("cursorLoginNote")}
