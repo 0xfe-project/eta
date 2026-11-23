@@ -4,7 +4,7 @@ import type {
   MarketSourceCatalog,
 } from "@eta/client-contracts";
 import { mount, signal, View } from "nsh";
-import { Label } from "../../src/components";
+import { Button, Label } from "../../src/components";
 import { Market } from "../../src/pages/plugins/market";
 import { createHost, Host } from "../../src/services/host";
 
@@ -47,12 +47,28 @@ const composio = (
   ...patch,
 });
 
-/** The market over one catalog; the link answer decides how connecting ends. */
-export function openMarket(catalog: MarketCatalog, link: "ok" | "fail" = "ok") {
+/**
+ * The market over one catalog; the link answer decides how connecting ends. `connected`: what the
+ * host says is connected; `"after-link"` means gmail is connected from the second question after
+ * the link was made (so a poll has to ask again); `"never"` that nothing ever is. `polls` shows
+ * how many times it was asked, and `leavable` adds a button that takes the market off the screen.
+ */
+export function openMarket(
+  catalog: MarketCatalog,
+  link: "ok" | "fail" = "ok",
+  options: {
+    connected?: "after-link" | "never" | "already";
+    leavable?: boolean;
+  } = {},
+) {
   mount(() => {
     const host = createHost();
     host.state.update((state) => ({ ...state, status: "open" }));
     const log = signal<string[]>([]);
+    const polls = signal(0);
+    const shown = signal(true);
+    let linked = false;
+    let since = 0;
     const stub = Object.assign(host, {
       call: async (
         _target: string,
@@ -61,7 +77,16 @@ export function openMarket(catalog: MarketCatalog, link: "ok" | "fail" = "ok") {
       ) => {
         if (method === "marketCatalog")
           return JSON.parse(JSON.stringify(catalog)) as MarketCatalog;
+        if (method === "composioConnected") {
+          polls.update((n) => n + 1);
+          if (linked) since++;
+          const on =
+            options.connected === "already" ||
+            (options.connected === "after-link" && linked && since >= 2);
+          return { status: "ready", slugs: on ? ["gmail"] : [] };
+        }
         if (method === "composioLink") {
+          linked = true;
           log.update((all) => [...all, "called:" + method + ":" + args.slug]);
           if (link === "fail") throw new Error("Composio refused the link");
           return { redirectUrl: "https://connect.composio.test/" + args.slug };
@@ -74,13 +99,19 @@ export function openMarket(catalog: MarketCatalog, link: "ok" | "fail" = "ok") {
       <Host.Provider value={stub}>
         <View style={{ flex: 1 }}>
           <Label>{log().join(" ")}</Label>
-          <Market
-            layout="desktop"
-            tabs={() => <Label>tabs</Label>}
-            open={async (url) => {
-              log.update((all) => [...all, "opened:" + url]);
-            }}
-          />
+          <Label>{"polls:" + polls()}</Label>
+          <If when={options.leavable}>
+            <Button label="Leave" onPress={() => shown.set(false)} />
+          </If>
+          <If when={shown()}>
+            <Market
+              layout="desktop"
+              tabs={() => <Label>tabs</Label>}
+              open={async (url) => {
+                log.update((all) => [...all, "opened:" + url]);
+              }}
+            />
+          </If>
         </View>
       </Host.Provider>
     );

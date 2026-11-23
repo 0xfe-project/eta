@@ -82,3 +82,84 @@ test("a refused link's error is gone once the detail is closed and opened again"
   await app.press("label:Gmail");
   expect(app.shows("Composio refused the link")).toBe(false);
 });
+
+const POLLING = { ...OPEN, clock: {} };
+const polls = (app: { texts(): string[] }) =>
+  Number(
+    app
+      .texts()
+      .find((text) => text.startsWith("polls:"))!
+      .slice(6),
+  );
+
+test("after Connect it asks until the toolkit is connected, shows the mark and stops", async () => {
+  const app = await open("./fixtures/composio-connect-polls.tsx", POLLING);
+  await app.press("label:Gmail");
+  expect(app.count("id:composio-connected")).toBe(0);
+  await app.press("label:Connect");
+  await app.waitFor(
+    "text:called:composioLink:gmail opened:https://connect.composio.test/gmail",
+  );
+  expect(app.count("id:composio-connected")).toBe(0);
+  await app.clock!.runFor(9000);
+  expect(app.count("id:composio-connected")).toBeGreaterThan(0);
+  // The button now says what it does, and is still there.
+  expect(app.shows("label:Reconnect")).toBe(true);
+  const asked = polls(app);
+  await app.clock!.runFor(60_000);
+  expect(polls(app)).toBe(asked);
+});
+
+test("it asks again at once when the window gets the focus back", async () => {
+  const app = await open("./fixtures/composio-connect-never.tsx", POLLING);
+  await app.press("label:Gmail");
+  await app.press("label:Connect");
+  await app.waitFor(
+    "text:called:composioLink:gmail opened:https://connect.composio.test/gmail",
+  );
+  await app.setLifecycle("inactive");
+  const before = polls(app);
+  await app.setLifecycle("active");
+  expect(polls(app)).toBe(before + 1);
+});
+
+test("it gives up after about three minutes, with no error and no mark", async () => {
+  const app = await open("./fixtures/composio-connect-never.tsx", POLLING);
+  await app.press("label:Gmail");
+  await app.press("label:Connect");
+  await app.waitFor(
+    "text:called:composioLink:gmail opened:https://connect.composio.test/gmail",
+  );
+  await app.clock!.runFor(200_000);
+  const asked = polls(app);
+  expect(asked).toBeGreaterThan(10);
+  expect(asked).toBeLessThan(70);
+  await app.clock!.runFor(60_000);
+  expect(polls(app)).toBe(asked);
+  expect(app.count("id:composio-connected")).toBe(0);
+  expect(app.shows("label:Connect")).toBe(true);
+});
+
+test("it stops asking when the market is left", async () => {
+  const app = await open("./fixtures/composio-connect-polls.tsx", {
+    ...POLLING,
+  });
+  await app.press("label:Gmail");
+  await app.press("label:Connect");
+  await app.waitFor(
+    "text:called:composioLink:gmail opened:https://connect.composio.test/gmail",
+  );
+  await app.clock!.runFor(3000);
+  expect(polls(app)).toBeGreaterThan(0);
+  await app.press("label:Leave");
+  const asked = polls(app);
+  await app.clock!.runFor(30_000);
+  expect(polls(app)).toBe(asked);
+});
+
+test("a toolkit already connected shows the mark on its card and says Reconnect", async () => {
+  const app = await open("./fixtures/composio-already-connected.tsx", OPEN);
+  await app.waitFor("id:composio-connected");
+  await app.press("label:Gmail");
+  expect(app.shows("label:Reconnect")).toBe(true);
+});
