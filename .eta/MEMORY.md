@@ -1,7 +1,5 @@
 # eta memory (untrusted)
-
 ## decision
-
 - [0] In the Eta monorepo, when the user says a change is done and asks to push, push it directly to main.
 - [9] In Eta product language, task is the human-level subagent abstraction; the internal Agent/subagent execution pool is an implementation detail and should not become a separate human-facing concept.
 - [13] Eta draft_task cards must be visually attached to the originating turn/message and be collapsible, so humans can review and confirm them in context.
@@ -39,13 +37,11 @@
 - [137] Eta 聊天过程窗口的 loading 态与内容态必须保持同一尺寸、边框和 padding；first token 到达时应填充同一个窗口，不重新挂载造成布局跳动。
 - [143] Eta main->web native channel: desktop sends `window.__etaNative?.({kind, action})` via `webview.executeJavascript`; web must implement `window.__etaNative` listener to handle menu/context-menu actions.
 - [144] Eta web keydown handling: currently only sidebar toggle and mobile drawer Escape exist; no global command-palette/shortcut dispatcher registry yet.
-
+- [152] 在 Eta 中，用户明确要求直接执行 Blender 等桌面应用操作并跳过任务草稿时，直接执行该次操作，无需 draft_task 确认。
+- [155] 在 Eta 中，用户要求仅重新打开已保存的 Blender 场景时，用 computer_open 将 .blend 路径作为参数传给 blender.exe，不渲染、不修改场景，并在用户要求时返回该次调用的 realmId。
 ## preference
-
-- [task-1-branch-naming] 分支按具体更新内容使用描述性名称，不仅使用任务编号；平台自动命名且无法安全同步关联时，明确报告限制，不直接改名造成任务关联失效。
-
-- [task-1-code-style] 代码遵循最小实现，避免过度防御、吞错和无依据兜底；错误沿现有链路抛出并保留诊断信息，必要安全边界除外。先看相邻及同类实现，沿用其命名、函数组织、状态管理、错误处理和测试风格，不另起无必要的新模式。
-
+- [145] [task-1-branch-naming] 分支按具体更新内容使用描述性名称，不仅使用任务编号；平台自动命名且无法安全同步关联时，明确报告限制，不直接改名造成任务关联失效。
+- [146] [task-1-code-style] 代码遵循最小实现，避免过度防御、吞错和无依据兜底；错误沿现有链路抛出并保留诊断信息，必要安全边界除外。先看相邻及同类实现，沿用其命名、函数组织、状态管理、错误处理和测试风格，不另起无必要的新模式。
 - [1] Use Chinese for Eta project interactions.
 - [2] For Eta changes, ensure pre-commit/repo checks pass before pushing.
 - [19] For Eta task/draft_task features, user considers human-reviewed draft_task sufficient and prefers minimal UI/lineage changes (attach cards to originating turn, collapse/expand) over redesigning subagent/background concurrency.
@@ -78,9 +74,9 @@
 - [138] Eta 聊天 first-token loading 应复用现有 ProcessBox/Loading 组件，使用 zh/en chat.json 成对文案和非空 aria-label；动画 motion-safe，已折叠历史不闪骨架。
 - [145] Eta web lib hooks style: prefer plain modules with `useSyncExternalStore` + external state (like fold.ts) or pure exported functions (like rail.ts); avoid heavy React state management for simple global/local storage-backed features.
 - [146] Eta web tests use `rstest` with `happy-dom`, importing from `@rstest/core`; setup forces Chinese locale in `beforeEach`.
-
+- [153] 交付 Blender 场景时，用户希望保留 Blender 窗口打开，并用 computer_observe 确认实际视口画面。
+- [156] 在 Eta 中，仅重新打开已保存的 Blender 场景时，完成后用一句话确认即可。
 ## lesson
-
 - [3] Knip in Eta flags exports used only internally; make internal helpers non-exported (e.g., onboardedStorageKey).
 - [11] Do not conflate Eta's product mechanism with implementation details: the user's 'subagent' meant task-as-subagent in human workflow, while opaque internal Agent execution may be fine.
 - [14] Before proposing new Eta task/promotion behavior, check whether existing draft_task already covers it; a request to make a card 'in the turn' may mean visual grouping/folding, not a change to execution timing or task semantics.
@@ -134,3 +130,4 @@
 - [149] Eta desktop menu items with 'action' currently do nothing because the main->page bridge is unidirectional (page->shell) except for context-menu clicks; new menu actions need the `window.__etaNative` channel implemented on the web side.
 - [150] Eta web has exactly one keyboard shortcut, ⌘,/Ctrl+, opening settings, mounted once on `window` by the root document (`apps/web/src/lib/settings-shortcut.ts`); the root route passes the page into `RootDocument` as children. A second chord is when a registry earns its place.
 - [151] [task-23~1798#151] Task #23 depends on task #22 completing, but task #22 is still active (status: working). The esm-mode branch has packages/eta-esm-mode/, but the task-23 worktree branch (eta/task-23) does not contain the prerequisite code from task #22. Cannot proceed with task #23 until task #22 completes and its changes are available on the working branch.
+- [154] Blender 窗口打开并不代表视口可见。若 `computer_observe` 只抓到灰屏，可独立核验渲染 PNG，并用 Blender 导出的视口截图检查构图，同时明确说明实时窗口仍未核验。
