@@ -10,7 +10,7 @@ import { contextRingDashes, contextUsage } from "@eta/client-contracts";
 import { computed, Image, View } from "nsh";
 import { uiText } from "../i18n";
 import { followSession, useHost } from "../services/host";
-import { Label } from "./text";
+import { hint } from "./controls";
 import { colors, fill } from "./theme";
 
 /**
@@ -52,23 +52,6 @@ export function useContextUsage(
       window,
     });
   });
-}
-
-/** A hover hint drawn as a small dark label (a bare string tooltip draws nothing on the web). */
-export function hint(text: string | undefined, c: ReturnType<typeof colors>) {
-  return text ? (
-    <View
-      style={{
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        backgroundColor: c().ink,
-      }}
-    >
-      <Label variant="small" tone="canvas">
-        {text}
-      </Label>
-    </View>
-  ) : undefined;
 }
 
 /** What the ring says when it is hovered or read out: the web ring's own words. */

@@ -154,18 +154,18 @@ export function ComposerRecipients(props: {
                 const selected = () => props.recipients.includes(id());
                 const running = () => props.running.includes(id());
                 const name = () => host.agent(id())?.name ?? uiText("agent");
+                // The chip keeps only its border; the button fills it, padding inside, so its
+                // hover reaches the border. A running reply's stop button sits beside the
+                // button, past its right padding (the old gap), with its own hover.
                 return (
                   <View
                     style={{
                       ...row,
                       height: 28,
-                      gap: 6,
-                      paddingLeft: 6,
-                      paddingRight: running() ? 4 : props.phone ? 8 : 10,
+                      paddingRight: running() ? 4 : 0,
                       flexShrink: 0,
                       borderWidth: 1,
                       borderColor: selected() ? c().ink : c().border,
-                      cursor: "pointer",
                       backgroundColor: selected() ? c().canvas : "transparent",
                     }}
                   >
@@ -179,6 +179,8 @@ export function ComposerRecipients(props: {
                         ...row,
                         gap: 6,
                         alignSelf: "stretch",
+                        paddingLeft: 6,
+                        paddingRight: running() ? 6 : props.phone ? 8 : 10,
                         cursor: "pointer",
                       }}
                     >

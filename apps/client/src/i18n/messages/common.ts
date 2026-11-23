@@ -109,6 +109,8 @@ export const commonMessages = {
   tasksViewAll: ["View all tasks", "查看全部任务"],
   on: ["On", "启用"],
   panel: ["Panel", "面板"],
+  hidePanel: ["Hide panel", "收起面板"],
+  showPanel: ["Show panel", "展开面板"],
   parentDirectory: ["Parent directory", "上级目录"],
   pending: ["Pending", "待处理"],
   plugins: ["Plugins", "插件"],
