@@ -18,18 +18,7 @@ export const chatMessages = {
   runUser: ["User", "用户"],
   runSummary: ["Summary", "摘要"],
   runGenericFailure: ["The run failed.", "本次运行失败。"],
-  stepField: ["Step", "步骤"],
   stepLoading: ["Loading steps…", "正在加载步骤…"],
-  stepEditContent: ["Edit {{content}}", "编辑 {{content}}"],
-  stepRemoveContent: ["Remove {{content}}", "删除 {{content}}"],
-  stepConnectToSave: [
-    "Connect to the Host to save this step.",
-    "连接主机后才能保存此步骤。",
-  ],
-  stepConnectToRemove: [
-    "Connect to the Host to remove this step.",
-    "连接主机后才能删除此步骤。",
-  ],
   runReconnectStatus: [
     "Connection lost. Reconnecting…",
     "连接已断开，正在重连…",
@@ -62,8 +51,6 @@ export const chatMessages = {
     "离线时无法查看执行记录。",
   ],
   defaultThinking: ["Thinking model default", "模型默认思考设置"],
-  removeStep: ["Remove step?", "移除此步骤？"],
-  editStep: ["Edit step", "编辑步骤"],
   noRunSteps: ["No steps yet.", "暂无步骤。"],
   offlineRunSteps: ["Steps unavailable offline.", "离线时无法查看步骤。"],
   stepCount: ["Steps {{completed}}/{{total}}", "步骤 {{completed}}/{{total}}"],
