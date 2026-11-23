@@ -333,7 +333,10 @@ export const pluginsMessages = {
     "Set one in Settings → Plugins to list its toolkits. The other sources are not affected.",
     "请在 设置 → 插件 中设置,才能列出它的 toolkit。其他来源不受影响。",
   ],
-  composioKeyRejected: ["Composio rejected the API key", "Composio 拒绝了这个 API 密钥"],
+  composioKeyRejected: [
+    "Composio rejected the API key",
+    "Composio 拒绝了这个 API 密钥",
+  ],
   composioKeyRejectedHint: [
     "Check or replace it in Settings → Plugins. The other sources are not affected.",
     "请在 设置 → 插件 中检查或替换。其他来源不受影响。",

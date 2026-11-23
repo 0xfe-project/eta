@@ -220,17 +220,17 @@ export function PluginSettings(props: { phone?: boolean }) {
                     }
                   />
                   <If when={item().kind !== "composio"}>
-                  <Button
-                    label={uiText("pluginsRemove")}
-                    accessibilityLabel={uiText("pluginsRemoveSource", {
-                      name: item().name || item().url,
-                    })}
-                    size={props.phone ? 40 : 28}
-                    disabled={busy()}
-                    onPress={() =>
-                      void call("marketRemoveSource", { url: item().url })
-                    }
-                  />
+                    <Button
+                      label={uiText("pluginsRemove")}
+                      accessibilityLabel={uiText("pluginsRemoveSource", {
+                        name: item().name || item().url,
+                      })}
+                      size={props.phone ? 40 : 28}
+                      disabled={busy()}
+                      onPress={() =>
+                        void call("marketRemoveSource", { url: item().url })
+                      }
+                    />
                   </If>
                 </View>
               )}
@@ -297,7 +297,11 @@ export function PluginSettings(props: { phone?: boolean }) {
                 />
               </If>
               <Button
-                label={hasKey() ? uiText("composioKeyReplace") : uiText("composioKeySave")}
+                label={
+                  hasKey()
+                    ? uiText("composioKeyReplace")
+                    : uiText("composioKeySave")
+                }
                 tone="primary"
                 size={props.phone ? 44 : 28}
                 disabled={busy()}

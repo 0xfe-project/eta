@@ -68,15 +68,32 @@ class Refused extends Error {
 const isPlain = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const OAUTH = new Set(["OAUTH2", "OAUTH1", "DCR_OAUTH", "CIMD_OAUTH", "S2S_OAUTH2"]);
-const API_KEY = new Set(["API_KEY", "BEARER_TOKEN", "BASIC", "BASIC_WITH_JWT", "BILLCOM_AUTH", "CALCOM_AUTH"]);
+const OAUTH = new Set([
+  "OAUTH2",
+  "OAUTH1",
+  "DCR_OAUTH",
+  "CIMD_OAUTH",
+  "S2S_OAUTH2",
+]);
+const API_KEY = new Set([
+  "API_KEY",
+  "BEARER_TOKEN",
+  "BASIC",
+  "BASIC_WITH_JWT",
+  "BILLCOM_AUTH",
+  "CALCOM_AUTH",
+]);
 
 /**
  * The sign-in a user meets. Composio's own (managed) schemes come first, since that is what the link
  * uses; within a list OAuth comes before a key. A scheme eta does not know is `unknown`, and so is
  * a toolkit that lists none.
  */
-export function authOf(schemes: readonly string[], managed: readonly string[], none: boolean): ComposioAuth {
+export function authOf(
+  schemes: readonly string[],
+  managed: readonly string[],
+  none: boolean,
+): ComposioAuth {
   if (none || (schemes.length === 1 && schemes[0] === "NO_AUTH")) return "none";
   for (const list of [managed, schemes]) {
     if (list.some((scheme) => OAUTH.has(scheme))) return "oauth";
@@ -87,14 +104,22 @@ export function authOf(schemes: readonly string[], managed: readonly string[], n
 
 const strings = (value: unknown, max: number): string[] =>
   Array.isArray(value)
-    ? value.flatMap((item) => (typeof item === "string" && item.length <= max ? [item] : [])).slice(0, 50)
+    ? value
+        .flatMap((item) =>
+          typeof item === "string" && item.length <= max ? [item] : [],
+        )
+        .slice(0, 50)
     : [];
 
 function https(value: unknown, max = 512): string | null {
   if (typeof value !== "string" || value.length > max) return null;
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && url.username === "" && url.password === "" ? value : null;
+    return url.protocol === "https:" &&
+      url.username === "" &&
+      url.password === ""
+      ? value
+      : null;
   } catch {
     return null;
   }
@@ -102,10 +127,15 @@ function https(value: unknown, max = 512): string | null {
 
 /** One toolkit as it must be; null for one that does not fit. */
 function toolkit(item: unknown, from: MarketSource): ComposioToolkit | null {
-  if (!isPlain(item) || typeof item.slug !== "string" || !SLUG.test(item.slug)) return null;
+  if (!isPlain(item) || typeof item.slug !== "string" || !SLUG.test(item.slug))
+    return null;
   const meta = isPlain(item.meta) ? item.meta : {};
-  const name = typeof item.name === "string" && item.name.trim() !== "" ? item.name.slice(0, 100) : item.slug;
-  const description = typeof meta.description === "string" ? meta.description : "";
+  const name =
+    typeof item.name === "string" && item.name.trim() !== ""
+      ? item.name.slice(0, 100)
+      : item.slug;
+  const description =
+    typeof meta.description === "string" ? meta.description : "";
   const schemes = strings(item.auth_schemes, 40);
   const managed = strings(item.composio_managed_auth_schemes, 40);
   const categories = Array.isArray(meta.categories)
@@ -118,14 +148,18 @@ function toolkit(item: unknown, from: MarketSource): ComposioToolkit | null {
     kind: "composio",
     slug: item.slug,
     name,
-    description: description.length > 500 ? `${description.slice(0, 499)}…` : description,
+    description:
+      description.length > 500 ? `${description.slice(0, 499)}…` : description,
     auth: authOf(schemes, managed, item.no_auth === true),
     authSchemes: schemes,
     managed: managed.length > 0,
     categories: categories.slice(0, 10),
     logo: https(meta.logo),
     appUrl: https(meta.app_url),
-    toolsCount: typeof meta.tools_count === "number" && Number.isFinite(meta.tools_count) ? meta.tools_count : null,
+    toolsCount:
+      typeof meta.tools_count === "number" && Number.isFinite(meta.tools_count)
+        ? meta.tools_count
+        : null,
     source: from.url,
     sourceName: from.name === "" ? from.url : from.name,
   };
@@ -177,7 +211,10 @@ export class Composio {
 
   setKey(key: string): void {
     const clean = key.trim();
-    if (!KEY_SHAPE.test(clean)) throw new PluginError("the API key must be one line of visible characters, up to 512");
+    if (!KEY_SHAPE.test(clean))
+      throw new PluginError(
+        "the API key must be one line of visible characters, up to 512",
+      );
     this.#db
       .query(
         `INSERT INTO composio_key (id, sealed, updated_at) VALUES (1, ?, ?)
@@ -195,20 +232,30 @@ export class Composio {
 
   /** The key, only for the header of a call to Composio. A blob that does not open reads as no key. */
   #apiKey(): string | undefined {
-    const row = this.#db.query<{ sealed: Uint8Array }, []>("SELECT sealed FROM composio_key WHERE id = 1").get();
+    const row = this.#db
+      .query<{ sealed: Uint8Array }, []>(
+        "SELECT sealed FROM composio_key WHERE id = 1",
+      )
+      .get();
     return row === null ? undefined : unseal(this.#key, row.sealed);
   }
 
   /* ------------------------------------------------------------------- list */
 
   /** The toolkits, or why there are none. `cached`: only what is kept, at once. */
-  async read(source: MarketSource, mode: "refresh" | "cached"): Promise<MarketSourceCatalog> {
+  async read(
+    source: MarketSource,
+    mode: "refresh" | "cached",
+  ): Promise<MarketSourceCatalog> {
     const answer = (
       status: ComposioStatus,
-      rest: Partial<MarketSourceCatalog> & { toolkits?: ComposioToolkit[] | null } = {},
+      rest: Partial<MarketSourceCatalog> & {
+        toolkits?: ComposioToolkit[] | null;
+      } = {},
     ): MarketSourceCatalog => ({
       source,
-      entries: rest.toolkits === undefined || rest.toolkits === null ? null : [],
+      entries:
+        rest.toolkits === undefined || rest.toolkits === null ? null : [],
       rejected: [],
       error: null,
       updatedAt: null,
@@ -223,11 +270,22 @@ export class Composio {
       return answer("needs_key");
     }
     const cached = this.#fromCache(source);
-    if (mode === "cached") return cached === undefined ? answer("ready") : this.#ready(answer, cached.toolkits, cached.at);
+    if (mode === "cached")
+      return cached === undefined
+        ? answer("ready")
+        : this.#ready(answer, cached.toolkits, cached.at);
     try {
       const toolkits = await this.#download(key, source);
       const now = Date.now();
-      this.#cache?.put(COMPOSIO_URL, JSON.stringify(toolkits.map(({ source: _a, sourceName: _b, ...rest }) => rest)), null, null, now);
+      this.#cache?.put(
+        COMPOSIO_URL,
+        JSON.stringify(
+          toolkits.map(({ source: _a, sourceName: _b, ...rest }) => rest),
+        ),
+        null,
+        null,
+        now,
+      );
       return this.#ready(answer, toolkits, now);
     } catch (error) {
       if (error instanceof Refused && error.status === 401) {
@@ -241,7 +299,10 @@ export class Composio {
   }
 
   #ready(
-    answer: (status: ComposioStatus, rest?: Partial<MarketSourceCatalog>) => MarketSourceCatalog,
+    answer: (
+      status: ComposioStatus,
+      rest?: Partial<MarketSourceCatalog>,
+    ) => MarketSourceCatalog,
     toolkits: ComposioToolkit[],
     at: number,
     stale: string | null = null,
@@ -251,42 +312,59 @@ export class Composio {
   }
 
   #remember(toolkits: readonly ComposioToolkit[]): void {
-    this.#logos = new Map(toolkits.flatMap((one) => (one.logo === null ? [] : [[one.slug, one.logo] as const])));
+    this.#logos = new Map(
+      toolkits.flatMap((one) =>
+        one.logo === null ? [] : [[one.slug, one.logo] as const],
+      ),
+    );
   }
 
   /** The kept list, checked again as if it had just come; a row that no longer passes is dropped. */
-  #fromCache(source: MarketSource): { toolkits: ComposioToolkit[]; at: number } | undefined {
+  #fromCache(
+    source: MarketSource,
+  ): { toolkits: ComposioToolkit[]; at: number } | undefined {
     const row = this.#cache?.get(COMPOSIO_URL, Date.now());
     if (row === undefined) return undefined;
     try {
       const raw: unknown = JSON.parse(row.text);
-      if (!Array.isArray(raw) || raw.length > MAX_TOOLKITS) throw new Error("not a list");
-      return { toolkits: raw.flatMap((item) => toolkit(item, source) ?? []), at: row.fetchedAt };
+      if (!Array.isArray(raw) || raw.length > MAX_TOOLKITS)
+        throw new Error("not a list");
+      return {
+        toolkits: raw.flatMap((item) => toolkit(item, source) ?? []),
+        at: row.fetchedAt,
+      };
     } catch {
       this.#cache?.delete(COMPOSIO_URL);
       return undefined;
     }
   }
 
-  async #download(key: string, source: MarketSource): Promise<ComposioToolkit[]> {
+  async #download(
+    key: string,
+    source: MarketSource,
+  ): Promise<ComposioToolkit[]> {
     const toolkits: ComposioToolkit[] = [];
     const seen = new Set<string>();
     let cursor: string | null = null;
     for (let page = 1; ; page++) {
-      if (page > MAX_PAGES) throw new Error(`the list is longer than ${MAX_PAGES} pages`);
+      if (page > MAX_PAGES)
+        throw new Error(`the list is longer than ${MAX_PAGES} pages`);
       const query = new URLSearchParams({ limit: String(PAGE) });
       if (cursor !== null) query.set("cursor", cursor);
       const body = await this.#call("GET", `/api/v3/toolkits?${query}`, key);
-      if (!isPlain(body) || !Array.isArray(body.items)) throw new Error("the answer is not a list of toolkits");
+      if (!isPlain(body) || !Array.isArray(body.items))
+        throw new Error("the answer is not a list of toolkits");
       for (const item of body.items) {
         const one = toolkit(item, source);
         if (one === null || seen.has(one.slug)) continue;
         seen.add(one.slug);
         toolkits.push(one);
       }
-      if (toolkits.length > MAX_TOOLKITS) throw new Error(`the list has more than ${MAX_TOOLKITS} toolkits`);
+      if (toolkits.length > MAX_TOOLKITS)
+        throw new Error(`the list has more than ${MAX_TOOLKITS} toolkits`);
       const next: unknown = body.next_cursor;
-      if (typeof next !== "string" || next === "" || body.items.length === 0) return toolkits;
+      if (typeof next !== "string" || next === "" || body.items.length === 0)
+        return toolkits;
       if (next === cursor) throw new Error("the list pages do not end");
       cursor = next;
     }
@@ -313,19 +391,27 @@ export class Composio {
   async link(slug: string): Promise<string> {
     if (!SLUG.test(slug)) throw new PluginError("that is not a toolkit name");
     const key = this.#apiKey();
-    if (key === undefined) throw new PluginError("set the Composio API key first");
+    if (key === undefined)
+      throw new PluginError("set the Composio API key first");
     try {
       const config = await this.#authConfig(slug, key);
-      const made = await this.#call("POST", "/api/v3/connected_accounts/link", key, {
-        auth_config_id: config,
-        user_id: this.#userId(),
-      });
+      const made = await this.#call(
+        "POST",
+        "/api/v3/connected_accounts/link",
+        key,
+        {
+          auth_config_id: config,
+          user_id: this.#userId(),
+        },
+      );
       const address = isPlain(made) ? https(made.redirect_url, 2048) : null;
-      if (address === null) throw new Error("Composio gave no https sign-in address");
+      if (address === null)
+        throw new Error("Composio gave no https sign-in address");
       return address;
     } catch (error) {
       this.#configs.delete(slug);
-      if (error instanceof Refused && error.status === 401) throw new PluginError("Composio refused the API key");
+      if (error instanceof Refused && error.status === 401)
+        throw new PluginError("Composio refused the API key");
       throw new PluginError(this.#clean(error, key));
     }
   }
@@ -341,21 +427,32 @@ export class Composio {
   async #authConfig(slug: string, key: string): Promise<string> {
     const known = this.#configs.get(slug);
     if (known !== undefined) return known;
-    const query = new URLSearchParams({ toolkit_slug: slug, is_composio_managed: "true", limit: "10" });
+    const query = new URLSearchParams({
+      toolkit_slug: slug,
+      is_composio_managed: "true",
+      limit: "10",
+    });
     const found = await this.#call("GET", `/api/v3/auth_configs?${query}`, key);
     let id: unknown;
     if (isPlain(found) && Array.isArray(found.items))
       id = found.items.find(
-        (item) => isPlain(item) && item.is_composio_managed === true && item.status !== "DISABLED",
+        (item) =>
+          isPlain(item) &&
+          item.is_composio_managed === true &&
+          item.status !== "DISABLED",
       )?.id;
     if (id === undefined) {
       const made = await this.#call("POST", "/api/v3/auth_configs", key, {
         toolkit: { slug },
         auth_config: { type: "use_composio_managed_auth" },
       });
-      id = isPlain(made) && isPlain(made.auth_config) ? made.auth_config.id : undefined;
+      id =
+        isPlain(made) && isPlain(made.auth_config)
+          ? made.auth_config.id
+          : undefined;
     }
-    if (typeof id !== "string" || !SLUG.test(id)) throw new Error("Composio gave no auth config for this toolkit");
+    if (typeof id !== "string" || !SLUG.test(id))
+      throw new Error("Composio gave no auth config for this toolkit");
     this.#configs.set(slug, id);
     return id;
   }
@@ -363,7 +460,12 @@ export class Composio {
   /* ------------------------------------------------------------------- wire */
 
   /** One call to Composio, JSON both ways, with a time limit and a size limit. */
-  async #call(method: "GET" | "POST", path: string, key: string, body?: unknown): Promise<unknown> {
+  async #call(
+    method: "GET" | "POST",
+    path: string,
+    key: string,
+    body?: unknown,
+  ): Promise<unknown> {
     let response: Response;
     try {
       response = await fetch(this.#base + path, {
@@ -379,14 +481,23 @@ export class Composio {
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch (error) {
-      const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+      const timedOut =
+        error instanceof Error &&
+        (error.name === "TimeoutError" || error.name === "AbortError");
       throw new Refused(
-        timedOut ? `Composio did not answer in ${this.#timeoutMs} ms` : "cannot reach Composio",
+        timedOut
+          ? `Composio did not answer in ${this.#timeoutMs} ms`
+          : "cannot reach Composio",
         null,
       );
     }
-    if (!response.ok) throw new Refused(`Composio answered HTTP ${response.status}`, response.status);
-    if (Number(response.headers.get("content-length") ?? 0) > this.#maxBytes) throw this.#tooBig();
+    if (!response.ok)
+      throw new Refused(
+        `Composio answered HTTP ${response.status}`,
+        response.status,
+      );
+    if (Number(response.headers.get("content-length") ?? 0) > this.#maxBytes)
+      throw this.#tooBig();
     const chunks: Uint8Array[] = [];
     let size = 0;
     const reader = response.body?.getReader();
@@ -406,14 +517,19 @@ export class Composio {
       throw new Refused("cannot read Composio's answer", null);
     }
     try {
-      return JSON.parse(new TextDecoder().decode(Buffer.concat(chunks))) as unknown;
+      return JSON.parse(
+        new TextDecoder().decode(Buffer.concat(chunks)),
+      ) as unknown;
     } catch {
       throw new Refused("Composio's answer is not JSON", null);
     }
   }
 
   #tooBig(): Refused {
-    return new Refused(`Composio's answer is larger than ${this.#maxBytes} bytes`, null);
+    return new Refused(
+      `Composio's answer is larger than ${this.#maxBytes} bytes`,
+      null,
+    );
   }
 
   /** The reason as text, without the key even if a remote text carried it. */

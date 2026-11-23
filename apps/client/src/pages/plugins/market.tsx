@@ -685,37 +685,58 @@ export function Market(props: {
         </View>
       </SmoothScroll>
       <If when={currentToolkit()}>
-        <Modal {...sheet(currentToolkit()!.name, 512, () => detail.set(""))} hideHeader>
+        <Modal
+          {...sheet(currentToolkit()!.name, 512, () => detail.set(""))}
+          hideHeader
+        >
           <SmoothScroll style={{ maxHeight: 440 }} scrollbar={false}>
             <View style={{ gap: 10, paddingTop: 6, ...inset() }}>
-              <View testID="market-detail-header" style={{ ...row, gap: 12, alignItems: "center" }}>
+              <View
+                testID="market-detail-header"
+                style={{ ...row, gap: 12, alignItems: "center" }}
+              >
                 <PluginLogo
                   name={currentToolkit()!.name}
                   composio={currentToolkit()!.slug}
                   size={40}
                 />
-                <View tooltip={hint(currentToolkit()!.name, c)} style={{ flex: 1, minWidth: 0 }}>
+                <View
+                  tooltip={hint(currentToolkit()!.name, c)}
+                  style={{ flex: 1, minWidth: 0 }}
+                >
                   <Label variant="title" weight={600} lines={1}>
                     {currentToolkit()!.name}
                   </Label>
                 </View>
                 <CloseButton onPress={() => detail.set("")} iconSize={14} />
               </View>
-              <Label variant="small" tone="muted" style={{ userSelect: "text" }}>
+              <Label
+                variant="small"
+                tone="muted"
+                style={{ userSelect: "text" }}
+              >
                 {currentToolkit()!.description}
               </Label>
               {line(uiText("marketSource"), currentToolkit()!.sourceName)}
-              {line(uiText("composioCategories"), currentToolkit()!.categories.join(", "))}
+              {line(
+                uiText("composioCategories"),
+                currentToolkit()!.categories.join(", "),
+              )}
               {line(
                 uiText("composioTools"),
-                currentToolkit()!.toolsCount === null ? null : String(currentToolkit()!.toolsCount),
+                currentToolkit()!.toolsCount === null
+                  ? null
+                  : String(currentToolkit()!.toolsCount),
               )}
               {line(uiText("composioHomepage"), currentToolkit()!.appUrl)}
               {line(uiText("composioAuth"), authLabel(currentToolkit()!.auth))}
-              <Label variant="small">
-                {authHelp(currentToolkit()!.auth)}
-              </Label>
-              <If when={!currentToolkit()!.managed && currentToolkit()!.auth !== "none"}>
+              <Label variant="small">{authHelp(currentToolkit()!.auth)}</Label>
+              <If
+                when={
+                  !currentToolkit()!.managed &&
+                  currentToolkit()!.auth !== "none"
+                }
+              >
                 <Label variant="small" tone="muted">
                   {uiText("composioNotManaged")}
                 </Label>
@@ -724,7 +745,11 @@ export function Market(props: {
                 {uiText("composioConnectNote")}
               </Label>
               <If when={installError()}>
-                <Label variant="small" tone="red" style={{ userSelect: "text" }}>
+                <Label
+                  variant="small"
+                  tone="red"
+                  style={{ userSelect: "text" }}
+                >
                   {installError()}
                 </Label>
               </If>
@@ -740,7 +765,11 @@ export function Market(props: {
             }}
           >
             <Button
-              label={busy() ? uiText("composioConnecting") : uiText("composioConnect")}
+              label={
+                busy()
+                  ? uiText("composioConnecting")
+                  : uiText("composioConnect")
+              }
               tone="primary"
               size={phone() ? 44 : 28}
               disabled={busy()}

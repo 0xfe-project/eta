@@ -355,7 +355,7 @@ export class Logos {
    * is kept in memory for a day; null when there is no picture.
    */
   async fromUrl(address: string): Promise<Logo | null> {
-    const key = "https\n" + address;
+    const key = `https\n${address}`;
     const now = (this.#options.now ?? Date.now)();
     const hit = this.#kept.get(key);
     if (hit && now - hit.at < KEEP_MS) return hit.logo;
@@ -713,7 +713,11 @@ export class Logos {
   }
 
   async #picture(address: string, httpsOnly = false): Promise<Logo | null> {
-    const got = await this.#get(this.#address(address, httpsOnly), MAX_PICTURE, httpsOnly);
+    const got = await this.#get(
+      this.#address(address, httpsOnly),
+      MAX_PICTURE,
+      httpsOnly,
+    );
     const type = pictureType(got.body);
     return type
       ? await this.#shrunk(
@@ -746,7 +750,10 @@ export class Logos {
       const status = response.status;
       if (status >= 300 && status < 400 && response.location) {
         // The GitHub proxy is for GitHub hosts only; viaProxy leaves any other address alone.
-        url = this.#address(viaProxy(new URL(response.location, url).href), httpsOnly);
+        url = this.#address(
+          viaProxy(new URL(response.location, url).href),
+          httpsOnly,
+        );
         continue;
       }
       if (status !== 200) throw new Error(`HTTP ${status}`);

@@ -5,7 +5,12 @@ import { createHost, Host } from "../../src/services/host";
 /** A host that keeps a Composio key the way the real one does: it says only that one is set. */
 let hasKey = false;
 const sources = [
-  { name: "Composio", url: "composio", enabled: true, kind: "composio" as const },
+  {
+    name: "Composio",
+    url: "composio",
+    enabled: true,
+    kind: "composio" as const,
+  },
   { name: "", url: "https://plain.test/marketplace.json", enabled: true },
 ];
 

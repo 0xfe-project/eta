@@ -131,7 +131,7 @@ export function PluginLogo(props: {
         ? `composio:${props.composio}`
         : props.repo
           ? repoKey(props.repo, props.homepage)
-        : (props.homepage ?? "");
+          : (props.homepage ?? "");
   const state = () => slot(key());
   effect(() => {
     const at = key();
@@ -149,8 +149,8 @@ export function PluginLogo(props: {
             : props.composio
               ? { composio: props.composio }
               : repo
-              ? { ...repo, homepage: props.homepage ?? null }
-              : { homepage: at },
+                ? { ...repo, homepage: props.homepage ?? null }
+                : { homepage: at },
         );
       (repo || props.composio ? turn(ask) : ask())
         .then((logo) => {

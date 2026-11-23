@@ -1,12 +1,25 @@
-import type { ComposioToolkit, MarketCatalog, MarketSourceCatalog } from "@eta/client-contracts";
+import type {
+  ComposioToolkit,
+  MarketCatalog,
+  MarketSourceCatalog,
+} from "@eta/client-contracts";
 import { mount, signal, View } from "nsh";
 import { Label } from "../../src/components";
 import { Market } from "../../src/pages/plugins/market";
 import { createHost, Host } from "../../src/services/host";
 
-const SOURCE = { url: "composio", name: "Composio", enabled: true, kind: "composio" as const };
+const SOURCE = {
+  url: "composio",
+  name: "Composio",
+  enabled: true,
+  kind: "composio" as const,
+};
 
-function toolkit(slug: string, name: string, auth: ComposioToolkit["auth"]): ComposioToolkit {
+function toolkit(
+  slug: string,
+  name: string,
+  auth: ComposioToolkit["auth"],
+): ComposioToolkit {
   return {
     kind: "composio",
     slug,
@@ -24,7 +37,9 @@ function toolkit(slug: string, name: string, auth: ComposioToolkit["auth"]): Com
   };
 }
 
-const composio = (patch: Partial<MarketSourceCatalog>): MarketSourceCatalog => ({
+const composio = (
+  patch: Partial<MarketSourceCatalog>,
+): MarketSourceCatalog => ({
   source: SOURCE,
   entries: [],
   rejected: [],
@@ -39,8 +54,13 @@ export function openMarket(catalog: MarketCatalog, link: "ok" | "fail" = "ok") {
     host.state.update((state) => ({ ...state, status: "open" }));
     const log = signal<string[]>([]);
     const stub = Object.assign(host, {
-      call: async (_target: string, method: string, args: { slug?: string }) => {
-        if (method === "marketCatalog") return JSON.parse(JSON.stringify(catalog)) as MarketCatalog;
+      call: async (
+        _target: string,
+        method: string,
+        args: { slug?: string },
+      ) => {
+        if (method === "marketCatalog")
+          return JSON.parse(JSON.stringify(catalog)) as MarketCatalog;
         if (method === "composioLink") {
           log.update((all) => [...all, "called:" + method + ":" + args.slug]);
           if (link === "fail") throw new Error("Composio refused the link");
@@ -73,11 +93,17 @@ export const readyCatalog: MarketCatalog = {
     composio({
       status: "ready",
       entries: [],
-      toolkits: [toolkit("gmail", "Gmail", "oauth"), toolkit("exa", "Exa", "api_key"), toolkit("hackernews", "Hacker News", "none")],
+      toolkits: [
+        toolkit("gmail", "Gmail", "oauth"),
+        toolkit("exa", "Exa", "api_key"),
+        toolkit("hackernews", "Hacker News", "none"),
+      ],
     }),
   ],
 };
-export const noKeyCatalog = (status: "needs_key" | "key_rejected"): MarketCatalog => ({
+export const noKeyCatalog = (
+  status: "needs_key" | "key_rejected",
+): MarketCatalog => ({
   proxy: "",
   sources: [
     composio({ status, toolkits: null }),

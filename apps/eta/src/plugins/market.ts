@@ -8,6 +8,7 @@ import type {
   MarketSourceCatalog,
 } from "@eta/client-contracts";
 import type { SettingStore } from "../settings/store";
+import type { Composio } from "./composio";
 import type { CachedCatalog, CatalogCache } from "./market-cache";
 import type { Plugins } from "./service";
 /**
@@ -28,7 +29,6 @@ import { Buffer } from "node:buffer";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { loadPlugin, PluginError } from "@eta/daemon";
-import type { Composio } from "./composio";
 import { COMPOSIO_URL } from "./composio";
 import {
   cleanPath,
@@ -172,7 +172,9 @@ export class Market {
   /** The git catalogs, then Composio when there is one: it is always listed, on unless switched off. */
   sources(): MarketSource[] {
     const git = this.#gitSources();
-    return this.#composio === undefined ? git : [...git, this.#composio.source()];
+    return this.#composio === undefined
+      ? git
+      : [...git, this.#composio.source()];
   }
 
   /** The git catalogs, read when asked: the stored list, else the defaults (or the old single address). */
@@ -230,7 +232,8 @@ export class Market {
   }
 
   removeSource(url: string): MarketSettings {
-    if (url === COMPOSIO_URL) throw new PluginError("Composio is built in: switch it off instead");
+    if (url === COMPOSIO_URL)
+      throw new PluginError("Composio is built in: switch it off instead");
     const list = this.#gitSources();
     if (!list.some((item) => item.url === url))
       throw new PluginError("that address is not in the list");
