@@ -19,6 +19,7 @@ import {
   ActionMenu,
   Button,
   colors,
+  dialogWidth,
   Field,
   grow,
   Label,
@@ -33,6 +34,11 @@ import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { acpStatus } from "./external-agent";
+
+/** A multi-line field (the command's arguments, its environment), and the machine menu off
+ * phones. */
+const multilineHeight = 64;
+const machineMenuWidth = 488;
 
 // Settings › External agents: one form to add an agent to a machine's ~/.eta/acp.json or to change
 // one there, as apps/web's AgentDialog does. The fields are checked by the same rules
@@ -214,7 +220,11 @@ export function ExternalAgentForm(props: {
     return key ? uiText(key, { line: problem.line ?? "" }) : problem.key;
   };
   const inputStyle = (invalid: boolean, multiline = false) => ({
-    height: multiline ? 64 : props.phone ? 36 : 30,
+    height: multiline
+      ? multilineHeight
+      : props.phone
+        ? control.touch
+        : control.lg,
     ...textStyle(type(props.phone ? "body" : "small")),
     paddingHorizontal: space[12],
     paddingVertical: multiline ? space[8] : undefined,
@@ -364,7 +374,7 @@ export function ExternalAgentForm(props: {
             accessibilityLabel={uiText("externalAgentMachine")}
             style={{
               ...row,
-              height: props.phone ? 36 : 30,
+              height: props.phone ? control.touch : control.lg,
               paddingHorizontal: space[12],
               borderWidth: 1,
               borderColor: c().border,
@@ -382,11 +392,11 @@ export function ExternalAgentForm(props: {
         <ActionMenu
           label={uiText("externalAgentMachine")}
           value={machineName(machine())}
-          popupWidth={props.phone ? undefined : 490}
+          popupWidth={props.phone ? undefined : machineMenuWidth}
           sheetTitle={uiText("externalAgentMachine")}
           triggerStyle={{
             width: "100%",
-            height: props.phone ? 36 : 30,
+            height: props.phone ? control.touch : control.lg,
             paddingLeft: space[12],
             paddingRight: space[8],
           }}
@@ -464,7 +474,7 @@ export function ExternalAgentForm(props: {
       phonePage={props.phone}
       hideHeader={props.phone}
       height={props.phone ? "100%" : undefined}
-      width={520}
+      width={dialogWidth.lg}
       dismissible={!saving()}
       onClose={props.onClose}
     >
@@ -481,7 +491,7 @@ export function ExternalAgentForm(props: {
           }}
         >
           <BackButton
-            size={40}
+            size={control.touch}
             iconSize={icon.md}
             disabled={saving()}
             onPress={props.onClose}

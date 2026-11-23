@@ -8,7 +8,7 @@ import {
   monoFontFamily,
   row,
 } from "../../../components";
-import { icon, space, weight } from "../../../components/tokens";
+import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { WarningLine } from "../section";
 import { LOGIN_COMMANDS } from "./status";
@@ -111,7 +111,7 @@ export function RuntimeHints(props: {
               props.probing ? uiText("runtimeRetrying") : uiText("runtimeRetry")
             }
             tone="ghost"
-            size={20}
+            size={control.sm}
             labelTone="mutedInk"
             disabled={props.probing}
             style={{ paddingHorizontal: 0 }}

@@ -171,14 +171,14 @@ export function UpdateSteps(props: { phase: UpgradePhase; percent?: number }) {
             <View style={{ flex: 1, minWidth: 0, gap: space[4] }}>
               <View
                 style={{
-                  height: 3,
+                  height: space[4],
                   backgroundColor: c().border,
                   flexDirection: "row",
                 }}
               >
                 <View
                   style={{
-                    height: 3,
+                    height: space[4],
                     width: fill(),
                     backgroundColor: state() === "done" ? c().green : c().blue,
                   }}

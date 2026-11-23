@@ -1,7 +1,7 @@
 import type { PluginView } from "@eta/client-contracts";
 import type { AgentForm } from "./form";
 import { View } from "nsh";
-import { colors, Empty, Label, row } from "../../../components";
+import { colors, Empty, emptyWidth, Label, row } from "../../../components";
 import { CheckControl } from "../../../components/check-control";
 import { icon, space, weight } from "../../../components/tokens";
 import { localizedText, uiText } from "../../../i18n";
@@ -14,6 +14,9 @@ import {
   StatusLine,
   WarningLine,
 } from "../section";
+
+/** A plugin's status column: room for "Needs setup" and its dot. */
+const pluginLaneWidth = 108;
 
 export function AgentPlugins(props: { form: AgentForm }) {
   const { plugins, phoneEditor } = props.form;
@@ -74,7 +77,7 @@ export function AgentPlugins(props: { form: AgentForm }) {
         else={
           <Empty
             title={uiText("noPluginsInstalled")}
-            descriptionWidth={320}
+            descriptionWidth={emptyWidth.narrow}
             style={emptyStyle}
           />
         }
@@ -96,7 +99,7 @@ export function AgentPlugins(props: { form: AgentForm }) {
                   )
                 }
                 size={icon.md}
-                markSize={phoneEditor() ? 10 : 12}
+                markSize={icon.sm}
                 indicatorStyle={{ margin: phoneEditor() ? space[8] : space[4] }}
                 style={{
                   ...row,
@@ -131,7 +134,10 @@ export function AgentPlugins(props: { form: AgentForm }) {
                           />
                         </If>
                       </View>
-                      <StatusLane width={108} status={status(item())} />
+                      <StatusLane
+                        width={pluginLaneWidth}
+                        status={status(item())}
+                      />
                     </>
                   }
                 >

@@ -3,6 +3,9 @@ import { View } from "nsh";
 import { colors, Label, row } from "../../../components";
 import { space } from "../../../components/tokens";
 
+/** A field beside its label. */
+const fieldWidth = 160;
+
 export function EditorRow(props: {
   label: string;
   hint?: JSX.Element;
@@ -34,7 +37,7 @@ export function EditorRow(props: {
       </View>
       <View
         style={{
-          width: props.stack ? "100%" : (props.width ?? 160),
+          width: props.stack ? "100%" : (props.width ?? fieldWidth),
           flexShrink: 0,
         }}
       >

@@ -24,6 +24,10 @@ import {
   toolsDescription,
   transportDescription,
 } from "./server-presentation";
+
+/** A fact's value beside its label, and the sign-out confirmation's sheet. */
+const valueWidth = "70%";
+const signOutHeight = 188;
 function McpFact(props: { label: string; value: string }) {
   const c = colors();
   return (
@@ -42,7 +46,7 @@ function McpFact(props: { label: string; value: string }) {
       <Label
         variant="small"
         tone="muted"
-        style={{ maxWidth: "70%", textAlign: "right" }}
+        style={{ maxWidth: valueWidth, textAlign: "right" }}
       >
         {props.value}
       </Label>
@@ -262,7 +266,7 @@ export function McpDetail(props: {
           title={uiText("mcpConfirmSignOut", { server: server().server })}
           phone={phone()}
           sheet={phone()}
-          height={186}
+          height={signOutHeight}
           onClose={() => confirm.set(false)}
         >
           <View style={{ padding: space[16], gap: space[12] }}>

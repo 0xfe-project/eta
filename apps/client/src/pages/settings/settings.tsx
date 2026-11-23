@@ -8,6 +8,7 @@ import {
   Button,
   colors,
   Empty,
+  emptyWidth,
   grow,
   Header,
   Modal,
@@ -15,7 +16,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { CloseButton } from "../../components/navigation-buttons";
-import { icon, space } from "../../components/tokens";
+import { control, icon, space } from "../../components/tokens";
 import { uiText, useText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { AgentEditor } from "./agents/editor";
@@ -42,6 +43,10 @@ import { emptyStyle, SectionHeader } from "./section";
 import { AgentSetting } from "./setting-row";
 import { TaskSettings } from "./tasks";
 import { UpdateSettings } from "./updates/update";
+
+/** The Settings dialog off phones: its own two-column layout, wider than a form. */
+const settingsDialogWidth = 768;
+const settingsDialogHeight = 576;
 
 export function Settings(
   props: AppearanceProps & {
@@ -94,7 +99,11 @@ export function Settings(
     );
   };
   const info = (text: string) => (
-    <Empty title={text} descriptionWidth={320} style={emptyStyle} />
+    <Empty
+      title={text}
+      descriptionWidth={emptyWidth.narrow}
+      style={emptyStyle}
+    />
   );
   const { count: sourceCount } = useModelSources();
   const acpLists = () =>
@@ -182,7 +191,7 @@ export function Settings(
                   title={text("settings")}
                   layout={props.layout}
                   onBack={() => section.set(undefined)}
-                  backIconSize={16}
+                  backIconSize={icon.md}
                 />
               </If>
               <If
@@ -232,7 +241,7 @@ export function Settings(
                           description={uiText("noModelSourcesHint")}
                           icon="powerPlug"
                           iconSize={icon.lg}
-                          descriptionWidth={320}
+                          descriptionWidth={emptyWidth.narrow}
                           style={emptyStyle}
                         >
                           <Button
@@ -306,7 +315,7 @@ export function Settings(
                       description={uiText("settingsNoExternalAgentsHint")}
                       icon="terminal"
                       iconSize={icon.lg}
-                      descriptionWidth={320}
+                      descriptionWidth={emptyWidth.narrow}
                       style={emptyStyle}
                     />
                   }
@@ -471,7 +480,7 @@ export function Settings(
                 iconOnly
                 tone="ghost"
                 iconSize={icon.md}
-                size={14}
+                size={control.sm}
                 style={{ paddingHorizontal: 0 }}
                 onPress={props.onClose}
               />
@@ -486,8 +495,8 @@ export function Settings(
         phone={phone()}
         phonePage={phone()}
         hideHeader
-        width={770}
-        height={phone() ? "100%" : 578}
+        width={settingsDialogWidth}
+        height={phone() ? "100%" : settingsDialogHeight}
         modalFocus
         onClose={props.onClose}
       >
@@ -499,7 +508,7 @@ export function Settings(
                 title={text("settings")}
                 layout="phone"
                 onBack={props.onClose}
-                backIconSize={16}
+                backIconSize={icon.md}
               />
             </If>
           }
@@ -509,12 +518,12 @@ export function Settings(
             title={text("settings")}
             layout="desktop"
             dialog
-            inset={11}
-            end={11}
+            inset={space[12]}
+            end={space[12]}
           >
             <View style={grow} />
             <CloseButton
-              size={16}
+              size={control.sm}
               iconSize={icon.md}
               style={{ paddingHorizontal: 0 }}
               onPress={props.onClose}

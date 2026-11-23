@@ -25,6 +25,9 @@ import {
   percentText,
 } from "./quota";
 
+/** The bar showing how much of a source's quota is used. */
+const usageBarWidth = 56;
+
 /** Every model source in one list: the gateway's accounts first, then the config's providers. */
 export function useModelSources() {
   const host = useHost();
@@ -125,7 +128,7 @@ export function ModelSourceList(props: {
                 <If when={!props.phone && used(item()) !== undefined}>
                   <View
                     style={{
-                      width: 56,
+                      width: usageBarWidth,
                       height: space[4],
                       borderWidth: 1,
                       borderColor: c().strong,

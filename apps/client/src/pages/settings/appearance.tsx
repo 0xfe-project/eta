@@ -22,6 +22,10 @@ import { control, space } from "../../components/tokens";
 import { languageChoices, LanguageSettings, useText } from "../../i18n";
 import { pictureModes, PictureModes } from "../../services/picture-mode";
 
+/** A choice's menu and a typed value, beside their label off phones. */
+const menuWidth = 160;
+const fieldWidth = 200;
+
 const themeLabels = {
   system: "system",
   light: "light",
@@ -175,7 +179,7 @@ function ChoiceRow<T extends string>(props: {
           label={props.title}
           value={props.displayValue ?? props.name(props.value)}
           triggerStyle={{
-            width: props.phone ? "100%" : 160,
+            width: props.phone ? "100%" : menuWidth,
             height: props.phone ? space[32] : space[24],
             paddingLeft: space[12],
             paddingRight: props.phone ? space[12] : space[8],
@@ -247,7 +251,7 @@ function FontRow(props: {
         onBlur={commit}
         onSubmit={commit}
         style={{
-          width: props.phone ? "100%" : 200,
+          width: props.phone ? "100%" : fieldWidth,
           height: props.phone ? space[32] : space[24],
           ...textStyle(type("small")),
           paddingHorizontal: space[12],

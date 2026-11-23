@@ -4,7 +4,7 @@ import { openUrl, View } from "nsh";
 import { Button, colors, Icon, Label, row } from "../../../components";
 import { chatText } from "../../../components/eta-editor";
 import { StatusDot } from "../../../components/status-dot";
-import { icon, space, weight } from "../../../components/tokens";
+import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { canStartHost } from "../../connection/local-host";
@@ -18,6 +18,10 @@ import {
   UpdateNotice,
   UpdateSteps,
 } from "./progress";
+
+/** A release row (its name, notes and action), and its status column off phones. */
+const releaseRow = 72;
+const statusWidth = 148;
 
 const phaseName = {
   starting: "updatePreparing",
@@ -131,7 +135,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
         <If when={offer()}>
           <Button
             label={offerLabel()}
-            size={props.phone ? 40 : undefined}
+            size={props.phone ? control.touch : undefined}
             style={
               props.phone
                 ? { marginTop: space[8], alignSelf: "stretch" }
@@ -156,7 +160,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
         <If when={waitingOnWork() && host.can("upgrade.start")}>
           <Button
             label={uiText("updateNow")}
-            size={props.phone ? 40 : undefined}
+            size={props.phone ? control.touch : undefined}
             disabled={!connected() || !!pending()}
             onPress={() => void updateNow()}
           />
@@ -164,7 +168,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
         <If when={starting() || canCancel()}>
           <Button
             label={uiText("cancelUpdate")}
-            size={props.phone ? 40 : undefined}
+            size={props.phone ? control.touch : undefined}
             disabled={!connected() || !!pending() || starting()}
             onPress={() => void request("cancel", {})}
           />
@@ -180,7 +184,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
           ...(props.phone ? {} : row),
           alignItems: props.phone ? "stretch" : "flex-start",
           gap: props.phone ? space[4] : space[8],
-          minHeight: 73,
+          minHeight: releaseRow,
           paddingVertical: space[8],
           paddingHorizontal: space[16],
           borderBottomWidth: 1,
@@ -242,7 +246,11 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
           when={props.phone}
           else={
             <View
-              style={{ width: 146, alignItems: "flex-start", gap: space[8] }}
+              style={{
+                width: statusWidth,
+                alignItems: "flex-start",
+                gap: space[8],
+              }}
             >
               <View style={{ ...row, gap: space[4] }}>
                 <StatusDot color={c()[statusTone()]} />

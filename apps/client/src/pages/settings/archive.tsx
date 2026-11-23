@@ -15,6 +15,7 @@ import {
   Button,
   colors,
   Empty,
+  emptyWidth,
   grow,
   Icon,
   Label,
@@ -27,6 +28,9 @@ import { useHost } from "../../services/host";
 import { messageTime } from "../chat/message-time";
 import { TaskGlyph } from "../tasks/status";
 import { emptyStyle, EntityRow, SectionHeader } from "./section";
+
+/** The quiet-period menu beside its label. */
+const quietPeriodWidth = 160;
 
 export function ArchiveSettings(props: { phone?: boolean }) {
   const host = useHost();
@@ -105,7 +109,7 @@ export function ArchiveSettings(props: { phone?: boolean }) {
                 </Label>
               </View>
               {quietPeriod({
-                width: 160,
+                width: quietPeriodWidth,
                 height: space[24],
                 paddingLeft: space[12],
                 paddingRight: space[8],
@@ -211,7 +215,7 @@ export function ArchiveSettings(props: { phone?: boolean }) {
               title={uiText("archivedTasksEmpty")}
               titleWeight={weight.regular}
               description={uiText("archivedTasksEmptyHint")}
-              descriptionWidth={360}
+              descriptionWidth={emptyWidth.narrow}
               style={emptyStyle}
             />
           }

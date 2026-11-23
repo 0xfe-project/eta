@@ -6,6 +6,12 @@ import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { tintedLogo } from "./models/logos";
 
+/** A row's status column, wide enough for its dot and word. */
+const statusLaneWidth = 100;
+
+/** The box a row's leading avatar, logo or glyph sits in when it is not the default 24. */
+export const leadingBoxWidth = 28;
+
 /** An empty pane says so right under its header, not in the middle of the pane. */
 export const emptyStyle: ViewStyle = {
   flex: 0,
@@ -94,7 +100,7 @@ export function StatusLane(props: { status?: EntityStatus; width?: number }) {
     <View
       style={{
         ...row,
-        width: props.width ?? 100,
+        width: props.width ?? statusLaneWidth,
         height: space[20],
         gap: space[4],
         flexShrink: 0,
@@ -145,7 +151,7 @@ export function PaneBack(props: {
       tone="ghost"
       iconSize={icon.md}
       labelTone={tablet() ? "ink" : "mutedInk"}
-      size={16}
+      size={control.sm}
       disabled={props.disabled}
       style={{ paddingHorizontal: 0 }}
       onPress={props.onPress}

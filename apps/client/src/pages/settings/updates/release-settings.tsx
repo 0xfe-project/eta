@@ -16,6 +16,14 @@ import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { GroupHeading } from "./group-heading";
 
+/** A setting, the channel row with its two lines, the channel menu and one of its items, and
+ * the Advanced toggle. */
+const settingRow = 56;
+const channelRow = 72;
+const channelWidth = 160;
+const itemRow = 28;
+const advancedWidth = 100;
+
 function SettingBand(props: {
   title: string;
   detail: string;
@@ -28,7 +36,7 @@ function SettingBand(props: {
         ...row,
         justifyContent: "space-between",
         gap: space[8],
-        minHeight: 55,
+        minHeight: settingRow,
         paddingHorizontal: space[16],
         paddingVertical: space[8],
         borderBottomWidth: 1,
@@ -87,7 +95,7 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
       <View
         style={{
           ...(props.phone ? {} : row),
-          minHeight: 71,
+          minHeight: channelRow,
           gap: props.phone ? space[4] : space[12],
           paddingHorizontal: space[16],
           paddingVertical: space[8],
@@ -109,7 +117,9 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
             </Label>
           </If>
         </View>
-        <View style={{ width: props.phone ? "100%" : 160, flexShrink: 0 }}>
+        <View
+          style={{ width: props.phone ? "100%" : channelWidth, flexShrink: 0 }}
+        >
           <LayoutSelect
             accessibilityLabel={uiText("channel")}
             items={[
@@ -128,7 +138,7 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
             itemStyle={{
               color: c().ink,
               fontSize: type("small").size,
-              minHeight: 29,
+              minHeight: itemRow,
               paddingHorizontal: space[12],
             }}
             trigger={
@@ -172,7 +182,7 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
           style={{
             ...row,
             height: props.phone ? control.md : space[24],
-            width: 98,
+            width: advancedWidth,
             paddingHorizontal: space[12],
             justifyContent: "space-between",
             borderWidth: 1,

@@ -22,6 +22,10 @@ import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { SectionHeader } from "./section";
 
+/** The draft timeout's minutes field and its action menu. */
+const minutesWidth = 72;
+const actionWidth = 160;
+
 export function TaskSettings(props: { phone?: boolean }) {
   const host = useHost();
   const c = colors();
@@ -178,7 +182,7 @@ export function TaskSettings(props: { phone?: boolean }) {
             label={uiText("draftTimeoutMinutes")}
             value={typed() ?? String(timeout().minutes)}
             maxLength={4}
-            style={{ width: 72, height: control.md }}
+            style={{ width: minutesWidth, height: control.md }}
             onChange={(value) => typed.set(value)}
             onSubmit={() => void commitMinutes()}
             onBlur={() => void commitMinutes()}
@@ -198,7 +202,7 @@ export function TaskSettings(props: { phone?: boolean }) {
             label={uiText("draftTimeoutAction")}
             value={actionLabel(timeout().action)}
             triggerStyle={{
-              width: 160,
+              width: actionWidth,
               height: space[24],
               paddingLeft: space[12],
               paddingRight: space[8],

@@ -7,7 +7,10 @@ import { useModels } from "../../components/model-select";
 import { avatar, icon, space, weight } from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
-import { EntityRow, WarningLine } from "./section";
+import { EntityRow, leadingBoxWidth, WarningLine } from "./section";
+
+/** A setting: its title and the line under it. */
+const settingRow = 56;
 
 /** 48,213 → "48k": a token count the way a row's meta line says it. */
 export function tokens(count: number) {
@@ -33,7 +36,7 @@ export function SettingRow(props: {
       hoverStyle={props.onPress ? { backgroundColor: c().selected } : undefined}
       style={{
         ...row,
-        minHeight: 55,
+        minHeight: settingRow,
         gap: space[8],
         paddingHorizontal: space[16],
         paddingVertical: space[8],
@@ -95,7 +98,7 @@ export function AgentSetting(props: {
       leading={
         <AgentFace id={props.agent.id} size={props.avatar ?? avatar.md} />
       }
-      leadingSize={props.phone ? 28 : props.avatar}
+      leadingSize={props.phone ? leadingBoxWidth : props.avatar}
       stacked={props.phone}
       caret={props.phone}
       meta={

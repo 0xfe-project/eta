@@ -15,6 +15,10 @@ import { EditorRow, focusOnOpen } from "./editor-row";
 import { PersonaField } from "./instructions";
 import { MachineField } from "./machine-field";
 
+/** The name field, and the runtime menu: wide enough for a name and its reason on one line. */
+const nameWidth = 200;
+const runtimeMenuWidth = 260;
+
 const agentNameLimit = 100;
 export function AgentGeneral(props: {
   form: AgentForm;
@@ -173,7 +177,7 @@ export function AgentGeneral(props: {
         label={uiText("name")}
         stack={stacked()}
         phone={phoneEditor()}
-        width={200}
+        width={nameWidth}
       >
         <Field
           label={uiText("name")}
@@ -213,7 +217,7 @@ export function AgentGeneral(props: {
           value={runtimeLabel(runtime())}
           triggerStyle={selectStyle()}
           // Wide enough for a name and its reason on one line ("OpenCode  Probe timed out (30s)").
-          popupWidth={260}
+          popupWidth={runtimeMenuWidth}
         >
           <Each of={runtimeList()}>
             {(item) => (

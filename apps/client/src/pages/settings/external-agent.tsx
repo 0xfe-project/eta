@@ -12,6 +12,10 @@ import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { LetterBox } from "./section";
 
+/** The detail's body off phones, and the label column of its facts. */
+const bodyMinHeight = 240;
+const labelWidth = 84;
+
 export const acpStatus = {
   available: "externalAgentAvailable",
   unauthenticated: "externalAgentUnauthenticated",
@@ -90,7 +94,11 @@ export function ExternalAgentDetail(props: {
             borderColor: c().border,
           }}
         >
-          <BackButton size={40} iconSize={icon.md} onPress={props.onClose} />
+          <BackButton
+            size={control.touch}
+            iconSize={icon.md}
+            onPress={props.onClose}
+          />
           <View style={{ ...row, flex: 1, minWidth: 0, gap: space[4] }}>
             <LetterBox name={props.agent.label} />
             <Label weight={weight.strong} lines={1} style={{ flex: 1 }}>
@@ -115,7 +123,9 @@ export function ExternalAgentDetail(props: {
           </If>
         </View>
       </If>
-      <View style={{ ...grow, minHeight: props.phone ? undefined : 240 }}>
+      <View
+        style={{ ...grow, minHeight: props.phone ? undefined : bodyMinHeight }}
+      >
         <View
           style={{
             ...row,
@@ -158,7 +168,9 @@ export function ExternalAgentDetail(props: {
             >
               <Label
                 style={
-                  props.phone ? { flexShrink: 0 } : { width: 82, flexShrink: 0 }
+                  props.phone
+                    ? { flexShrink: 0 }
+                    : { width: labelWidth, flexShrink: 0 }
                 }
               >
                 {item()[0]}
@@ -258,7 +270,7 @@ export function ExternalAgentDetail(props: {
             <Button
               label={testing() ? uiText("testing") : uiText("test")}
               tone="primary"
-              size={props.phone ? 32 : 36}
+              size={props.phone ? control.touch : control.lg}
               disabled={testing()}
               style={{ width: "100%", justifyContent: "center" }}
               onPress={() => void test()}

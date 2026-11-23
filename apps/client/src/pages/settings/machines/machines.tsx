@@ -31,6 +31,9 @@ import {
 import { useMachineUpdate } from "./machine-update";
 import { PhonePairing } from "./phone-pairing";
 
+/** A machine's status column: wider while it updates, for the progress. */
+const statusWidth = { updating: 160, idle: 100 } as const;
+
 export function machineStatus(item: MachineView) {
   if (item.status === "pending") return uiText("machinePending");
   if (item.status === "revoked") return uiText("machineRevoked");
@@ -75,7 +78,11 @@ function MachineRow(props: {
       style={{
         ...row,
         height: props.phone ? space[16] : space[20],
-        width: props.phone ? undefined : machineUpdate.state() ? 160 : 100,
+        width: props.phone
+          ? undefined
+          : machineUpdate.state()
+            ? statusWidth.updating
+            : statusWidth.idle,
         gap: space[4],
       }}
     >
@@ -255,7 +262,7 @@ function MachineRow(props: {
               <If when={updatable() && host.can("machines.upgrade")}>
                 <Button
                   label={uiText("updateTryAgain")}
-                  size={props.phone ? 40 : undefined}
+                  size={props.phone ? control.touch : undefined}
                   disabled={updating()}
                   onPress={() => void update()}
                 />
@@ -352,7 +359,7 @@ export function Machines(props: {
             title={text("settings")}
             layout="phone"
             onBack={props.onBack}
-            backIconSize={16}
+            backIconSize={icon.md}
           />
         </If>
         <SectionHeader

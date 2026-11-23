@@ -3,6 +3,7 @@ import { signal, View } from "nsh";
 import {
   Button,
   colors,
+  dialogWidth,
   grow,
   Label,
   Modal,
@@ -28,6 +29,16 @@ import { createAgentForm } from "./form";
 import { AgentGeneral } from "./general";
 import { AgentInstructions } from "./instructions";
 import { AgentPlugins } from "./plugins";
+
+/** The editor dialog's height off phones, its header (taller on phones and when creating), its
+ * tab column and a tab, and the footer when creating. */
+const editorHeight = 520;
+const phoneSheetHeight = "90%";
+const headerHeight = 40;
+const headerTallHeight = 48;
+const tabsWidth = 160;
+const tabRow = 32;
+const footerHeight = 52;
 
 const editorTabs = ["general", "instructions", "plugins"] as const;
 type AgentTab = (typeof editorTabs)[number];
@@ -91,15 +102,15 @@ export function AgentEditor(props: AgentEditorProps) {
       title={title()}
       phone={props.phone}
       phonePage={phoneEditor()}
-      width={creating ? 385 : 640}
+      width={creating ? dialogWidth.md : dialogWidth.xl}
       height={
         props.phone
           ? phoneEditor()
             ? "100%"
-            : "90%"
+            : phoneSheetHeight
           : creating
             ? undefined
-            : 520
+            : editorHeight
       }
       modalFocus
       blurBackdrop={creating && !props.tablet}
@@ -110,7 +121,8 @@ export function AgentEditor(props: AgentEditorProps) {
       <View
         style={{
           ...row,
-          minHeight: phoneEditor() ? 48 : creating ? 46 : 40,
+          minHeight:
+            phoneEditor() || creating ? headerTallHeight : headerHeight,
           gap: phoneEditor() ? space[4] : space[8],
           paddingLeft: phoneEditor() ? space[8] : space[12],
           paddingRight: phoneEditor()
@@ -125,7 +137,7 @@ export function AgentEditor(props: AgentEditorProps) {
         <If when={phoneEditor()}>
           <BackButton
             disabled={busy()}
-            size={40}
+            size={control.touch}
             iconSize={icon.md}
             onPress={close}
           />
@@ -165,7 +177,7 @@ export function AgentEditor(props: AgentEditorProps) {
         >
           <CloseButton
             disabled={busy()}
-            size={creating ? 24 : 16}
+            size={control.sm}
             iconSize={icon.md}
             style={creating ? undefined : { paddingHorizontal: 0 }}
             onPress={close}
@@ -183,7 +195,7 @@ export function AgentEditor(props: AgentEditorProps) {
                 flexDirection: props.phone ? "row" : "column",
                 padding: props.phone ? 0 : space[8],
                 gap: props.phone ? 0 : space[2],
-                width: props.phone ? undefined : 158,
+                width: props.phone ? undefined : tabsWidth,
                 flexShrink: 0,
                 borderRightWidth: props.phone ? 0 : 1,
                 borderBottomWidth: props.phone ? 1 : 0,
@@ -203,7 +215,7 @@ export function AgentEditor(props: AgentEditorProps) {
                         hoverStyle={{ backgroundColor: c().selected }}
                         style={{
                           ...row,
-                          height: 30,
+                          height: tabRow,
                           paddingHorizontal: space[12],
                           backgroundColor:
                             tab() === entry() ? c().selected : c().canvas,
@@ -341,7 +353,7 @@ export function AgentEditor(props: AgentEditorProps) {
             : creating
               ? undefined
               : space[12],
-          minHeight: creating && !phoneEditor() ? 52 : undefined,
+          minHeight: creating && !phoneEditor() ? footerHeight : undefined,
           justifyContent: "flex-end",
           gap: creating && !phoneEditor() ? space[16] : space[8],
           borderTopWidth: 1,
@@ -407,7 +419,7 @@ export function AgentEditor(props: AgentEditorProps) {
         <Modal
           title={localizedText("Delete agent?", "删除智能体？")}
           phone={props.phone}
-          width={392}
+          width={dialogWidth.md}
           modalFocus
           overPhoneNavigation
           onClose={() => {

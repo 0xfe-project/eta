@@ -15,6 +15,9 @@ import { localizedText, uiText } from "../../../i18n";
 
 import { EditorRow } from "./editor-row";
 
+/** A machine to pick: its name and the line under it. */
+const optionRow = 56;
+
 export function MachineField(props: { form: AgentForm }) {
   const { phoneEditor, machineId, machines, creating, stacked, selectStyle } =
     props.form;
@@ -69,7 +72,7 @@ export function MachineField(props: { form: AgentForm }) {
                 size={icon.md}
                 style={{
                   ...row,
-                  minHeight: 55,
+                  minHeight: optionRow,
                   paddingHorizontal: space[24],
                   gap: space[16],
                   borderBottomWidth: 1,

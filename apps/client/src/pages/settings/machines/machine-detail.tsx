@@ -19,11 +19,14 @@ import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { follow, relativeTime, useHost } from "../../../services/host";
 import { TaskGlyph } from "../../tasks/status";
-import { EntityRow, SectionHeader } from "../section";
+import { EntityRow, leadingBoxWidth, SectionHeader } from "../section";
 import { SettingRow } from "../setting-row";
 import { MachineRunsLimit, RevokeMachine } from "./machine-dialogs";
 import { useMachineUpdate } from "./machine-update";
 import { machineStatus } from "./machines";
+
+/** A machine's detail dialog off phones. */
+const detailHeight = 488;
 
 export function MachineDetail(props: {
   item: MachineView;
@@ -108,7 +111,7 @@ export function MachineDetail(props: {
       subtitleTone={statusTone()}
       phone={props.phone}
       phonePage={props.phone}
-      height={props.phone ? "100%" : 490}
+      height={props.phone ? "100%" : detailHeight}
       onClose={props.onClose}
     >
       <SmoothScroll style={grow} scrollbar={false}>
@@ -244,7 +247,7 @@ export function MachineDetail(props: {
                       leading={
                         <TaskGlyph status={item().status} size={icon.md} />
                       }
-                      leadingSize={28}
+                      leadingSize={leadingBoxWidth}
                       stacked
                       caret
                       status={{

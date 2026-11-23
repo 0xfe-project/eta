@@ -22,6 +22,9 @@ import { localizedText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { EditorRow } from "./editor-row";
 
+/** The avatar row's picker beside its label. */
+const avatarFieldWidth = 300;
+
 /** As many faces as the host keeps. */
 const HISTORY = 8;
 /** Faces the large avatar passes over before it lands. */
@@ -185,7 +188,7 @@ export function AvatarRow(props: {
       label={localizedText("Avatar", "头像")}
       stack={props.stacked}
       phone={props.phone}
-      width={300}
+      width={avatarFieldWidth}
       hint={
         <If when={draw.failure()}>
           <Label variant="small" tone="red">
