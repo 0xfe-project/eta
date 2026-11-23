@@ -198,29 +198,15 @@ export function AgentPlugins(props: { form: AgentForm }) {
               >
                 <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                   <Label weight={500}>{item().name}</Label>
-                  {/* The same mark and words as an installed plugin's row: the phone's status line under the name; otherwise the lane, at the right end of the line of "Composio toolkit". */}
+                  {/* The same mark and words as an installed plugin's row: the phone's status line under the name; otherwise the lane, at the right end of the line of the name (below). */}
                   <If when={phoneEditor() && !item().enabled}>
                     <View testID="composio-plugin-off">
                       <StatusLine status={off()} />
                     </View>
                   </If>
-                  <View style={{ ...row, alignItems: "center", gap: 10 }}>
-                    <Label
-                      variant="small"
-                      tone="muted"
-                      style={{ flex: 1, minWidth: 0 }}
-                    >
-                      {uiText("composioToolkit")}
-                    </Label>
-                    <If when={!phoneEditor() && !item().enabled}>
-                      <View
-                        testID="composio-plugin-off"
-                        style={{ flexShrink: 0 }}
-                      >
-                        <StatusLane width={108} status={off()} />
-                      </View>
-                    </If>
-                  </View>
+                  <Label variant="small" tone="muted">
+                    {uiText("composioToolkit")}
+                  </Label>
                   <If when={item().state !== "ready"}>
                     <View testID="composio-plugin-error">
                       <WarningLine text={uiText("composioPluginError")} />
@@ -232,6 +218,11 @@ export function AgentPlugins(props: { form: AgentForm }) {
                     </View>
                   </If>
                 </View>
+                <If when={!phoneEditor() && !item().enabled}>
+                  <View testID="composio-plugin-off" style={{ flexShrink: 0 }}>
+                    <StatusLane width={108} status={off()} />
+                  </View>
+                </If>
               </CheckControl>
             );
           }}
