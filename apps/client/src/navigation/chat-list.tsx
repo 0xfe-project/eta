@@ -3,6 +3,7 @@ import type { Layout } from "../components";
 import { signal, View } from "nsh";
 import {
   Button,
+  Caption,
   colors,
   Field,
   grow,
@@ -58,7 +59,7 @@ export function ChatList(
       );
   const listHeader = {
     ...row,
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
     height: 32,
     paddingHorizontal: 14,
     borderBottomWidth: 1,
@@ -130,15 +131,18 @@ export function ChatList(
           <If
             when={props.collapsed}
             else={
-              <Button
-                label={text("newGroup")}
-                icon="plus"
-                iconOnly
-                tone="ghost"
-                size={22}
-                onPress={() => props.onCreate()}
-                style={{ backgroundColor: "transparent" }}
-              />
+              <>
+                <Caption text={text("groups")} />
+                <Button
+                  label={text("newGroup")}
+                  icon="plus"
+                  iconOnly
+                  tone="ghost"
+                  size={22}
+                  onPress={() => props.onCreate()}
+                  style={{ backgroundColor: "transparent" }}
+                />
+              </>
             }
           >
             <RailButton
@@ -150,6 +154,19 @@ export function ChatList(
         </If>
       </View>
       <SmoothScroll style={grow} scrollbar={false}>
+        <If when={phone()}>
+          <View
+            style={{
+              height: 36,
+              borderBottomWidth: 1,
+              borderColor: c().border,
+              paddingHorizontal: 16,
+              justifyContent: "center",
+            }}
+          >
+            <Caption text={text("groups")} phone />
+          </View>
+        </If>
         <Each of={groups()} key={(group) => group.id}>
           {(group) => (
             <GroupRow

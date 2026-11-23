@@ -59,7 +59,10 @@
   },
   "macos": {
     "infoPlist": {
-      "NSCameraUsageDescription": "Scan an Eta pairing code to connect to your host."
+      "NSCameraUsageDescription": "Scan an Eta pairing code to connect to your host.",
+      "NSAppTransportSecurity": {
+        "NSAllowsArbitraryLoads": true
+      }
     }
   }
 }

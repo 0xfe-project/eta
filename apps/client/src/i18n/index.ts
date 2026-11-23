@@ -31,6 +31,7 @@ const messages = {
   ],
   working: ["Working", "工作中"],
   idle: ["Idle", "空闲"],
+  groups: ["Groups", "群组"],
   searchConversations: ["Search conversations", "搜索对话"],
   newConversation: ["New conversation", "新建对话"],
   newGroup: ["New group", "新建群组"],
