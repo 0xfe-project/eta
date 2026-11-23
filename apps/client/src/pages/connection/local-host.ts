@@ -30,6 +30,15 @@ function missing(error: unknown): boolean {
   );
 }
 
+function accessDenied(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error.code === "EACCES" || error.code === "EPERM"),
+  );
+}
+
 interface LocalCommand {
   command: string;
   args: string[];
@@ -37,10 +46,14 @@ interface LocalCommand {
 
 function bootstrap(): LocalCommand[] {
   const version = appInfo().version ?? "0.1.0";
-  if (platform.os === "windows")
-    return [{ command: "eta-bootstrap.exe", args: [version] }];
-  if (appInfo().development) return [];
   const launcher = packagedHostBootstrap();
+  // Windows launches the normalized absolute path directly: NSH's
+  // process.execute list allows absolute paths, and nsh.json already lists
+  // eta-bootstrap.exe. No cmd.exe or shell wrapper is used; a launcher that is
+  // found but exits unready reports its own error rather than being retried.
+  if (platform.os === "windows")
+    return launcher ? [{ command: launcher, args: [version] }] : [];
+  if (appInfo().development) return [];
   return launcher
     ? [{ command: "/usr/bin/env", args: [launcher, version] }]
     : [];
@@ -49,8 +62,12 @@ function bootstrap(): LocalCommand[] {
 async function prepare(): Promise<HostAddress> {
   for (const launch of bootstrap()) {
     const result = await spawnHost(launch).catch((cause: unknown) => {
+      // Only a launcher that was not found is skipped so the installed host is
+      // tried next; a launcher that was found but failed to start reports its
+      // own error instead of being masked by a retry.
       if (
         missing(cause) ||
+        accessDenied(cause) ||
         (cause instanceof LocalHostError && cause.kind === "missing")
       )
         return undefined;
