@@ -380,10 +380,6 @@ export const pluginsMessages = {
     "Connected on Composio ({{count}})",
     "已在 Composio 连接({{count}})",
   ],
-  composioConnectedGroupNote: [
-    "Each connected toolkit is a plugin: switch it here, and tick it for the agents that may use it.",
-    "每个已连接的 toolkit 都是一个插件:在这里开关,并在智能体的插件里勾选。",
-  ],
   composioPluginSwitch: ["Enabled: {{name}}", "已启用:{{name}}"],
   composioPluginError: [
     "Its session did not check out, so no agent gets it.",

@@ -1,13 +1,17 @@
 import type { PluginResults } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import { effect, openUrl, signal, untracked, View } from "nsh";
-import { Button, colors, Label, row, textFaces } from "../../components";
+import { Button, colors, Label, row } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { ComposioDisconnect, linkAndOpen } from "./composio-actions";
 import { ComposioPluginSwitch, useComposioPlugins } from "./composio-plugins";
 import { PluginLogo } from "./plugin-logo";
 import { PluginName } from "./plugin-name";
+import { authStyle, BADGE_EDGE_ALPHA } from "./plugin-status";
+
+/** What a real plugin card holds above its bottom row: 52 + 8 + 36 + 8 + 60. */
+const INFO_HEIGHT = 164;
 
 interface Connected {
   slug: string;
@@ -32,7 +36,6 @@ export function ComposioConnected(props: {
 }) {
   const host = useHost();
   const c = colors();
-  const type = textFaces();
   const shown = signal<Connected[]>([]);
   /** Whether Re-authenticate and Disconnect show: a key is set and the source is not switched off. */
   const manage = signal(false);
@@ -99,17 +102,17 @@ export function ComposioConnected(props: {
   const rows = () => props.layout !== "desktop";
   const actions = (item: Connected) => (
     <If when={manage()}>
-      <View style={{ ...row, flexGrow: 1, justifyContent: "flex-end", gap: 8 }}>
+      <View style={{ ...row, flexGrow: 1, justifyContent: "flex-end", gap: 4 }}>
         <Button
           label={uiText("composioReconnect")}
-          tone="plain"
-          size={rows() ? 32 : 24}
+          tone="ghost"
+          size={rows() ? 32 : undefined}
           onPress={() => void reauth(item.slug)}
         />
         <Button
           label={uiText("composioDisconnect")}
-          tone="plain"
-          size={rows() ? 32 : 24}
+          tone="ghost"
+          size={rows() ? 32 : undefined}
           onPress={() => disconnecting.set(item)}
         />
       </View>
@@ -117,17 +120,22 @@ export function ComposioConnected(props: {
   );
   const inset = () => (props.layout === "tablet" ? 14 : 16);
   /**
-   * The last line of a card: the connected mark at the left, the buttons at the right. When both
-   * do not fit on one line the buttons drop to the next line and stay at the right.
+   * The last line of a card: the switch at the left, the buttons at the right. On a desktop card it is
+   * the real card's bottom row (36 high, a line above it, 8 below the line, 4 between); a row of the
+   * phone and tablet layouts has no line. When both do not fit on one line the buttons drop to the
+   * next line and stay at the right.
    */
-  const footer = (item: Connected) => (
+  const footer = (item: Connected, divided = false) => (
     <View
       style={{
         ...row,
         flexWrap: "wrap",
         alignItems: "center",
-        gap: 8,
-        minHeight: type("small").line,
+        gap: 4,
+        minHeight: divided ? 36 : 24,
+        ...(divided
+          ? { borderTopWidth: 1, borderColor: c().border, paddingTop: 8 }
+          : {}),
       }}
     >
       <If when={viewOf(item.slug)}>
@@ -140,10 +148,20 @@ export function ComposioConnected(props: {
       {actions(item)}
     </View>
   );
-  /** The connected mark, at the top right of a card, on the line of the name. */
+  /** The connected mark, at the top right of a card, on the line of the name: the signed-in badge's colours. */
   const mark = () => (
-    <View testID="composio-connected" style={{ flexShrink: 0 }}>
-      <Label variant="small" tone="muted" lines={1}>
+    <View
+      testID="composio-connected"
+      style={{
+        flexShrink: 0,
+        paddingHorizontal: 6,
+        paddingVertical: 1,
+        backgroundColor: c()[authStyle("signed_in").fill],
+        borderWidth: 1,
+        borderColor: c()[authStyle("signed_in").edge] + BADGE_EDGE_ALPHA,
+      }}
+    >
+      <Label variant="caption" tone={authStyle("signed_in").tone} lines={1}>
         {uiText("composioConnected")}
       </Label>
     </View>
@@ -167,9 +185,6 @@ export function ComposioConnected(props: {
         >
           <Label variant="small">
             {uiText("composioConnectedGroup", { count: shown().length })}
-          </Label>
-          <Label variant="caption" tone="muted">
-            {uiText("composioConnectedGroupNote")}
           </Label>
           <If when={error()}>
             <Label variant="small" tone="red" style={{ userSelect: "text" }}>
@@ -206,23 +221,31 @@ export function ComposioConnected(props: {
                       ...faint(item()),
                       width: 267,
                       padding: 12,
-                      gap: 6,
+                      gap: 8,
                       backgroundColor: c().canvas,
                       borderWidth: 1,
                       borderColor: c().border,
                     }}
                   >
-                    <View style={{ ...row, gap: 8 }}>
-                      <PluginLogo name={item().name} composio={item().slug} />
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <PluginName name={item().name} />
+                    {/* As tall as what a real card holds above its bottom row (name and status 52, description 36, version/links and counts 60, gaps 16), so the cards sit in the same rhythm. The space is spacing, not text. */}
+                    <View style={{ minHeight: INFO_HEIGHT, gap: 8 }}>
+                      <View style={{ ...row, gap: 8 }}>
+                        <PluginLogo name={item().name} composio={item().slug} />
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <PluginName name={item().name} />
+                        </View>
+                        {mark()}
                       </View>
-                      {mark()}
+                      <Label
+                        variant="small"
+                        tone="muted"
+                        lines={2}
+                        style={{ height: 36 }}
+                      >
+                        {item().description}
+                      </Label>
                     </View>
-                    <Label variant="small" tone="muted" lines={2}>
-                      {item().description}
-                    </Label>
-                    {footer(item())}
+                    {footer(item(), true)}
                   </View>
                 )}
               </Each>
