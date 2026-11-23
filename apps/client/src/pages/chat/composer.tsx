@@ -22,7 +22,7 @@ import {
   windowSize,
 } from "nsh";
 
-import { Button, colors, Icon, Label, row } from "../../components";
+import { Button, colors, focusRing, Icon, Label, row } from "../../components";
 import {
   attachment,
   chatText,
@@ -475,11 +475,7 @@ function ComposerBody(
                   void host.action(() => files$.pick(editor));
               }}
               hoverStyle={{ opacity: opacity.muted }}
-              focusVisibleStyle={{
-                outlineWidth: 1,
-                outlineColor: c().blue,
-                outlineOffset: 1,
-              }}
+              focusVisibleStyle={focusRing(c())}
               style={{
                 ...row,
                 justifyContent: "center",

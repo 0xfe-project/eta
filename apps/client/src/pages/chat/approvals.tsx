@@ -424,11 +424,7 @@ function Choice(props: {
       hoverStyle={
         props.selected ? undefined : { backgroundColor: c().selected }
       }
-      focusVisibleStyle={{
-        outlineWidth: 1,
-        outlineColor: c().blue,
-        outlineOffset: 1,
-      }}
+      focusVisibleStyle={focusRing(c())}
       style={{
         ...row,
         height: control.md,

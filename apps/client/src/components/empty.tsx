@@ -11,6 +11,10 @@ import { icon, space, weight } from "./tokens";
  * description up to 280 wide, 8 apart. Panes whose design draws it smaller or
  * bolder pass the roles, weights and tones they need.
  */
+/** How wide an empty state's description runs: `narrow` by default, `wide` in a page's main
+ * column. */
+export const emptyWidth = { narrow: 320, wide: 448 } as const;
+
 export function Empty(props: {
   title: string;
   description?: string;
@@ -57,7 +61,7 @@ export function Empty(props: {
           variant={props.descriptionVariant ?? "small"}
           style={{
             textAlign: "center",
-            maxWidth: props.descriptionWidth ?? 280,
+            maxWidth: props.descriptionWidth ?? emptyWidth.narrow,
           }}
         >
           {props.description}

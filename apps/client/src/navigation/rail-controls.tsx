@@ -2,6 +2,7 @@ import type { JSX, Point, ViewRef } from "nsh";
 import type { IconName } from "../components/icons";
 import { View } from "nsh";
 import { colors, focusRing, Icon, Label } from "../components";
+import { dotSize } from "../components/status-dot";
 import { control, icon, space } from "../components/tokens";
 
 export function RailButton(props: {
@@ -121,8 +122,8 @@ export function RailEntry(props: {
             position: "absolute",
             top: 2,
             left: 2,
-            width: 6,
-            height: 6,
+            width: dotSize,
+            height: dotSize,
             backgroundColor: c().green,
           }}
         />

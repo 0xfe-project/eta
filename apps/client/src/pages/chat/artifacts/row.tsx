@@ -1,7 +1,15 @@
 import type { ArtifactView } from "@eta/client-contracts";
 import type { DayGroup } from "./filter";
 import { Text, View } from "nsh";
-import { colors, fill, grow, Icon, Label, row } from "../../../components";
+import {
+  colors,
+  fill,
+  focusRing,
+  grow,
+  Icon,
+  Label,
+  row,
+} from "../../../components";
 import { control, icon, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { clock, useHost } from "../../../services/host";
@@ -66,11 +74,7 @@ export function ArtifactRow(props: {
         accessibilityLabel={title()}
         onPress={props.onPress}
         hoverStyle={{ backgroundColor: c().selected }}
-        focusVisibleStyle={{
-          outlineWidth: 1,
-          outlineColor: c().blue,
-          outlineOffset: -1,
-        }}
+        focusVisibleStyle={focusRing(c(), "inset")}
         style={{
           ...row,
           gap: space[8],
@@ -108,11 +112,7 @@ export function ArtifactRow(props: {
         accessibilityLabel={title()}
         accessibilityHint={metadata()}
         onPress={props.onPress}
-        focusVisibleStyle={{
-          outlineWidth: 1,
-          outlineColor: c().blue,
-          outlineOffset: -1,
-        }}
+        focusVisibleStyle={focusRing(c(), "inset")}
         style={{ ...fill, cursor: "pointer" }}
       />
       <View
@@ -189,10 +189,7 @@ export function ArtifactRow(props: {
                     pointerEvents: "auto",
                   }}
                   hoverStyle={{ backgroundColor: c().canvas }}
-                  focusVisibleStyle={{
-                    outlineWidth: 1,
-                    outlineColor: c().blue,
-                  }}
+                  focusVisibleStyle={focusRing(c(), "inset")}
                   onPress={() => props.onTask?.(task().id)}
                 >
                   <Label

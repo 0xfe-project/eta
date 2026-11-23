@@ -4,6 +4,7 @@ import { View } from "nsh";
 import {
   Button,
   colors,
+  focusRing,
   grow,
   Header,
   Label,
@@ -63,7 +64,7 @@ export function PluginTablet(props: {
                 }}
                 onPress={() => props.onSelect(item().name)}
                 hoverStyle={{ backgroundColor: c().selected }}
-                focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+                focusVisibleStyle={focusRing(c(), "inset")}
                 style={{
                   ...row,
                   gap: space[8],

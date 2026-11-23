@@ -4,6 +4,7 @@ import { View } from "nsh";
 import {
   Button,
   colors,
+  focusRing,
   Icon,
   Label,
   row,
@@ -167,7 +168,7 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
           accessibilityState={{ expanded: advancedOpen() }}
           onPress={() => advanced.set(!advancedOpen())}
           hoverStyle={{ backgroundColor: c().selected }}
-          focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+          focusVisibleStyle={focusRing(c(), "inset")}
           style={{
             ...row,
             height: props.phone ? control.md : space[24],

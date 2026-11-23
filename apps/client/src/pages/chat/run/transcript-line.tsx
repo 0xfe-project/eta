@@ -8,7 +8,14 @@ import type { Signal } from "nsh";
 import type { ShownPicture } from "../../../components/picture-cards";
 import { fullOutputOf } from "@eta/client-contracts/tool-shape";
 import { computed, signal, View } from "nsh";
-import { Caption, colors, Label, Markdown, row } from "../../../components";
+import {
+  Caption,
+  colors,
+  focusRing,
+  Label,
+  Markdown,
+  row,
+} from "../../../components";
 import { PictureCards, PictureChip } from "../../../components/picture-cards";
 import { Lightbox } from "../../../components/picture-viewer";
 import { space } from "../../../components/tokens";
@@ -126,7 +133,7 @@ export function TranscriptLine(props: {
             }}
             onPress={props.onToggle}
             hoverStyle={{ backgroundColor: c().selected }}
-            focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+            focusVisibleStyle={focusRing(c(), "inset")}
             style={{
               ...row,
               height: 31,

@@ -2,6 +2,7 @@ import type { RoutineSummary } from "@eta/client-contracts";
 import { View } from "nsh";
 import {
   colors,
+  focusRing,
   grow,
   Label,
   Modal,
@@ -77,10 +78,7 @@ export function PendingReports(props: {
                   onPress={() => {
                     props.onOpen(entry().routine.id, entry().run.id);
                   }}
-                  focusVisibleStyle={{
-                    outlineWidth: 1,
-                    outlineColor: c().blue,
-                  }}
+                  focusVisibleStyle={focusRing(c(), "inset")}
                   style={{ alignSelf: "flex-start", cursor: "pointer" }}
                 >
                   <Label

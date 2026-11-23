@@ -12,6 +12,13 @@ import { control, icon, shadow, space, weight } from "./tokens";
 
 const modalStack: (() => void)[] = [];
 
+/** A centred dialog's width: `sm` a confirmation, `md` a short form (the default), `lg` a form
+ * with rows, `xl` a dialog with its own layout. Not tokens: only a dialog takes them. */
+export const dialogWidth = { sm: 360, md: 448, lg: 560, xl: 640 } as const;
+
+/** The grabber atop a phone sheet. */
+const grabberWidth = 36;
+
 function closeTopModal() {
   modalStack.at(-1)?.();
 }
@@ -65,7 +72,7 @@ export function Modal(props: {
   const centred = () => !props.phone && !props.side;
   const stepHeader = () => Boolean(props.stepHeader) && centred();
   const popupStyle = (): ViewStyle => ({
-    width: props.phone ? "100%" : (props.width ?? 480),
+    width: props.phone ? "100%" : (props.width ?? dialogWidth.md),
     maxWidth: "100%",
     maxHeight: "100%",
     height: props.height,
@@ -118,7 +125,7 @@ export function Modal(props: {
           >
             <View
               style={{
-                width: 36,
+                width: grabberWidth,
                 height: space[4],
                 backgroundColor: color().strong,
               }}
