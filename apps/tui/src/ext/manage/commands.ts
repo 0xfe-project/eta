@@ -10,7 +10,7 @@ import { createElement } from "react";
 import { hostHas } from "../../extensions/host-ops";
 import { commandUsage } from "../../extensions/usage";
 import { translatorFor } from "../../i18n/messages";
-import { conversationList } from "../conversation/facts";
+import { conversationKind, conversationList } from "../conversation/facts";
 import { CONVERSATION_VIEW } from "../conversation/kind";
 import { matchByName, matchConversation } from "../conversation/open-match";
 import { invite, remove, rename, setArchived, setSteward } from "./actions";
@@ -208,21 +208,35 @@ const agentArg = {
 };
 
 /**
+ * Whether the conversation is Captain's own, after saying that nobody joins or leaves it. It is
+ * not a row of the conversation list, so its kind is read off its own target, which the open tab
+ * follows.
+ */
+function refusedAsCaptains(ctx: ShellContext, id: string): boolean {
+  if (conversationKind(ctx.wire.store.getState(), id) !== "captain")
+    return false;
+  ctx.notify(texts(ctx)("captainChat"), "error");
+  return true;
+}
+
+/**
  * The conversation in front for a command that changes who is in it: undefined after saying a
- * conversation has to be opened, that its details (its kind and members) have not arrived, or that
- * a private chat takes nobody else.
+ * conversation has to be opened, that it is Captain's, that its details (its kind and members)
+ * have not arrived, or that a private chat (a host from before Captain's conversation had a kind
+ * of its own) takes nobody else.
  */
 function groupInFront(
   ctx: ShellContext,
 ): { id: string; summary: ConversationSummary } | undefined {
   const id = frontConversation(ctx);
   if (id === undefined) return undefined;
+  if (refusedAsCaptains(ctx, id)) return undefined;
   const summary = summaryOf(ctx.wire.store.getState(), id);
   if (summary === undefined) {
     ctx.notify(texts(ctx)("notArrived"), "error");
     return undefined;
   }
-  if (summary.kind === "direct") {
+  if (summary.kind !== "group") {
     ctx.notify(texts(ctx)("privateChat"), "error");
     return undefined;
   }
@@ -365,7 +379,7 @@ const stewardCommand: SlashCommand = {
   requiredOps: ["conversations.setSteward"],
   run: async (ctx, argText) => {
     const id = frontConversation(ctx);
-    if (id === undefined) return;
+    if (id === undefined || refusedAsCaptains(ctx, id)) return;
     const state = ctx.wire.store.getState();
     const summary = summaryOf(state, id);
     const members = membersOf(state, summary);

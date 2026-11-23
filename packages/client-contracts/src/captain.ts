@@ -1,5 +1,5 @@
 import type { CallFrame } from "@eta/client-wire-proto";
-import type { AgentRuntime, MessageView } from "./product";
+import type { AgentRuntime, ConversationSummary, MessageView } from "./product";
 import type { RoutineSchedule } from "./routines";
 import type { BoardTaskDetail, BoardTaskStatus } from "./tasks";
 
@@ -61,6 +61,15 @@ export interface CaptainIdentityView {
   model: string | null;
   conversationId: string | null;
   createdAt: number;
+}
+
+/**
+ * The `identity` section of the `captain` target: Captain, and its conversation as a row of
+ * `conversations.list` would show it (last message, unread, members and their sessions). Captain's
+ * conversation is not in that list, so this is where a client reads it.
+ */
+export interface CaptainIdentitySection extends CaptainIdentityView {
+  conversation: ConversationSummary | null;
 }
 
 export interface CaptainAssignmentTargetView {
@@ -313,6 +322,7 @@ export interface CaptainSettingsView {
 }
 
 export interface CaptainSections {
+  /** The host sends a `CaptainIdentitySection`; a client that needs only the identity reads this. */
   identity: CaptainIdentityView | null;
   assignments: CaptainAssignmentView[];
   operations: CaptainOperationView[];

@@ -439,12 +439,7 @@ function TaskContextPanel(props: {
       ? []
       : [[name(props.item.createdBy.agentId), uiText("taskCreatedTheTask")]]),
   ];
-  const group = () =>
-    host
-      .conversations()
-      .find(
-        (conversation) => conversation.id === props.item.originConversationId,
-      )?.name;
+  const group = () => host.conversation(props.item.originConversationId)?.name;
   return (
     <View style={grow}>
       <View

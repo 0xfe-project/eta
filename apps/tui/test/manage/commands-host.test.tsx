@@ -350,3 +350,46 @@ describe("before the conversation's details arrive", () => {
     60_000,
   );
 });
+
+describe("in Captain's conversation", () => {
+  // Not a row of the conversation list: the tab reads its name and kind off its own target. A
+  // pending question Captain asked opens it.
+  async function captain() {
+    const w = await group();
+    const { conversationId } = await w.raw.call<{ conversationId: string }>(
+      "captain",
+      "direct",
+      {},
+    );
+    const r = await w.showFront(conversationId);
+    await w.agentsArrived(3);
+    await screenShows(r, "Write a message");
+    return { ...w, r, conversationId };
+  }
+
+  it("is named Captain on its tab", async () => {
+    const { r } = await captain();
+    await until(
+      () => tabBar(r).includes("1:Captain"),
+      10_000,
+      "the tab named Captain",
+    );
+  }, 60_000);
+
+  it.each([["/invite"], ["/invite Cleo"], ["/remove"], ["/steward"]])(
+    "%s says nobody joins or leaves it and asks nothing",
+    async (line) => {
+      const { r, wire } = await captain();
+      await enter(r, line);
+      await screenShows(
+        r,
+        "Captain's conversation is just Captain and you; members cannot be added or removed",
+      );
+      await realDelay(50);
+      expect(askedStarting(wire, "conversations.")).toEqual([]);
+      expect(plain(r)).not.toContain("Invite to");
+      expect(plain(r)).not.toContain("Steward of");
+    },
+    60_000,
+  );
+});

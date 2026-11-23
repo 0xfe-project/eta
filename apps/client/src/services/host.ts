@@ -2,6 +2,7 @@ import type {
   AgentView,
   ArtifactView,
   BoardTaskView,
+  CaptainIdentitySection,
   ConversationSummary,
   InteractionView,
   ProjectView,
@@ -288,6 +289,13 @@ export function createHost(options: HostOptions = {}) {
     if (wire === activeWire) upgradeCheck.set(result);
   }
 
+  /**
+   * Captain's conversation as a list row would show it. It is not a row of `conversations.list`
+   * (the sidebar keeps Captain apart), so it comes with Captain's identity.
+   */
+  const captainConversation = () =>
+    section<CaptainIdentitySection>("captain", "identity")?.conversation ??
+    undefined;
   return {
     address,
     state,
@@ -323,6 +331,17 @@ export function createHost(options: HostOptions = {}) {
       list<AgentView>("agents").find((agent) => agent.id === id),
     projects: () => list<ProjectView>("projects"),
     conversations: () => list<ConversationSummary>("conversations"),
+    captainConversation,
+    /** A conversation's row by id: a group from the list, or Captain's own. */
+    conversation: (id: string | null | undefined) =>
+      id
+        ? (list<ConversationSummary>("conversations").find(
+            (item) => item.id === id,
+          ) ??
+          (captainConversation()?.id === id
+            ? captainConversation()
+            : undefined))
+        : undefined,
     tasks: () => list<BoardTaskView>("tasks"),
     pending: () =>
       list<InteractionView>("inbox").filter(

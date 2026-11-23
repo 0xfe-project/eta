@@ -232,11 +232,7 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
     item().workspace.mode === "worktree"
       ? uiText("taskOwnWorktree")
       : uiText("taskProjectDirectory");
-  const group = () =>
-    host
-      .conversations()
-      .find((conversation) => conversation.id === item().originConversationId)
-      ?.name;
+  const group = () => host.conversation(item().originConversationId)?.name;
   const belongsTo = () => {
     const entry = item().ancestors?.at(-1);
     return entry ? `#${entry.number} ${entry.title}` : undefined;

@@ -40,8 +40,7 @@ function SheetQuestion(props: {
   const selected = signal<string[]>([]);
   const reply = signal("");
   const busy = signal(false);
-  const conversation = () =>
-    host.conversations().find((item) => item.id === props.item.conversationId);
+  const conversation = () => host.conversation(props.item.conversationId);
   async function answer(response: InboxResponse) {
     if (busy()) return;
     busy.set(true);
@@ -238,9 +237,7 @@ function SheetProposal(props: {
   const title = () =>
     String(op().payload.name ?? op().payload.title ?? kindName(op().kind));
   const conversation = () =>
-    host
-      .conversations()
-      .find((item) => item.id === op().payload.originConversationId);
+    host.conversation(op().payload.originConversationId as string | undefined);
   async function decide(decision: "approve" | "reject") {
     if (working()) return;
     working.set(true);
