@@ -28,12 +28,16 @@ const plugin = (name: string, enabled: boolean): PluginView => ({
   agents: [],
 });
 
-const toolkit = (slug: string, name: string): ComposioToolkit => ({
+const toolkit = (
+  slug: string,
+  name: string,
+  auth: ComposioToolkit["auth"] = "oauth",
+): ComposioToolkit => ({
   kind: "composio",
   slug,
   name,
   description: name + " toolkit",
-  auth: "oauth",
+  auth,
   authSchemes: [],
   managed: true,
   categories: [],
@@ -59,7 +63,11 @@ const kept: MarketCatalog = {
       rejected: [],
       error: null,
       status: "ready",
-      toolkits: [toolkit("gmail", "Gmail"), toolkit("exa", "Exa")],
+      toolkits: [
+        toolkit("gmail", "Gmail"),
+        toolkit("exa", "Exa"),
+        toolkit("hackernews", "Hacker News", "none"),
+      ],
     },
   ],
 };
@@ -76,6 +84,8 @@ export function openInstalled(
   actions?: "ok" | "stale" | "fails" | "off",
   /** The connected toolkits as plugins of their own, as the host's `composioPlugins` lists them. */
   virtuals?: Omit<ComposioPluginView, "enabled">[],
+  /** The toolkits that need no sign-in and were added, as the host's `composioAdded` lists them. */
+  added?: string[],
 ) {
   mount(() => {
     const host = createHost();
@@ -97,6 +107,7 @@ export function openInstalled(
     const asked = signal<string[]>([]);
     const log = signal<string[]>([]);
     let gone = false;
+    let addedNow = [...(added ?? [])];
     const switchedOff = new Set<string>();
     const stub = Object.assign(host, {
       call: async (_target: string, method: string, args: unknown) => {
@@ -120,6 +131,17 @@ export function openInstalled(
           if (enabled) switchedOff.delete(name);
           else switchedOff.add(name);
           return { name, enabled };
+        }
+        if (method === "composioAdded") return { slugs: addedNow };
+        if (method === "composioRemove") {
+          log.update((all) => [
+            ...all,
+            "called:" + method + ":" + (args as { slug: string }).slug,
+          ]);
+          addedNow = addedNow.filter(
+            (one) => one !== (args as { slug: string }).slug,
+          );
+          return { removed: true };
         }
         if (method === "composioStatus")
           return actions === undefined

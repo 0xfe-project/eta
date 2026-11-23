@@ -49,7 +49,7 @@ test("the detail tells the two sign-in types apart, and never says Installed", a
   await none.press("label:Hacker News");
   expect(
     none.shows(
-      "This toolkit needs no sign-in, so there is nothing to authorize. Connect still opens Composio's page for it.",
+      "This toolkit needs no sign-in, so there is nothing to authorize. Add it to make it a plugin of your agents.",
     ),
   ).toBe(true);
 });
@@ -236,4 +236,46 @@ test("a connected card in the market still says From Composio, with the mark", a
   const app = await open("./fixtures/composio-already-connected.tsx", OPEN);
   await app.waitFor("id:composio-connected");
   expect(app.shows("From Composio")).toBe(true);
+});
+
+test("a toolkit that needs no sign-in has Add, not Connect: it asks for no link, opens nothing, and the mark says Added", async () => {
+  const app = await open("./fixtures/composio-ready.tsx", OPEN);
+  await app.press("label:Hacker News");
+  expect(app.shows("label:Connect")).toBe(false);
+  expect(app.shows("label:Add")).toBe(true);
+  await app.press("label:Add");
+  await app.waitFor("id:composio-added");
+  // The log holds the one call: no link was asked for and no address was opened.
+  expect(app.shows("text:called:composioAdd:hackernews")).toBe(true);
+  expect(app.count("id:composio-connected")).toBe(0);
+  expect(app.shows("label:Remove")).toBe(true);
+  expect(app.shows("label:Add")).toBe(false);
+});
+
+test("a toolkit that signs in keeps Connect, and no Add", async () => {
+  const app = await open("./fixtures/composio-ready.tsx", OPEN);
+  await app.press("label:Gmail");
+  expect(app.shows("label:Connect")).toBe(true);
+  expect(app.shows("label:Add")).toBe(false);
+  expect(app.shows("label:Remove")).toBe(false);
+});
+
+test("an added toolkit's card says Added, in the place of Connected, and still says where it is from", async () => {
+  const app = await open("./fixtures/composio-none-added.tsx", OPEN);
+  await app.waitFor("id:composio-added");
+  expect(app.count("id:composio-added")).toBe(1);
+  expect(app.count("id:composio-connected")).toBe(0);
+  expect(app.shows("Added")).toBe(true);
+  expect(app.shows("Connected")).toBe(false);
+  expect(app.shows("From Composio")).toBe(true);
+});
+
+test("Remove in the detail of an added toolkit asks Composio for nothing and takes the mark away", async () => {
+  const app = await open("./fixtures/composio-none-added.tsx", OPEN);
+  await app.waitFor("id:composio-added");
+  await app.press("label:Hacker News");
+  await app.press("label:Remove");
+  await app.waitFor("text:called:composioRemove:hackernews");
+  await app.waitFor("id:composio-added", { state: "gone" });
+  expect(app.shows("label:Add")).toBe(true);
 });

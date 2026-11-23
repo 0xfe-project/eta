@@ -63,6 +63,8 @@ export function openMarket(
     connected?: "after-link" | "never" | "already";
     leavable?: boolean;
     disconnect?: "ok" | "stale" | "fails";
+    /** The toolkits that need no sign-in and were added (what `composioAdded` answers). */
+    added?: string[];
   } = {},
 ) {
   mount(() => {
@@ -74,6 +76,7 @@ export function openMarket(
     let linked = false;
     let since = 0;
     let gone = false;
+    let added = [...(options.added ?? [])];
     const stub = Object.assign(host, {
       call: async (
         _target: string,
@@ -99,6 +102,17 @@ export function openMarket(
             return { status: "error", removed: 0 };
           gone = true;
           return { status: "ready", removed: 1 };
+        }
+        if (method === "composioAdded") return { slugs: added };
+        if (method === "composioAdd") {
+          log.update((all) => [...all, "called:" + method + ":" + args.slug]);
+          added = [...added, args.slug!];
+          return { status: "ready" };
+        }
+        if (method === "composioRemove") {
+          log.update((all) => [...all, "called:" + method + ":" + args.slug]);
+          added = added.filter((one) => one !== args.slug);
+          return { removed: true };
         }
         if (method === "composioLink") {
           linked = true;

@@ -212,3 +212,37 @@ test("the bottom row of a card stays one line, the switch and both buttons, also
   await app.waitUntil(() => isFaint(app));
   expect(oneLine()).toBe(true);
 });
+
+test("an added toolkit is in the same group: the Added mark and one Remove, with neither Re-authenticate nor Disconnect", async () => {
+  const app = await open("./fixtures/plugins-composio-added.tsx", DESKTOP);
+  await app.waitFor("id:composio-connected-item");
+  expect(app.count("id:composio-connected-item")).toBe(3);
+  expect(app.count("id:composio-added")).toBe(1);
+  expect(app.count("id:composio-connected")).toBe(2);
+  expect(app.count("label:Remove")).toBe(1);
+  // Only the two connected ones have the sign-in buttons.
+  expect(app.count("label:Re-authenticate")).toBe(2);
+  expect(app.count("label:Disconnect")).toBe(2);
+  expect(app.shows("Added")).toBe(true);
+  // The group counts what is added as well, and no longer says "connected".
+  expect(app.shows("In Composio (3)")).toBe(true);
+});
+
+test("Remove on an added toolkit asks nothing and opens nothing: its card goes at once", async () => {
+  const app = await open("./fixtures/plugins-composio-added.tsx", DESKTOP);
+  await app.waitFor("id:composio-connected-item >> nth=2");
+  await app.press("label:Remove");
+  await app.waitFor("id:composio-connected-item >> nth=2", { state: "gone" });
+  expect(app.count("id:composio-connected-item")).toBe(2);
+  expect(app.shows("label:Delete on Composio")).toBe(false);
+  // The log holds the one call: no link, no address.
+  expect(app.shows("text:called:composioRemove:hackernews")).toBe(true);
+});
+
+test("on a phone an added toolkit is a row with the Added mark and Remove", async () => {
+  const app = await open("./fixtures/plugins-composio-added-phone.tsx", PHONE);
+  await app.waitFor("id:composio-connected-item >> nth=2");
+  expect(app.count("id:composio-added")).toBe(1);
+  expect(app.count("label:Remove")).toBe(1);
+  expect(app.count("label:Disconnect")).toBe(2);
+});
