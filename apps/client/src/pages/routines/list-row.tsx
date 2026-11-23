@@ -1,7 +1,7 @@
 import type { RoutineSummary } from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, Label, row } from "../../components";
-import { weight } from "../../components/tokens";
+import { space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { clockDistance, runHistory, scheduleLabel } from "./schedule";
 
@@ -27,7 +27,7 @@ export function RoutineRow(props: {
         ...row,
         ...(props.tablet
           ? { height: 60, paddingHorizontal: 14, gap: 10 }
-          : { padding: 7, gap: 16 }),
+          : { padding: 7, gap: space[16] }),
         cursor: "pointer",
         backgroundColor: props.selected ? c().selected : c().canvas,
       }}
@@ -59,7 +59,7 @@ export function RoutineRow(props: {
                 <View
                   style={{
                     width: props.tablet ? 9 : 8,
-                    height: 8,
+                    height: space[8],
                     backgroundColor:
                       entry() === "failed"
                         ? c().red

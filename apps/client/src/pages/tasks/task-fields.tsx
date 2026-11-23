@@ -17,7 +17,7 @@ import {
 } from "../../components/eta-editor";
 import { touchScreen } from "../../components/menu";
 import { StatusDot } from "../../components/status-dot";
-import { weight } from "../../components/tokens";
+import { icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 import { ActorName } from "./creator";
@@ -98,9 +98,9 @@ export function TaskCommentBox(props: {
                   backgroundColor: c().surface,
                   borderTopWidth: 1,
                   borderColor: c().border,
-                  paddingHorizontal: 12,
+                  paddingHorizontal: space[12],
                   paddingVertical: 10,
-                  gap: 8,
+                  gap: space[8],
                 }
               : { gap: 6, marginHorizontal: props.panelInset, flexShrink: 0 }
           }
@@ -168,7 +168,7 @@ function CommentBox(props: {
           style={{
             ...row,
             justifyContent: "flex-end",
-            gap: 8,
+            gap: space[8],
             height: props.phone ? 44 : 36,
             paddingLeft: 10,
             paddingRight: 5,
@@ -216,7 +216,7 @@ export function TaskReviewActions(props: { state: TaskDetailState }) {
     <View
       style={{
         ...row,
-        gap: 8,
+        gap: space[8],
       }}
     >
       <Button
@@ -268,7 +268,7 @@ export function TaskFields(detail: {
     ].filter(([, value]) => value);
   return (
     <View style={{ gap: 10 }}>
-      <View style={{ ...row, gap: 8, alignItems: "flex-start" }}>
+      <View style={{ ...row, gap: space[8], alignItems: "flex-start" }}>
         <Label variant="caption" tone="muted" style={{ width: 68 }}>
           {uiText("status")}
         </Label>
@@ -278,7 +278,7 @@ export function TaskFields(detail: {
       </View>
       <Each of={fields()} key={(field) => field[0]}>
         {(field) => (
-          <View style={{ ...row, alignItems: "flex-start", gap: 8 }}>
+          <View style={{ ...row, alignItems: "flex-start", gap: space[8] }}>
             <Label variant="caption" tone="muted" style={{ width: 68 }}>
               {field()[0]}
             </Label>
@@ -427,9 +427,9 @@ export function TaskRail(detail: {
               hoverStyle={{ backgroundColor: c().selected }}
               style={{
                 ...row,
-                height: 20,
-                paddingHorizontal: 4,
-                gap: 4,
+                height: space[20],
+                paddingHorizontal: space[4],
+                gap: space[4],
                 cursor: "pointer",
               }}
             >
@@ -460,7 +460,7 @@ export function TaskRail(detail: {
                     onPress={() => detail.onTask(edge().taskId)}
                     style={{ ...row, gap: 5, cursor: "pointer" }}
                   >
-                    <TaskGlyph status={edge().status} size={12} />
+                    <TaskGlyph status={edge().status} size={icon.sm} />
                     <Label
                       variant="caption"
                       weight={weight.strong}
@@ -469,7 +469,7 @@ export function TaskRail(detail: {
                       {`#${edge().number} ${edge().title}`}
                     </Label>
                   </View>
-                  <View style={{ ...row, gap: 8, paddingLeft: 17 }}>
+                  <View style={{ ...row, gap: space[8], paddingLeft: 17 }}>
                     <Label variant="caption" tone="muted">
                       {edge().state === "resolved"
                         ? uiText("taskReady")
@@ -482,7 +482,7 @@ export function TaskRail(detail: {
                       checked={edge().requireDone}
                       size={11}
                       disabled={submitting()}
-                      style={{ ...row, gap: 8 }}
+                      style={{ ...row, gap: space[8] }}
                       onChange={(checked) =>
                         mutate(() =>
                           host.call("tasks", "addDependency", {
@@ -550,10 +550,10 @@ export function TaskRail(detail: {
                   role="button"
                   accessibilityLabel={edge().title}
                   onPress={() => detail.onTask(edge().taskId)}
-                  style={{ gap: 2, cursor: "pointer" }}
+                  style={{ gap: space[2], cursor: "pointer" }}
                 >
                   <View style={{ ...row, gap: 5 }}>
-                    <TaskGlyph status={edge().status} size={12} />
+                    <TaskGlyph status={edge().status} size={icon.sm} />
                     <Label variant="caption" weight={weight.strong}>
                       {`#${edge().number} ${edge().title}`}
                     </Label>

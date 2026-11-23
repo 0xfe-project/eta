@@ -16,7 +16,7 @@ import {
 } from "../../components";
 import { sendShortcut } from "../../components/eta-editor";
 import { CloseButton } from "../../components/navigation-buttons";
-import { weight } from "../../components/tokens";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { createDescription, DescriptionBox } from "./description-box";
@@ -93,7 +93,7 @@ export function TaskDetailDialogs(props: {
           overPhoneNavigation
           onClose={() => status.set(false)}
         >
-          <View style={{ paddingTop: 4, paddingBottom: 20 }}>
+          <View style={{ paddingTop: space[4], paddingBottom: space[20] }}>
             <Each of={TASK_STATUSES}>
               {(entry) => (
                 <>
@@ -101,7 +101,7 @@ export function TaskDetailDialogs(props: {
                     <View
                       style={{
                         height: 1,
-                        marginVertical: 4,
+                        marginVertical: space[4],
                         backgroundColor: c().border,
                       }}
                     />
@@ -121,14 +121,16 @@ export function TaskDetailDialogs(props: {
                       ...row,
                       alignItems: "flex-start",
                       paddingVertical: 10,
-                      paddingHorizontal: 16,
-                      gap: 8,
+                      paddingHorizontal: space[16],
+                      gap: space[8],
                       backgroundColor:
                         entry() === task()?.status ? c().selected : undefined,
                     }}
                   >
-                    <View style={{ ...row, width: 12, height: 20 }}>
-                      <TaskGlyph status={entry()} size={12} />
+                    <View
+                      style={{ ...row, width: space[12], height: space[20] }}
+                    >
+                      <TaskGlyph status={entry()} size={icon.sm} />
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Label>{statusName(entry())}</Label>
@@ -141,11 +143,11 @@ export function TaskDetailDialogs(props: {
                         ...row,
                         justifyContent: "center",
                         width: 14,
-                        height: 16,
+                        height: space[16],
                       }}
                     >
                       <If when={entry() === task()?.status}>
-                        <Icon name="check" size={12} />
+                        <Icon name="check" size={icon.sm} />
                       </If>
                     </View>
                   </View>
@@ -157,7 +159,7 @@ export function TaskDetailDialogs(props: {
                 <Label
                   variant="small"
                   tone="red"
-                  style={{ paddingTop: 8, paddingHorizontal: 16 }}
+                  style={{ paddingTop: space[8], paddingHorizontal: space[16] }}
                 >
                   {message()}
                 </Label>
@@ -174,7 +176,7 @@ export function TaskDetailDialogs(props: {
           height={phone() ? "66%" : 440}
           onClose={() => replacing.set(false)}
         >
-          <View style={{ ...grow, padding: 16, gap: 8 }}>
+          <View style={{ ...grow, padding: space[16], gap: space[8] }}>
             <Field
               label={uiText("findATask")}
               placeholder={uiText("findATask")}
@@ -222,7 +224,7 @@ export function TaskDetailDialogs(props: {
           sheet={phone()}
           onClose={() => cancelling.set(false)}
         >
-          <View style={{ padding: 16, gap: 10 }}>
+          <View style={{ padding: space[16], gap: 10 }}>
             <Label>{uiText("thisWillCancelTheTaskAnd")}</Label>
             <Button
               label={uiText("cancelTask")}
@@ -303,18 +305,18 @@ export function TaskDetailDialogs(props: {
                   style={{
                     ...row,
                     justifyContent: "flex-end",
-                    gap: 8,
-                    paddingTop: 20,
+                    gap: space[8],
+                    paddingTop: space[20],
                   }}
                 >
                   <Button
                     label={uiText("keepIt")}
-                    size={28}
+                    size={control.md}
                     onPress={() => archive.set(false)}
                   />
                   <Button
                     label={archiveLabel()}
-                    size={28}
+                    size={control.md}
                     tone="primary"
                     disabled={submitting()}
                     onPress={archiveTask}
@@ -327,10 +329,10 @@ export function TaskDetailDialogs(props: {
               style={{
                 ...row,
                 alignItems: "flex-start",
-                gap: 8,
-                paddingVertical: 8,
-                paddingLeft: 16,
-                paddingRight: 8,
+                gap: space[8],
+                paddingVertical: space[8],
+                paddingLeft: space[16],
+                paddingRight: space[8],
                 borderBottomWidth: 1,
                 borderColor: c().border,
               }}
@@ -342,12 +344,12 @@ export function TaskDetailDialogs(props: {
                 {archiveTitle()}
               </Label>
               <CloseButton
-                size={32}
-                iconSize={16}
+                size={control.lg}
+                iconSize={icon.md}
                 onPress={() => archive.set(false)}
               />
             </View>
-            <View style={{ padding: 16 }}>
+            <View style={{ padding: space[16] }}>
               <Label>{archiveBody()}</Label>
             </View>
             <View
@@ -355,8 +357,8 @@ export function TaskDetailDialogs(props: {
                 ...row,
                 justifyContent: "flex-end",
                 height: 56,
-                gap: 8,
-                paddingHorizontal: 16,
+                gap: space[8],
+                paddingHorizontal: space[16],
                 borderTopWidth: 1,
                 borderColor: c().border,
               }}
@@ -364,15 +366,15 @@ export function TaskDetailDialogs(props: {
               <Button
                 label={uiText("keepIt")}
                 tone="ghost"
-                size={32}
+                size={control.lg}
                 labelVariant="small"
-                style={{ paddingHorizontal: 12 }}
+                style={{ paddingHorizontal: space[12] }}
                 onPress={() => archive.set(false)}
               />
               <Button
                 label={archiveLabel()}
                 tone="primary"
-                size={32}
+                size={control.lg}
                 labelVariant="small"
                 style={{ paddingHorizontal: 14 }}
                 disabled={submitting()}
@@ -445,9 +447,9 @@ function TaskContextPanel(props: {
         style={{
           ...row,
           justifyContent: "space-between",
-          height: 40,
+          height: space[40],
           paddingLeft: 10,
-          paddingRight: 8,
+          paddingRight: space[8],
           borderBottomWidth: 1,
           borderColor: c().border,
           backgroundColor: c().surface,
@@ -455,7 +457,12 @@ function TaskContextPanel(props: {
       >
         <View
           role="tablist"
-          style={{ ...row, gap: 2, padding: 2, backgroundColor: c().selected }}
+          style={{
+            ...row,
+            gap: space[2],
+            padding: space[2],
+            backgroundColor: c().selected,
+          }}
         >
           <View
             role="tab"
@@ -463,19 +470,19 @@ function TaskContextPanel(props: {
             accessibilityState={{ selected: true }}
             style={{
               ...row,
-              height: 24,
+              height: space[24],
               paddingHorizontal: 10,
               gap: 6,
               backgroundColor: c().canvas,
             }}
           >
-            <Icon name="context" size={12} />
+            <Icon name="context" size={icon.sm} />
             <Label variant="small">{uiText("taskContext")}</Label>
           </View>
         </View>
         <CloseButton onPress={props.onClose} />
       </View>
-      <View style={{ padding: 12, gap: 12 }}>
+      <View style={{ padding: space[12], gap: space[12] }}>
         <Label variant="caption" tone="muted" style={caption}>
           {uiText("members")}
         </Label>
@@ -503,7 +510,7 @@ function TaskContextPanel(props: {
           <Label
             variant="caption"
             tone="muted"
-            style={{ ...caption, paddingTop: 8 }}
+            style={{ ...caption, paddingTop: space[8] }}
           >
             {uiText("taskGroup")}
           </Label>
@@ -541,7 +548,7 @@ function EditTask(props: {
     });
   }
   return (
-    <View style={{ padding: 16, gap: 10 }}>
+    <View style={{ padding: space[16], gap: 10 }}>
       <Field
         label={uiText("taskTitle")}
         value={editTitle()}
@@ -552,7 +559,7 @@ function EditTask(props: {
         label={uiText("taskDescription")}
         phone={props.phone}
       />
-      <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>
+      <View style={{ ...row, justifyContent: "flex-end", gap: space[8] }}>
         <Button label={uiText("cancel")} onPress={props.onClose} />
         <Button
           label={uiText("saveTask")}

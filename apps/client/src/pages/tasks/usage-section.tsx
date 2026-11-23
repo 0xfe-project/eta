@@ -11,7 +11,7 @@ import type { Layout } from "../../components";
 import { signal, View } from "nsh";
 import { Caption, colors, Icon, Label, row } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
-import { weight } from "../../components/tokens";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { clock, useHost } from "../../services/host";
 import {
@@ -226,14 +226,16 @@ function WideUsage(props: {
   const byModel = () => models().length > (props.tablet ? 1 : 0);
   const anyGoing = () => props.view.runs.some((run) => OPEN.has(run.status));
   return (
-    <View style={{ gap: 12, paddingBottom: props.parent ? 0 : 20 }}>
-      <View style={{ ...row, gap: 8 }}>
+    <View
+      style={{ gap: space[12], paddingBottom: props.parent ? 0 : space[20] }}
+    >
+      <View style={{ ...row, gap: space[8] }}>
         <View
           role="button"
           accessibilityLabel={uiText("usageTitle")}
           accessibilityState={{ expanded: props.open }}
           onPress={() => props.onOpen(!props.open)}
-          style={{ ...row, gap: 8, cursor: "pointer" }}
+          style={{ ...row, gap: space[8], cursor: "pointer" }}
         >
           <Icon name={props.open ? "down" : "right"} size={10} tone="muted" />
           <Label
@@ -267,11 +269,11 @@ function WideUsage(props: {
         </If>
       </View>
       <If when={props.open}>
-        <View style={{ gap: 16, paddingLeft: 18 }}>
+        <View style={{ gap: space[16], paddingLeft: 18 }}>
           <If
             when={totals()}
             else={
-              <View style={{ gap: 2 }}>
+              <View style={{ gap: space[2] }}>
                 <Label tone="faint">
                   {props.view.totals.runs
                     ? uiText("usageNoData")
@@ -444,7 +446,7 @@ function RunsTable(props: {
     host.tasks().find((task) => task.id === taskId)?.number ??
     props.item.children?.find((child) => child.taskId === taskId)?.number;
   const columns = () => [
-    ...(props.parent ? [{ title: "", width: 32, left: true }] : []),
+    ...(props.parent ? [{ title: "", width: space[32], left: true }] : []),
     {
       title: props.tablet ? uiText("usageRunColumn") : uiText("usageByRun"),
       left: true,
@@ -452,10 +454,10 @@ function RunsTable(props: {
     },
     { title: uiText("usageModel"), flex: true },
     ...(!props.tablet && !props.parent
-      ? [{ title: uiText("usageStarted"), width: 64, left: true }]
+      ? [{ title: uiText("usageStarted"), width: space[64], left: true }]
       : []),
     { title: uiText("usageTook"), width: 60 },
-    { title: uiText("usageTokens"), width: 64 },
+    { title: uiText("usageTokens"), width: space[64] },
     ...(!props.tablet ? [{ title: uiText("usageOutput"), width: 56 }] : []),
     { title: uiText("usageRateColumn"), width: 56 },
   ];
@@ -490,7 +492,7 @@ function RunsTable(props: {
                   }
                   style={{
                     ...row,
-                    height: 28,
+                    height: control.md,
                     gap: 6,
                     cursor: "pointer",
                   }}
@@ -559,7 +561,7 @@ function RunLineRow(props: {
           </Label>
         </If>
         <If when={going()}>
-          <View style={{ ...row, gap: 4 }}>
+          <View style={{ ...row, gap: space[4] }}>
             <BlueSquare />
             <If when={!props.tablet}>
               <Label variant="caption" tone="blue">
@@ -642,12 +644,12 @@ function Figure(props: {
   return (
     <View
       tooltip={props.hint ? <HintBox lines={props.hint} /> : undefined}
-      style={{ gap: 2 }}
+      style={{ gap: space[2] }}
     >
       <Label variant="caption" tone="mutedInk">
         {props.label}
       </Label>
-      <View style={{ ...row, gap: 4, alignItems: "baseline" }}>
+      <View style={{ ...row, gap: space[4], alignItems: "baseline" }}>
         <Label
           variant={props.strong ? "subtitle" : "body"}
           weight={props.strong ? weight.strong : weight.regular}
@@ -680,7 +682,7 @@ function Table(props: { columns: Column[]; children?: unknown }) {
         style={{
           ...row,
           height: 22,
-          gap: 8,
+          gap: space[8],
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
@@ -717,8 +719,8 @@ function TableRow(props: { children?: unknown }) {
     <View
       style={{
         ...row,
-        height: 28,
-        gap: 8,
+        height: control.md,
+        gap: space[8],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
@@ -774,7 +776,7 @@ function PhoneUsage(props: {
   const rest = () => (folds() ? models().slice(2) : []);
   return (
     <View style={{ gap: 6 }}>
-      <View style={{ ...row, gap: 8 }}>
+      <View style={{ ...row, gap: space[8] }}>
         <Caption text={uiText("usageTitle")} phone style={{ flex: 1 }} />
         <If when={props.parent}>
           <Label variant="small">{uiText("usageIncludeSubtasks")}</Label>
@@ -789,7 +791,7 @@ function PhoneUsage(props: {
       <If
         when={props.view.totals.tokens}
         else={
-          <View style={{ gap: 4 }}>
+          <View style={{ gap: space[4] }}>
             <Label variant="subtitle" tone="faint">
               {props.view.totals.runs
                 ? uiText("usageNoData")
@@ -807,7 +809,7 @@ function PhoneUsage(props: {
       >
         {(sum) => (
           <>
-            <View style={{ ...row, gap: 8, alignItems: "baseline" }}>
+            <View style={{ ...row, gap: space[8], alignItems: "baseline" }}>
               <View
                 role="button"
                 accessibilityLabel={uiText("usageExact", {
@@ -870,8 +872,8 @@ function PhoneUsage(props: {
                     <View
                       style={{
                         ...row,
-                        height: 32,
-                        gap: 8,
+                        height: space[32],
+                        gap: space[8],
                         borderBottomWidth: 1,
                         borderColor: c().border,
                       }}
@@ -898,7 +900,12 @@ function PhoneUsage(props: {
                       count: rest().length,
                     })}
                     onPress={() => all.set(true)}
-                    style={{ ...row, height: 32, gap: 8, cursor: "pointer" }}
+                    style={{
+                      ...row,
+                      height: space[32],
+                      gap: space[8],
+                      cursor: "pointer",
+                    }}
                   >
                     <Label variant="small" tone="muted" style={{ flex: 1 }}>
                       {uiText("usageMoreModels", { count: rest().length })}
@@ -911,7 +918,7 @@ function PhoneUsage(props: {
                         ),
                       )}
                     </Label>
-                    <Icon name="right" size={12} tone="muted" />
+                    <Icon name="right" size={icon.sm} tone="muted" />
                   </View>
                 </If>
               </View>

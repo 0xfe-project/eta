@@ -10,7 +10,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
-import { weight } from "../../components/tokens";
+import { space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "./activity";
@@ -57,13 +57,13 @@ export function TabletOverview(props: {
       <SmoothScroll style={grow} scrollbar={false}>
         <View
           style={{
-            paddingHorizontal: 20,
+            paddingHorizontal: space[20],
             paddingTop: 14,
-            paddingBottom: 12,
-            gap: 12,
+            paddingBottom: space[12],
+            gap: space[12],
           }}
         >
-          <View style={{ ...row, gap: 8 }}>
+          <View style={{ ...row, gap: space[8] }}>
             <Label variant="caption" tone="muted" style={{ flex: 1 }}>
               {parent()
                 ? uiText("parentCreatedBy", {
@@ -95,7 +95,7 @@ export function TabletOverview(props: {
               />
             </If>
           </View>
-          <View style={{ ...row, gap: 8 }}>
+          <View style={{ ...row, gap: space[8] }}>
             <TaskGlyph status={item().status} size={18} />
             <TitleInPlace
               title={item().title}
@@ -174,7 +174,7 @@ export function TabletOverview(props: {
                   compactHeadings
                 />
               </If>
-              <View style={{ paddingTop: item().description ? 4 : 0 }}>
+              <View style={{ paddingTop: item().description ? space[4] : 0 }}>
                 <EditDescriptionLink
                   onPress={() => {
                     editDescription.set(item().description);
@@ -198,7 +198,13 @@ export function TabletOverview(props: {
           />
         </View>
       </SmoothScroll>
-      <View style={{ paddingHorizontal: 20, paddingBottom: 14, gap: 12 }}>
+      <View
+        style={{
+          paddingHorizontal: space[20],
+          paddingBottom: 14,
+          gap: space[12],
+        }}
+      >
         <RunLine item={item()} state={props.state} tablet />
         <TaskCommentBox state={props.state} />
       </View>
@@ -279,9 +285,9 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
       style={{
         ...row,
         alignItems: "flex-start",
-        gap: 24,
+        gap: space[24],
         paddingVertical: parent() ? 8 : 10,
-        paddingHorizontal: 12,
+        paddingHorizontal: space[12],
         borderWidth: 1,
         borderColor: c().border,
         backgroundColor: c().surface,
@@ -299,7 +305,9 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
           <View style={{ flex: 1, minWidth: 0, gap: parent() ? 5 : 6 }}>
             <Each of={column()} key={(field) => field[0]!}>
               {(field) => (
-                <View style={{ ...row, alignItems: "flex-start", gap: 8 }}>
+                <View
+                  style={{ ...row, alignItems: "flex-start", gap: space[8] }}
+                >
                   <Label
                     variant="caption"
                     tone="muted"
@@ -340,9 +348,9 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
                         style={{
                           ...row,
                           height: 18,
-                          marginVertical: -2,
-                          paddingHorizontal: 4,
-                          gap: 4,
+                          marginVertical: -space[2],
+                          paddingHorizontal: space[4],
+                          gap: space[4],
                           flexShrink: 0,
                           cursor: "pointer",
                         }}

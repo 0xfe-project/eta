@@ -11,7 +11,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
-import { weight } from "../../components/tokens";
+import { icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskTableRow } from "./list";
@@ -62,7 +62,7 @@ export function TaskWorkspaceList(props: {
       <View
         style={{
           padding: props.groupByParent || props.view === "Plan" ? 0 : 22,
-          gap: props.groupByParent ? 0 : 12,
+          gap: props.groupByParent ? 0 : space[12],
         }}
       >
         <If when={props.view === "Plan" && !phone()}>
@@ -91,7 +91,7 @@ export function TaskWorkspaceList(props: {
                     style={{
                       ...row,
                       paddingLeft: tablet() ? 14 : 8,
-                      gap: tablet() ? 8 : 0,
+                      gap: tablet() ? space[8] : 0,
                       borderBottomWidth: 1,
                       borderColor: c().border,
                       backgroundColor: tablet() ? c().selected : c().surface,
@@ -130,11 +130,14 @@ export function TaskWorkspaceList(props: {
                         flex: 1,
                         height: tablet() ? 31 : 29,
                         paddingRight: 14,
-                        gap: 8,
+                        gap: space[8],
                         cursor: "pointer",
                       }}
                     >
-                      <TaskGlyph status={group().parent.status} size={12} />
+                      <TaskGlyph
+                        status={group().parent.status}
+                        size={icon.sm}
+                      />
                       <Label variant="small" weight={weight.strong} lines={1}>
                         {group().parent.title}
                       </Label>
@@ -154,12 +157,12 @@ export function TaskWorkspaceList(props: {
                       <UsageLine
                         task={group().parent}
                         variant="caption"
-                        style={{ flexShrink: 0, marginRight: 8 }}
+                        style={{ flexShrink: 0, marginRight: space[8] }}
                       />
                       <View
                         style={{
                           ...row,
-                          gap: 2,
+                          gap: space[2],
                           width: props.layout === "desktop" ? 80 : 90,
                         }}
                       >

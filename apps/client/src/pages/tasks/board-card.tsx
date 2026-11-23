@@ -3,6 +3,7 @@ import type { Layout } from "../../components";
 import type { taskDropZones } from "./drag";
 import { View } from "nsh";
 import { colors, Icon, Label, row } from "../../components";
+import { border, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { ownerLine } from "./creator";
@@ -125,7 +126,7 @@ export function BoardCard(props: {
           paddingHorizontal: tablet() ? 8 : 9,
           gap: tablet() ? (isParent() || cancelled() ? 4 : 3) : 3.6,
           borderWidth: 1,
-          borderLeftWidth: props.task.status === "blocked" ? 2 : 1,
+          borderLeftWidth: props.task.status === "blocked" ? border.thick : 1,
           borderColor: stacked() ? c().strong : c().border,
           borderLeftColor:
             props.task.status === "blocked"
@@ -189,7 +190,7 @@ export function BoardCard(props: {
                 </Label>
               </View>
             </If>
-            <View style={{ ...row, gap: 4 }}>
+            <View style={{ ...row, gap: space[4] }}>
               <If when={!tablet()}>
                 <TaskGlyph status={props.task.status} size={10} />
               </If>
@@ -229,7 +230,7 @@ export function BoardCard(props: {
                   </Label>
                 }
               >
-                <View style={{ ...row, gap: 4 }}>
+                <View style={{ ...row, gap: space[4] }}>
                   <View
                     style={{ width: 6, height: 6, backgroundColor: c().blue }}
                   />
@@ -259,7 +260,7 @@ export function BoardCard(props: {
         </View>
         <Label lines={4}>{props.task.title}</Label>
         <If when={isParent()}>
-          <View style={{ ...row, gap: 2, height: tablet() ? 3 : 4 }}>
+          <View style={{ ...row, gap: space[2], height: tablet() ? 3 : 4 }}>
             <Each of={children()} key={(task) => task.id}>
               {(task) => (
                 <View
@@ -326,8 +327,8 @@ export function BoardCard(props: {
               style={{
                 ...row,
                 gap: tablet() ? 4 : 5,
-                marginTop: tablet() ? 0 : 2,
-                paddingVertical: tablet() ? 1 : 2,
+                marginTop: tablet() ? 0 : space[2],
+                paddingVertical: tablet() ? 1 : space[2],
                 paddingHorizontal: tablet() ? 4 : 6,
                 borderWidth: 1,
                 borderColor: c().strong,
@@ -368,8 +369,8 @@ export function BoardCard(props: {
           <View
             style={{
               ...row,
-              gap: 4,
-              marginTop: 2,
+              gap: space[4],
+              marginTop: space[2],
               justifyContent: "space-between",
             }}
           >

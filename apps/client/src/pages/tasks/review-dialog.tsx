@@ -9,7 +9,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
-import { weight } from "../../components/tokens";
+import { control, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { TaskGlyph } from "./status";
 
@@ -43,7 +43,7 @@ export function TaskReviewDialog(props: {
     >
       <View
         style={{
-          padding: 16,
+          padding: space[16],
           gap: props.phone && props.decision === "todo" ? 12 : 14,
         }}
       >
@@ -65,7 +65,7 @@ export function TaskReviewDialog(props: {
               style={{
                 height: 104,
                 paddingVertical: 10,
-                paddingHorizontal: 12,
+                paddingHorizontal: space[12],
                 borderColor: c().strong,
               }}
             />
@@ -87,7 +87,7 @@ export function TaskReviewDialog(props: {
           />
         </If>
         <If when={props.decision === "done"}>
-          <View style={{ ...row, gap: 8 }}>
+          <View style={{ ...row, gap: space[8] }}>
             <TaskGlyph status="in_review" />
             <Label variant="small" tone="muted">
               {uiText("inReview")}
@@ -120,7 +120,7 @@ export function TaskReviewDialog(props: {
           <View
             style={{
               paddingVertical: props.phone ? 10 : 12,
-              paddingHorizontal: 12,
+              paddingHorizontal: space[12],
               gap: props.phone ? 4 : 6,
               backgroundColor: c().selected,
             }}
@@ -161,9 +161,9 @@ export function TaskReviewDialog(props: {
       <View
         style={{
           ...row,
-          paddingHorizontal: 16,
+          paddingHorizontal: space[16],
           height: 56,
-          gap: 8,
+          gap: space[8],
           justifyContent: "flex-end",
           borderTopWidth: 1,
           borderColor: c().border,
@@ -172,9 +172,9 @@ export function TaskReviewDialog(props: {
         <Button
           label={uiText("cancel")}
           disabled={props.submitting}
-          size={32}
+          size={control.lg}
           tone="ghost"
-          style={props.phone ? { paddingHorizontal: 12 } : undefined}
+          style={props.phone ? { paddingHorizontal: space[12] } : undefined}
           onPress={props.onClose}
         />
         <Button
@@ -183,7 +183,7 @@ export function TaskReviewDialog(props: {
               ? uiText("acceptAsDone")
               : uiText("sendBack")
           }
-          size={32}
+          size={control.lg}
           tone="primary"
           style={props.phone ? { paddingHorizontal: 14 } : undefined}
           disabled={
