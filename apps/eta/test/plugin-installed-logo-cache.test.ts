@@ -79,48 +79,41 @@ const boot = (db: ReturnType<typeof database>, now?: () => number) =>
   });
 
 describe("an installed plugin's icon after a restart", () => {
-  it("is read from the database, and no site is asked", async () => {
-    const home = await site({ icon: true });
-    const db = database();
-    const first = await boot(db).find(null, `${home.url}/`, null);
-    expect(first?.type).toBe("image/png");
-    const before = home.hits;
-    expect(before).toBeGreaterThan(0);
+  it.each([
+    {
+      name: "a homepage",
+      mode: { icon: true },
+      type: "image/png",
+      ask: (url: string) => [null, `${url}/`, null] as const,
+    },
+    {
+      name: "a remote server's site",
+      mode: { icon: true },
+      type: "image/png",
+      ask: (url: string) => [null, null, `${url}/mcp`] as const,
+    },
+    {
+      name: "a homepage with an ico",
+      mode: { icon: true, ico: true },
+      type: "image/x-icon",
+      ask: (url: string) => [null, `${url}/`, null] as const,
+    },
+  ])(
+    "is read from the database for $name, and no site is asked",
+    async ({ mode, type, ask }) => {
+      const site_ = await site(mode);
+      const db = database();
+      const first = await boot(db).find(...ask(site_.url));
+      expect(first?.type).toBe(type);
+      const before = site_.hits;
+      expect(before).toBeGreaterThan(0);
 
-    const restarted = boot(db);
-    const again = await restarted.find(null, `${home.url}/`, null);
-    expect(again).toEqual(first);
-    expect(restarted.requests).toBe(0);
-    expect(home.hits).toBe(before);
-  });
-
-  it("is read from the database for a remote server's site too", async () => {
-    const server = await site({ icon: true });
-    const db = database();
-    const first = await boot(db).find(null, null, `${server.url}/mcp`);
-    expect(first?.type).toBe("image/png");
-    const before = server.hits;
-
-    const restarted = boot(db);
-    expect(await restarted.find(null, null, `${server.url}/mcp`)).toEqual(
-      first,
-    );
-    expect(restarted.requests).toBe(0);
-    expect(server.hits).toBe(before);
-  });
-
-  it("is read from the database for an ico too, and no site is asked", async () => {
-    const home = await site({ icon: true, ico: true });
-    const db = database();
-    const first = await boot(db).find(null, `${home.url}/`, null);
-    expect(first?.type).toBe("image/x-icon");
-    const before = home.hits;
-
-    const restarted = boot(db);
-    expect(await restarted.find(null, `${home.url}/`, null)).toEqual(first);
-    expect(restarted.requests).toBe(0);
-    expect(home.hits).toBe(before);
-  });
+      const restarted = boot(db);
+      expect(await restarted.find(...ask(site_.url))).toEqual(first);
+      expect(restarted.requests).toBe(0);
+      expect(site_.hits).toBe(before);
+    },
+  );
 
   it("keeps 'no icon' for a while, then asks again", async () => {
     const home = await site({ icon: false });
