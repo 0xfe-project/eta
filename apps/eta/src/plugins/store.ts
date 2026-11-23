@@ -7,6 +7,7 @@
 import type { PluginAgentLevel, PluginValue } from "@eta/client-contracts";
 import type { Database } from "bun:sqlite";
 import type { Buffer } from "node:buffer";
+import { EncryptedCredentialTable } from "../credentials/table";
 import { seal, unseal } from "../secret";
 
 export interface GitSourceRow {
@@ -29,6 +30,14 @@ export interface AuditRow {
 }
 
 export type PluginValues = Record<string, PluginValue>;
+
+/**
+ * A market source's credential is one row of the host's `credential` table: integration "market",
+ * key the source's name, kind "secret", the value a string. A second source takes its own key.
+ */
+export const MARKET_CREDENTIAL = "market";
+export const CURSOR_SOURCE = "cursor";
+const CREDENTIAL_KIND = "secret";
 
 /** A request header the user attached to one of a plugin's remote servers. */
 export interface UserHeader {
@@ -58,10 +67,12 @@ export interface UserEnv {
 export class PluginRows {
   readonly #db: Database;
   readonly #key: Buffer;
+  readonly #credentials: EncryptedCredentialTable;
 
   constructor(db: Database, key: Buffer) {
     this.#db = db;
     this.#key = key;
+    this.#credentials = new EncryptedCredentialTable(db, key);
   }
 
   /* ---------------------------------------------------------------- sources */
@@ -144,16 +155,27 @@ export class PluginRows {
   configuredAt(plugin: string): number {
     return (
       this.#db
-        .query<{ at: number | null }, [string, string, string, string]>(
+        .query<
+          { at: number | null },
+          [string, string, string, string, string, string, string]
+        >(
           `SELECT MAX(
              COALESCE((SELECT updated_at FROM plugin_config WHERE plugin = ?), 0),
              COALESCE((SELECT MAX(updated_at) FROM plugin_header WHERE plugin = ?), 0),
              COALESCE((SELECT MAX(updated_at) FROM plugin_env WHERE plugin = ?), 0),
              COALESCE((SELECT MAX(updated_at) FROM plugin_token_header WHERE plugin = ?), 0),
-             COALESCE((SELECT updated_at FROM cursor_credential), 0)
+             COALESCE((SELECT updated_at FROM credential WHERE integration = ? AND key = ? AND kind = ?), 0)
            ) AS at`,
         )
-        .get(plugin, plugin, plugin, plugin)?.at ?? 0
+        .get(
+          plugin,
+          plugin,
+          plugin,
+          plugin,
+          MARKET_CREDENTIAL,
+          CURSOR_SOURCE,
+          CREDENTIAL_KIND,
+        )?.at ?? 0
     );
   }
 
@@ -254,23 +276,27 @@ export class PluginRows {
 
   /* ------------------------------------------------------ cursor credential */
 
+  /** The credential saved for a market source; undefined when there is none or its row does not open. */
+  marketCredential(source: string): string | undefined {
+    const value = this.#credentials.read(
+      MARKET_CREDENTIAL,
+      source,
+      CREDENTIAL_KIND,
+    );
+    return typeof value === "string" ? value : undefined;
+  }
+
+  saveMarketCredential(source: string, value: string): void {
+    this.#credentials.write(MARKET_CREDENTIAL, source, CREDENTIAL_KIND, value);
+  }
+
   /** The Cursor credential saved for the host; undefined when there is none or its blob does not open. */
   cursorCredential(): string | undefined {
-    const row = this.#db
-      .query<{ sealed: Uint8Array }, []>(
-        "SELECT sealed FROM cursor_credential WHERE id = 1",
-      )
-      .get();
-    return row === null ? undefined : unseal(this.#key, row.sealed);
+    return this.marketCredential(CURSOR_SOURCE);
   }
 
   saveCursorCredential(value: string): void {
-    this.#db
-      .query(
-        `INSERT INTO cursor_credential (id, sealed, updated_at) VALUES (1, ?, ?)
-         ON CONFLICT (id) DO UPDATE SET sealed = excluded.sealed, updated_at = excluded.updated_at`,
-      )
-      .run(seal(this.#key, value), Date.now());
+    this.saveMarketCredential(CURSOR_SOURCE, value);
   }
 
   /* -------------------------------------------------------------------- env */

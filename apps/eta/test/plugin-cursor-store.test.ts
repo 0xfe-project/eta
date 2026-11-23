@@ -35,7 +35,7 @@ describe("the Cursor credential in the credential table", () => {
   it("is one row: integration market, key cursor, kind secret", () => {
     const { db, rows } = world();
     rows.saveCursorCredential(VALUE);
-    rows.saveCursorCredential(VALUE + "x");
+    rows.saveCursorCredential(`${VALUE}x`);
     expect(
       db
         .query<{ integration: string; key: string; kind: string }, []>(
