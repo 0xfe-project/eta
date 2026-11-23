@@ -438,10 +438,18 @@ export function pluginsPlugin(
           return { result: { hasKey: false } };
         }),
         wire.handle("plugins", "composioStatus", async () => ({
-          result: { hasKey: needComposio().hasKey() },
+          result: {
+            hasKey: needComposio().hasKey(),
+            enabled: needComposio().source().enabled,
+          },
         })),
         wire.handle("plugins", "composioConnected", async () => ({
           result: await needComposio().connected(),
+        })),
+        wire.handle("plugins", "composioDisconnect", async (call) => ({
+          result: await needComposio().disconnect(
+            new Args(call).string("slug"),
+          ),
         })),
         wire.handle("plugins", "composioToolkits", (call) => {
           const { slugs } = (call.args ?? {}) as { slugs?: unknown };

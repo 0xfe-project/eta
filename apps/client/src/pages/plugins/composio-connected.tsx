@@ -1,9 +1,10 @@
 import type { PluginResults } from "@eta/client-contracts";
 import type { Layout } from "../../components";
-import { effect, signal, untracked, View } from "nsh";
-import { colors, grow, Label, row, textFaces } from "../../components";
+import { effect, openUrl, signal, untracked, View } from "nsh";
+import { Button, colors, grow, Label, row, textFaces } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { ComposioDisconnect, linkAndOpen } from "./composio-actions";
 import { PluginLogo } from "./plugin-logo";
 import { PluginName } from "./plugin-name";
 
@@ -18,13 +19,37 @@ interface Connected {
  * is linked there, nothing more: eta's agents cannot use it yet, and the text says so. The names and
  * pictures come from the list the host already keeps (never asked for from the network here); a
  * toolkit that is not in it is shown by its slug. When Composio cannot be asked (no key, a refused
- * key, no answer) the group is not there, and nothing says why.
+ * key, no answer) the group is not there, and nothing says why. Each item can be signed in again or
+ * disconnected on Composio (the same two operations the market's detail has) while the key is set and
+ * the source is on.
  */
-export function ComposioConnected(props: { layout: Layout }) {
+export function ComposioConnected(props: {
+  layout: Layout;
+  /** Opens an address in the browser; the system's by default. */
+  open?: (url: string) => Promise<void>;
+}) {
   const host = useHost();
   const c = colors();
   const type = textFaces();
   const shown = signal<Connected[]>([]);
+  /** Whether Re-authenticate and Disconnect show: a key is set and the source is not switched off. */
+  const manage = signal(false);
+  const disconnecting = signal<Connected | undefined>(undefined);
+  const error = signal("");
+  async function reauth(slug: string) {
+    error.set("");
+    try {
+      await linkAndOpen(host, props.open ?? openUrl, slug);
+    } catch (cause) {
+      error.set(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
+  function disconnected(slug: string) {
+    // Gone at once; the host is asked again behind it.
+    shown.update((all) => all.filter((one) => one.slug !== slug));
+    disconnecting.set(undefined);
+    void read();
+  }
   async function read() {
     const answer = await host
       .call<PluginResults["composioConnected"]>(
@@ -39,6 +64,10 @@ export function ComposioConnected(props: { layout: Layout }) {
       answer.slugs.length === 0
     )
       return;
+    const status = await host
+      .call<PluginResults["composioStatus"]>("plugins", "composioStatus", {})
+      .catch(() => undefined);
+    manage.set(status?.enabled === true);
     const kept = await host
       .call<PluginResults["composioToolkits"]>("plugins", "composioToolkits", {
         slugs: answer.slugs,
@@ -62,6 +91,24 @@ export function ComposioConnected(props: { layout: Layout }) {
     untracked(() => void read());
   });
   const rows = () => props.layout !== "desktop";
+  const actions = (item: Connected) => (
+    <If when={manage()}>
+      <View style={{ ...row, gap: 8 }}>
+        <Button
+          label={uiText("composioReconnect")}
+          tone="plain"
+          size={rows() ? 32 : 24}
+          onPress={() => void reauth(item.slug)}
+        />
+        <Button
+          label={uiText("composioDisconnect")}
+          tone="plain"
+          size={rows() ? 32 : 24}
+          onPress={() => disconnecting.set(item)}
+        />
+      </View>
+    </If>
+  );
   const inset = () => (props.layout === "tablet" ? 14 : 16);
   /** The same mark as an installed market card has, at the right of the last line. */
   const mark = () => (
@@ -90,7 +137,21 @@ export function ComposioConnected(props: { layout: Layout }) {
           <Label variant="caption" tone="muted">
             {uiText("composioConnectedGroupNote")}
           </Label>
+          <If when={error()}>
+            <Label variant="small" tone="red" style={{ userSelect: "text" }}>
+              {error()}
+            </Label>
+          </If>
         </View>
+        <If when={disconnecting()}>
+          <ComposioDisconnect
+            slug={disconnecting()!.slug}
+            name={disconnecting()!.name}
+            phone={props.layout === "phone"}
+            onDone={() => disconnected(disconnecting()!.slug)}
+            onClose={() => disconnecting.set(undefined)}
+          />
+        </If>
         <If
           when={rows()}
           else={
@@ -125,6 +186,7 @@ export function ComposioConnected(props: { layout: Layout }) {
                     <Label variant="small" tone="muted" lines={2}>
                       {item().description}
                     </Label>
+                    {actions(item())}
                     <View
                       style={{ ...row, gap: 8, minHeight: type("small").line }}
                     >
@@ -148,28 +210,44 @@ export function ComposioConnected(props: { layout: Layout }) {
                   testID="composio-connected-item"
                   accessibilityLabel={item().name}
                   style={{
-                    ...row,
-                    height: 60,
-                    gap: 12,
-                    paddingLeft: inset(),
-                    paddingRight: 12,
                     borderBottomWidth: 1,
                     borderColor: c().border,
                     backgroundColor: c().canvas,
                   }}
                 >
-                  <PluginLogo
-                    name={item().name}
-                    composio={item().slug}
-                    size={32}
-                  />
-                  <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-                    <PluginName name={item().name} />
-                    <Label variant="caption" tone="muted" lines={1}>
-                      {uiText("marketFrom", { name: "Composio" })}
-                    </Label>
+                  <View
+                    style={{
+                      ...row,
+                      height: 60,
+                      gap: 12,
+                      paddingLeft: inset(),
+                      paddingRight: 12,
+                    }}
+                  >
+                    <PluginLogo
+                      name={item().name}
+                      composio={item().slug}
+                      size={32}
+                    />
+                    <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+                      <PluginName name={item().name} />
+                      <Label variant="caption" tone="muted" lines={1}>
+                        {uiText("marketFrom", { name: "Composio" })}
+                      </Label>
+                    </View>
+                    {mark()}
                   </View>
-                  {mark()}
+                  <If when={manage()}>
+                    <View
+                      style={{
+                        paddingLeft: inset(),
+                        paddingRight: 12,
+                        paddingBottom: 10,
+                      }}
+                    >
+                      {actions(item())}
+                    </View>
+                  </If>
                 </View>
               )}
             </Each>

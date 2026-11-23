@@ -35,7 +35,12 @@ import { Skills } from "./skills/list";
 import { PluginTablet } from "./tablet-list";
 import { pluginWarnings, PluginWarningsDialog } from "./warnings";
 
-export function Plugins(props: { layout: Layout; onBack?: () => void }) {
+export function Plugins(props: {
+  layout: Layout;
+  onBack?: () => void;
+  /** Opens an address in the browser; the system's by default. */
+  open?: (url: string) => Promise<void>;
+}) {
   const host = useHost();
   const c = colors();
   const tab = signal("Plugins");
@@ -196,7 +201,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
             )}
           </Each>
         </View>
-        <ComposioConnected layout={props.layout} />
+        <ComposioConnected layout={props.layout} open={props.open} />
       </View>
     </SmoothScroll>
   );
@@ -314,7 +319,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                           onSelect={selected.set}
                         />
                       </If>
-                      <ComposioConnected layout="phone" />
+                      <ComposioConnected layout="phone" open={props.open} />
                     </SmoothScroll>
                   </If>
                 </If>

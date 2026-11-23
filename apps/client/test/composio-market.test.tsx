@@ -217,7 +217,7 @@ test("a confirmed Disconnect calls composioDisconnect and the mark is gone at on
   await app.press("label:Disconnect");
   await app.press("label:Delete on Composio");
   await app.waitFor("text:called:composioDisconnect:gmail");
-  await app.waitFor("id:composio-connected", { state: "hidden" });
+  await app.waitFor("id:composio-connected", { state: "gone" });
   expect(app.count("id:composio-connected")).toBe(0);
   expect(app.shows("label:Delete on Composio")).toBe(false);
 });

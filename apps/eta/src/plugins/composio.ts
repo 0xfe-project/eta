@@ -487,45 +487,99 @@ export class Composio {
   async connected(): Promise<{ status: ComposioStatus; slugs: string[] }> {
     const key = this.#apiKey();
     if (key === undefined) return { status: "needs_key", slugs: [] };
-    const slugs = new Set<string>();
-    let cursor: string | null = null;
     try {
-      for (let page = 1; ; page++) {
-        if (page > MAX_PAGES)
-          throw new Error(`the accounts are more than ${MAX_PAGES} pages`);
-        const query = new URLSearchParams({
-          user_ids: this.#userId(),
-          statuses: "ACTIVE",
-          limit: String(PAGE),
-        });
-        if (cursor !== null) query.set("cursor", cursor);
-        const body = await this.#call(
-          "GET",
-          `/api/v3/connected_accounts?${query}`,
+      const slugs = new Set((await this.#active(key)).map((one) => one.slug));
+      return { status: "ready", slugs: [...slugs] };
+    } catch (error) {
+      return { status: this.#failure(error), slugs: [] };
+    }
+  }
+
+  /**
+   * Disconnects one toolkit: deletes, on Composio, the ACTIVE accounts of that toolkit under this
+   * host's own `user_id` and no others (an account that names another user is left alone even if
+   * Composio ignored the filter). It cannot be undone there. Only a status and a count come back
+   * for a failure, never Composio's text. Whatever was deleted before a failure stays deleted and is
+   * counted.
+   */
+  async disconnect(
+    slug: string,
+  ): Promise<{ status: ComposioStatus; removed: number }> {
+    if (!SLUG.test(slug)) throw new PluginError("that is not a toolkit name");
+    const key = this.#apiKey();
+    if (key === undefined) return { status: "needs_key", removed: 0 };
+    const user = this.#userId();
+    let removed = 0;
+    try {
+      const mine = (await this.#active(key)).filter(
+        (one) =>
+          one.slug === slug &&
+          one.id !== undefined &&
+          (one.user === undefined || one.user === user),
+      );
+      for (const one of mine) {
+        const done = await this.#call(
+          "DELETE",
+          `/api/v3/connected_accounts/${encodeURIComponent(one.id!)}`,
           key,
         );
-        if (!isPlain(body) || !Array.isArray(body.items))
-          throw new Error("the answer is not a list of accounts");
-        for (const item of body.items) {
-          if (!isPlain(item) || item.status !== "ACTIVE") continue;
-          const slug = isPlain(item.toolkit) ? item.toolkit.slug : undefined;
-          if (typeof slug === "string" && SLUG.test(slug)) slugs.add(slug);
-        }
-        const next: unknown = body.next_cursor;
-        if (typeof next !== "string" || next === "" || body.items.length === 0)
-          return { status: "ready", slugs: [...slugs] };
-        if (next === cursor) throw new Error("the account pages do not end");
-        cursor = next;
+        if (!isPlain(done) || done.success !== true)
+          throw new Error("Composio did not confirm the delete");
+        removed++;
       }
+      return { status: "ready", removed };
     } catch (error) {
-      return {
-        status:
-          error instanceof Refused && error.status === 401
-            ? "key_rejected"
-            : "error",
-        slugs: [],
-      };
+      return { status: this.#failure(error), removed };
     }
+  }
+
+  /** The ACTIVE accounts of this host's user, page by page; a failure is thrown. */
+  async #active(
+    key: string,
+  ): Promise<{ slug: string; id: string | undefined; user: unknown }[]> {
+    const found: { slug: string; id: string | undefined; user: unknown }[] = [];
+    let cursor: string | null = null;
+    for (let page = 1; ; page++) {
+      if (page > MAX_PAGES)
+        throw new Error(`the accounts are more than ${MAX_PAGES} pages`);
+      const query = new URLSearchParams({
+        user_ids: this.#userId(),
+        statuses: "ACTIVE",
+        limit: String(PAGE),
+      });
+      if (cursor !== null) query.set("cursor", cursor);
+      const body = await this.#call(
+        "GET",
+        `/api/v3/connected_accounts?${query}`,
+        key,
+      );
+      if (!isPlain(body) || !Array.isArray(body.items))
+        throw new Error("the answer is not a list of accounts");
+      for (const item of body.items) {
+        if (!isPlain(item) || item.status !== "ACTIVE") continue;
+        const slug = isPlain(item.toolkit) ? item.toolkit.slug : undefined;
+        if (typeof slug === "string" && SLUG.test(slug))
+          found.push({
+            slug,
+            id:
+              typeof item.id === "string" && SLUG.test(item.id)
+                ? item.id
+                : undefined,
+            user: item.user_id,
+          });
+      }
+      const next: unknown = body.next_cursor;
+      if (typeof next !== "string" || next === "" || body.items.length === 0)
+        return found;
+      if (next === cursor) throw new Error("the account pages do not end");
+      cursor = next;
+    }
+  }
+
+  #failure(error: unknown): ComposioStatus {
+    return error instanceof Refused && error.status === 401
+      ? "key_rejected"
+      : "error";
   }
 
   #userId(): string {
@@ -573,7 +627,7 @@ export class Composio {
 
   /** One call to Composio, JSON both ways, with a time limit and a size limit. */
   async #call(
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "DELETE",
     path: string,
     key: string,
     body?: unknown,

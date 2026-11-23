@@ -224,6 +224,7 @@ A built-in market source (`MarketSource.kind: "composio"`, address `composio:too
 - `api_key`: the person gives the provider's own key on Composio's hosted page (as Composio describes it, not yet seen live). eta never receives that key.
 - `none` (`no_auth`) needs no sign-in; `unknown` is shown as it is, not guessed.
 - In both cases the card's install action goes straight to `redirectUrl` with no confirm dialog. The result is a connected account at Composio under the stored `user_id`; nothing is written to eta's plugin store.
+- A connected toolkit can be signed in again (the same `link` as Connect; Composio's own `refresh` endpoint is deprecated and re-starts the sign-in too, so it is not used) or disconnected. `plugins.composioDisconnect {slug}` lists the ACTIVE accounts under eta's own `user_id`, then deletes those of that toolkit one by one (`DELETE /api/v3/connected_accounts/{id}`, no upstream revoke). It never deletes by slug alone and skips an account that names another user. It cannot be undone on Composio, so the client asks first. A failure returns only a status. Both buttons show in the market detail and in the installed page's Composio group, only while the key is set and the source is on. Not checked against the real service.
 - The list and the icon come from `meta` of each toolkit (`meta.logo`, `meta.categories`, `meta.tools_count`). Logos are fetched by the host and cached (see Caches); the client only names a slug.
 
 #### MCP: current state

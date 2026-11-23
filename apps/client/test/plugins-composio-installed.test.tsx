@@ -112,7 +112,7 @@ test("Disconnect on an item asks first; Cancel deletes nothing; confirming remov
   await app.press("label:Disconnect >> nth=0");
   await app.press("label:Delete on Composio");
   await app.waitFor("text:called:composioDisconnect:gmail");
-  await app.waitFor("id:composio-connected-item >> nth=1", { state: "hidden" });
+  await app.waitFor("id:composio-connected-item >> nth=1", { state: "gone" });
   expect(app.count("id:composio-connected-item")).toBe(1);
   expect(app.shows("ghost")).toBe(true);
 });

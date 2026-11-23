@@ -271,6 +271,8 @@ export interface PluginArgs {
   composioToolkits: { slugs: string[] };
   /** Start connecting one toolkit with Composio's own sign-in page; the user finishes it in the browser. */
   composioLink: { slug: string };
+  /** Delete this host's accounts of one toolkit on Composio; it cannot be undone there. */
+  composioDisconnect: { slug: string };
 }
 
 /** What a connection test found. Secrets are never in it. */
@@ -351,7 +353,8 @@ export interface PluginResults {
   recheck: Record<string, never>;
   composioSetKey: { hasKey: boolean };
   composioClearKey: { hasKey: boolean };
-  composioStatus: { hasKey: boolean };
+  /** `enabled`: a key is set and the source is not switched off. */
+  composioStatus: { hasKey: boolean; enabled: boolean };
   /**
    * The slugs of the toolkits with an ACTIVE account. Only a mark: a status other than `ready`
    * (no key, key refused, no answer) means none is known, not that none is connected.
@@ -363,6 +366,8 @@ export interface PluginResults {
   };
   /** An https address on Composio's side; open it in the browser. */
   composioLink: { redirectUrl: string };
+  /** Only a status; `removed` counts the accounts deleted. */
+  composioDisconnect: { status: ComposioStatus; removed: number };
 }
 
 /**

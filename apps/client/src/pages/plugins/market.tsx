@@ -36,6 +36,7 @@ import { hint } from "../../components/controls";
 import { CloseButton } from "../../components/navigation-buttons";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { ComposioDisconnect, linkAndOpen } from "./composio-actions";
 import { sheetEdge } from "./configure";
 import { PluginLogo, primeLogos } from "./plugin-logo";
 import { PluginName } from "./plugin-name";
@@ -121,7 +122,7 @@ export function Market(props: {
         ]).includes(needle()),
     );
   const current = () => all().find((item) => key(item) === detail());
-  const toolkitKey = (item: ComposioToolkit) => "composio\n" + item.slug;
+  const toolkitKey = (item: ComposioToolkit) => `composio\n${item.slug}`;
   const allToolkits = () =>
     (catalog()?.sources ?? []).flatMap((item) => item.toolkits ?? []);
   const toolkits = () =>
@@ -234,18 +235,18 @@ export function Market(props: {
     if (!detail().startsWith("composio\n")) return;
     untracked(() => void refreshConnected());
   });
+  const messageOf = (error: unknown) =>
+    error instanceof Error && error.message !== ""
+      ? error.message
+      : String(error);
+
   /** Connecting a toolkit: the host starts it with Composio, and the user finishes in the browser. */
   async function connect(toolkit: ComposioToolkit) {
     if (busy()) return;
     busy.set(true);
     installError.set("");
     try {
-      const link = await host.call<{ redirectUrl: string }>(
-        "plugins",
-        "composioLink",
-        { slug: toolkit.slug },
-      );
-      await (props.open ?? openUrl)(link.redirectUrl);
+      await linkAndOpen(host, props.open ?? openUrl, toolkit.slug);
       // Already connected: nothing to wait for, the mark is there.
       if (!isConnected(toolkit.slug)) startWaiting(toolkit.slug);
     } catch (error) {
@@ -253,6 +254,14 @@ export function Market(props: {
     } finally {
       busy.set(false);
     }
+  }
+  /** The toolkit whose Disconnect is being asked about. */
+  const disconnecting = signal<ComposioToolkit | undefined>(undefined);
+  function disconnected(slug: string) {
+    // Gone at once; the host is asked again behind it.
+    connected.update((all) => all.filter((one) => one !== slug));
+    disconnecting.set(undefined);
+    void refreshConnected();
   }
   async function clearCache() {
     await host.action(() => host.call("plugins", "marketClearCache", {}));
@@ -333,11 +342,6 @@ export function Market(props: {
     host.subscriptionWire();
     untracked(() => void load());
   });
-
-  const messageOf = (error: unknown) =>
-    error instanceof Error && error.message !== ""
-      ? error.message
-      : String(error);
 
   /** Read what the entry would run. The same read an install pins its commit from; nothing is installed. */
   async function readInfo(entry: MarketEntry): Promise<MarketPreview> {
@@ -904,11 +908,21 @@ export function Market(props: {
             style={{
               ...row,
               justifyContent: "flex-end",
+              gap: 8,
               paddingTop: 10,
               paddingBottom: phone() ? 24 : 0,
               ...inset(),
             }}
           >
+            <If when={isConnected(currentToolkit()!.slug)}>
+              <Button
+                label={uiText("composioDisconnect")}
+                tone="plain"
+                size={phone() ? 44 : 28}
+                disabled={busy()}
+                onPress={() => disconnecting.set(currentToolkit())}
+              />
+            </If>
             <Button
               label={
                 busy()
@@ -924,6 +938,15 @@ export function Market(props: {
             />
           </View>
         </Modal>
+      </If>
+      <If when={disconnecting()}>
+        <ComposioDisconnect
+          slug={disconnecting()!.slug}
+          name={disconnecting()!.name}
+          phone={phone()}
+          onDone={() => disconnected(disconnecting()!.slug)}
+          onClose={() => disconnecting.set(undefined)}
+        />
       </If>
       <If when={current()}>
         <Modal
