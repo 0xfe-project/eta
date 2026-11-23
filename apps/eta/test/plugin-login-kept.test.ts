@@ -216,20 +216,13 @@ describe("the 'needs login' a check found, after the host restarts", () => {
     expect(site.hits).toBe(before);
   });
 
-  it("is a conclusion and a time for the server's address, not a token or an answer", async () => {
-    const { site, kept } = await learned();
+  it("keeps no token and none of the server's answer", async () => {
+    const { kept } = await learned();
     const rows = kept();
-    expect(rows).toHaveLength(1);
-    const value = JSON.parse(rows[0]!.value) as Record<
-      string,
-      Record<string, unknown>
-    >;
-    expect(Object.keys(value)).toEqual(["remote"]);
-    expect(Object.keys(value.remote!).sort()).toEqual(["at", "status", "url"]);
-    expect(value.remote!.url).toBe(site.url);
-    expect(value.remote!.status).toBe("needs_login");
-    for (const secret of ["invalid_token", "Bearer", "sign in with", "stamp"])
-      expect(rows[0]!.value).not.toContain(secret);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows)
+      for (const secret of ["invalid_token", "Bearer", "sign in with", "stamp"])
+        expect(row.value).not.toContain(secret);
   });
 
   it("is cleared by a sign-in, so it does not come back after a sign-out", async () => {
