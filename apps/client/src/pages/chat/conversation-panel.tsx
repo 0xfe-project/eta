@@ -305,7 +305,6 @@ export function ConversationPanel(props: {
                         members={props.members}
                         group={props.group}
                         info={props.info}
-                        phone={phone()}
                         expandedSession={props.memberSteps}
                         onToggleSteps={props.onToggleSteps}
                         onInspect={props.onInspect}
