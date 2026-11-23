@@ -4,7 +4,11 @@
  * about once in fifty resets (#367). Each round's install is tallied by its exit and its error, so
  * a run says how often it failed and with what.
  *
- *   bun scripts/upgrade-e2e/reinstall-loop.ts <eta-host.exe> <rounds> [label]
+ *   bun scripts/upgrade-e2e/reinstall-loop.ts <eta-host.exe> <rounds> [label] [absent]
+ *
+ * With `absent` it installs nothing, and runs `uninstall-service` with nothing installed instead:
+ * each run asks Windows for both services and must be told 1060, "no such service", which is the
+ * code every fresh install has to read correctly too, and the one #367 lost.
  *
  * Windows only, in an Administrator's terminal, with ETA_E2E_PASSWORD the password of this
  * account, on a computer nobody uses: it owns `io.eta.host`, `~/.eta` and `~/eta-e2e` there. The
@@ -27,6 +31,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 const SOURCE = resolve(process.argv[2] ?? "eta-host.exe");
 const ROUNDS = Number(process.argv[3] ?? 40);
 const LABEL = process.argv[4] ?? "";
+const ABSENT = process.argv[5] === "absent";
 const HOME = homedir();
 const DIR = join(HOME, "eta-e2e");
 const EXE = join(DIR, "eta-host.exe");
@@ -99,7 +104,30 @@ const install = (): Promise<Ran> => {
 
 const tally = new Map<string, number>();
 let failed = 0;
-for (let round = 1; round <= ROUNDS; round += 1) {
+
+if (ABSENT) {
+  mkdirSync(DIR, { recursive: true });
+  copyFileSync(SOURCE, EXE);
+  await run(EXE, ["uninstall-service"]);
+  for (let round = 1; round <= ROUNDS; round += 1) {
+    const ran = await run(EXE, ["uninstall-service"]);
+    const error =
+      ran.code === 0
+        ? "ok"
+        : (/uninstall-service: (.*)$/m.exec(ran.out)?.[1] ?? ran.out);
+    if (error !== "ok") {
+      failed += 1;
+      console.log(`${LABEL} round ${round}: ${error}`);
+    }
+    tally.set(error, (tally.get(error) ?? 0) + 1);
+    appendFileSync(
+      OUT,
+      `${JSON.stringify({ label: LABEL, mode: "absent", round, code: ran.code, ms: ran.ms, out: ran.out })}\n`,
+    );
+  }
+}
+
+for (let round = 1; round <= (ABSENT ? 0 : ROUNDS); round += 1) {
   const uninstalled = existsSync(EXE)
     ? await run(EXE, ["uninstall-service"])
     : undefined;
@@ -137,12 +165,14 @@ for (let round = 1; round <= ROUNDS; round += 1) {
 }
 
 if (existsSync(EXE)) await run(EXE, ["uninstall-service"]);
-console.log(`\n${LABEL}: ${failed} of ${ROUNDS} rounds failed`);
+const what = ABSENT ? "uninstalls of nothing" : "reinstalls";
+console.log(`\n${LABEL}: ${failed} of ${ROUNDS} ${what} failed`);
 for (const [error, count] of tally) console.log(`  ${count}× ${error}`);
 if (process.env.GITHUB_STEP_SUMMARY !== undefined)
   appendFileSync(
     process.env.GITHUB_STEP_SUMMARY,
-    `### ${LABEL}: ${failed} of ${ROUNDS} reinstalls failed\n\n${[...tally]
+    `### ${LABEL}: ${failed} of ${ROUNDS} ${what} failed\n\n${[...tally]
       .map(([error, count]) => `- ${count}× \`${error}\``)
       .join("\n")}\n\n`,
   );
+process.exitCode = failed === 0 ? 0 : 1;

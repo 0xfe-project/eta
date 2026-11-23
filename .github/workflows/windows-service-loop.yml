@@ -14,6 +14,9 @@ on:
       rounds:
         description: Reinstalls per build
         default: "50"
+      absent:
+        description: Runs of uninstall-service with nothing installed per build, before the reinstalls
+        default: "500"
       compare:
         description: Another ref to run the same loop with, first (empty for none)
         default: ""
@@ -64,6 +67,14 @@ jobs:
           Write-Output "::add-mask::$password"
           net user $env:USERNAME $password | Out-Null
           "ETA_E2E_PASSWORD=$password" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - name: Ask the compared build about services that are not there
+        if: inputs.compare != ''
+        continue-on-error: true
+        run: bun scripts/upgrade-e2e/reinstall-loop.ts "$RUNNER_TEMP/hosts/compare/eta-host.exe" "${{ inputs.absent }}" "${{ inputs.compare }}" absent
+
+      - name: Ask this build about services that are not there
+        run: bun scripts/upgrade-e2e/reinstall-loop.ts "$RUNNER_TEMP/hosts/this/eta-host.exe" "${{ inputs.absent }}" "${{ github.ref_name }}" absent
 
       - name: Loop the compared build
         if: inputs.compare != ''
