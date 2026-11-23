@@ -251,7 +251,7 @@ export function siteOf(server: string): string[] {
  * kept (an svg, and any picture that cannot be shrunk, is kept as it came), so many of them fit in
  * one `cached` answer. Measured on the test database: 112 of 134 kept pictures were within it.
  */
-export const MAX_ICON_BYTES = 16 * 1024;
+const MAX_ICON_BYTES = 16 * 1024;
 
 /** Entries `cached` answers per call; the ones after it are answered "unknown" without a look. */
 export const MAX_CACHED_LOGOS = 200;
