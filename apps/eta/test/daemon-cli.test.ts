@@ -8,7 +8,7 @@ import type { Buffer } from "node:buffer";
  */
 import type { ChildProcess } from "node:child_process";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
@@ -37,10 +37,10 @@ afterEach(() => {
 });
 
 /** Start the daemon's command line as a user whose home is `home`; `output()` is what it printed. */
-function daemon(home: string, args: string[]) {
+function daemon(home: string, args: string[], env: NodeJS.ProcessEnv = {}) {
   const child = spawn(process.execPath, [MAIN, ...args], {
     stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env, HOME: home },
+    env: { ...process.env, HOME: home, ...env },
   });
   children.push(child);
   let text = "";
@@ -131,6 +131,32 @@ describe.skipIf(process.platform === "win32")(
         expect(existsSync(join(dataDir, "identity.json"))).toBe(false);
       },
       START_MS,
+    );
+
+    it.skipIf(process.platform !== "linux")(
+      "keeps the systemctl error and prints the manual run command",
+      async () => {
+        const home = await tempDir("eta-daemon-cli-");
+        writeFileSync(
+          join(home, "systemctl"),
+          "#!/bin/sh\necho 'No user bus' >&2\nexit 1\n",
+          { mode: 0o755 },
+        );
+        const install = daemon(home, ["install-service"], { PATH: home });
+        expect(await install.exited).toBe(1);
+        expect(install.output()).toContain("No user bus");
+        expect(install.output()).toContain(
+          "To start the daemon manually on this machine",
+        );
+        const command = install.output().trim().split("\n").at(-1)!;
+        // Execute the printed command as copied, from outside the checkout.
+        const run = Bun.spawnSync(["/bin/sh", "-c", command], {
+          cwd: home,
+          env: { ...process.env, HOME: home },
+        });
+        expect(run.exitCode).toBe(2);
+        expect(run.stderr.toString()).toContain("has no identity");
+      },
     );
 
     it(
