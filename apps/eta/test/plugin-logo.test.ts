@@ -7,6 +7,8 @@ import { Buffer } from "node:buffer";
 import http from "node:http";
 import https from "node:https";
 import { afterEach, describe, expect, it } from "vitest";
+import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
+import { IconCache } from "../src/plugins/icon-cache";
 import {
   isPrivateAddress,
   Logos,
@@ -395,5 +397,126 @@ describe("a Composio toolkit's logo (Logos.fromUrl)", () => {
     const base = await secure((_req, res) => res.end(SVG));
     expect(await logos().find(`${base}/a.svg`, null)).toBeNull();
     expect(pictureType(Buffer.from(SVG))).toBeNull();
+  });
+});
+
+describe("a Composio toolkit's logo is kept in the database (Logos.fromUrl)", () => {
+  const SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><path d="M0 0h8v8z"/></svg>';
+
+  async function secure(handler: http.RequestListener) {
+    const server = https.createServer(
+      { key: TEST_KEY, cert: TEST_CERT },
+      handler,
+    );
+    servers.push(server as unknown as http.Server);
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    return `https://localhost:${(server.address() as AddressInfo).port}`;
+  }
+  function database() {
+    const db = openDatabase(":memory:");
+    applyMigrations(db, loadMigrations());
+    return db;
+  }
+  const rows = (db: ReturnType<typeof database>) =>
+    (db.query("SELECT COUNT(*) AS n FROM plugin_icon").get() as { n: number })
+      .n;
+  /** A new Logos over the same database: what a restart of the host is. */
+  const boot = (db: ReturnType<typeof database>, now?: () => number) =>
+    new Logos({
+      allowPrivate: true,
+      ca: TEST_CERT,
+      resolve: async () => ["127.0.0.1"],
+      store: new IconCache(db),
+      ...(now === undefined ? {} : { now }),
+    });
+
+  it("asks the server once, and not again after a restart", async () => {
+    let asked = 0;
+    const base = await secure((_req, res) => {
+      asked++;
+      res.end(SVG);
+    });
+    const db = database();
+    const first = await boot(db).fromUrl(`${base}/a`);
+    expect(first?.type).toBe("image/svg+xml");
+    expect(asked).toBe(1);
+    const again = await boot(db).fromUrl(`${base}/a`);
+    expect(again).toEqual(first);
+    expect(asked).toBe(1);
+  });
+
+  it("does not keep a failed ask as no picture: not in the database, not in memory", async () => {
+    let asked = 0;
+    let up = false;
+    const base = await secure((req, res) => {
+      asked++;
+      if (!up) return void req.socket.destroy();
+      res.end(SVG);
+    });
+    const db = database();
+    const logos = boot(db);
+    expect(await logos.fromUrl(`${base}/a`)).toBeNull();
+    expect(rows(db)).toBe(0);
+    up = true;
+    expect((await logos.fromUrl(`${base}/a`))?.type).toBe("image/svg+xml");
+    expect(asked).toBe(2);
+    expect(rows(db)).toBe(1);
+  });
+
+  it("does not keep a server error as no picture either", async () => {
+    let asked = 0;
+    let status = 503;
+    const base = await secure((_req, res) => {
+      asked++;
+      if (status !== 200) return void res.writeHead(status).end();
+      res.end(SVG);
+    });
+    const db = database();
+    const logos = boot(db);
+    expect(await logos.fromUrl(`${base}/a`)).toBeNull();
+    expect(rows(db)).toBe(0);
+    status = 200;
+    expect((await logos.fromUrl(`${base}/a`))?.type).toBe("image/svg+xml");
+    expect(asked).toBe(2);
+  });
+
+  it("keeps a confirmed miss for a while, across a restart, then asks again", async () => {
+    let asked = 0;
+    const base = await secure((_req, res) => {
+      asked++;
+      res.end("not a picture");
+    });
+    const db = database();
+    let now = 1_000_000;
+    expect(await boot(db, () => now).fromUrl(`${base}/a`)).toBeNull();
+    expect(asked).toBe(1);
+    expect(rows(db)).toBe(1);
+    now += 60 * 1000;
+    expect(await boot(db, () => now).fromUrl(`${base}/a`)).toBeNull();
+    expect(asked).toBe(1);
+    now += 2 * 60 * 60 * 1000;
+    expect(await boot(db, () => now).fromUrl(`${base}/a`)).toBeNull();
+    expect(asked).toBe(2);
+  });
+
+  it("checks the kept bytes again: a row that is no longer a safe picture is dropped and asked for", async () => {
+    let asked = 0;
+    const base = await secure((_req, res) => {
+      asked++;
+      res.end(SVG);
+    });
+    const db = database();
+    await boot(db).fromUrl(`${base}/a`);
+    db.query("UPDATE plugin_icon SET data = ?").run(
+      Buffer.from("<svg><script>alert(1)</script></svg>"),
+    );
+    const got = await boot(db).fromUrl(`${base}/a`);
+    expect(got).toEqual({
+      type: "image/svg+xml",
+      data: Buffer.from(SVG).toString("base64"),
+    });
+    expect(asked).toBe(2);
+    expect(rows(db)).toBe(1);
   });
 });
