@@ -3,7 +3,7 @@ import { View } from "nsh";
 import { colors, Icon, Label, row } from "../../../components";
 import { canHover } from "../../../components/menu";
 import { LayoutSelect } from "../../../components/select";
-import { control, shadow, space } from "../../../components/tokens";
+import { control, icon, shadow, space } from "../../../components/tokens";
 
 /**
  * The skills page's device and project pickers: the design's select menu, as
@@ -56,7 +56,7 @@ export function SkillSelect(props: {
               backgroundColor: chosen() ? c().selected : undefined,
             }}
           >
-            <View style={{ ...row, flex: 1, minWidth: 0, gap: 6 }}>
+            <View style={{ ...row, flex: 1, minWidth: 0, gap: space[4] }}>
               <Label variant="small" lines={1} style={{ flexShrink: 1 }}>
                 {item?.title ?? entry.title}
               </Label>
@@ -68,7 +68,7 @@ export function SkillSelect(props: {
             </View>
             <View style={{ width: 14, flexShrink: 0 }}>
               <If when={chosen()}>
-                <Icon name="check" size={14} />
+                <Icon name="check" size={icon.md} />
               </If>
             </View>
           </View>
@@ -98,7 +98,7 @@ export function SkillSelect(props: {
           >
             {current()?.title ?? props.placeholder}
           </Label>
-          <Icon name="down" size={10} tone="muted" />
+          <Icon name="down" size={icon.sm} tone="muted" />
         </View>
       }
       onChange={({ value }) => {

@@ -10,7 +10,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
-import { space } from "../../components/tokens";
+import { avatar, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { NoPlugins, PluginGlyph, Status } from "./plugin-status";
 
@@ -66,9 +66,9 @@ export function PluginTablet(props: {
                 focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
                 style={{
                   ...row,
-                  gap: 10,
+                  gap: space[8],
                   height: 60,
-                  paddingHorizontal: 14,
+                  paddingHorizontal: space[16],
                   borderBottomWidth: 1,
                   borderColor: c().border,
                   backgroundColor:
@@ -78,7 +78,7 @@ export function PluginTablet(props: {
                   cursor: "pointer",
                 }}
               >
-                <PluginGlyph size={28} />
+                <PluginGlyph size={avatar.lg} />
                 <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                   <Label variant="small" lines={1}>
                     {item().name}
@@ -107,7 +107,7 @@ export function PluginTablet(props: {
           style={{
             borderTopWidth: 1,
             borderColor: c().border,
-            paddingHorizontal: 14,
+            paddingHorizontal: space[16],
             paddingVertical: space[12],
           }}
         >

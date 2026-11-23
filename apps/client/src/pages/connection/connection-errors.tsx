@@ -169,10 +169,10 @@ export function LostPhoneConnection(
           paddingBottom: space[32],
         }}
       >
-        <Label variant="display" style={{ letterSpacing: -1.28 }}>
+        <Label tracking="tight" variant="display">
           ETA
         </Label>
-        <Label variant="title" style={{ letterSpacing: -0.24 }}>
+        <Label tracking="tight" variant="title">
           {uiText("lostTheConnectionToTheHost")}
         </Label>
         <Label tone="muted">{lastSeen(props.address, props.lastOnline)}</Label>
@@ -182,7 +182,7 @@ export function LostPhoneConnection(
         style={{
           paddingHorizontal: space[16],
           paddingTop: space[8],
-          paddingBottom: 34,
+          paddingBottom: space[32],
           gap: space[8],
         }}
       >

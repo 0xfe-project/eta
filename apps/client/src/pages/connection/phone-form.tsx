@@ -46,7 +46,7 @@ export function PhoneConnectionForm(props: {
           when={props.remoteFailure}
           else={
             <>
-              <Label variant="display" style={{ letterSpacing: -1.28 }}>
+              <Label tracking="tight" variant="display">
                 ETA
               </Label>
               <ConnectionIntro phone />
@@ -64,7 +64,7 @@ export function PhoneConnectionForm(props: {
           style={{
             paddingHorizontal: space[16],
             paddingTop: space[16],
-            paddingBottom: 34,
+            paddingBottom: space[32],
             gap: space[8],
           }}
         >
@@ -95,7 +95,7 @@ export function PhoneConnectionForm(props: {
                   right: 0,
                   bottom: 0,
                   minHeight: 52,
-                  paddingVertical: 10,
+                  paddingVertical: space[12],
                   paddingHorizontal: space[12],
                   backgroundColor: c().button,
                 }}

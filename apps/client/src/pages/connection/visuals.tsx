@@ -1,12 +1,12 @@
 import { Image, View } from "nsh";
 import photo from "../../../assets/onboard.jpg";
 import { colors, fill, Label } from "../../components";
-import { space, weight } from "../../components/tokens";
+import { opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 export function ConnectionIntro(props: { phone: boolean }) {
   return (
-    <View style={{ gap: props.phone ? 12 : 6 }}>
+    <View style={{ gap: props.phone ? space[12] : space[4] }}>
       <Label variant="subtitle">{uiText("connectToOneHostReachEvery")}</Label>
       <Label variant="small" tone="muted">
         {uiText("thePhoneIsOnlyAScreen")}
@@ -57,7 +57,7 @@ export function LocationOption(props: {
         paddingVertical: space[8],
         gap: space[2],
         cursor: props.disabled ? "default" : "pointer",
-        opacity: props.disabled ? 0.5 : 1,
+        opacity: props.disabled ? opacity.disabled : 1,
       }}
     >
       <Label>{props.title}</Label>
@@ -105,13 +105,13 @@ export function PhoneHero() {
         }}
       />
       <Label
+        tracking="tight"
         variant="display"
         weight={weight.strong}
         style={{
           // design-value: text over the photograph, the same in either theme
           color: "#ffffff",
           maxWidth: 320,
-          letterSpacing: -0.9,
         }}
       >
         {uiText("yourMachinesInYourPocket")}

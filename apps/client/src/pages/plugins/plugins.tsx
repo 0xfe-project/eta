@@ -13,7 +13,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
-import { control, icon, space, weight } from "../../components/tokens";
+import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { AddPlugin, ConfigurePlugin, sheetEdge } from "./configure";
@@ -68,7 +68,11 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
       <View
         style={{
           ...row,
-          paddingHorizontal: tablet ? 14 : phone() ? 16 : 24,
+          paddingHorizontal: tablet
+            ? space[16]
+            : phone()
+              ? space[16]
+              : space[24],
           height: tablet ? space[40] : undefined,
           paddingTop: tablet ? 0 : phone() ? space[12] : space[16],
           paddingBottom: tablet ? 0 : phone() ? space[4] : space[8],
@@ -203,16 +207,16 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                         label={uiText("refreshPlugins")}
                         icon="refresh"
                         iconOnly
-                        iconSize={14}
+                        iconSize={icon.md}
                         size={control.lg}
                         onPress={() => void refreshPlugins()}
                       />
                       <Button
                         label={uiText("addFromGit")}
                         icon="plus"
-                        iconSize={14}
+                        iconSize={icon.md}
                         size={control.lg}
-                        style={{ gap: 6, paddingHorizontal: 10 }}
+                        style={{ gap: space[4], paddingHorizontal: space[12] }}
                         onPress={() => add.set(true)}
                       />
                     </View>
@@ -359,7 +363,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
             <Label
               variant="small"
               tone="muted"
-              style={phone() ? undefined : { paddingTop: 6 }}
+              style={phone() ? undefined : { paddingTop: space[8] }}
             >
               {uiText("removePluginDescription")}
             </Label>
@@ -494,7 +498,7 @@ function PluginCard(props: {
               label={uiText("warningsFor", { name: props.item.name })}
               icon="warning"
               iconOnly
-              iconSize={14}
+              iconSize={icon.md}
               tone="ghost"
               labelTone={
                 props.item.problem || props.item.state === "needs_config"
@@ -569,7 +573,7 @@ function PluginSourceDialog(props: { item: PluginView; onClose: () => void }) {
           label={pluginText("ok")}
           tone="primary"
           size={control.md}
-          style={{ paddingHorizontal: 14 }}
+          style={{ paddingHorizontal: space[16] }}
           onPress={props.onClose}
         />
       </View>
@@ -590,7 +594,7 @@ function PluginRows(props: {
         style={{
           paddingHorizontal: space[16],
           paddingTop: props.first ? space[8] : space[16],
-          paddingBottom: 6,
+          paddingBottom: space[8],
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
@@ -616,8 +620,8 @@ function PluginRows(props: {
                 backgroundColor: c().canvas,
               }}
             >
-              <PluginGlyph size={32} />
-              <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+              <PluginGlyph size={avatar.lg} />
+              <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                 <Label lines={1}>{item().name}</Label>
                 <Label variant="caption" tone="muted" lines={1}>
                   {[
@@ -635,7 +639,7 @@ function PluginRows(props: {
                 <Status item={item()} />
               </If>
               <View style={{ width: space[16], alignItems: "center" }}>
-                <Icon name="right" size={14} />
+                <Icon name="right" size={icon.md} />
               </View>
             </View>
           )}

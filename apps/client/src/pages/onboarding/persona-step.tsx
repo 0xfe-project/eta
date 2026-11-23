@@ -1,7 +1,7 @@
 import { View } from "nsh";
 import { colors, Icon, Label, row } from "../../components";
 import { CheckControl } from "../../components/check-control";
-import { icon, space, weight } from "../../components/tokens";
+import { icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 export interface Persona {
@@ -46,7 +46,7 @@ function PersonaSkeleton(props: { phone: boolean }) {
               ...row,
               alignItems: "flex-start",
               paddingHorizontal: space[16],
-              paddingVertical: 10,
+              paddingVertical: space[12],
               gap: space[12],
               borderBottomWidth: 1,
               borderColor: c().border,
@@ -62,7 +62,12 @@ function PersonaSkeleton(props: { phone: boolean }) {
               }}
             />
             <View
-              style={{ flex: 1, minWidth: 0, gap: 6, paddingTop: space[4] }}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                gap: space[4],
+                paddingTop: space[4],
+              }}
             >
               {bar(widths()[0], 12)}
               {bar(widths()[1], 10)}
@@ -168,7 +173,7 @@ export function PersonaStep(props: {
                 checked={checked()}
                 disabled={installed() || props.working}
                 onChange={() => props.onToggle(card().id)}
-                size={16}
+                size={icon.md}
                 markSize={12}
                 indicatorStyle={{
                   marginTop: space[2],
@@ -186,13 +191,13 @@ export function PersonaStep(props: {
                 style={{
                   ...row,
                   paddingHorizontal: space[16],
-                  paddingVertical: 10,
+                  paddingVertical: space[12],
                   gap: space[12],
                   borderBottomWidth:
                     card().id === props.cards.at(-1)?.id ? 0 : 1,
                   borderColor: c().border,
                   alignItems: "flex-start",
-                  opacity: props.working && !checked() ? 0.5 : 1,
+                  opacity: props.working && !checked() ? opacity.disabled : 1,
                 }}
               >
                 <View style={{ flex: 1, gap: space[2] }}>
@@ -220,7 +225,7 @@ export function PersonaStep(props: {
                   <If when={active()}>
                     <View
                       style={{
-                        gap: 6,
+                        gap: space[4],
                         paddingTop: space[2],
                         alignItems: "flex-end",
                       }}

@@ -24,7 +24,15 @@ import {
 } from "../../components";
 import { CloseButton } from "../../components/navigation-buttons";
 import { ToggleSwitch } from "../../components/toggle-switch";
-import { control, shadow, space, weight } from "../../components/tokens";
+import {
+  control,
+  icon,
+  opacity,
+  shadow,
+  sizes,
+  space,
+  weight,
+} from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { pluginConfigText, PluginSelect } from "./config-fields";
@@ -113,14 +121,14 @@ export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
         <Label
           variant="small"
           tone="muted"
-          style={props.phone ? undefined : { paddingTop: 6 }}
+          style={props.phone ? undefined : { paddingTop: space[8] }}
         >
           {uiText("addPluginDescription")}
         </Label>
         <View
           style={{
-            gap: props.phone ? 10 : 12,
-            paddingTop: props.phone ? 16 : 14,
+            gap: props.phone ? space[8] : space[12],
+            paddingTop: space[16],
           }}
         >
           {field(uiText("repository"), repo, repo.set, true)}
@@ -141,7 +149,7 @@ export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
             labelWeight={props.phone ? weight.regular : undefined}
             dimDisabled={false}
             style={{
-              opacity: !repo().trim() || busy() ? 0.5 : 1,
+              opacity: !repo().trim() || busy() ? opacity.disabled : 1,
               ...(props.phone ? { flex: 1 } : {}),
             }}
             disabled={!repo().trim() || busy()}
@@ -234,7 +242,7 @@ export function ConfigurePlugin(props: {
   const phoneField = () => ({
     height: space[40],
     ...textStyle(type("small")),
-    paddingHorizontal: 10,
+    paddingHorizontal: space[12],
     borderColor: c().strong,
   });
   const form = () => (
@@ -246,7 +254,7 @@ export function ConfigurePlugin(props: {
         <View
           style={
             props.phone
-              ? { padding: space[16], gap: 18 }
+              ? { padding: space[16], gap: space[16] }
               : {
                   paddingHorizontal: space[16],
                   paddingTop: space[4],
@@ -265,13 +273,13 @@ export function ConfigurePlugin(props: {
               const item = () => field();
               const value = () => valueOf(item());
               return (
-                <View style={{ gap: 6 }}>
+                <View style={{ gap: space[4] }}>
                   <If when={item().type !== "boolean"}>
                     <View
                       style={{
                         ...row,
                         alignItems: "baseline",
-                        gap: props.phone ? 8 : 6,
+                        gap: props.phone ? space[8] : space[4],
                       }}
                     >
                       <Label variant="small">{item().title}</Label>
@@ -331,7 +339,12 @@ export function ConfigurePlugin(props: {
                           />
                         }
                       >
-                        <View style={{ ...row, gap: props.phone ? 12 : 10 }}>
+                        <View
+                          style={{
+                            ...row,
+                            gap: props.phone ? space[12] : space[8],
+                          }}
+                        >
                           <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                             <Label variant="small">{item().title}</Label>
                             <If when={item().description}>
@@ -382,7 +395,9 @@ export function ConfigurePlugin(props: {
                             />
                           }
                         >
-                          <View style={{ ...row, gap: 6, flexWrap: "wrap" }}>
+                          <View
+                            style={{ ...row, gap: space[4], flexWrap: "wrap" }}
+                          >
                             <Each
                               of={spec().options}
                               key={(choice) => choice.value}
@@ -510,7 +525,7 @@ export function ConfigurePlugin(props: {
           justifyContent: "flex-end",
           paddingVertical: space[12],
           paddingHorizontal: space[16],
-          gap: props.phone ? 12 : 10,
+          gap: props.phone ? space[12] : space[8],
           borderTopWidth: 1,
           borderColor: c().border,
         }}
@@ -525,7 +540,7 @@ export function ConfigurePlugin(props: {
           tone="primary"
           size={props.phone ? 36 : undefined}
           labelVariant="caption"
-          style={{ paddingHorizontal: props.phone ? 20 : 10 }}
+          style={{ paddingHorizontal: props.phone ? space[20] : space[12] }}
           disabled={
             busy() ||
             accessBusy() ||
@@ -560,7 +575,7 @@ export function ConfigurePlugin(props: {
           ...fill,
           alignItems: "center",
           ...(props.tablet
-            ? { paddingTop: 56 }
+            ? { paddingTop: sizes.header + space[16] }
             : { justifyContent: "center", paddingVertical: space[24] }),
         }}
         backdropStyle={{
@@ -599,7 +614,7 @@ export function ConfigurePlugin(props: {
                 {pluginConfigText("fields")}
               </Label>
             </View>
-            <CloseButton onPress={props.onClose} iconSize={14} />
+            <CloseButton onPress={props.onClose} iconSize={icon.md} />
           </View>
           {form()}
         </View>

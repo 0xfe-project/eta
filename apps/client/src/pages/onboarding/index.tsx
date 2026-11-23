@@ -14,7 +14,7 @@ import {
 } from "../../components";
 import { useModels } from "../../components/model-select";
 import { StatusDot } from "../../components/status-dot";
-import { control, icon, space, weight } from "../../components/tokens";
+import { control, icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { AddSource } from "../settings/models/add-source";
@@ -25,9 +25,9 @@ import { WelcomeStep } from "./welcome";
 // Footer buttons: 12pt from the edge to the label (the primary's 1pt border
 // counts), 8 before a leading icon, a 6pt gap, and half opacity when disabled.
 const footerButton = (disabled = false) => ({
-  paddingHorizontal: 11,
-  gap: 6,
-  opacity: disabled ? 0.5 : 1,
+  paddingHorizontal: space[12],
+  gap: space[4],
+  opacity: disabled ? opacity.disabled : 1,
 });
 // On a phone the footer's buttons are 36pt tall, as is step 1's first Add source.
 const phoneButton = 36;
@@ -142,11 +142,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
           >
             <View style={{ ...row, gap: space[8] }}>
               <If when={step() < 3} else={<Icon name="check" size={icon.sm} />}>
-                <Label
-                  variant="caption"
-                  tone="muted"
-                  style={{ letterSpacing: 0.8 }}
-                >
+                <Label tracking="caps" variant="caption" tone="muted">
                   {`${step()}/2`}
                 </Label>
               </If>
@@ -243,7 +239,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                     style={{
                       ...row,
                       alignItems: "flex-start",
-                      gap: 10,
+                      gap: space[8],
                       paddingVertical: space[8],
                       paddingHorizontal: space[12],
                       borderWidth: 1,
@@ -262,7 +258,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                         borderColor: c().strong,
                       }}
                     >
-                      <Icon name="plugins" size={14} />
+                      <Icon name="plugins" size={icon.md} />
                     </View>
                     <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                       <Label weight={weight.regular}>
@@ -284,7 +280,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                         ...row,
                         width: 80,
                         height: space[20],
-                        gap: 6,
+                        gap: space[4],
                         flexShrink: 0,
                       }}
                     >
@@ -317,8 +313,8 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                 onPress={() => adding.set(true)}
                 style={{
                   alignSelf: "flex-start",
-                  gap: 6,
-                  paddingHorizontal: sources().length ? 0 : 11,
+                  gap: space[4],
+                  paddingHorizontal: sources().length ? 0 : space[12],
                 }}
               />
             </View>
@@ -381,7 +377,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
               alignItems: "flex-start",
               flexShrink: 0,
               gap: space[8],
-              paddingVertical: 10,
+              paddingVertical: space[12],
               paddingHorizontal: space[16],
               borderTopWidth: 1,
               borderColor: c().border,
@@ -396,7 +392,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                 justifyContent: "center",
               }}
             >
-              <Icon name="warning" size={14} tone="red" />
+              <Icon name="warning" size={icon.md} tone="red" />
             </View>
             <Label style={{ flex: 1, minWidth: 0 }}>
               {uiText("installFailed", { message: error() })}
@@ -408,7 +404,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
             ...row,
             flexShrink: 0,
             paddingTop: space[12],
-            paddingBottom: props.phone ? 28 : 12,
+            paddingBottom: props.phone ? space[32] : space[12],
             paddingHorizontal: space[16],
             borderTopWidth: 1,
             borderColor: c().border,

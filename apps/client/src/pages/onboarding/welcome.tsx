@@ -45,24 +45,20 @@ export function WelcomeStep(props: { phone: boolean }) {
           gap: space[16],
         }}
       >
-        <View style={{ gap: 6 }}>
-          <Label
-            variant="title"
-            weight={weight.strong}
-            style={{ letterSpacing: -0.2 }}
-          >
+        <View style={{ gap: space[4] }}>
+          <Label tracking="tight" variant="title" weight={weight.strong}>
             {uiText("welcomeToEta")}
           </Label>
           <Label tone="mutedInk">{uiText("twoShortStepsThenYourAgents")}</Label>
         </View>
-        <View style={{ gap: 6 }}>
-          <View style={{ ...row, gap: 10 }}>
+        <View style={{ gap: space[4] }}>
+          <View style={{ ...row, gap: space[8] }}>
             <Label variant="small" tone="muted" style={{ width: space[16] }}>
               1
             </Label>
             <Label>{uiText("connectAModel")}</Label>
           </View>
-          <View style={{ ...row, gap: 10 }}>
+          <View style={{ ...row, gap: space[8] }}>
             <Label variant="small" tone="muted" style={{ width: space[16] }}>
               2
             </Label>
