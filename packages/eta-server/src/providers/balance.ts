@@ -14,6 +14,7 @@ import { balanceRevision } from "./config-types";
 const HISTORY_MS = 30 * 60_000;
 const COOLDOWN_MS = 15_000;
 type Currency = BalanceLine["currency"];
+type ProviderSummary = Extract<SourceSummary, { source: "provider" }>;
 
 interface Sample {
   lines: BalanceLine[];
@@ -175,28 +176,39 @@ export class ProviderBalances {
       : { state: "unavailable" };
   }
 
-  async summaries(): Promise<SourceSummary[]> {
+  async summaryReads(): Promise<Promise<ProviderSummary>[]> {
     const providers = (await this.#store.read()).config.providers ?? [];
-    const items = await Promise.all(
-      providers.map(async (provider) => {
-        const revision = balanceRevision(provider);
-        const result = await this.#read(provider, "fresh").catch(() => {
-          this.#warn(
-            `[eta-server] billing provider=${revision.slice(0, 12)} failure=unavailable`,
-          );
-          return undefined;
-        });
-        return {
-          source: "provider" as const,
-          id: provider.id,
-          balanceRevision: revision,
-          value:
-            result?.state === "available" && result.lines?.length
-              ? { balance: { lines: result.lines } }
-              : null,
-        };
-      }),
+    return providers.map(async (provider) => {
+      const revision = balanceRevision(provider);
+      const result = await this.#read(provider, "fresh").catch(() => {
+        this.#warn(
+          `[eta-server] billing provider=${revision.slice(0, 12)} failure=unavailable`,
+        );
+        return undefined;
+      });
+      return {
+        source: "provider" as const,
+        id: provider.id,
+        balanceRevision: revision,
+        value:
+          result?.state === "available" && result.lines?.length
+            ? { balance: { lines: result.lines } }
+            : null,
+      };
+    });
+  }
+
+  async currentSummary(item: ProviderSummary): Promise<ProviderSummary> {
+    const current = (await this.#store.view()).providers.find(
+      (provider) => provider.id === item.id,
     );
+    return current?.balanceRevision === item.balanceRevision
+      ? item
+      : { ...item, value: null };
+  }
+
+  async summaries(): Promise<ProviderSummary[]> {
+    const items = await Promise.all(await this.summaryReads());
     const current = (await this.#store.view()).providers;
     const revisions = new Map(
       current.map((item) => [item.id, item.balanceRevision]),

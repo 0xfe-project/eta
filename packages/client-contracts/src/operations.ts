@@ -206,6 +206,22 @@ export interface SourceSummaries {
   items: SourceSummary[];
 }
 
+export interface SourceQuota extends MonthlyUsage {
+  period: "weekly" | "monthly";
+}
+
+export type SourceSummaryUpdate =
+  | Extract<SourceSummary, { source: "provider" }>
+  | (Omit<Extract<SourceSummary, { source: "account" }>, "value"> & {
+      value: { quota: SourceQuota } | null;
+    });
+
+export interface SourceSummariesVisit {
+  visitId: string;
+}
+
+export type SourceSummaryEvent = SourceSummariesVisit & SourceSummaryUpdate;
+
 export interface ProviderBalance {
   state:
     | "available"

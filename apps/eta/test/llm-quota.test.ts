@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Codex } from "../src/llm/codex";
 import { Gateway } from "../src/llm/gateway";
 import { LlmError } from "../src/llm/problems";
+import { selectSourceQuota } from "../src/llm/source-quota";
 import { XAI } from "../src/llm/xai";
 
 const account: Connection = {
@@ -138,5 +139,53 @@ describe("monthly summaries", () => {
     expect((await read())[0]).toMatchObject({
       value: { monthly: { usedPercent: 3 } },
     });
+  });
+});
+
+describe("source quota selection", () => {
+  const now = Date.parse("2026-11-24T00:00:00Z");
+  const resetsAt = "2026-11-27T10:15:00.000Z";
+  const week = {
+    kind: "weekly" as const,
+    durationSeconds: 604800,
+    used: 17,
+    resetsAt,
+  };
+  const month = { kind: "monthly" as const, durationSeconds: 2592000, used: 0 };
+  const fiveHours = { kind: "5h" as const, durationSeconds: 18000, used: 99 };
+
+  it.each([-3600, 0, 3600])(
+    "prefers a verified week at offset %s",
+    (offset) => {
+      expect(
+        selectSourceQuota(
+          [
+            fiveHours,
+            month,
+            month,
+            { ...week, durationSeconds: 604800 + offset },
+          ],
+          now,
+        ),
+      ).toEqual({ period: "weekly", usedPercent: 17, resetsAt });
+    },
+  );
+
+  it("leaves the row blank without a verified week, a month included", () => {
+    expect(selectSourceQuota([fiveHours, month], now)).toBeNull();
+    expect(selectSourceQuota([fiveHours], now)).toBeNull();
+    expect(
+      selectSourceQuota([{ ...week, durationSeconds: 608401 }, month], now),
+    ).toBeNull();
+    expect(
+      selectSourceQuota([{ kind: "weekly", used: 17 }, month], now),
+    ).toBeNull();
+    expect(selectSourceQuota([fiveHours, month, month], now)).toBeNull();
+  });
+
+  it("leaves ambiguous or unusable weekly values blank, even with a valid month", () => {
+    expect(selectSourceQuota([week, week, month], now)).toBeNull();
+    expect(selectSourceQuota([{ ...week, used: NaN }, month], now)).toBeNull();
+    expect(selectSourceQuota([week, month], Date.parse(resetsAt))).toBeNull();
   });
 });

@@ -22,7 +22,9 @@ import type {
   ProviderCheck,
   ProviderHeaders,
   ProvidersView,
+  SourceSummariesVisit,
   SourceSummary,
+  SourceSummaryUpdate,
 } from "@eta/client-contracts";
 import type { DiscoveryResult } from "../providers/discovery";
 import type { ProviderConfigStore } from "../providers/store";
@@ -45,6 +47,12 @@ export interface ProvidersPluginOptions {
     | ((
         schedule: (read: () => Promise<LlmQuota>) => Promise<LlmQuota>,
       ) => Promise<SourceSummary[]>)
+    | undefined;
+  streamQuotaSummaries?:
+    | ((
+        schedule: (read: () => Promise<LlmQuota>) => Promise<LlmQuota>,
+        publish: (summary: SourceSummaryUpdate) => void,
+      ) => Promise<void>)
     | undefined;
   /**
    * The HTTP client discovery uses. A test supplies one; production uses `fetch`, which is what
@@ -397,6 +405,60 @@ export function providersPlugin(options: ProvidersPluginOptions) {
                 .catch(() => failed("accounts")),
             ]);
             return { result: { items: [...providers, ...(accounts ?? [])] } };
+          }),
+          wire.handle("billing", "startSourceSummaries", (call, context) => {
+            const { visitId } = (call.args ??
+              {}) as Partial<SourceSummariesVisit>;
+            if (typeof visitId !== "string" || !visitId || visitId.length > 128)
+              throw new Error("billing.startSourceSummaries needs a visitId");
+            const publish = (summary: SourceSummaryUpdate) =>
+              context.reply({
+                type: "event",
+                target: "billing",
+                name: "sourceSummary",
+                data: { visitId, ...summary },
+              });
+            const done = () =>
+              context.reply({
+                type: "event",
+                target: "billing",
+                name: "sourceSummariesDone",
+                data: { visitId },
+              });
+            const enumerationFailed = (source: string) =>
+              options.warn?.(
+                `[eta-server] billing ${source} failure=enumeration`,
+              );
+            // Queue the balance lookups first. Once a slot frees up, account usage can
+            // start without gating any of the balance events or blocking this connection's calls.
+            void balances
+              .summaryReads()
+              .catch(() => {
+                enumerationFailed("providers");
+                return [];
+              })
+              .then(async (reads) => {
+                await Promise.all([
+                  ...reads.map(async (read) => {
+                    const summary = await read;
+                    const current = await balances
+                      .currentSummary(summary)
+                      .catch(() => ({
+                        ...summary,
+                        value: null,
+                      }));
+                    publish(current);
+                  }),
+                  options
+                    .streamQuotaSummaries?.(balances.schedule, publish)
+                    .catch(() => enumerationFailed("accounts")),
+                ]);
+              })
+              .then(done, () => {
+                enumerationFailed("source summaries");
+                done();
+              });
+            return {};
           }),
           wire.handle("providers", "readBalance", async (call) => {
             const args = (call.args ?? {}) as Partial<

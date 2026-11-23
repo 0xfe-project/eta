@@ -5,86 +5,20 @@ import type {
   ProviderCheck,
   ProviderSummary,
   ProvidersView,
-  SourceSummaries,
-  SourceSummary,
+  SourceQuota,
 } from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
 import type { EntityStatus } from "../section";
+import type { DisplayedSourceSummary } from "./source-summaries";
 import { keyMissing, providerLabel } from "@eta/client-contracts";
-import {
-  cleanup,
-  computed,
-  effect,
-  signal,
-  untracked,
-  View,
-  windowSize,
-} from "nsh";
+import { View, windowSize } from "nsh";
 import { ActionItem, colors, Label, row } from "../../../components";
 import { space } from "../../../components/tokens";
-import { uiText } from "../../../i18n";
+import { formatLocale, uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { EntityRow, LetterBox } from "../section";
 import { logoKey, useSourceLogos } from "./logos";
 import { billingClock, localTime, percentText } from "./quota";
-
-/** The settings pane owns the visit, even when a breakpoint remounts the row layout. */
-export function useSourceSummaries(visible: () => boolean) {
-  const host = useHost();
-  const { providers, accounts, count } = useModelSources();
-  const items = signal<SourceSummary[]>([]);
-  const available = computed(
-    () =>
-      visible() &&
-      host.state().status === "open" &&
-      host.can("billing.readSourceSummaries"),
-  );
-  effect(() => {
-    const address = host.address();
-    items.set([]);
-    if (!available()) return;
-    let active = true;
-    cleanup(() => {
-      active = false;
-    });
-    // Each wave of four upstream reads has a 15-second deadline.
-    const sourceCount = untracked(count);
-    // Retiring a row or replacing its credential ends its eligibility for this visit,
-    // even if a new row subsequently uses the same id and key.
-    let previous = new Map<string, string | undefined>();
-    const retired = new Set<string>();
-    const retained = (item: SourceSummary) =>
-      !retired.has(`${item.source}:${item.id}`);
-    effect(() => {
-      const current = new Map<string, string | undefined>([
-        ...providers().map(
-          (p) => [`provider:${p.id}`, p.balanceRevision] as const,
-        ),
-        ...accounts().map((a) => [`account:${a.id}`, a.quotaRevision] as const),
-      ]);
-      for (const [id, revision] of previous) {
-        if (!current.has(id) || current.get(id) !== revision) retired.add(id);
-      }
-      previous = current;
-      const shown = untracked(items);
-      if (shown.some((item) => !retained(item)))
-        items.set(shown.filter(retained));
-    });
-    void host
-      .call<SourceSummaries>(
-        "billing",
-        "readSourceSummaries",
-        {},
-        { timeoutMs: 30_000 + 15_000 * Math.ceil(sourceCount / 4) },
-      )
-      .then((result) => {
-        if (active && available() && host.address() === address)
-          items.set(result.items.filter(retained));
-      })
-      .catch(() => {});
-  });
-  return items;
-}
 
 /** The bar showing how much of a source's quota is used. */
 const usageBarWidth = 56;
@@ -102,7 +36,7 @@ export function useModelSources() {
 
 export function ModelSourceList(props: {
   phone: boolean;
-  summaries: SourceSummary[];
+  summaries: DisplayedSourceSummary[];
   onProvider: (provider: ProviderSummary) => void;
   /** Opens an account's subscription detail. */
   onAccount: (id: string, connector: string) => void;
@@ -141,7 +75,7 @@ export function ModelSourceList(props: {
       return { label: uiText("sourceUnreachable"), color: c().red };
     return { label: uiText("sourceWorking"), color: c().green };
   };
-  const monthly = (item: LlmConnection) => {
+  const quota = (item: LlmConnection) => {
     const match = props.summaries.find(
       (s) => s.source === "account" && s.id === item.id,
     );
@@ -152,26 +86,40 @@ export function ModelSourceList(props: {
       match.quotaRevision !== item.quotaRevision
     )
       return undefined;
-    const value = match.value?.monthly;
+    const value = match.value?.quota;
     return value && (!value.resetsAt || Date.parse(value.resetsAt) > now())
-      ? value
+      ? { ...value, previousAt: match.previousAt }
       : undefined;
   };
-  const usedText = (used: number) =>
-    uiText("modelMonthlyUsed", { percent: percentText(used) });
-  const amounts = (item: ProviderSummary) => {
+  const usedText = (value: SourceQuota) =>
+    uiText("modelWeeklyUsed", {
+      percent: percentText(value.usedPercent),
+    });
+  const balance = (item: ProviderSummary) => {
     const match = props.summaries.find(
       (s) => s.source === "provider" && s.id === item.id,
     );
     return item.balanceRevision &&
       match?.source === "provider" &&
-      match.balanceRevision === item.balanceRevision
-      ? (match.value?.balance.lines.map(
-          (line) =>
-            `${line.currency} ${/^-?0+(?:\.0+)?$/.test(line.available) ? "0.00" : line.available}`,
-        ) ?? [])
-      : [];
+      match.balanceRevision === item.balanceRevision &&
+      match.value
+      ? {
+          amounts: match.value.balance.lines.map(
+            (line) =>
+              `${line.currency} ${/^-?0+(?:\.0+)?$/.test(line.available) ? "0.00" : line.available}`,
+          ),
+          previousAt: match.previousAt,
+        }
+      : undefined;
   };
+  const previousText = (time: number) =>
+    uiText("modelBillingPrevious", {
+      time: new Intl.DateTimeFormat(formatLocale(), {
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      }).format(time),
+    });
   const modelCount = (item: LlmConnection) =>
     uiText("sourceModelCount", {
       count: models().filter(
@@ -203,18 +151,26 @@ export function ModelSourceList(props: {
             meta={
               <View style={{ gap: space[2] }}>
                 <View
-                  style={
-                    narrow()
-                      ? { alignItems: "flex-start", gap: space[4] }
-                      : { ...row, flexWrap: "wrap", columnGap: space[8], rowGap: space[2] }
-                  }
+                  style={{
+                    ...row,
+                    flexWrap: "wrap",
+                    columnGap: space[8],
+                    rowGap: space[2],
+                  }}
                 >
                   <Label variant="small" tone="muted">
                     {modelCount(item())}
                   </Label>
-                  <If when={monthly(item())}>
+                  <If when={quota(item())}>
                     {(value) => (
-                      <View style={{ ...row, gap: space[4], maxWidth: "100%" }}>
+                      <View
+                        style={{
+                          ...row,
+                          gap: space[4],
+                          maxWidth: "100%",
+                          opacity: value().previousAt === undefined ? 1 : 0.55,
+                        }}
+                      >
                         <View
                           style={{
                             width: usageBarWidth,
@@ -233,21 +189,34 @@ export function ModelSourceList(props: {
                           />
                         </View>
                         <Label variant="small" tone="muted">
-                          {usedText(value().usedPercent)}
+                          {usedText(value())}
                         </Label>
                       </View>
                     )}
                   </If>
                 </View>
-                <If when={monthly(item())?.resetsAt}>
+                <If when={quota(item())?.resetsAt}>
                   {(time) => (
-                    <Label variant="small" tone="muted">
+                    <Label
+                      variant="small"
+                      tone="muted"
+                      style={{
+                        opacity:
+                          quota(item())?.previousAt === undefined ? 1 : 0.55,
+                      }}
+                    >
                       {uiText("modelQuotaResetsAt", {
                         time: localTime(time()),
                       })}
                     </Label>
                   )}
                 </If>
+                <If when={quota(item())?.previousAt}>
+                  {(time) => (
+                    <Label variant="small" tone="muted">
+                      {previousText(time())}
+                    </Label>
+                  )}
                 </If>
               </View>
             }
@@ -257,11 +226,13 @@ export function ModelSourceList(props: {
               item().label,
               item().connector,
               item().state,
-              monthly(item()) && usedText(monthly(item())!.usedPercent),
-              monthly(item())?.resetsAt &&
+              quota(item()) && usedText(quota(item())!),
+              quota(item())?.resetsAt &&
                 uiText("modelQuotaResetsAt", {
-                  time: localTime(monthly(item())?.resetsAt),
+                  time: localTime(quota(item())?.resetsAt),
                 }),
+              quota(item())?.previousAt &&
+                previousText(quota(item())!.previousAt!),
             ]
               .filter(Boolean)
               .join(" · ")}
@@ -299,48 +270,66 @@ export function ModelSourceList(props: {
               />
             }
             meta={
-              <View
-                style={
-                  narrow()
-                    ? { alignItems: "flex-start", gap: 6 }
-                    : {
-                        ...row,
-                        alignItems: "flex-start",
-                        gap: props.phone ? 16 : 10,
-                      }
-                }
-              >
-                <Label variant="small" tone="muted">
-                  {uiText("sourceModelCount", { count: item().models.length })}
-                </Label>
-                <If when={amounts(item()).length}>
-                  <View
-                    style={{
-                      ...(narrow()
-                        ? { alignItems: "flex-start" as const }
-                        : { ...row, flex: 1 }),
-                      minWidth: 0,
-                      flexWrap: "wrap",
-                      columnGap: 8,
-                      rowGap: narrow() ? 6 : 2,
-                    }}
-                  >
-                    <Each of={amounts(item())}>
-                      {(amount) => (
-                        <Label variant="small" tone="muted">
-                          {amount()}
-                        </Label>
-                      )}
-                    </Each>
-                  </View>
+              <View style={{ gap: space[2] }}>
+                <View
+                  style={
+                    narrow()
+                      ? { alignItems: "flex-start", gap: space[4] }
+                      : {
+                          ...row,
+                          alignItems: "flex-start",
+                          gap: props.phone ? space[16] : space[8],
+                        }
+                  }
+                >
+                  <Label variant="small" tone="muted">
+                    {uiText("sourceModelCount", {
+                      count: item().models.length,
+                    })}
+                  </Label>
+                  <If when={balance(item())}>
+                    {(value) => (
+                      <View
+                        style={{
+                          ...(narrow()
+                            ? { alignItems: "flex-start" as const }
+                            : { ...row, flex: 1 }),
+                          minWidth: 0,
+                          flexWrap: "wrap",
+                          columnGap: space[8],
+                          rowGap: narrow() ? space[4] : space[2],
+                          opacity: value().previousAt === undefined ? 1 : 0.55,
+                        }}
+                      >
+                        <Each of={value().amounts}>
+                          {(amount) => (
+                            <Label variant="small" tone="muted">
+                              {amount()}
+                            </Label>
+                          )}
+                        </Each>
+                      </View>
+                    )}
+                  </If>
+                </View>
+                <If when={balance(item())?.previousAt}>
+                  {(time) => (
+                    <Label variant="small" tone="muted">
+                      {previousText(time())}
+                    </Label>
+                  )}
                 </If>
               </View>
             }
             wideMeta={props.phone}
             accessibilityLabel={[
               providerLabel(item()),
-              ...amounts(item()),
-            ].join(" · ")}
+              ...(balance(item())?.amounts ?? []),
+              balance(item())?.previousAt &&
+                previousText(balance(item())!.previousAt!),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
             status={providerStatus(item())}
             caret
             controlRef={(node) => props.onRef(`source:${item().id}`, node)}

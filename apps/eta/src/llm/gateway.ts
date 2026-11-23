@@ -15,6 +15,7 @@ import type {
   LlmProblem,
   LlmQuota,
   SourceSummary,
+  SourceSummaryUpdate,
 } from "@eta/client-contracts";
 import type { Connector, KeyGroups } from "./connectors";
 import type { Connection } from "./state";
@@ -23,6 +24,7 @@ import { CpaHttpError } from "@cpajs/cpa/client";
 import { billingRetryAt, isMonthDuration } from "@eta/client-contracts";
 import { excludesAll, updateKeys } from "./connectors";
 import { codeOf, LlmError, notFound, problem } from "./problems";
+import { selectSourceQuota } from "./source-quota";
 import {
   connectionReason,
   connectionView,
@@ -515,22 +517,8 @@ export class Gateway {
           quotaRevision: quotaRevision ?? null,
           value: null,
         };
-        const connector = this.#byId.get(connection.connector);
-        if (
-          !quotaRevision ||
-          !connector?.usage ||
-          connection.state !== "active"
-        )
-          return empty;
-        const entry = this.#readUsage(connection, connector, schedule, warn);
-        const quota = await entry.reading.catch(() => {
-          warn(
-            `[eta] billing ${connector.info.id} source=${quotaRevision.slice(0, 12)} failure=unavailable`,
-          );
-          return undefined;
-        });
-        if (!quota || quota.error || this.#usage.get(id) !== entry)
-          return empty;
+        const quota = await this.#readSummaryQuota(connection, schedule, warn);
+        if (!quota) return empty;
         const windows = quota.windows.filter(
           (w) =>
             w.kind === "monthly" &&
@@ -566,6 +554,57 @@ export class Gateway {
         ? item
         : { ...item, value: null },
     );
+  }
+
+  async streamQuotaSummaries(
+    schedule: (read: () => Promise<LlmQuota>) => Promise<LlmQuota>,
+    warn: (message: string) => void,
+    publish: (item: SourceSummaryUpdate) => void,
+  ): Promise<void> {
+    const connections = await this.#connections();
+    await Promise.all(
+      connections.map(async (connection) => {
+        const { id, quotaRevision } = connection;
+        const quota = await this.#readSummaryQuota(connection, schedule, warn);
+        let selected = null;
+        if (quota) {
+          const current = await this.#connection(id).catch(() => undefined);
+          if (
+            current?.state === "active" &&
+            current.quotaRevision === quotaRevision &&
+            this.#usage.get(id)?.revision === quotaRevision
+          )
+            selected = selectSourceQuota(quota.windows, this.#now());
+        }
+        publish({
+          source: "account",
+          id,
+          quotaRevision: quotaRevision ?? null,
+          value: selected === null ? null : { quota: selected },
+        });
+      }),
+    );
+  }
+
+  async #readSummaryQuota(
+    connection: Connection,
+    schedule: (read: () => Promise<LlmQuota>) => Promise<LlmQuota>,
+    warn: (message: string) => void,
+  ): Promise<LlmQuota | undefined> {
+    const { id, quotaRevision } = connection;
+    const connector = this.#byId.get(connection.connector);
+    if (!quotaRevision || !connector?.usage || connection.state !== "active")
+      return undefined;
+    const entry = this.#readUsage(connection, connector, schedule, warn);
+    const quota = await entry.reading.catch(() => {
+      warn(
+        `[eta] billing ${connector.info.id} source=${quotaRevision.slice(0, 12)} failure=unavailable`,
+      );
+      return undefined;
+    });
+    return quota && !quota.error && this.#usage.get(id) === entry
+      ? quota
+      : undefined;
   }
 
   #readUsage(
