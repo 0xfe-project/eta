@@ -353,7 +353,9 @@ export class Logos {
 
   /**
    * A picture at one https address (a Composio toolkit's logo), every redirect https too. Same checks
-   * as any other fetch here; no header of the host or the user goes with it. An answer, and a miss,
+   * as any other fetch here; no header of the host or the user goes with it. Unlike every other way
+   * to a picture here it also takes an SVG (Composio's logos are SVG), kept as it is: it must pass
+   * the same test as a plugin's own SVG (`readOwnLogo`), or it is no picture. An answer, and a miss,
    * is kept in memory for a day; null when there is no picture.
    */
   async fromUrl(address: string): Promise<Logo | null> {
@@ -361,7 +363,7 @@ export class Logos {
     const now = (this.#options.now ?? Date.now)();
     const hit = this.#kept.get(key);
     if (hit && now - hit.at < KEEP_MS) return hit.logo;
-    const logo = await this.#picture(address, true).catch(() => null);
+    const logo = await this.#picture(address, true, true).catch(() => null);
     this.#kept.set(key, { at: now, logo });
     return logo;
   }
@@ -714,13 +716,26 @@ export class Logos {
     return null;
   }
 
-  async #picture(address: string, httpsOnly = false): Promise<Logo | null> {
+  async #picture(
+    address: string,
+    httpsOnly = false,
+    svg = false,
+  ): Promise<Logo | null> {
     const got = await this.#get(
       this.#address(address, httpsOnly),
       MAX_PICTURE,
       httpsOnly,
     );
     const type = pictureType(got.body);
+    if (!type && svg) {
+      const text = Buffer.from(got.body).toString("utf8");
+      return SVG_HEAD.test(text) && !SVG_UNSAFE.test(text)
+        ? {
+            type: "image/svg+xml",
+            data: Buffer.from(got.body).toString("base64"),
+          }
+        : null;
+    }
     return type
       ? await this.#shrunk(
           { type, data: Buffer.from(got.body).toString("base64") },
