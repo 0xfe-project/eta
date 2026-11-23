@@ -2,7 +2,7 @@
  * The market's Composio source: the list of Composio toolkits, and the link that starts connecting one.
  *
  * Composio is a hosted service: the host talks to it with the user's API key, which is kept sealed
- * (`composio_key`) and goes only to https://backend.composio.dev, in the `x-api-key` header, with
+ * (one row of the `credential` table: integration "market", key "composio") and goes only to https://backend.composio.dev, in the `x-api-key` header, with
  * redirects refused so it cannot follow one elsewhere. The key is no part of a cache key, a log
  * line, an error text or any answer to a client; a message that was built from a remote answer is
  * cleaned of it again. Nothing here installs anything: connecting a toolkit is Composio's own
@@ -26,7 +26,7 @@ import type { CatalogCache } from "./market-cache";
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import { PluginError } from "@eta/daemon";
-import { seal, unseal } from "../secret";
+import { EncryptedCredentialTable } from "../credentials/table";
 
 /** The address the source has in `MarketSource.url`: not a web address, only a name. */
 export const COMPOSIO_URL = "composio:toolkits";
@@ -34,6 +34,8 @@ const COMPOSIO_NAME = "Composio";
 /** Whether the source is on; absent means on, like any source that was added. */
 const COMPOSIO_ENABLED_KEY = "plugins.composioEnabled";
 const USER_ID_KEY = "plugins.composioUserId";
+/** Where the key is kept: the same row shape as another market source's credential (see PluginStore). */
+const CREDENTIAL = { integration: "market", key: "composio", kind: "secret" };
 
 const BASE = "https://backend.composio.dev";
 const PAGE = 100;
@@ -206,8 +208,7 @@ function kept(item: unknown, from: MarketSource): ComposioToolkit | null {
 }
 
 export class Composio {
-  readonly #db: Database;
-  readonly #key: Buffer;
+  readonly #credentials: EncryptedCredentialTable;
   readonly #settings: SettingStore;
   readonly #cache: CatalogCache | undefined;
   readonly #base: string;
@@ -219,8 +220,7 @@ export class Composio {
   #logos: Map<string, string> | undefined;
 
   constructor(options: ComposioOptions) {
-    this.#db = options.db;
-    this.#key = options.key;
+    this.#credentials = new EncryptedCredentialTable(options.db, options.key);
     this.#settings = options.settings;
     this.#cache = options.cache;
     this.#base = options.baseUrl ?? BASE;
@@ -260,29 +260,33 @@ export class Composio {
       throw new PluginError(
         "the API key must be one line of visible characters, up to 512",
       );
-    this.#db
-      .query(
-        `INSERT INTO composio_key (id, sealed, updated_at) VALUES (1, ?, ?)
-         ON CONFLICT (id) DO UPDATE SET sealed = excluded.sealed, updated_at = excluded.updated_at`,
-      )
-      .run(seal(this.#key, clean), Date.now());
+    this.#credentials.write(
+      CREDENTIAL.integration,
+      CREDENTIAL.key,
+      CREDENTIAL.kind,
+      clean,
+    );
     // Another key may be another project: what was found for the old one is not known for this.
     this.#configs.clear();
   }
 
   clearKey(): void {
-    this.#db.query("DELETE FROM composio_key WHERE id = 1").run();
+    this.#credentials.erase(
+      CREDENTIAL.integration,
+      CREDENTIAL.key,
+      CREDENTIAL.kind,
+    );
     this.#configs.clear();
   }
 
-  /** The key, only for the header of a call to Composio. A blob that does not open reads as no key. */
+  /** The key, only for the header of a call to Composio. A row that does not open, or is no string, reads as no key. */
   #apiKey(): string | undefined {
-    const row = this.#db
-      .query<{ sealed: Uint8Array }, []>(
-        "SELECT sealed FROM composio_key WHERE id = 1",
-      )
-      .get();
-    return row === null ? undefined : unseal(this.#key, row.sealed);
+    const value = this.#credentials.read(
+      CREDENTIAL.integration,
+      CREDENTIAL.key,
+      CREDENTIAL.kind,
+    );
+    return typeof value === "string" ? value : undefined;
   }
 
   /* ------------------------------------------------------------------- list */
