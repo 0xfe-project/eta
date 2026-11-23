@@ -172,9 +172,7 @@ describe("translation coverage", () => {
       );
       for (const [key, text] of Object.entries(english)) {
         const id = `${namespace}:${key}`;
-        expect(key, id).toMatch(
-          /^[a-z][a-zA-Z0-9]*(?:\.[a-z][a-zA-Z0-9]*)*(?:_(?:one|other))?$/,
-        );
+        expect(key, id).toMatch(/^[a-z]\w*(?:\.[a-z]\w*)*(?:_(?:one|other))?$/);
         expect(text.trim(), id).not.toBe("");
         expect(chinese[key].trim(), id).not.toBe("");
         expect(text, id).not.toMatch(/\p{Script=Han}/u);

@@ -3,8 +3,8 @@ import type { KnipConfig } from "knip";
 // Dead code check for the TypeScript workspaces (`turbo run knip`). The Python
 // sidecar only uses package.json for Turbo scripts.
 export default {
-  // System tools the scripts call (uv for the Python sidecar, hdiutil and ditto on macOS).
-  ignoreBinaries: ["uv", "hutch", "nsh", "hdiutil", "ditto"],
+  // System tools the scripts call (uv for the Python sidecar, reg.exe on Windows, hdiutil and ditto on macOS).
+  ignoreBinaries: ["uv", "hutch", "nsh", "hdiutil", "ditto", "reg.exe"],
   // `packages/TOBEREFR` holds plugins parked until the ESM rework is done (TODO.md there).
   ignore: [".eta/**", "**/test/**/fixtures/**", "packages/TOBEREFR/**"],
   // CSS files are part of the module graph: their @imports reference

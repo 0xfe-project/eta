@@ -76,6 +76,7 @@ import { CaptainReview } from "./captain-review";
 import { isCaptainReviewMessage } from "./captain-review-model";
 import { AttachmentChip, PasteChip } from "./composer-block";
 import { ComposerEditor } from "./composer-editor";
+import { ActiveRealmsBar } from "./computer/active-realms-bar";
 import { EmailProposalCard } from "./email-proposal-card";
 import { GroupNotice } from "./group-notice";
 import { HeldMessages } from "./held-messages";
@@ -1097,6 +1098,7 @@ export function ChatPanel({
   onResend,
   onGoal,
   onReload,
+  onReviewApproval,
 }: {
   groupId: string | undefined;
   groupName: string | undefined;
@@ -1148,6 +1150,8 @@ export function ChatPanel({
   onResend: (text: string, agentId?: string) => void;
   /** Ask for the conversation again, when reading it failed. */
   onReload?: () => void;
+  /** Jump to the Pending/Inbox tab when a Computer Use file approval is waiting. */
+  onReviewApproval?: () => void;
   /** The goal of this conversation, moved from the composer's `/goal`. */
   onGoal: (
     action: "set" | "pause" | "resume" | "clear",
@@ -1759,7 +1763,11 @@ export function ChatPanel({
       <footer className="input-area">
         {/* Its own strip above the frame, not a row inside it: the frame is one thing — a notice,
             the box, the toolbar — and a message that has not been sent yet is not part of it. */}
-        <div className="mx-auto w-full max-w-(--chat-width) pb-1.5">
+        <div className="mx-auto flex w-full max-w-(--chat-width) flex-col gap-1.5 pb-1.5">
+          <ActiveRealmsBar
+            conversationId={groupId}
+            onReviewApproval={onReviewApproval}
+          />
           {/* What is waiting behind the run in flight, over the box that would send it, as wide as it. */}
           <HeldMessages
             conversationId={groupId ?? ""}

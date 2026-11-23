@@ -1,0 +1,90 @@
+{
+  "title": "电脑画面",
+  "status": {
+    "agent": "智能体操作中",
+    "user": "由你接管",
+    "paused": "已暂停",
+    "closed": "已关闭"
+  },
+  "kind": {
+    "browser": "浏览器",
+    "app": "应用"
+  },
+  "tier": {
+    "cdp": "独立浏览器",
+    "child_session": "独立会话",
+    "childSession": "独立会话",
+    "hidden_desktop": "后台桌面",
+    "hiddenDesktop": "后台桌面",
+    "sandbox": "沙盒",
+    "unavailable": "不可用"
+  },
+  "action": {
+    "expand": "展开画面",
+    "collapse": "收起画面",
+    "takeover": "接管操作",
+    "release": "交还智能体",
+    "pause": "暂停",
+    "resume": "继续",
+    "stop": "停止",
+    "close": "关闭",
+    "closeAppConfirm": "关闭会结束 {{target}}，未保存的内容会丢失。确定要结束它吗？",
+    "closedAppRunning": "画面已关闭，进程仍在后台运行",
+    "cancel": "取消",
+    "endApp": "结束进程",
+    "promote": "提到前台",
+    "promoteHint": "把这块独立桌面切到你的屏幕上，浮层上的「回主桌面」随时可退回",
+    "demote": "收回后台",
+    "largeView": "大屏查看",
+    "pasteHost": "粘入本机文本",
+    "pasteHostHint": "从本机剪贴板粘入一次（Ctrl+Shift+V）",
+    "pasteEmpty": "本机剪贴板为空或未授权读取",
+    "pasteSent": "已粘入 {{count}} 个字符",
+    "reviewApproval": "去审批",
+    "selectFile": "选择文件"
+  },
+  "hint": {
+    "takeoverActive": "你正在直接操作 · 点击画面输入 · Ctrl+Shift+V 粘入本机文本 · Esc 退出焦点",
+    "pausedOverlay": "已暂停",
+    "activeRealms": "后台运行中",
+    "otherConversation": "来自其他会话，仍在后台运行",
+    "closedSummary": "该独立画面已关闭"
+  },
+  "summary": {
+    "observed": "正在查看 {{target}}",
+    "typed": "已输入 {{count}} 个字符",
+    "userTakeover": "已由你接管",
+    "userClick": "你点击了画面",
+    "userType": "你正在输入",
+    "userMove": "你移动了指针",
+    "handedBack": "已交还智能体",
+    "paused": "已暂停",
+    "resumed": "已恢复智能体操作",
+    "stopped": "已中止当前操作",
+    "closed": "已关闭",
+    "promoted": "已切换到你的屏幕",
+    "demoted": "已收回后台"
+  },
+  "owner": {
+    "agent": "智能体正在操作",
+    "user": "你正在直接操作",
+    "released": "已交还智能体"
+  },
+  "picker": {
+    "idle": "无文件请求",
+    "armed": "已备好文件",
+    "intercepted_silent": "已自动填入文件",
+    "interceptedSilent": "已自动填入文件",
+    "pending_input": "等待你选择文件",
+    "pendingInput": "等待你选择文件",
+    "awaiting_approval": "等待批准文件",
+    "awaitingApproval": "等待批准文件",
+    "denied": "已拒绝访问文件"
+  },
+  "empty": {
+    "title": "暂无活动画面",
+    "description": "智能体打开的浏览器或应用会显示在这里。",
+    "offline": "画面已断开",
+    "waitingFrame": "等待画面…"
+  }
+}

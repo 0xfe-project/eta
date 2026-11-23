@@ -19,6 +19,7 @@ import {
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
+import { ComputerPanel } from "../computer/computer-panel";
 import { CodeView } from "./code-view";
 import { ImageStrip } from "./image-strip";
 import { ToolCard, ToolCardBlock } from "./tool-card";
@@ -32,6 +33,10 @@ const isFields = (value: unknown): value is Fields =>
  * One tool call as a card whose body is drawn for what the call was: an edit as the lines it
  * changed, a command as a terminal, a to-do list as its steps, a screenshot as the picture. A call
  * the page has no shape for shows its arguments and output, as every card used to.
+ *
+ * A Computer Use call also carries the isolated realm it ran in: under the card sits the folded
+ * `<ComputerPanel />`, which shows the live screen and the agent's own cursor when opened, and
+ * nothing but one compact row when closed.
  */
 export function ToolDetailCard({
   block,
@@ -47,22 +52,45 @@ export function ToolDetailCard({
   statusLabel: string;
 }) {
   const shape = shapeOf(block);
+  const realmId = realmIdOf(block);
   return (
-    <ToolCard
-      tool={block.name}
-      summary={summaryOf(block, shape) || undefined}
-      meta={<ToolMeta block={block} shape={shape} />}
-      status={block.status}
-      statusLabel={statusLabel}
-    >
-      <ToolBody
-        block={block}
-        shape={shape}
-        sessionId={sessionId}
-        progress={progress}
-      />
-    </ToolCard>
+    <>
+      <ToolCard
+        tool={block.name}
+        summary={summaryOf(block, shape) || undefined}
+        meta={<ToolMeta block={block} shape={shape} />}
+        status={block.status}
+        statusLabel={statusLabel}
+      >
+        <ToolBody
+          block={block}
+          shape={shape}
+          sessionId={sessionId}
+          progress={progress}
+        />
+      </ToolCard>
+      {realmId === undefined ? null : (
+        <ComputerPanel realmId={realmId} className="mt-1" />
+      )}
+    </>
   );
+}
+
+/** The realm a Computer Use call belongs to, when the call is one. */
+function realmIdOf(block: ToolBlock): string | undefined {
+  // One strip per realm: the call that opened it, not every observation and action under it.
+  if (block.name !== "computer_open") return undefined;
+  const details = block.details;
+  if (typeof details === "object" && details !== null) {
+    const id = (details as { realmId?: unknown }).realmId;
+    if (typeof id === "string" && id.length > 0) return id;
+  }
+  const input = block.input;
+  if (typeof input === "object" && input !== null) {
+    const id = (input as { realmId?: unknown }).realmId;
+    if (typeof id === "string" && id.length > 0) return id;
+  }
+  return undefined;
 }
 
 /** eta's `esmrun` and `esmrunandkeep`: their input is a script, worth reading as it is written. */

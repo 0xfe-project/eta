@@ -9,6 +9,11 @@ export {
   type LinkServer,
   type LinkState,
 } from "./client";
+export {
+  isComputerFrameWithinBudget,
+  mountDaemonComputer,
+  type MountDaemonComputerOptions,
+} from "./computer";
 export { enroll } from "./enroll";
 export {
   fingerprintOf,

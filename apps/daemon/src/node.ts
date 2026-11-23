@@ -25,6 +25,7 @@ import type {
   ToolSpec,
 } from "@eta/client-contracts";
 import type { CallFrame, ServerFrame } from "@eta/client-wire-proto";
+import type { RealmManager } from "@eta/computer";
 import type { KernelTool, PersonaCard, ThinkingLevel } from "@eta/core";
 import type { AskObserver } from "@eta/harness";
 import type { McpManagerOptions } from "@eta/mcp";
@@ -35,6 +36,7 @@ import type {
   SessionsService,
   Socket,
 } from "@eta/server";
+import type { MountDaemonComputerOptions } from "./computer";
 import type { Peer } from "./link/peer";
 import type { ActivePlugin } from "./plugin-launch";
 import { Buffer } from "node:buffer";
@@ -62,6 +64,7 @@ import {
 } from "@eta/server";
 import { LocalTransport } from "@eta/ssh";
 import { Context } from "cordis";
+import { mountDaemonComputer } from "./computer";
 import { relayAuthProviderFor } from "./mcp-auth";
 import { McpHost } from "./mcp-host";
 import { ModelCatalog, remoteModels } from "./models";
@@ -108,6 +111,11 @@ export interface DaemonNodeOptions {
   mcp?: Partial<McpManagerOptions> | undefined;
   /** This machine's directories; a test hands in a Windows filesystem or a scripted git. */
   places?: Places | undefined;
+  /** Optional Computer Use realm manager mounted on this daemon's wire. */
+  computer?:
+    | RealmManager
+    | ({ manager: RealmManager } & MountDaemonComputerOptions)
+    | undefined;
 }
 
 /** What the primary last said about one agent's session in one conversation. */
@@ -339,6 +347,16 @@ export class DaemonNode {
         ctx.effect(() => {
           this.#sessions = ctx.sessions;
           const offs = this.#register(ctx.wire);
+          if (this.#options.computer !== undefined) {
+            if ("manager" in this.#options.computer) {
+              const { manager, ...computerOptions } = this.#options.computer;
+              offs.push(
+                mountDaemonComputer(ctx.wire, manager, computerOptions),
+              );
+            } else {
+              offs.push(mountDaemonComputer(ctx.wire, this.#options.computer));
+            }
+          }
           applied();
           return () => {
             for (const off of offs.splice(0)) off();
@@ -346,6 +364,11 @@ export class DaemonNode {
         }),
     });
     await ready;
+  }
+
+  /** The daemon's wire service, for mounting additional targets or inspecting in tests. */
+  get wire(): WireService {
+    return this.#wire;
   }
 
   /** A link came up: serve the primary on it. */

@@ -14,6 +14,7 @@ import type {
 export * from "./acp";
 export * from "./artifacts";
 export * from "./captain";
+export * from "./computer";
 export type * from "./data";
 export * from "./email";
 export * from "./inbox";

@@ -19,6 +19,7 @@
     "@earendil-works/pi-ai": "0.85.1",
     "@eta/client-contracts": "*",
     "@eta/client-wire-proto": "*",
+    "@eta/computer": "*",
     "@eta/core": "*",
     "@eta/harness": "*",
     "@eta/mcp": "*",

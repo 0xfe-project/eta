@@ -1,0 +1,26 @@
+{
+  "name": "@eta/computer",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Isolated Computer Use realms: browser CDP pipe, Windows child session / hidden desktop, virtual clipboard, and silent file picker broker.",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest --run --passWithNoTests",
+    "typecheck": "bun check",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
+  },
+  "dependencies": {
+    "@eta/client-contracts": "*"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.19",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}

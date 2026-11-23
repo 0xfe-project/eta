@@ -53,6 +53,11 @@ import { CaptainService } from "./captain/service";
 import { CaptainStore } from "./captain/store";
 import { CaptainSupervisor } from "./captain/supervisor";
 import { captainSessionTools } from "./captain/tools";
+import { createRealmDriverFactory } from "./computer/drivers";
+import { ComputerRealmMirrors } from "./computer/mirror";
+import { computerPlugin } from "./computer/plugin";
+import { ComputerService } from "./computer/service";
+import { computerSessionTools } from "./computer/tools";
 import { AttachmentStore } from "./conversations/attachments";
 import { combineRunHooks, Engine, RESTART_TEXT } from "./conversations/engine";
 import { conversationsPlugin } from "./conversations/plugin";
@@ -174,6 +179,8 @@ export interface Product {
   readonly runtimeExtrasFor: (meta: SessionMeta) => Promise<RuntimeExtras>;
   /** MCP on this machine (servers, credentials, sign-ins). */
   readonly mcp: McpService;
+  /** Computer Use realms, capabilities, and grounder routing on this host. */
+  readonly computer: ComputerService;
   /** The product's own HTTP routes (artifact pages, enrolling a machine); nothing for any other path. */
   fetch: (request: Request) => Promise<Response | undefined>;
   /** Where `sessions.*` actions for sessions on other machines go. */
@@ -417,6 +424,7 @@ export function createProduct(options: {
     inbox?: Inbox;
     plugins?: Plugins;
     mcp?: McpService;
+    engine?: Engine;
   } = {};
   const placeStore = new PlaceStore(db);
   const hub = new MachineHub({
@@ -482,6 +490,55 @@ export function createProduct(options: {
     ...(options.places === undefined ? {} : { local: options.places }),
   });
   const mirrors = new SessionMirrors(hub, (id) => machines.get(id)?.name);
+  const computerMirrors = new ComputerRealmMirrors(hub, {
+    nameOf: (id) => machines.get(id)?.name,
+  });
+  const computer = new ComputerService({
+    machineId: machines.primary()?.id ?? "local",
+    mirrors: computerMirrors,
+    models: () => running?.models,
+    onGenerated: generated,
+    changed: () => wire?.pushNow("computer"),
+    // A realm brought to the user's screen has an overlay on it; what the user types there is an
+    // ordinary chat line for the conversation that owns the realm. `engine` is built further down,
+    // and this closure only runs once a realm is promoted.
+    sendChat: async (conversationId, text) => {
+      const engine = later.engine;
+      if (engine === undefined) throw new Error("the host is starting");
+      await engine.send({
+        conversationId,
+        text,
+        mentions: [],
+        mode: "queue",
+      });
+    },
+    latestReply: (conversationId) => {
+      const row = db
+        .query<{ text: string }, [string]>(
+          `SELECT text FROM message
+            WHERE conversation_id = ? AND author = 'agent' AND text != ''
+            ORDER BY seq DESC LIMIT 1`,
+        )
+        .get(conversationId);
+      return row?.text;
+    },
+    // Real realms only: a session must never be told about a synthetic placeholder.
+    driverFactory: createRealmDriverFactory({
+      downloadPath: join(dataDir, "computer", "downloads"),
+      profileBaseDir: join(dataDir, "computer", "profiles"),
+    }),
+    dataDir,
+  });
+  // Apps launched earlier may still be running on their own desktops; give their realms back so the
+  // user can reach them again (the panel's Show on screen) instead of finding them unreachable.
+  // The refresh publishes them once the wire is up, since the plugin already built its first
+  // snapshot before this finished.
+  void computer
+    .restoreScreens()
+    .then(() => {
+      computer.refresh();
+    })
+    .catch(() => 0);
   const secretKey = loadSecretKey(dataDir);
   const emailCredentials = new EmailCredentials(db, secretKey);
   const mcp = new McpService({
@@ -624,6 +681,7 @@ export function createProduct(options: {
       }`,
     runHooks,
   });
+  later.engine = engine;
   // The executors of tasks: a fresh session of the agent that made a task for each run, on the
   // machine of the task's project.
   const transport = (machine: MachineRecord) => transportOn(machine, hub);
@@ -882,6 +940,21 @@ export function createProduct(options: {
         ]),
     ...(web === undefined ? [] : [{ sessionTools: webSessionTools(web) }]),
     { sessionTools: widgetSessionTools() },
+    {
+      sessionTools: computerSessionTools({
+        service: computer,
+        models: () => running?.models,
+        agentName: (agentId) => agents.get(agentId)?.name,
+        taskOfSession: (meta) =>
+          meta.conversationId === undefined
+            ? undefined
+            : taskOfRun(meta.conversationId),
+        machineOfSession: (meta) =>
+          conversations.ofSession(meta.id)?.machineId ??
+          runRows.bySession(meta.id)?.machineId ??
+          machines.primary()?.id,
+      }),
+    },
   ];
   // What the product's tools are, as a daemon's sessions get them (specs the daemon calls back).
   later.hooks = combineSessionHooks(productHooks);
@@ -904,6 +977,7 @@ export function createProduct(options: {
     skillDirsFor: (meta) => plugins.skillDirsFor(meta),
     runtimeExtrasFor: (meta) => plugins.runtimeExtrasFor(meta),
     mcp,
+    computer,
     fetch: async (request) =>
       (await hub.route(request)) ??
       (await mcp.route(request)) ??
@@ -918,6 +992,8 @@ export function createProduct(options: {
       await taskRunner.detach();
       hub.close();
       mirrors.detach();
+      computerMirrors.detach();
+      await computer.closeAll();
       plugins.close();
       email.stop();
       await mcp.close();
@@ -940,6 +1016,7 @@ export function createProduct(options: {
             ].map((session) => ({ session, machineId: machine.id })),
           ),
       );
+      computerMirrors.attach(server.wire);
       const pending = new Set([
         "agents",
         "machines",
@@ -955,6 +1032,7 @@ export function createProduct(options: {
         "email",
         "plugins",
         "mcp",
+        "computer",
         ...(options.acp === undefined ? [] : ["acp"]),
         ...(memory === undefined ? [] : ["memory"]),
       ]);
@@ -1143,6 +1221,10 @@ export function createProduct(options: {
         ),
       );
       server.mount("mcp", mcpPlugin({ service: mcp }, applied("mcp")));
+      server.mount(
+        "computer",
+        computerPlugin({ service: computer }, applied("computer")),
+      );
       if (options.acp !== undefined)
         server.mount(
           "acp",

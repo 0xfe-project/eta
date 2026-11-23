@@ -316,6 +316,10 @@ export function Workspace({
                 );
               }}
               onReload={conversation.loadOlder}
+              onReviewApproval={() => {
+                onViewChange("inbox");
+                showPanel();
+              }}
               onGoal={(action, objective) =>
                 // Through the session, like the panel's own buttons: one writer for a goal means
                 // the two can never show different ones.

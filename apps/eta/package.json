@@ -22,6 +22,7 @@
     "@eta/client-contracts": "*",
     "@eta/client-wire-proto": "*",
     "@eta/compaction": "*",
+    "@eta/computer": "*",
     "@eta/core": "*",
     "@eta/daemon": "*",
     "@eta/harness": "*",

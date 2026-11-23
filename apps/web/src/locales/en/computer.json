@@ -1,0 +1,90 @@
+{
+  "title": "Computer",
+  "status": {
+    "agent": "Agent working",
+    "user": "In your hands",
+    "paused": "Paused",
+    "closed": "Closed"
+  },
+  "kind": {
+    "browser": "Browser",
+    "app": "App"
+  },
+  "tier": {
+    "cdp": "Isolated browser",
+    "child_session": "Separate session",
+    "childSession": "Separate session",
+    "hidden_desktop": "Background desktop",
+    "hiddenDesktop": "Background desktop",
+    "sandbox": "Sandbox",
+    "unavailable": "Unavailable"
+  },
+  "action": {
+    "expand": "Expand view",
+    "collapse": "Collapse view",
+    "takeover": "Take over",
+    "release": "Hand back",
+    "pause": "Pause",
+    "resume": "Resume",
+    "stop": "Stop",
+    "close": "Close",
+    "closeAppConfirm": "Closing ends {{target}}. Anything unsaved in it will be lost. End it?",
+    "closedAppRunning": "Screen closed; the app is still running",
+    "cancel": "Cancel",
+    "endApp": "End it",
+    "promote": "Show on screen",
+    "promoteHint": "Put this desktop on your screen; the overlay's “Back to main desktop” brings you back",
+    "demote": "Back to background",
+    "largeView": "Large view",
+    "pasteHost": "Paste text",
+    "pasteHostHint": "Paste once from your clipboard (Ctrl+Shift+V)",
+    "pasteEmpty": "Clipboard is empty or permission was denied",
+    "pasteSent": "Pasted {{count}} characters",
+    "reviewApproval": "Review",
+    "selectFile": "Select file"
+  },
+  "hint": {
+    "takeoverActive": "You are in control · Click to focus & type · Ctrl+Shift+V to paste · Esc to blur",
+    "pausedOverlay": "Paused",
+    "activeRealms": "Active screens",
+    "otherConversation": "From another conversation, still running",
+    "closedSummary": "This screen has closed"
+  },
+  "summary": {
+    "observed": "Viewing {{target}}",
+    "typed": "Typed {{count}} characters",
+    "userTakeover": "In your hands",
+    "userClick": "You clicked the screen",
+    "userType": "You typed text",
+    "userMove": "You moved the pointer",
+    "handedBack": "Handed back to agent",
+    "paused": "Paused",
+    "resumed": "Agent resumed",
+    "stopped": "Interrupted current step",
+    "closed": "Closed",
+    "promoted": "Shown on your screen",
+    "demoted": "Returned to background"
+  },
+  "owner": {
+    "agent": "Agent is operating",
+    "user": "You are operating",
+    "released": "Handed back to agent"
+  },
+  "picker": {
+    "idle": "No file request",
+    "armed": "File ready to attach",
+    "intercepted_silent": "File attached automatically",
+    "interceptedSilent": "File attached automatically",
+    "pending_input": "Waiting for you to pick a file",
+    "pendingInput": "Waiting for you to pick a file",
+    "awaiting_approval": "Waiting for file approval",
+    "awaitingApproval": "Waiting for file approval",
+    "denied": "File access declined"
+  },
+  "empty": {
+    "title": "No active screen",
+    "description": "Screens opened by agents show up here.",
+    "offline": "Screen disconnected",
+    "waitingFrame": "Waiting for screen…"
+  }
+}

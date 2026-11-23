@@ -8,7 +8,8 @@ Browser (apps/web)
    ▼
 Main node  apps/eta                              ← the only process; SQLite + files in one data directory
    ├─ Upstream floor  packages/eta-server: sessions, providers, settings, personas
-   ├─ Product plugins  agents machines projects conversations inbox usage tasks artifacts routines [memory] [llm]
+   ├─ Product plugins  agents machines projects conversations inbox usage tasks artifacts routines computer [memory] [llm]
+   ├─ Computer Use   apps/eta/src/computer + packages/eta-computer: isolated browser CDP & Windows realms (see [Computer Use](computer-use.md))
    ├─ LLM gateway  apps/eta/src/llm: CLIProxyAPI child process (@cpajs/cpa) with accounts, directories, and quotas (subscription accounts, Gemini key)
    ├─ Web reading    apps/eta/src/web: web_fetch / web_search, calls the sex library in-process; the managed SearXNG is a child process (see [Web reading and search](web.md))
    ├─ Local sessions  harness (packages/eta-core, eta-harness…) runs directly in-process
@@ -35,7 +36,7 @@ There are no other services: no control plane, message queue, container orchestr
 apps/
   eta/        host: entry main.ts, host.ts (assembly), product.ts (product plugins), access.ts (access control),
               db.ts + migrations/ (SQLite), plus agents, machines, projects, conversations, inbox, usage,
-              memory, tasks, artifacts, routines, plugins, and web, one directory each
+              memory, tasks, artifacts, routines, plugins, computer, and web, one directory each
   daemon/     eta-daemon：setup / run / install-service
   web/        React UI, reads and writes over WebSocket
   tui/        terminal interface (React + Ink), reads and writes over the same WebSocket, see [TUI](tui.md)
@@ -46,6 +47,7 @@ packages/
   eta-ssh             transport: run `sh` locally or over SSH (task worktrees, remote machines)
   eta-plugin-akhook   declarative rules (akhook configuration) and streaming rules, see [akhook](akhook.md)
   eta-mcp             MCP library: proxy tools, lazy connections, metadata cache, direct tools, OAuth, see [MCP](mcp.md)
+  eta-computer        isolated Computer Use realms: browser CDP pipe, Windows child session / hidden desktop, silent file broker, see [Computer Use](computer-use.md)
   client-wire-proto, client-contracts   wire frames and product target types (shared by Web and host)
 deploy/       Dockerfile、memory.Dockerfile、compose.yaml
 ```

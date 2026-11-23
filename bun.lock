@@ -24,6 +24,7 @@
         "@earendil-works/pi-ai": "0.85.1",
         "@eta/client-contracts": "*",
         "@eta/client-wire-proto": "*",
+        "@eta/computer": "*",
         "@eta/core": "*",
         "@eta/harness": "*",
         "@eta/mcp": "*",
@@ -65,6 +66,7 @@
         "@eta/client-contracts": "*",
         "@eta/client-wire-proto": "*",
         "@eta/compaction": "*",
+        "@eta/computer": "*",
         "@eta/core": "*",
         "@eta/daemon": "*",
         "@eta/harness": "*",
@@ -231,6 +233,18 @@
       },
       "devDependencies": {
         "@earendil-works/pi-ai": "0.85.1",
+        "@types/node": "22.19.19",
+        "typescript": "5.9.3",
+        "vitest": "4.1.9",
+      },
+    },
+    "packages/eta-computer": {
+      "name": "@eta/computer",
+      "version": "0.1.0",
+      "dependencies": {
+        "@eta/client-contracts": "*",
+      },
+      "devDependencies": {
         "@types/node": "22.19.19",
         "typescript": "5.9.3",
         "vitest": "4.1.9",
@@ -700,6 +714,8 @@
     "@eta/client-wire-proto": ["@eta/client-wire-proto@workspace:packages/client-wire-proto"],
 
     "@eta/compaction": ["@eta/compaction@workspace:packages/eta-compaction"],
+
+    "@eta/computer": ["@eta/computer@workspace:packages/eta-computer"],
 
     "@eta/core": ["@eta/core@workspace:packages/eta-core"],
 
