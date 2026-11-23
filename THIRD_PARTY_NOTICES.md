@@ -8,23 +8,27 @@ running host serves it at `/THIRD_PARTY_NOTICES.md`; `apps/eta/scripts/notices.t
 
 ## Eta Sans (font)
 
-`apps/client/assets/AKRDWGSCNFM-Regular.woff2`, the default interface and monospace face of the client
-(`apps/client/src/components/theme.ts`), and the same file as `apps/web/public/AKRDWGSCNFM-Regular.woff2`,
-declared as "Eta Sans" in `apps/web/index.html`. It is the
-[AKR DWG SC NFM 1.1.0 release](https://github.com/AkaraChen/font/releases/tag/v1.1.0) and is in the client
-builds (web, desktop, phone) and in every compiled host. It is **not** covered by eta's MIT License. The
-release's own notes and the texts of both sources are next to it in `apps/client/assets/`
-(`AKRDWGSCNFM-README.txt`, `AKRDWGSCNFM-OFL-CascadiaCode.txt`, `AKRDWGSCNFM-Alibaba-PuHuiTi.txt`).
+Three faces of one family, the default interface and monospace face of the client
+(`apps/client/src/components/theme.ts`): `apps/client/assets/AKRDWGSCNFM-Light.woff2` (weight 300),
+`apps/client/assets/AKRDWGSCNFM-Regular.woff2` (400) and `apps/client/assets/AKRDWGSCNFM-Bold.woff2` (700).
+The Regular file is also `apps/web/public/AKRDWGSCNFM-Regular.woff2`, declared as "Eta Sans" in
+`apps/web/index.html`. They are the WOFF2 files of the
+[AKR DWG SC NFM 1.1.0 release](https://github.com/AkaraChen/font/releases/tag/v1.1.0), unchanged, and are in
+the client builds (web, desktop, phone) and in every compiled host. They are **not** covered by eta's MIT
+License. The release's own notes and the texts of both sources are next to them in `apps/client/assets/`
+(`AKRDWGSCNFM-README.txt`, `AKRDWGSCNFM-OFL-CascadiaCode.txt`, `AKRDWGSCNFM-Alibaba-PuHuiTi.txt`); they cover
+all three faces.
 
-The file is a merge of two fonts, named "AKR DWG SC NFM" inside it:
+Each file is a merge of two fonts, named "AKR DWG SC NFM" inside it (the CJK of Light, Regular and Bold
+comes from PuHuiTi Light, Regular and SemiBold):
 
 | Source                                                                                                                                                      | Copyright                                                    | License                                                                                                 |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
 | CaskaydiaCove Nerd Font Mono: [Cascadia Code](https://github.com/microsoft/cascadia-code), patched by [Nerd Fonts](https://github.com/ryanoasis/nerd-fonts) | Microsoft Corporation; the icon sets belong to their authors | [SIL Open Font License 1.1](https://openfontlicense.org); Nerd Fonts' icon sets have their own licenses |
 | [Alibaba PuHuiTi 3.0](https://fonts.alibabagroup.com)                                                                                                       | Alibaba Group                                                | Alibaba's own terms for the font, not an open source license                                            |
 
-The license text inside the file came along with the merge and does not describe it. The merged file
-is not a release of either source. If you redistribute it, check both sets of terms first.
+The license text inside each file came along with the merge and does not describe it. The merged files
+are not a release of either source. If you redistribute them, check both sets of terms first.
 
 ## Inter (font)
 

@@ -1,6 +1,8 @@
 import type { RunBlock } from "@eta/client-contracts";
 import type { WebViewRef } from "nsh";
 import { cleanup, colorScheme, effect, signal, View, WebView } from "nsh";
+import dwgBoldFile from "../../../../assets/AKRDWGSCNFM-Bold.woff2?url";
+import dwgLightFile from "../../../../assets/AKRDWGSCNFM-Light.woff2?url";
 import dwgFile from "../../../../assets/AKRDWGSCNFM-Regular.woff2?url";
 import {
   appFont,
@@ -17,24 +19,34 @@ const MAX_CODE = 60_000;
 const MAX_HEIGHT = 1_200;
 const STREAM_INTERVAL = 120;
 
-let appFontData: Promise<string> | undefined;
+/** The shipped faces by weight, as the app registers them (`theme.ts`). */
+const appFaces = [
+  { weight: 300, file: dwgLightFile },
+  { weight: 400, file: dwgFile },
+  { weight: 700, file: dwgBoldFile },
+];
+
+const appFontData = new Map<string, Promise<string>>();
 
 /**
- * The shipped face as base64, read once for every widget. The frame may load fonts from `data:`
- * only, so the face goes in as bytes, as the web app's widget shell takes it: a widget drawn in a
- * system face would be a second typeface in the product.
+ * A shipped face as base64, read once for every widget. The frame may load fonts from `data:`
+ * only, so the faces go in as bytes, as the web app's widget shell takes them: a widget drawn in a
+ * system face would be a second typeface in the product, and one with a single face would draw its
+ * bold text as a synthesized bold.
  */
-function appFontBytes() {
-  appFontData ??= fetch(dwgFile)
-    .then((response) => {
-      if (!response.ok) throw new Error(`font: HTTP ${response.status}`);
-      return response.arrayBuffer();
-    })
-    .then((data) => Buffer.from(data).toString("base64"));
-  appFontData.catch(() => {
-    appFontData = undefined;
-  });
-  return appFontData;
+function appFontBytes(file: string) {
+  let data = appFontData.get(file);
+  if (!data) {
+    data = fetch(file)
+      .then((response) => {
+        if (!response.ok) throw new Error(`font: HTTP ${response.status}`);
+        return response.arrayBuffer();
+      })
+      .then((bytes) => Buffer.from(bytes).toString("base64"));
+    data.catch(() => appFontData.delete(file));
+    appFontData.set(file, data);
+  }
+  return data;
 }
 
 export function widgetFrom(block: RunBlock) {
@@ -158,12 +170,14 @@ export function Widget(props: {
       clearTimeout(startup);
       problem.set(false);
       ready.set(true);
-      appFontBytes().then(
-        (data) => {
-          if (!disposed) post({ kind: "font", family: appFont, data });
-        },
-        (error: unknown) => console.error("eta widget: font", error),
-      );
+      for (const { weight, file } of appFaces)
+        appFontBytes(file).then(
+          (data) => {
+            if (!disposed)
+              post({ kind: "font", family: appFont, weight, data });
+          },
+          (error: unknown) => console.error("eta widget: font", error),
+        );
     } else if (
       message.kind === "height" &&
       typeof message.height === "number" &&
