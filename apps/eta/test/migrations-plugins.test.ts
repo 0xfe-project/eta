@@ -148,7 +148,7 @@ describe("the plugin tables' migration", () => {
     ).toEqual([
       { plugin: "p", server: "s", name: "x-token", format: "bearer" },
     ]);
-    // The old rows stay; the merged id is added next to them.
+    // The old rows stay; the merged id is added next to them (it sorts among them by name).
     expect(
       db
         .query<{ id: string }, []>(
@@ -156,7 +156,7 @@ describe("the plugin tables' migration", () => {
         )
         .all()
         .map((row) => row.id),
-    ).toEqual([...OLD_IDS.map(([id]) => id), "0061-plugins"]);
+    ).toEqual([...OLD_IDS.map(([id]) => id), "0061-plugins"].sort());
     // And a second start has nothing left to do.
     expect(applyMigrations(db, shipped())).toEqual([]);
   });

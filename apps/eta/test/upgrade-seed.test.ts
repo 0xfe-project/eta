@@ -138,13 +138,7 @@ describe("the seeds a release upgrades", () => {
       "0058-agent-avatar",
       "0059-pending-session-settings",
       "0060-interaction-context",
-      "0061-plugin-disabled",
-      "0062-plugin-headers",
-      "0063-plugin-env",
-      "0064-market-cache",
-      "0065-plugin-icon",
-      "0066-plugin-token-header",
-      "0067-cursor-credential",
+      "0061-plugins",
     ]);
   });
 
