@@ -21,7 +21,7 @@ import {
   textFaces,
   textStyle,
 } from "../../components";
-import { hint } from "../../components/context-ring";
+import { hint } from "../../components/controls";
 import { CloseButton } from "../../components/navigation-buttons";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";

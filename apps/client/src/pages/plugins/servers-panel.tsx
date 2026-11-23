@@ -13,7 +13,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
-import { hint } from "../../components/context-ring";
+import { hint } from "../../components/controls";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { EnvEditor } from "./env-editor";

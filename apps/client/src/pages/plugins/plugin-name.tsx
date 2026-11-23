@@ -1,7 +1,7 @@
 import type { PluginView } from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, Label, row } from "../../components";
-import { hint } from "../../components/context-ring";
+import { hint } from "../../components/controls";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
