@@ -903,7 +903,12 @@ describe("the source without a key", () => {
 });
 
 describe("disconnecting a toolkit", () => {
-  type Held = { id: string; user: string; slug: string; status: string };
+  interface Held {
+    id: string;
+    user: string;
+    slug: string;
+    status: string;
+  }
   /** A fake of Composio that holds accounts, lists them (by user, unless told to ignore it) and deletes them. */
   function hold(accounts: Held[], options: { ignoreUsers?: boolean } = {}) {
     const deleted: string[] = [];
