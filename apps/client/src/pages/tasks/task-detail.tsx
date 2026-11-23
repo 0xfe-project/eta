@@ -22,6 +22,7 @@ import { TaskDetailDialogs } from "./task-detail-dialogs";
 import { createTaskDetailState } from "./task-detail-state";
 import { TaskCommentBox, TaskReviewActions } from "./task-fields";
 import { TaskOverview } from "./task-overview";
+import { TaskTopBar } from "./top-bar";
 
 export function TaskDetail(props: {
   id: string;
@@ -153,60 +154,60 @@ export function TaskDetail(props: {
           </Modal>
         )}
       </If>
-      <Header
-        title={
-          phone() || props.docked
-            ? task()
-              ? uiText("task", { number: task()?.number })
-              : "Task"
-            : (task()?.title ?? "Task")
-        }
-        layout={props.layout}
-        onBack={paned() ? undefined : props.onClose}
-        inset={props.docked ? 8 : paned() ? 16 : undefined}
-        end={paned() ? 10 : undefined}
-        titleVariant={
-          props.layout === "desktop" && !props.docked ? "small" : undefined
-        }
-        backIcon={
-          props.layout === "desktop" && !props.docked ? "arrowLeft" : undefined
-        }
-        backIconSize={
-          props.layout === "desktop" && !props.docked ? 14 : undefined
-        }
-      >
-        <View style={{ flex: 1 }} />
-        <If when={task()}>
-          <If
-            when={!phone() && task()?.children?.length && (!paned() || plan())}
+      <If
+        when={phone()}
+        else={
+          <Header
+            title={
+              props.docked
+                ? task()
+                  ? uiText("task", { number: task()?.number })
+                  : "Task"
+                : (task()?.title ?? "Task")
+            }
+            layout={props.layout}
+            onBack={paned() ? undefined : props.onClose}
+            inset={props.docked ? 8 : paned() ? 16 : undefined}
+            end={paned() ? 10 : undefined}
+            titleVariant={
+              props.layout === "desktop" && !props.docked ? "small" : undefined
+            }
+            backIcon={
+              props.layout === "desktop" && !props.docked
+                ? "arrowLeft"
+                : undefined
+            }
+            backIconSize={
+              props.layout === "desktop" && !props.docked ? 14 : undefined
+            }
           >
-            <Segmented
-              options={[
-                { value: "overview", label: uiText("overview") },
-                { value: "plan", label: uiText("plan") },
-              ]}
-              value={plan() ? "plan" : "overview"}
-              height={paned() ? 20 : 22}
-              labelVariant="caption"
-              boldActive={!paned()}
-              paddingHorizontal={paned() ? 8 : undefined}
-              strong={paned()}
-              onChange={(value) => plan.set(value === "plan")}
-            />
-            <View style={{ width: paned() ? 0 : 8 }} />
-          </If>
-          <If when={paned()}>
-            <Button
-              label={uiText("panel")}
-              icon="sidebar"
-              iconSize={14}
-              labelVariant="caption"
-              onPress={() => panel.set(true)}
-            />
-          </If>
-          <If
-            when={phone()}
-            else={
+            <View style={{ flex: 1 }} />
+            <If when={task()}>
+              <If when={task()?.children?.length && (!paned() || plan())}>
+                <Segmented
+                  options={[
+                    { value: "overview", label: uiText("overview") },
+                    { value: "plan", label: uiText("plan") },
+                  ]}
+                  value={plan() ? "plan" : "overview"}
+                  height={paned() ? 20 : 22}
+                  labelVariant="caption"
+                  boldActive={!paned()}
+                  paddingHorizontal={paned() ? 8 : undefined}
+                  strong={paned()}
+                  onChange={(value) => plan.set(value === "plan")}
+                />
+                <View style={{ width: paned() ? 0 : 8 }} />
+              </If>
+              <If when={paned()}>
+                <Button
+                  label={uiText("panel")}
+                  icon="sidebar"
+                  iconSize={14}
+                  labelVariant="caption"
+                  onPress={() => panel.set(true)}
+                />
+              </If>
               <TaskMenu width={172} align="end" trigger={<MoreTrigger />}>
                 <Each of={actions()} key={(action) => action.label}>
                   {(action) => (
@@ -218,12 +219,22 @@ export function TaskDetail(props: {
                   )}
                 </Each>
               </TaskMenu>
-            }
-          >
+            </If>
+          </Header>
+        }
+      >
+        <TaskTopBar
+          number={task()?.number}
+          inset={16}
+          touch
+          background="canvas"
+          onBack={props.onClose}
+        >
+          <If when={task()}>
             <MoreTrigger onPress={() => more.set(true)} />
           </If>
-        </If>
-      </Header>
+        </TaskTopBar>
+      </If>
       <If
         when={task()}
         else={<TaskDetailSkeleton label={uiText("loadingTask")} />}

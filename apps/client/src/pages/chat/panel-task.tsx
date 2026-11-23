@@ -25,6 +25,7 @@ import { StatusSelect } from "../tasks/status-select";
 import { TaskDetailDialogs } from "../tasks/task-detail-dialogs";
 import { createTaskDetailState } from "../tasks/task-detail-state";
 import { TaskCommentBox, TaskCommentHint } from "../tasks/task-fields";
+import { TaskTopBar } from "../tasks/top-bar";
 import { messageTime } from "./message-time";
 
 /** How long a goal shows before "Expand full text". */
@@ -72,36 +73,26 @@ export function PanelTask(props: {
           <View
             style={{
               ...grow,
-              paddingVertical: 11,
+              paddingBottom: 11,
               backgroundColor: c().surface,
             }}
           >
-            <View
-              style={{
-                ...row,
-                height: 26,
-                gap: 8,
-                flexShrink: 0,
-                paddingHorizontal: inset,
-              }}
+            <TaskTopBar
+              number={item().number}
+              inset={inset}
+              onBack={props.onClose}
             >
-              <View
-                role="button"
-                accessibilityLabel={uiText("backToTasks")}
-                onPress={props.onClose}
-                style={{ cursor: "pointer" }}
-              >
-                <Label variant="small">{`← ${uiText("tasks2")}`}</Label>
-              </View>
-              <Label variant="small" tone="muted" style={{ flex: 1 }}>
-                {`#${item().number}`}
-              </Label>
               <If when={!item().children?.length}>
                 <StatusSelect item={item()} state={state} align="end" />
               </If>
               <ActionMenu
                 label={uiText("taskActions")}
-                triggerStyle={{ minWidth: 14, paddingHorizontal: 0 }}
+                triggerStyle={{
+                  minWidth: 28,
+                  width: 28,
+                  height: 28,
+                  paddingHorizontal: 0,
+                }}
               >
                 <ActionItem
                   label={uiText("edit")}
@@ -124,13 +115,13 @@ export function PanelTask(props: {
                   }}
                 />
               </ActionMenu>
-            </View>
+            </TaskTopBar>
             <SmoothScroll style={grow} scrollbar={false}>
               <Label
                 variant="subtitle"
                 weight={700}
                 style={{
-                  paddingTop: 4,
+                  paddingTop: 12,
                   paddingBottom: 7,
                   paddingHorizontal: inset,
                 }}
