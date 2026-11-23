@@ -88,7 +88,7 @@ for (const [name, width, height] of sizes)
     expect(app.shows("label:Queued message: Queued words")).toBe(false);
   });
 
-test("the desktop panel remembers both positions and keeps pending work visible when folded", async () => {
+test("the desktop panel remembers both positions and never marks its button with pending work", async () => {
   const options = {
     width: 1440,
     height: 900,
@@ -97,16 +97,17 @@ test("the desktop panel remembers both positions and keeps pending work visible 
   };
   const app = await open(fixture, options);
   expect(app.shows("label:Resize panel")).toBe(true);
-  await app.press("label:Panel");
+  expect(app.shows("id:panel-attention")).toBe(false);
+  await app.press("label:Hide panel");
   expect(app.shows("label:Context")).toBe(false);
   expect(app.shows("label:Resize panel")).toBe(false);
-  expect(app.shows("id:panel-attention")).toBe(true);
+  expect(app.shows("id:panel-attention")).toBe(false);
   const folded = app.storage();
   app.dispose();
 
   const again = await open(fixture, { ...options, storage: folded });
   await again.waitUntil(() => !again.shows("label:Resize panel"));
-  await again.press("label:Panel");
+  await again.press("label:Show panel");
   expect(again.shows("label:Context")).toBe(true);
   const expanded = again.storage();
   expect(expanded["eta.panel.open"]).toBe("true");
@@ -118,6 +119,17 @@ test("the desktop panel remembers both positions and keeps pending work visible 
   });
   expect(last.shows("label:Resize panel")).toBe(true);
   expect(last.shows("id:panel-attention")).toBe(false);
+});
+
+test("the tablet panel button still marks pending work, since its panel is in a drawer", async () => {
+  const app = await open(fixture, {
+    width: 834,
+    height: 1112,
+    locale: "en-US",
+    urlScheme: "eta://fixture/pending",
+  });
+  expect(app.shows("label:Panel")).toBe(true);
+  expect(app.shows("id:panel-attention")).toBe(true);
 });
 
 for (const [width, button] of [

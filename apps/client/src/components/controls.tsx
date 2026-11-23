@@ -47,6 +47,13 @@ export function Button(props: {
    * "muted" for a filter trigger that reads as secondary. */
   labelTone?: keyof typeof light;
   dimDisabled?: boolean;
+  /** The colour the label and icon take while the pointer is over the button,
+   * such as "ink" for a muted ghost icon that darkens on hover. */
+  hoverTone?: keyof typeof light;
+  /** Said as a dark hint on hover; an icon-only button's way of naming itself. */
+  tooltip?: string;
+  /** Whether what the button opens is open, for a screen reader. */
+  expanded?: boolean;
   /** The key that does the same, after the label (`⌘⏎` on a form's button). */
   shortcut?: string;
   style?: ViewStyle;
@@ -59,12 +66,15 @@ export function Button(props: {
   );
   const primary = () => props.tone === "primary";
   const ghost = () => props.tone === "ghost";
+  const hovered = signal(false);
   const textTone = () =>
     primary()
       ? "buttonInk"
       : props.tone === "danger"
         ? "red"
-        : (props.labelTone ?? "ink");
+        : hovered() && props.hoverTone
+          ? props.hoverTone
+          : (props.labelTone ?? "ink");
   return (
     <View
       {...picker}
@@ -77,7 +87,11 @@ export function Button(props: {
       accessibilityState={{
         disabled: props.disabled ?? false,
         selected: props.selected,
+        expanded: props.expanded,
       }}
+      tooltip={hint(props.tooltip, color)}
+      onMouseEnter={() => hovered.set(canHover)}
+      onMouseLeave={() => hovered.set(false)}
       onPress={() => {
         if (!props.disabled) props.onPress();
       }}
@@ -146,6 +160,23 @@ export function Button(props: {
       </If>
     </View>
   );
+}
+
+/** A hover hint drawn as a small dark label (a bare string tooltip draws nothing on the web). */
+export function hint(text: string | undefined, c: ReturnType<typeof colors>) {
+  return text ? (
+    <View
+      style={{
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        backgroundColor: c().ink,
+      }}
+    >
+      <Label variant="small" tone="canvas">
+        {text}
+      </Label>
+    </View>
+  ) : undefined;
 }
 
 type FieldInputProps = Pick<
