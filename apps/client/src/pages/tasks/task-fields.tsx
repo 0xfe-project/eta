@@ -6,14 +6,11 @@ import { View } from "nsh";
 import { Button, colors, Icon, Label, row, textFaces } from "../../components";
 import { CheckControl } from "../../components/check-control";
 import {
-  createEtaEditor,
+  commentText,
   draft,
-  EtaEditor,
   limit,
   mention,
   openDocDraft,
-  pasteBlock,
-  plainText,
   serialize,
   submitKeys,
 } from "../../components/eta-editor";
@@ -27,7 +24,7 @@ import { statusName, TaskGlyph } from "./status";
 import { StatusSelect } from "./status-select";
 
 /**
- * The comment box: the same editor as the chat's (`EtaEditor`), with `@` for the task's agents,
+ * The comment box: the same editor as the chat's (`commentText.Editor`), with `@` for the task's agents,
  * long pastes folded and a draft kept per task. No files: a task's comment carries text only.
  */
 function useCommentEditor(state: TaskDetailState, origin: string | undefined) {
@@ -56,13 +53,11 @@ function useCommentEditor(state: TaskDetailState, origin: string | undefined) {
       name: mentionLabel(member, ordered),
     }));
   };
-  const editor = createEtaEditor({
+  const editor = commentText.createEditor({
     doc: store.doc(),
     plugins: [
-      plainText(),
       submitKeys({ onSubmit: () => void submit() }),
       mention({ members, describe: () => uiText("askForAReply") }),
-      pasteBlock(),
       draft({ save: store.save }),
       limits,
       out,
@@ -148,7 +143,7 @@ function DesktopCommentBox(props: {
           paddingRight: bare() ? 10 : 4,
         }}
       >
-        <EtaEditor
+        <commentText.Editor
           editor={editor}
           label={uiText("comment")}
           placeholder={uiText("replyARunningTaskReadsIt")}
@@ -242,7 +237,7 @@ function PhoneCommentBox(props: {
           {uiText("composerTooLong")}
         </Label>
       </If>
-      <EtaEditor
+      <commentText.Editor
         editor={editor}
         label={uiText("comment")}
         placeholder={uiText("replyARunningTaskReadsIt")}

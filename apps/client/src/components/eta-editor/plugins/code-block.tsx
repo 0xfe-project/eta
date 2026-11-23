@@ -1,5 +1,8 @@
 import type { DocNode } from "@eta/client-contracts/composer-doc";
-import type { EtaEditorHandle, EtaPlugin, TextTheme } from "../editor";
+import type { TextViewCodeBlock } from "nsh/base";
+import type { EtaEditorHandle } from "../editor";
+import type { TextTheme } from "../look";
+import type { TextPlugin, ViewContext } from "../plugin";
 import {
   lineCount,
   normalizeNewlines,
@@ -14,6 +17,7 @@ import {
 import { uiText } from "../../../i18n";
 import { canHover } from "../../menu";
 import { colors, row, textFaces } from "../../theme";
+import { splitText } from "../look";
 import { blocksOf } from "../positions";
 import { oneStep } from "../step";
 
@@ -38,56 +42,73 @@ const codeOf = (node: DocNode) =>
  * (with ⌘⏎ to leave the block while editing; Copy where the text is only shown). Code copied
  * from an editor or an IDE pastes as a code block (`classifyClipboard`'s `code`); over
  * `FOLD_LINES` lines it comes folded, and "Show all N lines" under it opens it. Folding is the
- * editor's: the Markdown has the whole block.
+ * editor's: the Markdown has the whole block. Shown, a code block is the same box with its language
+ * and Copy.
  */
-export function codeBlock(): EtaPlugin {
+export function codeBlock(): TextPlugin {
   return {
     name: "codeBlock",
-    extensions: [
-      defineExtension({
-        name: "codeFold",
-        addGlobalAttributes: () => [
-          {
-            types: ["codeBlock"],
-            attributes: { folded: { default: false, keepOnSplit: false } },
-          },
-        ],
-      }),
-    ],
-    paste(action, editor) {
-      if (action.kind !== "code") return false;
-      const text = normalizeNewlines(action.text).replace(/\n+$/, "");
-      const session = editor.session;
-      const here = session.resolve(session.selection.head ?? 0) as {
-        start: number;
-        end: number;
-        parent: string;
-      };
-      // Already in a code block: the code is its text.
-      if (here.parent === "codeBlock") {
-        session.run(oneStep(insertContent(text)));
-        return true;
-      }
-      const block = {
-        type: "codeBlock",
-        attrs: { language: null, folded: lineCount(text) > FOLD_LINES },
-        content: [{ type: "text", text }],
-      };
-      // The block goes in place of an empty line, else after the line the caret is in, with a line
-      // after it to go on writing.
-      const empty = here.start === here.end;
-      session.run(
-        oneStep(
-          insertContentAt(
-            empty ? { from: here.start - 1, to: here.end + 1 } : here.end + 1,
-            [block, { type: "paragraph" }],
-          ),
-        ),
-      );
-      return true;
+    view: {
+      renderCodeBlock: (code, view) => <CodeView code={code} view={view} />,
     },
-    styles: { common: foldStyles },
-    contentLayer: (editor) => <CodeBlockChrome editor={editor} />,
+    styles: {
+      editor: (theme) => ({ nodes: foldStyles(theme) }),
+      // The view's box is `CodeView`'s own.
+      view: () => ({
+        codeBlock: {
+          borderWidth: 0,
+          padding: 0,
+          marginVertical: 0,
+          backgroundColor: "transparent",
+        },
+      }),
+    },
+    editor: {
+      extensions: [
+        defineExtension({
+          name: "codeFold",
+          addGlobalAttributes: () => [
+            {
+              types: ["codeBlock"],
+              attributes: { folded: { default: false, keepOnSplit: false } },
+            },
+          ],
+        }),
+      ],
+      paste(action, editor) {
+        if (action.kind !== "code") return false;
+        const text = normalizeNewlines(action.text).replace(/\n+$/, "");
+        const session = editor.session;
+        const here = session.resolve(session.selection.head ?? 0) as {
+          start: number;
+          end: number;
+          parent: string;
+        };
+        // Already in a code block: the code is its text.
+        if (here.parent === "codeBlock") {
+          session.run(oneStep(insertContent(text)));
+          return true;
+        }
+        const block = {
+          type: "codeBlock",
+          attrs: { language: null, folded: lineCount(text) > FOLD_LINES },
+          content: [{ type: "text", text }],
+        };
+        // The block goes in place of an empty line, else after the line the caret is in, with a line
+        // after it to go on writing.
+        const empty = here.start === here.end;
+        session.run(
+          oneStep(
+            insertContentAt(
+              empty ? { from: here.start - 1, to: here.end + 1 } : here.end + 1,
+              [block, { type: "paragraph" }],
+            ),
+          ),
+        );
+        return true;
+      },
+      contentLayer: (editor) => <CodeBlockChrome editor={editor} />,
+    },
   };
 }
 
@@ -98,18 +119,79 @@ const headHeight = (theme: { face: TextTheme["face"] }) =>
 function foldStyles(theme: TextTheme) {
   const small = theme.face("small");
   return {
-    nodes: {
-      // Room for the head row above the code.
-      codeBlock: { paddingTop: headHeight(theme) + 8 },
-      // The fold: FOLD_LINES lines and the padding, the rest under "Show all".
-      "codeBlock[folded=true]": {
-        maxHeight:
-          headHeight(theme) + 16 + small.prose * FOLD_LINES + small.line + 8,
-        overflow: "hidden" as const,
-        paddingBottom: small.line + 8,
-      },
+    // Room for the head row above the code.
+    codeBlock: { paddingTop: headHeight(theme) + 8 },
+    // The fold: FOLD_LINES lines and the padding, the rest under "Show all".
+    "codeBlock[folded=true]": {
+      maxHeight:
+        headHeight(theme) + 16 + small.prose * FOLD_LINES + small.line + 8,
+      overflow: "hidden" as const,
+      paddingBottom: small.line + 8,
     },
   };
+}
+
+/** A code block where the text is shown: the editor's box, its language and Copy over the code. */
+function CodeView(props: { code: TextViewCodeBlock; view: ViewContext }) {
+  const c = colors();
+  const type = textFaces();
+  const look = () => splitText(props.view.parts.codeBlock ?? {});
+  const caption = (value: string, tone: string) => (
+    <Text
+      style={{
+        fontSize: type("caption").size,
+        lineHeight: type("caption").line,
+        color: tone,
+      }}
+    >
+      {value}
+    </Text>
+  );
+  return (
+    <View
+      style={{
+        ...look().box,
+        position: "relative",
+        paddingTop: headHeight(props.view.theme) + 8,
+      }}
+    >
+      <View
+        style={{
+          ...row,
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: 0,
+          height: type("caption").line + 8,
+          paddingHorizontal: 12,
+          gap: 8,
+          borderBottomWidth: 1,
+          borderColor: c().border,
+        }}
+      >
+        <View style={{ flex: 1 }}>
+          {caption(props.code.language || uiText("codeKind"), c().faint)}
+        </View>
+        <View
+          role="button"
+          accessibilityLabel={uiText("copyCode")}
+          onPress={() => void Clipboard.writeText(props.code.code)}
+          hoverStyle={{ opacity: 0.7 }}
+          style={{ cursor: "pointer" }}
+        >
+          {caption(uiText("copyAction"), c().muted)}
+        </View>
+      </View>
+      <Text
+        style={{
+          color: c().ink,
+          ...look().text,
+        }}
+      >
+        {props.code.code}
+      </Text>
+    </View>
+  );
 }
 
 /** Over each code block: its language and what the keys do (Copy where it is only shown), and the

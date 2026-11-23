@@ -3,7 +3,14 @@ import type { IconName } from "../icons";
 import { Image, signal, Text, View } from "nsh";
 import { canHover } from "../menu";
 import { Icon } from "../text";
-import { colors, fontFamily, Fonts, row, textFaces } from "../theme";
+import {
+  colors,
+  fontFamily,
+  Fonts,
+  monoFontFamily,
+  row,
+  textFaces,
+} from "../theme";
 import { LineRoom } from "./room";
 
 /**
@@ -145,5 +152,63 @@ export function Chip(props: {
         </View>
       </If>
     </View>
+  );
+}
+
+const PREVIEW_LINES = 12;
+
+/** The first lines of a folded paste, over it on hover. */
+export function PastePreview(props: { text: string }) {
+  const c = colors();
+  const fonts = Fonts();
+  const type = textFaces();
+  const lines = () => props.text.split("\n");
+  return (
+    <View style={{ maxWidth: 420, padding: 8 }}>
+      <Text
+        style={{
+          fontFamily: monoFontFamily(fonts()),
+          fontSize: type("caption").size,
+          lineHeight: type("caption").line,
+          color: c().ink,
+          numberOfLines: PREVIEW_LINES,
+        }}
+      >
+        {lines().slice(0, PREVIEW_LINES).join("\n") +
+          (lines().length > PREVIEW_LINES ? "\n…" : "")}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * A member mentioned in the text (`@Opus`): their name in blue on a blue fill, in a line of text
+ * at the text's size. The same in the editor (where `selected` outlines it) and where the text is
+ * shown.
+ */
+export function MentionChip(props: {
+  label: string;
+  variant?: "body" | "small";
+  selected?: boolean;
+  accessibilityLabel: string;
+}) {
+  const c = colors();
+  const fonts = Fonts();
+  const type = textFaces();
+  return (
+    <Text
+      accessibilityLabel={props.accessibilityLabel}
+      style={{
+        fontFamily: fontFamily(fonts().interface),
+        fontSize: type(props.variant ?? "body").size,
+        color: c().blue,
+        backgroundColor: c().blueFill,
+        paddingHorizontal: 2,
+        borderWidth: 1,
+        borderColor: props.selected ? c().blue : c().blueFill,
+      }}
+    >
+      {`@${props.label}`}
+    </Text>
   );
 }

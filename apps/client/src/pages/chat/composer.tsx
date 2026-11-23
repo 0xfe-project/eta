@@ -5,7 +5,6 @@ import type {
 } from "@eta/client-contracts";
 import type { DocNode } from "@eta/client-contracts/composer-doc";
 import type { MenuItem } from "@eta/client-contracts/composer-menu";
-import type { RichNodeJSON } from "nsh/base";
 import type { Outgoing } from "./composer-draft";
 import { MAX_ATTACHMENTS } from "@eta/client-contracts";
 import { DOC_NODES, isBlankDoc } from "@eta/client-contracts/composer-doc";
@@ -22,14 +21,12 @@ import {
   View,
   windowSize,
 } from "nsh";
-import { insertContent, insertContentAt } from "nsh/base";
 
 import { Button, colors, Icon, Label, row } from "../../components";
 import {
   attachment,
   chatText,
   draft,
-  EtaEditor,
   limit,
   mention,
   quote,
@@ -68,7 +65,7 @@ interface ComposerProps {
 /** Quotes already put in a draft: a composer made again (the chat opened again) skips them. */
 const quoted = new WeakSet<object>();
 
-/** The chat's composer: its outbox and queue above, the editor (`EtaEditor`) and its bar. */
+/** The chat's composer: its outbox and queue above, the editor (`chatText.Editor`) and its bar. */
 export function Composer(props: ComposerProps) {
   const host = useHost();
   const origin = host.address()!.origin;
@@ -220,15 +217,14 @@ function ComposerBody(
       .join(", ");
 
   /** Markdown as blocks to put in the box. */
-  const blocksOf = (doc: DocNode) => (doc.content ?? []) as RichNodeJSON[];
+  const blocksOf = (doc: DocNode) => doc.content ?? [];
   /** Text put in from outside (a held message pulled back, a widget's prompt): above the draft. */
   function prepend(value: string) {
     const nodes = blocksOf(
       chatText.read({ text: value, mentions: mentionRefs() }),
     );
-    if (isBlankDoc(editor.doc())) editor.session.run(insertContent(nodes));
-    else
-      editor.session.run(insertContentAt(0, [...nodes, { type: "paragraph" }]));
+    if (isBlankDoc(editor.doc())) editor.insert(nodes);
+    else editor.insert([...nodes, { type: DOC_NODES.paragraph }], 0);
     editor.focus();
   }
   let appliedWidgetDraft: typeof props.widgetDraft;
@@ -323,11 +319,11 @@ function ComposerBody(
             size: file.size,
           },
         })),
-      } as RichNodeJSON);
+      });
     edit({ outgoing: removeOutgoing(message.id) });
     if (isBlankDoc(editor.doc()))
-      editor.session.setContent({ type: "doc", content: nodes });
-    else editor.session.run(insertContentAt(0, nodes));
+      editor.setDoc({ type: DOC_NODES.doc, content: nodes });
+    else editor.insert(nodes, 0);
     editor.focus();
   }
   function toggle(id: string) {
@@ -435,7 +431,7 @@ function ComposerBody(
             alignItems: props.phone ? "center" : "stretch",
           }}
         >
-          <EtaEditor
+          <chatText.Editor
             editor={editor}
             label={uiText("message")}
             placeholder={uiText("messageWithCount", { name: props.name })}

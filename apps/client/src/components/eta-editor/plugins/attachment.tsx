@@ -1,13 +1,15 @@
 import type { UploadState } from "@eta/client-contracts/composer-doc";
 import type { Signal } from "nsh";
 import type { RichNodeViewProps } from "nsh/base";
-import type { EtaEditorHandle, EtaPlugin } from "../editor";
+import type { EtaEditorHandle } from "../editor";
+import type { TextPlugin } from "../plugin";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "@eta/client-contracts";
 import { DOC_NODES, docToDraft } from "@eta/client-contracts/composer-doc";
 import { fileSize } from "@eta/client-contracts/composer-draft";
 import { computed, effect, Picker, signal } from "nsh";
 import { defineExtension, insertContent } from "nsh/base";
 import { uiText } from "../../../i18n";
+import { Host } from "../../../services/host";
 import {
   isPicture,
   fileSize as pictureSize,
@@ -17,6 +19,7 @@ import { Lightbox, picturePreview } from "../../picture-viewer";
 import { isBmp, pastedFile } from "../bmp-to-png";
 import { Chip } from "../chip";
 import { oneStep } from "../step";
+import { standIn } from "../view-source";
 
 /** Where a place's attachments go: the upload queue and each file's state, by block id. */
 export interface Uploads {
@@ -106,6 +109,80 @@ function FileView(input: {
   );
 }
 
+/** A file sent with a text, where the text is shown: its name and size, a sent picture's
+ * thumbnail (pressed, it opens large). */
+function ShownFileChip(props: {
+  file: { id: string; name: string; contentType: string; size: number };
+}) {
+  const host = Host();
+  const pictureOf = host ? useAttachmentPictures() : undefined;
+  const open = signal(false);
+  const image = () => isImage(props.file.contentType);
+  const picture = computed(() =>
+    image() && pictureOf && isPicture(props.file)
+      ? pictureOf(props.file)
+      : undefined,
+  );
+  effect(() => picture()?.load());
+  return (
+    <>
+      <Chip
+        label={props.file.name}
+        icon={picture()?.src() ? undefined : "file"}
+        thumbnail={picture()?.src()}
+        detail={image() ? undefined : fileSize(props.file.size)}
+        tooltip={(() => {
+          const shown = picture();
+          return shown ? picturePreview(shown, 248) : undefined;
+        })()}
+        cursor={picture() ? "zoom-in" : undefined}
+        accessibilityLabel={
+          picture()
+            ? uiText("openPicture", {
+                name: props.file.name,
+                size: pictureSize(props.file.size),
+              })
+            : uiText(image() ? "imageKindNamed" : "fileKindNamed", {
+                name: props.file.name,
+              })
+        }
+        onPress={picture() ? () => open.set(true) : undefined}
+      />
+      <If when={picture()}>
+        {(shown) => (
+          <Lightbox
+            pictures={() => [shown()]}
+            index={() => (open() ? 0 : undefined)}
+            onIndex={(at) => open.set(at !== undefined)}
+          />
+        )}
+      </If>
+    </>
+  );
+}
+
+const attachmentView: TextPlugin["view"] = {
+  extensions: [standIn(DOC_NODES.file)],
+  renderCustom: {
+    [DOC_NODES.file]: (node) => (
+      <ShownFileChip
+        file={{
+          id: node.attributes?.id ?? "",
+          name: node.attributes?.name ?? "",
+          contentType: node.attributes?.contentType ?? "",
+          size: Number(node.attributes?.size ?? 0),
+        }}
+      />
+    ),
+  },
+};
+
+/** The files of a text shown, with no editor: what `attachment` shows, for a place that only
+ * shows texts (sent messages). */
+export function shownFiles(): TextPlugin {
+  return { name: "attachment", view: attachmentView };
+}
+
 /** How many attachment blocks the document holds. */
 function attachmentCount(editor: EtaEditorHandle) {
   return docToDraft(editor.doc()).draft.filter((part) => part.type === "file")
@@ -116,13 +193,14 @@ function attachmentCount(editor: EtaEditorHandle) {
  * Files and pictures — pasted, dropped, or picked with ＋ — go in where the caret is as one block
  * each ("image · shot.png", "file · notes.pdf") and upload at once. The block shows the upload:
  * uploading, failed (press to retry), done. Backspace or × takes it out, undo brings it back (its
- * upload is kept until the message goes, so nothing uploads twice).
+ * upload is kept until the message goes, so nothing uploads twice). Shown, the files that went with
+ * a text come after it as the same blocks, a picture opening large.
  */
 export function attachment(options: {
   uploads: Uploads;
   /** Refuses new files (an archived chat). */
   blocked?: () => boolean;
-}): EtaPlugin & { pick: (editor: EtaEditorHandle) => Promise<void> } {
+}): TextPlugin & { pick: (editor: EtaEditorHandle) => Promise<void> } {
   const { uploads } = options;
   /** The lightbox's picture, by its block id. */
   const open = signal<string>();
@@ -165,76 +243,79 @@ export function attachment(options: {
   }
   return {
     name: "attachment",
-    extensions: [
-      defineExtension({
-        name: DOC_NODES.file,
-        node: {
-          group: "inline",
-          inline: true,
-          atom: true,
-          selectable: true,
-          attrs: {
-            id: { default: "" },
-            name: { default: "" },
-            contentType: { default: "" },
-            size: { default: 0 },
-          },
-          renderText: "[{name}]",
-          parseDOM: [
-            {
-              tag: "span[data-eta=file]",
-              getAttrs: {
-                id: "data-id",
-                name: "data-name",
-                contentType: "data-type",
-                size: "data-size",
+    view: attachmentView,
+    editor: {
+      extensions: [
+        defineExtension({
+          name: DOC_NODES.file,
+          node: {
+            group: "inline",
+            inline: true,
+            atom: true,
+            selectable: true,
+            attrs: {
+              id: { default: "" },
+              name: { default: "" },
+              contentType: { default: "" },
+              size: { default: 0 },
+            },
+            renderText: "[{name}]",
+            parseDOM: [
+              {
+                tag: "span[data-eta=file]",
+                getAttrs: {
+                  id: "data-id",
+                  name: "data-name",
+                  contentType: "data-type",
+                  size: "data-size",
+                },
               },
-            },
+            ],
+            toDOM: [
+              "span",
+              {
+                "data-eta": "file",
+                "data-id": { attr: "id" },
+                "data-name": { attr: "name" },
+                "data-type": { attr: "contentType" },
+                "data-size": { attr: "size" },
+              },
+            ],
+          },
+          addNodeView: () => (props: RichNodeViewProps) => (
+            <FileView view={props} uploads={uploads} onOpen={open.set} />
+          ),
+        }),
+      ],
+      files: insert,
+      setup(editor) {
+        handle = editor;
+      },
+      overlay: () => (
+        <PictureLightbox
+          ids={() => {
+            handle?.revision();
+            return handle
+              ? docToDraft(handle.doc())
+                  .draft.filter((part) => part.type === "file")
+                  .map((part) => part.id)
+              : [];
+          }}
+          uploads={uploads}
+          open={open}
+        />
+      ),
+      paste(action, editor) {
+        if (action.kind !== "textFile") return false;
+        return insert(
+          [
+            new File([action.text], uiText("pastedFile"), {
+              type: "text/plain;charset=utf-8",
+            }),
           ],
-          toDOM: [
-            "span",
-            {
-              "data-eta": "file",
-              "data-id": { attr: "id" },
-              "data-name": { attr: "name" },
-              "data-type": { attr: "contentType" },
-              "data-size": { attr: "size" },
-            },
-          ],
-        },
-        addNodeView: () => (props: RichNodeViewProps) => (
-          <FileView view={props} uploads={uploads} onOpen={open.set} />
-        ),
-      }),
-    ],
-    files: insert,
-    setup(editor) {
-      handle = editor;
-    },
-    overlay: () => (
-      <PictureLightbox
-        ids={() => {
-          handle?.revision();
-          return handle
-            ? docToDraft(handle.doc())
-                .draft.filter((part) => part.type === "file")
-                .map((part) => part.id)
-            : [];
-        }}
-        uploads={uploads}
-        open={open}
-      />
-    ),
-    paste(action, editor) {
-      if (action.kind !== "textFile") return false;
-      return insert(
-        [
-          new File([action.text], uiText("pastedFile"), {
-            type: "text/plain;charset=utf-8",
-          }),
-        ],
-        editor,
-      );
+          editor,
+        );
+      },
     },
     async pick(editor) {
       if (options.blocked?.()) return;

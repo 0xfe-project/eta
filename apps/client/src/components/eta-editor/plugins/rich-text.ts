@@ -1,4 +1,5 @@
-import type { EtaPlugin, TextTheme } from "../editor";
+import type { TextTheme } from "../look";
+import type { TextPlugin } from "../plugin";
 import { markdown, StarterKit } from "nsh/base";
 
 /**
@@ -11,28 +12,31 @@ import { markdown, StarterKit } from "nsh/base";
  * alignment or colour. Copies are Markdown on the clipboard; Markdown pasted reads as Markdown
  * (the editor's paste rules decide when: `classifyClipboard`).
  */
-export function richText(): EtaPlugin {
+export function richText(): TextPlugin {
   return {
     name: "richText",
-    rich: true,
-    extensions: [
-      StarterKit.configure({
-        heading: { levels: [1, 2, 3] },
-        underline: false,
-        highlight: false,
-        subscript: false,
-        superscript: false,
-        textAlign: false,
-        textStyle: false,
-        color: false,
-        typography: false,
-        image: false,
-        history: { depth: 100, newGroupDelay: 500 },
-      }),
-    ],
-    // Pastes go through the editor's rules (`eta-paste`), which read Markdown themselves.
-    plugins: [markdown({ paste: false })],
-    styles: { common: proseStyles, editor: proseParts },
+    editor: {
+      rich: true,
+      extensions: [
+        StarterKit.configure({
+          heading: { levels: [1, 2, 3] },
+          underline: false,
+          highlight: false,
+          subscript: false,
+          superscript: false,
+          textAlign: false,
+          textStyle: false,
+          color: false,
+          typography: false,
+          image: false,
+          history: { depth: 100, newGroupDelay: 500 },
+        }),
+      ],
+      // Pastes go through the editor's rules (`eta-paste`), which read Markdown themselves.
+      plugins: [markdown({ paste: false })],
+    },
+    // The view reads Markdown itself (nsh `TextView`): nothing to add but the look.
+    styles: { common: proseStyles, editor: proseEditor, view: proseView },
   };
 }
 
@@ -57,60 +61,95 @@ function proseStyles(theme: TextTheme) {
   const c = theme.colors;
   const small = theme.face("small");
   return {
-    nodes: {
-      "heading[level=1]": heading(theme, "title", 4),
-      "heading[level=2]": heading(theme, "subtitle", 6),
-      "heading[level=3]": heading(theme, "body", 4),
-      blockquote: {
-        borderLeftWidth: 2,
-        borderColor: c.strong,
-        paddingLeft: 10,
-        color: c.muted,
-      },
-      bulletList: { paddingLeft: 20 },
-      orderedList: { paddingLeft: 20 },
-      taskList: { paddingLeft: 0 },
-      taskItem: { gap: 8 },
-      codeBlock: {
-        backgroundColor: c.surface,
-        borderWidth: 1,
-        borderColor: c.border,
-        borderRadius: 0,
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        marginVertical: 2,
-        fontFamily: theme.mono,
-        fontSize: small.size,
-        lineHeight: small.prose,
-      },
-      horizontalRule: {
-        borderTopWidth: 1,
-        borderColor: c.border,
-        marginVertical: 6,
-      },
+    heading1: heading(theme, "title", 4),
+    heading2: heading(theme, "subtitle", 6),
+    heading3: heading(theme, "body", 4),
+    blockquote: {
+      borderLeftWidth: 2,
+      borderColor: c.strong,
+      paddingLeft: 10,
+      color: c.muted,
     },
-    marks: {
-      bold: { fontWeight: 600 },
-      italic: { fontStyle: "italic" as const },
-      strike: { textDecorationLine: "line-through" as const },
-      code: {
-        fontFamily: theme.mono,
-        fontSize: small.size,
-        backgroundColor: c.selected,
-      },
-      link: { color: c.blue, textDecorationLine: "underline" as const },
+    list: { paddingLeft: 20 },
+    codeBlock: {
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 0,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      marginVertical: 2,
+      fontFamily: theme.mono,
+      fontSize: small.size,
+      lineHeight: small.prose,
     },
+    rule: {
+      borderTopWidth: 1,
+      borderColor: c.border,
+      marginVertical: 6,
+    },
+    strong: { fontWeight: 600 },
+    emphasis: { fontStyle: "italic" as const },
+    strikethrough: { textDecorationLine: "line-through" as const },
+    code: {
+      fontFamily: theme.mono,
+      fontSize: small.size,
+      backgroundColor: c.selected,
+    },
+    link: { color: c.blue, textDecorationLine: "underline" as const },
   };
 }
 
-function proseParts(theme: TextTheme) {
+/** The editor's own: task lists, list markers and the task box. */
+function proseEditor(theme: TextTheme) {
   return {
+    nodes: {
+      taskList: { paddingLeft: 0 },
+      taskItem: { gap: 8 },
+      // Done, as the view shows it: struck through, muted.
+      "taskItem[checked=true]": {
+        color: theme.colors.muted,
+        textDecorationLine: "line-through" as const,
+      },
+    },
+    // The box filled in ink when done (only a class reaches its checked state).
+    classes: {
+      taskCheckbox: `checked:bg-[${theme.colors.ink}] checked:border-[${theme.colors.ink}]`,
+    },
     listMarker: { color: theme.colors.muted },
     taskCheckbox: {
       width: 14,
       height: 14,
       borderWidth: 1,
       borderColor: theme.colors.strong,
+    },
+  };
+}
+
+/** The view's own: no room under headings and around blocks beyond what the editor leaves, the
+ * markers and the task box as the editor draws them. */
+function proseView(theme: TextTheme) {
+  const none = { marginBottom: 0 };
+  return {
+    heading1: none,
+    heading2: none,
+    heading3: none,
+    blockquote: { marginVertical: 0, gap: 0 },
+    list: { marginVertical: 0, gap: 0, paddingLeft: 0 },
+    listItem: { marginVertical: 0, gap: 0 },
+    listItemContent: { gap: 0 },
+    listMarker: { color: theme.colors.muted },
+    taskMarker: {
+      width: 14,
+      height: 14,
+      borderWidth: 1,
+      borderRadius: 0,
+      borderColor: theme.colors.strong,
+      marginRight: 8,
+    },
+    taskMarkerChecked: {
+      backgroundColor: theme.colors.ink,
+      borderColor: theme.colors.ink,
     },
   };
 }

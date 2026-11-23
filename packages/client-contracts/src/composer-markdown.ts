@@ -80,8 +80,8 @@ const sameMarks = (a: Mark[], b: Mark[]) =>
   a.length === b.length && a.every((mark, i) => sameMark(mark, b[i]!));
 
 /** A paste's text stands in the Markdown as one of these until the end: one character each. */
-const TOKEN_BASE = 0xe000;
-const TOKEN_END = 0xf8ff;
+export const TOKEN_BASE = 0xe000;
+export const TOKEN_END = 0xf8ff;
 const isToken = (code: number) => code >= TOKEN_BASE && code <= TOKEN_END;
 
 function escapeInline(text: string): string {
@@ -472,7 +472,7 @@ export function markdownSource(input: {
 }
 
 /** An inline block's text, where only text may go (a code block, inline code). */
-function standText(node: Stand): string {
+export function standText(node: Stand): string {
   if (node.type === DOC_NODES.paste) return String(node.attrs?.text ?? "");
   if (node.type === DOC_NODES.mention)
     return `@${String(node.attrs?.label ?? "")}`;

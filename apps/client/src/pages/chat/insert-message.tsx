@@ -4,7 +4,6 @@ import { Button, colors, Label, row } from "../../components";
 import {
   chatText,
   draft,
-  EtaEditor,
   limit,
   openDocDraft,
   serialize,
@@ -112,7 +111,7 @@ function InsertBody(props: {
       out,
     ],
   });
-  editor.session.on("revision", () => error.set(""));
+  editor.onChange(() => error.set(""));
   async function send() {
     if (
       out.state().blank ||
@@ -167,7 +166,7 @@ function InsertBody(props: {
             {uiText("composerTooLong")}
           </Label>
         </If>
-        <EtaEditor
+        <chatText.Editor
           editor={editor}
           label={uiText("insertMessage")}
           placeholder={uiText("addToThisTurn")}

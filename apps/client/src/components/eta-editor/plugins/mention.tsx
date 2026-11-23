@@ -5,10 +5,11 @@ import type {
   MenuTask,
 } from "@eta/client-contracts/composer-menu";
 import type { RichNodeViewProps } from "nsh/base";
-import type { EtaEditorHandle, EtaPlugin } from "../editor";
+import type { EtaEditorHandle } from "../editor";
+import type { TextPlugin } from "../plugin";
 import { DOC_NODES } from "@eta/client-contracts/composer-doc";
 import { buildMenu } from "@eta/client-contracts/composer-menu";
-import { computed, effect, signal, Text, untracked, View } from "nsh";
+import { computed, effect, signal, untracked, View } from "nsh";
 import {
   defineExtension,
   exitSuggestion,
@@ -20,7 +21,9 @@ import {
 import { uiText } from "../../../i18n";
 import { SmoothScroll } from "../../smooth-scroll";
 import { Caption, Label } from "../../text";
-import { colors, fontFamily, Fonts, row, textFaces } from "../../theme";
+import { colors, row } from "../../theme";
+import { MentionChip } from "../chip";
+import { standIn } from "../view-source";
 
 /** What may come right before `@` or `#`: a space, or a CJK or Latin punctuation mark. */
 const PREFIXES = [
@@ -43,26 +46,14 @@ const PREFIXES = [
 const KEYS = ["ArrowUp", "ArrowDown", "Enter", "Tab"];
 
 function MentionView(props: RichNodeViewProps) {
-  const c = colors();
-  const fonts = Fonts();
-  const type = textFaces();
   return (
-    <Text
+    <MentionChip
+      label={String(props.node.attrs.label)}
+      selected={props.selected}
       accessibilityLabel={uiText("mention", {
         name: String(props.node.attrs.label),
       })}
-      style={{
-        fontFamily: fontFamily(fonts().interface),
-        fontSize: type("body").size,
-        color: c().blue,
-        backgroundColor: c().blueFill,
-        paddingHorizontal: 2,
-        borderWidth: 1,
-        borderColor: props.selected ? c().blue : c().blueFill,
-      }}
-    >
-      {`@${String(props.node.attrs.label)}`}
-    </Text>
+    />
   );
 }
 
@@ -83,7 +74,7 @@ export function mention(options: {
   describe?: (item: MenuItem) => string;
   /** Laid out to the full width of the box (tablet) rather than under the caret. */
   wide?: () => boolean;
-}): EtaPlugin {
+}): TextPlugin {
   const menu = signal<
     (MenuState & { key: "mention" | "task"; from: number; to: number }) | null
   >(null);
@@ -151,89 +142,105 @@ export function mention(options: {
   }
   return {
     name: "mention",
-    extensions: [
-      defineExtension({
-        name: DOC_NODES.mention,
-        node: {
-          group: "inline",
-          inline: true,
-          atom: true,
-          selectable: false,
-          attrs: { id: { default: "" }, label: { default: "" } },
-          renderText: "@{label}",
-          parseDOM: [
-            {
-              tag: "span[data-eta=mention]",
-              getAttrs: { id: "data-id", label: "data-label" },
-            },
-          ],
-          toDOM: [
-            "span",
-            {
-              "data-eta": "mention",
-              "data-id": { attr: "id" },
-              "data-label": { attr: "label" },
-            },
-          ],
-        },
-        addNodeView: () => MentionView,
-      }),
-      defineExtension({
-        name: "mentionSuggestion",
-        // Before the send key, so ⏎ picks while the list is open.
-        priority: 1100,
-        addProseMirrorPlugins: () => [
-          suggestion({
-            key: "mention",
-            char: "@",
-            allowedPrefixes: PREFIXES,
-            captureKeys: KEYS,
-          }),
-          ...(options.tasks
-            ? [
-                suggestion({
-                  key: "task",
-                  char: "#",
-                  allowedPrefixes: PREFIXES,
-                  captureKeys: KEYS,
-                }),
-              ]
-            : []),
-        ],
-      }),
-    ],
-    setup(handle) {
-      editor = handle;
-      const stop = handle.session.on("transaction", read);
-      // Rows that arrive later (the project's files) refresh an open list.
-      effect(() => {
-        options.files?.();
-        options.members?.();
-        untracked(() => {
-          if (menu()) read();
-        });
-      });
-      return stop;
+    view: {
+      extensions: [standIn(DOC_NODES.mention)],
+      renderCustom: {
+        [DOC_NODES.mention]: (node, view) => (
+          <MentionChip
+            label={node.attributes?.label ?? ""}
+            variant={view.variant}
+            accessibilityLabel={uiText("mention", {
+              name: node.attributes?.label ?? "",
+            })}
+          />
+        ),
+      },
     },
-    overlay: () => (
-      <SuggestionList
-        menu={menu}
-        selected={selected}
-        anchor={() =>
-          // Under the `@`, kept inside the box.
-          Math.max(-1, Math.min(anchor() - 12, (editor?.width() ?? 0) - 300))
-        }
-        wide={options.wide}
-        describe={options.describe}
-        onHover={(i) => index.set(i)}
-        onPick={pick}
-        onDismiss={() => {
-          const current = menu();
-          if (current && editor)
-            editor.session.run(exitSuggestion(current.key));
-        }}
-      />
-    ),
+    editor: {
+      extensions: [
+        defineExtension({
+          name: DOC_NODES.mention,
+          node: {
+            group: "inline",
+            inline: true,
+            atom: true,
+            selectable: false,
+            attrs: { id: { default: "" }, label: { default: "" } },
+            renderText: "@{label}",
+            parseDOM: [
+              {
+                tag: "span[data-eta=mention]",
+                getAttrs: { id: "data-id", label: "data-label" },
+              },
+            ],
+            toDOM: [
+              "span",
+              {
+                "data-eta": "mention",
+                "data-id": { attr: "id" },
+                "data-label": { attr: "label" },
+              },
+            ],
+          },
+          addNodeView: () => MentionView,
+        }),
+        defineExtension({
+          name: "mentionSuggestion",
+          // Before the send key, so ⏎ picks while the list is open.
+          priority: 1100,
+          addProseMirrorPlugins: () => [
+            suggestion({
+              key: "mention",
+              char: "@",
+              allowedPrefixes: PREFIXES,
+              captureKeys: KEYS,
+            }),
+            ...(options.tasks
+              ? [
+                  suggestion({
+                    key: "task",
+                    char: "#",
+                    allowedPrefixes: PREFIXES,
+                    captureKeys: KEYS,
+                  }),
+                ]
+              : []),
+          ],
+        }),
+      ],
+      setup(handle) {
+        editor = handle;
+        const stop = handle.session.on("transaction", read);
+        // Rows that arrive later (the project's files) refresh an open list.
+        effect(() => {
+          options.files?.();
+          options.members?.();
+          untracked(() => {
+            if (menu()) read();
+          });
+        });
+        return stop;
+      },
+      overlay: () => (
+        <SuggestionList
+          menu={menu}
+          selected={selected}
+          anchor={() =>
+            // Under the `@`, kept inside the box.
+            Math.max(-1, Math.min(anchor() - 12, (editor?.width() ?? 0) - 300))
+          }
+          wide={options.wide}
+          describe={options.describe}
+          onHover={(i) => index.set(i)}
+          onPick={pick}
+          onDismiss={() => {
+            const current = menu();
+            if (current && editor)
+              editor.session.run(exitSuggestion(current.key));
+          }}
+        />
+      ),
+    },
   };
 }
 

@@ -1,6 +1,7 @@
 import type { AttachmentView } from "@eta/client-contracts";
 import type { SerializedDraft } from "@eta/client-contracts/composer-doc";
-import type { EtaEditorHandle, EtaPlugin } from "../editor";
+import type { EtaEditorHandle } from "../editor";
+import type { TextPlugin } from "../plugin";
 import type { Uploads } from "./attachment";
 import { serializeDoc } from "@eta/client-contracts/composer-doc";
 import { docToMarkdown } from "@eta/client-contracts/composer-markdown";
@@ -18,7 +19,7 @@ export interface Outgoing extends Omit<SerializedDraft, "files"> {
  * waits for them; a failed one has to be retried or taken out first). Formatted text goes as
  * Markdown (`docToStoredMarkdown`, read back to check it); plain text as its lines.
  */
-export function serialize(uploads?: Uploads): EtaPlugin & {
+export function serialize(uploads?: Uploads): TextPlugin & {
   read: () => Outgoing;
   /** The document as it is now: words to send, files still uploading or failed. */
   state: () => {
@@ -57,10 +58,12 @@ export function serialize(uploads?: Uploads): EtaPlugin & {
   return {
     name: "serialize",
     state,
-    setup(handle) {
-      editor = handle;
-      measure();
-      return handle.session.on("revision", measure);
+    editor: {
+      setup(handle) {
+        editor = handle;
+        measure();
+        return handle.session.on("revision", measure);
+      },
     },
     refresh: measure,
     text: () => (editor ? quick(editor).text : ""),

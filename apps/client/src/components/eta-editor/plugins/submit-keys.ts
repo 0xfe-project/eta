@@ -1,5 +1,6 @@
 import type { RichCommand } from "nsh/base";
-import type { EtaEditorHandle, EtaPlugin } from "../editor";
+import type { EtaEditorHandle } from "../editor";
+import type { TextPlugin } from "../plugin";
 import { effect } from "nsh";
 import {
   chain,
@@ -97,7 +98,7 @@ export function submitKeys(options: {
   onSubmit: () => void;
   /** Whether Escape is this plugin's now, and what it does. */
   escape?: () => (() => void) | undefined;
-}): EtaPlugin {
+}): TextPlugin {
   let handle: EtaEditorHandle | undefined;
   const enter = new RichEditorPlugin("submitKeys").captureKeys(
     ["Enter"],
@@ -114,32 +115,34 @@ export function submitKeys(options: {
   );
   return {
     name: "submitKeys",
-    extensions: ({ rich }) => [
-      defineExtension({
-        name: "submitKeys",
-        // Above the base keymap (Enter splits the paragraph there), below the suggestion list.
-        priority: 1000,
-        addProseMirrorPlugins: () => [
-          enter,
-          escape,
-          keymap(
-            rich
-              ? {
-                  "Shift-Enter": newLine,
-                  // Out of a code block; elsewhere a new line, as ⇧⏎.
-                  "Mod-Enter": first([command("exitCode"), newLine]),
-                }
-              : { "Shift-Enter": command("splitBlock") },
-          ),
-        ],
-      }),
-    ],
-    setup(editor) {
-      handle = editor;
-      effect(() => {
-        onEscape = options.escape?.();
-        escape.capturing = !!onEscape;
-      });
+    editor: {
+      extensions: ({ rich }) => [
+        defineExtension({
+          name: "submitKeys",
+          // Above the base keymap (Enter splits the paragraph there), below the suggestion list.
+          priority: 1000,
+          addProseMirrorPlugins: () => [
+            enter,
+            escape,
+            keymap(
+              rich
+                ? {
+                    "Shift-Enter": newLine,
+                    // Out of a code block; elsewhere a new line, as ⇧⏎.
+                    "Mod-Enter": first([command("exitCode"), newLine]),
+                  }
+                : { "Shift-Enter": command("splitBlock") },
+            ),
+          ],
+        }),
+      ],
+      setup(editor) {
+        handle = editor;
+        effect(() => {
+          onEscape = options.escape?.();
+          escape.capturing = !!onEscape;
+        });
+      },
     },
   };
 }

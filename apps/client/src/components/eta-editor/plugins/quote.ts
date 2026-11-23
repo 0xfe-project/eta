@@ -1,5 +1,6 @@
 import type { DocNode } from "@eta/client-contracts/composer-doc";
-import type { EtaEditorHandle, EtaPlugin } from "../editor";
+import type { EtaEditorHandle } from "../editor";
+import type { TextPlugin } from "../plugin";
 import { DOC_NODES, textToNodes } from "@eta/client-contracts/composer-doc";
 import { chain, focus, insertContentAt, scrollIntoView } from "nsh/base";
 import { nodeSize } from "../positions";
@@ -24,14 +25,16 @@ const empty: DocNode = { type: DOC_NODES.paragraph };
  * draft (words, files, folded pastes, mentions) stays as it is; only blank lines at its end make
  * way for the quote's own. One undo step takes the quote back out.
  */
-export function quote(): EtaPlugin & {
+export function quote(): TextPlugin & {
   append: (selected: string) => boolean;
 } {
   let editor: EtaEditorHandle | undefined;
   return {
     name: "quote",
-    setup(handle) {
-      editor = handle;
+    editor: {
+      setup(handle) {
+        editor = handle;
+      },
     },
     append(selected) {
       const markdown = quoteMarkdown(selected);
