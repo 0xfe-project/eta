@@ -1,5 +1,7 @@
 import type { MessageView } from "@eta/client-contracts";
 import { mount, signal, Text, UrlScheme, View, windowSize } from "nsh";
+import { Button } from "../../src/components";
+import { ToastLayer } from "../../src/components/toast";
 import { ConversationTimeline } from "../../src/pages/chat/conversation-timeline";
 import { createHost, Host } from "../../src/services/host";
 
@@ -66,12 +68,34 @@ function Fixture() {
     sample.text = "";
   }
   const calls = signal<string[]>([]);
+  const rows = signal<MessageView[]>([sample]);
+  // The host's reply to a confirmation, held until "Reply" is pressed: as over
+  // the wire, the row's own update (now the task's card) comes first.
+  let reply: (() => void) | undefined;
   host.call = async <T,>(target: string, action: string, args?: unknown) => {
     calls.update((log) => [
       ...log,
       `${target}.${action} ${JSON.stringify(args)}`,
     ]);
-    return undefined as T;
+    if (action !== "confirmDraft") return undefined as T;
+    if (scenario === "eta://fixture/refused")
+      throw new Error("no such task: base");
+    const edits = (args as { edits: { title: string; status: string } }).edits;
+    rows.set([
+      { ...sample, kind: "task_card", data: { taskId: "task-7" }, revision: 2 },
+    ]);
+    await new Promise<void>((resolve) => {
+      reply = resolve;
+    });
+    return {
+      task: {
+        id: "task-7",
+        number: 7,
+        title: edits.title,
+        status: edits.status,
+      },
+      message: rows()[0],
+    } as T;
   };
   const noop = () => {};
   return (
@@ -80,7 +104,7 @@ function Fixture() {
         <ConversationTimeline
           title="Group"
           accessible
-          rows={[sample]}
+          rows={rows()}
           additions={new Map()}
           recipients={new Map()}
           members={[]}
@@ -99,10 +123,12 @@ function Fixture() {
           onWidgetDraft={noop}
           onQuote={noop}
         />
+        <Button label="Reply" onPress={() => reply?.()} />
         <Text>{`Calls: ${calls().length}`}</Text>
         <Each of={calls()} key="index">
           {(call) => <Text>{call()}</Text>}
         </Each>
+        <ToastLayer />
       </View>
     </Host.Provider>
   );

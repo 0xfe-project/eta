@@ -240,9 +240,14 @@ export const tasksMessages = {
     "确认后进入待办，满足执行条件后开始",
   ],
   draftDiscarded: ["Discarded", "已丢弃"],
-  draftCreated: [
-    "This draft has been created as a task",
-    "这份草案已创建为任务",
+  draftCreatedToast: ["Task #{{number}} created", "已创建任务 #{{number}}"],
+  draftBackloggedToast: [
+    "Task #{{number}} added to Backlog",
+    "已放入积压 #{{number}}",
+  ],
+  draftConfirmFailed: [
+    "Could not create the task: {{reason}}",
+    "没能创建任务：{{reason}}",
   ],
   awaitingTaskSession: ["Waiting for the task to start.", "正在等待任务开始。"],
   inReview: ["In review", "待验收"],
