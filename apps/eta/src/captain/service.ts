@@ -273,7 +273,7 @@ export class CaptainService {
 
   /**
    * Where Captain is talked to, made if it is missing: what the host posts for Captain to read (a
-   * routine's report, an email handed over, a proposal's outcome with nowhere else to go).
+   * routine's report, a proposal's outcome with nowhere else to go).
    */
   async conversation(): Promise<{
     conversationId: string;

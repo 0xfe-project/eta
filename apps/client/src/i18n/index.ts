@@ -15,7 +15,6 @@ const messages = {
   mcpServers: ["MCP servers", "MCP 服务器"],
   externalAgents: ["External agents", "外部智能体"],
   runtimes: ["Runtimes", "运行方式"],
-  email: ["Email", "邮箱"],
   archived: ["Archived", "已归档"],
   update: ["Update", "更新"],
   network: ["Network", "网络"],

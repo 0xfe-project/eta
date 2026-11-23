@@ -6,7 +6,6 @@ export const commonMessages = {
   taskInProgress: ["In progress", "进行中"],
   taskCompleted: ["Completed", "已完成"],
   taskCancelled: ["Cancelled", "已取消"],
-  inboxFolder: ["Inbox", "收件箱"],
   skillsTab: ["Skills", "技能"],
   imageUnavailable: ["Image unavailable", "图片不可用"],
   enlargeImage: ["Enlarge {{name}}", "放大 {{name}}"],
@@ -44,7 +43,6 @@ export const commonMessages = {
     "Connection lost, reconnecting… What you see may be out of date.",
     "连接已断开，正在重连… 此处显示的信息可能不是最新的。",
   ],
-  connectMailbox: ["Connect mailbox", "绑定邮箱"],
   conversation: ["Conversation", "对话"],
   copied: ["Copied", "已复制"],
   createAConversationOrSelectAn: [
@@ -59,6 +57,7 @@ export const commonMessages = {
   delete: ["Delete", "删除"],
   directory: ["Directory", "目录"],
   directoryPath: ["Directory path", "目录路径"],
+  discard: ["Discard", "丢弃"],
   dismissCompatibilityWarning: [
     "Dismiss compatibility warning",
     "关闭兼容性提示",
@@ -69,7 +68,6 @@ export const commonMessages = {
   download: ["Download", "下载"],
   downloadProgress: ["Download progress", "下载进度"],
   edit: ["Edit", "编辑"],
-  email: ["Email", "邮箱"],
   enterADirectoryOnTheHost: [
     "Enter a directory on the host",
     "输入主机上的目录",
@@ -139,7 +137,6 @@ export const commonMessages = {
   running: ["Running", "运行中"],
   runs: ["Runs · {{length}}", "运行 · {{length}}"],
   saveConfiguration: ["Save configuration", "保存配置"],
-  saveMailbox: ["Save mailbox", "保存邮箱"],
   search: ["Search", "搜索"],
   selected: ["Selected", "已选"],
   selectModel: ["Select model", "选择模型"],

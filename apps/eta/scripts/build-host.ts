@@ -8,7 +8,6 @@
  * `apps/eta/src/resources.ts` is how the host finds them:
  *
  *   migrations/     apps/eta/src/migrations
- *   Eta-Logo.png    the logo the mail template embeds
  *   web/            apps/client/dist/Eta, the page (built first: `bun run --cwd apps/client package:web`), and
  *                   THIRD_PARTY_NOTICES.md, written here next to it
  *   cpa/            CLIProxyAPI for this platform, and `cpa-launcher` next to it

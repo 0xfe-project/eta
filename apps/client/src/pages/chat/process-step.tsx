@@ -1,4 +1,4 @@
-import type { EmailProposalView, RunBlock } from "@eta/client-contracts";
+import type { RunBlock } from "@eta/client-contracts";
 import type { JSX, ScrollRef } from "nsh";
 import { commandOf } from "@eta/client-contracts";
 import { signal, View } from "nsh";
@@ -12,12 +12,9 @@ import {
   SmoothScroll,
 } from "../../components";
 import { uiText } from "../../i18n";
-import { follow, useHost } from "../../services/host";
-import { EmailProposal } from "../email/proposal";
 import { ToolOutput } from "./run/tool-code";
 
 export function ProcessStep(props: { value: RunBlock }) {
-  const host = useHost();
   const c = colors();
   const tool = () => (props.value.type === "tool" ? props.value : undefined);
   // A list recycles a step's view for another step: what was opened is kept
@@ -25,30 +22,6 @@ export function ProcessStep(props: { value: RunBlock }) {
   const opened = signal<string | undefined>(undefined);
   const expanded = () => opened() === props.value.id;
   const toggle = () => opened.set(expanded() ? undefined : props.value.id);
-  const emailProposalId = () => {
-    const step = tool();
-    const details = step?.details;
-    return step &&
-      ["send_email", "reply"].includes(step.name) &&
-      details &&
-      typeof details === "object" &&
-      "emailProposalId" in details &&
-      typeof details.emailProposalId === "string"
-      ? details.emailProposalId
-      : undefined;
-  };
-  follow(() => (emailProposalId() ? "email" : undefined));
-  const emailProposal = () => {
-    const id = emailProposalId();
-    if (!id) return undefined;
-    return host
-      .list<EmailProposalView>("email", "proposals")
-      .find(
-        (item) =>
-          item.id === id &&
-          (item.status === "pending" || item.status === "failed"),
-      );
-  };
   const title = () => {
     const step = tool();
     if (!step) return "";
@@ -64,9 +37,6 @@ export function ProcessStep(props: { value: RunBlock }) {
     return step.name + (detail ? ` · ${detail}` : "");
   };
   return (
-    <If
-      when={emailProposal()}
-      else={
         <If
           when={tool()}
           else={
@@ -149,10 +119,6 @@ export function ProcessStep(props: { value: RunBlock }) {
             </View>
           )}
         </If>
-      }
-    >
-      {(proposal) => <EmailProposal item={proposal()} />}
-    </If>
   );
 }
 

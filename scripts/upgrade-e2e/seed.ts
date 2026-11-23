@@ -47,7 +47,6 @@ const CONFIG = {
     },
   ],
 };
-export const SEED_MAIL_PASSWORD = "fake-mail-password";
 export const SEED_PLUGIN_SECRET = "sk-fakefakefake";
 
 /** Read back later: what each returned when the seed was made has to be what it returns then. */
@@ -58,7 +57,6 @@ const SAMPLES = [
   "SELECT status FROM task_run ORDER BY id",
   "SELECT title FROM artifact ORDER BY title",
   "SELECT number FROM artifact_version ORDER BY number",
-  "SELECT name, address, smtp_host FROM email_account ORDER BY name",
   "SELECT name FROM routine ORDER BY name",
   "SELECT name, kind FROM machine ORDER BY name",
   "SELECT key FROM setting ORDER BY key",
@@ -363,17 +361,6 @@ async function generate(binary: string, version: string): Promise<void> {
   if (seeded === null) throw new Error("the seed made no task to close");
   await call("tasks", "update", { taskId: seeded.id, status: "done" });
 
-  await call("email", "saveAccount", {
-    name: "Seed mail",
-    address: "seed@example.invalid",
-    smtpHost: "smtp.example.invalid",
-    smtpPort: 465,
-    imapHost: "imap.example.invalid",
-    imapPort: 993,
-    pollIntervalSeconds: 86_400,
-    username: "seed@example.invalid",
-    password: SEED_MAIL_PASSWORD,
-  });
   await call("plugins", "recheck");
   await call("plugins", "configure", {
     name: "seed-plugin",
@@ -424,10 +411,6 @@ async function generate(binary: string, version: string): Promise<void> {
     ),
     conversation: { id: conversation.id, said, replied: reply.text },
     sealed: [
-      {
-        query: "SELECT value AS sealed FROM credential WHERE kind = 'password'",
-        plain: JSON.stringify({ password: SEED_MAIL_PASSWORD }),
-      },
       {
         query: "SELECT sealed FROM plugin_config WHERE plugin = 'seed-plugin'",
         plain: JSON.stringify({

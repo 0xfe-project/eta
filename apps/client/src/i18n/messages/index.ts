@@ -3,7 +3,6 @@ import { chatMessages } from "./chat";
 import { commonMessages } from "./common";
 import { connectionMessages } from "./connection";
 import { conversationsMessages } from "./conversations";
-import { emailMessages } from "./email";
 import { machinesMessages } from "./machines";
 import { modelSourcesMessages } from "./model-sources";
 import { onboardingMessages } from "./onboarding";
@@ -21,7 +20,6 @@ export const clientMessages = {
   ...commonMessages,
   ...connectionMessages,
   ...conversationsMessages,
-  ...emailMessages,
   ...machinesMessages,
   ...modelSourcesMessages,
   ...onboardingMessages,

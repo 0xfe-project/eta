@@ -125,7 +125,8 @@ describe("0061-captain-conversation", () => {
   it("makes Captain's chat Captain's and the others groups of one, keeping all that points at them", async () => {
     const old = await oldHost();
     const db = openDatabase(databasePath(old.dataDir));
-    expect(applyMigrations(db, loadMigrations())).toEqual([MIGRATION]);
+    // 0061 runs first; whatever came after it may follow.
+    expect(applyMigrations(db, loadMigrations())[0]).toBe(MIGRATION);
     const rows = db
       .query<
         {
