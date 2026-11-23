@@ -23,6 +23,7 @@ export const sections = [
   ["Tasks", "tasks", "tasks"],
   ["Runtimes", "cpu", "runtimes"],
   ["Email", "email", "email"],
+  ["Network", "globe", "network"],
   ["Archived", "archive", "archived"],
   ["Appearance", "palette", "appearance"],
   ["Update", "arrowCircleUp", "update"],
@@ -138,6 +139,21 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
               tone: "red",
             }
           : { text: String(email().length) };
+      }
+      case "Network": {
+        const open = providers()?.privateNetwork;
+        const invalid = open?.invalid.length ?? 0;
+        if (invalid)
+          return {
+            text: uiText("settingsNeedsAttentionCount", { count: invalid }),
+            tone: "amber",
+          };
+        return {
+          text: [
+            String(open?.allow.length ?? 0),
+            ...(open?.loopback ? ["localhost"] : []),
+          ].join(" · "),
+        };
       }
       case "Archived":
         return {

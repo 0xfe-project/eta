@@ -290,6 +290,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
         : {}),
       ...(options.home === undefined ? {} : { home: options.home }),
       ...(options.network === undefined ? {} : { network: options.network }),
+      // `web.privateNetwork` in the config, now and whenever it changes: no restart.
+      onPrivateNetwork: (privateNetwork) =>
+        product.setPrivateNetwork(privateNetwork),
       warn,
     });
     try {

@@ -355,3 +355,92 @@ describe("the proxy a settings page writes", () => {
     );
   });
 });
+
+describe("the private-network list (web.privateNetwork)", () => {
+  it("is absent without the section, and reports a hand-typed bad entry while keeping the rest", async () => {
+    const root = await scratch();
+    const path = join(root, "config.json");
+    const store = new ProviderConfigStore({ path });
+    await writeFile(path, JSON.stringify({ providers: [] }));
+    expect((await store.view()).privateNetwork).toBeUndefined();
+
+    await writeFile(
+      path,
+      JSON.stringify({
+        providers: [],
+        web: {
+          privateNetwork: {
+            allow: ["192.168.1.0/24", "10.0.0.0/33", 7, "docs.corp.internal"],
+            loopback: "yes",
+          },
+        },
+      }),
+    );
+    expect((await store.view()).privateNetwork).toEqual({
+      allow: ["192.168.1.0/24", "10.0.0.0/33", "7", "docs.corp.internal"],
+      // Only `true` turns local services on.
+      loopback: false,
+      invalid: [
+        { entry: "10.0.0.0/33", reason: "prefix" },
+        { entry: "7", reason: "syntax" },
+      ],
+    });
+  });
+
+  it("is saved by the settings page: trimmed, deduplicated, a new bad entry refused by name, an old one kept", async () => {
+    const root = await scratch();
+    const path = join(root, "config.json");
+    const store = new ProviderConfigStore({ path });
+    await writeFile(
+      path,
+      JSON.stringify({
+        network: { mode: "direct" },
+        web: { privateNetwork: { allow: ["10.0.0.0/33"] } },
+      }),
+    );
+    let view = await store.view();
+
+    await expect(
+      store.setPrivateNetwork(
+        { allow: ["10.0.0.0/33", "http://nas.lan/"], loopback: false },
+        view.revision,
+      ),
+    ).rejects.toThrow("invalid_private_network: url http://nas.lan/");
+    await expect(
+      store.setPrivateNetwork(
+        { allow: ["169.254.169.254"], loopback: false },
+        view.revision,
+      ),
+    ).rejects.toThrow("invalid_private_network: never 169.254.169.254");
+
+    view = await store.setPrivateNetwork(
+      {
+        allow: [" 192.168.1.0/24 ", "10.0.0.0/33", "192.168.1.0/24", ""],
+        loopback: true,
+      },
+      view.revision,
+    );
+    expect(view.privateNetwork).toEqual({
+      allow: ["192.168.1.0/24", "10.0.0.0/33"],
+      loopback: true,
+      invalid: [{ entry: "10.0.0.0/33", reason: "prefix" }],
+    });
+    // The rest of the file is untouched.
+    expect(view.network).toEqual({ mode: "direct" });
+
+    // Nothing open is the same as no section.
+    view = await store.setPrivateNetwork(
+      { allow: [], loopback: false },
+      view.revision,
+    );
+    expect(view.privateNetwork).toBeUndefined();
+    expect(JSON.parse(await readFile(path, "utf8")).web).toBeUndefined();
+
+    await expect(
+      store.setPrivateNetwork(
+        { allow: "10.0.0.0/8", loopback: false },
+        view.revision,
+      ),
+    ).rejects.toThrow("invalid_config");
+  });
+});

@@ -232,6 +232,23 @@ export function providersPlugin(options: ProvidersPluginOptions) {
               },
             };
           }),
+          wire.handle("providers", "setPrivateNetwork", async (call) => {
+            const args = (call.args ?? {}) as Partial<
+              ProviderArgs["setPrivateNetwork"]
+            >;
+            const view = await options.store.setPrivateNetwork(
+              { allow: args.allow, loopback: args.loopback },
+              args.revision,
+            );
+            latest = view;
+            wire.pushNow("providers");
+            return {
+              result: {
+                revision: view.revision,
+                privateNetwork: view.privateNetwork ?? null,
+              },
+            };
+          }),
           wire.handle("providers", "discover", async (call) => {
             const args = (call.args ?? {}) as Partial<ProviderArgs["discover"]>;
             // Never echo URLs, keys, headers or upstream error bodies.

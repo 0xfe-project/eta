@@ -6,8 +6,11 @@
  *
  * - **Fetching** goes through sex-egress, whose SSRF guard stays on: loopback, private, link-local
  *   and metadata addresses are refused, and the request is pinned to the address it checked. The
- *   proxy is the one eta's network settings put in the environment, read at each call, since
- *   those settings are applied after the product is made.
+ *   one opening is the config's `web.privateNetwork` (`setPrivateNetwork`): the networks and names
+ *   it lists, and loopback behind its own switch, are allowed and still checked on every hop and
+ *   pinned; link-local and metadata addresses never are. The proxy is the one eta's network
+ *   settings put in the environment, read at each call, since those settings are applied after
+ *   the product is made.
  * - **Searching** asks an external SearXNG when the host was given one (`--searxng-url`), and
  *   otherwise the prebuilt SearXNG the library runs as a child of this process, started on the
  *   first search and gone with the host. Where no prebuilt binary exists there is no search.
@@ -19,11 +22,14 @@
  * Both run on Bun, as the whole host does. On Bun the libraries' optional Node peers (`undici` for
  * requests, `marked` for Markdown to HTML, `yaml` for SearXNG's proxy settings) are not used.
  */
+import type { PrivateNetworkConfig } from "@eta/client-contracts";
+import type { PrivateNetworkAccess } from "@searxng-js/sex-egress";
 import type { Document } from "@searxng-js/sex-scrape";
 import type { SearchData, SearchRequest } from "@searxng-js/sex-search";
 import { subscribe, unsubscribe } from "node:diagnostics_channel";
 import process from "node:process";
 import { TARGETS } from "@searxng-js/searxng";
+import { classifyAddress } from "@searxng-js/sex-egress";
 import { ExtractPool } from "@searxng-js/sex-page";
 import { AppError, scrapeUrl } from "@searxng-js/sex-scrape";
 import { search } from "@searxng-js/sex-search";
@@ -34,8 +40,9 @@ export interface WebOptions {
   /** An external SearXNG (its base URL). Without one the host runs the prebuilt one, where it can. */
   searxngUrl?: string | undefined;
   /**
-   * Let fetches reach loopback and private addresses. Only a test sets it, for its fixture site on
-   * 127.0.0.1; a host never does, and nothing a user configures turns it on.
+   * Let fetches reach loopback and private addresses with no check at all (and no pinning). Only a
+   * test sets it, for its fixture site on 127.0.0.1; a host never does. What a user opens goes
+   * through `setPrivateNetwork`, which keeps the checks.
    */
   allowPrivateNetwork?: boolean | undefined;
   /** How long one page may take, in ms. */
@@ -89,6 +96,19 @@ interface CachedPage {
   at: number;
 }
 
+/** What is wrong with an entry, for the host's log. */
+const ENTRY_PROBLEMS: Record<
+  PrivateNetworkConfig["invalid"][number]["reason"],
+  string
+> = {
+  syntax: "not a network, address or host name",
+  url: "a URL; write the host or network only",
+  port: "not a valid port",
+  prefix: "not a valid prefix length",
+  never: "link-local and cloud metadata addresses are never allowed",
+  loopback: "loopback is opened by the local services switch instead",
+};
+
 export class Web {
   private readonly options: WebOptions;
   private readonly extractPool: ExtractPool;
@@ -103,6 +123,12 @@ export class Web {
   /** Whether `search` can run: given a SearXNG, or on a platform with a prebuilt one. */
   readonly searchable: boolean;
   private closed = false;
+  /**
+   * What the config opens in private networks: `false`, or one allowlist object for as long as
+   * the config says the same (sex-egress keeps its address cache per object).
+   */
+  private privateNetwork: PrivateNetworkAccess = false;
+  private privateNetworkKey = JSON.stringify(undefined);
 
   constructor(options: WebOptions) {
     this.options = options;
@@ -168,6 +194,44 @@ export class Web {
     };
   }
 
+  /**
+   * Apply the config's `web.privateNetwork` to the fetches that start from now on. A change is
+   * written to the host's log, with every entry that has no effect; the same config again is not
+   * a change. Pages kept for reading on are dropped, so a page the list no longer opens is not
+   * read from the copy.
+   */
+  setPrivateNetwork(config: PrivateNetworkConfig | undefined): void {
+    const open =
+      config !== undefined && (config.loopback || config.allow.length > 0);
+    const key = JSON.stringify(
+      open ? { allow: config.allow, loopback: config.loopback } : undefined,
+    );
+    if (key === this.privateNetworkKey) return;
+    const first = this.privateNetworkKey === JSON.stringify(undefined);
+    this.privateNetworkKey = key;
+    this.privateNetwork = open
+      ? { allow: [...config.allow], loopback: config.loopback }
+      : false;
+    this.pages.clear();
+    if (!open) {
+      if (!first)
+        this.options.warn(
+          "[eta] web: private network: closed (web_fetch reaches public addresses only)",
+        );
+      return;
+    }
+    const invalid = new Set(config.invalid.map((item) => item.entry));
+    const valid = config.allow.filter((entry) => !invalid.has(entry));
+    this.options.warn(
+      `[eta] web: private network: web_fetch may reach ${valid.length === 0 ? "no listed address" : valid.join(", ")}; ` +
+        `local services (loopback) ${config.loopback ? "on" : "off"}`,
+    );
+    for (const item of config.invalid)
+      this.options.warn(
+        `[eta] web: private network: ignoring ${JSON.stringify(item.entry)} in web.privateNetwork.allow (${ENTRY_PROBLEMS[item.reason]})`,
+      );
+  }
+
   /** Search through SearXNG; `searchable` says whether there is one to ask. */
   async search(
     request: SearchRequest,
@@ -203,23 +267,29 @@ export class Web {
     onlyMainContent: boolean,
     signal: AbortSignal | undefined,
   ): Promise<CachedPage> {
-    const { document } = await scrapeUrl(
-      {
-        settings: this.settings(),
-        scrapeLimit: this.scrapeLimit,
-        extractPool: this.extractPool,
-      },
-      url,
-      { formats: ["markdown"], onlyMainContent, removeBase64Images: true },
-      signal === undefined ? {} : { signal },
-    );
-    return pageOf(document, url);
+    try {
+      const { document } = await scrapeUrl(
+        {
+          settings: this.settings(url),
+          scrapeLimit: this.scrapeLimit,
+          extractPool: this.extractPool,
+        },
+        url,
+        { formats: ["markdown"], onlyMainContent, removeBase64Images: true },
+        signal === undefined ? {} : { signal },
+      );
+      return pageOf(document, url);
+    } catch (error) {
+      throw blockedHere(error);
+    }
   }
 
-  private settings() {
-    const proxyUrl = proxyFromEnvironment();
+  /** The libraries' settings for a fetch that starts at `url` (the proxy depends on it). */
+  private settings(url?: string) {
+    const proxyUrl = url === undefined ? proxyFromEnvironment() : proxyFor(url);
     return {
-      allowPrivateNetwork: this.options.allowPrivateNetwork === true,
+      allowPrivateNetwork:
+        this.options.allowPrivateNetwork === true ? true : this.privateNetwork,
       userAgent: "eta (+https://github.com/0xfe-project/eta)",
       timeout: this.timeoutMs,
       maxBodyBytes: MAX_BODY_BYTES,
@@ -295,6 +365,41 @@ export class Web {
   }
 }
 
+/**
+ * The library's refusal of a private address, said the way this host is configured: where the
+ * user opens it (the settings page) instead of the library's own command-line flag, which a host
+ * does not have. Everything else passes through as it was thrown.
+ */
+function blockedHere(error: unknown): unknown {
+  if (!AppError.isInstance(error) || error.code !== "PRIVATE_NETWORK_BLOCKED")
+    return error;
+  const details = (error.details ?? {}) as {
+    host?: unknown;
+    address?: unknown;
+    reason?: unknown;
+  };
+  const host = typeof details.host === "string" ? details.host : undefined;
+  const address =
+    typeof details.address === "string" && details.address !== host
+      ? ` (${details.address})`
+      : "";
+  const where = host === undefined ? "This address" : `${host}${address}`;
+  // Without a list, sex-egress 0.2.0 reports loopback as `private`; it is the switch either way.
+  const reason =
+    details.reason === "private" &&
+    typeof details.address === "string" &&
+    classifyAddress(details.address) === "loopback"
+      ? "loopback"
+      : details.reason;
+  const message =
+    reason === "never"
+      ? `${where} is a link-local or cloud metadata address; those are never fetched.`
+      : reason === "loopback"
+        ? `${where} is on the host itself; to allow local services, turn on "Allow local services (localhost)" in Settings › Network › Private network.`
+        : `${where} is in a private network; to allow it, add it in Settings › Network › Private network.`;
+  return new AppError("PRIVATE_NETWORK_BLOCKED", message, error.details);
+}
+
 function pageOf(document: Document, url: string): CachedPage {
   const metadata = document.metadata ?? {};
   return {
@@ -307,9 +412,47 @@ function pageOf(document: Document, url: string): CachedPage {
 }
 
 /**
+ * The proxy for a fetch that starts at `url`: none when `NO_PROXY` names its host (loopback is
+ * always there, `@eta/server`'s `initializeNetwork` puts it in), so local services and intranet
+ * hosts the user exempted are reached directly, checked and pinned like any other address. The
+ * decision is the first URL's: the redirects of one fetch go the same way.
+ *
+ * `NO_PROXY` entries match a host name exactly or as a domain suffix (`corp.internal` and
+ * `.corp.internal` both cover `docs.corp.internal`), and an address literally; `*` is everything.
+ * Networks (CIDR) in `NO_PROXY` are not matched.
+ */
+function proxyFor(url: string): string | undefined {
+  const proxy = proxyFromEnvironment();
+  if (proxy === undefined) return undefined;
+  let host: string;
+  try {
+    host = new URL(url).hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  } catch {
+    return proxy;
+  }
+  const bypass = (process.env.NO_PROXY ?? process.env.no_proxy ?? "")
+    .split(/[\s,]+/)
+    .map((entry) =>
+      entry
+        .trim()
+        .toLowerCase()
+        .replace(/^\[|\](:\d+)?$/g, "")
+        .replace(/^\*?\./, ""),
+    )
+    .filter((entry) => entry !== "");
+  const exempt = bypass.some(
+    (entry) =>
+      entry === "*" ||
+      host === entry ||
+      host === entry.replace(/:\d+$/, "") ||
+      host.endsWith(`.${entry.replace(/:\d+$/, "")}`),
+  );
+  return exempt ? undefined : proxy;
+}
+
+/**
  * The proxy eta's network settings left in the environment (`@eta/server`'s `initializeNetwork`),
- * as the one URL the libraries take. Loopback is in `NO_PROXY` there, and a fetch never goes to
- * loopback, so `NO_PROXY` has nothing to add.
+ * as the one URL the libraries take.
  */
 function proxyFromEnvironment(): string | undefined {
   for (const key of [

@@ -20,11 +20,15 @@
  * and the failure is the honest one (`model_unavailable`) when a session asks for a model.
  */
 
-import type { ProvidersView } from "@eta/client-contracts";
+import type {
+  PrivateNetworkConfig,
+  ProvidersView,
+} from "@eta/client-contracts";
 import type { EtaConfig, EtaProviderConfig } from "./config-types";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { parseAllowEntry } from "@searxng-js/sex-egress";
 import { providerSummary } from "./config-types";
 
 /** A caller's mistake, with the name the client shows. */
@@ -191,6 +195,51 @@ export class ProviderConfigStore {
         ...(proxyUrl === undefined ? {} : { proxyUrl }),
         ...(input.mode === "manual" && noProxy.length > 0 ? { noProxy } : {}),
       };
+    });
+  }
+
+  /**
+   * Replace what `web_fetch` may reach in private networks (`web.privateNetwork`). Entries are
+   * trimmed and deduplicated; an empty list with loopback off removes the section, which is the
+   * same as never having had one.
+   *
+   * A new entry that `@searxng-js/sex-egress` cannot use refuses the save, naming the entry
+   * (`invalid_private_network: <reason> <entry>`), so the form can say which one. An invalid entry
+   * that is already in the file (typed by hand) is kept: it has no effect, the view lists it as
+   * invalid, and refusing every later save because of it would make the page unusable.
+   */
+  async setPrivateNetwork(
+    input: { allow: unknown; loopback: unknown },
+    revision: unknown,
+  ): Promise<ProvidersView> {
+    if (
+      !Array.isArray(input.allow) ||
+      input.allow.some((entry) => typeof entry !== "string") ||
+      typeof input.loopback !== "boolean"
+    )
+      throw new ProviderConfigError("invalid_config");
+    const loopback = input.loopback;
+    const wanted = input.allow as string[];
+    return await this.mutate(revision, (config) => {
+      const saved = new Set(privateNetworkOf(config)?.allow ?? []);
+      const allow: string[] = [];
+      for (const raw of wanted) {
+        const entry = raw.trim();
+        if (entry.length === 0 || allow.includes(entry)) continue;
+        const parsed = parseAllowEntry(entry);
+        if ("reason" in parsed && !saved.has(entry))
+          throw new ProviderConfigError(
+            `invalid_private_network: ${parsed.reason} ${entry}`,
+          );
+        allow.push(entry);
+      }
+      const { privateNetwork: _, ...web } = config.web ?? {};
+      if (allow.length === 0 && !loopback) {
+        if (Object.keys(web).length === 0) delete config.web;
+        else config.web = web;
+      } else {
+        config.web = { ...web, privateNetwork: { allow, loopback } };
+      }
     });
   }
 
@@ -389,11 +438,40 @@ function normalizeProxyUrl(value: string | undefined): string | undefined {
   return url.href;
 }
 
+/**
+ * The `web.privateNetwork` section as the host applies it, or undefined without one. The file is
+ * edited by hand, so nothing about its shape is assumed: a list that is not a list is empty, an
+ * entry that is not a string is shown as its JSON and is invalid, and loopback is on only when it
+ * is `true`. Invalid entries stay in `allow` (as written) and are listed in `invalid`.
+ */
+export function privateNetworkOf(
+  config: EtaConfig,
+): PrivateNetworkConfig | undefined {
+  const web: unknown = config.web;
+  if (typeof web !== "object" || web === null) return undefined;
+  const section: unknown = (web as { privateNetwork?: unknown }).privateNetwork;
+  if (typeof section !== "object" || section === null) return undefined;
+  const { allow: list, loopback } = section as {
+    allow?: unknown;
+    loopback?: unknown;
+  };
+  const allow = (Array.isArray(list) ? (list as unknown[]) : []).map((entry) =>
+    typeof entry === "string" ? entry : JSON.stringify(entry),
+  );
+  const invalid = allow.flatMap((entry) => {
+    const parsed = parseAllowEntry(entry);
+    return "reason" in parsed ? [{ entry, reason: parsed.reason }] : [];
+  });
+  return { allow, loopback: loopback === true, invalid };
+}
+
 /** The client's view of a config: the key becomes a boolean, everything else stays. */
 export function publicView(config: EtaConfig, revision: string): ProvidersView {
+  const privateNetwork = privateNetworkOf(config);
   return {
     revision,
     network: config.network ?? { mode: "system" },
+    ...(privateNetwork === undefined ? {} : { privateNetwork }),
     providers: (config.providers ?? []).map(providerSummary),
   };
 }

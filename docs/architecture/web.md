@@ -1,6 +1,6 @@
 # Reading web pages and searching
 
-Two product tools: `web_fetch` reads a web page and returns Markdown; `web_search` searches the web and returns ranked results. Both call libraries directly in the main node's process (`@searxng-js/sex-scrape`, `sex-search`, `sex-searxng`, `sex-page`, 0.1.1), without starting a separate service. The code is in `apps/eta/src/web/`.
+Two product tools: `web_fetch` reads a web page and returns Markdown; `web_search` searches the web and returns ranked results. Both call libraries directly in the main node's process (`@searxng-js/sex-scrape`, `sex-search`, `sex-searxng`, `sex-page`, 0.2.0), without starting a separate service. The code is in `apps/eta/src/web/`.
 
 ## Why session tools
 
@@ -34,8 +34,40 @@ The zod schema descriptions in sex-scrape / sex-search 0.1.1 are already neutral
 - Result: `Title:`, `URL:` (the address after redirects), the library-provided `Warning:`, then the Markdown.
 - **Length**: at most 50KB per call (UTF-8 bytes, same as the `read` tool), breaking at newlines where possible and never splitting surrogate pairs. When not finished, the end states `[Showing characters A-B of N. Call web_fetch with the same url and offset=B for the next part.]`; the last part says `This is the end of the page.`
 - **Continuation does not refetch**: fetched pages are kept in memory for 10 minutes (at most 16 pages). For `offset > 0`, this copy is used first to ensure all parts come from the same content; `offset` 0 always refetches.
-- **SSRF**: sex-egress protections remain enabled: loopback, private networks, link-local (including `169.254.169.254`), and ULA are always rejected (`PRIVATE_NETWORK_BLOCKED`); after DNS validation the connection is pinned to the validated address, and every redirect hop is checked again. No configuration option can disable it; to read the local machine or an intranet, the agent uses bash.
+- **SSRF**: sex-egress protections remain enabled: by default loopback, private networks, link-local (including `169.254.169.254`), and ULA are rejected (`PRIVATE_NETWORK_BLOCKED`); after DNS validation the connection is pinned to the validated address, and every redirect hop is checked again. The user can open parts of private networks; see [Private networks](#private-networks).
 - Maximum 10 MiB per page, 30 seconds by default; PDFs are also converted to Markdown (unpdf). Browser rendering and LLM formats are not supported.
+
+## Private networks
+
+Self-hosted users want agents to read intranet documentation (issue #634). `web_fetch` refuses every private address by default; the host's config can open a list of them.
+
+```jsonc
+// ~/.eta/config.json
+"web": {
+  "privateNetwork": {
+    "allow": ["192.168.1.0/24", "fd12:3456::/32", "10.0.0.5:8080", "docs.corp.internal", "*.lab.internal"],
+    "loopback": false
+  }
+}
+```
+
+- **Entries**: a network (IPv4 or IPv6 CIDR, or one address), or a host name (`*.name` for every name under it, not the name itself); each optionally with `:port` (`[v6]:port` for IPv6). Without a port every port is open; a URL without one is on 80 / 443.
+- **Loopback** (`localhost`, `127.0.0.0/8`, `::1`, and the unspecified address, which reaches the host too) is its own switch, off by default. Entries never open it: Ollama, SearXNG and docs sites on the host are what users want most, and the host's admin ports are the most sensitive, so it is one explicit decision.
+- **Never**: link-local (`169.254.0.0/16`, `fe80::/10`, where most cloud metadata services are) and the metadata addresses outside it (`fd00:ec2::254`, `100.100.100.200`, `168.63.129.16`) are refused whatever the list says, even under `0.0.0.0/0`.
+- Without the section (or with an empty list and loopback off) nothing changes: every private address is refused.
+
+**Where it is enforced**: in sex-egress's `EgressPolicy` (0.2.0, `allowPrivateNetwork` given the list), the same place as the default rule. After the host name is resolved, every address must be public or opened by the list (a network entry contains it, IPv4 embedded in IPv6 judged as IPv4; or a host-name entry names the host and the address is private), on a matching port; otherwise the fetch is refused before connecting. An allowed address is **pinned** like a public one, and **every redirect hop** is checked again, so a public page redirecting into an unlisted private address, or a listed name whose next DNS answer points elsewhere (rebinding), is still refused. (The library's other mode, `allowPrivateNetwork: true`, turns every check and the pinning off; only tests use it, and nothing a user configures reaches it.)
+
+**Refusals** are `PRIVATE_NETWORK_BLOCKED`, worded for this host (`blockedHere` in `service.ts`): a private address says where to add it (Settings › Network › Private network), loopback names the local services switch, and link-local / metadata says those are never fetched.
+
+**Config**: the host reads the section when it starts and whenever the file changes, from the settings page or an editor (the providers store's 2-second watch), and applies it to the next fetch: no restart. Each change is written to the host log (`[eta] web: private network: ...`) with every entry that has no effect; an entry that is not understood (a URL, a bad prefix, `localhost`, a link-local network) is reported and ignored, and the others apply. The settings page writes the section through `providers.setPrivateNetwork` (same revision rule as the rest of `config.json`), which refuses a new invalid entry. No agent tool reads or writes it.
+
+**Limits**:
+
+- **Not a security boundary.** Agents have a terminal (`bash` in eta's runtime, Claude Code's Bash, …): `curl` reaches the intranet whether or not this list exists, and an agent can edit `~/.eta/config.json` itself. The list keeps `web_fetch` from wandering into private addresses it was not meant to read (a link on a page, a search result); it does not stop an agent that sets out to.
+- **Proxy**: with a proxy (eta's network settings), a fetch goes through it unless `NO_PROXY` names the first URL's host (loopback always is). Through a proxy the request cannot be pinned: the proxy resolves the name itself, so rebinding between this check and its lookup is the proxy's to stop, and the proxy has to be able to reach the address. Put intranet hosts in the proxy exceptions to have them fetched directly and pinned. `NO_PROXY` networks (CIDR) are not matched.
+- **Where**: `web_fetch` always runs on the host, also for sessions on a daemon, so "private network" means the host's network; the list is one per host.
+- `web_search` is unchanged: SearXNG is not reached through this check, and it only returns results; reading a result page is a `web_fetch`, under this policy.
 
 ## web_search
 
@@ -68,4 +100,4 @@ These packages declare `node >= 24` in `engines`, while the repository root's `e
 
 ## Testing
 
-`apps/eta/test/web.test.ts`: scraping uses a loopback fixture site started by the test itself (`allowPrivateNetwork` is enabled only in tests, and verifies that it is rejected by default), search uses a fake SearXNG, plus one call through the scripted model to both tools in a real session. The two tests that access the external network and managed SearXNG are skipped by default and only run with `ETA_WEB_LIVE=1`.
+`apps/eta/test/web.test.ts`: scraping uses a loopback fixture site started by the test itself (`allowPrivateNetwork` is enabled only in tests, and verifies that it is rejected by default); the private-network list is tested on the same site through the loopback switch and redirects, and with a documentation network (`192.0.2.0/24`, where nothing answers: an allowed fetch times out instead of being refused). Rebinding and host-name entries need a scripted resolver, so they are covered by sex-egress's own tests; `packages/eta-server/test/providers-store.test.ts` covers the config section, search uses a fake SearXNG, plus one call through the scripted model to both tools in a real session. The two tests that access the external network and managed SearXNG are skipped by default and only run with `ETA_WEB_LIVE=1`.
