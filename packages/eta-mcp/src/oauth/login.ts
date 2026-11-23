@@ -104,17 +104,16 @@ function withServerHeaders(
 ): FetchLike {
   if (headers === undefined || Object.keys(headers).length === 0) return base;
   const origin = new URL(serverUrl).origin;
-  const own = sameOriginFetch(
-    (input, init) => {
-      const next = new Headers(init?.headers);
-      for (const [name, value] of Object.entries(headers))
-        if (!next.has(name)) next.set(name, value);
-      return base(input, { ...init, headers: next });
-    },
-    origin,
-  );
+  const own = sameOriginFetch((input, init) => {
+    const next = new Headers(init?.headers);
+    for (const [name, value] of Object.entries(headers))
+      if (!next.has(name)) next.set(name, value);
+    return base(input, { ...init, headers: next });
+  }, origin);
   return (input, init) =>
-    new URL(String(input)).origin === origin ? own(input, init) : base(input, init);
+    new URL(String(input)).origin === origin
+      ? own(input, init)
+      : base(input, init);
 }
 
 const KINDS: CredentialKind[] = [
