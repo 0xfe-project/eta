@@ -89,11 +89,12 @@ export function PanelTask(props: {
               <ActionMenu
                 label={uiText("taskActions")}
                 triggerStyle={{
-                  minWidth: control.md,
-                  width: control.md,
-                  height: control.md,
+                  minWidth: control.sm,
+                  width: control.sm,
+                  height: control.sm,
                   paddingHorizontal: 0,
                 }}
+                iconSize={icon.sm}
               >
                 <ActionItem
                   label={uiText("edit")}
@@ -118,12 +119,13 @@ export function PanelTask(props: {
               </ActionMenu>
             </TaskTopBar>
             <SmoothScroll style={grow} scrollbar={false}>
+              {/* The panel's section title: body 14 / 600 (compact), not the page's subtitle. */}
               <Label
-                variant="subtitle"
+                variant="body"
                 weight={weight.strong}
                 style={{
                   paddingTop: space[12],
-                  paddingBottom: 7,
+                  paddingBottom: space[8],
                   paddingHorizontal: inset,
                 }}
               >

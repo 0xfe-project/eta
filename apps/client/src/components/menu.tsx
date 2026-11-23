@@ -2,6 +2,7 @@ import type { JSX, ViewStyle } from "nsh";
 import type { Layout } from "./theme";
 import { context, platform, signal, View } from "nsh";
 import { Menu, MenuItem, MenuSeparator, Popover, Sheet } from "nsh/base";
+import { Compact } from "./density";
 import { SmoothScroll } from "./smooth-scroll";
 import { colors, Screen } from "./theme";
 import { space } from "./tokens";
@@ -150,7 +151,7 @@ export function MenuFrame(props: {
         <Grabber />
         {props.sheetHeader}
       </If>
-      {props.children}
+      <Compact>{props.children}</Compact>
     </MenuHost.Provider>
   );
   const viaMenu = () => (
