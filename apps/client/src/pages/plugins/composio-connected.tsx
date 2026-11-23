@@ -11,9 +11,6 @@ import { PluginLogo } from "./plugin-logo";
 import { PluginName } from "./plugin-name";
 import { authStyle, BADGE_EDGE_ALPHA } from "./plugin-status";
 
-/** What a real plugin card holds above its bottom row: 52 + 8 + 36 + 8 + 60. */
-const INFO_HEIGHT = 164;
-
 interface Connected {
   slug: string;
   name: string;
@@ -122,7 +119,8 @@ export function ComposioConnected(props: {
   const inset = () => (props.layout === "tablet" ? 14 : 16);
   /**
    * The last line of a card: the switch at the left, the buttons at the right. On a desktop card it is
-   * the real card's bottom row (36 high, a line above it, 8 below the line, 4 between); a row of the
+   * the real card's bottom row (36 high, a line above it, 8 below the line, 4 between), 10 under the
+   * description: the 24-high buttons sit in the 28 under the line, so they start 10 below it too; a row of the
    * phone and tablet layouts has no line. When both do not fit on one line the buttons drop to the
    * next line and stay at the right.
    */
@@ -135,7 +133,12 @@ export function ComposioConnected(props: {
         gap: 4,
         minHeight: divided ? 36 : 24,
         ...(divided
-          ? { borderTopWidth: 1, borderColor: c().border, paddingTop: 8 }
+          ? {
+              borderTopWidth: 1,
+              borderColor: c().border,
+              paddingTop: 8,
+              marginTop: 10,
+            }
           : {}),
       }}
     >
@@ -234,30 +237,27 @@ export function ComposioConnected(props: {
                       ...faint(item()),
                       width: 267,
                       padding: 12,
-                      gap: 8,
                       backgroundColor: c().canvas,
                       borderWidth: 1,
                       borderColor: c().border,
                     }}
                   >
-                    {/* As tall as what a real card holds above its bottom row (name and status 52, description 36, version/links and counts 60, gaps 16), so the cards sit in the same rhythm. The space is spacing, not text. */}
-                    <View style={{ minHeight: INFO_HEIGHT, gap: 8 }}>
-                      <View style={{ ...row, gap: 8 }}>
-                        <PluginLogo name={item().name} composio={item().slug} />
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <PluginName name={item().name} />
-                        </View>
-                        {mark(item())}
+                    <View style={{ ...row, gap: 8 }}>
+                      <PluginLogo name={item().name} composio={item().slug} />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <PluginName name={item().name} />
                       </View>
-                      <Label
-                        variant="small"
-                        tone="muted"
-                        lines={2}
-                        style={{ height: 36 }}
-                      >
-                        {item().description}
-                      </Label>
+                      {mark(item())}
                     </View>
+                    {/* Two lines high however short the text, 12 under the name row. */}
+                    <Label
+                      variant="small"
+                      tone="muted"
+                      lines={2}
+                      style={{ height: 36, marginTop: 12 }}
+                    >
+                      {item().description}
+                    </Label>
                     {footer(item(), true)}
                   </View>
                 )}
