@@ -35,8 +35,8 @@ export type PluginValues = Record<string, PluginValue>;
  * A market source's credential is one row of the host's `credential` table: integration "market",
  * key the source's name, kind "secret", the value a string. A second source takes its own key.
  */
-export const MARKET_CREDENTIAL = "market";
-export const CURSOR_SOURCE = "cursor";
+const MARKET_CREDENTIAL = "market";
+const CURSOR_SOURCE = "cursor";
 const CREDENTIAL_KIND = "secret";
 
 /** A request header the user attached to one of a plugin's remote servers. */
