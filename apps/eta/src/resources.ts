@@ -1,7 +1,7 @@
 /**
  * The host's own files: in the checkout, or inside the executable.
  *
- * Run from source, a file the host reads (the migrations, the mail logo) is where the checkout
+ * Run from source, a file the host reads (the migrations) is where the checkout
  * keeps it. A `bun build --compile` host has no checkout: `apps/eta/scripts/build-host.ts`
  * compiles it from a generated entry (`apps/eta/scripts/embed.ts`) that imports every file with
  * `{ type: "file" }` and hands the table over with `embedResources` before the host starts. A
@@ -43,7 +43,6 @@ export interface Embedded {
 /** Where a checkout keeps the files every host reads, by the first segment of their names. */
 const CHECKOUT: Readonly<Record<string, URL>> = {
   migrations: new URL("migrations/", import.meta.url),
-  "Eta-Logo.png": new URL("assets/Eta-Logo.png", import.meta.url),
 };
 
 /** Set once, before anything reads a resource; a test puts it back with `undefined`. */

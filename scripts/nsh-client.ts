@@ -11,7 +11,13 @@ import {
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 import { thirdPartyNotices } from "../apps/eta/scripts/notices";
+import {
+  desktopHostLauncherName,
+  desktopHostLauncherPath,
+  desktopHostProcessGrants,
+} from "../packages/client-contracts/src/host-launcher";
 import { writeClientIcons } from "./client-icons";
 
 const root = resolve(import.meta.dir, "..");
@@ -24,7 +30,19 @@ const meta = (await Bun.file(join(cwd, "nsh.json")).json()) as {
   name: string;
   version: string;
   icon: Record<string, string>;
+  capabilities: { process: { execute: string[] } };
 };
+
+const granted = meta.capabilities.process.execute;
+if (
+  granted.length !== desktopHostProcessGrants.length ||
+  granted.some(
+    (name) => !(desktopHostProcessGrants as readonly string[]).includes(name),
+  )
+)
+  throw new Error(
+    `apps/client/nsh.json must grant exactly: ${desktopHostProcessGrants.join(", ")}`,
+  );
 
 function option(name: string, short?: string): string | undefined {
   const index = args.findIndex(
@@ -63,9 +81,12 @@ async function run(
 const packaging =
   args[0] === "package" && !args.includes("--help") && !args.includes("-h");
 const target = option("--target");
-const desktop =
+const desktopTarget =
   packaging &&
-  (target === "macos" || target === "windows" || target === "linux");
+  (target === "macos" || target === "windows" || target === "linux")
+    ? target
+    : undefined;
+const desktop = desktopTarget !== undefined;
 // Android updates by signed packages of the app's code (`nsh publish`), and
 // by a new APK when the code needs a newer shell. iOS goes through the store.
 const android = packaging && target === "android";
@@ -232,24 +253,26 @@ if (packaging && target === "web") {
   );
 }
 if (desktop) {
-  const platform = { macos: "darwin", linux: "linux", windows: "win32" }[
-    target
-  ];
+  if (!desktopTarget) throw new Error("Choose a desktop package target.");
+  const platform = {
+    macos: "darwin",
+    linux: "linux",
+    windows: "win32",
+  }[desktopTarget];
   if (platform !== process.platform)
     throw new Error(
-      `Build the ${target} desktop package on a ${target} runner.`,
+      `Build the ${desktopTarget} desktop package on a ${desktopTarget} runner.`,
     );
-  const bundle = join(out, target === "macos" ? `${name}.app` : name);
+  const bundle = join(out, desktopTarget === "macos" ? `${name}.app` : name);
   const resources =
-    target === "macos"
+    desktopTarget === "macos"
       ? join(bundle, "Contents", "Resources", "nsh")
-      : target === "linux"
+      : desktopTarget === "linux"
         ? join(bundle, "nsh")
         : bundle;
-  const launcher = join(
-    resources,
-    target === "windows" ? "eta-bootstrap.exe" : "eta-bootstrap",
-  );
+  const bundleDirectory =
+    desktopTarget === "macos" ? resources : join(bundle, "nsh");
+  const launcher = join(resources, desktopHostLauncherName(desktopTarget));
   const upstream = process.env.ETA_HOST_UPSTREAM;
   const define = upstream
     ? ["--define", `ETA_HOST_UPSTREAM=${JSON.stringify(upstream)}`]
@@ -257,7 +280,7 @@ if (desktop) {
   const arch = option("--arch");
 
   if (
-    target === "macos" &&
+    desktopTarget === "macos" &&
     arch &&
     arch !== (process.arch === "x64" ? "x86_64" : process.arch)
   )
@@ -283,8 +306,21 @@ if (desktop) {
   } finally {
     rmSync(bootstrapWork, { recursive: true, force: true });
   }
+  const expectedLauncher = desktopHostLauncherPath(
+    desktopTarget,
+    pathToFileURL(join(bundleDirectory, "bundle.nshc")),
+  );
+  if (
+    !existsSync(bundleDirectory) ||
+    !existsSync(launcher) ||
+    !expectedLauncher ||
+    resolve(expectedLauncher) !== resolve(launcher)
+  )
+    throw new Error(
+      `${desktopTarget} package does not put ${launcher} where the app looks for it.`,
+    );
 
-  if (target === "macos") {
+  if (desktopTarget === "macos") {
     const sign = ["--force", "--sign", "-"];
     const entitlements = join(out, `${name}.entitlements`);
     await run("codesign", [...sign, launcher]);
@@ -302,7 +338,7 @@ if (desktop) {
       bundle,
       join(out, `${name}.zip`),
     ]);
-  } else if (target === "linux") {
+  } else if (desktopTarget === "linux") {
     await run("tar", ["-czf", join(out, `${name}.tar.gz`), "-C", out, name]);
   } else {
     // Windows' own bsdtar: the GNU tar of Git's bash, first on a runner's PATH, reads `D:\…` as
@@ -320,18 +356,18 @@ if (desktop) {
 
   if (updateEnabled) {
     const version = option("--app-version") ?? meta.version;
-    const prefix = `${name}-${version}-${target}-`;
+    const prefix = `${name}-${version}-${desktopTarget}-`;
     const archive = readdirSync(out).find(
       (item) =>
         item.startsWith(prefix) &&
         (item.endsWith(".tar.gz") || item.endsWith(".zip")),
     );
     if (!archive) throw new Error("NSH did not emit a desktop update archive.");
-    if (target === "macos") {
+    if (desktopTarget === "macos") {
       await run("tar", ["-czf", join(out, archive), "-C", out, `${name}.app`]);
     } else {
       copyFileSync(
-        join(out, `${name}.${target === "linux" ? "tar.gz" : "zip"}`),
+        join(out, `${name}.${desktopTarget === "linux" ? "tar.gz" : "zip"}`),
         join(out, archive),
       );
     }

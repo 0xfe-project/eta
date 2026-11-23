@@ -12,10 +12,10 @@
  * a 0.4.0-rc.3 one is already past it, which is the rc → next answer the workflow could not ask
  * until there was a seed for an rc.
  */
-import type { Database } from "bun:sqlite";
 import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   chooseSeed,
@@ -64,6 +64,21 @@ async function upgraded(version: string) {
   const applied = applyMigrations(db, loadMigrations());
   return { seed, home, dataDir, db, before, applied };
 }
+
+const emailTables = (db: Database): string[] =>
+  db
+    .query<{ name: string }, []>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND (name LIKE 'email\\_%' ESCAPE '\\' OR name = 'session_email')",
+    )
+    .all()
+    .map(({ name }) => name);
+
+const emailCredentials = (db: Database): number =>
+  db
+    .query<{ n: number }, []>(
+      "SELECT count(*) AS n FROM credential WHERE integration = 'email'",
+    )
+    .get()!.n;
 
 describe("the seeds a release upgrades", () => {
   it("has the ones the versions in flight need", () => {
@@ -138,9 +153,29 @@ describe("the seeds a release upgrades", () => {
       "0058-agent-avatar",
       "0059-pending-session-settings",
       "0060-interaction-context",
-      "0061-plugins",
+      "0061-captain-conversation",
+      "0062-drop-email",
+      "0063-plugins",
     ]);
   });
+
+  /*
+   * Every seed was made with a mailbox signed in (an account and its sealed password). After the
+   * upgrade there is no email: not a table, not a credential.
+   */
+  for (const version of seeds)
+    it(`${version}: drops the mailbox and its password`, async () => {
+      const { seed, db } = await upgraded(version);
+      const old = new Database(join(seed, "data", "eta.sqlite"), {
+        readonly: true,
+      });
+      open.push(old);
+      expect(emailTables(old)).toContain("email_account");
+      expect(emailCredentials(old)).toBe(1);
+
+      expect(emailTables(db)).toEqual([]);
+      expect(emailCredentials(db)).toBe(0);
+    });
 
   /*
    * Every seed's group follows its project's steward (Ada, a member) and every agent has its own

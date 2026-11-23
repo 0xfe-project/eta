@@ -3,12 +3,11 @@ import type { OpenSession } from "@eta/harness";
 /**
  * The tools a Captain session is not offered, although other sessions are.
  *
- * Two features withhold them on purpose. The task board keeps its conversation tools away from
- * Captain — it reads and controls tasks through its own `captain_*` tools, and never drafts one for
- * an agent — and email keeps its four away for the same sort of reason: Captain relays an Inbox
- * question to the user instead of writing to anyone itself.
+ * The task board withholds them on purpose: it keeps its conversation tools away from Captain,
+ * which reads and controls tasks through its own `captain_*` tools and never drafts one for an
+ * agent.
  *
- * The names are listed here, beside those two guards rather than inside them, because withholding
+ * The names are listed here, beside that guard rather than inside it, because withholding
  * is only half of the decision. A session's journal pins the tools it was opened with, and the
  * runner refuses to run while that pin names a tool the host does not install
  * (`configured_tools_unavailable`). One data directory is opened by every build pointed at it —
@@ -23,10 +22,6 @@ export const CAPTAIN_WITHHELD_TOOL_NAMES = [
   "create_task",
   "update_task",
   "comment_task",
-  "list_emails",
-  "read_email",
-  "send_email",
-  "reply",
 ] as const;
 
 const WITHHELD: ReadonlySet<string> = new Set(CAPTAIN_WITHHELD_TOOL_NAMES);

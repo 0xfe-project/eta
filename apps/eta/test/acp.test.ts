@@ -65,10 +65,13 @@ async function save(
   })) as AcpAgentView;
 }
 
-async function direct(w: World, agent: AgentView) {
-  const { conversation } = (await w.client.call("agents", "direct", {
-    agentId: agent.id,
-  })) as { conversation: { id: string } };
+/** A group of the agent alone, in its own workspace. */
+async function alone(w: World, agent: AgentView) {
+  const conversation = await w.group(
+    agent.homeProjectId,
+    [agent.id],
+    agent.name,
+  );
   await w.watch(conversation.id);
   return conversation.id;
 }
@@ -122,7 +125,7 @@ describe("an ACP agent, from the settings page to a reply", () => {
     await expect(
       w.agent("Bad", { runtime: "acp.fake", model: "claude:sonnet" }),
     ).rejects.toThrow(/acp\.fake:<model>/);
-    const chat = await direct(w, agent);
+    const chat = await alone(w, agent);
     const sent = await w.send(chat, "use a tool please");
     const done = await w.settled(chat, sent.replies[0]!.id);
     expect(done.status).toBe("done");
@@ -145,7 +148,7 @@ describe("an ACP agent, from the settings page to a reply", () => {
     const fake = fakeAgent("fake");
     await save(w, fake.config);
     const agent = await w.agent("Ace", { runtime: "acp.fake" });
-    const chat = await direct(w, agent);
+    const chat = await alone(w, agent);
     const first = await w.send(chat, "hello");
     await w.settled(chat, first.replies[0]!.id);
     const session = sessionOf(w, chat)!;
@@ -585,7 +588,7 @@ describe("one machine at a time: the settings page on a daemon", () => {
     })) as { runtimes: AgentRuntimeInfo[] };
     expect(runtimes.some((runtime) => runtime.id === "acp.fake")).toBe(true);
     const ace = await r.agent("Ace", { runtime: "acp.fake", machineId });
-    const chat = await direct(r, ace);
+    const chat = await alone(r, ace);
     const sent = await r.send(chat, "state");
     const done = await r.settled(chat, sent.replies[0]!.id);
     expect(done.status).toBe("done");

@@ -1,4 +1,5 @@
--- The plugin tables, in one migration. They were first seven migrations (0061 to 0067);
+-- The plugin tables, in one migration (0063: upstream took 0061 and 0062). They were first seven
+-- migrations (0061 to 0067);
 -- a database that already ran the first six runs this once more, so each table is made only where it
 -- is missing. (A table of the same name with another shape would pass unnoticed; none is known to
 -- exist.) The Cursor credential is not a table here: it is a row of `credential` (integration

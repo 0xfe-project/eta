@@ -1,7 +1,6 @@
 import type {
   AcpMachineList,
   BoardTaskView,
-  EmailAccountView,
   MachineView,
   McpServerView,
   ProvidersView,
@@ -10,7 +9,7 @@ import type { IconName } from "../../components/icons";
 import type { Message } from "../../i18n";
 import type { AppearanceProps } from "./appearance";
 import { effect } from "nsh";
-import { formatLocale, uiText, useText } from "../../i18n";
+import { uiText, useText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { createRuntimeListing } from "./runtimes/listing";
 
@@ -23,7 +22,6 @@ export const sections = [
   ["External agents", "terminal", "externalAgents"],
   ["Tasks", "tasks", "tasks"],
   ["Runtimes", "cpu", "runtimes"],
-  ["Email", "email", "email"],
   ["Network", "globe", "network"],
   ["Archived", "archive", "archived"],
   ["Appearance", "palette", "appearance"],
@@ -37,7 +35,6 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
   const text = useText();
   const providers = () => host.section<ProvidersView>("providers", "config");
   const machines = () => host.list<MachineView>("machines");
-  const email = () => host.list<EmailAccountView>("email", "accounts");
   const acp = () =>
     host.section<Record<string, AcpMachineList>>("acp", "machines") ?? {};
   const externalAgents = () =>
@@ -47,7 +44,6 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
   follow(() => "machines");
   follow(() => "mcp");
   follow(() => "acp");
-  follow(() => "email");
   // A daemon's external agents are in the `acp` section only once it was asked while online:
   // ask each online daemon once, and again after it was offline.
   const askedAcp = new Set<string>();
@@ -131,18 +127,6 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
             count: runtimes.available(),
           }),
         };
-      case "Email": {
-        const errors = email().filter((item) => item.status === "error").length;
-        return errors
-          ? {
-              text: uiText("mailboxConnectionErrors", {
-                count: errors,
-                suffix: errors === 1 || formatLocale() === "zh-CN" ? "" : "s",
-              }),
-              tone: "red",
-            }
-          : { text: String(email().length) };
-      }
       case "Network": {
         const open = providers()?.privateNetwork;
         const invalid = open?.invalid.length ?? 0;
@@ -185,5 +169,5 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
     }
   };
 
-  return { providers, machines, email, externalAgents, runtimes, summary };
+  return { providers, machines, externalAgents, runtimes, summary };
 }

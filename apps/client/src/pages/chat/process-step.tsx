@@ -1,4 +1,4 @@
-import type { EmailProposalView, RunBlock } from "@eta/client-contracts";
+import type { RunBlock } from "@eta/client-contracts";
 import type { JSX, ScrollRef } from "nsh";
 import { commandOf } from "@eta/client-contracts";
 import { signal, View } from "nsh";
@@ -12,12 +12,9 @@ import {
   SmoothScroll,
 } from "../../components";
 import { uiText } from "../../i18n";
-import { follow, useHost } from "../../services/host";
-import { EmailProposal } from "../email/proposal";
 import { ToolOutput } from "./run/tool-code";
 
 export function ProcessStep(props: { value: RunBlock }) {
-  const host = useHost();
   const c = colors();
   const tool = () => (props.value.type === "tool" ? props.value : undefined);
   // A list recycles a step's view for another step: what was opened is kept
@@ -25,30 +22,6 @@ export function ProcessStep(props: { value: RunBlock }) {
   const opened = signal<string | undefined>(undefined);
   const expanded = () => opened() === props.value.id;
   const toggle = () => opened.set(expanded() ? undefined : props.value.id);
-  const emailProposalId = () => {
-    const step = tool();
-    const details = step?.details;
-    return step &&
-      ["send_email", "reply"].includes(step.name) &&
-      details &&
-      typeof details === "object" &&
-      "emailProposalId" in details &&
-      typeof details.emailProposalId === "string"
-      ? details.emailProposalId
-      : undefined;
-  };
-  follow(() => (emailProposalId() ? "email" : undefined));
-  const emailProposal = () => {
-    const id = emailProposalId();
-    if (!id) return undefined;
-    return host
-      .list<EmailProposalView>("email", "proposals")
-      .find(
-        (item) =>
-          item.id === id &&
-          (item.status === "pending" || item.status === "failed"),
-      );
-  };
   const title = () => {
     const step = tool();
     if (!step) return "";
@@ -65,93 +38,85 @@ export function ProcessStep(props: { value: RunBlock }) {
   };
   return (
     <If
-      when={emailProposal()}
+      when={tool()}
       else={
         <If
-          when={tool()}
+          when={props.value.type === "steer"}
           else={
-            <If
-              when={props.value.type === "steer"}
-              else={
-                <TextStep
-                  id={props.value.id}
-                  kind={props.value.type === "thinking" ? "thinking" : "note"}
-                  text={
-                    props.value.type === "thinking" ||
-                    props.value.type === "text"
-                      ? props.value.text
-                      : ""
-                  }
-                />
+            <TextStep
+              id={props.value.id}
+              kind={props.value.type === "thinking" ? "thinking" : "note"}
+              text={
+                props.value.type === "thinking" || props.value.type === "text"
+                  ? props.value.text
+                  : ""
               }
-            >
-              {/* Where the run took words inserted into it: a trace, not the words again. */}
-              <View
-                style={{
-                  paddingVertical: 3,
-                  paddingHorizontal: 10,
-                  borderBottomWidth: 1,
-                  borderColor: c().border,
-                  alignItems: "center",
-                }}
-              >
-                <Label variant="caption" tone="faint">
-                  {uiText("insertReceived")}
-                </Label>
-              </View>
-            </If>
+            />
           }
         >
-          {(step) => (
-            <View>
-              <View
-                role={step().output ? "button" : undefined}
-                onPress={step().output ? toggle : undefined}
-                style={{
-                  ...row,
-                  minHeight: 33,
-                  paddingHorizontal: 10,
-                  gap: 8,
-                  borderBottomWidth: 1,
-                  borderColor: c().border,
-                }}
-              >
-                <Label variant="small" lines={1} style={{ flex: 1 }}>
-                  {title()}
-                </Label>
-                <Caption
-                  text={
-                    step().status === "running"
-                      ? uiText("inProgress")
-                      : step().status === "completed"
-                        ? uiText("done")
-                        : uiText("failed")
-                  }
-                  style={
-                    step().status === "running"
-                      ? {
-                          backgroundColor: c().button,
-                          color: c().buttonInk,
-                          paddingHorizontal: 8,
-                          paddingVertical: 2,
-                          letterSpacing: 1,
-                          fontWeight: 600,
-                        }
-                      : { letterSpacing: 1, color: c().faint }
-                  }
-                />
-              </View>
-              <If when={expanded() && step().output}>
-                <View style={{ padding: 8, backgroundColor: c().surface }}>
-                  <ToolOutput text={step().output ?? ""} tone="muted" />
-                </View>
-              </If>
-            </View>
-          )}
+          {/* Where the run took words inserted into it: a trace, not the words again. */}
+          <View
+            style={{
+              paddingVertical: 3,
+              paddingHorizontal: 10,
+              borderBottomWidth: 1,
+              borderColor: c().border,
+              alignItems: "center",
+            }}
+          >
+            <Label variant="caption" tone="faint">
+              {uiText("insertReceived")}
+            </Label>
+          </View>
         </If>
       }
     >
-      {(proposal) => <EmailProposal item={proposal()} />}
+      {(step) => (
+        <View>
+          <View
+            role={step().output ? "button" : undefined}
+            onPress={step().output ? toggle : undefined}
+            style={{
+              ...row,
+              minHeight: 33,
+              paddingHorizontal: 10,
+              gap: 8,
+              borderBottomWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <Label variant="small" lines={1} style={{ flex: 1 }}>
+              {title()}
+            </Label>
+            <Caption
+              text={
+                step().status === "running"
+                  ? uiText("inProgress")
+                  : step().status === "completed"
+                    ? uiText("done")
+                    : uiText("failed")
+              }
+              style={
+                step().status === "running"
+                  ? {
+                      backgroundColor: c().button,
+                      color: c().buttonInk,
+                      paddingHorizontal: 8,
+                      paddingVertical: 2,
+                      letterSpacing: 1,
+                      fontWeight: 600,
+                    }
+                  : { letterSpacing: 1, color: c().faint }
+              }
+            />
+          </View>
+          <If when={expanded() && step().output}>
+            <View style={{ padding: 8, backgroundColor: c().surface }}>
+              <ToolOutput text={step().output ?? ""} tone="muted" />
+            </View>
+          </If>
+        </View>
+      )}
     </If>
   );
 }

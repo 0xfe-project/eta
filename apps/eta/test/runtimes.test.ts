@@ -87,10 +87,13 @@ async function callHostTool(
   };
 }
 
-async function direct(w: World, agent: AgentView) {
-  const { conversation } = (await w.client.call("agents", "direct", {
-    agentId: agent.id,
-  })) as { conversation: { id: string } };
+/** A group of the agent alone, in its own workspace. */
+async function alone(w: World, agent: AgentView) {
+  const conversation = await w.group(
+    agent.homeProjectId,
+    [agent.id],
+    agent.name,
+  );
   await w.watch(conversation.id);
   return conversation.id;
 }
@@ -264,7 +267,7 @@ describe("a conversation with an agent on Claude Code", () => {
       model: "claude:sonnet",
       instructions: "Be terse.",
     });
-    const chat = await direct(w, agent);
+    const chat = await alone(w, agent);
     const sent = await w.send(chat, "what is here?");
     const done = await w.settled(chat, sent.replies[0]!.id);
     expect(done.status).toBe("done");
@@ -286,7 +289,7 @@ describe("a conversation with an agent on Claude Code", () => {
       runtime: "claude",
       model: "claude:sonnet",
     });
-    const chat = await direct(w, agent);
+    const chat = await alone(w, agent);
     await w.settled(chat, (await w.send(chat, "one")).replies[0]!.id);
     await w.client.call("agents", "update", {
       agentId: agent.id,
@@ -301,7 +304,7 @@ describe("a conversation with an agent on Claude Code", () => {
   it("an agent moved off eta answers on the runtime from the next message", async () => {
     const { w, turns } = await onClaude((turn) => turn.say("from claude"));
     const agent = await w.agent("Ada", { model: "fake:model" });
-    const chat = await direct(w, agent);
+    const chat = await alone(w, agent);
     await w
       .settled(chat, (await w.send(chat, "one")).replies[0]!.id)
       .catch(() => undefined);
@@ -561,7 +564,7 @@ describe("eta's tools, on eta and on Claude Code", () => {
       await w.agent("Ada", { model: "fake:model" }),
       await w.agent("Cody", { runtime: "claude", model: "claude:sonnet" }),
     ]) {
-      const chat = await direct(w, agent);
+      const chat = await alone(w, agent);
       await w.settled(chat, (await w.send(chat, "hello")).replies[0]!.id);
     }
 
@@ -754,7 +757,7 @@ describe("a turn Claude Code opens itself, on a background task's notification",
       turn.say(" and yes: here they are.");
     });
     const agent = await w.agent("Opus", { runtime: "claude" });
-    const chat = await direct(w, agent);
+    const chat = await alone(w, agent);
     await w.settled(chat, (await w.send(chat, "audit")).replies[0]!.id);
     await notify("audit completed");
     const working = () =>
@@ -787,7 +790,7 @@ describe("a turn Claude Code opens itself, on a background task's notification",
       await held;
     });
     const agent = await w.agent("Opus", { runtime: "claude" });
-    const chat = await direct(w, agent);
+    const chat = await alone(w, agent);
     await w.settled(chat, (await w.send(chat, "audit")).replies[0]!.id);
     await notify("audit completed");
     await until(() => w.rows(chat).some((row) => row.data.unprompted === true));
@@ -810,7 +813,7 @@ describe("a turn Claude Code opens itself, on a background task's notification",
       if (turn.input.includes("second")) turn.say("Both batches are done.");
     });
     const agent = await w.agent("Opus", { runtime: "claude" });
-    const chat = await direct(w, agent);
+    const chat = await alone(w, agent);
     await w.settled(chat, (await w.send(chat, "audit")).replies[0]!.id);
     await notify("first");
     await notify("second");

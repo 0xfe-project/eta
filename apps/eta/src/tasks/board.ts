@@ -1483,7 +1483,7 @@ export class TaskBoard {
 
   /**
    * A task that came from a group is that group's work: only its members can be called into the
-   * thread. One from a direct chat, or from nowhere, can call in any agent.
+   * thread. One from Captain's own conversation, or from nowhere, can call in any agent.
    */
   #checkMentions(task: TaskRecord, mentions: readonly string[]): void {
     if (mentions.length === 0 || task.originConversationId === null) return;

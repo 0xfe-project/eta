@@ -24,7 +24,7 @@ No second root is allowed here. There used to be a `--data-dir`: it only moved c
   plugin-runtime/           generated directory for Claude Code, containing only valid skills (symlinks)
   modules/                  official plugins
   access-token              the token for the token gate (when enabled; 0600)
-  secret.key                sealing key for email and MCP (0600, generated on first use)
+  secret.key                sealing key for MCP (0600, generated on first use)
 ```
 
 daemon data lives in the same root: `~/.eta/daemon/` (see [machines and daemon](machines.md)), sessions in `daemon/sessions/`. It shares `$HOME` with the host, each occupying its own subdirectory. The memory sidecar's data lives in its own PostgreSQL, not here.

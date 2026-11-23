@@ -317,6 +317,11 @@ const REMOVED_TOOLS: ReadonlySet<string> = new Set([
   // The GitHub connection's; a host started with `--github` pinned them on every session.
   "open_pull_request",
   "draft_issue",
+  // The mailbox's; every agent session of a host that had email pinned them.
+  "list_emails",
+  "read_email",
+  "send_email",
+  "reply",
 ]);
 
 /** Replay a journal and hand back a session ready to run. */

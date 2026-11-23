@@ -39,12 +39,7 @@
     },
     "statusBar": true,
     "process": {
-      "execute": [
-        "eta-host",
-        "eta-host.exe",
-        "eta-bootstrap.exe",
-        "/usr/bin/env"
-      ],
+      "execute": ["eta-host", "eta-host.exe", "env", "cmd.exe"],
       "env": ["XDG_DATA_HOME", "ETA_RELEASES_URL", "ETA_HOST_ORIGIN"]
     },
     "application": true

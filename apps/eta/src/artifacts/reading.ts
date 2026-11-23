@@ -6,7 +6,7 @@
  * asks for (`scopeOf`):
  *
  * - Captain, in any session including the routines it runs: every artifact.
- * - An agent in a conversation (a group or a direct chat): that conversation's artifacts, which
+ * - An agent in a conversation (a group, or Captain's own): that conversation's artifacts, which
  *   are the ones published there and the ones of the tasks that are in it now.
  * - A task's session: the conversation the task is in, the same as an agent there. A task in no
  *   conversation: its own artifacts only.

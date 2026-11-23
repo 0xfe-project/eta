@@ -12,14 +12,14 @@
 
 - Fields: `name`, `instructions` (appended after the base of every session's system prompt for this agent), `persona` (the name of a persona card; an empty string is the project's default card, which differs from "no persona"), `model` (`provider:modelId`, empty means follow settings), `thinking_level`.
 - On creation it gets its own workspace on the primary node, `<data directory>/agents/<id>/`, which is also a project of kind `agent_home` owned by it (`project.owner_agent_id`), and both appear together in one transaction. Renaming moves the directory.
-- A **DM** is the `direct` conversation in its workspace whose only member is itself (`agents.direct` gets or restores it).
-- Deleting an agent first stops the reply it is writing; the lines it wrote on the timeline are kept.
+- An agent is talked to in groups; there are no private chats. `agents.direct` is gone and answers with an error that says so. Migration 0061 made every private chat a group of one (same id, name, archive state and timeline; the agent as its steward).
+- Deleting an agent first stops the reply it is writing; the lines it wrote on the timeline are kept. Each kind of conversation is told (`ConversationPolicy.onAgentDeleted`); a group keeps its rows and loses the member.
 
 ## Projects and stewards
 
 project = machine + directory (unique per path on the same machine). A project has no steward; `owner_agent_id` is set only on an `agent_home` and says whose workspace it is (Captain's memory and the ACP machine list find an agent's workspace by it).
 
-The **steward** belongs to a group: `conversation.steward_id` is one of its members, or NULL for none. Messages that don't @ anyone go to it. It is chosen when the group is made (`conversations.create`: a member, null for none, left out the first member) and changed with `conversations.setSteward`, which takes only a member or null. A steward that leaves the group (`conversations.remove`) leaves it with none, and a `system` line says so ("X left the group, which has no steward now."). A private chat's steward is its agent. Migration 0055 wrote each group's former effective steward (its own, else its project's, unless `no_steward`) onto the group, and none when that agent was not a member.
+The **steward** belongs to a group: `conversation.steward_id` is one of its members, or NULL for none. Messages that don't @ anyone go to it. It is chosen when the group is made (`conversations.create`: a member, null for none, left out the first member) and changed with `conversations.setSteward`, which takes only a member or null. A steward that leaves the group (`conversations.remove`) leaves it with none, and a `system` line says so ("X left the group, which has no steward now."). Migration 0055 wrote each group's former effective steward (its own, else its project's, unless `no_steward`) onto the group, and none when that agent was not a member.
 
 **File list** (`projects.files`, used by the composer's `@` menu): listed by a shell script on the machine the project lives on (the local machine via the process's own shell, a daemon via the link's `exec`, so there is only one implementation): in a git checkout it takes the files git knows about (tracked, not ignored), otherwise a `find` with depth ≤ 8; then filters out `node_modules`, `.git`, `.eta`, `dist`, `build` and similar directories, sorts shallow-first, defaults to 2000 and at most 5000 entries, with `truncated` when it overflows. Paths are relative to the project directory, i.e. the agent's working directory. In the menu, members come first and files after.
 
@@ -29,7 +29,9 @@ The **steward** belongs to a group: `conversation.steward_id` is one of its memb
 
 ## Conversations and members
 
-- A conversation's `kind` is `group` or `direct`. It has two text blocks, `goal` and `decided` (the discussion's goal and the conclusions reached), plus `read_seq` (how far the user has read) and `archived`.
+- A conversation's `kind` is `group` or `captain`. It has two text blocks, `goal` and `decided` (the discussion's goal and the conclusions reached), plus `read_seq` (how far the user has read) and `archived`.
+- **Conversation policy** (`conversations/policy.ts`): what differs by kind is asked of the kind's policy, never of `kind` directly — who a user message wakes (`route`), whether members may join or leave (`canChangeMembers`: `invite`, `remove`, `setSteward`), whether `conversations.update` may change it (`updateRefusal`), whether it is a row of `conversations.list` (`listed`), what `conversation_info` tells an agent (`describe`), and what follows an agent's rename or deletion (`onAgentRenamed`, `onAgentDeleted`). The conversations module registers only the group's (`group-policy.ts`); another module registers its own kind when its plugin starts. A kind nobody registered (a module that is off) is left alone: listed nowhere, unchanged, waking nobody.
+- **Captain's conversation** is kind `captain`, owned by the captain module (`captain/policy.ts`, registered by the captain plugin). Captain finds or makes it itself (`CaptainService.conversation`, in Captain's workspace, Captain its only member); clients reach it through `captain.direct`, whose arguments and result are unchanged. A message that names nobody goes to Captain; nobody can be invited or removed, and `conversations.update` refuses it (name, goal and archive alike). It is not in `conversations.list`, but `conversations.<id>` and `send`, `stop`, `steer`, `history`, `attach` work on it as on any conversation. What the host posts for Captain lands there: a routine's report line, and a proposal's outcome with nowhere else to go.
 - `participant`: who takes part. `session_id` is that agent's session in this conversation (created on first wake-up, reused ever after, and found again from this row after a restart); `last_seq` is the line it has been told up to.
 - `message` (the timeline): `seq` increases within a conversation and is the reading order. `kind` is one of `message`, `mention`, `system`, `task_draft`, `task_card`; `status` is one of `queued`, `working`, `waiting_for_input`, `done`, `failed`, `stopping`, `stopped`. **A reply row holds its place**: it has a `seq` as soon as it is queued, and as text arrives `revision` grows while `seq` stays the same.
 - When a reply finishes, the run's tool activity is stored in the row's `data.activity` (`ToolActivity[]`: name, truncated input, at most the first 2000 characters of output, status, and the `details` the tool left for the page, such as the artifact reference from `publish_artifact`; `details` over 4000 bytes are dropped, at most 200 entries). While a reply is in progress the page draws tool cards from the session's transcript; afterwards it draws the same cards and artifact cards from here. For remote sessions the daemon's `run` brings them back in `RunOutcome.activity`, so no migration is needed.
@@ -42,13 +44,12 @@ A user row's `data.attachments` (`AttachmentView[]`: id, name, type, size) lists
 
 **One wake-up is one reply row.** There is no separate wake-up table or queue: a `queued` reply row is a wake-up waiting for its session, `working` is one in flight, and on process restart any leftover in-flight rows are all marked failed ("the service restarted and this reply did not finish").
 
-Who gets woken (`conversations/routing.ts`, pure rules):
+Who gets woken in a group (`conversations/routing.ts`, pure rules; Captain's conversation always wakes Captain):
 
 1. Members @-mentioned in the user message (only members count).
-2. No @ and it's a DM: the one and only agent.
-3. No @ and the group has a steward: the steward.
-4. No steward and only one member: that member.
-5. Everything else: nobody is woken, and the sender is told under the message ("nobody was @mentioned and this group has no steward") — no guessing.
+2. No @ and the group has a steward: the steward.
+3. No steward and only one member: that member.
+4. Everything else: nobody is woken, and the sender is told under the message ("nobody was @mentioned and this group has no steward") — no guessing.
 
 Routing never adds anyone to a conversation.
 

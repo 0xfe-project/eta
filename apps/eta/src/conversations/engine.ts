@@ -34,6 +34,7 @@ import type { MachineRecord, MachineStore } from "../machines/store";
 import type { ProjectStore } from "../projects/store";
 import type { AttachmentRecord, AttachmentStore } from "./attachments";
 import type { SessionHandle, SessionPlace } from "./places";
+import type { ConversationPolicies } from "./policy";
 import type { ConversationRecord, ConversationStore } from "./store";
 import type { Timeline } from "./timeline";
 import { homedir } from "node:os";
@@ -45,12 +46,7 @@ import { heldIn } from "../session-owner";
 import { viewOf as attachmentView } from "./attachments";
 import { briefing } from "./briefing";
 import { LocalPlace, messageOf } from "./places";
-import {
-  judgeMention,
-  resolveNamed,
-  routeUserMessage,
-  WAKE_BUDGET,
-} from "./routing";
+import { judgeMention, resolveNamed, WAKE_BUDGET } from "./routing";
 import { conversationTools } from "./tools";
 
 /** What a reply says when the process died under it. */
@@ -139,6 +135,8 @@ export interface EngineOptions {
   machines: MachineStore;
   projects: ProjectStore;
   conversations: ConversationStore;
+  /** What each kind of conversation does differently: who a message goes to, what an agent is told. */
+  policies: ConversationPolicies;
   timeline: Timeline;
   /** The files people attach to messages. */
   attachments: AttachmentStore;
@@ -174,6 +172,7 @@ export class Engine {
   readonly #machines: MachineStore;
   readonly #projects: ProjectStore;
   readonly #conversations: ConversationStore;
+  readonly #policies: ConversationPolicies;
   readonly #timeline: Timeline;
   readonly #attachments: AttachmentStore;
   readonly #shell: EngineOptions["shell"];
@@ -211,6 +210,7 @@ export class Engine {
     this.#machines = options.machines;
     this.#projects = options.projects;
     this.#conversations = options.conversations;
+    this.#policies = options.policies;
     this.#timeline = options.timeline;
     this.#attachments = options.attachments;
     this.#shell = options.shell;
@@ -711,8 +711,7 @@ export class Engine {
     let message!: MessageView;
     let nobody = false;
     this.#db.transaction(() => {
-      const routing = routeUserMessage({
-        kind: conversation.kind,
+      const routing = this.#policies.of(conversation.kind).route({
         members: this.#conversations
           .participants(conversation.id)
           .map((participant) => participant.agentId),
@@ -1024,15 +1023,16 @@ export class Engine {
       ].filter((mark) => mark !== undefined);
       return marks.length === 0 ? name : `${name} (${marks.join(", ")})`;
     });
+    const described = this.#policies
+      .of(conversation.kind)
+      .describe(conversation);
     return [
-      `Conversation: ${conversation.name}${conversation.kind === "direct" ? " (a private chat with the user)" : ""}`,
+      `Conversation: ${conversation.name}${described.note === undefined ? "" : ` (${described.note})`}`,
       `Project: ${project === undefined ? "(gone)" : `${project.name}, at ${project.path}`}`,
       `Goal: ${conversation.goal === "" ? "(not set)" : conversation.goal}`,
       `Decided so far: ${conversation.decided === "" ? "(nothing yet)" : conversation.decided}`,
       `Members: ${members.join(", ")}`,
-      ...(conversation.kind === "group"
-        ? [stewardLine(steward, participants.length, this.#agents)]
-        : []),
+      ...described.lines,
     ].join("\n");
   }
 
@@ -1661,18 +1661,6 @@ export class Engine {
  * Who takes a user message that names nobody, as `conversation_info` says it: the steward, the only
  * member of a group without one, or nobody at all. Never somebody from outside the group.
  */
-function stewardLine(
-  steward: string | null,
-  members: number,
-  agents: AgentStore,
-): string {
-  if (steward !== null)
-    return `Steward: ${agents.get(steward)?.name ?? "(deleted)"} (takes the user's messages that @mention nobody)`;
-  return members === 1
-    ? "Steward: none (the user's messages that @mention nobody go to the only member)"
-    : "Steward: none (a user message that @mentions nobody wakes nobody)";
-}
-
 /** One participant, which is one session. */
 function keyOf(conversationId: string, agentId: string): string {
   return `${conversationId}:${agentId}`;

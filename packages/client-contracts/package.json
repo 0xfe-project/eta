@@ -15,6 +15,7 @@
     "./composer-target": "./src/composer-target.ts",
     "./connect-link": "./src/connect-link.ts",
     "./desktop": "./src/desktop.ts",
+    "./host-launcher": "./src/host-launcher.ts",
     "./plugin-fields": "./src/plugin-fields.ts",
     "./themes": "./src/themes.ts",
     "./tool-shape": "./src/tool-shape.ts",

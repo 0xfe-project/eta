@@ -134,7 +134,7 @@ export function PhoneNavigation(props: Navigation) {
               props.page === tab()[0] ||
               (tab()[0] === "pending" && props.page === "routines") ||
               (tab()[0] === "more" &&
-                ["email", "plugins", "settings"].includes(props.page))
+                ["plugins", "settings"].includes(props.page))
             }
             count={tab()[0] === "pending" ? waiting() : 0}
             onPress={() => props.onNavigate(tab()[0])}

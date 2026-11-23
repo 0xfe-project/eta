@@ -47,7 +47,6 @@ const CONFIG = {
     },
   ],
 };
-export const SEED_MAIL_PASSWORD = "fake-mail-password";
 export const SEED_PLUGIN_SECRET = "sk-fakefakefake";
 
 /** Read back later: what each returned when the seed was made has to be what it returns then. */
@@ -58,7 +57,6 @@ const SAMPLES = [
   "SELECT status FROM task_run ORDER BY id",
   "SELECT title FROM artifact ORDER BY title",
   "SELECT number FROM artifact_version ORDER BY number",
-  "SELECT name, address, smtp_host FROM email_account ORDER BY name",
   "SELECT name FROM routine ORDER BY name",
   "SELECT name, kind FROM machine ORDER BY name",
   "SELECT key FROM setting ORDER BY key",
@@ -141,7 +139,7 @@ export function restoreSeed(seed: string, dataDir: string, home: string): void {
 
 /**
  * What a host makes for itself when it starts, out of what it is checked on: a later build makes
- * agents with a system role (Captain) and their direct conversations, which no seed has. The
+ * agents with a system role (Captain) and Captain's own conversation, which no seed has. The
  * agents are told by `system_role`, not by name, so a person's agent called Captain is still the
  * seed's. Temporary views of the same names come first in every query of this connection, the
  * manifest's own included; nothing is written to the database.
@@ -150,15 +148,15 @@ export function restoreSeed(seed: string, dataDir: string, home: string): void {
  *
  * - `participant` leaves out every row of a system agent, in any conversation: a group a person
  *   made and then gave to Captain is the person's, and keeps its other members.
- * - `conversation` leaves out only `direct` conversations with a system agent. That is everything
- *   a host makes for itself today: Captain's one conversation is the direct one `openDirect`
- *   gives it, and every group with Captain in it was made by a person, so it belongs in the check.
+ * - `conversation` leaves out only Captain's own: kind `captain` since 0061, and before that the
+ *   `direct` conversation with a system agent it had. That is everything a host makes for itself
+ *   today; every group with Captain in it was made by a person, so it belongs in the check.
  *
- * It stops holding when a build makes a conversation for a system agent that is not `direct` (a
- * group of its own, say): that conversation stays in the view, shows up in the samples of an
- * upgraded host, and the check reports it as drift although the seed is intact. Then leave out
- * whatever that build makes, by how it marks it, not by dropping the `kind` test: a person's group
- * with Captain in it must still be checked. apps/eta/test/upgrade-e2e.test.ts holds both rules.
+ * It stops holding when a build makes another conversation for itself (a group of its own, say):
+ * that conversation stays in the view, shows up in the samples of an upgraded host, and the check
+ * reports it as drift although the seed is intact. Then leave out whatever that build makes, by how
+ * it marks it, not by dropping the `kind` test: a person's group with Captain in it must still be
+ * checked. apps/eta/test/upgrade-e2e.test.ts holds both rules.
  */
 export function leaveOutSystemData(db: Database): void {
   const columns = db
@@ -171,7 +169,7 @@ export function leaveOutSystemData(db: Database): void {
       SELECT * FROM main.agent WHERE system_role IS NULL;
     CREATE TEMP VIEW conversation AS
       SELECT * FROM main.conversation AS c
-      WHERE NOT (c.kind = 'direct' AND EXISTS (
+      WHERE c.kind <> 'captain' AND NOT (c.kind = 'direct' AND EXISTS (
         SELECT 1 FROM main.participant AS p
         WHERE p.conversation_id = c.id AND p.agent_id IN (${system})));
     CREATE TEMP VIEW participant AS
@@ -363,17 +361,6 @@ async function generate(binary: string, version: string): Promise<void> {
   if (seeded === null) throw new Error("the seed made no task to close");
   await call("tasks", "update", { taskId: seeded.id, status: "done" });
 
-  await call("email", "saveAccount", {
-    name: "Seed mail",
-    address: "seed@example.invalid",
-    smtpHost: "smtp.example.invalid",
-    smtpPort: 465,
-    imapHost: "imap.example.invalid",
-    imapPort: 993,
-    pollIntervalSeconds: 86_400,
-    username: "seed@example.invalid",
-    password: SEED_MAIL_PASSWORD,
-  });
   await call("plugins", "recheck");
   await call("plugins", "configure", {
     name: "seed-plugin",
@@ -401,7 +388,7 @@ async function generate(binary: string, version: string): Promise<void> {
   stopped.exec("PRAGMA journal_mode = DELETE");
   stopped.exec("VACUUM");
   // The manifest is what the check will read back, so it is read through the same lens: what a
-  // host makes for itself (a Captain and its direct conversation, a system agent) is left out of
+  // host makes for itself (a Captain and its own conversation, a system agent) is left out of
   // both, because the upgraded host makes its own. A build that has a Captain would otherwise
   // write a seed its own check calls wrong.
   leaveOutSystemData(stopped);
@@ -424,10 +411,6 @@ async function generate(binary: string, version: string): Promise<void> {
     ),
     conversation: { id: conversation.id, said, replied: reply.text },
     sealed: [
-      {
-        query: "SELECT value AS sealed FROM credential WHERE kind = 'password'",
-        plain: JSON.stringify({ password: SEED_MAIL_PASSWORD }),
-      },
       {
         query: "SELECT sealed FROM plugin_config WHERE plugin = 'seed-plugin'",
         plain: JSON.stringify({
