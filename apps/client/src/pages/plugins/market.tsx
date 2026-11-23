@@ -1,11 +1,13 @@
 import type {
+  ComposioAuth,
+  ComposioToolkit,
   MarketCatalog,
   MarketEntry,
   MarketPreview,
 } from "@eta/client-contracts";
 import type { JSX } from "nsh";
 import type { Layout } from "../../components";
-import { effect, signal, untracked, View } from "nsh";
+import { effect, openUrl, signal, untracked, View } from "nsh";
 import { Input } from "nsh/base";
 import {
   Button,
@@ -42,6 +44,8 @@ export function Market(props: {
   layout: Layout;
   tabs: () => JSX.Element;
   onBack?: () => void;
+  /** Opens an address in the browser; the system's by default. */
+  open?: (url: string) => Promise<void>;
 }) {
   const host = useHost();
   const c = colors();
@@ -77,6 +81,27 @@ export function Market(props: {
     );
   };
   const current = () => all().find((item) => key(item) === detail());
+  const toolkitKey = (item: ComposioToolkit) => "composio\n" + item.slug;
+  const allToolkits = () =>
+    (catalog()?.sources ?? []).flatMap((item) => item.toolkits ?? []);
+  const toolkits = () => {
+    const needle = query().trim().toLowerCase();
+    return allToolkits().filter(
+      (item) =>
+        needle === "" ||
+        [item.name, item.description, item.sourceName, ...item.categories]
+          .join(" ")
+          .toLowerCase()
+          .includes(needle),
+    );
+  };
+  const currentToolkit = () =>
+    allToolkits().find((item) => toolkitKey(item) === detail());
+  /** A Composio source with no key, or whose key was refused: an answer of its own, not a failure of the market. */
+  const composioNotes = () =>
+    (catalog()?.sources ?? []).filter(
+      (item) => item.status === "needs_key" || item.status === "key_rejected",
+    );
   const failed = () =>
     (catalog()?.sources ?? []).filter((item) => item.error !== null);
   const skipped = () =>
@@ -97,6 +122,24 @@ export function Market(props: {
       ? undefined
       : new Date(Math.min(...times)).toLocaleString();
   };
+  /** Connecting a toolkit: the host starts it with Composio, and the user finishes in the browser. */
+  async function connect(toolkit: ComposioToolkit) {
+    if (busy()) return;
+    busy.set(true);
+    installError.set("");
+    try {
+      const link = await host.call<{ redirectUrl: string }>(
+        "plugins",
+        "composioLink",
+        { slug: toolkit.slug },
+      );
+      await (props.open ?? openUrl)(link.redirectUrl);
+    } catch (error) {
+      installError.set(messageOf(error));
+    } finally {
+      busy.set(false);
+    }
+  }
   async function clearCache() {
     await host.action(() => host.call("plugins", "marketClearCache", {}));
     await load();
@@ -261,6 +304,22 @@ export function Market(props: {
       }}
     />
   );
+  const authLabel = (auth: ComposioAuth) =>
+    auth === "api_key"
+      ? uiText("composioAuthApiKey")
+      : auth === "oauth"
+        ? uiText("composioAuthOauth")
+        : auth === "none"
+          ? uiText("composioAuthNone")
+          : uiText("composioAuthUnknown");
+  const authHelp = (auth: ComposioAuth) =>
+    auth === "api_key"
+      ? uiText("composioAuthApiKeyHelp")
+      : auth === "oauth"
+        ? uiText("composioAuthOauthHelp")
+        : auth === "none"
+          ? uiText("composioAuthNoneHelp")
+          : uiText("composioAuthUnknownHelp");
   const marker = (item: MarketEntry) =>
     item.unsupported !== null
       ? uiText("marketUnsupported")
@@ -476,11 +535,27 @@ export function Market(props: {
               />
             </View>
           </If>
-          <If when={all().length}>
+          <Each of={composioNotes()} key={(item) => item.source.url}>
+            {(item) => (
+              <View testID="composio-note" style={{ gap: 4 }}>
+                <Label weight={500}>
+                  {item().status === "needs_key"
+                    ? uiText("composioNeedsKey")
+                    : uiText("composioKeyRejected")}
+                </Label>
+                <Label variant="small" tone="muted">
+                  {item().status === "needs_key"
+                    ? uiText("composioNeedsKeyHint")
+                    : uiText("composioKeyRejectedHint")}
+                </Label>
+              </View>
+            )}
+          </Each>
+          <If when={all().length || allToolkits().length}>
             <View style={{ maxWidth: 480 }}>
               {field(uiText("marketSearch"), query, query.set)}
             </View>
-            <If when={!entries().length}>
+            <If when={!entries().length && !toolkits().length}>
               <Label variant="small" tone="muted">
                 {uiText("marketNothingFound")}
               </Label>
@@ -493,6 +568,40 @@ export function Market(props: {
                 gap: 12,
               }}
             >
+              <Each of={toolkits()} key={toolkitKey}>
+                {(item) => (
+                  <View
+                    role="button"
+                    accessibilityLabel={item().name}
+                    onPress={() => detail.set(toolkitKey(item()))}
+                    style={{
+                      width: phone() ? undefined : 267,
+                      flex: phone() ? 1 : undefined,
+                      padding: 12,
+                      gap: 6,
+                      backgroundColor: c().canvas,
+                      borderWidth: 1,
+                      borderColor: c().border,
+                    }}
+                  >
+                    <View style={{ ...row, gap: 8 }}>
+                      <PluginLogo name={item().name} composio={item().slug} />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <PluginName name={item().name} />
+                      </View>
+                    </View>
+                    <Label variant="small" tone="muted" lines={1}>
+                      {authLabel(item().auth)}
+                    </Label>
+                    <Label variant="small" tone="muted" lines={2}>
+                      {item().description}
+                    </Label>
+                    <Label variant="caption" tone="muted" lines={1}>
+                      {uiText("marketFrom", { name: item().sourceName })}
+                    </Label>
+                  </View>
+                )}
+              </Each>
               <Each of={entries()} key={key}>
                 {(item) => (
                   <View
@@ -575,6 +684,71 @@ export function Market(props: {
           </If>
         </View>
       </SmoothScroll>
+      <If when={currentToolkit()}>
+        <Modal {...sheet(currentToolkit()!.name, 512, () => detail.set(""))} hideHeader>
+          <SmoothScroll style={{ maxHeight: 440 }} scrollbar={false}>
+            <View style={{ gap: 10, paddingTop: 6, ...inset() }}>
+              <View testID="market-detail-header" style={{ ...row, gap: 12, alignItems: "center" }}>
+                <PluginLogo
+                  name={currentToolkit()!.name}
+                  composio={currentToolkit()!.slug}
+                  size={40}
+                />
+                <View tooltip={hint(currentToolkit()!.name, c)} style={{ flex: 1, minWidth: 0 }}>
+                  <Label variant="title" weight={600} lines={1}>
+                    {currentToolkit()!.name}
+                  </Label>
+                </View>
+                <CloseButton onPress={() => detail.set("")} iconSize={14} />
+              </View>
+              <Label variant="small" tone="muted" style={{ userSelect: "text" }}>
+                {currentToolkit()!.description}
+              </Label>
+              {line(uiText("marketSource"), currentToolkit()!.sourceName)}
+              {line(uiText("composioCategories"), currentToolkit()!.categories.join(", "))}
+              {line(
+                uiText("composioTools"),
+                currentToolkit()!.toolsCount === null ? null : String(currentToolkit()!.toolsCount),
+              )}
+              {line(uiText("composioHomepage"), currentToolkit()!.appUrl)}
+              {line(uiText("composioAuth"), authLabel(currentToolkit()!.auth))}
+              <Label variant="small">
+                {authHelp(currentToolkit()!.auth)}
+              </Label>
+              <If when={!currentToolkit()!.managed && currentToolkit()!.auth !== "none"}>
+                <Label variant="small" tone="muted">
+                  {uiText("composioNotManaged")}
+                </Label>
+              </If>
+              <Label variant="small" tone="muted">
+                {uiText("composioConnectNote")}
+              </Label>
+              <If when={installError()}>
+                <Label variant="small" tone="red" style={{ userSelect: "text" }}>
+                  {installError()}
+                </Label>
+              </If>
+            </View>
+          </SmoothScroll>
+          <View
+            style={{
+              ...row,
+              justifyContent: "flex-end",
+              paddingTop: 10,
+              paddingBottom: phone() ? 24 : 0,
+              ...inset(),
+            }}
+          >
+            <Button
+              label={busy() ? uiText("composioConnecting") : uiText("composioConnect")}
+              tone="primary"
+              size={phone() ? 44 : 28}
+              disabled={busy()}
+              onPress={() => void connect(currentToolkit()!)}
+            />
+          </View>
+        </Modal>
+      </If>
       <If when={current()}>
         <Modal
           {...sheet(current()!.name, 512, () => detail.set(""))}

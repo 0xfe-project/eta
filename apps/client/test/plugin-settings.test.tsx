@@ -86,3 +86,29 @@ for (const [name, size] of [
     expect(hint.y + hint.height).toBeLessThanOrEqual(form.y);
   });
 }
+
+const KEY_FIELD = "label:Composio API key";
+
+test("the Composio source has a switch but no Remove, and no key is set at first", async () => {
+  const app = await open("./fixtures/plugin-settings-composio.tsx", OPEN);
+  expect(app.shows("label:Use Composio")).toBe(true);
+  expect(app.shows("label:Remove source Composio")).toBe(false);
+  expect(app.shows("No key is set")).toBe(true);
+});
+
+test("a saved key shows only that it is set, and can be replaced or cleared", async () => {
+  const app = await open("./fixtures/plugin-settings-composio.tsx", OPEN);
+  await app.type(KEY_FIELD, "ak_secret_value");
+  await app.press("label:Save key");
+  await app.waitFor("text:A key is set");
+  expect(app.shows("ak_secret_value")).toBe(false);
+  expect(app.shows("label:Replace key")).toBe(true);
+  await app.press("label:Clear key");
+  await app.waitFor("text:No key is set");
+});
+
+test("saving an empty key asks for one", async () => {
+  const app = await open("./fixtures/plugin-settings-composio.tsx", OPEN);
+  await app.press("label:Save key");
+  expect(app.shows("Enter a key first.")).toBe(true);
+});

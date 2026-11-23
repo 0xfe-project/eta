@@ -115,6 +115,8 @@ export function PluginLogo(props: {
   homepage?: string | null;
   /** A market entry in a repository: the host reads its own logo from its manifest there. */
   repo?: { repo: string; ref: string; path: string } | null;
+  /** A Composio toolkit's slug: the host looks the picture up in its own list. */
+  composio?: string | null;
   /** An installed plugin: the host reads its own picture, then its homepage's icon. */
   installed?: boolean;
   size?: number;
@@ -125,8 +127,10 @@ export function PluginLogo(props: {
   const key = () =>
     props.installed
       ? `installed:${props.name}`
-      : props.repo
-        ? repoKey(props.repo, props.homepage)
+      : props.composio
+        ? `composio:${props.composio}`
+        : props.repo
+          ? repoKey(props.repo, props.homepage)
         : (props.homepage ?? "");
   const state = () => slot(key());
   effect(() => {
@@ -142,11 +146,13 @@ export function PluginLogo(props: {
           "logo",
           props.installed
             ? { plugin: props.name }
-            : repo
+            : props.composio
+              ? { composio: props.composio }
+              : repo
               ? { ...repo, homepage: props.homepage ?? null }
               : { homepage: at },
         );
-      (repo ? turn(ask) : ask())
+      (repo || props.composio ? turn(ask) : ask())
         .then((logo) => {
           if (logo) one.set(`data:${logo.type};base64,${logo.data}`);
         })

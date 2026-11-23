@@ -5,6 +5,7 @@ import {
   Button,
   colors,
   Empty,
+  Field,
   fontFamily,
   Fonts,
   grow,
@@ -50,6 +51,9 @@ export function PluginSettings(props: { phone?: boolean }) {
   const problem = signal("");
   const proxyProblem = signal("");
   const busy = signal(false);
+  const hasKey = signal(false);
+  const typedKey = signal("");
+  const keyProblem = signal("");
   const sources = () => settings()?.sources ?? [];
 
   async function call(
@@ -67,9 +71,38 @@ export function PluginSettings(props: { phone?: boolean }) {
     proxy.set(result.proxy);
     return true;
   }
+  const hasComposio = () => sources().some((item) => item.kind === "composio");
+  /** The key is written and never read back: the host only says whether one is set. */
+  async function keyCall(method: string, args: Record<string, unknown>) {
+    if (busy()) return;
+    busy.set(true);
+    const result = await host.action(() =>
+      host.call<{ hasKey: boolean }>("plugins", method, args),
+    );
+    busy.set(false);
+    if (result) hasKey.set(result.hasKey);
+    return result;
+  }
+  async function saveKey() {
+    const clean = typedKey().trim();
+    if (clean === "") {
+      keyProblem.set(uiText("composioKeyEmpty"));
+      return;
+    }
+    keyProblem.set("");
+    if (await keyCall("composioSetKey", { key: clean })) typedKey.set("");
+  }
+  async function clearKey() {
+    keyProblem.set("");
+    if (await keyCall("composioClearKey", {})) typedKey.set("");
+  }
   effect(() => {
     host.subscriptionWire();
-    untracked(() => void call("marketSettings", {}));
+    untracked(() => {
+      void call("marketSettings", {}).then((ok) => {
+        if (ok && hasComposio()) void keyCall("composioStatus", {});
+      });
+    });
   });
 
   async function add() {
@@ -162,7 +195,7 @@ export function PluginSettings(props: { phone?: boolean }) {
                 >
                   <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                     <Label lines={1}>{item().name || item().url}</Label>
-                    <If when={item().name}>
+                    <If when={item().name && item().kind !== "composio"}>
                       <Label
                         variant="small"
                         tone="muted"
@@ -186,6 +219,7 @@ export function PluginSettings(props: { phone?: boolean }) {
                       })
                     }
                   />
+                  <If when={item().kind !== "composio"}>
                   <Button
                     label={uiText("pluginsRemove")}
                     accessibilityLabel={uiText("pluginsRemoveSource", {
@@ -197,6 +231,7 @@ export function PluginSettings(props: { phone?: boolean }) {
                       void call("marketRemoveSource", { url: item().url })
                     }
                   />
+                  </If>
                 </View>
               )}
             </Each>
@@ -226,6 +261,51 @@ export function PluginSettings(props: { phone?: boolean }) {
             />
           </View>
         </View>
+
+        <If when={hasComposio()}>
+          <Label weight={500} style={{ paddingTop: 8 }}>
+            {uiText("composioKeyTitle")}
+          </Label>
+          <Label variant="small" tone="muted" style={{ maxWidth: 760 }}>
+            {uiText("composioKeyHint")}
+          </Label>
+          <View style={{ gap: 8, maxWidth: 560 }}>
+            <Label variant="small" weight={500}>
+              {hasKey() ? uiText("composioKeySet") : uiText("composioKeyNone")}
+            </Label>
+            <Field
+              label={uiText("composioKeyField")}
+              placeholder={uiText("composioKeyField")}
+              value={typedKey()}
+              masked
+              onChange={typedKey.set}
+              onSubmit={() => void saveKey()}
+              style={{ height: props.phone ? 40 : 28 }}
+            />
+            <If when={keyProblem()}>
+              <Label variant="small" tone="mutedInk">
+                {keyProblem()}
+              </Label>
+            </If>
+            <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>
+              <If when={hasKey()}>
+                <Button
+                  label={uiText("composioKeyClear")}
+                  size={props.phone ? 44 : 28}
+                  disabled={busy()}
+                  onPress={() => void clearKey()}
+                />
+              </If>
+              <Button
+                label={hasKey() ? uiText("composioKeyReplace") : uiText("composioKeySave")}
+                tone="primary"
+                size={props.phone ? 44 : 28}
+                disabled={busy()}
+                onPress={() => void saveKey()}
+              />
+            </View>
+          </View>
+        </If>
 
         <Label weight={500} style={{ paddingTop: 8 }}>
           {uiText("pluginsProxyTitle")}
