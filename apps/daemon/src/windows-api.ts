@@ -7,11 +7,12 @@
  * Each library is opened on first use, so this module loads anywhere. Every layout below is the
  * 64-bit one: there is no other Windows build.
  */
-import type { Pointer } from "bun:ffi";
+import type { FFIFunction, Library, Pointer } from "bun:ffi";
 import { Buffer } from "node:buffer";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import process from "node:process";
 import {
   ptr as addressOf,
   cc,
@@ -211,6 +212,14 @@ const handleIn = (slot: BigUint64Array): number => Number(slot[0]);
  * `bun:ffi` call it is not the call's: a garbage collection or a turn of the event loop in between
  * runs Windows calls of Bun's own on this thread, and those set it, mostly to 0 (#367). The error is
  * cleared first, so a 0 here means the call failed without saying why.
+ *
+ * What it can call: the shim passes every function 13 64-bit integer slots and takes a 64-bit
+ * integer back. That is right for a function that takes at most 13 arguments, each an integer, a
+ * handle or a pointer, and returns one of those, in the 64-bit Windows convention, where those go in
+ * RCX, RDX, R8, R9 and then the stack, and the caller owns the stack. It is wrong for a function
+ * that takes or returns a float or a double (those go in XMM registers, which the shim leaves
+ * unset), takes a struct by value, or is variadic like `wsprintfW`: call those directly, and read
+ * their errors some other way.
  */
 const SHIM = String.raw`
 typedef unsigned long long u64;
@@ -252,33 +261,44 @@ const pointerOf = (fn: Native): Pointer =>
 /** Every Win32 function here takes at most this many arguments: the rest are passed as 0. */
 const SHIM_ARGS = 13;
 
+const shimCall = {
+  args: Array.from<FFIType>({ length: SHIM_ARGS + 2 }).fill(ptr),
+};
+const SHIM_SYMBOLS = {
+  bind_errors: { args: [ptr, ptr], returns: FFIType.void },
+  call_pointer: { ...shimCall, returns: ptr },
+  call_int: { ...shimCall, returns: i32 },
+} satisfies Record<string, FFIFunction>;
+type ShimSymbols = Library<typeof SHIM_SYMBOLS>["symbols"];
+
 /**
- * The shim, compiled by Bun's TinyCC. In the 64-bit Windows convention the caller owns the
- * arguments, so a function called with more than it takes ignores the rest. Undefined when it does
- * not compile; the codes are then read the old way, and may be lost.
+ * Set to 1 where a build must use the shim: a call then throws when it did not compile, instead of
+ * reading its code the old way. The Windows CI jobs set it, so a build that loses the shim fails
+ * there rather than going back quietly to the codes #367 lost.
  */
-const shim = load(() => {
+const REQUIRE_SHIM = "ETA_REQUIRE_WIN32_SHIM";
+
+/**
+ * The shim, compiled by Bun's TinyCC, or why it was not. In the 64-bit Windows convention the
+ * caller owns the arguments, so a function called with more than it takes ignores the rest.
+ */
+const shim = load((): { symbols: ShimSymbols } | { failed: string } => {
   let dir: string | undefined;
   try {
     dir = mkdtempSync(join(tmpdir(), "eta-ffi-"));
     const source = join(dir, "last-error.c");
     writeFileSync(source, SHIM);
-    const call = {
-      args: Array.from<FFIType>({ length: SHIM_ARGS + 2 }).fill(ptr),
-    };
-    const { symbols } = cc({
-      source,
-      symbols: {
-        bind_errors: { args: [ptr, ptr], returns: FFIType.void },
-        call_pointer: { ...call, returns: ptr },
-        call_int: { ...call, returns: i32 },
-      },
-    });
+    const { symbols } = cc({ source, symbols: SHIM_SYMBOLS });
     const { GetLastError, SetLastError } = kernel32().symbols;
     symbols.bind_errors(pointerOf(GetLastError), pointerOf(SetLastError));
-    return symbols;
-  } catch {
-    return undefined;
+    return { symbols };
+  } catch (error) {
+    const failed = error instanceof Error ? error.message : String(error);
+    if (process.env[REQUIRE_SHIM] !== "1")
+      console.warn(
+        `eta: the Windows error-code shim did not compile (${failed}): a failed Windows call's error code is read after it, and may come back as 0`,
+      );
+    return { failed };
   } finally {
     if (dir !== undefined) {
       try {
@@ -303,11 +323,16 @@ function invoke(
   fn: Native,
   args: readonly Arg[],
 ): Called {
-  const native = shim();
-  if (native === undefined) {
+  const compiled = shim();
+  if ("failed" in compiled) {
+    if (process.env[REQUIRE_SHIM] === "1")
+      throw new Error(
+        `the Windows error-code shim did not compile, and ${REQUIRE_SHIM}=1: ${compiled.failed}`,
+      );
     const value = (fn as (...given: Arg[]) => number | null)(...args) ?? 0;
     return { value, code: lastCode() };
   }
+  const native = compiled.symbols;
   const padded = [...args];
   while (padded.length < SHIM_ARGS) padded.push(0);
   codeSlot[0] = 0;

@@ -33,6 +33,9 @@ jobs:
     defaults:
       run:
         shell: bash
+    # A build that cannot compile the error-code shim fails, rather than reading codes the old way.
+    env:
+      ETA_REQUIRE_WIN32_SHIM: "1"
     steps:
       - run: git config --global core.autocrlf false
 
@@ -61,6 +64,12 @@ jobs:
             build "$RUNNER_TEMP/compare" compare
           fi
           build . this
+
+      # eta-daemon.exe runs the same Windows code as the host, from a build of its own.
+      - name: Ask the daemon build about its service
+        run: |
+          (cd apps/daemon && bun scripts/build.ts > /dev/null)
+          apps/daemon/out/dist/eta-daemon-win32-x64.exe uninstall-service
 
       - name: Give the account a password
         shell: pwsh
