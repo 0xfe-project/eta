@@ -13,9 +13,30 @@ import { LIST_KEYS } from "../ext-support/keys";
 import { renderWithHost } from "../ext-support/render-with-host";
 import { KEYS } from "../ui-support/render";
 
+/**
+ * `m1` thinks at levels it does not name; `m2` names the five every picker used to offer; `x1`
+ * names only high and max (#799's endpoint model); `p1` says nothing about thinking.
+ */
 const PROVIDERS = [
-  { id: "local", models: ["m1", "m2"] },
-  { id: "other", models: ["x1"] },
+  {
+    id: "local",
+    models: [
+      { id: "m1", reasoning: true },
+      {
+        id: "m2",
+        reasoning: true,
+        reasoningEfforts: ["minimal", "low", "medium", "high"],
+        thinkingMode: "both",
+      },
+    ],
+  },
+  {
+    id: "other",
+    models: [
+      { id: "x1", reasoning: true, reasoningEfforts: ["high", "max"] },
+      "p1",
+    ],
+  },
 ];
 
 function markedLine(r: HostRendered): string {
@@ -99,7 +120,7 @@ describe("/model", () => {
     await r.waitFor("Model for Bob");
     const screen = r.screen();
     // Each provider's models under its name; eta's own loop has no default to offer first.
-    const order = ["local", "m1", "m2", "other", "x1"];
+    const order = ["local", "m1", "m2", "other", "x1", "p1"];
     const at = order.map((text) => screen.indexOf(text));
     expect(at.every((index) => index >= 0)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);

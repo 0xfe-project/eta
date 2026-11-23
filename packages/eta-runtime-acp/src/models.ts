@@ -70,13 +70,15 @@ export function modelsOf(choices: AcpChoices): AgentRuntimeModel[] {
 
 /**
  * The reasoning level an agent is asked for at a thinking level: the level itself where the agent
- * has it, `minimal` falling back to `low`. `off`, and a level it lacks, ask for nothing.
+ * has it, `minimal` falling back to `low`. `off` is the agent's `none` (or `off`) where it lists
+ * one; otherwise `off`, and a level it lacks, ask for nothing.
  */
 export function effortFor(
   level: ThinkingLevel,
   efforts: readonly string[],
 ): string | undefined {
-  if (level === "off") return undefined;
+  if (level === "off")
+    return ["none", "off"].find((word) => efforts.includes(word));
   if (efforts.includes(level)) return level;
   if (level === "minimal" && efforts.includes("low")) return "low";
   return undefined;

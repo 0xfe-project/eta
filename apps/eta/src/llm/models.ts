@@ -19,7 +19,7 @@ import { buildProvider } from "@eta/server";
 const EFFORTS = ["minimal", "low", "medium", "high", "xhigh", "max"] as const;
 
 /** One catalog entry as the config vocabulary states a model. */
-function modelConfig(model: CatalogModel): EtaModelConfig {
+export function modelConfig(model: CatalogModel): EtaModelConfig {
   const efforts = EFFORTS.filter((level) =>
     model.reasoningLevels.includes(level),
   );

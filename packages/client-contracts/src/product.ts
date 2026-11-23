@@ -378,8 +378,16 @@ export interface AgentRuntimeModel {
   name: string;
   /** The one it runs when told none. */
   default: boolean;
-  /** Its reasoning-effort levels, in the runtime's spelling; empty when it names none. */
+  /**
+   * Its reasoning-effort levels, in the runtime's spelling (`none` is its off switch); empty when
+   * it has no effort setting for this model.
+   */
   efforts: string[];
+  /**
+   * The runtime has an effort setting but could not say its levels this time (oar's
+   * `effortUnavailableReason`): `efforts` is empty and means nothing. Older daemons never send it.
+   */
+  effortsUnknown?: boolean | undefined;
 }
 
 /** An external runtime, as a machine has it. */
@@ -469,7 +477,14 @@ export interface AgentArgs {
 }
 export interface AgentResults {
   create: { agent: AgentView };
-  update: { agent: AgentView };
+  update: {
+    agent: AgentView;
+    /**
+     * The level the agent had, cleared to the model's default because the model it moved to does
+     * not take it. Absent when nothing was cleared.
+     */
+    thinkingCleared?: ThinkingLevel | undefined;
+  };
   delete: { agentId: string };
   direct: { conversation: ConversationSummary };
   runtimes: { runtimes: AgentRuntimeInfo[] };

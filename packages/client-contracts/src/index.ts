@@ -35,6 +35,7 @@ export * from "./skill-files";
 export * from "./system-notice";
 export * from "./task-order";
 export * from "./tasks";
+export * from "./thinking";
 export type * from "./types";
 export { SERVICE_PROTOCOL } from "./types";
 export * from "./usage";

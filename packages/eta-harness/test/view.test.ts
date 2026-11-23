@@ -192,6 +192,7 @@ describe("the built-in sections a session contributes", () => {
     expect(before.sections.model).toEqual({
       id: "unknown:unknown",
       thinkingLevel: "off",
+      thinkingAsked: null,
     });
     expect(
       (before.sections.tools as { name: string }[]).map((tool) => tool.name),

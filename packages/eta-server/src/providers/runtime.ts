@@ -121,21 +121,31 @@ function apiKeyAuth(provider: EtaProviderConfig): {
  * Every level is stated, because a missing key would leave the provider's default in charge and
  * a `null` is the only way to say "this model does not take this level". `off` becomes the
  * provider's disable token where one exists.
+ *
+ * A model that reasons at levels it does not name has them passed on as asked: what it takes is
+ * not known, so the endpoint decides, which is what the agent pickers say of such a model
+ * (`etaModelThinking` in `@eta/client-contracts`).
  */
 function thinkingLevelMap(
   model: EtaModelConfig,
   source: ModelSource,
 ): ThinkingLevelMap {
   const levels = modelThinkingLevels(model);
+  const facts = effectiveModel(model);
+  const unknown =
+    facts.reasoning === true &&
+    facts.thinkingMode !== "no" &&
+    (facts.reasoningEfforts ?? []).length === 0;
   const mapped: Record<string, string | null | undefined> = {};
   for (const level of MODEL_THINKING_LEVELS) {
     if (level === "off") {
       // "none" is the OpenAI-compatible disable; a provider that has no off switch says null.
-      mapped[level] =
-        source.noThinkingOff !== true && levels.includes("off") ? "none" : null;
+      const off =
+        levels.includes("off") || (unknown && facts.thinkingMode === "both");
+      mapped[level] = source.noThinkingOff !== true && off ? "none" : null;
       continue;
     }
-    mapped[level] = levels.includes(level) ? level : null;
+    mapped[level] = unknown || levels.includes(level) ? level : null;
   }
   return mapped as ThinkingLevelMap;
 }

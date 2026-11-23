@@ -46,8 +46,13 @@ export interface RuntimeModel {
   name: string;
   /** The model the runtime runs when it is told none. */
   default: boolean;
-  /** The reasoning-effort levels it takes, in the runtime's spelling; empty when it names none. */
+  /**
+   * The reasoning-effort levels it takes, in the runtime's spelling; empty when the runtime has no
+   * effort setting for it (oar leaves `effortLevels` out).
+   */
   efforts: string[];
+  /** The runtime has one but could not say its levels this time (`effortUnavailableReason`). */
+  effortsUnknown?: boolean;
 }
 
 export interface RuntimeInfo {
@@ -295,6 +300,10 @@ export class RuntimeCatalog {
                   name: model.displayName ?? model.id,
                   default: model.default === true,
                   efforts: [...(model.effortLevels ?? [])],
+                  ...(model.effortLevels === undefined &&
+                  model.effortUnavailableReason !== undefined
+                    ? { effortsUnknown: true }
+                    : {}),
                 }))
             : [],
       };

@@ -11,7 +11,8 @@ import { withHostWire } from "./host-wire";
 
 export interface ConfiguredProvider {
   id: string;
-  models: string[];
+  /** A model by its id, or as `config.json` states it (its thinking levels, say). */
+  models: (string | ({ id: string } & Record<string, unknown>))[];
   /** `openai-compatible` (usable without a key) unless given. */
   kind?: string;
 }
@@ -33,7 +34,9 @@ export async function dataDirWith(options: {
       id: provider.id,
       kind: provider.kind ?? "openai-compatible",
       baseUrl: "http://127.0.0.1:9/v1",
-      models: provider.models.map((id) => ({ id })),
+      models: provider.models.map((model) =>
+        typeof model === "string" ? { id: model } : model,
+      ),
     })),
     ...(options.defaultModel === undefined
       ? {}
