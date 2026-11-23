@@ -112,7 +112,12 @@ export const chatMessages = {
   removePaste: ["Remove pasted text", "移除粘贴文本"],
   pastedBlock: ["Pasted text · {{size}}", "粘贴文本 · {{size}}"],
   pastedFile: ["Pasted text.txt", "粘贴文本.txt"],
-  pastedKind: ["pasted", "粘贴"],
+  pastedKind: ["Pasted", "粘贴"],
+  codeBlockLeave: ["{{mod}}⏎ leaves", "{{mod}}⏎ 跳出"],
+  codeKind: ["code", "代码"],
+  codeShowAll: ["Show all {{count}} lines", "展开全部 {{count}} 行"],
+  copyCode: ["Copy code", "复制代码"],
+  copyAction: ["Copy", "复制"],
   taskSuggestions: ["Tasks", "任务"],
   pastedLines: ["{{count}} lines", "{{count}} 行"],
   unfoldPaste: [

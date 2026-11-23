@@ -1,5 +1,5 @@
 import type { RichNodeViewProps } from "nsh/base";
-import type { EtaPlugin } from "../editor";
+import type { TextPlugin } from "../plugin";
 import {
   DOC_NODES,
   lineCount,
@@ -7,8 +7,9 @@ import {
 } from "@eta/client-contracts/composer-doc";
 import { defineExtension, insertContent, insertContentAt } from "nsh/base";
 import { uiText } from "../../../i18n";
-import { Chip } from "../chip";
+import { Chip, PastePreview } from "../chip";
 import { oneStep } from "../step";
+import { standIn } from "../view-source";
 
 /** Puts the folded paste back as its text, in its place: one undoable change. */
 function unfold(props: RichNodeViewProps) {
@@ -29,6 +30,7 @@ function PasteView(props: RichNodeViewProps) {
   const lines = () => lineCount(String(props.node.attrs.text));
   return (
     <Chip
+      icon="lines"
       kind={uiText("pastedKind")}
       label={uiText("pastedLines", { count: lines() })}
       selected={props.selected}
@@ -44,50 +46,70 @@ function PasteView(props: RichNodeViewProps) {
  * Long pastes fold, where the caret is, into one block ("pasted · 42 lines"): pressing it puts the
  * text back. It goes out as the text it stands for, its place recorded as a `PasteRange`
  * (`serialize`). Copied, it is that text (`renderText`), so a paste of it anywhere is the text,
- * and into this editor folds again.
+ * and into this editor folds again. Shown, it is the same block; its text shows on hover.
  */
-export function pasteBlock(): EtaPlugin {
+export function pasteBlock(): TextPlugin {
   return {
     name: "pasteBlock",
-    extensions: [
-      defineExtension({
-        name: DOC_NODES.paste,
-        node: {
-          group: "inline",
-          inline: true,
-          atom: true,
-          selectable: true,
-          attrs: { id: { default: "" }, text: { default: "" } },
-          renderText: "{text}",
-          parseDOM: [
-            {
-              tag: "span[data-eta=paste]",
-              getAttrs: { id: "data-id", text: "data-text" },
-            },
-          ],
-          toDOM: [
-            "span",
-            {
-              "data-eta": "paste",
-              "data-id": { attr: "id" },
-              "data-text": { attr: "text" },
-            },
-          ],
+    view: {
+      extensions: [standIn(DOC_NODES.paste)],
+      renderCustom: {
+        [DOC_NODES.paste]: (node) => {
+          const text = node.text ?? "";
+          const lines = lineCount(text);
+          return (
+            <Chip
+              icon="lines"
+              kind={uiText("pastedKind")}
+              label={uiText("pastedLines", { count: lines })}
+              tooltip={<PastePreview text={text} />}
+              accessibilityLabel={`${uiText("pastedKind")} · ${uiText("pastedLines", { count: lines })}`}
+            />
+          );
         },
-        addNodeView: () => PasteView,
-      }),
-    ],
-    paste(action, editor) {
-      if (action.kind !== "block") return false;
-      editor.session.run(
-        oneStep(
-          insertContent({
-            type: DOC_NODES.paste,
-            attrs: { id: crypto.randomUUID(), text: action.text },
-          }),
-        ),
-      );
-      return true;
+      },
+    },
+    editor: {
+      extensions: [
+        defineExtension({
+          name: DOC_NODES.paste,
+          node: {
+            group: "inline",
+            inline: true,
+            atom: true,
+            selectable: true,
+            attrs: { id: { default: "" }, text: { default: "" } },
+            renderText: "{text}",
+            parseDOM: [
+              {
+                tag: "span[data-eta=paste]",
+                getAttrs: { id: "data-id", text: "data-text" },
+              },
+            ],
+            toDOM: [
+              "span",
+              {
+                "data-eta": "paste",
+                "data-id": { attr: "id" },
+                "data-text": { attr: "text" },
+              },
+            ],
+          },
+          addNodeView: () => PasteView,
+        }),
+      ],
+      paste(action, editor) {
+        if (action.kind !== "block") return false;
+        editor.session.run(
+          oneStep(
+            insertContent({
+              type: DOC_NODES.paste,
+              attrs: { id: crypto.randomUUID(), text: action.text },
+            }),
+          ),
+        );
+        return true;
+      },
     },
   };
 }

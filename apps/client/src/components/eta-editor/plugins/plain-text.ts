@@ -1,4 +1,4 @@
-import type { EtaPlugin } from "../editor";
+import type { TextPlugin } from "../plugin";
 import { Document, History, Paragraph, richExtension } from "nsh/base";
 
 /**
@@ -7,14 +7,16 @@ import { Document, History, Paragraph, richExtension } from "nsh/base";
  * `pasteText`), as the web composer's PlainTextPlugin does. Undo and redo come with it: a paste,
  * a block put in or unfolded is one step each.
  */
-export function plainText(): EtaPlugin {
+export function plainText(): TextPlugin {
   return {
     name: "plainText",
-    extensions: [
-      Document,
-      Paragraph,
-      richExtension("text"),
-      History.configure({ depth: 100, newGroupDelay: 500 }),
-    ],
+    editor: {
+      extensions: [
+        Document,
+        Paragraph,
+        richExtension("text"),
+        History.configure({ depth: 100, newGroupDelay: 500 }),
+      ],
+    },
   };
 }

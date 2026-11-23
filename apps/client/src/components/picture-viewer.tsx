@@ -121,12 +121,16 @@ function PictureCaption(props: { children: string }) {
  * `min(90vw, 720px)` × `70vh`, with its caption under it. NSH shows it once the mouse has rested
  * on the trigger for 200ms or the keyboard has focused it, and hides it as either leaves; never
  * on a touch screen, where a tap opens the lightbox instead. It takes no pointer, so it cannot
- * hold itself open.
+ * hold itself open. `size` caps it (an editor's chip previews at 248).
  */
-export function picturePreview(picture: ViewedPicture): JSX.Element {
+export function picturePreview(
+  picture: ViewedPicture,
+  size?: number,
+): JSX.Element {
   const c = colors();
-  const width = () => Math.min(windowSize().width * 0.9, 720) - 10;
-  const height = () => windowSize().height * 0.7;
+  const outer = () => Math.min(windowSize().width * 0.9, size ?? 720);
+  const width = () => outer() - 10;
+  const height = () => (size ? size * 0.75 : windowSize().height * 0.7);
   return (
     <Tooltip
       delay={200}
@@ -137,7 +141,7 @@ export function picturePreview(picture: ViewedPicture): JSX.Element {
       style={{
         gap: 4,
         padding: 4,
-        maxWidth: Math.min(windowSize().width * 0.9, 720),
+        maxWidth: outer(),
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
@@ -258,6 +262,7 @@ function LightboxDialog(props: {
                 }
               >
                 {/* At its own size the picture scrolls, from its top-left corner. */}
+                {/* eslint-disable-next-line no-restricted-syntax -- a pan area: it scrolls both ways, with the horizontal Scroll inside */}
                 <Scroll style={{ ...fill }} contentStyle={{ flexGrow: 1 }}>
                   <Scroll horizontal contentStyle={{ flexGrow: 1 }}>
                     <PictureImage
