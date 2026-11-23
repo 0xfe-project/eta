@@ -189,3 +189,20 @@ test("a card has one status badge at its top right: Connected, or Unavailable wh
   expect(app.count("text:Unavailable")).toBe(1);
   expect(app.shows("Its session did not check out")).toBe(false);
 });
+
+test("the bottom row of a card stays one line, the switch and both buttons, also when the toolkit is off", async () => {
+  const app = await open("./fixtures/plugins-composio-virtual.tsx", DESKTOP);
+  await app.waitFor("id:composio-plugin-switch");
+  const oneLine = () => {
+    const toggle = app.layout("label:Enabled: @composio/gmail")!;
+    const reauth = app.layout("label:Re-authenticate >> nth=0")!;
+    const leave = app.layout("label:Disconnect >> nth=0")!;
+    const overlaps = (a: typeof toggle, b: typeof toggle) =>
+      a.y < b.y + b.height && a.y + a.height > b.y;
+    return overlaps(toggle, reauth) && overlaps(reauth, leave);
+  };
+  expect(oneLine()).toBe(true);
+  await app.press("label:Enabled: @composio/gmail");
+  await app.waitFor("id:composio-plugin-off");
+  expect(oneLine()).toBe(true);
+});
