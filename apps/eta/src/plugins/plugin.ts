@@ -485,80 +485,90 @@ export function pluginsPlugin(
             },
           };
         }),
-        wire.handle("plugins", "logo", async (call) => {
-          const args = new Args(call);
-          // An installed plugin: its own file first, then its homepage's icon.
-          const installed = args.optionalString("plugin");
-          if (installed !== undefined) {
-            const found = plugins.registry
-              .entries()
-              .find((entry) => entry.name === installed)?.plugin;
-            const own =
-              found?.manifest.logo === undefined
-                ? null
-                : await readOwnLogo(found.root, found.manifest.logo);
-            if (own) return { result: own };
-            // The first remote MCP server's site is the last source before the letter.
-            const remote = plugins
-              .view()
-              .find((view) => view.name === installed)
-              ?.servers.find((server) => server.url !== undefined)?.url;
+        wire.handle(
+          "plugins",
+          "logo",
+          async (call) => {
+            const args = new Args(call);
+            // An installed plugin: its own file first, then its homepage's icon.
+            const installed = args.optionalString("plugin");
+            if (installed !== undefined) {
+              const found = plugins.registry
+                .entries()
+                .find((entry) => entry.name === installed)?.plugin;
+              const own =
+                found?.manifest.logo === undefined
+                  ? null
+                  : await readOwnLogo(found.root, found.manifest.logo);
+              if (own) return { result: own };
+              // The first remote MCP server's site is the last source before the letter.
+              const remote = plugins
+                .view()
+                .find((view) => view.name === installed)
+                ?.servers.find((server) => server.url !== undefined)?.url;
+              return {
+                result: await logos.find(
+                  null,
+                  found?.manifest.homepage ?? null,
+                  remote ?? null,
+                ),
+              };
+            }
+            // A market entry that is a path in a GitHub repository: the plugin's own logo from its manifest.
+            const repo = args.optionalString("repo");
+            if (repo !== undefined) {
+              const found = await logos.forEntry(
+                repo,
+                args.optionalString("ref") ?? "HEAD",
+                args.optionalString("path") ?? "",
+                args.nullableString("homepage") ?? null,
+              );
+              return { result: found };
+            }
             return {
               result: await logos.find(
-                null,
-                found?.manifest.homepage ?? null,
-                remote ?? null,
+                args.optionalString("own") ?? null,
+                args.nullableString("homepage") ?? null,
+                args.optionalString("origin") ?? null,
               ),
             };
-          }
-          // A market entry that is a path in a GitHub repository: the plugin's own logo from its manifest.
-          const repo = args.optionalString("repo");
-          if (repo !== undefined) {
-            const found = await logos.forEntry(
-              repo,
-              args.optionalString("ref") ?? "HEAD",
-              args.optionalString("path") ?? "",
-              args.nullableString("homepage") ?? null,
-            );
-            return { result: found };
-          }
-          return {
-            result: await logos.find(
-              args.optionalString("own") ?? null,
-              args.nullableString("homepage") ?? null,
-              args.optionalString("origin") ?? null,
-            ),
-          };
-        }),
-        wire.handle("plugins", "logosCached", (call) => {
-          const { entries } = (call.args ?? {}) as { entries?: unknown };
-          if (!Array.isArray(entries))
-            throw new Error("plugins.logosCached needs entries");
-          const text = (value: unknown): string =>
-            typeof value === "string" ? value : "";
-          const asked = entries.map((raw) => {
-            const one = (raw ?? {}) as Record<string, unknown>;
+          },
+          { unordered: true },
+        ),
+        wire.handle(
+          "plugins",
+          "logosCached",
+          (call) => {
+            const { entries } = (call.args ?? {}) as { entries?: unknown };
+            if (!Array.isArray(entries))
+              throw new Error("plugins.logosCached needs entries");
+            const text = (value: unknown): string =>
+              typeof value === "string" ? value : "";
+            const asked = entries.map((raw) => {
+              const one = (raw ?? {}) as Record<string, unknown>;
+              return {
+                repo: text(one.repo),
+                ref: text(one.ref) || "HEAD",
+                path: text(one.path),
+                homepage: text(one.homepage) || null,
+              };
+            });
             return {
-              repo: text(one.repo),
-              ref: text(one.ref) || "HEAD",
-              path: text(one.path),
-              homepage: text(one.homepage) || null,
+              result: {
+                logos: logos.cached(asked).map((one) =>
+                  one.status === "hit"
+                    ? {
+                        status: "hit",
+                        type: one.logo.type,
+                        data: one.logo.data,
+                      }
+                    : { status: one.status },
+                ),
+              },
             };
-          });
-          return {
-            result: {
-              logos: logos.cached(asked).map((one) =>
-                one.status === "hit"
-                  ? {
-                      status: "hit",
-                      type: one.logo.type,
-                      data: one.logo.data,
-                    }
-                  : { status: one.status },
-              ),
-            },
-          };
-        }),
+          },
+          { unordered: true },
+        ),
         wire.handle("plugins", "recheck", async () => {
           await plugins.registry.refresh();
           await plugins.recheck();

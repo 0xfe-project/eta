@@ -129,6 +129,8 @@ export class WireService extends Service implements WireApi {
     call: CallFrame,
     context: OpContext,
   ) => Promise<DispatchOutcome>;
+  /** Whether the op asked not to be kept in line with the other calls of its connection. */
+  readonly isUnordered: (target: string, action: string) => boolean;
   /** Send a frame to every connected client (the shell's native relay, a version notice). */
   readonly broadcast: (frame: ServerFrame) => void;
   readonly attachSink: (sink: FrameSink | undefined) => void;
@@ -303,6 +305,7 @@ export class WireService extends Service implements WireApi {
       pacers.delete(pacerKey(socketId, target));
     };
     this.dispatch = (call, opContext) => registry.dispatch(call, opContext);
+    this.isUnordered = (target, action) => registry.isUnordered(target, action);
     this.broadcast = (frame) => {
       sink?.({ frame });
     };

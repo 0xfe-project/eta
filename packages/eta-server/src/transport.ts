@@ -14,7 +14,10 @@
  *
  * - **Frames from one connection apply strictly in arrival order.** A client sends `prompt`
  *   then `abort`; if those race, the abort lands before the run starts and the user watches
- *   their cancellation be ignored. So each socket has a tail promise.
+ *   their cancellation be ignored. So each socket has a tail promise. The one exception is an
+ *   op that registered itself `unordered` (a read-only lookup that may wait on the network): it
+ *   neither waits for the tail nor becomes it, so a slow one does not hold up what comes after.
+ *   It still replies under its own requestId.
  * - **A call with a requestId gets a reply, whichever way it settled.** Fire-and-forget
  *   calls (no requestId) get none, which is what makes them cheap.
  * - **A bad frame is an error frame, not a disconnect** — a client that sends garbage is
@@ -209,6 +212,13 @@ export function createConnection(
         return;
       }
       const queued = frame;
+      if (
+        queued.op === "call" &&
+        deps.wire.isUnordered(queued.target, queued.action)
+      ) {
+        await applyOne(queued);
+        return;
+      }
       const run = (): Promise<void> => applyOne(queued);
       const chained = tail.then(run, run);
       tail = chained;
