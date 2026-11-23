@@ -56,6 +56,7 @@ export const PROVIDER_ACTIONS = [
   "save",
   "delete",
   "setNetwork",
+  "setPrivateNetwork",
   "reload",
   "refresh",
   "discover",
@@ -206,6 +207,11 @@ export interface ProviderArgs {
   save: { revision: string; provider: ProviderInput };
   delete: { revision: string; id: string };
   setNetwork: { revision: string } & import("./types").NetworkConfig;
+  /**
+   * Replace the private-network list and switch. A new entry that is not valid refuses the whole
+   * save (`invalid_private_network: <reason> <entry>`); one already in the file is kept as it is.
+   */
+  setPrivateNetwork: { revision: string; allow: string[]; loopback: boolean };
   reload: Record<string, never>;
   /**
    * List the models a saved provider serves now, with models.dev's facts where its endpoint is an

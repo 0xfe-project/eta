@@ -10,6 +10,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type {
   AgentRuntimeAccount,
   AgentRuntimeInfo,
+  PrivateNetworkConfig,
   RoutinesStatus,
 } from "@eta/client-contracts";
 import type { McpHostOptions } from "@eta/daemon";
@@ -206,6 +207,11 @@ export interface Product {
   readonly remote: RemoteSessions;
   /** The product's own WebSocket routes: the link daemons dial. */
   readonly endpoints: readonly WebSocketEndpoint[];
+  /**
+   * What `web_fetch` may reach in private networks, from the config's `web.privateNetwork`
+   * (undefined: nothing). Applied to the next fetch; a host without the web tools ignores it.
+   */
+  setPrivateNetwork: (privateNetwork: PrivateNetworkConfig | undefined) => void;
   /** Cut the links to other machines (the host is stopping). */
   close: () => Promise<void>;
 }
@@ -999,6 +1005,8 @@ export function createProduct(options: {
       upgradeRoutes(request, dataDir),
     remote: router,
     endpoints: [hub.endpoint],
+    setPrivateNetwork: (privateNetwork) =>
+      web?.setPrivateNetwork(privateNetwork),
     close: async () => {
       // The runs stop first: they work through the links and the session host.
       archiver.stop();
