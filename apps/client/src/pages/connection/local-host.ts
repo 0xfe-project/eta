@@ -1,6 +1,11 @@
+import type { DesktopHostCommand } from "@eta/client-contracts/host-launcher";
 import type { ChildProcess } from "process";
 import type { HostAddress } from "../../services/host";
 import { run, spawn } from "process";
+import {
+  bootstrapExitKind,
+  desktopHostLauncherCommand,
+} from "@eta/client-contracts/host-launcher";
 import { appInfo, platform, signal } from "nsh";
 import { packagedHostBootstrap } from "../../../packaged-host-bootstrap";
 import { addressFrom } from "../../services/host";
@@ -39,32 +44,22 @@ function accessDenied(error: unknown): boolean {
   );
 }
 
-interface LocalCommand {
-  command: string;
-  args: string[];
-}
-
-function bootstrap(): LocalCommand[] {
+function bootstrap(): DesktopHostCommand[] {
   const version = appInfo().version ?? "0.1.0";
-  const launcher = packagedHostBootstrap();
-  // Windows launches the normalized absolute path directly: NSH's
-  // process.execute list allows absolute paths, and nsh.json already lists
-  // eta-bootstrap.exe. No cmd.exe or shell wrapper is used; a launcher that is
-  // found but exits unready reports its own error rather than being retried.
-  if (platform.os === "windows")
-    return launcher ? [{ command: launcher, args: [version] }] : [];
   if (appInfo().development) return [];
-  return launcher
-    ? [{ command: "/usr/bin/env", args: [launcher, version] }]
-    : [];
+  const launcher = packagedHostBootstrap();
+  const command = launcher
+    ? desktopHostLauncherCommand(platform.os, launcher, version)
+    : undefined;
+  return command ? [command] : [];
 }
 
 async function prepare(): Promise<HostAddress> {
   for (const launch of bootstrap()) {
-    const result = await spawnHost(launch).catch((cause: unknown) => {
-      // Only a launcher that was not found is skipped so the installed host is
-      // tried next; a launcher that was found but failed to start reports its
-      // own error instead of being masked by a retry.
+    // Only a launcher that was not found is skipped so the installed host is
+    // tried next; a launcher that was found but failed to start reports its
+    // own error instead of being masked by a retry.
+    const result = await spawnHost(launch, true).catch((cause: unknown) => {
       if (
         missing(cause) ||
         accessDenied(cause) ||
@@ -99,10 +94,13 @@ async function prepare(): Promise<HostAddress> {
         );
       return { origin: addressFrom(running.address), token: running.token };
     }
-    return spawnHost({
-      command: name,
-      args: ["--host", "127.0.0.1", "--port", "0"],
-    });
+    return spawnHost(
+      {
+        command: name,
+        args: ["--host", "127.0.0.1", "--port", "0"],
+      },
+      false,
+    );
   }
   throw new Error("Install the Eta host for this computer, then retry.");
 }
@@ -120,7 +118,10 @@ interface HostLine {
   port?: number;
 }
 
-function spawnHost(launch: LocalCommand): Promise<HostAddress> {
+function spawnHost(
+  launch: DesktopHostCommand,
+  bootstrap: boolean,
+): Promise<HostAddress> {
   return new Promise((resolve, reject) => {
     const owned: ChildProcess = spawn(launch.command, launch.args, {
       lines: true,
@@ -175,16 +176,12 @@ function spawnHost(launch: LocalCommand): Promise<HostAddress> {
         ready({ origin: `http://127.0.0.1:${frame.port}` });
       }
     });
-    owned.on("exit", (exit) => {
+    owned.on("exit", (result) => {
       clearTimeout(timer);
       localProgress.set(undefined);
-      const kind =
-        launch.command === "/usr/bin/env" && exit.code === 127
-          ? "missing"
-          : "start";
       reject(
         new LocalHostError(
-          kind,
+          bootstrap ? bootstrapExitKind(platform.os, result.code) : "start",
           detail || "The host exited before it was ready.",
         ),
       );
