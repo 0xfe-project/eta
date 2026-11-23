@@ -535,12 +535,23 @@ export function Market(props: {
                     <Label variant="small" tone="muted" lines={2}>
                       {item().description}
                     </Label>
-                    <Label variant="caption" tone="muted" lines={1}>
-                      {uiText("marketFrom", { name: item().sourceName })}
-                    </Label>
-                    <If when={marker(item())}>
-                      <Label variant="small">{marker(item())}</Label>
-                    </If>
+                    {/* The marker sits at the card's bottom right, on the source's line, so it adds no row; the row is as tall as the marker either way. */}
+                    <View
+                      style={{ ...row, gap: 8, minHeight: type("small").line }}
+                    >
+                      <View style={grow}>
+                        <Label variant="caption" tone="muted" lines={1}>
+                          {uiText("marketFrom", { name: item().sourceName })}
+                        </Label>
+                      </View>
+                      <If when={marker(item())}>
+                        <View style={{ flexShrink: 1, minWidth: 0 }}>
+                          <Label variant="small" lines={1}>
+                            {marker(item())}
+                          </Label>
+                        </View>
+                      </If>
+                    </View>
                   </View>
                 )}
               </Each>

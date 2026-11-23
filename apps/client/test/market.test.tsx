@@ -91,3 +91,35 @@ test("the kept catalog shows at once, while the read that asks the servers has n
   });
   expect(app.shows("kept-entry")).toBe(true);
 });
+
+test("a card is as tall as the others whether or not it carries a marker", async () => {
+  const app = await open("./fixtures/market-markers.tsx", {
+    width: 1400,
+    height: 700,
+  });
+  // A card with a marker (installed, name taken, not supported) and one with none.
+  expect(app.shows("Installed")).toBe(true);
+  expect(app.shows("Format not supported")).toBe(true);
+  const heights = ["plain", "here", "taken", "bad"].map(
+    (name) => app.layout(`label:${name}`)?.height,
+  );
+  expect(heights[0]).toBeGreaterThan(0);
+  expect(new Set(heights).size).toBe(1);
+  // The marker is at the card's bottom right (inside its 12 padding and 1 border).
+  for (const [name, text] of [
+    ["here", "Installed"],
+    ["taken", "A plugin with this name is installed from another source"],
+    ["bad", "Format not supported"],
+  ] as const) {
+    const card = app.layout(`label:${name}`)!;
+    const mark = app.layout(`text:${text}`)!;
+    // A marker that fits is only as wide as its text, not a full-width row at the left.
+    if (name !== "taken") expect(mark.width).toBeLessThan(card.width - 26 - 40);
+    expect(
+      Math.abs(card.x + card.width - 13 - (mark.x + mark.width)),
+    ).toBeLessThan(2);
+    expect(
+      Math.abs(card.y + card.height - 13 - (mark.y + mark.height)),
+    ).toBeLessThan(2);
+  }
+});
