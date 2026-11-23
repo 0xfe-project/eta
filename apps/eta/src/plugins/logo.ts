@@ -19,6 +19,7 @@ import { isIP } from "node:net";
 import { extname, isAbsolute, resolve, sep } from "node:path";
 import { fitImage } from "../images/fit";
 import { viaProxy } from "./git";
+import { fitIco } from "./ico";
 
 export interface Logo {
   type: string;
@@ -593,6 +594,19 @@ export class Logos {
    * showed before must not be lost to a failed shrink, and it is within the size caps already.
    */
   async #shrunk(logo: Logo, label: string): Promise<Logo> {
+    const warn = (message: string) =>
+      (this.#options.warn ?? ((text) => console.warn(text)))(message);
+    if (logo.type === "image/x-icon") {
+      // Bun.Image cannot decode an ico: the pictures that fit are kept as they are.
+      const bytes = Buffer.from(logo.data, "base64");
+      if (bytes.byteLength <= MAX_ICON_BYTES) return logo;
+      const cut = fitIco(bytes, MAX_ICON_BYTES);
+      if (cut) return { type: logo.type, data: cut.toString("base64") };
+      warn(
+        `[eta] logo ${label} (${bytes.byteLength} bytes) kept as it was: no picture in the ico fits in ${MAX_ICON_BYTES} bytes`,
+      );
+      return logo;
+    }
     if (!SHRINKABLE.has(logo.type)) return logo;
     const bytes = Buffer.from(logo.data, "base64");
     if (bytes.byteLength <= MAX_ICON_BYTES) return logo;
