@@ -17,7 +17,10 @@ import type { AgentRecord, AgentStore } from "../agents/store";
 import type { AttachmentStore } from "../conversations/attachments";
 import type { Engine } from "../conversations/engine";
 import type { ConversationPolicies } from "../conversations/policy";
-import type { ConversationStore } from "../conversations/store";
+import type {
+  ConversationRecord,
+  ConversationStore,
+} from "../conversations/store";
 import type { Timeline } from "../conversations/timeline";
 import type { Inbox } from "../inbox/inbox";
 import type { MachineRecord, MachineStore } from "../machines/store";
@@ -37,10 +40,10 @@ import { createCaptainIdentity } from "../agents/create";
 import { ensureHome, homeOf } from "../agents/home";
 import { checkModel } from "../agents/model";
 import { agentHome } from "../agents/store";
-import { openDirect } from "../conversations/direct";
 import { conversationOf, ownerOf, taskKey } from "../session-owner";
 import { isActive } from "../tasks/status";
 import { executorOf } from "../tasks/store";
+import { CAPTAIN_KIND, captainConversations } from "./policy";
 import { CaptainProposals } from "./proposals";
 import { agentProposals, listPersonaCards } from "./propose-agent";
 import { groupProposals } from "./propose-group";
@@ -144,7 +147,7 @@ export class CaptainService {
       {
         ...deps,
         identity: () => this.identity(),
-        direct: async () => await this.direct(),
+        conversation: async () => await this.conversation(),
         createOperation: (input) => this.createOperation(input),
       },
       Object.values(this.propose),
@@ -243,12 +246,42 @@ export class CaptainService {
   }
 
   /**
-   * Captain's conversation, made if it is missing and brought back if it was archived before
-   * archiving it was refused (`conversations.update` refuses it now). A host whose Captain was
-   * made by an older build without one gets it here, the next time it starts.
+   * Captain's conversation, made if it is missing. One archived before archiving it was refused
+   * comes back. A host whose Captain was made by an older build without one gets it here, the next
+   * time it starts.
    */
-  #conversation(agent: AgentRecord): string {
-    return openDirect(this.#deps, ensureHome(this.#deps, agent), agent).id;
+  #conversation(agent: AgentRecord): ConversationRecord {
+    const { conversations } = this.#deps;
+    const found = captainConversations(conversations, agent)[0];
+    if (found === undefined) {
+      const made = conversations.create({
+        projectId: ensureHome(this.#deps, agent).id,
+        kind: CAPTAIN_KIND,
+        name: agent.name,
+        agentIds: [agent.id],
+        stewardId: agent.id,
+      });
+      this.#deps.created?.(made.id);
+      this.#deps.changed([made.id]);
+      return made;
+    }
+    if (!found.archived) return found;
+    const back = conversations.update(found.id, { archived: false })!;
+    this.#deps.changed([back.id]);
+    return back;
+  }
+
+  /**
+   * Where Captain is talked to, made if it is missing: what the host posts for Captain to read (a
+   * routine's report, an email handed over, a proposal's outcome with nowhere else to go).
+   */
+  async conversation(): Promise<{
+    conversationId: string;
+    agent: AgentRecord;
+  }> {
+    const { identity } = await this.ensure();
+    const agent = this.#deps.agents.get(identity.agentId)!;
+    return { conversationId: this.#conversation(agent).id, agent };
   }
 
   async direct(): Promise<CaptainIdentityView & { conversationId: string }> {
@@ -402,7 +435,7 @@ export class CaptainService {
   /**
    * A plain Captain message in a group: said, and nobody woken. It is what `assign` is without the
    * work: no agent is named, the steward is not defaulted to, no reply is queued, and no assignment
-   * is recorded. Only a group: an agent's direct chat is the user's with that agent. Captain joins
+   * is recorded. Only a group: Captain's own conversation is the user's with Captain. Captain joins
    * a group it is not in, as `assign` does, so the members see who spoke.
    */
   async post(input: { conversationId: string; text: string }): Promise<{
@@ -828,7 +861,7 @@ export class CaptainService {
     switch (input.action) {
       case "continue": {
         // A normal continuation is a chat instruction, not a task reassignment. In a group the
-        // executor sees who asked and can act on the task in its own session; in a direct chat
+        // executor sees who asked and can act on the task in its own session; in Captain's own chat
         // there is no group to speak in, so the task comment is the only channel.
         const origin =
           task.originConversationId === null
@@ -1172,7 +1205,7 @@ export class CaptainService {
       chars += cost;
     }
     const { identity } = await this.ensure();
-    const director = await this.direct();
+    const director = await this.conversation();
     const captainStatus = this.#deps.timeline
       .memberActivity(director.conversationId)
       .get(identity.agentId)?.status;
@@ -1227,17 +1260,16 @@ export class CaptainService {
 
   #viewOf(agent: AgentRecord): CaptainIdentityView {
     const home = agentHome(this.#deps.dataDir, agent.id);
-    const project = homeOf(this.#deps, agent);
-    const direct =
-      project === undefined
-        ? undefined
-        : this.#deps.conversations.directOf(project.id, agent.id);
+    const conversation = captainConversations(
+      this.#deps.conversations,
+      agent,
+    )[0];
     return {
       agentId: agent.id,
       name: agent.name,
       home,
       model: agent.model,
-      conversationId: direct?.id ?? null,
+      conversationId: conversation?.id ?? null,
       createdAt: agent.createdAt,
     };
   }

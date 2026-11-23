@@ -109,10 +109,13 @@ const agentView = (w: World, id: string): AgentView =>
     .section<AgentView[]>("agents", "list")!
     .find((agent) => agent.id === id)!;
 
-async function direct(w: World, agent: AgentView): Promise<string> {
-  const { conversation } = (await w.client.call("agents", "direct", {
-    agentId: agent.id,
-  })) as { conversation: { id: string } };
+/** A group of the agent alone, in its own workspace. */
+async function alone(w: World, agent: AgentView): Promise<string> {
+  const conversation = await w.group(
+    agent.homeProjectId,
+    [agent.id],
+    agent.name,
+  );
   await w.watch(conversation.id);
   return conversation.id;
 }
@@ -437,7 +440,7 @@ describe("an upgrade that breaks the configuration", () => {
     await configure(w, fullConfig);
     await until(() => view(w).state === "ready");
     const agent = await enable(w, await w.agent("Ada"));
-    const chat = await direct(w, agent);
+    const chat = await alone(w, agent);
     await ask(w, chat, "first");
     const systemOf = () => requests.at(-1)!.system;
     expect(systemOf()).toContain("greet");
@@ -488,7 +491,7 @@ describe("a session on eta's own loop", () => {
     await configure(w, fullConfig);
     await until(() => view(w).state === "ready");
     const agent = await enable(w, await w.agent("Ada"));
-    await ask(w, await direct(w, agent), "hello");
+    await ask(w, await alone(w, agent), "hello");
     const { system } = requests.at(-1)!;
     expect(system).toContain("greet");
     expect(system).toContain("How to greet someone");
@@ -517,7 +520,7 @@ export default { greeting, cwd, max, servers: eta.mcp.servers().map((s) => s.nam
     await configure(w, fullConfig);
     await until(() => view(w).state === "ready");
     const agent = await enable(w, await w.agent("Ada"));
-    await ask(w, await direct(w, agent), "greet");
+    await ask(w, await alone(w, agent), "greet");
     const root = realpathSync(join(w.host.dataDir, "plugins", NAME));
     expect(told).toContain("Hello Ada from ops");
     expect(told).toContain('"servers": "hello-plugin-hello"');
@@ -569,7 +572,7 @@ export default { greeting, cwd, max, servers: eta.mcp.servers().map((s) => s.nam
     await configure(w, fullConfig);
     await until(() => view(w).state === "ready");
     const agent = await w.agent("Ada");
-    await ask(w, await direct(w, agent), "hello");
+    await ask(w, await alone(w, agent), "hello");
     expect(requests.at(-1)!.system).not.toContain("hello-plugin");
   });
 
@@ -579,7 +582,7 @@ export default { greeting, cwd, max, servers: eta.mcp.servers().map((s) => s.nam
     await configure(w, fullConfig);
     await until(() => view(w).state === "ready");
     const agent = await enable(w, await w.agent("Ada"));
-    const chat = await direct(w, agent);
+    const chat = await alone(w, agent);
     await ask(w, chat, "one");
     expect(requests.at(-1)!.system).toContain("How to greet someone");
     await writeFile(
@@ -617,7 +620,7 @@ describe("get_plugin_config", () => {
     await until(() => view(w).state === "ready");
     let agent = await w.agent("Ada");
     if (enabled) agent = await enable(w, agent);
-    await ask(w, await direct(w, agent), "read it");
+    await ask(w, await alone(w, agent), "read it");
     return {
       w,
       agent,
@@ -707,7 +710,7 @@ describe("get_plugin_config", () => {
     ])
       await w.client.call("plugins", "setLevel", { name: NAME, field, level });
     const agent = await enable(w, await w.agent("Ada"));
-    await ask(w, await direct(w, agent), "read it");
+    await ask(w, await alone(w, agent), "read it");
     const fields = fieldsOf(result);
     expect(fields.plain_key?.level).toBe("none");
     expect(fields.script_key?.level).toBe("none");
@@ -735,7 +738,7 @@ await eta.platform.get_plugin_config({ plugin: "${NAME}", fields: ["team", "api_
     await configure(w, fullConfig);
     await until(() => view(w).state === "ready");
     const agent = await enable(w, await w.agent("Ada"));
-    await ask(w, await direct(w, agent), "read it from a script");
+    await ask(w, await alone(w, agent), "read it from a script");
     expect(told).toContain("ops");
     expect(told).toContain("Not readable");
     expect(told).not.toContain(API_KEY);
@@ -761,7 +764,7 @@ describe("what a session on eta's own loop keeps", () => {
     await configure(w, fullConfig);
     await until(() => view(w).state === "ready");
     const agent = await enable(w, await w.agent("Ada"));
-    await ask(w, await direct(w, agent), "print it");
+    await ask(w, await alone(w, agent), "print it");
     expect(told).toContain("[secret hello-plugin.api_key]");
     expect(told).not.toContain(API_KEY);
     expect(framesHold(w, API_KEY)).toBe(false);
@@ -805,7 +808,7 @@ describe("a session on an external runtime", () => {
     await configure(w, fullConfig);
     await until(() => view(w).state === "ready");
     const agent = await enable(w, await w.agent("Cody", { runtime: "claude" }));
-    await ask(w, await direct(w, agent), "hi");
+    await ask(w, await alone(w, agent), "hi");
     const server = pluginServer(turns[0]!);
     expect(server.env).toMatchObject({
       HELLO_API_KEY: API_KEY,
@@ -844,7 +847,7 @@ describe("a session on an external runtime", () => {
     await configure(w, fullConfig);
     await until(() => view(w).state === "ready");
     const agent = await enable(w, await w.agent("Cody", { runtime: "codex" }));
-    await ask(w, await direct(w, agent), "hi");
+    await ask(w, await alone(w, agent), "hi");
     const prompt = turns[0]!.options.appendSystemPrompt ?? "";
     expect(prompt).toContain("<name>greet</name>");
     expect(prompt).toContain(
@@ -858,7 +861,7 @@ describe("a session on an external runtime", () => {
     await configure(w, fullConfig);
     await until(() => view(w).state === "ready");
     const agent = await enable(w, await w.agent("Cody", { runtime: "claude" }));
-    await ask(w, await direct(w, agent), "hi");
+    await ask(w, await alone(w, agent), "hi");
     const answer = await callServer(pluginServer(turns[0]!));
     const sha256 = (text: string): string =>
       new Bun.CryptoHasher("sha256").update(text).digest("hex");
@@ -880,7 +883,7 @@ describe("a session on an external runtime", () => {
     await configure(w, fullConfig);
     await until(() => view(w).state === "ready");
     const agent = await enable(w, await w.agent("Cody", { runtime: "claude" }));
-    const chat = await direct(w, agent);
+    const chat = await alone(w, agent);
     await ask(w, chat, "one");
     await configure(w, { team: "new-team" });
     await ask(w, chat, "two");
@@ -899,7 +902,7 @@ describe("a session on an external runtime", () => {
     await configure(w, fullConfig);
     await until(() => view(w).state === "ready");
     const agent = await enable(w, await w.agent("Cody", { runtime: "claude" }));
-    await ask(w, await direct(w, agent), "hi");
+    await ask(w, await alone(w, agent), "hi");
     const fields = fieldsOf(answer);
     expect(fields.team).toEqual({ level: "read", value: "ops" });
     expect(fields.plain_key).toEqual({ level: "value", value: PLAIN_KEY });

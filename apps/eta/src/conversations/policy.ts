@@ -57,8 +57,8 @@ export interface ConversationPolicy {
 }
 
 /**
- * A kind nobody registered: a conversation of a module that is not running (Captain's, on a host
- * started without Captain). It stays where it is and nothing in it moves.
+ * A kind nobody registered: a conversation of a module that is not running on this host. It stays
+ * where it is and nothing in it moves.
  */
 const unclaimed = (kind: string): ConversationPolicy => ({
   kind,

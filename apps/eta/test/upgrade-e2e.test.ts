@@ -28,7 +28,10 @@ const SAMPLES = [
   "SELECT name FROM conversation ORDER BY name",
 ];
 
-/** What a seed holds: a person's agents (one of them called Captain), a group and a direct talk. */
+/**
+ * What a seed holds: a person's agents (one of them called Captain), a group and a talk with each
+ * agent alone (a private chat, before 0061 made those groups of one).
+ */
 function seedDatabase(): Database {
   const db = openDatabase(":memory:");
   applyMigrations(db, loadMigrations());
@@ -40,8 +43,8 @@ function seedDatabase(): Database {
       ('mine', 'Captain', 'fake:m1', 1, 1);
     INSERT INTO conversation (id, project_id, kind, name, created_at, updated_at) VALUES
       ('group', 'p', 'group', 'Seed talk', 1, 1),
-      ('ada-direct', 'p', 'direct', 'Ada alone', 1, 1),
-      ('mine-direct', 'p', 'direct', 'My Captain alone', 1, 1);
+      ('ada-direct', 'p', 'group', 'Ada alone', 1, 1),
+      ('mine-direct', 'p', 'group', 'My Captain alone', 1, 1);
     INSERT INTO participant (conversation_id, agent_id, invited_at) VALUES
       ('group', 'ada', 1),
       ('group', 'mine', 1),
@@ -69,13 +72,13 @@ function manifestOf(db: Database): Manifest {
   };
 }
 
-/** What a later build adds when it starts: Captain, its direct talk, and a place in the group. */
+/** What a later build adds when it starts: Captain, its own conversation, and a place in the group. */
 function hostStarted(db: Database): void {
   db.exec(`
     INSERT INTO agent (id, name, model, system_role, created_at, updated_at) VALUES
       ('captain', 'Captain', 'fake:m2', 'captain', 2, 2);
     INSERT INTO conversation (id, project_id, kind, name, created_at, updated_at) VALUES
-      ('captain-direct', 'home', 'direct', 'Captain', 2, 2);
+      ('captain-direct', 'home', 'captain', 'Captain', 2, 2);
     INSERT INTO participant (conversation_id, agent_id, invited_at) VALUES
       ('captain-direct', 'captain', 2),
       ('group', 'captain', 2);

@@ -131,8 +131,9 @@ describe("email wire", () => {
     expect(w.client.section<unknown[]>("sessions", "list")).toEqual([]);
   });
 
-  it("hands mail to the selected agent in a real private conversation", async () => {
-    const w = await world();
+  it("hands mail to Captain, in Captain's conversation, saying whom the user picked", async () => {
+    const w = await world({ captain: true, tasks: { runs: false } });
+    const captain = w.host.product.captain.identity()!;
     const store = new EmailStore(w.host.db);
     const account = store.saveAccount({
       name: "Mailbox",
@@ -181,20 +182,19 @@ describe("email wire", () => {
     };
 
     expect(assigned).toMatchObject({
-      agentName: "Mailer",
+      conversationId: captain.conversationId,
+      agentName: captain.name,
       assignments: [{ sessionId: assigned.sessionId }],
     });
-    expect(assigned.conversationId.startsWith("mail:")).toBe(false);
     await w.watch(assigned.conversationId);
-    expect(
-      w
-        .rows(assigned.conversationId)
-        .some(
-          (message) =>
-            message.author === "user" &&
-            message.text.includes("## Email: [eta-mp] Please handle this"),
-        ),
-    ).toBe(true);
+    const handed = w
+      .rows(assigned.conversationId)
+      .find(
+        (message) =>
+          message.author === "user" &&
+          message.text.includes("## Email: [eta-mp] Please handle this"),
+      );
+    expect(handed?.text).toContain(`They picked Mailer (agent ${agent.id})`);
 
     const reassigned = (await w.client.call("email", "assign", {
       threadIds: [thread.id],

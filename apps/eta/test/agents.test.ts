@@ -83,12 +83,9 @@ describe("creating an agent", () => {
     ).toEqual([]);
   });
 
-  it("edits an agent in place, and the workspace's names follow a rename", async () => {
+  it("edits an agent in place, and the workspace's name follows a rename", async () => {
     const w = await world();
     const agent = await w.agent("Ada");
-    const chat = (await w.client.call("agents", "direct", {
-      agentId: agent.id,
-    })) as { conversation: ConversationSummary };
 
     const { agent: edited } = (await w.client.call("agents", "update", {
       agentId: agent.id,
@@ -129,13 +126,6 @@ describe("creating an agent", () => {
         w.client
           .section<ProjectView[]>("projects", "list")
           ?.find((project) => project.id === agent.homeProjectId)?.name ===
-        "Ada Lovelace",
-    );
-    await until(
-      () =>
-        w.client
-          .section<ConversationSummary[]>("conversations", "list")
-          ?.find((entry) => entry.id === chat.conversation.id)?.name ===
         "Ada Lovelace",
     );
     await expect(
@@ -301,67 +291,13 @@ describe("editing the model while a session is running", () => {
   );
 });
 
-describe("the private chat", () => {
-  it("is made once, in the agent's workspace, with the agent as its only member", async () => {
+describe("an agent alone in a group", () => {
+  it("is no private chat: agents.direct says it is gone", async () => {
     const w = await world();
     const agent = await w.agent("Ada");
-
-    const first = (await w.client.call("agents", "direct", {
-      agentId: agent.id,
-    })) as { conversation: ConversationSummary };
-    const second = (await w.client.call("agents", "direct", {
-      agentId: agent.id,
-    })) as { conversation: ConversationSummary };
-
-    expect(second.conversation.id).toBe(first.conversation.id);
-    expect(first.conversation).toMatchObject({
-      kind: "direct",
-      projectId: agent.homeProjectId,
-      name: "Ada",
-      archived: false,
-      stewardId: agent.id,
-    });
-    expect(first.conversation.participants.map((m) => m.agentId)).toEqual([
-      agent.id,
-    ]);
-    const listed = w.client.section<ConversationSummary[]>(
-      "conversations",
-      "list",
-    )!;
-    // Ada's, once. (Captain's private chat is in the list too: the host makes it when it starts.)
-    expect(
-      listed.filter(
-        (entry) =>
-          entry.kind === "direct" &&
-          entry.participants.some((member) => member.agentId === agent.id),
-      ),
-    ).toHaveLength(1);
-    // And it is a target of its own, from the moment it exists.
-    await w.watch(first.conversation.id);
-    expect(
-      w.client.section(`conversations.${first.conversation.id}`, "info"),
-    ).toMatchObject({ kind: "direct", stewardId: agent.id });
-  });
-
-  it("cannot take or lose members", async () => {
-    const w = await world();
-    const ada = await w.agent("Ada");
-    const bob = await w.agent("Bob");
-    const { conversation } = (await w.client.call("agents", "direct", {
-      agentId: ada.id,
-    })) as { conversation: ConversationSummary };
     await expect(
-      w.client.call("conversations", "invite", {
-        conversationId: conversation.id,
-        agentId: bob.id,
-      }),
-    ).rejects.toThrow(/private chat/);
-    await expect(
-      w.client.call("conversations", "remove", {
-        conversationId: conversation.id,
-        agentId: ada.id,
-      }),
-    ).rejects.toThrow(/private chat/);
+      w.client.call("agents", "direct", { agentId: agent.id }),
+    ).rejects.toThrow(/agents\.direct is gone/);
   });
 
   it("answers: queued, then working, then done with the model's words", async () => {
@@ -372,13 +308,11 @@ describe("the private chat", () => {
     });
     const w = await world({ models });
     const agent = await w.agent("Ada");
-    const { conversation } = (await w.client.call("agents", "direct", {
-      agentId: agent.id,
-    })) as { conversation: ConversationSummary };
+    const conversation = await w.group(agent.homeProjectId, [agent.id]);
     await w.watch(conversation.id);
 
     const sent = await w.send(conversation.id, "Hi Ada");
-    // A message in a private chat needs no mention: it is the agent's.
+    // A message that names nobody is the steward's: the agent's, alone in its group.
     expect(sent.nobody).toBe(false);
     expect(sent.message).toMatchObject({ author: "user", status: "done" });
     expect(sent.replies).toHaveLength(1);
@@ -440,29 +374,10 @@ describe("the private chat", () => {
     )!;
     expect(members[0]?.sessionId).toMatch(/^eta-/);
   });
-
-  it("opens the chat again when it was put away", async () => {
-    const w = await world();
-    const agent = await w.agent("Ada");
-    const { conversation } = (await w.client.call("agents", "direct", {
-      agentId: agent.id,
-    })) as { conversation: ConversationSummary };
-    await w.client.call("conversations", "update", {
-      conversationId: conversation.id,
-      archived: true,
-    });
-    const again = (await w.client.call("agents", "direct", {
-      agentId: agent.id,
-    })) as { conversation: ConversationSummary };
-    expect(again.conversation).toMatchObject({
-      id: conversation.id,
-      archived: false,
-    });
-  });
 });
 
 describe("deleting an agent", () => {
-  it("clears it as steward, archives its private chat, stops what it was saying, and keeps its directory", async () => {
+  it("clears it as steward and member, stops what it was saying, and keeps its directory", async () => {
     const { models, requests } = scriptedModels(() => HANG);
     const w = await world({ models });
     const ada = await w.agent("Ada");
@@ -470,11 +385,7 @@ describe("deleting an agent", () => {
     await writeFile(join(ada.home, "notes.md"), "kept");
     const project = await w.project();
     const group = await w.group(project.id, [ada.id, bob.id], "plans");
-    const chat = (
-      (await w.client.call("agents", "direct", { agentId: ada.id })) as {
-        conversation: ConversationSummary;
-      }
-    ).conversation;
+    const chat = await w.group(ada.homeProjectId, [ada.id], "Ada");
     await w.watch(chat.id);
     await w.watch(group.id);
 
@@ -501,7 +412,9 @@ describe("deleting an agent", () => {
       "conversations",
       "list",
     )!;
-    expect(conversations.find((c) => c.id === chat.id)?.archived).toBe(true);
+    expect(conversations.find((c) => c.id === chat.id)?.participants).toEqual(
+      [],
+    );
     const plans = conversations.find((c) => c.id === group.id)!;
     expect(plans.participants.map((m) => m.agentId)).toEqual([bob.id]);
     expect(plans.stewardId).toBeNull();

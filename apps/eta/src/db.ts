@@ -29,6 +29,14 @@ const WAL_RETRY_MS = 10;
 
 const MIGRATION_FILE = /^(\d{4})-[a-z0-9-]+\.sql$/;
 
+/**
+ * A migration that makes a table again which others reference says so on a line of its own. Its
+ * statements then run with foreign keys off, as SQLite's own recipe for remaking a table has it:
+ * dropping the old table would otherwise take every row that references it along (ON DELETE
+ * CASCADE). Every reference is checked before the migration counts as done.
+ */
+const FOREIGN_KEYS_OFF = /^-- eta: foreign keys off$/m;
+
 /** Where a data directory keeps its database. */
 export function databasePath(dataDir: string): string {
   return join(dataDir, "eta.sqlite");
@@ -156,18 +164,41 @@ export function applyMigrations(
   );
   const applied: string[] = [];
   for (const migration of migrations) {
-    // One transaction per migration: a half-applied migration is a database nobody can reason
-    // about, so the statements and the record of having run them land together or not at all.
-    // Immediate, and asked inside it: two hosts starting on a new database take turns, and the
-    // second finds the first's work done.
-    db.transaction(() => {
-      if (isDone.get(migration.id) !== null) return;
-      for (const statement of statementsOf(migration.sql)) db.exec(statement);
-      db.query(
-        `INSERT INTO ${MIGRATION_TABLE} (id, applied_at) VALUES (?, ?)`,
-      ).run(migration.id, new Date().toISOString());
-      applied.push(migration.id);
-    }).immediate();
+    const keysOff = FOREIGN_KEYS_OFF.test(migration.sql);
+    // Read before the transaction, and switched there too: SQLite ignores the pragma inside one.
+    const keysWere =
+      db.query<{ foreign_keys: number }, []>("PRAGMA foreign_keys").get()
+        ?.foreign_keys === 1;
+    if (keysOff && keysWere) db.exec("PRAGMA foreign_keys = OFF");
+    try {
+      // One transaction per migration: a half-applied migration is a database nobody can reason
+      // about, so the statements and the record of having run them land together or not at all.
+      // Immediate, and asked inside it: two hosts starting on a new database take turns, and the
+      // second finds the first's work done.
+      db.transaction(() => {
+        if (isDone.get(migration.id) !== null) return;
+        for (const statement of statementsOf(migration.sql)) db.exec(statement);
+        // With the keys off nothing stopped a row from losing what it points at: the migration
+        // only counts as done when every reference still holds.
+        if (keysOff) {
+          const broken = db
+            .query<{ table: string; parent: string }, []>(
+              "PRAGMA foreign_key_check",
+            )
+            .all();
+          if (broken.length > 0)
+            throw new Error(
+              `migration ${migration.id} broke ${broken.length} reference(s), the first from ${broken[0]!.table} to ${broken[0]!.parent}`,
+            );
+        }
+        db.query(
+          `INSERT INTO ${MIGRATION_TABLE} (id, applied_at) VALUES (?, ?)`,
+        ).run(migration.id, new Date().toISOString());
+        applied.push(migration.id);
+      }).immediate();
+    } finally {
+      if (keysOff && keysWere) db.exec("PRAGMA foreign_keys = ON");
+    }
   }
   return applied;
 }
