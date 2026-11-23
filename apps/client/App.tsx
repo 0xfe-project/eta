@@ -35,7 +35,7 @@ import {
   ElementPicking,
 } from "./src/components/element-picker";
 import { ToastLayer } from "./src/components/toast";
-import { control, icon, space } from "./src/components/tokens";
+import { control, icon, layer, space } from "./src/components/tokens";
 import { createLanguagePreference, LanguageSettings, uiText } from "./src/i18n";
 import { resumeComposerOutbox } from "./src/pages/chat/composer-draft";
 import { Connection, WorkspaceSkeleton } from "./src/pages/connection";
@@ -321,7 +321,7 @@ function App() {
                           style={{
                             ...row,
                             position: "absolute",
-                            zIndex: 1000,
+                            zIndex: layer.toast,
                             bottom: 16,
                             right: 16,
                             left: 16,

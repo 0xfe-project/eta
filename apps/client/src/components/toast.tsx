@@ -4,7 +4,9 @@ import { screenInsets } from "./safe-area";
 import { StatusDot } from "./status-dot";
 import { Label } from "./text";
 import { colors, row, Screen } from "./theme";
-import { shadow, space, weight } from "./tokens";
+import { layer, shadow, space, weight } from "./tokens";
+
+const toastWidth = 356;
 
 // A short app-wide note that goes by itself ("Updated to 0.9.1"). A native dialog (Settings on a
 // computer or tablet) is a layer over the window that nothing in the root can draw above, so each
@@ -58,12 +60,12 @@ export function ToastLayer(props: { phone?: boolean }) {
       <View
         style={{
           position: "absolute",
-          zIndex: 1000,
+          zIndex: layer.toast,
           right: phone() ? 12 + insets().right : 16,
           left: phone() ? 12 + insets().left : undefined,
           top: phone() ? 8 + insets().top : undefined,
           bottom: phone() ? undefined : 16 + insets().bottom,
-          width: phone() ? undefined : 356,
+          width: phone() ? undefined : toastWidth,
           gap: space[8],
         }}
       >

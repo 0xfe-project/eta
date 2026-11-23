@@ -29,6 +29,12 @@ import {
 } from "./theme";
 import { control, icon, opacity, shadow, space, weight } from "./tokens";
 
+/** A menu's width, unless its caller says. */
+const menuWidth = 172;
+/** A choice's row in a phone sheet, and in a menu. */
+const sheetRowHeight = 52;
+const checkRowHeight = 32;
+
 export function Button(props: {
   label: string;
   /** What a screen reader says when the label alone is ambiguous; `label` by default. */
@@ -331,7 +337,7 @@ export function ActionMenu(props: {
       open={titled() ? open() : undefined}
       onOpenChange={(next) => open.set(next)}
       popupStyle={{
-        width: props.popupWidth ?? 172,
+        width: props.popupWidth ?? menuWidth,
         paddingVertical: props.lifted ? space[4] : 0,
         borderWidth: 1,
         borderColor: c().strong,
@@ -378,7 +384,7 @@ export function ActionMenu(props: {
             ...row,
             justifyContent: props.value ? "space-between" : "center",
             minWidth: space[32],
-            height: 30,
+            height: control.lg,
             paddingHorizontal: space[8],
             gap: space[8],
             cursor: "pointer",
@@ -457,7 +463,7 @@ export function ActionItem(props: {
         inSheet()
           ? {
               ...row,
-              minHeight: 52,
+              minHeight: sheetRowHeight,
               paddingHorizontal: space[16],
               gap: space[12],
               borderTopWidth: 1,
@@ -472,7 +478,7 @@ export function ActionItem(props: {
               }
             : {
                 ...row,
-                minHeight: touchScreen ? touchRow : 33,
+                minHeight: touchScreen ? touchRow : checkRowHeight,
                 paddingHorizontal: space[8],
                 gap: space[4],
               }

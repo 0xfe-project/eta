@@ -4,11 +4,14 @@ import { Image, View } from "nsh";
 import { colors, Label, row, sizes } from "../components";
 import { pickerTarget } from "../components/element-picker";
 import { phoneTabPaths } from "../components/icons";
-import { avatar, icon, space, weight } from "../components/tokens";
+import { avatar, border, icon, space, weight } from "../components/tokens";
 import { useText } from "../i18n";
 import { taskNeedsAttention } from "../pages/tasks/status";
 import { useHost } from "../services/host";
 import { CaptainFace } from "./captain";
+
+/** An unread count over a tab icon. */
+const badgeHeight = 16;
 
 export const phoneTabs = [
   ["chat", "chat"],
@@ -57,7 +60,7 @@ export function PhoneTabItem(props: {
       onPress={() => props.onPress()}
       style={{
         flex: 1,
-        height: 63,
+        height: sizes.phoneNav - border.hair,
         alignItems: "center",
         justifyContent: "center",
         gap: space[4],
@@ -89,15 +92,15 @@ export function PhoneTabItem(props: {
             top: 8,
             left: "50%",
             marginLeft: space[4],
-            height: 14,
-            minWidth: 14,
+            height: badgeHeight,
+            minWidth: badgeHeight,
             paddingHorizontal: space[4],
             backgroundColor: c().blue,
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          <Label variant="caption" style={{ color: "#ffffff" }}>
+          <Label variant="caption" tone="buttonInk">
             {props.count}
           </Label>
         </View>

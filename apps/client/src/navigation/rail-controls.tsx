@@ -5,6 +5,12 @@ import { colors, focusRing, Icon, Label } from "../components";
 import { dotSize } from "../components/status-dot";
 import { control, icon, space } from "../components/tokens";
 
+/** An unread count over a rail icon. */
+const badgeHeight = 16;
+/** A rail destination: its icon over its caption. */
+const buttonHeight = 40;
+const labelWidth = 48;
+
 export function RailButton(props: {
   label: string;
   icon: IconName;
@@ -55,8 +61,8 @@ export function RailButton(props: {
               position: "absolute",
               right: -5,
               top: -2,
-              height: 13,
-              minWidth: 10,
+              height: badgeHeight,
+              minWidth: badgeHeight,
               paddingHorizontal: space[2],
               alignItems: "center",
               justifyContent: "center",
@@ -96,7 +102,7 @@ export function RailEntry(props: {
       focusVisibleStyle={focusRing(c())}
       style={{
         position: "relative",
-        height: 41,
+        height: buttonHeight,
         flexShrink: 0,
         alignItems: "center",
         paddingTop: space[4],
@@ -112,7 +118,7 @@ export function RailEntry(props: {
       <Label
         variant="caption"
         lines={1}
-        style={{ maxWidth: 49, textAlign: "center" }}
+        style={{ maxWidth: labelWidth, textAlign: "center" }}
       >
         {props.label}
       </Label>

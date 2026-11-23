@@ -8,6 +8,10 @@ import { messageTime } from "../pages/chat/message-time";
 import { useHost } from "../services/host";
 import { CaptainContextRing } from "./captain-context-ring";
 
+const cardHeight = 56;
+/** Captain atop the tablet rail: its face and its name. */
+const railCaptainHeight = 80;
+
 export function CaptainFace(props: { size: number }) {
   const host = useHost();
   return <AgentFace id={host.captain()?.id ?? "Captain"} size={props.size} />;
@@ -38,7 +42,7 @@ export function CaptainCard(props: { onPress: () => void }) {
           ...row,
           alignItems: "flex-start",
           gap: space[12],
-          minHeight: 54,
+          minHeight: cardHeight,
           paddingVertical: space[8],
           paddingHorizontal: space[16],
           borderWidth: 1,
@@ -74,7 +78,7 @@ export function RailCaptain(props: { selected: boolean; onPress: () => void }) {
   return (
     <View
       style={{
-        height: 80,
+        height: railCaptainHeight,
         flexShrink: 0,
         alignItems: "center",
         paddingTop: space[8],

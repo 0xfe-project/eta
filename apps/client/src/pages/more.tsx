@@ -6,6 +6,8 @@ import { colors, grow, Header, Icon, Label, row } from "../components";
 import { icon, space } from "../components/tokens";
 import { useText } from "../i18n";
 
+const rowHeight = 56;
+
 export function More(props: {
   layout: Layout;
   onNavigate: (page: Page) => void;
@@ -43,7 +45,7 @@ function MoreRow(props: {
       activeStyle={{ backgroundColor: c().selected }}
       style={{
         ...row,
-        height: 56,
+        height: rowHeight,
         paddingLeft: space[16],
         paddingRight: space[12],
         gap: space[12],

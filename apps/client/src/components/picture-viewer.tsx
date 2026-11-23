@@ -7,7 +7,10 @@ import { CloseButton } from "./navigation-buttons";
 import { screenInsets } from "./safe-area";
 import { Label } from "./text";
 import { colors, fill, Fonts, monoFontFamily, row } from "./theme";
-import { space } from "./tokens";
+import { shadow, space } from "./tokens";
+
+/** The viewer's bottom bar. */
+const barHeight = 32;
 
 /** One picture as the preview and the lightbox show it: where it is, and its caption. */
 export interface ViewedPicture {
@@ -148,7 +151,7 @@ export function picturePreview(
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
-        boxShadow: [{ x: 0, y: 4, blur: 12, color: "#0000001f" }],
+        boxShadow: [shadow.popover],
       }}
     >
       <PictureImage picture={picture} maxWidth={width()} maxHeight={height()} />
@@ -285,7 +288,7 @@ function LightboxDialog(props: {
         style={{
           ...row,
           gap: space[12],
-          minHeight: 33,
+          minHeight: barHeight,
           paddingTop: space[4],
           paddingBottom: Math.max(4, insets().bottom),
           paddingLeft: 12 + insets().left,

@@ -8,6 +8,11 @@ import { Icon, Label } from "./text";
 import { colors, row, textFaces, textStyle } from "./theme";
 import { control, icon, space } from "./tokens";
 
+/** The model picker's popup: wide enough for a provider's long model ids. */
+const popupWidth = 336;
+const popupHeight = 312;
+const searchHeight = 36;
+
 /**
  * The models an eta agent can run on, each with the thinking levels it declares
  * (`etaModelThinking`), so a level picker offers what the model takes.
@@ -75,18 +80,18 @@ export function ModelSelect(props: {
       cover={false}
       offset={2}
       popupStyle={{
-        minWidth: 336,
+        minWidth: popupWidth,
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
-        maxHeight: 312,
+        maxHeight: popupHeight,
       }}
       searchStyle={{
         color: c().ink,
         placeholderColor: c().muted,
         ...textStyle(type("small")),
         paddingHorizontal: space[12],
-        height: 34,
+        height: searchHeight,
         backgroundColor: "transparent",
         borderBottomWidth: 1,
         borderColor: c().border,

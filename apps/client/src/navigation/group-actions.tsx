@@ -14,6 +14,10 @@ import { control, shadow, space, weight } from "../components/tokens";
 import { uiText } from "../i18n";
 import { useHost } from "../services/host";
 
+const menuWidth = 188;
+/** The group's name atop the phone's action sheet. */
+const sheetHeaderHeight = 36;
+
 /** Renaming and archiving go through `conversations.update`; a connection without it sees both dimmed. */
 function useGroupsEditable() {
   const host = useHost();
@@ -47,7 +51,7 @@ export function GroupMenu(props: {
           if (!open) props.onClose();
         }}
         popupStyle={{
-          width: 188,
+          width: menuWidth,
           paddingVertical: space[4],
           borderWidth: 1,
           borderColor: c().strong,
@@ -55,7 +59,13 @@ export function GroupMenu(props: {
           boxShadow: [shadow.popover],
         }}
         sheetHeader={
-          <View style={{ ...row, height: 36, paddingHorizontal: space[16] }}>
+          <View
+            style={{
+              ...row,
+              height: sheetHeaderHeight,
+              paddingHorizontal: space[16],
+            }}
+          >
             <Label variant="small" tone="muted" lines={1} style={{ flex: 1 }}>
               {props.group.name}
             </Label>
@@ -250,13 +260,13 @@ export function ArchiveGroup(props: {
           <Button
             label={uiText("archive")}
             tone="danger"
-            size={40}
+            size={control.touch}
             disabled={busy()}
             onPress={() => void archive()}
           />
           <Button
             label={uiText("cancel")}
-            size={40}
+            size={control.touch}
             disabled={busy()}
             onPress={props.onClose}
           />

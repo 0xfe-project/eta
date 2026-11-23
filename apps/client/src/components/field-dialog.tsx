@@ -44,7 +44,7 @@ export function FieldDialog(props: {
         }, 50)
       }
       style={{
-        height: props.phone ? 36 : 30,
+        height: props.phone ? control.touch : control.lg,
         ...textStyle(type("small")),
         paddingHorizontal: space[12],
         borderColor: props.error ? c().red : c().strong,
@@ -121,13 +121,13 @@ export function FieldDialog(props: {
           <Button
             label={props.saveLabel ?? uiText("save")}
             tone="primary"
-            size={40}
+            size={control.touch}
             disabled={props.busy || !props.valid}
             onPress={props.onSave}
           />
           <Button
             label={uiText("cancel")}
-            size={40}
+            size={control.touch}
             disabled={props.busy}
             onPress={props.onClose}
           />
