@@ -243,3 +243,21 @@ function CodeBlockChrome(props: { editor: EtaEditorHandle }) {
     </>
   );
 }
+
+/**
+ * Code blocks without their own frame (border and the space around): for code shown on its own
+ * (a tool call's input), framed by the place around it, which scrolls it when it is long (a code
+ * block only scrolls sideways).
+ */
+export function bareCode(): TextPlugin {
+  return {
+    name: "bareCode",
+    styles: {
+      view: () => ({
+        codeBlock: { borderWidth: 0, marginVertical: 0 },
+        // The block's own padding is the only space around the code.
+        codeBlockCode: { padding: 0 },
+      }),
+    },
+  };
+}
