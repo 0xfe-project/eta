@@ -11,7 +11,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
-import { weight } from "../../components/tokens";
+import { space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { ToolOutput } from "./run/tool-code";
 
@@ -81,7 +81,7 @@ export function ProcessStep(props: { value: RunBlock }) {
               ...row,
               minHeight: 33,
               paddingHorizontal: 10,
-              gap: 8,
+              gap: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
@@ -102,8 +102,8 @@ export function ProcessStep(props: { value: RunBlock }) {
                   ? {
                       backgroundColor: c().button,
                       color: c().buttonInk,
-                      paddingHorizontal: 8,
-                      paddingVertical: 2,
+                      paddingHorizontal: space[8],
+                      paddingVertical: space[2],
                       letterSpacing: 1,
                       fontWeight: weight.strong,
                     }
@@ -112,7 +112,7 @@ export function ProcessStep(props: { value: RunBlock }) {
             />
           </View>
           <If when={expanded() && step().output}>
-            <View style={{ padding: 8, backgroundColor: c().surface }}>
+            <View style={{ padding: space[8], backgroundColor: c().surface }}>
               <ToolOutput text={step().output ?? ""} tone="muted" />
             </View>
           </If>
@@ -149,7 +149,7 @@ function TextStep(props: {
         style={{
           ...row,
           gap: 6,
-          paddingVertical: 4,
+          paddingVertical: space[4],
           paddingHorizontal: 10,
           cursor: "pointer",
         }}

@@ -17,7 +17,13 @@ import {
   MessagesSkeleton,
 } from "../../components";
 import { wheelScroll } from "../../components/scroll-follow";
-import { shadow, weight } from "../../components/tokens";
+import {
+  control,
+  opacity,
+  shadow,
+  space,
+  weight,
+} from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { Message } from "./message";
@@ -218,8 +224,12 @@ export function ConversationTimeline(props: {
             <Button
               label={uiText("retry")}
               icon="refresh"
-              size={32}
-              style={{ marginTop: 8, paddingHorizontal: 12, gap: 6 }}
+              size={control.lg}
+              style={{
+                marginTop: space[8],
+                paddingHorizontal: space[12],
+                gap: 6,
+              }}
               onPress={host.reconnect}
             />
           </Empty>
@@ -255,13 +265,13 @@ export function ConversationTimeline(props: {
             firstVisibleId.set(viewableItems[0]?.item.id);
           }}
           contentStyle={{
-            paddingLeft: 16,
+            paddingLeft: space[16],
             paddingRight: props.rail ? 60 : 16,
             // The header's slot stays, empty, with a gap after it: take that
             // gap back while there is nothing older to load.
             paddingTop: (phone() ? 16 : 12) - (props.hasOlder ? 0 : 12),
-            paddingBottom: 12,
-            gap: 12,
+            paddingBottom: space[12],
+            gap: space[12],
           }}
           header={() => (
             <If when={props.hasOlder}>
@@ -273,10 +283,10 @@ export function ConversationTimeline(props: {
                   onPress={() => {
                     if (!props.paging) props.onPageOlder();
                   }}
-                  hoverStyle={{ opacity: 0.7 }}
+                  hoverStyle={{ opacity: opacity.muted }}
                   focusVisibleStyle={focusRing(c())}
                   style={{
-                    paddingVertical: 4,
+                    paddingVertical: space[4],
                     opacity: props.paging ? 0.45 : 1,
                     cursor: props.paging ? "default" : "pointer",
                   }}
@@ -289,7 +299,7 @@ export function ConversationTimeline(props: {
             </If>
           )}
           empty={() => (
-            <Label tone="muted" style={{ padding: 16 }}>
+            <Label tone="muted" style={{ padding: space[16] }}>
               {uiText("noMessagesYet")}
             </Label>
           )}
@@ -345,7 +355,7 @@ export function ConversationTimeline(props: {
               <Button
                 label={uiText("quoteSelection")}
                 icon="return"
-                size={28}
+                size={control.md}
                 style={{
                   paddingHorizontal: 10,
                   gap: 6,

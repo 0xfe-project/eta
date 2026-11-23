@@ -22,7 +22,7 @@ import { uiText } from "../../../i18n";
 import { SmoothScroll } from "../../smooth-scroll";
 import { Caption, Label } from "../../text";
 import { colors, row } from "../../theme";
-import { weight } from "../../tokens";
+import { control, space, weight } from "../../tokens";
 import { MentionChip } from "../chip";
 import { standIn } from "../view-source";
 
@@ -300,7 +300,11 @@ function SuggestionList(props: {
           text={uiText(
             props.menu()?.kind === "hash" ? "taskSuggestions" : "mentions",
           )}
-          style={{ paddingHorizontal: 10, paddingTop: 6, paddingBottom: 4 }}
+          style={{
+            paddingHorizontal: 10,
+            paddingTop: 6,
+            paddingBottom: space[4],
+          }}
         />
         <SmoothScroll style={{ maxHeight: 224, flexShrink: 1 }}>
           <Each
@@ -325,9 +329,9 @@ function SuggestionList(props: {
                 }
                 style={{
                   ...row,
-                  height: 28,
+                  height: control.md,
                   paddingHorizontal: 10,
-                  gap: 8,
+                  gap: space[8],
                   cursor: "pointer",
                   backgroundColor:
                     props.selected() === i() ? c().ink : "transparent",

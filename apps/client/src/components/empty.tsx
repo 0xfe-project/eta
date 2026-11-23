@@ -4,7 +4,7 @@ import type { light, TextVariant } from "./theme";
 import { View } from "nsh";
 import { Icon, Label } from "./text";
 import { grow } from "./theme";
-import { weight } from "./tokens";
+import { icon, space, weight } from "./tokens";
 
 /**
  * The design's empty and error state: an icon, a `body` title and a `small`
@@ -31,15 +31,15 @@ export function Empty(props: {
         ...grow,
         justifyContent: "center",
         alignItems: "center",
-        gap: 8,
-        paddingHorizontal: 24,
+        gap: space[8],
+        paddingHorizontal: space[24],
         ...props.style,
       }}
     >
       <If when={props.icon !== undefined}>
         <Icon
           name={props.icon!}
-          size={props.iconSize ?? 20}
+          size={props.iconSize ?? icon.lg}
           tone={props.iconTone ?? "muted"}
         />
       </If>

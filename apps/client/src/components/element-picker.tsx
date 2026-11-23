@@ -16,6 +16,7 @@ import {
 } from "nsh";
 import { useText } from "../i18n";
 import { textFaces } from "./theme";
+import { space } from "./tokens";
 
 const storageKey = "eta.appearance.element-picker";
 
@@ -160,7 +161,7 @@ export function ElementPickerOverlay() {
                 pointerEvents: "none",
                 bottom: 76,
                 right: 16,
-                padding: 8,
+                padding: space[8],
                 backgroundColor: "#24417f", // design-value: the element picker's notice, a developer tool
               }}
             >

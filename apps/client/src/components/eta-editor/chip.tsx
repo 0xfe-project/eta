@@ -11,6 +11,7 @@ import {
   row,
   textFaces,
 } from "../theme";
+import { icon, space } from "../tokens";
 import { LineRoom } from "./room";
 
 /**
@@ -115,7 +116,7 @@ export function Chip(props: {
           />
         </If>
         <If when={!props.thumbnail && props.icon}>
-          <Icon name={props.icon!} size={12} tone="muted" />
+          <Icon name={props.icon!} size={icon.sm} tone="muted" />
         </If>
         <If when={props.kind}>
           {text(c().muted, props.kind!)}
@@ -164,7 +165,7 @@ export function PastePreview(props: { text: string }) {
   const type = textFaces();
   const lines = () => props.text.split("\n");
   return (
-    <View style={{ maxWidth: 420, padding: 8 }}>
+    <View style={{ maxWidth: 420, padding: space[8] }}>
       <Text
         style={{
           fontFamily: monoFontFamily(fonts()),
@@ -206,7 +207,7 @@ export function MentionChip(props: {
         fontSize: type(props.variant ?? "body").size,
         color: c().blue,
         backgroundColor: c().blueFill,
-        paddingHorizontal: 2,
+        paddingHorizontal: space[2],
         borderWidth: 1,
         borderColor: props.selected || hovered() ? c().blue : c().blueFill,
       }}

@@ -14,7 +14,7 @@ import {
   sizes,
 } from "../components";
 import { pickerTarget } from "../components/element-picker";
-import { weight } from "../components/tokens";
+import { control, icon, space, weight } from "../components/tokens";
 import { useText } from "../i18n";
 import { useHost } from "../services/host";
 import { CaptainCard, RailCaptain } from "./captain";
@@ -52,7 +52,7 @@ export function NavItem(props: {
         width: phone() ? "20%" : "100%",
         flexShrink: 0,
         paddingHorizontal: wide() ? 7 : 0,
-        gap: wide() ? 8 : 4,
+        gap: wide() ? space[8] : space[4],
         backgroundColor:
           props.selected && !phone() ? c().selected : "transparent",
         cursor: "pointer",
@@ -133,7 +133,7 @@ export function DesktopSidebar(
         style={{
           ...row,
           justifyContent: props.collapsed ? "center" : "space-between",
-          height: 40,
+          height: space[40],
           paddingHorizontal: props.collapsed ? 4 : 14,
           borderBottomWidth: 1,
           borderColor: c().border,
@@ -151,9 +151,9 @@ export function DesktopSidebar(
           <RailButton
             label={text("collapseSidebar")}
             icon="sidebar"
-            size={24}
+            size={control.sm}
             width={16}
-            iconSize={12}
+            iconSize={icon.sm}
             expanded
             attach={attachToggle}
             onPress={toggleSidebar}

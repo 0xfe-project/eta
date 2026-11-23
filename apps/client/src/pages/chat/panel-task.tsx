@@ -15,7 +15,7 @@ import {
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
-import { weight } from "../../components/tokens";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "../tasks/activity";
@@ -89,9 +89,9 @@ export function PanelTask(props: {
               <ActionMenu
                 label={uiText("taskActions")}
                 triggerStyle={{
-                  minWidth: 28,
-                  width: 28,
-                  height: 28,
+                  minWidth: control.md,
+                  width: control.md,
+                  height: control.md,
                   paddingHorizontal: 0,
                 }}
               >
@@ -122,7 +122,7 @@ export function PanelTask(props: {
                 variant="subtitle"
                 weight={weight.strong}
                 style={{
-                  paddingTop: 12,
+                  paddingTop: space[12],
                   paddingBottom: 7,
                   paddingHorizontal: inset,
                 }}
@@ -155,8 +155,8 @@ export function PanelTask(props: {
                 }}
               >
                 <AgentFace id={item().createdBy.agentId ?? "user"} size={20} />
-                <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-                  <View style={{ ...row, gap: 8 }}>
+                <View style={{ flex: 1, minWidth: 0, gap: space[4] }}>
+                  <View style={{ ...row, gap: space[8] }}>
                     <Label variant="small" weight={weight.strong}>
                       {actorLabel(item().createdBy, host.agent)}
                     </Label>
@@ -164,7 +164,7 @@ export function PanelTask(props: {
                       {messageTime(item().createdAt, false)}
                     </Label>
                   </View>
-                  <View style={{ gap: 12 }}>
+                  <View style={{ gap: space[12] }}>
                     <If when={item().description}>
                       <Markdown value={goal()} dense />
                     </If>
@@ -188,7 +188,7 @@ export function PanelTask(props: {
                 <View
                   style={{
                     ...row,
-                    gap: 8,
+                    gap: space[8],
                     paddingTop: 14,
                     paddingHorizontal: inset,
                   }}
@@ -222,8 +222,8 @@ export function PanelTask(props: {
                 <View
                   style={{
                     ...row,
-                    height: 24,
-                    gap: 8,
+                    height: space[24],
+                    gap: space[8],
                     flexShrink: 0,
                     paddingHorizontal: inset,
                   }}
@@ -251,12 +251,12 @@ export function PanelTask(props: {
                     role="button"
                     accessibilityLabel={uiText("stop")}
                     onPress={() => state.stop(entry())}
-                    style={{ ...row, gap: 4, cursor: "pointer" }}
+                    style={{ ...row, gap: space[4], cursor: "pointer" }}
                   >
                     <View
                       style={{
-                        width: 8,
-                        height: 8,
+                        width: space[8],
+                        height: space[8],
                         borderWidth: 1.5,
                         borderColor: c().ink,
                       }}
@@ -300,7 +300,7 @@ function Edges(props: {
         tone="muted"
         style={{
           paddingTop: props.before ? 0 : 14,
-          paddingBottom: 4,
+          paddingBottom: space[4],
           paddingHorizontal: inset,
         }}
       >
@@ -316,7 +316,7 @@ function Edges(props: {
             style={{
               ...row,
               height: 30,
-              gap: 8,
+              gap: space[8],
               // Edge to edge, so the hover does too; the text stays where the bordered box put it.
               paddingHorizontal: inset + 1 + 10,
               borderTopWidth: 1,
@@ -325,7 +325,7 @@ function Edges(props: {
               cursor: "pointer",
             }}
           >
-            <TaskGlyph status={edge().status} size={12} />
+            <TaskGlyph status={edge().status} size={icon.sm} />
             <Label
               variant="small"
               weight={weight.strong}

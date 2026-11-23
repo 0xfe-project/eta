@@ -21,6 +21,7 @@ import {
 } from "../../components";
 import { ModelSelect } from "../../components/model-select";
 import { CloseButton } from "../../components/navigation-buttons";
+import { icon, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { taskNeedsAttention } from "../tasks/status";
@@ -110,10 +111,10 @@ export function ConversationPanel(props: {
           style={{
             ...row,
             justifyContent: docked() ? "space-between" : "center",
-            gap: 2,
+            gap: space[2],
             paddingLeft: docked() ? 10 : 0,
-            paddingRight: docked() ? 8 : 0,
-            height: 40,
+            paddingRight: docked() ? space[8] : 0,
+            height: space[40],
             flexShrink: 0,
             borderBottomWidth: 1,
             borderColor: c().border,
@@ -122,8 +123,8 @@ export function ConversationPanel(props: {
           <View
             style={{
               ...row,
-              gap: 2,
-              padding: 2,
+              gap: space[2],
+              padding: space[2],
               backgroundColor: c().selected,
             }}
           >
@@ -145,7 +146,7 @@ export function ConversationPanel(props: {
                     style={{
                       ...row,
                       gap: 6,
-                      height: 24,
+                      height: space[24],
                       paddingHorizontal: 10,
                       cursor: "pointer",
                       backgroundColor: selected() ? c().canvas : c().selected,
@@ -153,7 +154,7 @@ export function ConversationPanel(props: {
                   >
                     <Icon
                       name={tab()[1]}
-                      size={12}
+                      size={icon.sm}
                       tone={selected() ? "ink" : "muted"}
                     />
                     <If when={selected()}>
@@ -215,14 +216,14 @@ export function ConversationPanel(props: {
                     <If when={props.captain && panel() === "Context"}>
                       <View
                         style={{
-                          padding: 12,
+                          padding: space[12],
                           gap: 6,
                           borderBottomWidth: 1,
                           borderColor: c().border,
                         }}
                       >
                         <Caption text={uiText("captainModel")} />
-                        <View style={{ ...row, gap: 8 }}>
+                        <View style={{ ...row, gap: space[8] }}>
                           <View style={{ flex: 1 }}>
                             <ModelSelect
                               value={model() || host.captain()?.model || ""}
@@ -249,7 +250,7 @@ export function ConversationPanel(props: {
                       </View>
                       <View
                         style={{
-                          padding: 12,
+                          padding: space[12],
                           gap: 6,
                           borderBottomWidth: 1,
                           borderColor: c().border,

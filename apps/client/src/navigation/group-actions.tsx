@@ -10,7 +10,7 @@ import { ActionItem, Button, Label, Modal, row } from "../components";
 import { FieldDialog } from "../components/field-dialog";
 import { MenuFrame } from "../components/menu";
 import { colors } from "../components/theme";
-import { shadow, weight } from "../components/tokens";
+import { control, shadow, space, weight } from "../components/tokens";
 import { uiText } from "../i18n";
 import { useHost } from "../services/host";
 
@@ -48,14 +48,14 @@ export function GroupMenu(props: {
         }}
         popupStyle={{
           width: 188,
-          paddingVertical: 4,
+          paddingVertical: space[4],
           borderWidth: 1,
           borderColor: c().strong,
           backgroundColor: c().canvas,
           boxShadow: [shadow.popover],
         }}
         sheetHeader={
-          <View style={{ ...row, height: 36, paddingHorizontal: 16 }}>
+          <View style={{ ...row, height: 36, paddingHorizontal: space[16] }}>
             <Label variant="small" tone="muted" lines={1} style={{ flex: 1 }}>
               {props.group.name}
             </Label>
@@ -204,26 +204,26 @@ export function ArchiveGroup(props: {
       <If
         when={props.phone}
         else={
-          <View style={{ paddingTop: 6, gap: 8 }}>
+          <View style={{ paddingTop: 6, gap: space[8] }}>
             {body()}
             <View
               style={{
                 ...row,
-                gap: 8,
+                gap: space[8],
                 justifyContent: "flex-end",
-                paddingTop: 12,
+                paddingTop: space[12],
               }}
             >
               <Button
                 label={uiText("cancel")}
-                size={28}
+                size={control.md}
                 disabled={busy()}
                 onPress={props.onClose}
               />
               <Button
                 label={uiText("archive")}
                 tone="danger"
-                size={28}
+                size={control.md}
                 disabled={busy()}
                 onPress={() => void archive()}
               />
@@ -231,13 +231,22 @@ export function ArchiveGroup(props: {
           </View>
         }
       >
-        <View style={{ ...row, height: 44, paddingLeft: 16, paddingRight: 8 }}>
+        <View
+          style={{
+            ...row,
+            height: control.touch,
+            paddingLeft: space[16],
+            paddingRight: space[8],
+          }}
+        >
           <Label weight={weight.strong} style={{ flex: 1 }}>
             {title()}
           </Label>
         </View>
-        <View style={{ paddingHorizontal: 16, gap: 8 }}>{body()}</View>
-        <View style={{ padding: 16, gap: 8 }}>
+        <View style={{ paddingHorizontal: space[16], gap: space[8] }}>
+          {body()}
+        </View>
+        <View style={{ padding: space[16], gap: space[8] }}>
           <Button
             label={uiText("archive")}
             tone="danger"

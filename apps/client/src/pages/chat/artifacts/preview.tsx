@@ -25,6 +25,7 @@ import {
   Modal,
   row,
 } from "../../../components";
+import { icon, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { createArtifactFileSaver } from "./file";
@@ -267,8 +268,12 @@ export function ArtifactPreview(props: {
     return (
       <ActionMenu
         label={uiText("artifactActions")}
-        iconSize={20}
-        triggerStyle={{ width: 40, height: 40, paddingHorizontal: 0 }}
+        iconSize={icon.lg}
+        triggerStyle={{
+          width: space[40],
+          height: space[40],
+          paddingHorizontal: 0,
+        }}
       >
         <If when={url()}>
           <ActionItem label={uiText("openInBrowser")} onSelect={openPreview} />
@@ -326,7 +331,7 @@ export function ArtifactPreview(props: {
       />
       {files.writer()}
       <If when={downloadProblem()}>
-        <View style={{ ...row, padding: 8, gap: 8 }}>
+        <View style={{ ...row, padding: space[8], gap: space[8] }}>
           <Label variant="small" style={{ flex: 1 }} tone="red">
             {downloadProblem()}
           </Label>
@@ -334,7 +339,7 @@ export function ArtifactPreview(props: {
         </View>
       </If>
       <If when={files.savedPath()}>
-        <View style={{ ...row, padding: 8, gap: 8 }}>
+        <View style={{ ...row, padding: space[8], gap: space[8] }}>
           <Label variant="small" style={{ flex: 1 }}>
             {uiText("artifactSavedTo", { path: files.savedPath() })}
           </Label>
@@ -351,7 +356,7 @@ export function ArtifactPreview(props: {
           <View
             style={{
               ...row,
-              padding: 8,
+              padding: space[8],
               gap: 10,
               borderBottomWidth: 1,
               borderColor: c().border,
@@ -435,11 +440,11 @@ export function ArtifactPreview(props: {
           sheet={phone()}
           onClose={dismissPdf}
         >
-          <View style={{ padding: 16, gap: 12 }}>
+          <View style={{ padding: space[16], gap: space[12] }}>
             <Label variant="small">
               {pdfProblem() || uiText("artifactPdfPreparing")}
             </Label>
-            <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>
+            <View style={{ ...row, justifyContent: "flex-end", gap: space[8] }}>
               <Button label={uiText("cancel")} onPress={dismissPdf} />
               <If when={pdfProblem()}>
                 <Button
@@ -459,9 +464,9 @@ export function ArtifactPreview(props: {
           sheet={phone()}
           onClose={() => confirmingShare.set(false)}
         >
-          <View style={{ padding: 16, gap: 10 }}>
+          <View style={{ padding: space[16], gap: 10 }}>
             <Label>{uiText("anyoneWithTheLinkCanOpen")}</Label>
-            <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>
+            <View style={{ ...row, justifyContent: "flex-end", gap: space[8] }}>
               <Button
                 label={uiText("cancel")}
                 disabled={busy()}

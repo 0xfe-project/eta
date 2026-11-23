@@ -2,6 +2,7 @@ import type { MessageView } from "@eta/client-contracts";
 import { captainProposalOf, systemNoticeOf } from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, Label, row } from "../../components";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -51,7 +52,12 @@ export function SystemNotice(props: { item: MessageView; phone: boolean }) {
   };
   const rule = () => (
     <View
-      style={{ flex: 1, minWidth: 16, height: 1, backgroundColor: c().border }}
+      style={{
+        flex: 1,
+        minWidth: space[16],
+        height: 1,
+        backgroundColor: c().border,
+      }}
     />
   );
   return (
@@ -60,9 +66,9 @@ export function SystemNotice(props: { item: MessageView; phone: boolean }) {
       style={{
         ...row,
         alignSelf: "stretch",
-        gap: 12,
+        gap: space[12],
         paddingVertical: props.phone ? 6 : 8,
-        paddingHorizontal: props.phone ? 0 : 16,
+        paddingHorizontal: props.phone ? 0 : space[16],
       }}
     >
       {rule()}

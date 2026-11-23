@@ -33,7 +33,7 @@ import {
   serialize,
   submitKeys,
 } from "../../components/eta-editor";
-import { weight } from "../../components/tokens";
+import { control, icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { OutboxRows } from "./composer-delivery";
@@ -84,9 +84,9 @@ function ComposerShell(props: { phone: boolean }) {
   return (
     <View
       style={{
-        paddingVertical: props.phone ? 12 : 16,
-        paddingHorizontal: props.phone ? 12 : 16,
-        paddingTop: 8,
+        paddingVertical: props.phone ? space[12] : space[16],
+        paddingHorizontal: props.phone ? space[12] : space[16],
+        paddingTop: space[8],
         flexShrink: 0,
       }}
     >
@@ -341,10 +341,14 @@ function ComposerBody(
       style={{
         position: "relative",
         zIndex: 2,
-        paddingVertical: props.phone ? 12 : 16,
-        paddingHorizontal: props.phone ? 12 : props.alignWithContent ? 0 : 16,
-        paddingTop: 8,
-        gap: 8,
+        paddingVertical: props.phone ? space[12] : space[16],
+        paddingHorizontal: props.phone
+          ? space[12]
+          : props.alignWithContent
+            ? 0
+            : space[16],
+        paddingTop: space[8],
+        gap: space[8],
         flexShrink: 0,
         borderTopWidth: props.phone ? 1 : 0,
         borderColor: c().border,
@@ -453,8 +457,8 @@ function ComposerBody(
           <View
             style={{
               ...row,
-              height: 40,
-              paddingLeft: props.phone ? 0 : 12,
+              height: space[40],
+              paddingLeft: props.phone ? 0 : space[12],
               paddingRight: 6,
               gap: props.phone ? 6 : 12,
               backgroundColor: props.phone ? c().canvas : c().surface,
@@ -470,7 +474,7 @@ function ComposerBody(
                 if (!attachDisabled())
                   void host.action(() => files$.pick(editor));
               }}
-              hoverStyle={{ opacity: 0.7 }}
+              hoverStyle={{ opacity: opacity.muted }}
               focusVisibleStyle={{
                 outlineWidth: 1,
                 outlineColor: c().blue,
@@ -494,12 +498,14 @@ function ComposerBody(
               icon={props.phone ? "arrowUp" : undefined}
               iconOnly={props.phone}
               end={props.phone ? undefined : "return"}
-              size={props.phone ? 32 : 28}
-              iconSize={props.phone ? 16 : undefined}
+              size={props.phone ? control.lg : control.md}
+              iconSize={props.phone ? icon.md : undefined}
               labelVariant="caption"
               labelWeight={weight.regular}
               style={
-                props.phone ? undefined : { paddingHorizontal: 10, gap: 8 }
+                props.phone
+                  ? undefined
+                  : { paddingHorizontal: 10, gap: space[8] }
               }
               tone="primary"
               dimDisabled={

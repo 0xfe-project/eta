@@ -5,6 +5,7 @@ import { Chip } from "./eta-editor/chip";
 import { picturePreview } from "./picture-viewer";
 import { Label } from "./text";
 import { colors, focusRing, row } from "./theme";
+import { space } from "./tokens";
 
 // Pictures in shown text (a message, a reply, a step's screenshots), as Settings › Appearance ›
 // Images in messages says: compact, a chip with the picture's name where it was put, its thumbnail
@@ -69,7 +70,7 @@ export function PictureCards(props: {
   return (
     <View
       onLayout={({ bounds }) => room.set(bounds.size.width)}
-      style={{ ...row, flexWrap: "wrap", gap: CARD_GAP, paddingTop: 8 }}
+      style={{ ...row, flexWrap: "wrap", gap: CARD_GAP, paddingTop: space[8] }}
     >
       <Each of={props.pictures} key={(picture) => picture.key}>
         {(picture) => {
@@ -116,7 +117,7 @@ export function PictureCards(props: {
                 style={{
                   borderTopWidth: 1,
                   borderColor: c().border,
-                  paddingVertical: 4,
+                  paddingVertical: space[4],
                   paddingHorizontal: 6,
                 }}
               >

@@ -1,6 +1,7 @@
 import type { ViewStyle } from "nsh";
 import { View } from "nsh";
 import { colors, row } from "./theme";
+import { space } from "./tokens";
 
 /** A placeholder bar: the muted fill inside a border, as the design's loading states draw it. */
 function Bar(props: { width: ViewStyle["width"]; height: number }) {
@@ -26,7 +27,7 @@ export function ListSkeleton(props: { label: string; style?: ViewStyle }) {
     <View
       role="progressbar"
       accessibilityLabel={props.label}
-      style={{ paddingVertical: 8, ...props.style }}
+      style={{ paddingVertical: space[8], ...props.style }}
     >
       <Each of={[210, 140, 175, 245, 105]}>
         {(width) => (
@@ -35,8 +36,8 @@ export function ListSkeleton(props: { label: string; style?: ViewStyle }) {
               ...row,
               height: 36,
               flexShrink: 0,
-              paddingHorizontal: 8,
-              gap: 12,
+              paddingHorizontal: space[8],
+              gap: space[12],
             }}
           >
             <Bar width={14} height={14} />
@@ -57,11 +58,11 @@ export function DetailSkeleton(props: { label: string; style?: ViewStyle }) {
     <View
       role="progressbar"
       accessibilityLabel={props.label}
-      style={{ padding: 16, gap: 12, ...props.style }}
+      style={{ padding: space[16], gap: space[12], ...props.style }}
     >
       <Bar width={184} height={20} />
       <Bar width={92} height={12} />
-      <View style={{ gap: 8, paddingTop: 12 }}>
+      <View style={{ gap: space[8], paddingTop: space[12] }}>
         <Each of={[211, 366, 183, 366, 122]}>
           {(width) => <Bar width={width()} height={12} />}
         </Each>
@@ -73,7 +74,7 @@ export function DetailSkeleton(props: { label: string; style?: ViewStyle }) {
 function MessageBars(props: { width: number }) {
   return (
     <View style={{ gap: 10 }}>
-      <View style={{ ...row, gap: 8 }}>
+      <View style={{ ...row, gap: space[8] }}>
         <Bar width={18} height={18} />
         <Bar width={96} height={12} />
       </View>
@@ -89,7 +90,7 @@ export function MessagesSkeleton(props: { label: string; style?: ViewStyle }) {
     <View
       role="progressbar"
       accessibilityLabel={props.label}
-      style={{ padding: 16, gap: 22, ...props.style }}
+      style={{ padding: space[16], gap: 22, ...props.style }}
     >
       <MessageBars width={220} />
       <View style={{ alignItems: "flex-end" }}>

@@ -13,7 +13,7 @@ import {
   monoFontFamily,
   textFaces,
 } from "./theme";
-import { weight } from "./tokens";
+import { opacity, space, weight } from "./tokens";
 
 export function Label(props: {
   children?: JSX.Element | string | number;
@@ -166,8 +166,8 @@ export function Caption(props: {
 /** The 14px foreground caret at 45% in a 16px slot that ends phone list rows. */
 export function RowChevron() {
   return (
-    <View style={{ width: 16, alignItems: "center", flexShrink: 0 }}>
-      <View style={{ opacity: 0.45 }}>
+    <View style={{ width: space[16], alignItems: "center", flexShrink: 0 }}>
+      <View style={{ opacity: opacity.disabled }}>
         <Icon name="right" size={14} />
       </View>
     </View>

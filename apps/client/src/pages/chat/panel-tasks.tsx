@@ -11,7 +11,7 @@ import {
   Screen,
 } from "../../components";
 import { StatusDot } from "../../components/status-dot";
-import { weight } from "../../components/tokens";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { taskTime } from "../tasks/facts";
@@ -76,7 +76,7 @@ export function ContextTasks(props: {
               height: 30,
               paddingLeft: entry().depth ? 22 : 10,
               paddingRight: 10,
-              gap: 8,
+              gap: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
               cursor: "pointer",
@@ -109,8 +109,8 @@ export function ContextTasks(props: {
           variant="small"
           tone="muted"
           style={{
-            paddingHorizontal: 12,
-            paddingBottom: 8,
+            paddingHorizontal: space[12],
+            paddingBottom: space[8],
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
@@ -175,7 +175,7 @@ export function TasksTab(props: {
       onPress={onPress}
       hoverStyle={{ backgroundColor: c().selected }}
       style={{
-        paddingVertical: 2,
+        paddingVertical: space[2],
         paddingHorizontal: 6,
         borderWidth: 1,
         borderColor: selected ? c().ink : c().border,
@@ -194,13 +194,13 @@ export function TasksTab(props: {
   );
   return (
     // No side padding here: each part carries its own, so the rows can reach both edges.
-    <View style={{ paddingTop: 12 }}>
+    <View style={{ paddingTop: space[12] }}>
       <View
         style={{
           ...row,
           justifyContent: "space-between",
-          gap: 8,
-          paddingBottom: 8,
+          gap: space[8],
+          paddingBottom: space[8],
           paddingHorizontal: inset,
         }}
       >
@@ -219,7 +219,7 @@ export function TasksTab(props: {
           triggerStyle={{
             borderWidth: 0,
             height: 23,
-            marginVertical: -4,
+            marginVertical: -space[4],
             marginRight: -6,
             paddingHorizontal: 6,
             gap: 5,
@@ -239,7 +239,12 @@ export function TasksTab(props: {
         </ActionMenu>
       </View>
       <View
-        style={{ ...row, gap: 6, paddingBottom: 12, paddingHorizontal: inset }}
+        style={{
+          ...row,
+          gap: 6,
+          paddingBottom: space[12],
+          paddingHorizontal: inset,
+        }}
       >
         {scope(props.conversationName, !everywhere(), () =>
           everywhere.set(false),
@@ -247,7 +252,7 @@ export function TasksTab(props: {
         {scope(uiText("allGroups"), everywhere(), () => everywhere.set(true))}
       </View>
       <If when={taskPanelSort() === "updated"}>
-        <View style={{ height: 2 }} />
+        <View style={{ height: space[2] }} />
         <Each
           of={tasks().filter((task) => !closed(task))}
           key={(task) => task.id}
@@ -313,8 +318,8 @@ export function TasksTab(props: {
                 }
                 style={{
                   ...row,
-                  height: 28,
-                  gap: 8,
+                  height: control.md,
+                  gap: space[8],
                   paddingTop: index() ? 0 : 6,
                   paddingHorizontal: inset,
                   cursor: "pointer",
@@ -325,7 +330,7 @@ export function TasksTab(props: {
                   size={8}
                   tone="muted"
                 />
-                <TaskGlyph status={group()[0]} size={12} />
+                <TaskGlyph status={group()[0]} size={icon.sm} />
                 <Label variant="small">
                   {uiText(group()[1], { count: items().length })}
                 </Label>
@@ -415,7 +420,7 @@ function TaskRow(props: {
       }}
     >
       <TaskGlyph status={task().status} size={14} />
-      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+      <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
         <Label variant="small" lines={1}>
           {task().title}
         </Label>
@@ -427,7 +432,7 @@ function TaskRow(props: {
             <Label
               variant="caption"
               tone="muted"
-              style={{ flexShrink: 0, marginHorizontal: 4 }}
+              style={{ flexShrink: 0, marginHorizontal: space[4] }}
             >
               ·
             </Label>
@@ -444,7 +449,7 @@ function TaskRow(props: {
             <Label
               variant="caption"
               tone="muted"
-              style={{ flexShrink: 0, marginHorizontal: 4 }}
+              style={{ flexShrink: 0, marginHorizontal: space[4] }}
             >
               ·
             </Label>
@@ -473,7 +478,9 @@ function TaskRow(props: {
       <If when={!task().subtasks?.total}>
         <If when={waitingFor()}>
           {(wait) => (
-            <View style={{ ...row, gap: 4, flexShrink: 1, maxWidth: 160 }}>
+            <View
+              style={{ ...row, gap: space[4], flexShrink: 1, maxWidth: 160 }}
+            >
               <Icon name="lock" size={11} tone="muted" />
               <Label variant="small" tone="muted" lines={1}>
                 {wait().title}
@@ -482,7 +489,7 @@ function TaskRow(props: {
           )}
         </If>
         <If when={task().status === "in_progress"}>
-          <View style={{ ...row, gap: 4 }}>
+          <View style={{ ...row, gap: space[4] }}>
             <StatusDot color={c().blue} />
             <Label variant="small" tone="blue">
               {uiText("minutesShort", { count: minutes() })}

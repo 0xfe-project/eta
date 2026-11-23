@@ -12,6 +12,7 @@ import { AgentFace } from "../../components/agent-face";
 import { ContextRing, useContextUsage } from "../../components/context-ring";
 import { hint } from "../../components/controls";
 import { StatusDot } from "../../components/status-dot";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { followSession, useHost } from "../../services/host";
 import { tokens } from "../tasks/usage";
@@ -37,7 +38,7 @@ export function ConversationMembers(props: {
           ...row,
           justifyContent: "space-between",
           height: 37,
-          paddingHorizontal: 12,
+          paddingHorizontal: space[12],
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
@@ -67,8 +68,8 @@ export function ConversationMembers(props: {
             <View
               style={{
                 ...row,
-                paddingVertical: 8,
-                paddingHorizontal: 12,
+                paddingVertical: space[8],
+                paddingHorizontal: space[12],
                 gap: 10,
               }}
             >
@@ -76,7 +77,7 @@ export function ConversationMembers(props: {
                 agentId={entry().agentId}
                 session={entry().sessionId}
               />
-              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+              <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                 <View style={{ ...row, gap: 6 }}>
                   <Label lines={1}>
                     {host.agent(entry().agentId)?.name ?? uiText("agent")}
@@ -133,7 +134,7 @@ export function ConversationMembers(props: {
                   triggerStyle={{
                     minWidth: 14,
                     width: 14,
-                    height: 24,
+                    height: space[24],
                     paddingHorizontal: 0,
                   }}
                 >

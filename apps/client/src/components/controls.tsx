@@ -27,7 +27,7 @@ import {
   textFaces,
   textStyle,
 } from "./theme";
-import { shadow, weight } from "./tokens";
+import { control, icon, shadow, space, weight } from "./tokens";
 
 export function Button(props: {
   label: string;
@@ -106,7 +106,7 @@ export function Button(props: {
       style={{
         ...row,
         justifyContent: "center",
-        gap: 4,
+        gap: space[4],
         flexShrink: 0,
         height: size(),
         minWidth: size(),
@@ -153,7 +153,7 @@ export function Button(props: {
         <Label
           variant="caption"
           tone={textTone()}
-          style={{ opacity: 0.55, marginLeft: 4 }}
+          style={{ opacity: 0.55, marginLeft: space[4] }}
         >
           {props.shortcut}
         </Label>
@@ -174,8 +174,8 @@ export function hint(text: string | undefined, c: ReturnType<typeof colors>) {
   return text ? (
     <View
       style={{
-        paddingHorizontal: 8,
-        paddingVertical: 4,
+        paddingHorizontal: space[8],
+        paddingVertical: space[4],
         backgroundColor: c().ink,
       }}
     >
@@ -266,9 +266,9 @@ export function Field(
         backgroundColor: color().canvas,
         fontFamily: fontFamily(fonts().interface),
         ...textStyle(type("body")),
-        height: 32,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
+        height: space[32],
+        paddingHorizontal: space[8],
+        paddingVertical: space[4],
         borderWidth: 1,
         borderColor: color().border,
         borderRadius: 0,
@@ -331,7 +331,7 @@ export function ActionMenu(props: {
       onOpenChange={(next) => open.set(next)}
       popupStyle={{
         width: props.popupWidth ?? 172,
-        paddingVertical: props.lifted ? 4 : 0,
+        paddingVertical: props.lifted ? space[4] : 0,
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
@@ -340,7 +340,12 @@ export function ActionMenu(props: {
       sheetHeader={
         <If when={props.sheetTitle}>
           <View
-            style={{ ...row, height: 44, paddingLeft: 16, paddingRight: 8 }}
+            style={{
+              ...row,
+              height: control.touch,
+              paddingLeft: space[16],
+              paddingRight: space[8],
+            }}
           >
             <Label weight={weight.strong} lines={1} style={grow}>
               {props.sheetTitle}
@@ -349,9 +354,9 @@ export function ActionMenu(props: {
               label={text("close")}
               icon="close"
               iconOnly
-              iconSize={16}
+              iconSize={icon.md}
               tone="ghost"
-              size={32}
+              size={control.lg}
               onPress={() => open.set(false)}
             />
           </View>
@@ -371,7 +376,7 @@ export function ActionMenu(props: {
           style={{
             ...row,
             justifyContent: props.value ? "space-between" : "center",
-            minWidth: 32,
+            minWidth: space[32],
             height: 30,
             paddingHorizontal: 7,
             gap: 7,
@@ -452,17 +457,17 @@ export function ActionItem(props: {
           ? {
               ...row,
               minHeight: 52,
-              paddingHorizontal: 16,
-              gap: 12,
+              paddingHorizontal: space[16],
+              gap: space[12],
               borderTopWidth: 1,
               borderColor: c().border,
             }
           : props.roomy
             ? {
                 ...row,
-                minHeight: touchScreen ? touchRow : 32,
-                paddingHorizontal: 12,
-                gap: 8,
+                minHeight: touchScreen ? touchRow : space[32],
+                paddingHorizontal: space[12],
+                gap: space[8],
               }
             : {
                 ...row,
@@ -487,7 +492,7 @@ export function ActionItem(props: {
         </Label>
       </If>
       <If when={props.checked}>
-        <Icon name="check" size={12} />
+        <Icon name="check" size={icon.sm} />
       </If>
     </MenuRow>
   );

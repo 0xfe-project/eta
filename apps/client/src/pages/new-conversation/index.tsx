@@ -14,7 +14,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
-import { weight } from "../../components/tokens";
+import { control, space, weight } from "../../components/tokens";
 import { localizedText, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { ConversationMembers } from "./conversation-members";
@@ -177,17 +177,17 @@ export function NewConversation(props: {
         <View
           style={{
             ...row,
-            height: 40,
+            height: space[40],
             flexShrink: 0,
-            paddingHorizontal: phone() ? 0 : 20,
-            marginHorizontal: phone() ? 16 : 0,
-            marginTop: phone() ? 16 : 0,
-            gap: 12,
+            paddingHorizontal: phone() ? 0 : space[20],
+            marginHorizontal: phone() ? space[16] : 0,
+            marginTop: phone() ? space[16] : 0,
+            gap: space[12],
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
-          <View style={{ ...row, ...grow, gap: 8 }}>
+          <View style={{ ...row, ...grow, gap: space[8] }}>
             <Label
               variant="caption"
               tone="muted"
@@ -204,18 +204,18 @@ export function NewConversation(props: {
               ? localizedText("Last step", "最后一步")
               : localizedText("Next: Members", "下一步：成员")}
           </Label>
-          <View style={{ ...row, gap: 4 }}>
+          <View style={{ ...row, gap: space[4] }}>
             <View
               style={{
-                width: 8,
-                height: 8,
+                width: space[8],
+                height: space[8],
                 backgroundColor: directory() ? c().faint : c().ink,
               }}
             />
             <View
               style={{
-                width: 8,
-                height: 8,
+                width: space[8],
+                height: space[8],
                 backgroundColor: directory() ? c().ink : undefined,
                 borderWidth: directory() ? 0 : 1,
                 borderColor: c().strong,
@@ -249,7 +249,7 @@ export function NewConversation(props: {
         </If>
         <If when={error()}>
           {(failure) => (
-            <View role="alert" style={{ padding: 16, gap: 4 }}>
+            <View role="alert" style={{ padding: space[16], gap: space[4] }}>
               <Label tone="red">{failureText(failure())}</Label>
               <If when={failure().detail && failure().code !== "other"}>
                 <Label tone="muted" variant="small">
@@ -282,8 +282,8 @@ export function NewConversation(props: {
           ...row,
           height: phone() ? 56 : 50,
           justifyContent: "flex-end",
-          gap: 8,
-          paddingHorizontal: phone() ? 16 : 20,
+          gap: space[8],
+          paddingHorizontal: phone() ? space[16] : space[20],
           borderTopWidth: 1,
           borderColor: c().border,
         }}
@@ -291,7 +291,7 @@ export function NewConversation(props: {
         <Button
           label={methodEntry() ? uiText("cancel") : uiText("back")}
           tone="ghost"
-          size={24}
+          size={control.sm}
           disabled={busy() || saving() || cancelling()}
           onPress={previous}
         />
@@ -299,7 +299,7 @@ export function NewConversation(props: {
           <Button
             label={localizedText("Start", "开始")}
             tone="primary"
-            size={24}
+            size={control.sm}
             disabled={
               !agents().length || saving() || !host.can("conversations.create")
             }

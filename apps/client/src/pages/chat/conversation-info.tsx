@@ -16,7 +16,7 @@ import {
 import { AgentFace } from "../../components/agent-face";
 import { ContextRing, useContextUsage } from "../../components/context-ring";
 import { BackButton, CloseButton } from "../../components/navigation-buttons";
-import { weight } from "../../components/tokens";
+import { control, icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskGlyph } from "../tasks/status";
@@ -57,9 +57,9 @@ export function PhoneConversationInfo(props: {
         <View
           style={{
             ...row,
-            height: 44,
-            paddingLeft: 16,
-            paddingRight: 8,
+            height: control.touch,
+            paddingLeft: space[16],
+            paddingRight: space[8],
             flexShrink: 0,
           }}
         >
@@ -73,7 +73,11 @@ export function PhoneConversationInfo(props: {
               </Label>
             </If>
           </View>
-          <CloseButton size={32} iconSize={16} onPress={props.onClose} />
+          <CloseButton
+            size={control.lg}
+            iconSize={icon.md}
+            onPress={props.onClose}
+          />
         </View>
         <SmoothScroll style={grow} scrollbar={false}>
           <Section
@@ -131,7 +135,7 @@ export function PhoneConversationInfo(props: {
                   .join(" · ")}
                 onPress={() => props.onArtifact(artifact())}
               >
-                <Icon name="artifact" size={16} />
+                <Icon name="artifact" size={icon.md} />
               </InfoRow>
             )}
           </Each>
@@ -142,7 +146,7 @@ export function PhoneConversationInfo(props: {
               title={uiText("noArtifactsYet")}
               description={uiText("artifactsEmptyHelp")}
               descriptionVariant="caption"
-              style={{ flex: 0, paddingVertical: 32 }}
+              style={{ flex: 0, paddingVertical: space[32] }}
             />
           </If>
         </SmoothScroll>
@@ -156,18 +160,18 @@ export function PhoneConversationInfo(props: {
         <View
           style={{
             ...row,
-            height: 44,
-            gap: 4,
-            paddingLeft: 4,
-            paddingRight: 8,
+            height: control.touch,
+            gap: space[4],
+            paddingLeft: space[4],
+            paddingRight: space[8],
             flexShrink: 0,
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
           <BackButton
-            size={32}
-            iconSize={16}
+            size={control.lg}
+            iconSize={icon.md}
             onPress={() => allArtifacts.set(false)}
           />
           <Label weight={weight.strong} lines={1}>
@@ -176,7 +180,11 @@ export function PhoneConversationInfo(props: {
           <Label variant="small" tone="muted" style={{ flex: 1 }}>
             {artifacts().length}
           </Label>
-          <CloseButton size={32} iconSize={16} onPress={props.onClose} />
+          <CloseButton
+            size={control.lg}
+            iconSize={icon.md}
+            onPress={props.onClose}
+          />
         </View>
         <ArtifactBrowser
           artifacts={artifacts()}
@@ -199,9 +207,9 @@ export function PhoneConversationInfo(props: {
       <View
         style={{
           ...row,
-          height: 32,
+          height: space[32],
           gap: 6,
-          paddingHorizontal: 16,
+          paddingHorizontal: space[16],
           flexShrink: 0,
           backgroundColor: c().selected,
           borderTopWidth: section.first ? 1 : 0,
@@ -251,8 +259,8 @@ function MemberRow(props: {
         else={
           <View
             style={{
-              width: 32,
-              height: 32,
+              width: space[32],
+              height: space[32],
               alignItems: "center",
               justifyContent: "center",
               flexShrink: 0,
@@ -288,9 +296,9 @@ function InfoRow(props: {
       style={{
         ...row,
         height: props.height,
-        gap: 12,
-        paddingLeft: 16,
-        paddingRight: 12,
+        gap: space[12],
+        paddingLeft: space[16],
+        paddingRight: space[12],
         flexShrink: 0,
         borderBottomWidth: 1,
         borderColor: c().border,
@@ -308,7 +316,7 @@ function InfoRow(props: {
           </Label>
         </If>
       </View>
-      <View style={{ opacity: 0.45 }}>
+      <View style={{ opacity: opacity.disabled }}>
         <Icon name="right" size={14} />
       </View>
     </View>
