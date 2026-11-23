@@ -32,7 +32,7 @@ const plugin = (name: string, enabled: boolean): PluginView => ({
 });
 
 (globalThis as { __calls?: unknown[] }).__calls = [];
-/** What the host would remember after setTokenHeader: the format, or null while nothing is set. */
+/** What the host would remember after a Cursor sign-in: the format, or null while nothing is set. */
 let tokenHeaderSet: string | null = null;
 
 function Fixture() {
@@ -166,10 +166,6 @@ function Fixture() {
         tokenHeaderSet = "bearer";
         return { state: "done", validForSeconds: 60 * 86400 };
       }
-      if (method === "setTokenHeader")
-        tokenHeaderSet =
-          (args as { header: { format: string } | null }).header?.format ??
-          null;
       if (
         method === "testServer" &&
         (args as { name?: string }).name === "header-plugin" &&

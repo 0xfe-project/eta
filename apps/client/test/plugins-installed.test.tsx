@@ -268,7 +268,7 @@ test("the Test connection button is never squeezed or wrapped, at a narrow width
   // shrink) is only checked by reading the code; the buttons staying in the title row is checked here.
 });
 
-test("a 401 that names a header: the badge says the sign-in is saved, and both retest buttons appear", async () => {
+test("a 401 that names a header: the badge says the sign-in is saved, and no token-header button is offered", async () => {
   const app = await open("./fixtures/plugins-installed.tsx", {
     width: 1100,
     height: 900,
@@ -280,26 +280,9 @@ test("a 401 that names a header: the badge says the sign-in is saved, and both r
   await app.press("label:Test connection");
   expect(app.shows("Sign-in saved; the server wants x-cursor-auth")).toBe(true);
   expect(app.shows("Send sign-in token in x-cursor-auth and retest")).toBe(
-    true,
-  );
-  expect(app.shows("Same, as Bearer <token>")).toBe(true);
-});
-
-test("pressing the retest button sets the header and tests again; the server then answers", async () => {
-  const app = await open("./fixtures/plugins-installed.tsx", {
-    width: 1100,
-    height: 900,
-  });
-  await app.press("label:header-plugin");
-  await app.press("label:Test connection");
-  await app.press("label:Send sign-in token in x-cursor-auth and retest");
-  expect(app.shows("Connected · 12 ms")).toBe(true);
-  expect(app.shows("Send sign-in token in x-cursor-auth and retest")).toBe(
     false,
   );
-  expect(app.shows("Sign-in saved; the server wants x-cursor-auth")).toBe(
-    false,
-  );
+  expect(app.shows("Same, as Bearer <token>")).toBe(false);
 });
 
 test("Sign in with Cursor: starts, notes the days left, and tests again", async () => {

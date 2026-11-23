@@ -67,17 +67,6 @@ function createTest(props: { item: PluginView; server: string }) {
       }
     });
   }
-  /** Send the sign-in token in the header the server asked for, then test again. */
-  function useToken(header: string, format: "raw" | "bearer") {
-    void host.action(async () => {
-      await host.call("plugins", "setTokenHeader", {
-        name: props.item.name,
-        server: props.server,
-        header: { name: header, format },
-      });
-      run();
-    });
-  }
   /** Sign in to a Cursor account in the browser (unofficial); the host saves the credential, then test again. */
   const cursorId = signal<string | undefined>(undefined);
   const cursorNote = signal<string | undefined>(undefined);
@@ -142,7 +131,6 @@ function createTest(props: { item: PluginView; server: string }) {
     result,
     at,
     run,
-    useToken,
     cursorId,
     cursorNote,
     cursorLogin,
@@ -612,39 +600,6 @@ function TestResultView(props: { test: Test; stdio: boolean }) {
             <Label variant="small" tone="muted">
               {result()!.message}
             </Label>
-          </If>
-          <If when={result()!.requiredHeader}>
-            <If when={result()!.status === "failed"}>
-              <Label variant="small" tone="muted">
-                {uiText("tokenHeaderHint")}
-              </Label>
-            </If>
-            <View style={{ ...row, gap: 8, flexWrap: "wrap" }}>
-              <If when={result()!.status === "failed"}>
-                <Button
-                  label={uiText("useTokenHeader", {
-                    header: result()!.requiredHeader!,
-                  })}
-                  tone="plain"
-                  labelVariant="body"
-                  size={28}
-                  disabled={props.test.busy()}
-                  onPress={() =>
-                    props.test.useToken(result()!.requiredHeader!, "raw")
-                  }
-                />
-                <Button
-                  label={uiText("useTokenHeaderBearer")}
-                  tone="plain"
-                  labelVariant="body"
-                  size={28}
-                  disabled={props.test.busy()}
-                  onPress={() =>
-                    props.test.useToken(result()!.requiredHeader!, "bearer")
-                  }
-                />
-              </If>
-            </View>
           </If>
           <If when={result()!.status === "ok"}>
             <ResultInfo result={result()!} />
