@@ -317,6 +317,14 @@ test("a quoted selection goes after the draft, and a second quote after the firs
   );
 });
 
+test("two quotes in a row stay two quotes", async () => {
+  const app = await fixture();
+  await app.press("label:Quote");
+  await app.press("label:Quote");
+  await app.keyboard.press("enter");
+  await app.waitFor(sent(["alpha", `${quoted}\n\n${quoted}`, "queue", []]));
+});
+
 test("a quote keeps the draft's words and files, and stays in its own chat", async () => {
   const app = await fixture();
   await app.type(input, "😀 see ");
