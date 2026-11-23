@@ -139,13 +139,25 @@ async function rejectionOf(
     : { text: parts.join(", "), header };
 }
 
-/** What an unauthenticated request to the server says about sign-in: true when its 401 challenge is OAuth. */
-async function declaresOauth(url: string, timeoutMs = 5000): Promise<boolean> {
+/**
+ * What a request to the server says about sign-in: true when its 401 challenge is OAuth. It carries
+ * the server's own headers (a Cursor-hosted server answers a request without its x-cursor-auth by a
+ * bare 401, with no challenge) and goes to the server's own address only.
+ */
+async function declaresOauth(
+  url: string,
+  own: Record<string, string> | undefined,
+  send: typeof fetch,
+  timeoutMs = 5000,
+): Promise<boolean> {
   try {
-    const response = await fetch(url, {
+    const response = await send(url, {
       method: "POST",
       redirect: "manual",
       headers: {
+        ...Object.fromEntries(
+          Object.entries(own ?? {}).filter(([, value]) => value.trim() !== ""),
+        ),
         "content-type": "application/json",
         accept: "application/json, text/event-stream",
       },
@@ -242,7 +254,8 @@ export async function testConnection(
         (value) => value.trim() !== "",
       );
       const challenge =
-        definition.url !== undefined && (await declaresOauth(definition.url));
+        definition.url !== undefined &&
+        (await declaresOauth(definition.url, definition.headers, base));
       if (
         cursorFlag(definition).cursorServer === true &&
         !Object.keys(definition.headers ?? {}).some(

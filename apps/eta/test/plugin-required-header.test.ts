@@ -107,3 +107,53 @@ describe("a 401 that names a header, with no saved sign-in", () => {
     expect(seen.length).toBeGreaterThan(0);
   });
 });
+
+/**
+ * A Cursor-hosted server with the Cursor credential saved and no sign-in of the service's own: the
+ * user's header means no `auth` is declared, so only the server's challenge says it also signs in.
+ * That server answers a request without x-cursor-auth with a bare 401, and one with it by a
+ * Bearer challenge naming its OAuth metadata. The fake records names only.
+ */
+describe("a Cursor server with the credential saved and no sign-in", () => {
+  const CHALLENGE =
+    'Bearer resource_metadata="https://api.cursor.com/.well-known/oauth-protected-resource/rest-mcp/google-drive/mcp"';
+  const VALUE = "Bearer cursor-value-not-shown";
+
+  function served() {
+    const urls: { url: string; carried: boolean }[] = [];
+    const fetchImpl = (async (input: unknown, init?: RequestInit) => {
+      const carried = new Headers(init?.headers).has("x-cursor-auth");
+      urls.push({ url: String(input), carried });
+      return carried
+        ? new Response('{"error":"unauthorized"}', {
+            status: 401,
+            headers: { "www-authenticate": CHALLENGE },
+          })
+        : new Response(NAMED, { status: 401 });
+    }) as unknown as typeof fetch;
+    return { urls, fetchImpl };
+  }
+
+  it("is a login when the server's challenge, to a request that carries x-cursor-auth, is OAuth", async () => {
+    const f = served();
+    const result = await testConnection(
+      {
+        name: "remote",
+        url: CURSOR_URL,
+        headers: { "x-cursor-auth": VALUE },
+        source: "plugin-test",
+        hash: "plugin-test",
+      } as never,
+      [VALUE],
+      5000,
+      undefined,
+      f.fetchImpl,
+    );
+    expect(result.status).toBe("needs_login");
+    expect(result.message).not.toContain("Cursor account first");
+    expect(JSON.stringify(result)).not.toContain("cursor-value-not-shown");
+    // The header goes to the server's own address and nowhere else.
+    for (const one of f.urls)
+      expect(new URL(one.url).origin).toBe("https://api.cursor.com");
+  });
+});
