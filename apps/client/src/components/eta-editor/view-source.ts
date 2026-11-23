@@ -92,21 +92,33 @@ const PLAIN_NOT = /[^\n]\n[^\n]|[\uE000-\uF8FF\u{F0000}-\u{FFFFD}]/u;
 const STARTS_BLOCK = /^ {0,3}(?:[-*+] |1[.)] |#{1,6}(?: |$))/;
 const HEADING = /^ {0,3}#{1,6}(?: |$)/;
 /** Lines a mark at the end would change: rules and setext underlines, table rows, link
- * definitions, and lines that already end in a break. */
+ * definitions, an alert's `[!NOTE]`, and lines that already end in a break. */
 const KEEP = [
   /^ {0,3}([-*_])( *\1){2,} *$/,
   /^ {0,3}(=+|-+) *$/,
   /\|/,
   /^ {0,3}\[[^\]]+\]:/,
+  /^ {0,3}(?:> ?)+\[![A-Z]+\] *$/i,
   /(\\| {2})$/,
 ];
+const TOKEN = new RegExp(TOKENS, "g");
 
-/** Marks the end of each line that has a line of text after it, outside code fences. */
-function markLineEnds(source: string): string {
+const standAt = (token: string | undefined, stands: readonly Stand[]) =>
+  token ? stands[token.charCodeAt(0) - TOKEN_BASE] : undefined;
+
+/** Marks the end of each line that has a line of text after it, outside code fences. A line is
+ * looked at as written: what `markdownSource` kept as its own text (a table's rows, an image) is
+ * read through. */
+function markLineEnds(source: string, stands: readonly Stand[]): string {
   const lines = source.split("\n");
+  const written = (line: string) =>
+    line.replace(TOKEN, (token) => {
+      const stand = standAt(token, stands);
+      return stand?.type === DOC_NODES.text ? (stand.text ?? "") : token;
+    });
   let fence: string | undefined;
   for (let at = 0; at < lines.length - 1; at++) {
-    const line = lines[at]!;
+    const line = written(lines[at]!);
     const opened = FENCE.exec(line)?.[1];
     if (fence) {
       if (
@@ -121,13 +133,13 @@ function markLineEnds(source: string): string {
       fence = opened;
       continue;
     }
-    const next = lines[at + 1]!;
+    const next = written(lines[at + 1]!);
     if (!line.trim() || !next.trim() || FENCE.test(next)) continue;
     // The next line starts a block of its own (an item, a heading), or this one is a
     // heading: there is no line of a paragraph to keep.
     if (STARTS_BLOCK.test(next) || HEADING.test(line)) continue;
     if (KEEP.some((rule) => rule.test(line))) continue;
-    lines[at] = line + LINE_END;
+    lines[at] += LINE_END;
   }
   return lines.join("\n");
 }
@@ -153,7 +165,7 @@ export function viewSource(text: ShownText): {
     tokens.push(String.fromCharCode(TOKEN_BASE + stands.length - 1));
   }
   let markdown = "";
-  for (const char of markLineEnds(source) +
+  for (const char of markLineEnds(source, stands) +
     (tokens.length ? `\n\n${tokens.join(" ")}` : "")) {
     const code = char.charCodeAt(0);
     const stand =
@@ -166,9 +178,6 @@ export function viewSource(text: ShownText): {
   }
   return { markdown, stands };
 }
-
-const standAt = (token: string | undefined, stands: readonly Stand[]) =>
-  token ? stands[token.charCodeAt(0) - TOKEN_BASE] : undefined;
 
 /** Text where only text goes: blocks as their text, line ends gone. */
 function plain(text: string, stands: readonly Stand[]): string {
