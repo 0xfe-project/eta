@@ -826,7 +826,15 @@ export class OarDelegate implements RunDelegate {
       const inputId = crypto.randomUUID();
       offs.push(
         // Observers hear a record in the order they came, and a call's name can be in its frame.
-        session.rawEvents((record) => this.#calls?.see(record)),
+        session.rawEvents((record) => {
+          this.#calls?.see(record);
+          if (
+            !settled &&
+            endedAt === undefined &&
+            record.sessionId === session.id
+          )
+            translator.seeRaw(record);
+        }),
         session.events(
           (event: Event) => {
             if (settled) return;

@@ -283,7 +283,7 @@ export interface UsageEvents {
     compactedAt?: number;
     used: number | null;
     window: number | null;
-    reason?: "compacted" | "model" | "inconsistent";
+    reason?: "compacted" | "model" | "inconsistent" | "missing";
   };
   /** A runtime reported the prompt's bill after its last assistant message was closed. */
   "usage:detached": { usage: Usage };

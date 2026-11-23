@@ -97,6 +97,7 @@ const ADDRESS = value<{ reading: ContextReading }>("eta.session-context");
 
 async function runtimeJournal(
   run: (context: RunDelegateContext) => Promise<void>,
+  runtime = "codex",
 ) {
   const root = await mkdtemp(join(tmpdir(), "eta-context-"));
   const models = fakeModels([]);
@@ -127,8 +128,8 @@ async function runtimeJournal(
   let current = open();
   const created = await current.manager.create({
     cwd: root,
-    runtime: "codex",
-    model: "codex:one",
+    runtime,
+    model: `${runtime}:one`,
   });
   const id = created.meta.id;
   let session = created.session;
@@ -410,3 +411,29 @@ it("rejects a saved reading on reopen when the journal has a newer compaction bo
     await host.stop();
   }
 });
+
+it.each(["claude", "codex", "pi"])(
+  "reopens zero from %s according to the runtime's reporting semantics",
+  async (runtime) => {
+    const host = await runtimeJournal(
+      async (context) => sample(context, 0),
+      runtime,
+    );
+    try {
+      await host.start();
+      expect((await readFromDisk(host.path))?.reading.used).toBe(0);
+      await host.restart();
+      if (runtime === "claude") {
+        expect(host.read()).toMatchObject({ used: null, reason: "missing" });
+        expect((await readFromDisk(host.path))?.reading.reason).toBe("missing");
+      } else {
+        expect(host.read()).toMatchObject({
+          used: 0,
+          observation: "last-observed",
+        });
+      }
+    } finally {
+      await host.stop();
+    }
+  },
+);

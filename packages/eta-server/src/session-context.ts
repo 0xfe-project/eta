@@ -235,6 +235,14 @@ export async function attachSessionContext(
     } else if (previous.reason !== null) {
       const { observation: _observation, ...fields } = previous;
       reading = { ...fields, reason: contextReason(previous) ?? "unverified" };
+    } else if (runtime === "claude" && previous.used === 0) {
+      // Older Claude projections persisted the assistant's zero placeholders.
+      await invalidate(
+        "missing",
+        previous.observedAt,
+        previous.model,
+        previous.compactedAt,
+      );
     } else if (
       (source === "harness" || nativeSessionId !== null) &&
       previous.observedAt >= (previous.compactedAt ?? 0) &&
