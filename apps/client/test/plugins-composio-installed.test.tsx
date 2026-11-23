@@ -25,21 +25,25 @@ test("only the connected toolkits are asked for by name, not the whole list", as
   expect(app.shows("asked-the-network")).toBe(false);
 });
 
-test("the mark of a connected card is at its bottom right, on the source's line", async () => {
-  const app = await open("./fixtures/plugins-composio-two.tsx", DESKTOP);
+test("a card in the group has the connected mark and both buttons, and no 'From Composio' line", async () => {
+  const app = await open("./fixtures/plugins-composio-actions-ok.tsx", DESKTOP);
   await app.waitFor("id:composio-connected-item");
-  const card = app.layout("id:composio-connected-item >> nth=0")!;
-  const mark = app.layout("id:composio-connected >> nth=0")!;
-  const from = app.layout("text:From Composio >> nth=0")!;
-  expect(
-    Math.abs(card.x + card.width - 13 - (mark.x + mark.width)),
-  ).toBeLessThan(2);
-  expect(
-    Math.abs(card.y + card.height - 13 - (mark.y + mark.height)),
-  ).toBeLessThan(2);
-  expect(
-    Math.abs(from.y + from.height / 2 - (mark.y + mark.height / 2)),
-  ).toBeLessThan(3);
+  expect(app.count("id:composio-connected")).toBe(2);
+  expect(app.count("label:Re-authenticate")).toBe(2);
+  expect(app.count("label:Disconnect")).toBe(2);
+  expect(app.shows("From Composio")).toBe(false);
+  // Without the buttons (no word from the host) the mark is still there and the line is still gone.
+  const plain = await open("./fixtures/plugins-composio-two.tsx", DESKTOP);
+  await plain.waitFor("id:composio-connected-item");
+  expect(plain.count("id:composio-connected")).toBe(2);
+  expect(plain.shows("From Composio")).toBe(false);
+});
+
+test("on a phone the rows have no 'From Composio' line either, and keep the mark and the buttons", async () => {
+  const app = await open("./fixtures/plugins-composio-phone.tsx", PHONE);
+  await app.waitFor("id:composio-connected-item");
+  expect(app.shows("From Composio")).toBe(false);
+  expect(app.count("id:composio-connected")).toBe(2);
 });
 
 test("no connected toolkit: no group, and the plugins show as before", async () => {

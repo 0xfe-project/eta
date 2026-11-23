@@ -231,3 +231,9 @@ test("a failed Disconnect says so, keeps the mark and the dialog, and shows no t
   await app.waitFor("text:Could not disconnect. Try again later.");
   expect(app.count("id:composio-connected")).toBeGreaterThan(0);
 });
+
+test("a connected card in the market still says From Composio, with the mark", async () => {
+  const app = await open("./fixtures/composio-already-connected.tsx", OPEN);
+  await app.waitFor("id:composio-connected");
+  expect(app.shows("From Composio")).toBe(true);
+});
