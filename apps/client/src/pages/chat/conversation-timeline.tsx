@@ -61,7 +61,7 @@ export function ConversationTimeline(props: {
   const host = useHost();
   const c = colors();
   let transcriptList: ListRef | undefined;
-  const markedMessage = signal("");
+  const firstVisibleId = signal<string>();
   const phone = () => props.phone;
   const sameFailures = computed(() => sameFailureAsNext(props.rows));
   // The owning conversation is keyed by id. Always read the current row, including a remote confirmation.
@@ -245,6 +245,9 @@ export function ConversationTimeline(props: {
             if (selection()) selection.set(undefined);
             if (onWindows) glide.onScroll(event);
           }}
+          onViewableItemsChange={({ viewableItems }) => {
+            firstVisibleId.set(viewableItems[0]?.item.id);
+          }}
           contentStyle={{
             paddingLeft: 16,
             paddingRight: props.rail ? 60 : 16,
@@ -364,7 +367,7 @@ export function ConversationTimeline(props: {
               gap: 3,
             }}
           >
-            <Each of={["assistant", "user"] as const}>
+            <Each of={["agent", "user"] as const}>
               {(author) => {
                 const entries = () =>
                   props.rows
@@ -379,11 +382,10 @@ export function ConversationTimeline(props: {
                           label={`${author() === "user" ? "Prompt" : "Reply"} ${index() + 1}`}
                           size={20}
                           iconOnly
-                          selected={markedMessage() === entry().message.id}
+                          selected={firstVisibleId() === entry().message.id}
                           icon={author() === "user" ? "chat" : "info"}
                           tone="ghost"
                           onPress={() => {
-                            markedMessage.set(entry().message.id);
                             transcriptList?.scrollToIndex({
                               index: entry().index,
                               viewPosition: 0,
