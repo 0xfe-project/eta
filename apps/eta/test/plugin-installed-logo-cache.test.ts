@@ -78,25 +78,28 @@ const boot = (db: ReturnType<typeof database>, now?: () => number) =>
     ...(now === undefined ? {} : { now }),
   });
 
+/** What `find` is asked: the plugin's own logo, its homepage, its remote server's address. */
+type Ask = [string | null, string | null, string | null];
+
 describe("an installed plugin's icon after a restart", () => {
   it.each([
     {
       name: "a homepage",
       mode: { icon: true },
       type: "image/png",
-      ask: (url: string) => [null, `${url}/`, null] as const,
+      ask: (url: string): Ask => [null, `${url}/`, null],
     },
     {
       name: "a remote server's site",
       mode: { icon: true },
       type: "image/png",
-      ask: (url: string) => [null, null, `${url}/mcp`] as const,
+      ask: (url: string): Ask => [null, null, `${url}/mcp`],
     },
     {
       name: "a homepage with an ico",
       mode: { icon: true, ico: true },
       type: "image/x-icon",
-      ask: (url: string) => [null, `${url}/`, null] as const,
+      ask: (url: string): Ask => [null, `${url}/`, null],
     },
   ])(
     "is read from the database for $name, and no site is asked",
