@@ -19,7 +19,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
-import { icon, space, weight } from "../../components/tokens";
+import { icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { taskDropZones } from "./drag";
@@ -38,15 +38,15 @@ const sizes = {
   page: {
     cardWidth: 256,
     cardHeight: 52,
-    columnGap: 36,
-    rowGap: 9,
+    columnGap: space[32],
+    rowGap: space[8],
     left: 13,
     labelTop: 16,
     cardsTop: 37,
     tileHeight: 30,
     legendGap: 12,
     bottom: 16,
-    padding: 9,
+    padding: space[8],
     titleVariant: "small" as TextVariant,
     criticalBorder: 1,
     indent: 0,
@@ -54,15 +54,15 @@ const sizes = {
   detail: {
     cardWidth: 254,
     cardHeight: 49,
-    columnGap: 38,
-    rowGap: 11,
+    columnGap: space[32],
+    rowGap: space[12],
     left: 12,
     labelTop: 15,
     cardsTop: 36,
     tileHeight: 33,
     legendGap: 16,
     bottom: 15,
-    padding: 10,
+    padding: space[12],
     titleVariant: "caption" as TextVariant,
     criticalBorder: 2,
     indent: 18,
@@ -76,7 +76,7 @@ function tabletSize(cardWidth: number) {
   return {
     cardWidth,
     cardHeight: 64,
-    columnGap: 36,
+    columnGap: space[32],
     rowGap: space[12],
     left: 12,
     labelTop: 12,
@@ -261,8 +261,10 @@ function PlanGraph(props: {
                 top: y(graph().columns.at(-1)?.length ?? 0),
                 width: size().cardWidth,
                 height: size().tileHeight,
-                paddingHorizontal: isTablet(props.variant) ? 8 : 10,
-                gap: 6,
+                paddingHorizontal: isTablet(props.variant)
+                  ? space[8]
+                  : space[12],
+                gap: space[4],
                 borderWidth: 1,
                 borderStyle: "dashed",
                 borderColor: c().strong,
@@ -271,7 +273,7 @@ function PlanGraph(props: {
             >
               <Icon
                 name="plus"
-                size={isTablet(props.variant) ? 11 : 10}
+                size={isTablet(props.variant) ? icon.sm : icon.sm}
                 tone="mutedInk"
               />
               <Label variant="caption" tone="mutedInk">
@@ -288,7 +290,7 @@ function PlanGraph(props: {
         <View
           style={{
             ...row,
-            gap: 18,
+            gap: space[16],
             paddingLeft: size().left - 1,
             marginTop: size().legendGap,
             marginBottom: size().bottom,
@@ -311,31 +313,31 @@ function PlanLegend() {
   const c = colors();
   return (
     <>
-      <View style={{ ...row, gap: 5 }}>
-        <TaskGlyph status="done" size={11} />
+      <View style={{ ...row, gap: space[4] }}>
+        <TaskGlyph status="done" size={icon.sm} />
         <Label variant="caption" tone="muted">
           {uiText("taskDone")}
         </Label>
       </View>
-      <View style={{ ...row, gap: 5 }}>
+      <View style={{ ...row, gap: space[4] }}>
         <TaskGlyph status="in_review" size={icon.sm} />
         <Label variant="caption" tone="muted">
           {uiText("inReviewLetsNextGo")}
         </Label>
       </View>
-      <View style={{ ...row, gap: 5 }}>
-        <TaskGlyph status="in_progress" size={11} />
+      <View style={{ ...row, gap: space[4] }}>
+        <TaskGlyph status="in_progress" size={icon.sm} />
         <Label variant="caption" tone="muted">
           {statusName("in_progress")}
         </Label>
       </View>
-      <View style={{ ...row, gap: 5 }}>
-        <Icon name="lock" size={11} tone="muted" />
+      <View style={{ ...row, gap: space[4] }}>
+        <Icon name="lock" size={icon.sm} tone="muted" />
         <Label variant="caption" tone="muted">
           {uiText("taskWaitingForOthers")}
         </Label>
       </View>
-      <View style={{ ...row, gap: 5 }}>
+      <View style={{ ...row, gap: space[4] }}>
         <View
           style={{
             width: 14,
@@ -393,20 +395,20 @@ function PlanCard(props: {
         top: props.top,
         width: size().cardWidth,
         height: size().cardHeight,
-        paddingVertical: isTablet(props.variant) ? 7 : 6,
+        paddingVertical: isTablet(props.variant) ? space[8] : space[8],
         paddingHorizontal: size().padding,
-        gap: isTablet(props.variant) ? 3 : 6,
+        gap: isTablet(props.variant) ? space[2] : space[4],
         borderWidth: props.critical ? size().criticalBorder : 1,
         borderColor: props.critical ? c().ink : c().strong,
         backgroundColor: c().canvas,
-        opacity: props.drag.active() === props.task.id ? 0.65 : 1,
+        opacity: props.drag.active() === props.task.id ? opacity.muted : 1,
         cursor: "pointer",
       }}
     >
-      <View style={{ ...row, gap: 6 }}>
+      <View style={{ ...row, gap: space[4] }}>
         <TaskGlyph
           status={props.task.status}
-          size={isTablet(props.variant) ? 12 : 11}
+          size={isTablet(props.variant) ? icon.sm : icon.sm}
         />
         <Label
           variant={size().titleVariant}
@@ -424,7 +426,7 @@ function PlanCard(props: {
           {`#${props.task.number} ·`}
         </Label>
         <If when={isWaiting(props.task)}>
-          <Icon name="lock" size={10} tone="muted" />
+          <Icon name="lock" size={icon.sm} tone="muted" />
         </If>
         <Label
           variant="caption"
@@ -662,10 +664,14 @@ export function TaskPlan(props: {
           props.tablet
             ? {
                 paddingHorizontal: space[20],
-                paddingVertical: 14,
+                paddingVertical: space[16],
                 gap: space[12],
               }
-            : { paddingHorizontal: 22, paddingTop: space[16], gap: 14 }
+            : {
+                paddingHorizontal: space[24],
+                paddingTop: space[16],
+                gap: space[12],
+              }
         }
       >
         <Label variant="caption" tone="muted">
@@ -701,7 +707,7 @@ export function TaskPlan(props: {
           </View>
         </Scroll>
         <If when={props.tablet}>
-          <View style={{ ...row, gap: 18 }}>
+          <View style={{ ...row, gap: space[16] }}>
             <PlanLegend />
           </View>
           <Label variant="caption" tone="muted">
@@ -743,11 +749,15 @@ export function TaskPlanBoard(props: {
       style={
         props.tablet
           ? {
-              paddingHorizontal: 14,
+              paddingHorizontal: space[16],
               paddingVertical: space[12],
               gap: space[12],
             }
-          : { paddingHorizontal: 22, paddingVertical: 14, gap: 15 }
+          : {
+              paddingHorizontal: space[24],
+              paddingVertical: space[16],
+              gap: space[16],
+            }
       }
     >
       <Each of={parents()} key={(task) => task.id}>
@@ -757,7 +767,7 @@ export function TaskPlanBoard(props: {
               style={{
                 ...row,
                 height: props.tablet ? 36 : 37,
-                paddingHorizontal: props.tablet ? 12 : 13,
+                paddingHorizontal: space[12],
                 gap: space[8],
                 borderBottomWidth: 1,
                 borderColor: c().border,
@@ -789,7 +799,7 @@ export function TaskPlanBoard(props: {
                   cursor: "pointer",
                 }}
               >
-                <Icon name="plus" size={props.tablet ? 11 : 10} />
+                <Icon name="plus" size={icon.sm} />
                 <Label variant="caption">{uiText("subtask")}</Label>
               </View>
             </View>
@@ -822,7 +832,7 @@ export function TaskPlanBoard(props: {
             style={{
               ...row,
               height: props.tablet ? 36 : 37,
-              paddingHorizontal: props.tablet ? 12 : 13,
+              paddingHorizontal: space[12],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}

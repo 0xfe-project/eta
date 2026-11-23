@@ -2,7 +2,7 @@ import type { TaskActor } from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, Label, row } from "../../components";
 import { AgentFace, UserFace } from "../../components/agent-face";
-import { space, weight } from "../../components/tokens";
+import { avatar, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -34,7 +34,7 @@ export function ownerLine(
 export function ActorName(props: { actor: TaskActor; size: number }) {
   const host = useHost();
   return (
-    <View style={{ ...row, gap: 6, flex: 1, minWidth: 0 }}>
+    <View style={{ ...row, gap: space[4], flex: 1, minWidth: 0 }}>
       {props.actor.kind === "agent" ? (
         <AgentFace id={props.actor.agentId} size={props.size} />
       ) : (
@@ -62,7 +62,7 @@ export function CreatorChip(props: { creator: TaskActor }) {
       accessibilityLabel={uiText("taskCreatorValue", { name: name() })}
       style={{
         ...row,
-        gap: 6,
+        gap: space[4],
         alignSelf: "flex-start",
         paddingVertical: space[2],
         paddingHorizontal: space[8],
@@ -74,9 +74,9 @@ export function CreatorChip(props: { creator: TaskActor }) {
         {uiText("taskCreator")}
       </Label>
       {props.creator.kind === "agent" ? (
-        <AgentFace id={props.creator.agentId} size={14} />
+        <AgentFace id={props.creator.agentId} size={avatar.sm} />
       ) : (
-        <UserFace size={14} />
+        <UserFace size={avatar.sm} />
       )}
       <Label variant="caption" weight={weight.strong} lines={1}>
         {name()}

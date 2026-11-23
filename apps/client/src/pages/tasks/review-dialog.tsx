@@ -9,7 +9,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
-import { control, space, weight } from "../../components/tokens";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { TaskGlyph } from "./status";
 
@@ -44,7 +44,7 @@ export function TaskReviewDialog(props: {
       <View
         style={{
           padding: space[16],
-          gap: props.phone && props.decision === "todo" ? 12 : 14,
+          gap: props.phone && props.decision === "todo" ? space[12] : space[12],
         }}
       >
         <If when={props.phone && props.decision === "todo"}>
@@ -53,7 +53,7 @@ export function TaskReviewDialog(props: {
               executor: props.executor ?? uiText("executor"),
             })}
           </Label>
-          <View style={{ gap: 6 }}>
+          <View style={{ gap: space[4] }}>
             <Label variant="caption" tone="muted">
               {uiText("comment")}
             </Label>
@@ -64,7 +64,7 @@ export function TaskReviewDialog(props: {
               onChange={props.onFeedback}
               style={{
                 height: 104,
-                paddingVertical: 10,
+                paddingVertical: space[12],
                 paddingHorizontal: space[12],
                 borderColor: c().strong,
               }}
@@ -119,9 +119,9 @@ export function TaskReviewDialog(props: {
         <If when={props.decision === "done" && props.task?.dependents?.length}>
           <View
             style={{
-              paddingVertical: props.phone ? 10 : 12,
+              paddingVertical: space[12],
               paddingHorizontal: space[12],
-              gap: props.phone ? 4 : 6,
+              gap: space[4],
               backgroundColor: c().selected,
             }}
           >
@@ -141,12 +141,10 @@ export function TaskReviewDialog(props: {
                 key={(edge) => edge.taskId}
               >
                 {(edge) => (
-                  <View
-                    style={{ ...row, gap: props.phone ? 8 : 7, minHeight: 18 }}
-                  >
+                  <View style={{ ...row, gap: space[8], minHeight: 18 }}>
                     <TaskGlyph
                       status={edge().status}
-                      size={props.phone ? 12 : 14}
+                      size={props.phone ? icon.sm : icon.md}
                     />
                     <Label variant="small">
                       {`#${edge().number} ${edge().title}`}
@@ -185,7 +183,7 @@ export function TaskReviewDialog(props: {
           }
           size={control.lg}
           tone="primary"
-          style={props.phone ? { paddingHorizontal: 14 } : undefined}
+          style={props.phone ? { paddingHorizontal: space[16] } : undefined}
           disabled={
             props.submitting ||
             (props.decision === "todo" && !props.feedback.trim())

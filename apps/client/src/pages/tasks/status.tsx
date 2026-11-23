@@ -134,8 +134,8 @@ export function TaskStatus(props: { task: BoardTaskView }) {
       style={{
         ...row,
         paddingVertical: 1,
-        paddingLeft: waiting() ? 4 : 6,
-        paddingRight: 6,
+        paddingLeft: waiting() ? space[4] : space[8],
+        paddingRight: space[8],
         gap: space[4],
         flexShrink: 0,
         backgroundColor: waiting() ? c().canvas : c()[fills[props.task.status]],
@@ -223,7 +223,7 @@ function TaskCardStatus(props: { task: BoardTaskView }) {
         ...row,
         paddingVertical: 1,
         paddingLeft: space[4],
-        paddingRight: 6,
+        paddingRight: space[8],
         gap: space[4],
         flexShrink: 1,
         minWidth: 0,
@@ -237,7 +237,7 @@ function TaskCardStatus(props: { task: BoardTaskView }) {
       }}
     >
       <If when={!waitingFor()}>
-        <TaskGlyph status={task().status} size={10} />
+        <TaskGlyph status={task().status} size={icon.sm} />
       </If>
       <Label
         variant="small"
@@ -327,22 +327,19 @@ export function TaskSummary(props: {
         focusVisibleStyle={focusRing(c())}
         style={{
           ...row,
-          paddingHorizontal: 10,
-          paddingVertical: 6,
+          paddingHorizontal: space[12],
+          paddingVertical: space[8],
           gap: space[8],
           cursor: "pointer",
         }}
       >
         <Icon
           name={props.open ? "down" : "right"}
-          size={props.open ? 8 : 10}
+          size={icon.sm}
           tone={props.open ? "muted" : "faint"}
         />
         <TaskGlyph status={props.task.status} size={icon.sm} />
-        <Caption
-          text={kind()}
-          style={{ letterSpacing: 1.4, color: c().faint, flexShrink: 0 }}
-        />
+        <Caption text={kind()} style={{ color: c().faint, flexShrink: 0 }} />
         <View
           role="link"
           accessibilityLabel={openTask()}
@@ -388,7 +385,7 @@ export function TaskSummary(props: {
                 style={{
                   ...row,
                   paddingVertical: space[8],
-                  paddingHorizontal: 10,
+                  paddingHorizontal: space[12],
                   gap: space[12],
                   justifyContent: "space-between",
                 }}
@@ -408,8 +405,8 @@ export function TaskSummary(props: {
             <View
               style={{
                 paddingVertical: space[8],
-                paddingHorizontal: 10,
-                gap: 6,
+                paddingHorizontal: space[12],
+                gap: space[4],
               }}
             >
               <View

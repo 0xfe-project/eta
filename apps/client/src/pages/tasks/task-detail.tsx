@@ -10,7 +10,7 @@ import {
   Modal,
   row,
 } from "../../components";
-import { space } from "../../components/tokens";
+import { icon, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { ArtifactPreview } from "../chat/artifacts/preview";
@@ -112,7 +112,7 @@ export function TaskDetail(props: {
         cursor: "pointer",
       }}
     >
-      <Icon name="more" size={17} />
+      <Icon name="more" size={icon.md} />
     </View>
   );
   return (
@@ -204,7 +204,7 @@ export function TaskDetail(props: {
                 <Button
                   label={uiText("panel")}
                   icon="sidebar"
-                  iconSize={14}
+                  iconSize={icon.md}
                   labelVariant="caption"
                   onPress={() => panel.set(true)}
                 />
@@ -275,7 +275,7 @@ export function TaskDetail(props: {
                 style={{
                   ...row,
                   justifyContent: "space-between",
-                  padding: 14,
+                  padding: space[16],
                   gap: space[12],
                   borderTopWidth: 1,
                   borderColor: c().border,

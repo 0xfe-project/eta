@@ -22,7 +22,7 @@ import {
   textStyle,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
-import { control, icon, space, weight } from "../../components/tokens";
+import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { taskDropZones } from "./drag";
@@ -148,7 +148,7 @@ export function Tasks(props: {
                       filterOpen() || executor() ? c().selected : undefined,
                   }}
                 >
-                  <Icon name="funnel" size={14} />
+                  <Icon name="funnel" size={icon.md} />
                 </View>
               }
             />
@@ -187,7 +187,7 @@ export function Tasks(props: {
                         ...row,
                         flex: 1,
                         minWidth: 0,
-                        gap: 6,
+                        gap: space[4],
                         marginLeft: space[4],
                       }
                     : {
@@ -195,13 +195,13 @@ export function Tasks(props: {
                         width: 150,
                         height: 25,
                         paddingHorizontal: space[8],
-                        gap: 7,
-                        marginRight: 7,
+                        gap: space[8],
+                        marginRight: space[8],
                         flexShrink: 0,
                       }
                 }
               >
-                <Icon name="search" size={tablet() ? 12 : 12.6} tone="muted" />
+                <Icon name="search" size={icon.sm} tone="muted" />
                 <Field
                   label={uiText("searchTasks")}
                   placeholder={uiText("search")}
@@ -232,7 +232,7 @@ export function Tasks(props: {
                       cursor: "pointer",
                     }}
                   >
-                    <Icon name="close" size={10} />
+                    <Icon name="close" size={icon.sm} />
                   </View>
                 </If>
               </View>
@@ -373,12 +373,12 @@ export function Tasks(props: {
                       host.state().missing.tasks || !host.state().targets.tasks
                         ? undefined
                         : phone()
-                          ? { gap: 10, paddingHorizontal: space[40] }
+                          ? { gap: space[8], paddingHorizontal: space[40] }
                           : {
                               flex: 1,
                               justifyContent: "flex-start",
                               paddingTop: space[64],
-                              gap: tablet() ? 8 : 10,
+                              gap: space[8],
                             }
                     }
                     title={
@@ -393,9 +393,9 @@ export function Tasks(props: {
                     icon={host.state().missing.tasks ? "warning" : "tasks"}
                     iconSize={
                       host.state().missing.tasks
-                        ? 32
+                        ? icon.xl
                         : designed()
-                          ? 28
+                          ? icon.xl
                           : undefined
                     }
                     iconTone={
@@ -529,7 +529,7 @@ function ExecutorMenu(props: {
         {(agent) => (
           <TaskMenuItem
             label={agent().name}
-            leading={<AgentFace id={agent().id} size={10} />}
+            leading={<AgentFace id={agent().id} size={avatar.sm} />}
             checked={props.value === agent().id}
             onSelect={() => props.onChange(agent().id)}
           />
@@ -566,7 +566,7 @@ function ArchiveToggle(props: {
     >
       <Icon
         name="archive"
-        size={props.selected ? 13 : 12}
+        size={icon.sm}
         tone={props.selected ? "ink" : "muted"}
       />
       <Label variant="small" tone={props.selected ? "ink" : "muted"}>
@@ -609,7 +609,9 @@ function ArchivedTasks(props: {
       }}
     >
       <View style={{ ...row, gap: space[8] }}>
-        <View style={{ ...row, flex: 1, gap: 6, alignItems: "baseline" }}>
+        <View
+          style={{ ...row, flex: 1, gap: space[4], alignItems: "baseline" }}
+        >
           <Label weight={weight.strong}>{uiText("archivedTitle")}</Label>
           <Label variant="small" tone="muted">
             {props.count}
@@ -623,7 +625,7 @@ function ArchivedTasks(props: {
           style={{
             ...row,
             height: space[24],
-            paddingHorizontal: 6,
+            paddingHorizontal: space[8],
             gap: space[4],
             cursor: "pointer",
           }}
@@ -636,7 +638,7 @@ function ArchivedTasks(props: {
         style={{
           ...row,
           height: 30,
-          paddingHorizontal: 10,
+          paddingHorizontal: space[12],
           gap: space[8],
           borderWidth: 1,
           borderColor: c().border,
@@ -674,7 +676,7 @@ function ArchivedTasks(props: {
           else={
             <Empty
               icon="archive"
-              iconSize={28}
+              iconSize={icon.xl}
               title={
                 props.count
                   ? uiText("noArchivedTasksMatch")
@@ -690,7 +692,7 @@ function ArchivedTasks(props: {
                 flex: 1,
                 justifyContent: "flex-start",
                 paddingTop: space[64],
-                gap: 10,
+                gap: space[8],
               }}
             />
           }

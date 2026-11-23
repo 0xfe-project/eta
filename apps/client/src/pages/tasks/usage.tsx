@@ -140,8 +140,8 @@ export function HintBox(props: { lines: string[] }) {
   return (
     <View
       style={{
-        paddingHorizontal: 10,
-        paddingVertical: 6,
+        paddingHorizontal: space[12],
+        paddingVertical: space[8],
         gap: space[2],
         backgroundColor: c().ink,
       }}
@@ -204,7 +204,7 @@ export function UsageLine(props: {
       {(current) => (
         <View
           tooltip={<HintBox lines={usageHint(current().brief)} />}
-          style={{ ...row, gap: 6, minWidth: 0, ...props.style }}
+          style={{ ...row, gap: space[4], minWidth: 0, ...props.style }}
         >
           <Label
             variant={props.variant ?? "small"}

@@ -61,7 +61,7 @@ export function TaskWorkspaceList(props: {
     <SmoothScroll style={grow}>
       <View
         style={{
-          padding: props.groupByParent || props.view === "Plan" ? 0 : 22,
+          padding: props.groupByParent || props.view === "Plan" ? 0 : space[24],
           gap: props.groupByParent ? 0 : space[12],
         }}
       >
@@ -90,7 +90,7 @@ export function TaskWorkspaceList(props: {
                   <View
                     style={{
                       ...row,
-                      paddingLeft: tablet() ? 14 : 8,
+                      paddingLeft: tablet() ? space[16] : space[8],
                       gap: tablet() ? space[8] : 0,
                       borderBottomWidth: 1,
                       borderColor: c().border,
@@ -108,7 +108,7 @@ export function TaskWorkspaceList(props: {
                         >
                           <Icon
                             name={isFolded() ? "right" : "down"}
-                            size={10}
+                            size={icon.sm}
                           />
                         </View>
                       }
@@ -129,7 +129,7 @@ export function TaskWorkspaceList(props: {
                         ...row,
                         flex: 1,
                         height: tablet() ? 31 : 29,
-                        paddingRight: 14,
+                        paddingRight: space[16],
                         gap: space[8],
                         cursor: "pointer",
                       }}
@@ -215,8 +215,8 @@ export function TaskWorkspaceList(props: {
                 style={{
                   ...row,
                   height: tablet() ? 32 : 29,
-                  paddingHorizontal: 14,
-                  gap: tablet() ? 8 : 6,
+                  paddingHorizontal: space[16],
+                  gap: tablet() ? space[8] : space[4],
                   backgroundColor: tablet() ? c().selected : c().surface,
                   borderBottomWidth: 1,
                   borderColor: c().border,
@@ -244,7 +244,7 @@ export function TaskWorkspaceList(props: {
         <If when={(props.view !== "Plan" || phone()) && !props.groupByParent}>
           <Each of={visibleStatuses}>
             {(status) => (
-              <View style={{ gap: 5 }}>
+              <View style={{ gap: space[4] }}>
                 <Button
                   label={`${statusName(status())} ${column(status()).length}`}
                   tone="ghost"

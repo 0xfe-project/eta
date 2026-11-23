@@ -51,7 +51,11 @@ export function TaskTopBar(props: {
         tone="ghost"
         labelVariant={compact() ? "small" : "body"}
         size={props.touch ? control.lg : compact() ? control.sm : control.md}
-        style={{ gap: space[2], paddingLeft: backPadding, paddingRight: 6 }}
+        style={{
+          gap: space[2],
+          paddingLeft: backPadding,
+          paddingRight: space[8],
+        }}
         onPress={props.onBack}
       />
       <Label tone="muted" lines={1} style={{ flex: 1, minWidth: 0 }}>
