@@ -20,10 +20,6 @@ export const pluginsMessages = {
   marketSource: ["Plugin source", "插件来源"],
   marketProxy: ["Fetched through the GitHub proxy", "经由 GitHub 代理获取"],
   pluginsSourcesTitle: ["Plugin sources", "插件来源"],
-  pluginsSourcesHint: [
-    "The market lists the plugins of every source below that is switched on. Each source is a marketplace.json in the Claude Code or Cursor format.",
-    "插件市场会列出下面每个已打开的来源里的插件。来源是 Claude Code 或 Cursor 格式的 marketplace.json。",
-  ],
   pluginsNoSources: ["No plugin sources", "没有插件来源"],
   pluginsNoSourcesHint: [
     "Add the address of a marketplace.json to browse its plugins.",
@@ -318,10 +314,6 @@ export const pluginsMessages = {
   missingSave: ["Save", "保存"],
   warningsFor: ["Warnings for {{name}}", "{{name}} 的警告"],
   composioKeyTitle: ["Composio API key", "Composio API 密钥"],
-  composioKeyHint: [
-    "The market reads Composio's toolkit list with this key. It is stored encrypted on the host and is never shown again.",
-    "插件市场用这个密钥读取 Composio 的 toolkit 列表。密钥加密保存在主机上,不会再次显示。",
-  ],
   composioKeyField: ["Composio API key", "Composio API 密钥"],
   composioKeySet: ["A key is set", "已设置"],
   composioKeyNone: ["No key is set", "未设置"],

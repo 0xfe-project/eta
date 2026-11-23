@@ -172,9 +172,6 @@ export function PluginSettings(props: { phone?: boolean }) {
         }}
       >
         <Label weight={500}>{uiText("pluginsSourcesTitle")}</Label>
-        <Label variant="small" tone="muted">
-          {uiText("pluginsSourcesHint")}
-        </Label>
         <If
           when={sources().length}
           else={
@@ -279,9 +276,6 @@ export function PluginSettings(props: { phone?: boolean }) {
         <If when={hasComposio()}>
           <Label weight={500} style={{ paddingTop: 8 }}>
             {uiText("composioKeyTitle")}
-          </Label>
-          <Label variant="small" tone="muted" style={{ maxWidth: 760 }}>
-            {uiText("composioKeyHint")}
           </Label>
           <View style={{ gap: 8, maxWidth: 560 }}>
             <Label variant="small" weight={500}>
