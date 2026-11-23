@@ -595,7 +595,7 @@ function PluginRows(props: {
           borderColor: c().border,
         }}
       >
-        <Caption text={props.caption} phone />
+        <Caption text={props.caption} />
       </View>
       <View>
         <Each of={props.items} key={(item) => item.name}>

@@ -217,7 +217,7 @@ export function PhoneConversationInfo(props: {
           borderColor: c().border,
         }}
       >
-        <Caption text={section.label} phone />
+        <Caption text={section.label} />
         <Label variant="caption" tone="muted">
           {section.count}
         </Label>

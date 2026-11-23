@@ -253,7 +253,7 @@ export function PluginDetail(props: DetailProps) {
             </View>
           </If>
           <View style={section(20)}>
-            <Caption text={text("source")} phone={props.phone} />
+            <Caption text={text("source")} />
             <View
               style={{
                 ...row,
@@ -303,7 +303,7 @@ export function PluginDetail(props: DetailProps) {
             </View>
           </View>
           <View style={section(16)}>
-            <Caption text={text("runs")} phone={props.phone} />
+            <Caption text={text("runs")} />
             <View style={{ borderWidth: 1, borderColor: c().border }}>
               <Each of={props.item.servers} key={(server) => server.name}>
                 {(server) => (
@@ -368,7 +368,7 @@ export function PluginDetail(props: DetailProps) {
           </View>
           <If when={reads().length}>
             <View style={section(16)}>
-              <Caption text={text("audit")} phone={props.phone} />
+              <Caption text={text("audit")} />
               <View style={{ borderWidth: 1, borderColor: c().border }}>
                 <Each of={reads()} key={(entry) => entry.id}>
                   {(entry, index) => (

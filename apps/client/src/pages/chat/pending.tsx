@@ -213,7 +213,7 @@ export function Pending(props: {
           flexShrink: 0,
         }}
       >
-        <Caption text={props.label} phone />
+        <Caption text={props.label} />
         <Label variant="caption" tone="muted">
           {props.count}
         </Label>

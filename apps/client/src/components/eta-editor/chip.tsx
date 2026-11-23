@@ -11,7 +11,7 @@ import {
   row,
   textFaces,
 } from "../theme";
-import { icon, space } from "../tokens";
+import { icon, opacity, space } from "../tokens";
 import { LineRoom } from "./room";
 
 /**
@@ -73,12 +73,12 @@ export function Chip(props: {
       onMouseLeave={() => hovered.set(false)}
       style={{
         ...row,
-        gap: 5,
+        gap: space[4],
         maxWidth: room() ? Math.min(280, room() - 16) : 280,
         overflow: "hidden",
         height: type("small").line + 4,
-        paddingLeft: props.thumbnail ? 2 : 5,
-        paddingRight: removable() ? 2 : 6,
+        paddingLeft: props.thumbnail ? space[2] : space[4],
+        paddingRight: removable() ? space[2] : space[8],
         marginHorizontal: 1,
         borderWidth: 1,
         borderColor: props.selected
@@ -89,7 +89,7 @@ export function Chip(props: {
               ? c().warning
               : c().strong,
         backgroundColor: props.tone === "red" ? c().redFill : c().selected,
-        opacity: props.dim ? 0.6 : 1,
+        opacity: props.dim ? opacity.muted : 1,
       }}
     >
       <View
@@ -99,7 +99,7 @@ export function Chip(props: {
         onPress={props.onPress}
         style={{
           ...row,
-          gap: 5,
+          gap: space[4],
           flexShrink: 1,
           cursor: props.cursor ?? (props.onPress ? "pointer" : "default"),
         }}

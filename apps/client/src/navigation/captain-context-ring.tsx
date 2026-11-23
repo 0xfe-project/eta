@@ -18,6 +18,7 @@ export function CaptainContextRing(props: { children: JSX.Element }) {
   };
   const usage = useContextUsage(session);
   return (
+    // design-value: the ring drawn round the rail's 36px Captain face (box 44, radius 20.5)
     <ContextRing usage={usage} size={44} box={44} radius={20.5} label={false}>
       {props.children}
     </ContextRing>

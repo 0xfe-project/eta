@@ -73,7 +73,7 @@ export function DetailSkeleton(props: { label: string; style?: ViewStyle }) {
 
 function MessageBars(props: { width: number }) {
   return (
-    <View style={{ gap: 10 }}>
+    <View style={{ gap: space[8] }}>
       <View style={{ ...row, gap: space[8] }}>
         <Bar width={18} height={18} />
         <Bar width={96} height={12} />
@@ -90,7 +90,7 @@ export function MessagesSkeleton(props: { label: string; style?: ViewStyle }) {
     <View
       role="progressbar"
       accessibilityLabel={props.label}
-      style={{ padding: space[16], gap: 22, ...props.style }}
+      style={{ padding: space[16], gap: space[20], ...props.style }}
     >
       <MessageBars width={220} />
       <View style={{ alignItems: "flex-end" }}>

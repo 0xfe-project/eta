@@ -51,7 +51,7 @@ export function NavItem(props: {
         height: wide() ? 28 : phone() ? 63 : 48,
         width: phone() ? "20%" : "100%",
         flexShrink: 0,
-        paddingHorizontal: wide() ? 7 : 0,
+        paddingHorizontal: wide() ? space[8] : 0,
         gap: wide() ? space[8] : space[4],
         backgroundColor:
           props.selected && !phone() ? c().selected : "transparent",
@@ -60,7 +60,7 @@ export function NavItem(props: {
     >
       <Icon
         name={props.item[2]}
-        size={wide() ? 14 : phone() ? 22 : 18}
+        size={wide() ? icon.md : phone() ? icon.lg : icon.md}
         tone={props.selected || wide() ? "ink" : "muted"}
       />
       <Label
@@ -134,7 +134,7 @@ export function DesktopSidebar(
           ...row,
           justifyContent: props.collapsed ? "center" : "space-between",
           height: space[40],
-          paddingHorizontal: props.collapsed ? 4 : 14,
+          paddingHorizontal: props.collapsed ? space[4] : space[16],
           borderBottomWidth: 1,
           borderColor: c().border,
           flexShrink: 0,
@@ -143,7 +143,9 @@ export function DesktopSidebar(
         <Label
           variant={props.collapsed ? "caption" : "subtitle"}
           tone={props.collapsed ? "muted" : "ink"}
-          style={{ letterSpacing: props.collapsed ? 0.8 : 3.2 }}
+          tracking={props.collapsed ? "caps" : undefined}
+          // design-value: the wordmark's own spacing, not a caption's
+          style={props.collapsed ? undefined : { letterSpacing: 3.2 }}
         >
           ETA
         </Label>
@@ -176,8 +178,8 @@ export function DesktopSidebar(
           borderBottomWidth: 1,
           borderColor: c().border,
           ...(props.collapsed
-            ? { alignItems: "center", paddingVertical: 7 }
-            : { paddingHorizontal: 7, paddingBottom: 5, gap: 1 }),
+            ? { alignItems: "center", paddingVertical: space[8] }
+            : { paddingHorizontal: space[8], paddingBottom: space[4], gap: 1 }),
         }}
       >
         <If when={props.collapsed}>
@@ -229,7 +231,7 @@ export function DesktopSidebar(
       />
       <View
         style={{
-          paddingHorizontal: 7,
+          paddingHorizontal: space[8],
           height: 37,
           justifyContent: "center",
           flexShrink: 0,

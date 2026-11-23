@@ -63,7 +63,7 @@ export function ChatList(
     ...row,
     justifyContent: "space-between",
     height: space[32],
-    paddingHorizontal: 14,
+    paddingHorizontal: space[16],
     borderBottomWidth: 1,
     flexShrink: 0,
   } as const;
@@ -167,7 +167,7 @@ export function ChatList(
                 justifyContent: "center",
               }}
             >
-              <Caption text={text("groups")} phone />
+              <Caption text={text("groups")} />
             </View>
           </If>
           <Each of={groups()} key={(group) => group.id}>
@@ -195,7 +195,7 @@ export function ChatList(
             )}
           </Each>
           <If when={!props.collapsed && groups().length === 0}>
-            <Label variant="small" tone="muted" style={{ padding: 14 }}>
+            <Label variant="small" tone="muted" style={{ padding: space[16] }}>
               {text(query() ? "noMatchingConversations" : "noConversations")}
             </Label>
           </If>

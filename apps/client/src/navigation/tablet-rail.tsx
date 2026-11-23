@@ -1,7 +1,7 @@
 import type { Navigation } from "./routes";
 import { View } from "nsh";
 import { colors, focusRing, sizes } from "../components";
-import { space } from "../components/tokens";
+import { avatar, space } from "../components/tokens";
 import { useText } from "../i18n";
 import { useHost } from "../services/host";
 import { CaptainFace } from "./captain";
@@ -41,7 +41,7 @@ export function TabletRail(props: Navigation) {
           cursor: "pointer",
         }}
       >
-        <CaptainFace size={28} />
+        <CaptainFace size={avatar.lg} />
       </View>
       <Each of={sections}>
         {(item) => (
@@ -63,8 +63,8 @@ export function TabletRail(props: Navigation) {
         style={{
           borderTopWidth: 1,
           borderColor: c().border,
-          paddingBottom: 6,
-          paddingTop: 3,
+          paddingBottom: space[8],
+          paddingTop: space[4],
         }}
       >
         <NavItem

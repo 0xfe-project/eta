@@ -15,7 +15,7 @@ import {
   textFaces,
   textStyle,
 } from "./theme";
-import { opacity, space, weight } from "./tokens";
+import { icon, opacity, space, tracking, weight } from "./tokens";
 
 export function Label(props: {
   children?: JSX.Element | string | number;
@@ -23,6 +23,8 @@ export function Label(props: {
   variant?: TextVariant;
   tone?: keyof typeof light;
   weight?: number;
+  /** Letter spacing, in em of the role's size: `caps` with uppercase, `tight` for display text. */
+  tracking?: keyof typeof tracking;
   lines?: number;
   style?: TextStyle;
 }) {
@@ -40,6 +42,9 @@ export function Label(props: {
         fontWeight: props.weight ?? weight.regular,
         color: color()[props.tone ?? "ink"],
         numberOfLines: props.lines,
+        ...(props.tracking
+          ? { letterSpacing: tracking[props.tracking] * face().size }
+          : {}),
         ...props.style,
       }}
     >
@@ -160,8 +165,6 @@ export function Markdown(props: {
 
 export function Caption(props: {
   text: string;
-  /** The phone's 0.08em tracking. */
-  phone?: boolean;
   tone?: keyof typeof light;
   style?: TextStyle;
 }) {
@@ -169,11 +172,8 @@ export function Caption(props: {
     <Label
       variant="caption"
       tone={props.tone ?? "muted"}
-      style={{
-        letterSpacing: props.phone ? 0.8 : 1.2,
-        textTransform: "uppercase",
-        ...props.style,
-      }}
+      tracking="caps"
+      style={{ textTransform: "uppercase", ...props.style }}
     >
       {props.text}
     </Label>
@@ -185,7 +185,7 @@ export function RowChevron() {
   return (
     <View style={{ width: space[16], alignItems: "center", flexShrink: 0 }}>
       <View style={{ opacity: opacity.disabled }}>
-        <Icon name="right" size={14} />
+        <Icon name="right" size={icon.md} />
       </View>
     </View>
   );

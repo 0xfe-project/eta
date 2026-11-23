@@ -68,7 +68,7 @@ function proseStyles(theme: TextTheme) {
     blockquote: {
       borderLeftWidth: border.thick,
       borderColor: c.strong,
-      paddingLeft: 10,
+      paddingLeft: space[12],
       color: c.muted,
     },
     list: { paddingLeft: space[20] },
@@ -87,7 +87,7 @@ function proseStyles(theme: TextTheme) {
     rule: {
       borderTopWidth: 1,
       borderColor: c.border,
-      marginVertical: 6,
+      marginVertical: space[8],
     },
     strong: { fontWeight: weight.strong },
     emphasis: { fontStyle: "italic" as const },

@@ -121,7 +121,7 @@ export function Header(props: {
           {props.title}
         </Label>
         <If when={props.subtitle}>
-          <View style={{ ...row, gap: 6 }}>
+          <View style={{ ...row, gap: space[4] }}>
             <If when={props.subtitleTone}>
               <StatusDot color={color()[props.subtitleTone ?? "muted"]} />
             </If>

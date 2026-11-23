@@ -22,7 +22,7 @@ import { uiText } from "../../../i18n";
 import { SmoothScroll } from "../../smooth-scroll";
 import { Caption, Label } from "../../text";
 import { colors, row } from "../../theme";
-import { control, space, weight } from "../../tokens";
+import { control, opacity, space, weight } from "../../tokens";
 import { MentionChip } from "../chip";
 import { standIn } from "../view-source";
 
@@ -301,8 +301,8 @@ function SuggestionList(props: {
             props.menu()?.kind === "hash" ? "taskSuggestions" : "mentions",
           )}
           style={{
-            paddingHorizontal: 10,
-            paddingTop: 6,
+            paddingHorizontal: space[12],
+            paddingTop: space[8],
             paddingBottom: space[4],
           }}
         />
@@ -330,7 +330,7 @@ function SuggestionList(props: {
                 style={{
                   ...row,
                   height: control.md,
-                  paddingHorizontal: 10,
+                  paddingHorizontal: space[12],
                   gap: space[8],
                   cursor: "pointer",
                   backgroundColor:
@@ -349,7 +349,9 @@ function SuggestionList(props: {
                   variant="small"
                   lines={1}
                   tone={props.selected() === i() ? "canvas" : "muted"}
-                  style={{ opacity: props.selected() === i() ? 0.75 : 1 }}
+                  style={{
+                    opacity: props.selected() === i() ? opacity.muted : 1,
+                  }}
                 >
                   {props.describe?.(entry()) ?? ""}
                 </Label>

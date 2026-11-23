@@ -4,7 +4,7 @@ import { Image, View } from "nsh";
 import { colors, Label, row, sizes } from "../components";
 import { pickerTarget } from "../components/element-picker";
 import { phoneTabPaths } from "../components/icons";
-import { avatar, space, weight } from "../components/tokens";
+import { avatar, icon, space, weight } from "../components/tokens";
 import { useText } from "../i18n";
 import { taskNeedsAttention } from "../pages/tasks/status";
 import { useHost } from "../services/host";
@@ -72,7 +72,7 @@ export function PhoneTabItem(props: {
         <Image
           src={glyph()}
           fadeDuration={0}
-          style={{ width: 22, height: 22, flexShrink: 0 }}
+          style={{ width: icon.lg, height: icon.lg, flexShrink: 0 }}
         />
         <Label
           variant="caption"
@@ -91,7 +91,7 @@ export function PhoneTabItem(props: {
             marginLeft: space[4],
             height: 14,
             minWidth: 14,
-            paddingHorizontal: 3,
+            paddingHorizontal: space[4],
             backgroundColor: c().blue,
             alignItems: "center",
             justifyContent: "center",

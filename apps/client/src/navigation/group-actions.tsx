@@ -78,7 +78,7 @@ export function GroupMenu(props: {
           <Label
             variant="caption"
             tone="muted"
-            style={{ paddingHorizontal: 9, paddingVertical: 6 }}
+            style={{ paddingHorizontal: space[8], paddingVertical: space[8] }}
           >
             {uiText("groupsReadOnly")}
           </Label>
@@ -204,7 +204,7 @@ export function ArchiveGroup(props: {
       <If
         when={props.phone}
         else={
-          <View style={{ paddingTop: 6, gap: space[8] }}>
+          <View style={{ paddingTop: space[8], gap: space[8] }}>
             {body()}
             <View
               style={{

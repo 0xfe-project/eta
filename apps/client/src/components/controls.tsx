@@ -27,7 +27,7 @@ import {
   textFaces,
   textStyle,
 } from "./theme";
-import { control, icon, shadow, space, weight } from "./tokens";
+import { control, icon, opacity, shadow, space, weight } from "./tokens";
 
 export function Button(props: {
   label: string;
@@ -110,7 +110,7 @@ export function Button(props: {
         flexShrink: 0,
         height: size(),
         minWidth: size(),
-        paddingHorizontal: props.iconOnly ? 3 : 8,
+        paddingHorizontal: props.iconOnly ? space[4] : space[8],
         borderWidth: ghost() ? 0 : 1,
         borderColor: props.selected
           ? color().ink
@@ -125,7 +125,8 @@ export function Button(props: {
             : ghost()
               ? undefined
               : color().canvas,
-        opacity: props.disabled && props.dimDisabled !== false ? 0.45 : 1,
+        opacity:
+          props.disabled && props.dimDisabled !== false ? opacity.disabled : 1,
         cursor: props.disabled ? "default" : "pointer",
         ...props.style,
       }}
@@ -153,7 +154,7 @@ export function Button(props: {
         <Label
           variant="caption"
           tone={textTone()}
-          style={{ opacity: 0.55, marginLeft: space[4] }}
+          style={{ opacity: opacity.disabled, marginLeft: space[4] }}
         >
           {props.shortcut}
         </Label>
@@ -162,7 +163,7 @@ export function Button(props: {
         <Icon
           name={props.end!}
           tone={primary() ? "buttonInk" : "muted"}
-          size={10}
+          size={icon.sm}
         />
       </If>
     </View>
@@ -378,8 +379,8 @@ export function ActionMenu(props: {
             justifyContent: props.value ? "space-between" : "center",
             minWidth: space[32],
             height: 30,
-            paddingHorizontal: 7,
-            gap: 7,
+            paddingHorizontal: space[8],
+            gap: space[8],
             cursor: "pointer",
             borderWidth: props.value ? 1 : 0,
             borderColor: c().strong,
@@ -419,9 +420,9 @@ export function ActionMenu(props: {
               size={
                 props.value
                   ? props.valueTone
-                    ? 14
-                    : 9
-                  : (props.iconSize ?? 17)
+                    ? icon.md
+                    : icon.sm
+                  : (props.iconSize ?? icon.md)
               }
               tone={props.valueTone}
             />
@@ -472,8 +473,8 @@ export function ActionItem(props: {
             : {
                 ...row,
                 minHeight: touchScreen ? touchRow : 33,
-                paddingHorizontal: 9,
-                gap: 6,
+                paddingHorizontal: space[8],
+                gap: space[4],
               }
       }
       onSelect={props.onSelect}

@@ -39,6 +39,10 @@ export const weight = { regular: 400, strong: 600 } as const;
  * text. */
 export const tracking = { caps: 0.08, tight: -0.02 } as const;
 
+/** A tracking step in pixels, for text of `size` (a `Label` takes `tracking` itself). */
+export const tracked = (step: keyof typeof tracking, size: number) =>
+  tracking[step] * size;
+
 /** Border widths. */
 export const border = { hair: 1, thick: 2 } as const;
 
@@ -95,18 +99,16 @@ export interface DensityDefaults {
 }
 
 /**
- * The defaults by density. `regular` is what each component took before densities existed, so
- * nothing changes where nothing says `compact`; the parts that do say it with `<Compact>`
- * (density.tsx) at their root. Moving `regular` onto the named steps (an icon of 16, an avatar of
- * 24) is a change of its own.
+ * The defaults by density: `regular` takes the main area's steps, `compact` the side panels'
+ * (the parts that say `<Compact>` at their root, density.tsx).
  */
 export const densities: Record<DensityName, DensityDefaults> = {
   regular: {
     text: "body",
     button: control.sm,
     buttonIcon: icon.sm,
-    icon: 14,
-    avatar: 20,
+    icon: icon.md,
+    avatar: avatar.md,
     editor: "body",
   },
   compact: {
