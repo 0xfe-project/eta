@@ -1,8 +1,4 @@
-import type {
-  AgentResults,
-  CaptainResults,
-  ProvidersView,
-} from "@eta/client-contracts";
+import type { CaptainResults, ProvidersView } from "@eta/client-contracts";
 import type { Layout } from "../components";
 import type { Flavor, PaletteId } from "../components/palettes";
 import type { Page } from "../navigation/routes";
@@ -36,7 +32,6 @@ import { Onboard } from "../pages/onboarding";
 import { PhoneHostSetup } from "../pages/onboarding/phone-host-setup";
 import { Plugins } from "../pages/plugins/plugins";
 import { Routines } from "../pages/routines/routines";
-import { AgentEditor } from "../pages/settings/agents/editor";
 import { Settings } from "../pages/settings/settings";
 import { NewTask } from "../pages/tasks/new-task";
 import { TaskDetail } from "../pages/tasks/task-detail";
@@ -102,7 +97,6 @@ export function Workspace(props: {
     task.set(taskBackStack.pop() ?? "");
   }
   const newGroup = signal(false);
-  const newAgent = signal(false);
   const newTask = signal(false);
   const setup = signal(start.page === "onboard");
   let checkedSetup = false;
@@ -159,12 +153,6 @@ export function Workspace(props: {
   function showSettings(section: SettingsSection = "Agents") {
     settings.set(section);
     link("settings");
-  }
-  async function direct(agentId: string) {
-    const result = await host.action(() =>
-      host.call<AgentResults["direct"]>("agents", "direct", { agentId }),
-    );
-    if (result) open(result.conversation.id);
   }
   let openingCaptain = false;
   async function openCaptain() {
@@ -290,9 +278,7 @@ export function Workspace(props: {
             // A group reads as current only while its conversation is open.
             selected={page() === "chat" && !settings() ? conversation() : ""}
             onConversation={open}
-            onAgent={(id) => void direct(id)}
             onCreate={() => newGroup.set(true)}
-            onCreateAgent={() => newAgent.set(true)}
             onArchived={leaveArchived}
             collapsed={collapsed()}
             onToggle={() => collapsed.set(!collapsed())}
@@ -334,9 +320,7 @@ export function Workspace(props: {
               layout={props.layout}
               selected={conversation()}
               onConversation={open}
-              onAgent={(id) => void direct(id)}
               onCreate={() => newGroup.set(true)}
-              onCreateAgent={() => newAgent.set(true)}
               onArchived={leaveArchived}
             />
           </If>
@@ -511,21 +495,6 @@ export function Workspace(props: {
           layout={props.layout}
           onOpen={open}
           onClose={() => newGroup.set(false)}
-        />
-      </If>
-      <If when={newAgent()}>
-        <AgentEditor
-          phone={phone()}
-          tablet={props.layout === "tablet"}
-          onClose={() => newAgent.set(false)}
-          onModelServices={() => {
-            newAgent.set(false);
-            showSettings("Model services");
-          }}
-          onRuntimes={() => {
-            newAgent.set(false);
-            showSettings("Runtimes");
-          }}
         />
       </If>
       <If when={newTask()}>

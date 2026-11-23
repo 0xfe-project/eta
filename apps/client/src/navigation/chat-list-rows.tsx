@@ -1,4 +1,4 @@
-import type { AgentView, ConversationSummary } from "@eta/client-contracts";
+import type { ConversationSummary } from "@eta/client-contracts";
 import type { JSX, Point } from "nsh";
 import type { Layout } from "../components";
 import { View } from "nsh";
@@ -6,7 +6,6 @@ import { colors, focusRing, Label, row, RowChevron } from "../components";
 import { AgentFace } from "../components/agent-face";
 import { touchScreen } from "../components/menu";
 import { StatusDot } from "../components/status-dot";
-import { uiText } from "../i18n";
 import { relativeTime, useHost } from "../services/host";
 import { RailEntry } from "./rail-controls";
 
@@ -117,11 +116,9 @@ export function GroupRow(props: {
           {...menu}
           label={props.group.name}
           selected={props.selected}
-          status={
-            props.group.participants.some((person) => person.status !== "idle")
-              ? "active"
-              : undefined
-          }
+          active={props.group.participants.some(
+            (person) => person.status !== "idle",
+          )}
           onPress={props.onPress}
         >
           <View style={{ ...row, height: 14 }}>
@@ -137,84 +134,5 @@ export function GroupRow(props: {
       </If>
       {props.children}
     </View>
-  );
-}
-
-export function AgentRow(props: {
-  agent: AgentView;
-  phone: boolean;
-  collapsed?: boolean;
-  onPress: () => void;
-}) {
-  const c = colors();
-  const detailed = () => (
-    <View
-      role="button"
-      accessibilityLabel={props.agent.name}
-      onPress={() => props.onPress()}
-      hoverStyle={{ backgroundColor: c().selected }}
-      focusVisibleStyle={focusRing(c())}
-      style={{
-        ...row,
-        height: props.phone ? 52 : 33,
-        paddingLeft: 16,
-        paddingRight: props.phone ? 12 : 16,
-        flexShrink: 0,
-        gap: props.phone ? 12 : 8,
-        borderBottomWidth: 1,
-        borderColor: c().border,
-        cursor: "pointer",
-      }}
-    >
-      <View
-        style={{
-          width: props.phone ? 36 : 20,
-          paddingLeft: props.phone ? 2 : 0,
-          flexShrink: 0,
-        }}
-      >
-        <AgentFace id={props.agent.id} size={20} />
-      </View>
-      <Label lines={1} style={{ flex: 1 }}>
-        {props.agent.name}
-      </Label>
-      <If when={props.phone}>
-        <Label
-          variant="caption"
-          tone="muted"
-          lines={1}
-          style={{ minWidth: 32, textAlign: "right", flexShrink: 0 }}
-        >
-          {props.agent.status === "working"
-            ? uiText("working2")
-            : uiText("idle")}
-        </Label>
-        <RowChevron />
-      </If>
-      <If when={!props.phone}>
-        <StatusDot
-          color={props.agent.status === "working" ? c().blue : c().muted}
-          opacity={props.agent.status === "working" ? 1 : 0.4}
-        />
-      </If>
-    </View>
-  );
-  return (
-    <If when={props.collapsed} else={detailed()}>
-      <RailEntry
-        label={props.agent.name}
-        agent
-        status={
-          props.agent.status === "working"
-            ? "active"
-            : props.agent.status === "waiting_for_input"
-              ? "waiting"
-              : "idle"
-        }
-        onPress={props.onPress}
-      >
-        <AgentFace id={props.agent.id} size={24} />
-      </RailEntry>
-    </If>
   );
 }
