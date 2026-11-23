@@ -373,6 +373,23 @@ describe("the connection test right after a real sign-in", () => {
       for (const value of carried(s)) expect(value).toBe(`Bearer ${token}`);
     }, 30_000);
 
+    it("never overwrites a header the user configured under the same name (a Cursor credential)", async () => {
+      const s = await signedIn();
+      const token = (await s.access())!;
+      const credential = "Bearer cursor-credential-0123456789";
+      const result = await s.test({
+        headers: { [NAME]: credential },
+        tokenHeader: { name: NAME, format: "bearer" },
+      });
+      expect(result.status).toBe("ok");
+      const values = carried(s);
+      expect(values.length).toBeGreaterThan(0);
+      for (const value of values) {
+        expect(value).toBe(credential);
+        expect(value).not.toBe(`Bearer ${token}`);
+      }
+    }, 30_000);
+
     it("uses the new token after a refresh, not the one it started with", async () => {
       const s = await signedIn();
       const old = (await s.access())!;

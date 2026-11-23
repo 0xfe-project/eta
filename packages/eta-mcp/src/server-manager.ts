@@ -586,7 +586,16 @@ export class ServerManager {
       }
       headers.Authorization = `Bearer ${token}`;
     }
-    const tokenHeader = authProvider ? definition.tokenHeader : undefined;
+    // A header the user configured under the same name carries a credential of its own (a Cursor
+    // account's, say): the sign-in token never replaces it.
+    const tokenHeader =
+      authProvider &&
+      !Object.keys(headers).some(
+        (one) =>
+          one.toLowerCase() === definition.tokenHeader?.name.toLowerCase(),
+      )
+        ? definition.tokenHeader
+        : undefined;
     // The sign-in token as a header of the server's own choosing, read fresh on every request (a
     // refresh in between is picked up), and only on a request to this server's origin.
     const withToken = (base: FetchLike): FetchLike =>
