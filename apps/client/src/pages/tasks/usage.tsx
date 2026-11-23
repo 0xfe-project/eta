@@ -7,6 +7,7 @@ import type { TextStyle, ViewStyle } from "nsh";
 import type { TextVariant } from "../../components";
 import { signal, Storage, View } from "nsh";
 import { colors, Label, row } from "../../components";
+import { weight } from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
 import { followSession, useHost } from "../../services/host";
 
@@ -146,12 +147,8 @@ export function HintBox(props: { lines: string[] }) {
       }}
     >
       <Each of={props.lines}>
-        {(line, index) => (
-          <Label
-            variant="small"
-            tone="canvas"
-            weight={index() === 0 ? 500 : 400}
-          >
+        {(line) => (
+          <Label variant="small" tone="canvas" weight={weight.regular}>
             {line()}
           </Label>
         )}

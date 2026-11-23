@@ -14,6 +14,7 @@ import {
 } from "../../components";
 import { useModels } from "../../components/model-select";
 import { StatusDot } from "../../components/status-dot";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { AddSource } from "../settings/models/add-source";
@@ -149,7 +150,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                   {`${step()}/2`}
                 </Label>
               </If>
-              <Label variant="small" weight={600}>
+              <Label variant="small" weight={weight.strong}>
                 {step() === 1
                   ? uiText("connectAModel")
                   : step() === 2
@@ -203,7 +204,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
           </If>
           <If when={step() === 1}>
             <View style={{ padding: 16, paddingTop: 24, gap: 4 }}>
-              <Label variant="subtitle" weight={600}>
+              <Label variant="subtitle" weight={weight.strong}>
                 {uiText("whichModelShouldYourAgentsUse")}
               </Label>
               <Label tone="mutedInk">
@@ -252,7 +253,9 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                       <Icon name="plugins" size={14} />
                     </View>
                     <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                      <Label weight={500}>{source().name ?? source().id}</Label>
+                      <Label weight={weight.regular}>
+                        {source().name ?? source().id}
+                      </Label>
                       <Label variant="small" tone="muted">
                         {[
                           ...(source().hasApiKey
@@ -329,7 +332,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
             <View
               style={{ paddingHorizontal: 16, paddingVertical: 24, gap: 4 }}
             >
-              <Label variant="subtitle" weight={600}>
+              <Label variant="subtitle" weight={weight.strong}>
                 {uiText("yourAgentsAreReady")}
               </Label>
               <Label tone="mutedInk">

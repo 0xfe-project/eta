@@ -11,6 +11,7 @@ import {
   row,
 } from "../../../components";
 import { CloseButton } from "../../../components/navigation-buttons";
+import { weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 
 export function ArtifactToolbar(props: {
@@ -120,7 +121,7 @@ export function ArtifactToolbar(props: {
           <Icon name="appWindow" size={14} tone="muted" />
           <Label
             variant="small"
-            weight={500}
+            weight={weight.regular}
             lines={1}
             style={{ flex: 1, minWidth: 0 }}
           >

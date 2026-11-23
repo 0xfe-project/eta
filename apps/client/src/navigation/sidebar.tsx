@@ -14,6 +14,7 @@ import {
   sizes,
 } from "../components";
 import { pickerTarget } from "../components/element-picker";
+import { weight } from "../components/tokens";
 import { useText } from "../i18n";
 import { useHost } from "../services/host";
 import { CaptainCard, RailCaptain } from "./captain";
@@ -65,7 +66,7 @@ export function NavItem(props: {
       <Label
         variant={wide() ? "body" : "caption"}
         tone={wide() || props.selected ? "ink" : "muted"}
-        weight={phone() && props.selected ? 600 : 400}
+        weight={phone() && props.selected ? weight.strong : weight.regular}
         style={wide() ? { flex: 1 } : undefined}
       >
         {text(props.item[1])}

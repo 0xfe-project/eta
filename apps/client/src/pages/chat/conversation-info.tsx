@@ -16,6 +16,7 @@ import {
 import { AgentFace } from "../../components/agent-face";
 import { ContextRing, useContextUsage } from "../../components/context-ring";
 import { BackButton, CloseButton } from "../../components/navigation-buttons";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskGlyph } from "../tasks/status";
@@ -63,7 +64,7 @@ export function PhoneConversationInfo(props: {
           }}
         >
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Label weight={600} lines={1}>
+            <Label weight={weight.strong} lines={1}>
               {props.name}
             </Label>
             <If when={props.project}>
@@ -169,7 +170,7 @@ export function PhoneConversationInfo(props: {
             iconSize={16}
             onPress={() => allArtifacts.set(false)}
           />
-          <Label weight={600} lines={1}>
+          <Label weight={weight.strong} lines={1}>
             {uiText("chatArtifacts")}
           </Label>
           <Label variant="small" tone="muted" style={{ flex: 1 }}>

@@ -146,7 +146,7 @@ export function ElementPickerOverlay() {
                 width: target().bounds.size.width,
                 height: target().bounds.size.height,
                 borderWidth: 1,
-                borderColor: "#638eff",
+                borderColor: "#638eff", // design-value: the element picker is a developer tool, drawn the same over any theme
               }}
             />
           )}
@@ -161,9 +161,10 @@ export function ElementPickerOverlay() {
                 bottom: 76,
                 right: 16,
                 padding: 8,
-                backgroundColor: "#24417f",
+                backgroundColor: "#24417f", // design-value: the element picker's notice, a developer tool
               }}
             >
+              {/* design-value: the element picker's notice, a developer tool */}
               <Text style={{ color: "#ffffff", fontSize: type("small").size }}>
                 {text(message())}
               </Text>

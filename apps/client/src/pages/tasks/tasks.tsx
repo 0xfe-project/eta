@@ -22,6 +22,7 @@ import {
   textStyle,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { taskDropZones } from "./drag";
@@ -398,7 +399,7 @@ export function Tasks(props: {
                           ? "ink"
                           : undefined
                     }
-                    titleWeight={designed() ? 600 : undefined}
+                    titleWeight={designed() ? weight.strong : undefined}
                     titleTone={designed() ? "ink" : undefined}
                     description={
                       host.state().missing.tasks
@@ -603,7 +604,7 @@ function ArchivedTasks(props: {
     >
       <View style={{ ...row, gap: 8 }}>
         <View style={{ ...row, flex: 1, gap: 6, alignItems: "baseline" }}>
-          <Label weight={600}>{uiText("archivedTitle")}</Label>
+          <Label weight={weight.strong}>{uiText("archivedTitle")}</Label>
           <Label variant="small" tone="muted">
             {props.count}
           </Label>
@@ -673,7 +674,7 @@ function ArchivedTasks(props: {
                   ? uiText("noArchivedTasksMatch")
                   : uiText("noArchivedTasks")
               }
-              titleWeight={600}
+              titleWeight={weight.strong}
               titleTone="ink"
               description={
                 props.count ? undefined : uiText("noArchivedTasksDescription")

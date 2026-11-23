@@ -12,6 +12,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { EarlierReportCard, LatestReportCard } from "./history";
 import {
@@ -64,7 +65,11 @@ export function RoutineDetail(props: {
           }}
         >
           <View style={{ ...row, height: 24, gap: 16 }}>
-            <Label variant="subtitle" weight={600} style={{ flex: 1 }}>
+            <Label
+              variant="subtitle"
+              weight={weight.strong}
+              style={{ flex: 1 }}
+            >
               {props.routine.name}
             </Label>
             <View style={{ ...row, gap: 8 }}>

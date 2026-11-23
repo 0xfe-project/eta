@@ -17,6 +17,7 @@ import {
 } from "../../components/eta-editor";
 import { touchScreen } from "../../components/menu";
 import { StatusDot } from "../../components/status-dot";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 import { ActorName } from "./creator";
@@ -281,7 +282,7 @@ export function TaskFields(detail: {
             <Label variant="caption" tone="muted" style={{ width: 68 }}>
               {field()[0]}
             </Label>
-            <Label variant="small" style={{ flex: 1 }} weight={500}>
+            <Label variant="small" style={{ flex: 1 }} weight={weight.regular}>
               {field()[1]}
             </Label>
           </View>
@@ -349,7 +350,7 @@ export function TaskRail(detail: {
         <If
           when={executor()}
           else={
-            <Label variant="small" weight={600}>
+            <Label variant="small" weight={weight.strong}>
               {uiText("unassigned")}
             </Label>
           }
@@ -381,7 +382,7 @@ export function TaskRail(detail: {
               onPress={() => detail.onTask(entry().taskId)}
               style={{ cursor: "pointer", flex: 1 }}
             >
-              <Label variant="small" weight={600}>
+              <Label variant="small" weight={weight.strong}>
                 {`#${entry().number} ${entry().title}`}
               </Label>
             </View>
@@ -389,7 +390,7 @@ export function TaskRail(detail: {
         </If>
       </RailRow>
       <RailRow label={uiText("workspace")}>
-        <Label variant="small" weight={600} style={{ flex: 1 }}>
+        <Label variant="small" weight={weight.strong} style={{ flex: 1 }}>
           {item().workspace.mode === "worktree"
             ? uiText("taskOwnWorktree")
             : (item().workspace.path ?? uiText("taskProjectDirectory"))}
@@ -413,7 +414,7 @@ export function TaskRail(detail: {
               </If>
             )}
           </If>
-          <Label variant="caption" weight={600}>
+          <Label variant="caption" weight={weight.strong}>
             {runText()}
           </Label>
           <If when={canStartOver()}>
@@ -433,7 +434,7 @@ export function TaskRail(detail: {
               }}
             >
               <Icon name="refresh" size={11} />
-              <Label variant="caption" weight={600}>
+              <Label variant="caption" weight={weight.strong}>
                 {uiText("rerun")}
               </Label>
             </View>
@@ -460,7 +461,11 @@ export function TaskRail(detail: {
                     style={{ ...row, gap: 5, cursor: "pointer" }}
                   >
                     <TaskGlyph status={edge().status} size={12} />
-                    <Label variant="caption" weight={600} style={{ flex: 1 }}>
+                    <Label
+                      variant="caption"
+                      weight={weight.strong}
+                      style={{ flex: 1 }}
+                    >
                       {`#${edge().number} ${edge().title}`}
                     </Label>
                   </View>
@@ -549,7 +554,7 @@ export function TaskRail(detail: {
                 >
                   <View style={{ ...row, gap: 5 }}>
                     <TaskGlyph status={edge().status} size={12} />
-                    <Label variant="caption" weight={600}>
+                    <Label variant="caption" weight={weight.strong}>
                       {`#${edge().number} ${edge().title}`}
                     </Label>
                   </View>
@@ -565,7 +570,7 @@ export function TaskRail(detail: {
         </RailRow>
       </If>
       <RailRow label={uiText("taskUpdated")}>
-        <Label variant="small" weight={600}>
+        <Label variant="small" weight={weight.strong}>
           {taskMoment(item().updatedAt)}
         </Label>
       </RailRow>

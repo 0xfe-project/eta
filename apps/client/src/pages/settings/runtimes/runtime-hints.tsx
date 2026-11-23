@@ -8,6 +8,7 @@ import {
   monoFontFamily,
   row,
 } from "../../../components";
+import { weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { WarningLine } from "../section";
 import { LOGIN_COMMANDS } from "./status";
@@ -122,7 +123,11 @@ export function RuntimeHints(props: {
             <Each of={props.explained} key={(item) => item.id}>
               {(item) => (
                 <View style={{ gap: 1 }}>
-                  <Label variant="small" weight={500} tone="mutedInk">
+                  <Label
+                    variant="small"
+                    weight={weight.regular}
+                    tone="mutedInk"
+                  >
                     {item().label}
                   </Label>
                   <RuntimeWords>{item().detail ?? ""}</RuntimeWords>

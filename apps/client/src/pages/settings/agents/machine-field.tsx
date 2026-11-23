@@ -10,6 +10,7 @@ import {
 } from "../../../components";
 import { CheckControl } from "../../../components/check-control";
 import { StatusDot } from "../../../components/status-dot";
+import { weight } from "../../../components/tokens";
 import { localizedText, uiText } from "../../../i18n";
 
 import { EditorRow } from "./editor-row";
@@ -54,7 +55,7 @@ export function MachineField(props: { form: AgentForm }) {
             borderColor: c().border,
           }}
         >
-          <Label weight={600}>{uiText("runsOn")}</Label>
+          <Label weight={weight.strong}>{uiText("runsOn")}</Label>
         </View>
         <Each of={items()} key={(item) => item.id ?? "project"}>
           {(item) => {
@@ -77,7 +78,7 @@ export function MachineField(props: { form: AgentForm }) {
                 }}
               >
                 <View style={{ ...grow, gap: 2 }}>
-                  <Label weight={500} lines={1}>
+                  <Label weight={weight.regular} lines={1}>
                     {item().title}
                   </Label>
                   <View style={{ ...row, gap: 5 }}>

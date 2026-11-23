@@ -1,6 +1,7 @@
 import type { JSX } from "nsh";
 import { View } from "nsh";
 import { colors, Label, row } from "../../../components";
+import { weight } from "../../../components/tokens";
 
 export function GroupHeading(props: {
   title: string;
@@ -20,7 +21,7 @@ export function GroupHeading(props: {
         borderColor: c().border,
       }}
     >
-      <Label weight={600}>{props.title}</Label>
+      <Label weight={weight.strong}>{props.title}</Label>
       {props.children}
     </View>
   );

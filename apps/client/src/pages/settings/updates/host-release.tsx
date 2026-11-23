@@ -4,6 +4,7 @@ import { openUrl, View } from "nsh";
 import { Button, colors, Icon, Label, row } from "../../../components";
 import { chatText } from "../../../components/eta-editor";
 import { StatusDot } from "../../../components/status-dot";
+import { weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { canStartHost } from "../../connection/local-host";
@@ -199,7 +200,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
         </If>
         <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
           <View testID="host-version">
-            <Label weight={500}>{version()}</Label>
+            <Label weight={weight.regular}>{version()}</Label>
           </View>
           <If when={props.phone}>
             <View style={{ ...row, gap: 5 }}>

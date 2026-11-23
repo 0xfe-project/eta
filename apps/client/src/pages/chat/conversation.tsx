@@ -28,6 +28,7 @@ import {
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
+import { shadow, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { CaptainFace } from "../../navigation/captain";
 import { follow, useHost } from "../../services/host";
@@ -424,7 +425,7 @@ export function Conversation(props: {
                     count: approvals().length,
                   })}
             </Label>
-            <Label variant="small" weight={600}>
+            <Label variant="small" weight={weight.strong}>
               {uiText("reviewProposals")}
             </Label>
             <View style={{ opacity: 0.45 }}>
@@ -558,7 +559,7 @@ export function Conversation(props: {
                   borderWidth: 1,
                   borderColor: c().border,
                   backgroundColor: c().canvas,
-                  boxShadow: [{ x: 0, y: 4, blur: 16, color: "#0a0a0a14" }],
+                  boxShadow: [shadow.float],
                   cursor: "pointer",
                 }}
               >

@@ -5,10 +5,11 @@ import { Button, Field } from "./controls";
 import { Modal } from "./modal";
 import { Label } from "./text";
 import { colors, row, textFaces, textStyle } from "./theme";
+import { weight } from "./tokens";
 
 /**
  * A small dialog with one field and Cancel / Save, such as renaming a machine or a group. Off
- * phones it is the design's 480pt dialog (14pt padding, a 14/500 title); on a phone it is a bottom
+ * phones it is the design's 480pt dialog (14pt padding, a 14/400 title); on a phone it is a bottom
  * sheet with full-width Save and Cancel. Return saves, Escape cancels.
  */
 export function FieldDialog(props: {
@@ -64,7 +65,7 @@ export function FieldDialog(props: {
       sheet={props.phone}
       plainSheetHeader={props.phone}
       compact={!props.phone}
-      titleWeight={500}
+      titleWeight={weight.regular}
       overPhoneNavigation
       dismissible={!props.busy}
       onClose={props.onClose}

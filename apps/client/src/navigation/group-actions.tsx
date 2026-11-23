@@ -10,6 +10,7 @@ import { ActionItem, Button, Label, Modal, row } from "../components";
 import { FieldDialog } from "../components/field-dialog";
 import { MenuFrame } from "../components/menu";
 import { colors } from "../components/theme";
+import { shadow, weight } from "../components/tokens";
 import { uiText } from "../i18n";
 import { useHost } from "../services/host";
 
@@ -51,7 +52,7 @@ export function GroupMenu(props: {
           borderWidth: 1,
           borderColor: c().strong,
           backgroundColor: c().canvas,
-          boxShadow: [{ x: 0, y: 8, blur: 24, color: "#0000001f" }],
+          boxShadow: [shadow.popover],
         }}
         sheetHeader={
           <View style={{ ...row, height: 36, paddingHorizontal: 16 }}>
@@ -196,7 +197,7 @@ export function ArchiveGroup(props: {
       overPhoneNavigation
       hideHeader={props.phone}
       compact={!props.phone}
-      titleWeight={500}
+      titleWeight={weight.regular}
       dismissible={!busy()}
       onClose={props.onClose}
     >
@@ -231,7 +232,7 @@ export function ArchiveGroup(props: {
         }
       >
         <View style={{ ...row, height: 44, paddingLeft: 16, paddingRight: 8 }}>
-          <Label weight={600} style={{ flex: 1 }}>
+          <Label weight={weight.strong} style={{ flex: 1 }}>
             {title()}
           </Label>
         </View>

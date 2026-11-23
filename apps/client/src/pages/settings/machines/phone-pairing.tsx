@@ -3,6 +3,7 @@ import { Clipboard, Image, Overlay, signal, View, windowSize } from "nsh";
 import qrCode from "qrcode-generator";
 import { Button, colors, Field, Label, Modal, row } from "../../../components";
 import { CloseButton } from "../../../components/navigation-buttons";
+import { weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 
@@ -71,7 +72,7 @@ export function PhonePairing(props: {
     >
       <If when={popover()}>
         <View style={{ ...row, justifyContent: "space-between" }}>
-          <Label variant="small" weight={600}>
+          <Label variant="small" weight={weight.strong}>
             {uiText("scanWithYourPhone")}
           </Label>
           <CloseButton size={16} onPress={props.onClose} />
@@ -99,7 +100,7 @@ export function PhonePairing(props: {
           }}
           style={{
             alignSelf: "center",
-            backgroundColor: "#ffffff",
+            backgroundColor: "#ffffff", // design-value: a QR code is read black on white in either theme
             borderWidth: 1,
             borderColor: c().border,
             padding: 10,

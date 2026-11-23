@@ -5,6 +5,7 @@
 import type { RoutineInfo } from "@eta/client-contracts";
 import { signal, View } from "nsh";
 import { Button, Label, Modal, row } from "../../components";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -52,7 +53,7 @@ export function DeleteRoutine(props: {
       overPhoneNavigation
       hideHeader={props.phone}
       compact={!props.phone}
-      titleWeight={500}
+      titleWeight={weight.regular}
       dismissible={!busy()}
       onClose={props.onClose}
     >
@@ -87,7 +88,7 @@ export function DeleteRoutine(props: {
         }
       >
         <View style={{ ...row, height: 44, paddingLeft: 16, paddingRight: 8 }}>
-          <Label weight={600} style={{ flex: 1 }}>
+          <Label weight={weight.strong} style={{ flex: 1 }}>
             {title()}
           </Label>
         </View>

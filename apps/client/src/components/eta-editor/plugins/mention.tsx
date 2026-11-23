@@ -22,6 +22,7 @@ import { uiText } from "../../../i18n";
 import { SmoothScroll } from "../../smooth-scroll";
 import { Caption, Label } from "../../text";
 import { colors, row } from "../../theme";
+import { weight } from "../../tokens";
 import { MentionChip } from "../chip";
 import { standIn } from "../view-source";
 
@@ -334,7 +335,7 @@ function SuggestionList(props: {
               >
                 <Label
                   variant="small"
-                  weight={600}
+                  weight={weight.strong}
                   lines={1}
                   tone={props.selected() === i() ? "canvas" : "ink"}
                 >

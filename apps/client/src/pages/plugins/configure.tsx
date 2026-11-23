@@ -24,6 +24,7 @@ import {
 } from "../../components";
 import { CloseButton } from "../../components/navigation-buttons";
 import { ToggleSwitch } from "../../components/toggle-switch";
+import { shadow, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { pluginConfigText, PluginSelect } from "./config-fields";
@@ -96,7 +97,7 @@ export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
       panelStyle={props.phone ? sheetEdge : undefined}
       overPhoneNavigation={props.phone}
       compact={!props.phone}
-      titleWeight={500}
+      titleWeight={weight.regular}
       width={512}
       onClose={props.onClose}
     >
@@ -135,7 +136,7 @@ export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
             label={busy() ? uiText("adding") : uiText("addPluginSubmit")}
             tone="primary"
             size={props.phone ? 44 : 28}
-            labelWeight={props.phone ? 500 : undefined}
+            labelWeight={props.phone ? weight.regular : undefined}
             dimDisabled={false}
             style={{
               opacity: !repo().trim() || busy() ? 0.5 : 1,
@@ -577,7 +578,7 @@ export function ConfigurePlugin(props: {
             backgroundColor: c().canvas,
             borderWidth: 1,
             borderColor: c().strong,
-            boxShadow: [{ x: 0, y: 8, blur: 24, color: "#0000001f" }],
+            boxShadow: [shadow.popover],
           }}
         >
           <View
@@ -591,7 +592,7 @@ export function ConfigurePlugin(props: {
             }}
           >
             <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-              <Label weight={600}>{title()}</Label>
+              <Label weight={weight.strong}>{title()}</Label>
               <Label variant="small" tone="muted">
                 {pluginConfigText("fields")}
               </Label>

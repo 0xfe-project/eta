@@ -1,6 +1,7 @@
 import { Image, View } from "nsh";
 import photo from "../../../assets/onboard.jpg";
 import { colors, fill, Label } from "../../components";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 export function ConnectionIntro(props: { phone: boolean }) {
@@ -105,12 +106,21 @@ export function PhoneHero() {
       />
       <Label
         variant="display"
-        weight={600}
-        style={{ color: "#ffffff", maxWidth: 320, letterSpacing: -0.9 }}
+        weight={weight.strong}
+        style={{
+          // design-value: text over the photograph, the same in either theme
+          color: "#ffffff",
+          maxWidth: 320,
+          letterSpacing: -0.9,
+        }}
       >
         {uiText("yourMachinesInYourPocket")}
       </Label>
-      <Label variant="caption" style={{ color: "#ffffffbf" }}>
+      <Label
+        variant="caption"
+        // design-value: text over the photograph, the same in either theme
+        style={{ color: "#ffffffbf" }}
+      >
         Photo: Barnabas Davoti / Unsplash
       </Label>
     </View>

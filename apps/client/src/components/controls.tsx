@@ -27,6 +27,7 @@ import {
   textFaces,
   textStyle,
 } from "./theme";
+import { shadow, weight } from "./tokens";
 
 export function Button(props: {
   label: string;
@@ -139,7 +140,10 @@ export function Button(props: {
       <If when={!props.iconOnly}>
         <Label
           variant={props.labelVariant ?? "small"}
-          weight={props.labelWeight ?? (props.selected ? 600 : 400)}
+          weight={
+            props.labelWeight ??
+            (props.selected ? weight.strong : weight.regular)
+          }
           tone={textTone()}
         >
           {props.label}
@@ -331,16 +335,14 @@ export function ActionMenu(props: {
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
-        boxShadow: props.lifted
-          ? [{ x: 0, y: 8, blur: 24, color: "#0000001f" }]
-          : undefined,
+        boxShadow: props.lifted ? [shadow.popover] : undefined,
       }}
       sheetHeader={
         <If when={props.sheetTitle}>
           <View
             style={{ ...row, height: 44, paddingLeft: 16, paddingRight: 8 }}
           >
-            <Label weight={600} lines={1} style={grow}>
+            <Label weight={weight.strong} lines={1} style={grow}>
               {props.sheetTitle}
             </Label>
             <Button

@@ -1,6 +1,7 @@
 import type { RoutineSummary } from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, Label, row } from "../../components";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { clockDistance, runHistory, scheduleLabel } from "./schedule";
 
@@ -32,7 +33,12 @@ export function RoutineRow(props: {
       }}
     >
       <View style={{ flex: 1, minWidth: 0, gap: props.tablet ? 3 : 4 }}>
-        <Label weight={props.tablet && props.selected ? 600 : 400} lines={1}>
+        <Label
+          weight={
+            props.tablet && props.selected ? weight.strong : weight.regular
+          }
+          lines={1}
+        >
           {props.item.name}
         </Label>
         <Label variant="small" tone="muted">

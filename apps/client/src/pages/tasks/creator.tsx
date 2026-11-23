@@ -2,6 +2,7 @@ import type { TaskActor } from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, Label, row } from "../../components";
 import { AgentFace, UserFace } from "../../components/agent-face";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -39,7 +40,12 @@ export function ActorName(props: { actor: TaskActor; size: number }) {
       ) : (
         <UserFace size={props.size} />
       )}
-      <Label variant="small" weight={600} lines={1} style={{ flexShrink: 1 }}>
+      <Label
+        variant="small"
+        weight={weight.strong}
+        lines={1}
+        style={{ flexShrink: 1 }}
+      >
         {actorLabel(props.actor, host.agent)}
       </Label>
     </View>
@@ -72,7 +78,7 @@ export function CreatorChip(props: { creator: TaskActor }) {
       ) : (
         <UserFace size={14} />
       )}
-      <Label variant="caption" weight={600} lines={1}>
+      <Label variant="caption" weight={weight.strong} lines={1}>
         {name()}
       </Label>
     </View>

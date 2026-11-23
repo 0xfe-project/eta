@@ -13,6 +13,7 @@ import {
   row,
   SmoothScroll,
 } from "../../../components";
+import { weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { LetterBox, PaneBack, SectionHeader } from "../section";
@@ -254,7 +255,13 @@ export function SubscriptionDetail(props: {
                 }}
               >
                 <Label
-                  weight={tab() === item() ? (props.phone ? 600 : 500) : 400}
+                  weight={
+                    tab() === item()
+                      ? props.phone
+                        ? weight.strong
+                        : weight.regular
+                      : weight.regular
+                  }
                   tone={
                     tab() === item()
                       ? "ink"
@@ -290,7 +297,7 @@ export function SubscriptionDetail(props: {
         >
           <If when={props.phone}>{summary()}</If>
           <Label
-            weight={600}
+            weight={weight.strong}
             style={{ padding: 16 }}
           >{`${uiText("models2")} ${models().length}`}</Label>
           <Each of={models()} key={(item) => item.id}>

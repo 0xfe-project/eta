@@ -32,6 +32,7 @@ import {
   touchRow,
   touchScreen,
 } from "../../components/menu";
+import { weight } from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { upcomingTimes, weekday } from "./schedule";
@@ -65,7 +66,7 @@ function PhoneSelect(props: {
       sheetStyle={{ paddingBottom: 24 }}
       sheetHeader={
         <View style={{ ...row, height: 44, paddingHorizontal: 16 }}>
-          <Label weight={600}>{props.title}</Label>
+          <Label weight={weight.strong}>{props.title}</Label>
         </View>
       }
       trigger={
@@ -452,7 +453,7 @@ export function RoutineEditor(props: {
               {props.item?.name ?? uiText("routines2")}
             </Label>
           </View>
-          <Label weight={600}>
+          <Label weight={weight.strong}>
             {props.item ? uiText("edit") : uiText("newRoutine")}
           </Label>
         </View>

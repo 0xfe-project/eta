@@ -16,6 +16,7 @@ import {
 } from "../../components";
 import { sendShortcut } from "../../components/eta-editor";
 import { CloseButton } from "../../components/navigation-buttons";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { createDescription, DescriptionBox } from "./description-box";
@@ -282,7 +283,7 @@ export function TaskDetailDialogs(props: {
           sheet={phone()}
           hideHeader={phone()}
           compact={!phone()}
-          titleWeight={500}
+          titleWeight={weight.regular}
           panelStyle={
             props.layout === "desktop"
               ? { position: "absolute", top: 340 }
@@ -335,7 +336,7 @@ export function TaskDetailDialogs(props: {
               }}
             >
               <Label
-                weight={600}
+                weight={weight.strong}
                 style={{ flex: 1, minWidth: 0, paddingTop: 6 }}
               >
                 {archiveTitle()}

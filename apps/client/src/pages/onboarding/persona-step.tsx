@@ -1,6 +1,7 @@
 import { View } from "nsh";
 import { colors, Icon, Label, row } from "../../components";
 import { CheckControl } from "../../components/check-control";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 export interface Persona {
@@ -115,7 +116,7 @@ export function PersonaStep(props: {
           gap: 4,
         }}
       >
-        <Label variant="subtitle" weight={600}>
+        <Label variant="subtitle" weight={weight.strong}>
           {props.working
             ? uiText("gettingYourAgentsReady")
             : uiText("whoWouldYouLikeToWork")}
@@ -133,7 +134,7 @@ export function PersonaStep(props: {
         <If when={props.missing}>
           <View style={emptyState}>
             <Icon name="warning" size={16} tone="red" />
-            <Label weight={500} style={{ textAlign: "center" }}>
+            <Label weight={weight.regular} style={{ textAlign: "center" }}>
               {uiText("unableToLoadAgents")}
             </Label>
             <Label
@@ -147,7 +148,7 @@ export function PersonaStep(props: {
         </If>
         <If when={!(props.missing || props.loading || props.cards.length)}>
           <View style={emptyState}>
-            <Label weight={500} style={{ textAlign: "center" }}>
+            <Label weight={weight.regular} style={{ textAlign: "center" }}>
               {uiText("noPersonaCardsToInstall")}
             </Label>
           </View>
@@ -193,7 +194,7 @@ export function PersonaStep(props: {
                 }}
               >
                 <View style={{ flex: 1, gap: 2 }}>
-                  <Label weight={500}>{card().name}</Label>
+                  <Label weight={weight.regular}>{card().name}</Label>
                   <Label variant="small" tone="muted">
                     {card().description}
                   </Label>
