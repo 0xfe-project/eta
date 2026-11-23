@@ -7,7 +7,7 @@ import { signal, View } from "nsh";
 import { Button, colors, grow, Label, Modal, row } from "../../components";
 import { BackButton } from "../../components/navigation-buttons";
 import { StatusDot } from "../../components/status-dot";
-import { weight } from "../../components/tokens";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { LetterBox } from "./section";
@@ -82,16 +82,16 @@ export function ExternalAgentDetail(props: {
         <View
           style={{
             ...row,
-            height: 48,
+            height: space[48],
             flexShrink: 0,
-            gap: 4,
-            paddingHorizontal: 8,
+            gap: space[4],
+            paddingHorizontal: space[8],
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
-          <BackButton size={40} iconSize={16} onPress={props.onClose} />
-          <View style={{ ...row, flex: 1, minWidth: 0, gap: 4 }}>
+          <BackButton size={40} iconSize={icon.md} onPress={props.onClose} />
+          <View style={{ ...row, flex: 1, minWidth: 0, gap: space[4] }}>
             <LetterBox name={props.agent.label} />
             <Label weight={weight.strong} lines={1} style={{ flex: 1 }}>
               {props.agent.label}
@@ -99,11 +99,15 @@ export function ExternalAgentDetail(props: {
           </View>
           <If
             when={props.onEdit && props.writable !== false}
-            else={<View style={{ width: 40, height: 40, flexShrink: 0 }} />}
+            else={
+              <View
+                style={{ width: space[40], height: space[40], flexShrink: 0 }}
+              />
+            }
           >
             <Button
               label={uiText("settingsEdit")}
-              size={28}
+              size={control.md}
               style={{ paddingHorizontal: 10, flexShrink: 0 }}
               disabled={testing() || removing()}
               onPress={() => props.onEdit?.()}
@@ -115,9 +119,9 @@ export function ExternalAgentDetail(props: {
         <View
           style={{
             ...row,
-            minHeight: 44,
-            paddingHorizontal: 16,
-            paddingVertical: 8,
+            minHeight: control.touch,
+            paddingHorizontal: space[16],
+            paddingVertical: space[8],
             borderBottomWidth: 1,
             borderColor: c().border,
             gap: 6,
@@ -144,12 +148,12 @@ export function ExternalAgentDetail(props: {
             <View
               style={{
                 ...row,
-                paddingHorizontal: 16,
-                paddingVertical: 8,
-                minHeight: 44,
+                paddingHorizontal: space[16],
+                paddingVertical: space[8],
+                minHeight: control.touch,
                 borderBottomWidth: 1,
                 borderColor: c().border,
-                gap: props.phone ? 16 : 8,
+                gap: props.phone ? space[16] : space[8],
               }}
             >
               <Label
@@ -179,8 +183,8 @@ export function ExternalAgentDetail(props: {
         >
           <View
             style={{
-              paddingHorizontal: 16,
-              paddingVertical: 8,
+              paddingHorizontal: space[16],
+              paddingVertical: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
@@ -202,10 +206,10 @@ export function ExternalAgentDetail(props: {
           <View
             style={{
               ...row,
-              minHeight: 44,
-              gap: 16,
-              paddingHorizontal: 16,
-              paddingVertical: 8,
+              minHeight: control.touch,
+              gap: space[16],
+              paddingHorizontal: space[16],
+              paddingVertical: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
@@ -223,10 +227,10 @@ export function ExternalAgentDetail(props: {
           <View
             style={{
               ...row,
-              minHeight: 44,
-              gap: 16,
-              paddingHorizontal: 16,
-              paddingVertical: 8,
+              minHeight: control.touch,
+              gap: space[16],
+              paddingHorizontal: space[16],
+              paddingVertical: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
@@ -245,8 +249,8 @@ export function ExternalAgentDetail(props: {
         <If when={host.can("acp.test")}>
           <View
             style={{
-              paddingHorizontal: 16,
-              paddingVertical: props.phone ? 12 : 16,
+              paddingHorizontal: space[16],
+              paddingVertical: props.phone ? space[12] : space[16],
               borderTopWidth: 1,
               borderColor: c().border,
             }}
@@ -268,7 +272,7 @@ export function ExternalAgentDetail(props: {
           phone={props.phone}
           onClose={() => confirm.set(false)}
         >
-          <View style={{ padding: 16, gap: 10 }}>
+          <View style={{ padding: space[16], gap: 10 }}>
             <Label>
               {uiText("removeFromWithCount", {
                 label: props.agent.label,

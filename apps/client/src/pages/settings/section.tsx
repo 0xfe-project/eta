@@ -2,7 +2,7 @@ import type { JSX, ViewRef, ViewStyle } from "nsh";
 import { Image, View, windowSize } from "nsh";
 import { ActionMenu, Button, colors, Icon, Label, row } from "../../components";
 import { StatusDot } from "../../components/status-dot";
-import { weight } from "../../components/tokens";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { tintedLogo } from "./models/logos";
 
@@ -10,9 +10,9 @@ import { tintedLogo } from "./models/logos";
 export const emptyStyle: ViewStyle = {
   flex: 0,
   justifyContent: "flex-start",
-  gap: 4,
-  paddingVertical: 24,
-  paddingHorizontal: 16,
+  gap: space[4],
+  paddingVertical: space[24],
+  paddingHorizontal: space[16],
 };
 
 /** The header that opens a settings pane or a group inside one: title, count, actions, description. */
@@ -33,9 +33,9 @@ export function SectionHeader(props: {
     <View
       style={{
         flexShrink: 0,
-        gap: 2,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        gap: space[2],
+        paddingHorizontal: space[16],
+        paddingVertical: space[8],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
@@ -43,8 +43,8 @@ export function SectionHeader(props: {
       <View
         style={{
           ...row,
-          height: props.rowHeight ?? (props.phone ? 28 : 24),
-          gap: 8,
+          height: props.rowHeight ?? (props.phone ? control.md : space[24]),
+          gap: space[8],
         }}
       >
         {props.leading}
@@ -54,7 +54,7 @@ export function SectionHeader(props: {
             alignItems: "baseline",
             flex: 1,
             minWidth: 0,
-            gap: 8,
+            gap: space[8],
           }}
         >
           <Label
@@ -71,7 +71,7 @@ export function SectionHeader(props: {
           </If>
         </View>
         <If when={props.children}>
-          <View style={{ ...row, gap: 8 }}>{props.children}</View>
+          <View style={{ ...row, gap: space[8] }}>{props.children}</View>
         </If>
       </View>
       <If when={props.description}>
@@ -95,7 +95,7 @@ export function StatusLane(props: { status?: EntityStatus; width?: number }) {
       style={{
         ...row,
         width: props.width ?? 100,
-        height: 20,
+        height: space[20],
         gap: 6,
         flexShrink: 0,
       }}
@@ -117,7 +117,7 @@ export function StatusLane(props: { status?: EntityStatus; width?: number }) {
 /** The phone's status line under an entity's name: a 6px square and a short label. */
 export function StatusLine(props: { status: EntityStatus }) {
   return (
-    <View style={{ ...row, height: 16, gap: 6, flexShrink: 0 }}>
+    <View style={{ ...row, height: space[16], gap: 6, flexShrink: 0 }}>
       <StatusDot color={props.status.color} />
       <Label variant="small" tone="mutedInk" lines={1}>
         {props.status.label}
@@ -162,10 +162,10 @@ export function WarningLine(props: { text: string; outline?: boolean }) {
     <View
       style={{ ...row, alignSelf: "stretch", gap: 6, alignItems: "flex-start" }}
     >
-      <View style={{ height: 16, justifyContent: "center" }}>
+      <View style={{ height: space[16], justifyContent: "center" }}>
         <Icon
           name={props.outline ? "warning" : "warningFill"}
-          size={12}
+          size={icon.sm}
           tone="warning"
         />
       </View>
@@ -214,8 +214,8 @@ export function EntityRow(props: {
         alignItems: "flex-start",
         flexShrink: 0,
         gap: 10,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        paddingHorizontal: space[16],
+        paddingVertical: space[8],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
@@ -241,8 +241,8 @@ export function EntityRow(props: {
         <If when={props.leading}>
           <View
             style={{
-              width: props.leadingSize ?? 24,
-              height: props.leadingSize ?? 24,
+              width: props.leadingSize ?? space[24],
+              height: props.leadingSize ?? space[24],
               flexShrink: 0,
               alignItems: "center",
               justifyContent: "center",
@@ -251,7 +251,7 @@ export function EntityRow(props: {
             {props.leading}
           </View>
         </If>
-        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
           <Label
             weight={weight.regular}
             tone={props.titleTone ?? "ink"}
@@ -283,7 +283,7 @@ export function EntityRow(props: {
           <If when={!props.stacked || props.caret}>
             <View
               style={{
-                width: 24,
+                width: space[24],
                 height: trailingHeight(),
                 flexShrink: 0,
                 alignItems: "center",
@@ -291,7 +291,7 @@ export function EntityRow(props: {
               }}
             >
               <If when={props.caret}>
-                <Icon name="right" size={16} tone="mutedInk" />
+                <Icon name="right" size={icon.md} tone="mutedInk" />
               </If>
             </View>
           </If>
@@ -300,9 +300,9 @@ export function EntityRow(props: {
         <ActionMenu
           label={props.menuLabel ?? props.title}
           triggerStyle={{
-            minWidth: 24,
-            width: 24,
-            height: 24,
+            minWidth: space[24],
+            width: space[24],
+            height: space[24],
             paddingHorizontal: 0,
           }}
         >

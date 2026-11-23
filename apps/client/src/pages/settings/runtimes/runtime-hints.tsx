@@ -8,7 +8,7 @@ import {
   monoFontFamily,
   row,
 } from "../../../components";
-import { weight } from "../../../components/tokens";
+import { icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { WarningLine } from "../section";
 import { LOGIN_COMMANDS } from "./status";
@@ -51,10 +51,10 @@ export function RuntimeHints(props: {
     props.runtimes === null || props.explained.length > 0 || !!signIn();
   return (
     <If when={shown()}>
-      <View style={{ alignSelf: "stretch", gap: 4 }}>
+      <View style={{ alignSelf: "stretch", gap: space[4] }}>
         <If when={signIn()}>
           {(command) => (
-            <View style={{ gap: 2 }}>
+            <View style={{ gap: space[2] }}>
               <WarningLine
                 outline
                 text={uiText("runtimeSignInHint", {
@@ -86,18 +86,18 @@ export function RuntimeHints(props: {
             {uiText("runtimeUnreachable")}
           </Label>
         </If>
-        <View style={{ ...row, gap: 8, minHeight: 20 }}>
+        <View style={{ ...row, gap: space[8], minHeight: space[20] }}>
           <If when={props.explained.length > 0}>
             <View
               role="button"
               accessibilityLabel={uiText("runtimeDetails")}
               accessibilityState={{ expanded: open() }}
               onPress={() => open.set(!open())}
-              style={{ ...row, gap: 4, cursor: "pointer" }}
+              style={{ ...row, gap: space[4], cursor: "pointer" }}
             >
               <Icon
                 name={open() ? "down" : "right"}
-                size={12}
+                size={icon.sm}
                 tone="mutedInk"
               />
               <Label variant="small" tone="mutedInk">
@@ -119,7 +119,7 @@ export function RuntimeHints(props: {
           />
         </View>
         <If when={open() && props.explained.length > 0}>
-          <View style={{ gap: 6, paddingLeft: 16 }}>
+          <View style={{ gap: 6, paddingLeft: space[16] }}>
             <Each of={props.explained} key={(item) => item.id}>
               {(item) => (
                 <View style={{ gap: 1 }}>

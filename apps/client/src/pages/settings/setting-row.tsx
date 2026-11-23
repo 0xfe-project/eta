@@ -4,7 +4,7 @@ import { View } from "nsh";
 import { ActionItem, colors, Icon, Label, row } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { useModels } from "../../components/model-select";
-import { weight } from "../../components/tokens";
+import { avatar, space, weight } from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { EntityRow, WarningLine } from "./section";
@@ -35,7 +35,7 @@ export function SettingRow(props: {
         ...row,
         minHeight: 55,
         gap: 10,
-        paddingHorizontal: 16,
+        paddingHorizontal: space[16],
         paddingVertical: 7,
         borderBottomWidth: 1,
         borderColor: c().border,
@@ -92,7 +92,9 @@ export function AgentSetting(props: {
   return (
     <EntityRow
       title={props.agent.name}
-      leading={<AgentFace id={props.agent.id} size={props.avatar ?? 24} />}
+      leading={
+        <AgentFace id={props.agent.id} size={props.avatar ?? avatar.md} />
+      }
       leadingSize={props.phone ? 28 : props.avatar}
       stacked={props.phone}
       caret={props.phone}

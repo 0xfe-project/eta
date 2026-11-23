@@ -3,7 +3,7 @@ import type { AgentForm } from "./form";
 import { View } from "nsh";
 import { colors, Empty, Label, row } from "../../../components";
 import { CheckControl } from "../../../components/check-control";
-import { weight } from "../../../components/tokens";
+import { space, weight } from "../../../components/tokens";
 import { localizedText, uiText } from "../../../i18n";
 
 import { useHost } from "../../../services/host";
@@ -101,8 +101,8 @@ export function AgentPlugins(props: { form: AgentForm }) {
                 style={{
                   ...row,
                   alignItems: "flex-start",
-                  paddingHorizontal: 16,
-                  paddingVertical: 8,
+                  paddingHorizontal: space[16],
+                  paddingVertical: space[8],
                   gap: 10,
                   borderBottomWidth: 1,
                   borderColor: c().border,
@@ -113,7 +113,7 @@ export function AgentPlugins(props: { form: AgentForm }) {
                   when={phoneEditor()}
                   else={
                     <>
-                      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                      <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                         <Label weight={weight.regular}>{item().name}</Label>
                         <If
                           when={checked() && !ready()}
@@ -135,7 +135,7 @@ export function AgentPlugins(props: { form: AgentForm }) {
                     </>
                   }
                 >
-                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                  <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                     <Label weight={weight.regular}>{item().name}</Label>
                     <StatusLine status={status(item())} />
                     <Label variant="small" tone="muted">

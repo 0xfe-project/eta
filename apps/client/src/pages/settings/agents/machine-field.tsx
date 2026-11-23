@@ -10,7 +10,7 @@ import {
 } from "../../../components";
 import { CheckControl } from "../../../components/check-control";
 import { StatusDot } from "../../../components/status-dot";
-import { weight } from "../../../components/tokens";
+import { control, space, weight } from "../../../components/tokens";
 import { localizedText, uiText } from "../../../i18n";
 
 import { EditorRow } from "./editor-row";
@@ -48,8 +48,8 @@ export function MachineField(props: { form: AgentForm }) {
       <View role="radiogroup" accessibilityLabel={uiText("runsOn")}>
         <View
           style={{
-            paddingHorizontal: 16,
-            height: 44,
+            paddingHorizontal: space[16],
+            height: control.touch,
             justifyContent: "center",
             borderBottomWidth: 1,
             borderColor: c().border,
@@ -71,13 +71,13 @@ export function MachineField(props: { form: AgentForm }) {
                   ...row,
                   minHeight: 55,
                   paddingHorizontal: 22,
-                  gap: 16,
+                  gap: space[16],
                   borderBottomWidth: 1,
                   borderColor: c().border,
                   cursor: "pointer",
                 }}
               >
-                <View style={{ ...grow, gap: 2 }}>
+                <View style={{ ...grow, gap: space[2] }}>
                   <Label weight={weight.regular} lines={1}>
                     {item().title}
                   </Label>
@@ -99,8 +99,8 @@ export function MachineField(props: { form: AgentForm }) {
         <If when={!phoneEditor()}>
           <View
             style={{
-              paddingHorizontal: 16,
-              paddingVertical: 8,
+              paddingHorizontal: space[16],
+              paddingVertical: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}

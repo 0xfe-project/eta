@@ -9,7 +9,7 @@ import {
   Icon,
   SmoothScroll,
 } from "../../../components";
-import { weight } from "../../../components/tokens";
+import { icon, weight } from "../../../components/tokens";
 import { uiText, useText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 
@@ -98,7 +98,7 @@ export function McpSettings(props: { layout: Layout; onBack: () => void }) {
                           titleTone={item().overriddenBy ? "muted" : "ink"}
                           strike={!!item().overriddenBy}
                           leading={
-                            <Icon name="plugins" size={16} tone="muted" />
+                            <Icon name="plugins" size={icon.md} tone="muted" />
                           }
                           meta={meta(item())}
                           status={

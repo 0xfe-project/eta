@@ -10,6 +10,7 @@ import {
   textFaces,
 } from "../../../components";
 import { LayoutSelect } from "../../../components/select";
+import { control, icon, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { GroupHeading } from "./group-heading";
@@ -25,9 +26,9 @@ function SettingBand(props: {
       style={{
         ...row,
         justifyContent: "space-between",
-        gap: 8,
+        gap: space[8],
         minHeight: 55,
-        paddingHorizontal: 16,
+        paddingHorizontal: space[16],
         paddingVertical: 7,
         borderBottomWidth: 1,
         borderColor: c().border,
@@ -87,14 +88,18 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
           ...(props.phone ? {} : row),
           minHeight: 71,
           gap: props.phone ? 4 : 14,
-          paddingHorizontal: 16,
+          paddingHorizontal: space[16],
           paddingVertical: 7,
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
       >
         <View
-          style={{ flex: props.phone ? undefined : 1, minWidth: 0, gap: 2 }}
+          style={{
+            flex: props.phone ? undefined : 1,
+            minWidth: 0,
+            gap: space[2],
+          }}
         >
           <Label>{uiText("channel")}</Label>
           <If when={!props.phone}>
@@ -129,7 +134,7 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
               <View
                 style={{
                   ...row,
-                  height: props.phone ? 32 : 24,
+                  height: props.phone ? space[32] : space[24],
                   gap: 6,
                   paddingHorizontal: 10,
                   borderWidth: 1,
@@ -140,7 +145,7 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
                 <Label variant="small" lines={1} style={{ flex: 1 }}>
                   {channelName()}
                 </Label>
-                <Icon name="down" size={12} tone="muted" />
+                <Icon name="down" size={icon.sm} tone="muted" />
               </View>
             }
             onChange={({ value }) => {
@@ -165,7 +170,7 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
           focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
           style={{
             ...row,
-            height: props.phone ? 28 : 24,
+            height: props.phone ? control.md : space[24],
             width: 98,
             paddingHorizontal: 10,
             justifyContent: "space-between",
@@ -180,7 +185,7 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
               transform: advancedOpen() ? [{ rotate: "180deg" }] : undefined,
             }}
           >
-            <Icon name="down" size={12} tone="muted" />
+            <Icon name="down" size={icon.sm} tone="muted" />
           </View>
         </View>
       </GroupHeading>

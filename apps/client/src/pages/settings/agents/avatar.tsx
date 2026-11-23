@@ -11,6 +11,7 @@ import {
 } from "nsh";
 import { Button, colors, focusRing, Label, row } from "../../../components";
 import { AgentFace } from "../../../components/agent-face";
+import { avatar, control, space } from "../../../components/tokens";
 import { localizedText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { EditorRow } from "./editor-row";
@@ -190,7 +191,7 @@ export function AvatarRow(props: {
         </If>
       }
     >
-      <View style={{ ...row, gap: 8 }}>
+      <View style={{ ...row, gap: space[8] }}>
         <View
           testID={`avatar:${draw.shown()}`}
           style={{
@@ -203,7 +204,7 @@ export function AvatarRow(props: {
           <AgentFace
             id={draw.agentId}
             seed={draw.shown()}
-            size={props.phone ? 40 : 32}
+            size={props.phone ? avatar.xl : avatar.lg}
           />
         </View>
         <Button
@@ -212,12 +213,18 @@ export function AvatarRow(props: {
           iconOnly
           iconSize={14}
           tone="ghost"
-          size={props.phone ? 32 : 24}
+          size={props.phone ? control.lg : control.sm}
           onPress={draw.roll}
         />
         <View
           accessibilityLabel={localizedText("Recent faces", "最近的头像")}
-          style={{ ...row, flex: 1, minWidth: 0, flexWrap: "wrap", gap: 4 }}
+          style={{
+            ...row,
+            flex: 1,
+            minWidth: 0,
+            flexWrap: "wrap",
+            gap: space[4],
+          }}
         >
           <Each of={draw.seeds()} key={(face) => face}>
             {(face, index) => (
@@ -234,8 +241,8 @@ export function AvatarRow(props: {
                 hoverStyle={{ opacity: 1 }}
                 focusVisibleStyle={focusRing(c())}
                 style={{
-                  width: 24,
-                  height: 24,
+                  width: space[24],
+                  height: space[24],
                   alignItems: "center",
                   justifyContent: "center",
                   borderWidth: 1,

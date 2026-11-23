@@ -5,18 +5,17 @@ import type { AppearanceProps } from "./appearance";
 import type { SettingsSection } from "./overview";
 import { signal, View } from "nsh";
 import {
-  ActionItem,
   Button,
   colors,
   Empty,
   grow,
   Header,
-  Icon,
   Modal,
   row,
   SmoothScroll,
 } from "../../components";
 import { CloseButton } from "../../components/navigation-buttons";
+import { icon, space } from "../../components/tokens";
 import { uiText, useText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { AgentEditor } from "./agents/editor";
@@ -39,7 +38,7 @@ import { SettingsNavigation } from "./navigation";
 import { NetworkSettings } from "./network";
 import { sections, useSettingsOverview } from "./overview";
 import { RuntimeList } from "./runtimes/runtime-list";
-import { emptyStyle, EntityRow, SectionHeader } from "./section";
+import { emptyStyle, SectionHeader } from "./section";
 import { AgentSetting } from "./setting-row";
 import { TaskSettings } from "./tasks";
 import { UpdateSettings } from "./updates/update";
@@ -238,7 +237,10 @@ export function Settings(
                         >
                           <Button
                             label={uiText("addEtaTokenPlan")}
-                            style={{ marginTop: 8, paddingHorizontal: 10 }}
+                            style={{
+                              marginTop: space[8],
+                              paddingHorizontal: 10,
+                            }}
                             onPress={() => sources.set("eta")}
                           />
                         </Empty>
@@ -513,7 +515,7 @@ export function Settings(
             <View style={grow} />
             <CloseButton
               size={16}
-              iconSize={16}
+              iconSize={icon.md}
               style={{ paddingHorizontal: 0 }}
               onPress={props.onClose}
             />
