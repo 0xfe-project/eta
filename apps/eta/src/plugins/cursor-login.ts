@@ -13,6 +13,9 @@
  */
 import { Buffer } from "node:buffer";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { CURSOR_AUTH_HEADER } from "@eta/client-contracts";
+
+export { CURSOR_AUTH_HEADER };
 
 const CURSOR_LOGIN_PAGE = "https://cursor.com/loginDeepControl";
 const CURSOR_POLL_URL = "https://api2.cursor.sh/auth/poll";

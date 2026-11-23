@@ -69,6 +69,33 @@ function Fixture() {
               ...plugin("fresh-plugin", true),
               servers: [{ ...remote, login: "needs_login" as const }],
             },
+            // A Cursor-hosted server: the host says so from the address and the saved header.
+            {
+              ...plugin("cursor-new-plugin", true),
+              servers: [
+                {
+                  ...remote,
+                  name: "drive",
+                  url: "https://api.cursor.com/rest-mcp/google-drive/mcp",
+                  login: "needs_login" as const,
+                  cursorServer: true,
+                  cursorSignedIn: false,
+                },
+              ],
+            },
+            {
+              ...plugin("cursor-in-plugin", true),
+              servers: [
+                {
+                  ...remote,
+                  name: "drive",
+                  url: "https://api.cursor.com/rest-mcp/google-drive/mcp",
+                  login: "needs_login" as const,
+                  cursorServer: true,
+                  cursorSignedIn: true,
+                },
+              ],
+            },
             {
               ...plugin("acme-plugin", true),
               servers: [{ ...remote, login: "needs_login" as const }],
@@ -227,6 +254,20 @@ function Fixture() {
           prompts: [
             { name: "prompt_0", description: "a prompt", params: ["topic"] },
           ],
+        };
+      }
+      // The credential is saved but the server still does not take the sign-in.
+      if (
+        method === "testServer" &&
+        (args as { name?: string }).name === "cursor-in-plugin"
+      ) {
+        return {
+          status: "needs_login",
+          message: "the server did not accept the stored sign-in",
+          ms: 7,
+          tools: [],
+          toolCount: 0,
+          cursorServer: true,
         };
       }
       if (method === "testServer") {

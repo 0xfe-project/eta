@@ -12,7 +12,11 @@ import type { Market } from "./market";
 import type { Plugins } from "./service";
 import { Args, productPlugin, publish } from "../wire";
 
-import { CursorLogin, isCursorServer } from "./cursor-login";
+import {
+  CURSOR_AUTH_HEADER,
+  CursorLogin,
+  isCursorServer,
+} from "./cursor-login";
 import { Logos, readOwnLogo } from "./logo";
 import { testConnection } from "./test-server";
 
@@ -349,7 +353,7 @@ export function pluginsPlugin(
           const args = new Args(call);
           const name = args.string("name");
           const server = args.string("server");
-          const header = args.optionalString("header") ?? "x-cursor-auth";
+          const header = args.optionalString("header") ?? CURSOR_AUTH_HEADER;
           // A Cursor credential goes only to Cursor's own servers.
           if (!isCursorServer(remoteUrl(name, server)))
             throw new Error(`${server} is not a Cursor server`);

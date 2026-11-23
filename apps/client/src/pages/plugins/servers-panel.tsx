@@ -3,6 +3,7 @@ import type {
   PluginTestResult,
   PluginView,
 } from "@eta/client-contracts";
+import { CURSOR_AUTH_HEADER } from "@eta/client-contracts";
 import { openUrl, signal, View } from "nsh";
 import {
   Button,
@@ -188,6 +189,12 @@ function ServerBadge(props: {
         text: uiText(authStyle("needs_setup").text),
         tone: authStyle("needs_setup").tone,
       };
+    if (
+      props.server.cursorServer === true &&
+      props.server.cursorSignedIn !== true &&
+      props.server.login !== "signed_in"
+    )
+      return { text: uiText("cursorNeedsLogin"), tone: "warningInk" };
     if (props.server.login === "expired")
       return {
         text: uiText(authStyle("expired").text),
@@ -512,6 +519,78 @@ function ResultInfo(props: { result: PluginTestResult }) {
   );
 }
 
+/**
+ * The Cursor account sign-in of a Cursor-hosted server, on the server's own box: shown from what the
+ * host knows (the address, and whether the credential header is saved), not from a test. Without a
+ * saved credential it is offered at once; with one, again only after a test the server did not accept.
+ * An older host does not send the two fields; a test result that names Cursor then stands in for them.
+ */
+function CursorLoginRow(props: {
+  item: PluginView;
+  server: PluginServerView;
+  test: Test;
+}) {
+  const result = props.test.result;
+  const isCursor = () =>
+    props.server.cursorServer === true || result()?.cursorServer === true;
+  const signedIn = () => props.server.cursorSignedIn === true;
+  const rejected = () =>
+    result()?.status === "needs_login" || result()?.status === "failed";
+  const offered = () =>
+    props.item.enabled &&
+    isCursor() &&
+    props.test.cursorId() === undefined &&
+    (!signedIn() || rejected());
+  return (
+    <>
+      <If when={offered()}>
+        <View style={{ gap: 8 }}>
+          <Label variant="small" tone="muted" style={{ lineHeight: 20 }}>
+            {signedIn()
+              ? uiText("cursorReloginNote")
+              : uiText("cursorLoginNote")}
+          </Label>
+          <View style={{ ...row, gap: 8 }}>
+            <Button
+              label={
+                signedIn() ? uiText("cursorRelogin") : uiText("cursorLogin")
+              }
+              tone="plain"
+              labelVariant="body"
+              size={28}
+              disabled={props.test.busy()}
+              onPress={() =>
+                props.test.cursorLogin(
+                  result()?.requiredHeader ?? CURSOR_AUTH_HEADER,
+                )
+              }
+            />
+          </View>
+        </View>
+      </If>
+      <If when={props.test.cursorId() !== undefined}>
+        <View style={{ ...row, gap: 8, flexWrap: "wrap" }}>
+          <Label variant="small" tone="muted">
+            {uiText("cursorLoginWaiting")}
+          </Label>
+          <Button
+            label={uiText("cursorLoginCancel")}
+            tone="plain"
+            labelVariant="body"
+            size={28}
+            onPress={props.test.cursorCancel}
+          />
+        </View>
+      </If>
+      <If when={props.test.cursorNote()}>
+        <Label variant="small" tone="muted">
+          {props.test.cursorNote()}
+        </Label>
+      </If>
+    </>
+  );
+}
+
 function TestResultView(props: { test: Test; stdio: boolean }) {
   const result = props.test.result;
   return (
@@ -565,44 +644,7 @@ function TestResultView(props: { test: Test; stdio: boolean }) {
                   }
                 />
               </If>
-              <If
-                when={
-                  result()!.cursorServer === true &&
-                  props.test.cursorId() === undefined
-                }
-              >
-                <Label variant="small" tone="muted">
-                  {uiText("cursorLoginNote")}
-                </Label>
-                <Button
-                  label={uiText("cursorLogin")}
-                  tone="plain"
-                  labelVariant="body"
-                  size={28}
-                  disabled={props.test.busy()}
-                  onPress={() =>
-                    props.test.cursorLogin(result()!.requiredHeader!)
-                  }
-                />
-              </If>
-              <If when={props.test.cursorId() !== undefined}>
-                <Label variant="small" tone="muted">
-                  {uiText("cursorLoginWaiting")}
-                </Label>
-                <Button
-                  label={uiText("cursorLoginCancel")}
-                  tone="plain"
-                  labelVariant="body"
-                  size={28}
-                  onPress={props.test.cursorCancel}
-                />
-              </If>
             </View>
-          </If>
-          <If when={props.test.cursorNote()}>
-            <Label variant="small" tone="muted">
-              {props.test.cursorNote()}
-            </Label>
           </If>
           <If when={result()!.status === "ok"}>
             <ResultInfo result={result()!} />
@@ -788,6 +830,7 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
                   </If>
                 </View>
               </If>
+              <CursorLoginRow item={props.item} server={server()} test={test} />
               <TestResultView
                 test={test}
                 stdio={server().transport === "stdio"}

@@ -6,7 +6,7 @@
 import type { PluginTestResult } from "@eta/client-contracts";
 import type { AuthProviderFor, McpServerDefinition } from "@eta/mcp";
 import { ServerManager } from "@eta/mcp";
-import { isCursorServer } from "./cursor-login";
+import { CURSOR_AUTH_HEADER, isCursorServer } from "./cursor-login";
 
 const TEST_TIMEOUT_MS = 15_000;
 const MAX_TOOLS = 100;
@@ -243,6 +243,24 @@ export async function testConnection(
       );
       const challenge =
         definition.url !== undefined && (await declaresOauth(definition.url));
+      if (
+        cursorFlag(definition).cursorServer === true &&
+        !Object.keys(definition.headers ?? {}).some(
+          (name) => name.toLowerCase() === CURSOR_AUTH_HEADER,
+        )
+      ) {
+        // A Cursor-hosted server with no Cursor credential saved: that comes first, whatever the 401
+        // said (it may name the header, or only "not logged in"). Then the service's own sign-in.
+        return {
+          ...empty(
+            "needs_login",
+            `no Cursor account credential is saved for this server: sign in with your Cursor account first, then sign in to the service itself`,
+            elapsed(),
+          ),
+          requiredHeader: CURSOR_AUTH_HEADER,
+          cursorServer: true,
+        };
+      }
       if (stored === undefined && rejected?.header !== undefined) {
         // Nothing is signed in yet, and the server's first demand is a header of its own: for a
         // Cursor-hosted server that is a Cursor account credential, then the service's own sign-in.

@@ -16,6 +16,7 @@ import type {
   PluginEnvView,
   PluginField,
   PluginHeaderView,
+  PluginServerView,
   PluginState,
   PluginTestResult,
   PluginValue,
@@ -48,6 +49,7 @@ import {
   serversConfig,
   toMcpEntries,
 } from "@eta/daemon";
+import { CURSOR_AUTH_HEADER, isCursorServer } from "./cursor-login";
 import {
   envProblem,
   headerProblem,
@@ -483,7 +485,7 @@ export class Plugins {
         name,
         description,
       })),
-      servers: serverViews(plugin),
+      servers: this.#serversOf(entry),
       requires,
       machines: this.#machineViews(requires),
       headers: this.#headerViews(entry),
@@ -505,6 +507,27 @@ export class Plugins {
         return agent === undefined ? [] : [{ id, name: agent.name }];
       }),
     };
+  }
+
+  /**
+   * The servers as shown, with the Cursor state worked out here from the address and the saved
+   * header, not from what a test saw: a Cursor-hosted server without a saved credential needs the
+   * Cursor sign-in whatever its 401 says. Says nothing of whether the server accepts the credential.
+   */
+  #serversOf(entry: PluginEntry): PluginServerView[] {
+    const saved = this.rows.headers(entry.name);
+    return serverViews(entry.plugin).map((view) => {
+      if (view.url === undefined || !isCursorServer(view.url)) return view;
+      return {
+        ...view,
+        cursorServer: true,
+        cursorSignedIn: saved.some(
+          (one) =>
+            one.server === view.name &&
+            one.name.toLowerCase() === CURSOR_AUTH_HEADER,
+        ),
+      };
+    });
   }
 
   /** The user's headers as the page sees them: a secret's value stays here. */

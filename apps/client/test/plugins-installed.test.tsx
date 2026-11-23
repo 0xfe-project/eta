@@ -151,7 +151,7 @@ test("each installed card has exactly one avatar in its header, and no default p
     height: 900,
   });
   // The fixture lists thirteen installed plugins; one avatar each, not two.
-  expect(app.count("id:plugin-avatar")).toBe(13);
+  expect(app.count("id:plugin-avatar")).toBe(15);
 });
 
 test("a card shows its login only with evidence: needs login, signed in, and nothing otherwise", async () => {
@@ -342,6 +342,46 @@ test("with no saved sign-in, a Cursor server still offers the Cursor sign-in, an
   expect(app.shows("Send sign-in token in x-cursor-auth and retest")).toBe(
     false,
   );
+});
+
+test("a fresh Cursor server shows the Cursor sign-in at once, with no test run", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", {
+    width: 1100,
+    height: 900,
+  });
+  await app.press("label:cursor-new-plugin");
+  expect(app.shows("Needs Cursor sign-in")).toBe(true);
+  expect(app.shows("Sign in with Cursor account")).toBe(true);
+  expect(app.shows("Sign in with Cursor account again")).toBe(false);
+  expect(app.shows("Last test")).toBe(false);
+});
+
+test("with the Cursor credential saved, the button comes back as a re-login only after a test the server did not accept", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", {
+    width: 1100,
+    height: 900,
+  });
+  await app.press("label:cursor-in-plugin");
+  expect(app.shows("Needs Cursor sign-in")).toBe(false);
+  expect(app.shows("Sign in with Cursor account again")).toBe(false);
+  await app.press("label:Test connection");
+  expect(app.shows("Sign in with Cursor account again")).toBe(true);
+  // It names both causes: the Cursor credential, or the service's own sign-in.
+  expect(
+    app.shows(
+      "The server did not accept the sign-in. Either the saved Cursor credential no longer works, or the service's own sign-in (Google, for google-drive) has to be done again: sign in with Cursor first, then to the service. Unofficial; it may stop working.",
+    ),
+  ).toBe(true);
+});
+
+test("a server that is not a Cursor one has no Cursor sign-in before or after a test", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", {
+    width: 1100,
+    height: 900,
+  });
+  await app.press("label:acme-plugin");
+  expect(app.shows("Sign in with Cursor account")).toBe(false);
+  expect(app.shows("Needs Cursor sign-in")).toBe(false);
 });
 
 test("a server that is not a Cursor one gets no Cursor sign-in button", async () => {

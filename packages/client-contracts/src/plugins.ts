@@ -78,7 +78,14 @@ export interface PluginServerView {
   problem: string | null;
   /** The server's sign-in: stored (`signed_in`), or asked for by the server (`needs_login`); `expired`: a token is stored but the server refused it. Absent from an older host. */
   login?: "none" | "needs_login" | "signed_in" | "expired";
+  /** The server is one the host can sign in to with a Cursor account (cursor.com, https). Absent from an older host. */
+  cursorServer?: boolean;
+  /** A Cursor credential is saved for it (the header `CURSOR_AUTH_HEADER`); not whether the server accepts it. */
+  cursorSignedIn?: boolean;
 }
+
+/** The request header a Cursor-hosted server reads the user's Cursor credential from. */
+export const CURSOR_AUTH_HEADER = "x-cursor-auth";
 
 /** Which commands a machine is missing, of the ones the plugin says it needs. */
 export interface PluginMachineView {

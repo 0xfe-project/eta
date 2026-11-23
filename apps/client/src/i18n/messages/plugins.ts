@@ -126,6 +126,15 @@ export const pluginsMessages = {
     "Two steps, in this order: 1. sign in with your Cursor account, 2. then sign in to the service itself (Google, for google-drive). Step 1 saves your Cursor session credential, which can do more than an API key, as an encrypted header sent only to this server. Unofficial; it may stop working.",
     "分两步,按顺序:1. 先用 Cursor 账号登录,2. 再登录服务本身(google-drive 是 Google)。第 1 步会把你的 Cursor 会话凭据(权限比 API key 宽)加密保存为请求头,只发给这个服务器。非官方方式,可能失效。",
   ],
+  cursorRelogin: [
+    "Sign in with Cursor account again",
+    "重新用 Cursor 账号登录",
+  ],
+  cursorReloginNote: [
+    "The server did not accept the sign-in. Either the saved Cursor credential no longer works, or the service's own sign-in (Google, for google-drive) has to be done again: sign in with Cursor first, then to the service. Unofficial; it may stop working.",
+    "服务器没有接受登录:可能是已保存的 Cursor 凭据失效,也可能是服务本身(google-drive 是 Google)的登录要重做。先重新用 Cursor 账号登录,再登录服务。非官方方式,可能失效。",
+  ],
+  cursorNeedsLogin: ["Needs Cursor sign-in", "需要 Cursor 登录"],
   cursorLoginWaiting: [
     "Waiting for the browser to confirm. This is an unofficial way and may stop working.",
     "等待浏览器确认。这是非官方方式,可能失效。",
