@@ -31,6 +31,7 @@ import type { AgentStore } from "../agents/store";
 import type { MachineHub, MachineLink } from "../machines/hub";
 import type { MachineStore } from "../machines/store";
 import type { PluginEntry } from "./registry";
+import type { UserHeader } from "./store";
 import process from "node:process";
 import {
   agentLevel,
@@ -189,12 +190,40 @@ export class Plugins {
     return entry !== undefined && this.#usable(entry);
   }
 
-  /** What a plugin's servers are given: its fields' values, then the user's headers on top. */
+  /**
+   * What a plugin's servers are given: its fields' values, then the user's headers on top. A server
+   * on cursor.com with no Cursor credential of its own gets the host's, as one of the user's headers:
+   * the service behind it still signs in with OAuth.
+   */
   #config(entry: PluginEntry): ReturnType<typeof serversConfig> {
+    const own = this.rows.headers(entry.name);
+    const host = this.rows.cursorCredential();
+    const shared: UserHeader[] =
+      host === undefined
+        ? []
+        : (entry.plugin?.servers ?? []).flatMap((def) =>
+            def.config.type === "stdio" ||
+            !isCursorServer(def.config.url) ||
+            own.some(
+              (header) =>
+                header.server === def.name &&
+                header.name.toLowerCase() === CURSOR_AUTH_HEADER,
+            )
+              ? []
+              : [
+                  {
+                    server: def.name,
+                    name: CURSOR_AUTH_HEADER,
+                    value: host,
+                    secret: true,
+                    plainOk: false,
+                  },
+                ],
+          );
     return serversConfig(
       entry.plugin!,
       this.rows.values(entry.name),
-      this.rows.headers(entry.name),
+      [...own, ...shared],
       this.rows.env(entry.name),
       this.rows.tokenHeaders(entry.name),
     );
@@ -367,6 +396,9 @@ export class Plugins {
             readable.add(`${entry.name}.${field.name}`);
       }
     const redactions: Redaction[] = [];
+    const host = this.rows.cursorCredential();
+    if (host !== undefined)
+      redactions.push({ value: host, label: "[secret cursor credential]" });
     for (const entry of this.registry.entries()) {
       if (entry.plugin === undefined) continue;
       // A header the user attached is a credential too, and no agent may read it.
@@ -516,16 +548,19 @@ export class Plugins {
    */
   #serversOf(entry: PluginEntry): PluginServerView[] {
     const saved = this.rows.headers(entry.name);
+    const host = this.rows.cursorCredential() !== undefined;
     return serverViews(entry.plugin).map((view) => {
       if (view.url === undefined || !isCursorServer(view.url)) return view;
       return {
         ...view,
         cursorServer: true,
-        cursorSignedIn: saved.some(
-          (one) =>
-            one.server === view.name &&
-            one.name.toLowerCase() === CURSOR_AUTH_HEADER,
-        ),
+        cursorSignedIn:
+          host ||
+          saved.some(
+            (one) =>
+              one.server === view.name &&
+              one.name.toLowerCase() === CURSOR_AUTH_HEADER,
+          ),
       };
     });
   }
@@ -750,6 +785,42 @@ export class Plugins {
       ...kept,
       { server, name: clean, value, secret: true, plainOk: false },
     ]);
+    this.#changed();
+  }
+
+  /**
+   * Save the Cursor credential for the host: every server on cursor.com uses it unless it has a
+   * header of its own. A copy the user already has on a Cursor server is brought up to date, or it
+   * would keep the old one in front of this.
+   */
+  setCursorCredential(value: string): void {
+    const problem = headerProblem(CURSOR_AUTH_HEADER, value);
+    if (problem !== undefined) throw new Error(problem);
+    this.rows.saveCursorCredential(value);
+    for (const entry of this.registry.entries()) {
+      const own = this.rows.headers(entry.name);
+      const isCopy = (header: UserHeader): boolean => {
+        const def = entry.plugin?.servers.find(
+          (one) => one.name === header.server,
+        );
+        return (
+          header.name.toLowerCase() === CURSOR_AUTH_HEADER &&
+          def !== undefined &&
+          def.config.type !== "stdio" &&
+          isCursorServer(def.config.url)
+        );
+      };
+      for (const server of new Set(
+        own.filter(isCopy).map((header) => header.server),
+      ))
+        this.rows.saveHeaders(
+          entry.name,
+          server,
+          own
+            .filter((header) => header.server === server)
+            .map((header) => (isCopy(header) ? { ...header, value } : header)),
+        );
+    }
     this.#changed();
   }
 

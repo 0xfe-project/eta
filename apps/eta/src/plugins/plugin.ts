@@ -368,7 +368,11 @@ export function pluginsPlugin(
             throw new Error(`${server} is not a Cursor server`);
           const started = cursorLogin.start((token) => {
             // The server answers a bare token as missing; it wants Bearer here (seen on a real sign-in).
-            plugins.setSecretHeader(name, server, header, `Bearer ${token}`);
+            const value = `Bearer ${token}`;
+            // The Cursor credential is the host's: one sign-in serves every Cursor server.
+            if (header.toLowerCase() === CURSOR_AUTH_HEADER)
+              plugins.setCursorCredential(value);
+            else plugins.setSecretHeader(name, server, header, value);
           });
           return {
             result: {
