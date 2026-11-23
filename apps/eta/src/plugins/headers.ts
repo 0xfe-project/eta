@@ -10,10 +10,6 @@ const MAX_NAME = 128;
 const MAX_VALUE = 4096;
 export const MAX_HEADERS_PER_SERVER = 32;
 
-/** Names whose value is a credential: the toggle starts on for these. */
-const SECRET_NAME = /authorization|key|token|secret|auth|cookie|password/i;
-const looksSecret = (name: string): boolean => SECRET_NAME.test(name);
-
 export const MAX_ENV_PER_SERVER = 32;
 const ENV_NAME = /^[A-Z_]\w*$/i;
 
