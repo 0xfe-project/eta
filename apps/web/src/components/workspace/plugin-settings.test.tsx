@@ -71,6 +71,7 @@ const displayPlugin = (overrides: Partial<PluginView> = {}): PluginView => ({
   version: "1.0.0",
   description: "Says hello.",
   source: { kind: "local", path: "/h/.eta/plugins/hello" },
+  enabled: true,
   state: "ready",
   problem: null,
   reports: [],
@@ -79,6 +80,7 @@ const displayPlugin = (overrides: Partial<PluginView> = {}): PluginView => ({
   requires: [],
   machines: [],
   fields: [],
+  headers: [],
   agents: [],
   ...overrides,
 });
@@ -93,6 +95,7 @@ const configuration = {
       command: ["node", "${PLUGIN_ROOT}/server.mjs"],
       env: ["HELLO_KEY"],
       headers: [],
+      plainHttp: false,
       problem: null,
     },
   ],
