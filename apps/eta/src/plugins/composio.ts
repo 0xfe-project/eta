@@ -165,6 +165,46 @@ function toolkit(item: unknown, from: MarketSource): ComposioToolkit | null {
   };
 }
 
+const AUTHS = new Set<string>(["api_key", "oauth", "none", "unknown"]);
+
+/**
+ * One toolkit as it was kept (the shape of `ComposioToolkit` without its source), checked again
+ * field by field: what is kept is the checked list, not Composio's answer, so it is not read back
+ * through `toolkit`. Null for one that does not fit.
+ */
+function kept(item: unknown, from: MarketSource): ComposioToolkit | null {
+  if (!isPlain(item) || typeof item.slug !== "string" || !SLUG.test(item.slug))
+    return null;
+  const name =
+    typeof item.name === "string" && item.name.trim() !== ""
+      ? item.name.slice(0, 100)
+      : item.slug;
+  const description =
+    typeof item.description === "string" ? item.description : "";
+  return {
+    kind: "composio",
+    slug: item.slug,
+    name,
+    description:
+      description.length > 500 ? `${description.slice(0, 499)}…` : description,
+    auth:
+      typeof item.auth === "string" && AUTHS.has(item.auth)
+        ? (item.auth as ComposioAuth)
+        : "unknown",
+    authSchemes: strings(item.authSchemes, 40),
+    managed: item.managed === true,
+    categories: strings(item.categories, 60).slice(0, 10),
+    logo: https(item.logo),
+    appUrl: https(item.appUrl),
+    toolsCount:
+      typeof item.toolsCount === "number" && Number.isFinite(item.toolsCount)
+        ? item.toolsCount
+        : null,
+    source: from.url,
+    sourceName: from.name === "" ? from.url : from.name,
+  };
+}
+
 export class Composio {
   readonly #db: Database;
   readonly #key: Buffer;
@@ -330,7 +370,7 @@ export class Composio {
       if (!Array.isArray(raw) || raw.length > MAX_TOOLKITS)
         throw new Error("not a list");
       return {
-        toolkits: raw.flatMap((item) => toolkit(item, source) ?? []),
+        toolkits: raw.flatMap((item) => kept(item, source) ?? []),
         at: row.fetchedAt,
       };
     } catch {
