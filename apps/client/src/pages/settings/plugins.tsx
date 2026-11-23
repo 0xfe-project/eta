@@ -90,11 +90,18 @@ export function PluginSettings(props: { phone?: boolean }) {
       return;
     }
     keyProblem.set("");
-    if (await keyCall("composioSetKey", { key: clean })) typedKey.set("");
+    if (await keyCall("composioSetKey", { key: clean })) {
+      typedKey.set("");
+      // The source is on only with a key: read the list again.
+      await call("marketSettings", {});
+    }
   }
   async function clearKey() {
     keyProblem.set("");
-    if (await keyCall("composioClearKey", {})) typedKey.set("");
+    if (await keyCall("composioClearKey", {})) {
+      typedKey.set("");
+      await call("marketSettings", {});
+    }
   }
   effect(() => {
     host.subscriptionWire();
@@ -195,6 +202,11 @@ export function PluginSettings(props: { phone?: boolean }) {
                 >
                   <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                     <Label lines={1}>{item().name || item().url}</Label>
+                    <If when={item().kind === "composio" && !hasKey()}>
+                      <Label variant="small" tone="muted" lines={1}>
+                        {uiText("composioSourceNeedsKey")}
+                      </Label>
+                    </If>
                     <If when={item().name && item().kind !== "composio"}>
                       <Label
                         variant="small"
@@ -211,7 +223,9 @@ export function PluginSettings(props: { phone?: boolean }) {
                       name: item().name || item().url,
                     })}
                     checked={item().enabled}
-                    disabled={busy()}
+                    disabled={
+                      busy() || (item().kind === "composio" && !hasKey())
+                    }
                     onChange={(enabled) =>
                       void call("marketSetSourceEnabled", {
                         url: item().url,

@@ -228,12 +228,17 @@ export class Composio {
     this.#maxBytes = options.maxBytes ?? MAX_BYTES;
   }
 
-  /** The source as the market lists it: always there, on unless the user switched it off. */
+  /**
+   * The source as the market lists it: always there. It is on when there is a key and the user did
+   * not switch it off; with no key it is off, and nothing is written to the setting for that, so a
+   * key saved later turns it on again unless the user had switched it off.
+   */
   source(): MarketSource {
     return {
       url: COMPOSIO_URL,
       name: COMPOSIO_NAME,
-      enabled: this.#settings.get(COMPOSIO_ENABLED_KEY) !== false,
+      enabled:
+        this.#settings.get(COMPOSIO_ENABLED_KEY) !== false && this.hasKey(),
       kind: "composio",
     };
   }

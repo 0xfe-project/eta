@@ -327,6 +327,7 @@ export const pluginsMessages = {
   composioKeySave: ["Save key", "保存密钥"],
   composioKeyReplace: ["Replace key", "替换密钥"],
   composioKeyClear: ["Clear key", "清除密钥"],
+  composioSourceNeedsKey: ["Enter an API key first.", "先填写 API key"],
   composioKeyEmpty: ["Enter a key first.", "请先输入密钥。"],
   composioNeedsKey: ["Composio needs an API key", "Composio 需要 API 密钥"],
   composioNeedsKeyHint: [

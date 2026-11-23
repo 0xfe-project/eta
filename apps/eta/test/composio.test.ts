@@ -108,10 +108,17 @@ const composioOf = async (
   )!;
 
 describe("the Composio source", () => {
-  it("is listed, on, and cannot be removed", () => {
-    const { market } = open();
-    const one = market.sources().find((source) => source.kind === "composio")!;
-    expect(one).toMatchObject({
+  it("is listed, off without a key, on with one, and cannot be removed", () => {
+    const { market, composio } = open();
+    const one = () =>
+      market.sources().find((source) => source.kind === "composio")!;
+    expect(one()).toMatchObject({
+      url: COMPOSIO_URL,
+      name: "Composio",
+      enabled: false,
+    });
+    composio.setKey(KEY);
+    expect(one()).toMatchObject({
       url: COMPOSIO_URL,
       name: "Composio",
       enabled: true,
@@ -120,7 +127,8 @@ describe("the Composio source", () => {
   });
 
   it("can be switched off and on like any source, and the git list is not touched", async () => {
-    const { market, settings } = open();
+    const { market, settings, composio } = open();
+    composio.setKey(KEY);
     market.setSourceEnabled(COMPOSIO_URL, false);
     expect(
       market.settings().sources.find((s) => s.kind === "composio")?.enabled,
@@ -141,9 +149,9 @@ describe("the Composio source", () => {
     ).toBe(true);
   });
 
-  it("says a key is needed when there is none: no request, no error", async () => {
-    const { market } = open();
-    const one = await composioOf(market);
+  it("says a key is needed when it is asked with none: no request, no error", async () => {
+    const { composio } = open();
+    const one = await composio.read(composio.source(), "refresh");
     expect(one).toMatchObject({
       status: "needs_key",
       entries: null,
@@ -153,7 +161,7 @@ describe("the Composio source", () => {
     expect(requests).toHaveLength(0);
   });
 
-  it("does not hide the other sources when it needs a key", async () => {
+  it("does not hide the other sources while there is no key", async () => {
     const { market } = open();
     const git = Bun.serve({
       port: 0,
@@ -167,12 +175,8 @@ describe("the Composio source", () => {
         if (source.kind !== "composio") market.removeSource(source.url);
       market.addSource(`http://127.0.0.1:${git.port}/catalog.json`, "");
       const sources = (await market.catalog()).sources;
-      expect(sources.map((s) => s.source.kind ?? "git")).toEqual([
-        "git",
-        "composio",
-      ]);
+      expect(sources.map((s) => s.source.kind ?? "git")).toEqual(["git"]);
       expect(sources[0]!.entries?.map((entry) => entry.name)).toEqual(["demo"]);
-      expect(sources[1]!.status).toBe("needs_key");
     } finally {
       await git.stop(true);
     }
@@ -318,10 +322,11 @@ describe("the Composio source", () => {
     ).toEqual(["github"]);
     expect(requests).toHaveLength(0);
     again.composio.clearKey();
-    expect(await composioOf(again.market, "cached")).toMatchObject({
-      status: "needs_key",
-      toolkits: null,
-    });
+    expect(
+      (await again.market.catalog("cached")).sources.some(
+        (one) => one.source.kind === "composio",
+      ),
+    ).toBe(false);
   });
 
   it("does not follow a redirect with the key", async () => {
@@ -839,7 +844,7 @@ describe("the source without a key", () => {
     expect(enabledOf(market)).toBe(false);
     expect(await listed(market)).toBe(false);
     // The manual off is the user's: a new key does not undo it, and clearing the key keeps it.
-    composio.setKey(KEY + "x");
+    composio.setKey(`${KEY}x`);
     expect(enabledOf(market)).toBe(false);
     composio.clearKey();
     expect(settings.get("plugins.composioEnabled")).toBe(false);
