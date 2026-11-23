@@ -33,6 +33,9 @@ export function RoutineDetail(props: {
   onReport: (id: string) => void;
   onReadBrief: () => void;
   onEdit: () => void;
+  /** Dimmed when the connection cannot delete routines. */
+  canDelete: boolean;
+  onDelete: () => void;
   onToggle: () => void;
 }) {
   const c = colors();
@@ -93,6 +96,12 @@ export function RoutineDetail(props: {
                 }}
               >
                 <ActionItem label={uiText("edit")} onSelect={props.onEdit} />
+                <ActionItem
+                  label={uiText("deleteRoutineMenu")}
+                  tone="red"
+                  disabled={!props.canDelete}
+                  onSelect={props.onDelete}
+                />
               </ActionMenu>
             </View>
           </View>
