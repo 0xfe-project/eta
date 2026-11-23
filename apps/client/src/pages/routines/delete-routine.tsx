@@ -60,7 +60,7 @@ export function DeleteRoutine(props: {
       <If
         when={props.phone}
         else={
-          <View style={{ paddingTop: 6, gap: space[8] }}>
+          <View style={{ paddingTop: space[8], gap: space[8] }}>
             {body()}
             <View
               style={{

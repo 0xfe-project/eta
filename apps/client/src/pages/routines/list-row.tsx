@@ -26,13 +26,19 @@ export function RoutineRow(props: {
       style={{
         ...row,
         ...(props.tablet
-          ? { height: 60, paddingHorizontal: 14, gap: 10 }
-          : { padding: 7, gap: space[16] }),
+          ? { height: 60, paddingHorizontal: space[16], gap: space[8] }
+          : { padding: space[8], gap: space[16] }),
         cursor: "pointer",
         backgroundColor: props.selected ? c().selected : c().canvas,
       }}
     >
-      <View style={{ flex: 1, minWidth: 0, gap: props.tablet ? 3 : 4 }}>
+      <View
+        style={{
+          flex: 1,
+          minWidth: 0,
+          gap: props.tablet ? space[2] : space[4],
+        }}
+      >
         <Label
           weight={
             props.tablet && props.selected ? weight.strong : weight.regular
@@ -48,7 +54,7 @@ export function RoutineRow(props: {
       <View
         style={{
           alignItems: "flex-end",
-          gap: props.tablet ? 5 : 4,
+          gap: space[4],
           flexShrink: 0,
         }}
       >

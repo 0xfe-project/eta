@@ -47,14 +47,14 @@ export function PendingReports(props: {
             {(entry) => (
               <View
                 style={{
-                  paddingVertical: 10,
+                  paddingVertical: space[12],
                   paddingHorizontal: space[12],
-                  gap: 6,
+                  gap: space[4],
                   borderWidth: 1,
                   borderColor: c().strong,
                 }}
               >
-                <View style={{ ...row, gap: 6 }}>
+                <View style={{ ...row, gap: space[4] }}>
                   <StatusDot
                     color={entry().run.status === "sent" ? c().blue : c().red}
                   />
