@@ -5,6 +5,7 @@ import { Button, colors, Label, row, textFaces } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { ComposioDisconnect, linkAndOpen } from "./composio-actions";
+import { ComposioPluginSwitch, useComposioPlugins } from "./composio-plugins";
 import { PluginLogo } from "./plugin-logo";
 import { PluginName } from "./plugin-name";
 
@@ -15,8 +16,9 @@ interface Connected {
 }
 
 /**
- * The Composio toolkits the user connected on Composio, under the installed plugins. A list of what
- * is linked there, nothing more: eta's agents cannot use it yet, and the text says so. The names and
+ * The Composio toolkits the user connected on Composio, under the installed plugins. Each is a plugin
+ * of the agents too (`@composio/<slug>`): its card has the user's switch for every agent, and a
+ * toolkit whose session did not check out says so instead. The names and
  * pictures come from the list the host already keeps (never asked for from the network here); a
  * toolkit that is not in it is shown by its slug. When Composio cannot be asked (no key, a refused
  * key, no answer) the group is not there, and nothing says why. Each item can be signed in again or
@@ -36,6 +38,9 @@ export function ComposioConnected(props: {
   const manage = signal(false);
   const disconnecting = signal<Connected | undefined>(undefined);
   const error = signal("");
+  const plugins = useComposioPlugins();
+  const viewOf = (slug: string) =>
+    plugins.list().find((one) => one.slug === slug);
   async function reauth(slug: string) {
     error.set("");
     try {
@@ -49,6 +54,7 @@ export function ComposioConnected(props: {
     shown.update((all) => all.filter((one) => one.slug !== slug));
     disconnecting.set(undefined);
     void read();
+    void plugins.read();
   }
   async function read() {
     const answer = await host
@@ -124,17 +130,28 @@ export function ComposioConnected(props: {
         minHeight: type("small").line,
       }}
     >
-      <View
-        testID="composio-connected"
-        style={{ flexGrow: 1, flexShrink: 1, minWidth: 0 }}
-      >
-        <Label variant="small" lines={1}>
-          {uiText("composioConnected")}
-        </Label>
-      </View>
+      <If when={viewOf(item.slug)}>
+        {(view) => (
+          <View style={{ flexShrink: 1, minWidth: 0 }}>
+            <ComposioPluginSwitch view={view()} onChanged={plugins.read} />
+          </View>
+        )}
+      </If>
       {actions(item)}
     </View>
   );
+  /** The connected mark, at the top right of a card, on the line of the name. */
+  const mark = () => (
+    <View testID="composio-connected" style={{ flexShrink: 0 }}>
+      <Label variant="small" tone="muted" lines={1}>
+        {uiText("composioConnected")}
+      </Label>
+    </View>
+  );
+  /** A card the user switched off for every agent is shown one step fainter. */
+  const faint = (item: Connected) => ({
+    opacity: viewOf(item.slug)?.enabled === false ? 0.55 : 1,
+  });
   return (
     <If when={shown().length}>
       <View testID="composio-connected-group" style={{ gap: rows() ? 0 : 8 }}>
@@ -186,6 +203,7 @@ export function ComposioConnected(props: {
                     testID="composio-connected-item"
                     accessibilityLabel={item().name}
                     style={{
+                      ...faint(item()),
                       width: 267,
                       padding: 12,
                       gap: 6,
@@ -199,6 +217,7 @@ export function ComposioConnected(props: {
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <PluginName name={item().name} />
                       </View>
+                      {mark()}
                     </View>
                     <Label variant="small" tone="muted" lines={2}>
                       {item().description}
@@ -217,6 +236,7 @@ export function ComposioConnected(props: {
                   testID="composio-connected-item"
                   accessibilityLabel={item().name}
                   style={{
+                    ...faint(item()),
                     borderBottomWidth: 1,
                     borderColor: c().border,
                     backgroundColor: c().canvas,
@@ -239,6 +259,7 @@ export function ComposioConnected(props: {
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <PluginName name={item().name} />
                     </View>
+                    {mark()}
                   </View>
                   <View
                     style={{

@@ -152,7 +152,9 @@ test("the switch of a toolkit is the user's switch for every agent: it asks setE
   await app.waitFor("text:called:setEnabled:@composio/gmail:false");
   await app.waitFor("id:composio-plugin-off");
   await app.press("label:Enabled: @composio/gmail");
-  await app.waitFor("text:called:setEnabled:@composio/gmail:true");
+  await app.waitFor(
+    "text:called:setEnabled:@composio/gmail:false called:setEnabled:@composio/gmail:true",
+  );
   await app.waitFor("id:composio-plugin-off", { state: "gone" });
 });
 

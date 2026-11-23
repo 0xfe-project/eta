@@ -381,8 +381,17 @@ export const pluginsMessages = {
     "已在 Composio 连接({{count}})",
   ],
   composioConnectedGroupNote: [
-    "Linked on Composio only. eta's agents cannot use these yet.",
-    "只是在 Composio 上连接了账户,eta 的智能体暂时还不能使用。",
+    "Each connected toolkit is a plugin: switch it here, and tick it for the agents that may use it.",
+    "每个已连接的 toolkit 都是一个插件:在这里开关,并在智能体的插件里勾选。",
+  ],
+  composioPluginSwitch: ["Enabled: {{name}}", "已启用:{{name}}"],
+  composioPluginError: [
+    "Its session did not check out, so no agent gets it.",
+    "它的会话没有通过检查,智能体暂时用不了。",
+  ],
+  composioPluginExternal: [
+    "Not available to agents on an external runtime.",
+    "外部运行时的智能体用不了。",
   ],
   composioReconnect: ["Re-authenticate", "重新认证"],
   composioDisconnect: ["Disconnect", "取消连接"],

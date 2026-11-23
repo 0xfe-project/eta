@@ -6,6 +6,7 @@ import { CheckControl } from "../../../components/check-control";
 import { localizedText, uiText } from "../../../i18n";
 
 import { useHost } from "../../../services/host";
+import { useComposioPlugins } from "../../plugins/composio-plugins";
 import {
   emptyStyle,
   SectionHeader,
@@ -15,10 +16,13 @@ import {
 } from "../section";
 
 export function AgentPlugins(props: { form: AgentForm }) {
-  const { plugins, phoneEditor } = props.form;
+  const { plugins, phoneEditor, runtime } = props.form;
   const host = useHost();
   const c = colors();
   const activePlugins = () => host.list<PluginView>("plugins");
+  /** The connected Composio toolkits, as plugins of their own after the installed ones. */
+  const composio = useComposioPlugins();
+  const shown = () => activePlugins().length + composio.list().length;
   const transports = { stdio: "stdio", "streamable-http": "HTTP", sse: "SSE" };
   const meta = (item: PluginView) => {
     const servers = item.servers
@@ -62,12 +66,12 @@ export function AgentPlugins(props: { form: AgentForm }) {
       <If when={!phoneEditor()}>
         <SectionHeader
           title={uiText("plugins")}
-          count={activePlugins().length}
+          count={shown()}
           description={uiText("pluginsHint")}
         />
       </If>
       <If
-        when={activePlugins().length}
+        when={shown()}
         else={
           <Empty
             title={uiText("noPluginsInstalled")}
@@ -153,6 +157,66 @@ export function AgentPlugins(props: { form: AgentForm }) {
                     </If>
                   </View>
                 </If>
+              </CheckControl>
+            );
+          }}
+        </Each>
+        <Each of={composio.list()} key={(item) => item.name}>
+          {(item) => {
+            const checked = () => plugins().includes(item().name);
+            /** Only a toolkit that checked out, and only for an agent of eta's own loop. */
+            const usable = () =>
+              item().state === "ready" && runtime() === "eta";
+            return (
+              <CheckControl
+                label={item().name}
+                checked={checked()}
+                disabled={!usable() && !checked()}
+                onChange={(enabled) =>
+                  plugins.update((list) =>
+                    enabled
+                      ? [...new Set([...list, item().name])]
+                      : list.filter((entry) => entry !== item().name),
+                  )
+                }
+                size={16}
+                markSize={phoneEditor() ? 10 : 12}
+                indicatorStyle={{ margin: phoneEditor() ? 6 : 4 }}
+                style={{
+                  ...row,
+                  alignItems: "flex-start",
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                  gap: 10,
+                  borderBottomWidth: 1,
+                  borderColor: c().border,
+                  cursor: usable() || checked() ? "pointer" : "default",
+                  opacity: item().enabled ? 1 : 0.55,
+                }}
+              >
+                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                  <Label weight={500}>{item().name}</Label>
+                  <Label variant="small" tone="muted">
+                    {uiText("composioToolkit")}
+                  </Label>
+                  <If when={item().state !== "ready"}>
+                    <View testID="composio-plugin-error">
+                      <WarningLine text={uiText("composioPluginError")} />
+                    </View>
+                  </If>
+                  <If when={runtime() !== "eta"}>
+                    <View testID="composio-plugin-external">
+                      <WarningLine text={uiText("composioPluginExternal")} />
+                    </View>
+                  </If>
+                  <If when={!item().enabled}>
+                    <View testID="composio-plugin-off">
+                      <Label variant="small" tone="muted">
+                        {uiText("pluginOffForAll")}
+                      </Label>
+                    </View>
+                  </If>
+                </View>
               </CheckControl>
             );
           }}
