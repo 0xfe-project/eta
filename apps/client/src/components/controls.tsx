@@ -47,6 +47,8 @@ export function Button(props: {
    * "muted" for a filter trigger that reads as secondary. */
   labelTone?: keyof typeof light;
   dimDisabled?: boolean;
+  /** The key that does the same, after the label (`⌘⏎` on a form's button). */
+  shortcut?: string;
   style?: ViewStyle;
   onPress: () => void;
 }) {
@@ -124,6 +126,15 @@ export function Button(props: {
           tone={textTone()}
         >
           {props.label}
+        </Label>
+      </If>
+      <If when={props.shortcut}>
+        <Label
+          variant="caption"
+          tone={textTone()}
+          style={{ opacity: 0.55, marginLeft: 4 }}
+        >
+          {props.shortcut}
         </Label>
       </If>
       <If when={props.end !== undefined}>

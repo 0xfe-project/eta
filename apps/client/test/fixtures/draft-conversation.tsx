@@ -49,6 +49,15 @@ function Fixture() {
         { taskId: "second", requireDone: false },
       ],
     };
+  // A description as agents and the old plain box wrote it: `*` bullets, `1)`, a table,
+  // snake_case, a hard tab.
+  if (scenario === "eta://fixture/legacy")
+    sample.data = {
+      title: "Login page",
+      description:
+        "Goal: the login page lays out right in Safari.\n\n### Steps\n* reproduce on Safari 18\n* fix `login_form` padding\n\n| browser | ok |\n| --- | --- |\n| Safari | no |\n\n1) keep snake_case names\n2) ship",
+      workspace: "local",
+    };
   if (scenario === "eta://fixture/discarded")
     sample.data = { ...sample.data, discarded: true };
   if (scenario === "eta://fixture/empty") {

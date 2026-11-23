@@ -119,11 +119,13 @@ export function createTaskDetailState(props: {
       await host.call("tasks", "update", { taskId: props.id, title });
     });
   }
-  function saveDescription() {
+  /** Saves `text` (the description editor's Markdown) as the task's description. */
+  function saveDescription(text: string) {
+    editDescription.set(text);
     void mutate(async () => {
       await host.call("tasks", "update", {
         taskId: props.id,
-        description: editDescription(),
+        description: text,
       });
       describing.set(false);
     });

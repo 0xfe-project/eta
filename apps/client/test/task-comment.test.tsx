@@ -44,7 +44,7 @@ for (const [surface, width] of surfaces)
       const app = await openOn(surface, width, state);
       const body = `A note on the ${state} task`;
       await app.type("label:Comment", body);
-      await app.keyboard.press("enter");
+      await app.keyboard.press("mod+enter");
       await app.waitUntil(() =>
         app.texts().includes(`Sent: tasks.comment t2 ${body}`),
       );
@@ -73,3 +73,43 @@ test("the send button posts the comment too, on a task in review", async () => {
     app.texts().includes("Sent: tasks.comment t2 One more case"),
   );
 });
+
+test("a comment is kept as the Markdown typed; ⏎ is a new line, ⌘⏎ posts", async () => {
+  const app = await openOn("page", 1440, "in_review");
+  await app.type("label:Comment", "Checked on **all** sizes:");
+  await app.keyboard.press("enter");
+  await app.type("label:Comment", "- desktop");
+  await app.keyboard.press("enter");
+  await app.type("label:Comment", "phone");
+  await app.keyboard.press("enter");
+  await app.keyboard.press("enter");
+  await app.type("label:Comment", "Run `bun test` again");
+  expect(app.texts().some((text) => text.includes("tasks.comment"))).toBe(
+    false,
+  );
+  await app.keyboard.press("mod+enter");
+  await app.waitUntil(() =>
+    app
+      .texts()
+      .includes(
+        "Sent: tasks.comment t2 Checked on **all** sizes:\n\n- desktop\n- phone\n\nRun `bun test` again",
+      ),
+  );
+});
+
+for (const [surface, width] of surfaces)
+  test(`${surface} at ${width}px: @ offers the task's agents first and the comment mentions the one picked`, async () => {
+    const app = await openOn(surface, width, "in_review");
+    // Ada runs the task; Lin is on the host (listed first there) but not in the task. ⏎ takes
+    // the list's first row.
+    await app.type("label:Comment", "@");
+    await app.waitFor("label:Mention Lin");
+    await app.keyboard.press("enter");
+    await app.type("label:Comment", "please look");
+    await app.press("label:Send comment");
+    await app.waitUntil(() =>
+      app
+        .texts()
+        .includes("Sent: tasks.comment t2 @Ada please look mentions=ada"),
+    );
+  });

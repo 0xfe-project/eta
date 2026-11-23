@@ -84,7 +84,7 @@ function enterInPlace(editor: EtaEditorHandle): boolean {
 }
 
 /**
- * ⏎ sends, ⇧⏎ starts a new line. In formatted text ⏎ is the line's own inside a list (a new
+ * ⏎ sends, ⇧⏎ starts a new line (or, with `enter: "newline"`, ⏎ is a new line and ⌘⏎ sends). In formatted text ⏎ is the line's own inside a list (a new
  * item; on an empty one, out of the list) and a code block (a new line; ⌘⏎, or ⏎ on a second
  * empty line at its end, leaves it), and ⏎ on a line that is only a fence makes the code block.
  * Enter is always this plugin's, on every platform, so what it does never depends on the
@@ -95,17 +95,26 @@ function enterInPlace(editor: EtaEditorHandle): boolean {
  * do (stopping the replies under an empty box).
  */
 export function submitKeys(options: {
-  onSubmit: () => void;
+  /** What sends: ⏎ (`enter: "send"`), else ⌘⏎. None: no key sends (a form's own button does). */
+  onSubmit?: () => void;
+  /**
+   * `send` (the chat): ⏎ sends, ⇧⏎ is a new line. `newline` (a comment, a description): ⏎ and ⇧⏎
+   * are a new line, ⌘⏎ sends.
+   */
+  enter?: "send" | "newline";
   /** Whether Escape is this plugin's now, and what it does. */
   escape?: () => (() => void) | undefined;
 }): TextPlugin {
   let handle: EtaEditorHandle | undefined;
+  const sends = (options.enter ?? "send") === "send";
   const enter = new RichEditorPlugin("submitKeys").captureKeys(
-    ["Enter"],
-    () => {
+    sends ? ["Enter"] : ["Enter", "Mod-Enter"],
+    (key) => {
       if (!handle || handle.session.composing || handle.composing()) return;
+      if (key === "Mod-Enter") return options.onSubmit?.();
       if (enterInPlace(handle)) return;
-      options.onSubmit();
+      if (sends) options.onSubmit?.();
+      else handle.session.run(handle.rich ? newLine : command("splitBlock"));
     },
   );
   enter.capturing = true;
@@ -125,13 +134,15 @@ export function submitKeys(options: {
             enter,
             escape,
             keymap(
-              rich
-                ? {
-                    "Shift-Enter": newLine,
-                    // Out of a code block; elsewhere a new line, as ⇧⏎.
-                    "Mod-Enter": first([command("exitCode"), newLine]),
-                  }
-                : { "Shift-Enter": command("splitBlock") },
+              sends
+                ? rich
+                  ? {
+                      "Shift-Enter": newLine,
+                      // Out of a code block; elsewhere a new line, as ⇧⏎.
+                      "Mod-Enter": first([command("exitCode"), newLine]),
+                    }
+                  : { "Shift-Enter": command("splitBlock") }
+                : { "Shift-Enter": rich ? newLine : command("splitBlock") },
             ),
           ],
         }),

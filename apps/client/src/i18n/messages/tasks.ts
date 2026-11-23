@@ -119,9 +119,14 @@ export const tasksMessages = {
     "例如：修好 Safari 里登录页的布局",
   ],
   newTaskDescriptionPlaceholder: [
-    "Goal, background, completion criteria…",
-    "目标、背景、完成标准…",
+    "Describe the task. Markdown works as you type.",
+    "描述这个任务。Markdown 边写边生效。",
   ],
+  descriptionMarkdownHint: [
+    "Markdown · # heading · - list · ``` code",
+    "Markdown · # 标题 · - 列表 · ``` 代码",
+  ],
+  mentionInDescription: ["Named in the description", "在描述里点名"],
   newTaskIn: ["In", "所在"],
   newTaskAdd: ["Add", "添加"],
   newTaskCreate: ["Create", "创建"],
@@ -354,9 +359,9 @@ export const tasksMessages = {
     "Read-only. Reply on the task to steer {{executor}}.",
     "日志只读。请在任务中回复，给 {{executor}} 补充指令。",
   ],
-  replyARunningTaskReadsIt: [
-    "Reply; a running task reads it right away",
-    "回复；执行中的任务会直接读到",
+  commentPlaceholder: [
+    "Comment, @ an agent in this task…",
+    "评论，@ 任务里的 agent…",
   ],
   rerun: ["Start over", "从头重跑"],
   runLog: ["Run log", "运行日志"],

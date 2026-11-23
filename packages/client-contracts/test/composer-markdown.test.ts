@@ -129,6 +129,9 @@ describe("docToMarkdown", () => {
         "",
         "- one",
         "- two",
+        // A list starting past 1 may not interrupt a line: without the blank line it reads as
+        // "two 3. deep".
+        "",
         "  3. deep",
         "",
         "- [x] done",
@@ -290,5 +293,53 @@ describe("classifyClipboard in a rich editor", () => {
     expect(classifyClipboard({ text: markdown }, { files: true }).kind).toBe(
       "text",
     );
+  });
+});
+
+describe("what the editor has no block for", () => {
+  const literal = (source: string, stands: DocNode[]) =>
+    [...source]
+      .map((char) => {
+        const at = char.charCodeAt(0) - 0xe000;
+        return at >= 0 && at < stands.length ? `«${stands[at]!.text}»` : char;
+      })
+      .join("");
+
+  it("keeps a table's rows and an image as their own text", () => {
+    const { source, stands } = markdownSource({
+      text: "Intro\n\n| a | b \\| c |\n| --- | :-: |\n| `x` | y |\n\nAfter ![shot](s.png) here",
+    });
+    expect(literal(source, stands)).toBe(
+      "Intro\n\n«| a | b \\| c |»\n«| --- | :-: |»\n«| `x` | y |»\n\nAfter «![shot](s.png)» here",
+    );
+  });
+
+  it("writes a table's rows, kept as lines, with a blank line around them", () => {
+    const line = (text: string): DocNode => ({
+      type: "paragraph",
+      content: [{ type: "text", text }],
+    });
+    const doc: DocNode = {
+      type: "doc",
+      content: [
+        "Intro",
+        "| a | b |",
+        "| --- | --- |",
+        "| c | d |",
+        "after",
+        "more",
+      ].map(line),
+    };
+    expect(docToMarkdown(doc).text).toBe(
+      "Intro\n\n| a | b |\n| --- | --- |\n| c | d |\n\nafter\nmore",
+    );
+  });
+
+  it("leaves code, a setext heading and a lone pipe as they are", () => {
+    const text =
+      "```\n| a | b |\n| - | - |\n![x](y)\n```\n\nTitle | x\n---\n\na | b";
+    const { source, stands } = markdownSource({ text });
+    expect(source).toBe(text);
+    expect(stands).toEqual([]);
   });
 });

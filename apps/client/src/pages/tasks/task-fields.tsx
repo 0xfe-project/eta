@@ -6,14 +6,16 @@ import { View } from "nsh";
 import { Button, colors, Icon, Label, row, textFaces } from "../../components";
 import { CheckControl } from "../../components/check-control";
 import {
-  commentText,
+  chatText,
   draft,
   limit,
   mention,
   openDocDraft,
+  sendShortcut,
   serialize,
   submitKeys,
 } from "../../components/eta-editor";
+import { touchScreen } from "../../components/menu";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
@@ -24,8 +26,9 @@ import { statusName, TaskGlyph } from "./status";
 import { StatusSelect } from "./status-select";
 
 /**
- * The comment box: the same editor as the chat's (`commentText.Editor`), with `@` for the task's agents,
- * long pastes folded and a draft kept per task. No files: a task's comment carries text only.
+ * The comment box: the chat's text (`chatText`: Markdown as you type, code blocks, long pastes
+ * folded) with `@` for the task's agents and a draft kept per task. ⏎ is a new line; ⌘⏎ or the
+ * Comment button posts. No files: a task's comment carries text only.
  */
 function useCommentEditor(state: TaskDetailState, origin: string | undefined) {
   const host = useHost();
@@ -53,10 +56,10 @@ function useCommentEditor(state: TaskDetailState, origin: string | undefined) {
       name: mentionLabel(member, ordered),
     }));
   };
-  const editor = commentText.createEditor({
+  const editor = chatText.createEditor({
     doc: store.doc(),
     plugins: [
-      submitKeys({ onSubmit: () => void submit() }),
+      submitKeys({ enter: "newline", onSubmit: () => void submit() }),
       mention({ members, describe: () => uiText("askForAReply") }),
       draft({ save: store.save }),
       limits,
@@ -74,9 +77,7 @@ function useCommentEditor(state: TaskDetailState, origin: string | undefined) {
 
 export function TaskCommentBox(props: {
   state: TaskDetailState;
-  /** Tablet's box: 36 high, the send mark bare at its end. */
-  tablet?: boolean;
-  /** The chat's task panel: a 38-high box `inset` in from its sides, the hint drawn by the panel. */
+  /** The chat's task panel: the box `inset` in from its sides, the hint drawn by the panel. */
   panelInset?: number;
 }) {
   const host = useHost();
@@ -84,44 +85,59 @@ export function TaskCommentBox(props: {
   const store = openDocDraft(
     `eta.task-comment.v1.${JSON.stringify([origin, props.state.id])}`,
   );
+  const c = colors();
+  const phone = () => props.state.phone();
   return (
     <If when={store.ready()}>
       {() => (
-        <If
-          when={!props.state.phone()}
-          else={<PhoneCommentBox state={props.state} origin={origin} />}
+        <View
+          style={
+            phone()
+              ? {
+                  backgroundColor: c().surface,
+                  borderTopWidth: 1,
+                  borderColor: c().border,
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  gap: 8,
+                }
+              : { gap: 6, marginHorizontal: props.panelInset, flexShrink: 0 }
+          }
         >
-          <DesktopCommentBox
+          <CommentBox
             state={props.state}
             origin={origin}
-            tablet={props.tablet}
-            panelInset={props.panelInset}
+            phone={phone()}
+            hint={props.panelInset === undefined || phone()}
           />
-        </If>
+        </View>
       )}
     </If>
   );
 }
 
-function DesktopCommentBox(props: {
+/**
+ * The box itself, per Paper's "Task comment": the editor, 1 to 6 lines then it scrolls inside;
+ * under it ⌘⏎ (with a keyboard) and a plain Comment button.
+ */
+function CommentBox(props: {
   state: TaskDetailState;
   origin: string | undefined;
-  tablet?: boolean;
-  panelInset?: number;
+  phone: boolean;
+  /** The parent's line over the box (the chat's panel draws its own). */
+  hint: boolean;
 }) {
-  const panel = () => props.panelInset !== undefined;
   const c = colors();
   const type = textFaces();
   const { editor, submit, disabled, limits } = useCommentEditor(
     props.state,
     props.origin,
   );
-  const line = () => type("small").prose;
-  const height = () => (panel() ? 36 : props.tablet ? 34 : 35);
-  const bare = () => props.tablet || panel();
+  const line = () => type("body").prose;
+  const pad = 8;
   return (
     <>
-      <If when={!panel()}>
+      <If when={props.hint}>
         <TaskCommentHint state={props.state} />
       </If>
       <If when={limits.tooLong()}>
@@ -131,60 +147,47 @@ function DesktopCommentBox(props: {
       </If>
       <View
         style={{
-          ...row,
-          alignItems: "flex-end",
-          gap: 6,
           borderWidth: 1,
-          borderColor: panel() ? c().border : c().strong,
-          minHeight: height() + 2,
+          borderColor: editor.focused() ? c().ink : c().strong,
+          backgroundColor: c().canvas,
           flexShrink: 0,
-          marginHorizontal: props.panelInset,
-          paddingLeft: panel() || props.tablet ? 10 : 9,
-          paddingRight: bare() ? 10 : 4,
         }}
       >
-        <commentText.Editor
+        <chatText.Editor
           editor={editor}
           label={uiText("comment")}
-          placeholder={uiText("replyARunningTaskReadsIt")}
-          variant="small"
-          minHeight={height()}
-          maxHeight={160}
-          padding={{
-            top: (height() - line()) / 2,
-            bottom: (height() - line()) / 2,
-            left: 0,
-            right: 0,
-          }}
-          style={{ flex: 1 }}
+          placeholder={uiText("commentPlaceholder")}
+          variant="body"
+          minHeight={line() + pad * 2}
+          maxHeight={line() * 6 + pad * 2}
+          clip
+          padding={{ top: pad, bottom: pad, left: 10, right: 10 }}
         />
-        <View style={{ height: height(), justifyContent: "center" }}>
-          <If
-            when={!bare()}
-            else={
-              <View
-                role="button"
-                accessibilityLabel={uiText("sendComment")}
-                accessibilityState={{ disabled: disabled() }}
-                onPress={() => void submit()}
-                style={{ cursor: "pointer", opacity: disabled() ? 0.45 : 1 }}
-              >
-                <Icon name="send" size={14} tone="muted" />
-              </View>
-            }
-          >
-            <Button
-              label={uiText("sendComment")}
-              icon="send"
-              iconOnly
-              iconSize={14}
-              labelTone="muted"
-              tone="ghost"
-              size={28}
-              disabled={disabled()}
-              onPress={() => void submit()}
-            />
+        <View
+          style={{
+            ...row,
+            justifyContent: "flex-end",
+            gap: 8,
+            height: props.phone ? 44 : 36,
+            paddingLeft: 10,
+            paddingRight: 5,
+          }}
+        >
+          <If when={!props.phone && !touchScreen}>
+            <Label variant="caption" tone="faint">
+              {sendShortcut}
+            </Label>
           </If>
+          <Button
+            label={uiText("comment")}
+            accessibilityLabel={uiText("sendComment")}
+            size={props.phone ? 32 : 26}
+            labelTone={disabled() ? "muted" : "ink"}
+            dimDisabled={props.state.posting()}
+            disabled={disabled()}
+            style={{ paddingHorizontal: props.phone ? 14 : 10 }}
+            onPress={() => void submit()}
+          />
         </View>
       </View>
     </>
@@ -203,69 +206,6 @@ export function TaskCommentHint(props: {
         {uiText("parentCommentHint")}
       </Label>
     </If>
-  );
-}
-
-/** The phone's reply box under the task: a borderless editor, then Send on its own row. */
-function PhoneCommentBox(props: {
-  state: TaskDetailState;
-  origin: string | undefined;
-}) {
-  const c = colors();
-  const { editor, submit, disabled, limits } = useCommentEditor(
-    props.state,
-    props.origin,
-  );
-  return (
-    <View
-      style={{
-        backgroundColor: c().surface,
-        borderTopWidth: 1,
-        borderColor: c().border,
-      }}
-    >
-      <TaskCommentHint
-        state={props.state}
-        style={{ paddingTop: 10, paddingHorizontal: 16 }}
-      />
-      <If when={limits.tooLong()}>
-        <Label
-          tone="amber"
-          variant="caption"
-          style={{ paddingTop: 10, paddingHorizontal: 16 }}
-        >
-          {uiText("composerTooLong")}
-        </Label>
-      </If>
-      <commentText.Editor
-        editor={editor}
-        label={uiText("comment")}
-        placeholder={uiText("replyARunningTaskReadsIt")}
-        minHeight={48}
-        maxHeight={180}
-        padding={{ top: 13, bottom: 13, left: 16, right: 16 }}
-      />
-      <View
-        style={{
-          ...row,
-          justifyContent: "flex-end",
-          height: 48,
-          paddingLeft: 16,
-          paddingRight: 12,
-          gap: 8,
-        }}
-      >
-        <Button
-          label={uiText("send")}
-          tone="primary"
-          size={32}
-          style={{ paddingHorizontal: 14 }}
-          disabled={disabled()}
-          dimDisabled={props.state.posting()}
-          onPress={() => void submit()}
-        />
-      </View>
-    </View>
   );
 }
 

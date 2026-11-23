@@ -1,4 +1,5 @@
 export { openDocDraft } from "./doc-draft";
+export { sendShortcut } from "./keys";
 export type { TextPlugin } from "./plugin";
 export type { Uploads } from "./plugins/attachment";
 export { attachment, shownFiles } from "./plugins/attachment";
@@ -8,5 +9,5 @@ export { mention, shownMentions } from "./plugins/mention";
 export { quote } from "./plugins/quote";
 export { serialize } from "./plugins/serialize";
 export { submitKeys } from "./plugins/submit-keys";
-export { chatText, commentText } from "./systems";
+export { chatText, descriptionText } from "./systems";
 export { createTextSystem } from "./text-system";
