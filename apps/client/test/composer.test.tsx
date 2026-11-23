@@ -128,6 +128,38 @@ test("a long paste folds where the caret is, survives switching and sends its te
   expect(app.shows("text:[[2,9]]")).toBe(true);
 });
 
+test("a bracket pair an input method types in one go leaves the caret between its halves", async () => {
+  const app = await fixture();
+  await app.type(input, "看");
+  // A Chinese input method that pairs brackets commits both halves at once (#366).
+  await app.type(input, "（）");
+  await app.wait(200);
+  await app.type(input, "中文");
+  await app.keyboard.press("enter");
+  await app.waitFor(sent(["alpha", "看（中文）", "queue", []]));
+});
+
+test("a bracket pair after a mention leaves the caret between its halves too", async () => {
+  const app = await fixture();
+  await app.type(input, "看 @Ad");
+  await app.press("label:Mention Ada");
+  await app.type(input, "（）");
+  await app.wait(200);
+  await app.type(input, "hi");
+  await app.keyboard.press("enter");
+  await app.waitFor(sent(["alpha", "看 @Ada （hi）", "queue", []]));
+});
+
+test("brackets typed one at a time keep the caret after them", async () => {
+  const app = await fixture();
+  await app.type(input, "（");
+  await app.type(input, "）");
+  await app.wait(200);
+  await app.type(input, "了");
+  await app.keyboard.press("enter");
+  await app.waitFor(sent(["alpha", "（）了", "queue", []]));
+});
+
 test("a folded paste unfolds into its text, and undo folds it again", async () => {
   const app = await fixture();
   await app.type(input, "left ");

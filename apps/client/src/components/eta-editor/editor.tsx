@@ -3,7 +3,12 @@ import type {
   DocNode,
 } from "@eta/client-contracts/composer-doc";
 import type { ViewStyle } from "nsh";
-import type { RichEditorFile, RichEditorSession, RichNodeJSON } from "nsh/base";
+import type {
+  RichEditorFile,
+  RichEditorRef,
+  RichEditorSession,
+  RichNodeJSON,
+} from "nsh/base";
 import type { TextPlugin } from "./plugin";
 import { classifyClipboard } from "@eta/client-contracts/composer-doc";
 import { cleanup, Clipboard, signal, View } from "nsh";
@@ -22,6 +27,7 @@ import { baseText, editorLook, useTextTheme } from "./look";
 import { asRich, markdownToDoc } from "./markdown";
 import { refusedFile } from "./plugins/attachment";
 import { LineRoom } from "./room";
+import { followSinkCaret } from "./sink-caret";
 
 // The composer's editor: nsh's RichEditor (a ProseMirror state in Rust, edited natively — typing,
 // selection, input methods, undo) with the app's plugins on it. Each place that writes something
@@ -71,6 +77,7 @@ export interface EtaEditorHandle {
     laidOut: () => void;
     pasteFiles: (files: RichEditorFile[], uris: string[]) => void;
     dropFiles: (uris: string[]) => void;
+    ref: (ref: RichEditorRef) => void;
   };
   plugins: TextPlugin[];
 }
@@ -98,6 +105,7 @@ export function createEtaEditor(profile: EtaEditorProfile): EtaEditorHandle {
   const focused = signal(false);
   const width = signal(0);
   const laidOut = signal(0);
+  let view: RichEditorRef | undefined;
   // One paste hook for every plugin: the clipboard rules decide what the paste is, then the
   // plugin that takes that kind of paste does it. A copy from an editor of ours (`data-pm-slice`,
   // its blocks in the HTML) goes in natively, so a copied block pastes as a block.
@@ -220,12 +228,16 @@ export function createEtaEditor(profile: EtaEditorProfile): EtaEditorHandle {
       dropFiles(uris) {
         if (takesFiles) void filesFromUris(uris).then(addFiles);
       },
+      ref: (ref) => (view = ref),
     },
   };
   self.handle = handle;
   session.on("revision", ({ revision: value }) => revision.set(value));
+  // Where an input method puts its caret, the editor's goes too (sink-caret.ts, #366).
+  const stopCaret = followSinkCaret(session, () => view, composing);
   const stops = plugins.map((plugin) => plugin.editor?.setup?.(handle));
   cleanup(() => {
+    stopCaret();
     for (const stop of stops) stop?.();
   });
   return handle;
@@ -279,6 +291,7 @@ export function EtaEditor(props: {
       </Each>
       <LineRoom.Provider value={room}>
         <RichEditor
+          ref={editor.view.ref}
           editor={editor.session}
           testID="eta-editor"
           accessibilityLabel={props.label}
