@@ -310,7 +310,12 @@ export const chatMessages = {
   newBadge: ["New", "新"],
   confirmationRequestCaption: ["Confirmation request", "确认请求"],
   giveUp: ["Give up", "放弃"],
-  moreWaiting: ["and {{count}} more waiting", "还有 {{count}} 个在等待"],
+  moreQuestions: ["{{count}} more", "还有 {{count}} 条"],
+  waitingForYourAnswer: [
+    "{{name}} is waiting for your answer: {{prompt}}",
+    "{{name}} 在等你回答：{{prompt}}",
+  ],
+  jumpToQuestion: ["Jump to question", "跳到提问"],
   proposalNewGroup: ["New group", "新建群组"],
   proposalNewAgent: ["New agent", "新建智能体"],
   proposalNewRoutine: ["New routine", "新建定时任务"],

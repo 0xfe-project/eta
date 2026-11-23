@@ -18,6 +18,7 @@ import {
   textFaces,
   textStyle,
 } from "../../components";
+import { StatusDot } from "../../components/status-dot";
 import { control, icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
@@ -454,6 +455,17 @@ function Choice(props: {
   );
 }
 
+/** The question a jump went to, its card lit up for a moment. */
+const flashing = signal("");
+let flashTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Lights up the card of question `id` for a moment, after a jump to it. */
+export function flashQuestion(id: string) {
+  clearTimeout(flashTimer);
+  flashing.set(id);
+  flashTimer = setTimeout(() => flashing.set(""), 1200);
+}
+
 function QuestionCard(props: { item: InteractionView }) {
   const host = useHost();
   const c = colors();
@@ -485,10 +497,15 @@ function QuestionCard(props: { item: InteractionView }) {
   }
   return (
     <View
+      testID={`question-${props.item.id}`}
       style={{
         borderWidth: 1,
-        borderColor: c().warning,
-        backgroundColor: c().canvas,
+        borderColor: c().strong,
+        // A jump from the strip above the transcript lights the card up for a moment.
+        backgroundColor:
+          flashing() === props.item.id ? c().warningFill : c().canvas,
+        transitionProperty: "backgroundColor",
+        transitionDuration: flashing() === props.item.id ? 0 : 900,
       }}
     >
       <View
@@ -597,54 +614,52 @@ function QuestionCard(props: { item: InteractionView }) {
   );
 }
 
-/** The questions waiting in a conversation, above its transcript. */
+/** A question waiting off screen, above the transcript: pressing it goes to the question. */
 export function PendingStrip(props: {
-  items: InteractionView[];
-  onOpen?: (item: InteractionView) => void;
+  item: InteractionView;
+  /** How many other questions wait in the conversation. */
+  more: number;
+  onJump: (item: InteractionView) => void;
 }) {
   const host = useHost();
   const c = colors();
-  const first = () => props.items[0];
+  const text = () =>
+    uiText("waitingForYourAnswer", {
+      name: host.agent(props.item.agentId)?.name ?? uiText("agent"),
+      prompt: props.item.prompt,
+    });
   return (
-    <If when={first()}>
-      {(item) => (
-        <View
-          role="button"
-          accessibilityLabel={item().prompt}
-          onPress={() => props.onOpen?.(item())}
-          hoverStyle={{ opacity: opacity.muted }}
-          focusVisibleStyle={focusRing(c())}
-          style={{
-            cursor: "pointer",
-            gap: space[2],
-            paddingVertical: space[4],
-            paddingHorizontal: space[8],
-            borderWidth: 1,
-            borderColor: c().warning,
-            backgroundColor: c().canvas,
-          }}
-        >
-          <View style={{ ...row, gap: space[8], paddingVertical: space[2] }}>
-            <Label
-              tracking="caps"
-              variant="caption"
-              tone="warning"
-              style={{ textTransform: "uppercase" }}
-            >
-              {host.agent(item().agentId)?.name ?? uiText("agent")}
-            </Label>
-            <Label variant="small" lines={1} style={{ flex: 1 }}>
-              {item().prompt}
-            </Label>
-          </View>
-          <If when={props.items.length > 1}>
-            <Label variant="caption" tone="muted">
-              {uiText("moreWaiting", { count: props.items.length - 1 })}
-            </Label>
-          </If>
-        </View>
-      )}
-    </If>
+    <View
+      role="button"
+      accessibilityLabel={uiText("jumpToQuestion")}
+      accessibilityHint={text()}
+      onPress={() => props.onJump(props.item)}
+      hoverStyle={{ backgroundColor: c().selected }}
+      focusVisibleStyle={focusRing(c())}
+      style={{
+        ...row,
+        height: 30,
+        gap: 8,
+        paddingHorizontal: 10,
+        borderWidth: 1,
+        borderColor: c().strong,
+        backgroundColor: c().canvas,
+        cursor: "pointer",
+      }}
+    >
+      <StatusDot color={c().warning} />
+      <Label variant="small" lines={1} style={{ flex: 1 }}>
+        {text()}
+      </Label>
+      <If when={props.more > 0}>
+        <Label variant="caption" tone="muted" style={{ flexShrink: 0 }}>
+          {uiText("moreQuestions", { count: props.more })}
+        </Label>
+      </If>
+      <Label variant="caption" tone="muted" style={{ flexShrink: 0 }}>
+        {uiText("jumpToQuestion")}
+      </Label>
+    </View>
   );
 }
 

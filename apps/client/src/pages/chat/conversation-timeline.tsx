@@ -64,6 +64,8 @@ export function ConversationTimeline(props: {
   onWidgetDraft: (conversationId: string, text: string) => void;
   /** Hands out the function that scrolls to the row of a question's reply. */
   revealer?: (reveal: (replyId: string | null) => void) => void;
+  /** The ids of the rows on screen, each time they change. */
+  onVisibleRows?: (ids: ReadonlySet<string>) => void;
   /** Quote what the reader selected in a reply into the composer. */
   onQuote: (conversationId: string, text: string) => void;
   /** A mention's press in a message: its member, by agent id. */
@@ -265,6 +267,9 @@ export function ConversationTimeline(props: {
           }}
           onViewableItemsChange={({ viewableItems }) => {
             firstVisibleId.set(viewableItems[0]?.item.id);
+            props.onVisibleRows?.(
+              new Set(viewableItems.map((token) => token.item.id)),
+            );
           }}
           contentStyle={{
             paddingLeft: space[16],
