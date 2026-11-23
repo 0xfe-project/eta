@@ -225,8 +225,11 @@ describe("the 'needs login' a check found, after the host restarts", () => {
         expect(row.value).not.toContain(secret);
   });
 
-  it("is cleared by a sign-in, so it does not come back after a sign-out", async () => {
+  it("gives way to a stored sign-in, and is cleared by a sign-in so it does not come back after a sign-out", async () => {
     const { credentials, start } = await learned();
+    credentials.signed = true; // signed in elsewhere: the kept answer gives way
+    expect((await start()).login()).toBe("signed_in");
+    credentials.signed = false;
     const second = await start();
     await second.call("loginServer", { name: "demo", server: "remote" });
     expect(credentials.signed).toBe(true);
@@ -236,13 +239,6 @@ describe("the 'needs login' a check found, after the host restarts", () => {
     const fourth = await start();
     expect(fourth.login()).not.toBe("needs_login");
   });
-
-  it("gives way to a stored sign-in", async () => {
-    const { credentials, start } = await learned();
-    credentials.signed = true;
-    expect((await start()).login()).toBe("signed_in");
-  });
-
   it("is replaced by a later good answer", async () => {
     const { site, start } = await learned();
     site.state.mode = "open";
