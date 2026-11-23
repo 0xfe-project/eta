@@ -440,6 +440,9 @@ export function pluginsPlugin(
         wire.handle("plugins", "composioStatus", async () => ({
           result: { hasKey: needComposio().hasKey() },
         })),
+        wire.handle("plugins", "composioConnected", async () => ({
+          result: await needComposio().connected(),
+        })),
         wire.handle("plugins", "composioLink", async (call) => ({
           result: {
             redirectUrl: await needComposio().link(

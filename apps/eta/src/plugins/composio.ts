@@ -416,6 +416,55 @@ export class Composio {
     }
   }
 
+  /**
+   * The toolkits the user has connected with Composio: the ACTIVE accounts of the same user `link`
+   * uses, read page by page. Only a status comes back for a failure, never its text: the answer
+   * is only a mark in the market, and a key refused or Composio silent just leaves it out.
+   */
+  async connected(): Promise<{ status: ComposioStatus; slugs: string[] }> {
+    const key = this.#apiKey();
+    if (key === undefined) return { status: "needs_key", slugs: [] };
+    const slugs = new Set<string>();
+    let cursor: string | null = null;
+    try {
+      for (let page = 1; ; page++) {
+        if (page > MAX_PAGES)
+          throw new Error(`the accounts are more than ${MAX_PAGES} pages`);
+        const query = new URLSearchParams({
+          user_ids: this.#userId(),
+          statuses: "ACTIVE",
+          limit: String(PAGE),
+        });
+        if (cursor !== null) query.set("cursor", cursor);
+        const body = await this.#call(
+          "GET",
+          `/api/v3/connected_accounts?${query}`,
+          key,
+        );
+        if (!isPlain(body) || !Array.isArray(body.items))
+          throw new Error("the answer is not a list of accounts");
+        for (const item of body.items) {
+          if (!isPlain(item) || item.status !== "ACTIVE") continue;
+          const slug = isPlain(item.toolkit) ? item.toolkit.slug : undefined;
+          if (typeof slug === "string" && SLUG.test(slug)) slugs.add(slug);
+        }
+        const next: unknown = body.next_cursor;
+        if (typeof next !== "string" || next === "" || body.items.length === 0)
+          return { status: "ready", slugs: [...slugs] };
+        if (next === cursor) throw new Error("the account pages do not end");
+        cursor = next;
+      }
+    } catch (error) {
+      return {
+        status:
+          error instanceof Refused && error.status === 401
+            ? "key_rejected"
+            : "error",
+        slugs: [],
+      };
+    }
+  }
+
   #userId(): string {
     const saved = this.#settings.get(USER_ID_KEY);
     if (typeof saved === "string" && SLUG.test(saved)) return saved;
