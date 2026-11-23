@@ -4,10 +4,18 @@ import { fill, Label, row } from "../../components";
 import { space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
+/** The photograph atop the welcome step. */
+const photoHeight = { phone: 200, other: 272 } as const;
+
 export function WelcomeStep(props: { phone: boolean }) {
   return (
     <>
-      <View style={{ height: props.phone ? 200 : 272, position: "relative" }}>
+      <View
+        style={{
+          height: props.phone ? photoHeight.phone : photoHeight.other,
+          position: "relative",
+        }}
+      >
         <Image
           src={photo}
           style={{

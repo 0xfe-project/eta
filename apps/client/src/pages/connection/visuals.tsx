@@ -4,6 +4,12 @@ import { colors, fill, Label } from "../../components";
 import { opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
+/** The connection card's width off phones (the form, an error, a download). */
+export const cardWidth = 480;
+/** The phone hero's photograph, and how wide its headline runs over it. */
+const heroHeight = 296;
+const headlineWidth = 320;
+
 export function ConnectionIntro(props: { phone: boolean }) {
   return (
     <View style={{ gap: props.phone ? space[12] : space[4] }}>
@@ -72,7 +78,7 @@ export function PhoneHero() {
   return (
     <View
       style={{
-        height: 295,
+        height: heroHeight,
         flexShrink: 0,
         justifyContent: "flex-end",
         padding: space[16],
@@ -111,7 +117,7 @@ export function PhoneHero() {
         style={{
           // design-value: text over the photograph, the same in either theme
           color: "#ffffff",
-          maxWidth: 320,
+          maxWidth: headlineWidth,
         }}
       >
         {uiText("yourMachinesInYourPocket")}

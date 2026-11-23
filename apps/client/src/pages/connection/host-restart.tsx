@@ -3,9 +3,16 @@ import type { light } from "../../components/theme";
 import type { UpgradeResult } from "../settings/updates/progress";
 import { cleanup, computed, effect, signal, untracked, View } from "nsh";
 import { Dialog } from "nsh/base";
-import { Button, colors, fill, Label, row } from "../../components";
+import {
+  Button,
+  colors,
+  dialogWidth,
+  fill,
+  Label,
+  row,
+} from "../../components";
 import { screenInsets } from "../../components/safe-area";
-import { StatusDot } from "../../components/status-dot";
+import { dotSize, StatusDot } from "../../components/status-dot";
 import { showToast } from "../../components/toast";
 import { space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
@@ -196,7 +203,12 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
       state === "failed" ? "red" : state === "restoring" ? "warning" : "blue";
     return state === "todo" ? (
       <View
-        style={{ width: 6, height: 6, borderWidth: 1, borderColor: c().strong }}
+        style={{
+          width: dotSize,
+          height: dotSize,
+          borderWidth: 1,
+          borderColor: c().strong,
+        }}
       />
     ) : (
       <StatusDot color={c()[tone]} />
@@ -259,6 +271,7 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
             accessibilityLabel={uiText("hostUpdateInProgress")}
             style={{
               ...fill,
+              // design-value: the update screen covers an open dialog (layer.modal), under toasts
               zIndex: 500,
               backgroundColor: c().canvas,
               justifyContent: "center",
@@ -268,7 +281,13 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
               paddingHorizontal: space[24],
             }}
           >
-            <View style={{ width: 448, maxWidth: "100%", gap: space[16] }}>
+            <View
+              style={{
+                width: dialogWidth.md,
+                maxWidth: "100%",
+                gap: space[16],
+              }}
+            >
               <>
                 <If when={running()}>
                   <View style={{ gap: space[4] }}>

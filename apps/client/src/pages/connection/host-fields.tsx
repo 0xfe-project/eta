@@ -1,7 +1,10 @@
 import { View } from "nsh";
 import { colors, Field, Label, row, textFaces } from "../../components";
-import { control, space, tracked } from "../../components/tokens";
+import { border, control, space, tracked } from "../../components/tokens";
 import { uiText } from "../../i18n";
+
+/** A row of the plain (phone) form; its field sits inside the row's bottom line. */
+const plainRowHeight = 56;
 
 export function HostFields(props: {
   plain?: boolean;
@@ -19,7 +22,7 @@ export function HostFields(props: {
     props.plain
       ? {
           flex: 1,
-          height: 54,
+          height: plainRowHeight - 2 * border.hair,
           borderWidth: 0,
           paddingHorizontal: 0,
           fontSize: type("subtitle").size,
@@ -35,7 +38,7 @@ export function HostFields(props: {
     props.plain
       ? {
           ...row,
-          height: 56,
+          height: plainRowHeight,
           paddingHorizontal: space[16],
           gap: space[16],
           borderBottomWidth: 1,
