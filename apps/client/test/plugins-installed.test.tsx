@@ -388,3 +388,14 @@ test("a result that names no header has no retest button", async () => {
   expect(app.shows("Connected · 12 ms")).toBe(true);
   expect(app.shows("and retest")).toBe(false);
 });
+
+test("an off plugin card says it is off once, at its switch, and not on the version line", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", {
+    width: 1100,
+    height: 700,
+  });
+  expect(app.shows("off-plugin")).toBe(true);
+  expect(app.count("text:Off for all agents")).toBe(1);
+  // What else the line says is still there: a plugin that needs configuring.
+  expect(app.shows("Needs configuring")).toBe(true);
+});

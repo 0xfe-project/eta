@@ -176,3 +176,12 @@ test("a host that does not list the toolkits as plugins: the cards show as befor
   expect(app.count("id:composio-plugin-switch")).toBe(0);
   expect(app.count("id:composio-plugin-error")).toBe(0);
 });
+
+test("a card has one status badge at its top right: Connected, or Unavailable when its session did not check out, and no small line under the name", async () => {
+  const app = await open("./fixtures/plugins-composio-virtual.tsx", DESKTOP);
+  await app.waitFor("id:composio-plugin-switch");
+  expect(app.count("id:composio-connected")).toBe(1);
+  expect(app.count("id:composio-plugin-error")).toBe(1);
+  expect(app.count("text:Unavailable")).toBe(1);
+  expect(app.shows("Its session did not check out")).toBe(false);
+});
