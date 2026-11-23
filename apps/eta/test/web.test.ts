@@ -51,6 +51,14 @@ beforeAll(() => {
       hits.push(pathname);
       if (pathname === "/moved")
         return Response.redirect(`${siteUrl}/article`, 302);
+      // Where a page may send a fetch that the private-network list does not open.
+      if (pathname === "/to-private")
+        return Response.redirect("http://192.168.77.1/admin", 302);
+      if (pathname === "/to-metadata")
+        return Response.redirect(
+          "http://169.254.169.254/latest/meta-data/",
+          302,
+        );
       const page = PAGES[pathname];
       return page === undefined
         ? new Response("not here", { status: 404 })
@@ -195,6 +203,21 @@ describe("web_fetch", () => {
     }
     // Refused before a connection was made.
     expect(hits).toEqual([]);
+  });
+
+  it("refuses in words that say where to open it, not with a flag the host does not have", async () => {
+    const { web } = makeWeb();
+    const fetch = toolsOf(web).get("web_fetch");
+    const privateRefusal = await run(fetch, { url: "http://10.0.0.1/" });
+    expect(privateRefusal.text).toContain(
+      "Settings › Network › Private network",
+    );
+    const loopback = await run(fetch, { url: `${siteUrl}/article` });
+    expect(loopback.text).toContain("Allow local services (localhost)");
+    const metadata = await run(fetch, { url: "http://169.254.169.254/" });
+    expect(metadata.text).toContain("never fetched");
+    for (const { text } of [privateRefusal, loopback, metadata])
+      expect(text).not.toContain("allow-private-network");
   });
 
   it("cuts a long page into parts, says where the next starts, and reads on from its copy", async () => {
@@ -461,5 +484,117 @@ describe.skipIf(process.env.ETA_WEB_LIVE !== "1")("live", () => {
     });
     expect(isError, text).toBe(false);
     expect(text).toMatch(/^1\. /);
+  });
+});
+
+/** `web.privateNetwork` as the config store reports it. */
+function privateNetwork(
+  allow: string[],
+  loopback = false,
+  invalid: { entry: string; reason: "syntax" | "prefix" | "never" }[] = [],
+) {
+  return { allow, loopback, invalid };
+}
+
+describe("web_fetch and the private-network list", () => {
+  it("reaches local services only while their switch is on, and follows the config without a restart", async () => {
+    const { web, warnings } = makeWeb();
+    const fetch = toolsOf(web).get("web_fetch");
+    expect((await run(fetch, { url: `${siteUrl}/article` })).text).toMatch(
+      /^PRIVATE_NETWORK_BLOCKED: /,
+    );
+
+    // A list alone does not open loopback, even one that covers every address.
+    web.setPrivateNetwork(privateNetwork(["0.0.0.0/0", "::/0"]));
+    expect((await run(fetch, { url: `${siteUrl}/article` })).text).toMatch(
+      /^PRIVATE_NETWORK_BLOCKED: /,
+    );
+
+    web.setPrivateNetwork(privateNetwork([], true));
+    const opened = await run(fetch, { url: `${siteUrl}/moved` });
+    expect(opened.isError).toBe(false);
+    expect(opened.text).toContain("**main content**");
+
+    // Off again: the next fetch is refused, and no copy of the page is read on from.
+    web.setPrivateNetwork(undefined);
+    expect(
+      (await run(fetch, { url: `${siteUrl}/long`, offset: 10 })).text,
+    ).toMatch(/^PRIVATE_NETWORK_BLOCKED: /);
+    expect(warnings.join("\n")).toContain("local services (loopback) on");
+    expect(warnings.at(-1)).toContain("private network: closed");
+  });
+
+  it("lets a listed private address through and refuses an unlisted one", async () => {
+    // 192.0.2.0/24 is a documentation network: nothing answers there, so an allowed fetch ends
+    // in a connection failure or a timeout instead of a refusal.
+    const { web } = makeWeb({ timeoutMs: 1_500 });
+    web.setPrivateNetwork(privateNetwork(["192.0.2.0/24"]));
+    const fetch = toolsOf(web).get("web_fetch");
+    const allowed = await run(fetch, { url: "http://192.0.2.10/" });
+    expect(allowed.isError).toBe(true);
+    expect(allowed.text).not.toMatch(/^PRIVATE_NETWORK_BLOCKED/);
+    const refused = await run(fetch, { url: "http://198.51.100.10/" });
+    expect(refused.text).toMatch(/^PRIVATE_NETWORK_BLOCKED: .*Private network/);
+    // A port on the entry opens that port only.
+    web.setPrivateNetwork(privateNetwork(["192.0.2.10:8080"]));
+    expect((await run(fetch, { url: "http://192.0.2.10/" })).text).toMatch(
+      /^PRIVATE_NETWORK_BLOCKED: /,
+    );
+  });
+
+  it("never reaches metadata or link-local addresses, even when the list names them", async () => {
+    const { web } = makeWeb();
+    web.setPrivateNetwork(
+      privateNetwork(["169.0.0.0/8", "fe80::/9", "0.0.0.0/0", "::/0"], true),
+    );
+    const fetch = toolsOf(web).get("web_fetch");
+    for (const url of [
+      "http://169.254.169.254/latest/meta-data/",
+      "http://169.254.10.1/",
+      "http://[fe80::1]/",
+      "http://[fd00:ec2::254]/",
+    ]) {
+      const { text } = await run(fetch, { url });
+      expect(text, url).toMatch(/^PRIVATE_NETWORK_BLOCKED: .*never fetched/);
+    }
+  });
+
+  it("checks every redirect: a page that sends the fetch to an unlisted or metadata address is refused", async () => {
+    const { web } = makeWeb();
+    web.setPrivateNetwork(privateNetwork(["10.0.0.0/8", "169.0.0.0/8"], true));
+    const fetch = toolsOf(web).get("web_fetch");
+    const unlisted = await run(fetch, { url: `${siteUrl}/to-private` });
+    expect(unlisted.text).toMatch(/^PRIVATE_NETWORK_BLOCKED: 192\.168\.77\.1/);
+    const metadata = await run(fetch, { url: `${siteUrl}/to-metadata` });
+    expect(metadata.text).toMatch(
+      /^PRIVATE_NETWORK_BLOCKED: 169\.254\.169\.254 .*never fetched/,
+    );
+  });
+
+  it("logs and ignores an entry that is not valid, and the others apply", async () => {
+    const { web, warnings } = makeWeb();
+    web.setPrivateNetwork(
+      privateNetwork(["10.0.0.0/33", "192.0.2.0/24"], true, [
+        { entry: "10.0.0.0/33", reason: "prefix" },
+      ]),
+    );
+    expect(warnings).toContainEqual(
+      expect.stringContaining('ignoring "10.0.0.0/33"'),
+    );
+    expect(warnings).toContainEqual(
+      expect.stringContaining("web_fetch may reach 192.0.2.0/24;"),
+    );
+    const fetch = toolsOf(web).get("web_fetch");
+    expect((await run(fetch, { url: `${siteUrl}/article` })).isError).toBe(
+      false,
+    );
+    // The same config again is not a change, and says nothing.
+    const before = warnings.length;
+    web.setPrivateNetwork(
+      privateNetwork(["10.0.0.0/33", "192.0.2.0/24"], true, [
+        { entry: "10.0.0.0/33", reason: "prefix" },
+      ]),
+    );
+    expect(warnings.length).toBe(before);
   });
 });

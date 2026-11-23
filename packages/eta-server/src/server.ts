@@ -22,7 +22,10 @@
  */
 
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import type { MountedPlugin } from "@eta/client-contracts";
+import type {
+  MountedPlugin,
+  PrivateNetworkConfig,
+} from "@eta/client-contracts";
 import type { CompactionSummarizer, KernelModels } from "@eta/core";
 import type { RemoteSessions } from "./bundled/sessions";
 import type { SessionManagerOptions } from "./manager";
@@ -79,6 +82,14 @@ export interface AssembleOptions {
    * caller that manages its own proxy wants.
    */
   network?: boolean | undefined;
+  /**
+   * Told what the config's `web.privateNetwork` says (undefined without the section): once when
+   * the config is first read, and again whenever it changes, from the settings page or an
+   * editor (within the watch tick). A config that does not parse is not a change.
+   */
+  onPrivateNetwork?:
+    | ((privateNetwork: PrivateNetworkConfig | undefined) => void)
+    | undefined;
   /** The summarizer sessions compact with. Without one they run unbound. */
   compaction?: CompactionSummarizer;
   /** The base system prompt for local sessions; absent uses the harness default. */
@@ -265,6 +276,15 @@ export async function assembleServer(
     // (below, `reloadModels`), so no restart is involved on either side.
     watchIntervalMs: 2_000,
   });
+  if (options.onPrivateNetwork !== undefined) {
+    const tell = options.onPrivateNetwork;
+    providers.watch((view) => tell(view.privateNetwork));
+    try {
+      tell((await providers.view()).privateNetwork);
+    } catch (error) {
+      warn(`[eta-server] ${String(error)}`);
+    }
+  }
   const settings = new SettingsStore({
     path: settingsPath(options.dataDir),
     warn,

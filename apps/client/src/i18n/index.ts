@@ -18,6 +18,7 @@ const messages = {
   email: ["Email", "邮箱"],
   archived: ["Archived", "已归档"],
   update: ["Update", "更新"],
+  network: ["Network", "网络"],
   more: ["More", "更多"],
   chat: ["Chat", "聊天"],
   tasks: ["Tasks", "任务"],

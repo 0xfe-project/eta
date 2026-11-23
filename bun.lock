@@ -89,10 +89,11 @@
         "@eta/server": "*",
         "@eta/ssh": "*",
         "@searxng-js/searxng": "0.1.0",
-        "@searxng-js/sex-page": "0.1.1",
-        "@searxng-js/sex-scrape": "0.1.1",
-        "@searxng-js/sex-search": "0.1.1",
-        "@searxng-js/sex-searxng": "0.1.1",
+        "@searxng-js/sex-egress": "0.2.0",
+        "@searxng-js/sex-page": "0.2.0",
+        "@searxng-js/sex-scrape": "0.2.0",
+        "@searxng-js/sex-search": "0.2.0",
+        "@searxng-js/sex-searxng": "0.2.0",
         "cheerio": "1.1.2",
         "croner": "10.0.1",
         "fflate": "^0.8.3",
@@ -385,6 +386,7 @@
         "@eta/harness": "*",
         "@eta/plugin-sdk": "*",
         "@eta/storage-jsonl": "*",
+        "@searxng-js/sex-egress": "0.2.0",
         "cordis": "4.0.0-rc.10",
       },
       "devDependencies": {
@@ -1133,15 +1135,15 @@
 
     "@searxng-js/searxng": ["@searxng-js/searxng@0.1.0", "", { "optionalDependencies": { "@searxng-js/darwin-arm64": "0.1.0", "@searxng-js/linux-x64": "0.1.0", "@searxng-js/win32-x64": "0.1.0" } }, "sha512-yMK6z7ffAaKfx72CFlZwpng3Lk8TdDneOq/Qdj5NxWIau3Xx4Ono0WMUZrej2o+1cmSmWUxLUU1yWi6nzHs+KA=="],
 
-    "@searxng-js/sex-egress": ["@searxng-js/sex-egress@0.1.1", "", { "dependencies": { "ipaddr.js": "^2" }, "peerDependencies": { "undici": "^8" }, "optionalPeers": ["undici"] }, "sha512-ktlIBXsfYc7223arK65hMGj7JRi7nl9DiQxn6h+GeCAG2ASyKUymvxoBFzs+rkdgbYpo3u0iHeBRHBG9BWwufQ=="],
+    "@searxng-js/sex-egress": ["@searxng-js/sex-egress@0.2.0", "", { "dependencies": { "ipaddr.js": "^2.5.0" }, "peerDependencies": { "undici": "^8" }, "optionalPeers": ["undici"] }, "sha512-BcDqdiGcQ+b9sONuns0bKoIqYkoQurNobWzWuS0arPJ5jX3IhCofh28px7H4ABJFwjRSD2T78/G/utm1YBKFwg=="],
 
-    "@searxng-js/sex-page": ["@searxng-js/sex-page@0.1.1", "", { "dependencies": { "defuddle": "^0.19.6", "linkedom": "^0.18.14", "unpdf": "^1.9.1" }, "peerDependencies": { "marked": "^18" }, "optionalPeers": ["marked"] }, "sha512-XB3BiSXHKyGjnOLjlkOTOaRoeNS5FpgI1NwvByHpvm83fRFshzmCAvHxFrjB4bMMqJBfJVc3mCkYgHZRWp1Mlg=="],
+    "@searxng-js/sex-page": ["@searxng-js/sex-page@0.2.0", "", { "dependencies": { "defuddle": "^0.19.11", "linkedom": "^0.18.15", "unpdf": "^2.2.1" }, "peerDependencies": { "marked": "^18" }, "optionalPeers": ["marked"] }, "sha512-NQb+JWTExXT3BBwUiNQTJVVUagPUBhfUUX4Nyhhqm+Wb4XyTh1Az5PrteheqyWghdujxLKfWGHLcCOXdLgfBZg=="],
 
-    "@searxng-js/sex-scrape": ["@searxng-js/sex-scrape@0.1.1", "", { "dependencies": { "@searxng-js/sex-egress": "^0.1.1", "@searxng-js/sex-page": "^0.1.1", "p-limit": "^7.3.3", "zod": "^4.6.7" } }, "sha512-3s+j5x3KzLI0FmikM44GyOeegC3UZTy/C2XsbAppy3J1Fq9LGeonjukjJDP1m3W7yUApln/7XC5ob+IBhBuduw=="],
+    "@searxng-js/sex-scrape": ["@searxng-js/sex-scrape@0.2.0", "", { "dependencies": { "@searxng-js/sex-egress": "^0.2.0", "@searxng-js/sex-page": "^0.2.0", "p-limit": "^7.3.3", "zod": "^4.6.7" } }, "sha512-40w2/qYLJ/YWM7bRBRQGTVfMYRtsBsJ9cACIU/sjBUfdIuGti4YTT2lvl0SBV5rfpSr/n+JkRJchbkr3cv7ozA=="],
 
-    "@searxng-js/sex-search": ["@searxng-js/sex-search@0.1.1", "", { "dependencies": { "@searxng-js/sex-scrape": "^0.1.1", "@searxng-js/sex-searxng": "^0.1.1", "p-limit": "^7.3.3", "zod": "^4.6.7" } }, "sha512-LxR9MTBCVBK/qhANcvu5eg8llWqbqirsjVTtqk8/NpmWzEvU5f2529dDHKWUztcT6gkNhW/idVq2Aor1gXRjbQ=="],
+    "@searxng-js/sex-search": ["@searxng-js/sex-search@0.2.0", "", { "dependencies": { "@searxng-js/sex-scrape": "^0.2.0", "@searxng-js/sex-searxng": "^0.2.0", "p-limit": "^7.3.3", "zod": "^4.6.7" } }, "sha512-+RNtz7yC8PYhbrcajPf6XJZGHWr0mU/3DDAmsnE3LVFxdrPaEbJwPhN6bT8u0IUbcbRW9s51YLfo4tD33XZzZQ=="],
 
-    "@searxng-js/sex-searxng": ["@searxng-js/sex-searxng@0.1.1", "", { "dependencies": { "@searxng-js/searxng": "0.1.0" }, "peerDependencies": { "yaml": "^2" }, "optionalPeers": ["yaml"] }, "sha512-s4H+9Nq8oK+ZezhLJylxusmIi0X8AgKZv290BbxZhF4JFPGiirxpoTMucH7tqS/z+KxHFxnUGMCJfk0YrYJgSw=="],
+    "@searxng-js/sex-searxng": ["@searxng-js/sex-searxng@0.2.0", "", { "dependencies": { "@searxng-js/searxng": "0.1.0" }, "peerDependencies": { "yaml": "^2" }, "optionalPeers": ["yaml"] }, "sha512-WWZnULwNY8/cMrHWA7rKjb7nxD+JElGK92+otMjLzvJWuW1+C7y0Ma4XSHodTQq2uBWQOpDTeKA3JwEt1MckxA=="],
 
     "@searxng-js/win32-x64": ["@searxng-js/win32-x64@0.1.0", "", { "os": "win32", "cpu": "x64" }, "sha512-Nj1pd13/PgAqiM1WosZSgNNNmak4fwQkiTfnQG8FaFbEcWuPbC3JwdUUfdBNfFYI55FpVw+n4eVi7srjltDuvQ=="],
 
@@ -1561,7 +1563,7 @@
 
     "define-lazy-prop": ["define-lazy-prop@3.0.0", "", {}, "sha512-N+MeXYoqr3pOgn8xfyRPREN7gHakLYjhsHhWGT3fWAiL4IkAt0iDw14QiiEm2bE30c5XX5q0FtAA3CK5f9/BUg=="],
 
-    "defuddle": ["defuddle@0.19.6", "", { "dependencies": { "commander": "^12.1.0", "mathml-to-latex": "^1.8.0" }, "optionalDependencies": { "linkedom": "^0.18.12", "temml": "^0.13.3", "turndown": "^7.2.0" }, "bin": { "defuddle": "dist/cli.js" } }, "sha512-VzIOHD5iKABZVQg2xcPYD/181rgfCO4Mtqay9rfYyXXewMSX+fI+XU3COMpi4YEW34EJuf0WC6f/52NlW9akIw=="],
+    "defuddle": ["defuddle@0.19.13", "", { "dependencies": { "commander": "^12.1.0", "mathml-to-latex": "^1.8.0" }, "optionalDependencies": { "linkedom": "^0.18.12", "temml": "^0.13.3", "turndown": "^7.2.0" }, "bin": { "defuddle": "dist/cli.js" } }, "sha512-BMrCxWUmHge6o8ZBKRDTFxXNSfGDiWiV2rzJLh9vVMJnDExzCvLzaSrSH1mwa/sZZtCBa3Z+jccCXNblj3qnCg=="],
 
     "dequal": ["dequal@2.0.3", "", {}, "sha512-0je+qPKHEMohvfRTCEo3CrPG6cAzAYgmzKyxRiYSSDkS6eGJdyVJm7WaYA5ECaAD9wLB2T4EEeymA5aFVcYXCA=="],
 
@@ -2675,7 +2677,7 @@
 
     "universalify": ["universalify@2.0.1", "", {}, "sha512-gptHNQghINnc/vTGIk0SOFGFNXw7JVrlRUtConJRlvaw6DuX0wO5Jeko9sWrMBhh+PsYAZ7oXAiOnf/UKogyiw=="],
 
-    "unpdf": ["unpdf@1.9.1", "", { "peerDependencies": { "@napi-rs/canvas": "^0.1.69 || ^1.0.0" }, "optionalPeers": ["@napi-rs/canvas"] }, "sha512-nO1npM2kNyd4hj1fKzUVU6bvnWjDSxI97eycM/DgzI83dYyW+pNRI9NeMQVEfef8fI3Q06i9lkMeE1HxrQqKoA=="],
+    "unpdf": ["unpdf@2.2.1", "", { "peerDependencies": { "@napi-rs/canvas": "^0.1.69 || ^1.0.0", "pdfjs-dist": "*" }, "optionalPeers": ["@napi-rs/canvas", "pdfjs-dist"] }, "sha512-tstQpe/fhxkDGY1ZtpejwnU14QZ9w0SYLo9lIZooB1zQ7QXVE4t+SBQUN/2a9+EBg9UrrO2bWlqdzV+UtoebHw=="],
 
     "unplugin": ["unplugin@3.7.0", "", { "dependencies": { "@jridgewell/remapping": "^2.3.5", "@rolldown/pluginutils": "^1.0.1", "picomatch": "^4.0.7", "webpack-virtual-modules": "^0.6.2" }, "peerDependencies": { "@farmfe/core": "*", "@rsbuild/core": "*", "@rspack/core": "*", "bun-types-no-globals": "*", "esbuild": "*", "rolldown": "*", "rollup": "*", "unloader": "*", "vite": "*", "webpack": "*" }, "optionalPeers": ["@farmfe/core", "@rsbuild/core", "@rspack/core", "bun-types-no-globals", "esbuild", "rolldown", "rollup", "unloader", "vite", "webpack"] }, "sha512-GrM2uq3DQo3hvLU2FjeYhooJ8BY9N6j1Fbzgx7Pta3VVJevsD3VP4dPjZkZOS0mLvN8w9zzr9OlP+31bSMyuLw=="],
 

@@ -1,4 +1,60 @@
 export const settingsMessages = {
+  privateNetwork: ["Private network", "私有网络"],
+  privateNetworkSubtitle: [
+    "web_fetch does not reach private networks unless listed here",
+    "web_fetch 默认不访问内网，这里列出的除外",
+  ],
+  privateNetworkAllowed: ["Allowed addresses", "允许的地址"],
+  privateNetworkNone: ["No addresses allowed", "还没有允许的地址"],
+  privateNetworkPlaceholder: [
+    "192.168.1.0/24, 10.0.0.5:8080 or docs.corp.internal",
+    "192.168.1.0/24、10.0.0.5:8080 或 docs.corp.internal",
+  ],
+  privateNetworkEntryHint: [
+    "A network (CIDR), an address or a host name (*.name for the names under it), optionally with :port.",
+    "网段（CIDR）、地址或主机名（*.name 表示其下所有主机名），可加 :端口。",
+  ],
+  privateNetworkAdd: ["Add", "添加"],
+  privateNetworkRemove: ["Remove {{entry}}", "删除 {{entry}}"],
+  privateNetworkLoopback: [
+    "Allow local services (localhost)",
+    "允许访问本机服务（localhost）",
+  ],
+  privateNetworkLoopbackHint: [
+    "Services on the host itself, such as Ollama or a local docs site.",
+    "主机本机上的服务，比如 Ollama 或本地文档站。",
+  ],
+  privateNetworkNote: [
+    "Cloud metadata and link-local addresses are never allowed. This is not a security boundary: agents can still reach the network from a terminal.",
+    "云元数据和链路本地地址始终不允许。这不是安全边界：agent 仍可通过终端访问网络。",
+  ],
+  privateNetworkApplies: [
+    "Changes apply to the next fetch, without restarting the host.",
+    "修改后对下一次抓取生效，不用重启 host。",
+  ],
+  privateNetworkUnsupported: [
+    "Update the host to set this here.",
+    "升级 host 后才能在这里设置。",
+  ],
+  privateNetworkIgnored: ["Ignored: {{reason}}", "已忽略：{{reason}}"],
+  privateNetworkSyntax: [
+    "not a network, address or host name",
+    "不是网段、地址或主机名",
+  ],
+  privateNetworkUrl: [
+    "write the host or network, not a URL",
+    "请填写主机或网段，不要写网址",
+  ],
+  privateNetworkPort: ["not a valid port (1–65535)", "端口无效（1–65535）"],
+  privateNetworkPrefix: ["not a valid prefix length", "网段前缀长度无效"],
+  privateNetworkNever: [
+    "link-local and cloud metadata addresses are never allowed",
+    "链路本地和云元数据地址始终不允许",
+  ],
+  privateNetworkLoopbackEntry: [
+    "for localhost, use the local services switch",
+    "本机地址请用「允许访问本机服务」开关",
+  ],
   autoArchivePhoneHint: [
     "Done or cancelled tasks whose timeline has had nothing new go to Archived. Anything new brings them back.",
     "时间线没有新内容的已完成或已取消任务会移到「已归档」。有新内容时会自动回来。",

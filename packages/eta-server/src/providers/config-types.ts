@@ -96,6 +96,10 @@ export interface EtaConfig {
     noProxy?: string;
   };
   providers?: EtaProviderConfig[];
+  /** What the host's own web tools may reach. Hand-edited, so every field is checked on read. */
+  web?: {
+    privateNetwork?: { allow?: unknown; loopback?: unknown };
+  };
 }
 
 /** RFC 7230 token: the only names worth accepting from a settings form. */

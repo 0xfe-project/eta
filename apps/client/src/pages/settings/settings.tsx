@@ -41,6 +41,7 @@ import { ProviderDetail } from "./models/provider-detail";
 import { ModelSourceList, useModelSources } from "./models/source-list";
 import { SubscriptionDetail } from "./models/subscription-detail";
 import { SettingsNavigation } from "./navigation";
+import { NetworkSettings } from "./network";
 import { sections, useSettingsOverview } from "./overview";
 import { PluginSettings } from "./plugins";
 import { RuntimeList } from "./runtimes/runtime-list";
@@ -445,6 +446,9 @@ export function Settings(
               </If>
               <If when={current() === "Tasks"}>
                 <TaskSettings phone={phone()} />
+              </If>
+              <If when={current() === "Network"}>
+                <NetworkSettings phone={phone()} />
               </If>
               <If when={current() === "Archived"}>
                 <ArchiveSettings phone={phone()} />

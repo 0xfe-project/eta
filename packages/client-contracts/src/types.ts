@@ -283,9 +283,34 @@ export interface NetworkConfig {
   noProxy?: string;
 }
 
+/** Why an entry of the private-network list has no effect (`@searxng-js/sex-egress`'s reasons). */
+export type PrivateNetworkEntryReason =
+  | "syntax"
+  | "url"
+  | "port"
+  | "prefix"
+  | "never"
+  | "loopback";
+
+/**
+ * Which private addresses `web_fetch` may reach (`web.privateNetwork` in `config.json`): networks
+ * and host names, each with an optional port, plus loopback behind its own switch. Link-local and
+ * cloud metadata addresses are never reachable, whatever the list says.
+ */
+export interface PrivateNetworkConfig {
+  /** The entries as written, the invalid ones included (they have no effect). */
+  allow: string[];
+  /** Local services on the host (`localhost`, `127.0.0.0/8`, `::1`). */
+  loopback: boolean;
+  /** The entries that have no effect, and why. */
+  invalid: { entry: string; reason: PrivateNetworkEntryReason }[];
+}
+
 /** The providers target's state: what a settings page renders, and the revision it holds. */
 export interface ProvidersView {
   network?: NetworkConfig;
+  /** Absent when the config has no `web.privateNetwork`: no private address is reachable. */
+  privateNetwork?: PrivateNetworkConfig;
   providers: ProviderSummary[];
   /** The config file's content hash: a write carries the revision it read. */
   revision: string;
