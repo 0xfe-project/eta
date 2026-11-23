@@ -26,6 +26,43 @@ test("no evidence, no servers, or header-only servers show nothing", () => {
   expect(cardLogin(view(["needs_login"], 1))).toBeUndefined();
 });
 
+const cursor = (server: Record<string, unknown>): PluginView =>
+  ({ servers: [server] }) as unknown as PluginView;
+
+test("a Cursor server with no Cursor sign-in makes the card need login, with no test run", () => {
+  expect(cardLogin(cursor({ cursorServer: true, cursorSignedIn: false }))).toBe(
+    "needs_login",
+  );
+  expect(cardLogin(cursor({ cursorServer: true }))).toBe("needs_login");
+  expect(
+    cardLogin(
+      cursor({ cursorServer: true, cursorSignedIn: false, login: "none" }),
+    ),
+  ).toBe("needs_login");
+});
+
+test("a Cursor server that is signed in does not", () => {
+  expect(
+    cardLogin(cursor({ cursorServer: true, cursorSignedIn: true })),
+  ).not.toBe("needs_login");
+  expect(
+    cardLogin(
+      cursor({
+        cursorServer: true,
+        cursorSignedIn: false,
+        login: "signed_in",
+      }),
+    ),
+  ).not.toBe("needs_login");
+});
+
+test("a server that is not Cursor's is not made to need login by the Cursor flag", () => {
+  expect(
+    cardLogin(cursor({ cursorServer: false, cursorSignedIn: false })),
+  ).toBeUndefined();
+  expect(cardLogin(cursor({ cursorSignedIn: false }))).toBeUndefined();
+});
+
 test("the badge is a quiet tint: a soft fill token and a low-alpha edge, never a solid colour", () => {
   expect(authStyle("signed_in")).toMatchObject({
     tone: "green",
