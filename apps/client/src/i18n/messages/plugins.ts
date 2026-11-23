@@ -375,6 +375,14 @@ export const pluginsMessages = {
     "「连接」会在浏览器里打开 Composio 的页面。「已连接」只表示账户已在 Composio 上连上,eta 的智能体暂时还用不上。",
   ],
   composioConnected: ["Connected", "已连接"],
+  composioConnectedGroup: [
+    "Connected on Composio ({{count}})",
+    "已在 Composio 连接({{count}})",
+  ],
+  composioConnectedGroupNote: [
+    "Linked on Composio only. eta's agents cannot use these yet.",
+    "只是在 Composio 上连接了账户,eta 的智能体暂时还不能使用。",
+  ],
   composioReconnect: ["Reconnect", "重新连接"],
   composioTools: ["Tools", "工具数"],
   composioCategories: ["Categories", "分类"],

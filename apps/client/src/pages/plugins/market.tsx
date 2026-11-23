@@ -673,19 +673,29 @@ export function Market(props: {
                     <Label variant="small" tone="muted" lines={1}>
                       {authLabel(item().auth)}
                     </Label>
-                    <If when={isConnected(item().slug)}>
-                      <View testID="composio-connected">
-                        <Label variant="small" weight={600} lines={1}>
-                          {uiText("composioConnected")}
-                        </Label>
-                      </View>
-                    </If>
                     <Label variant="small" tone="muted" lines={2}>
                       {item().description}
                     </Label>
-                    <Label variant="caption" tone="muted" lines={1}>
-                      {uiText("marketFrom", { name: item().sourceName })}
-                    </Label>
+                    {/* The mark sits where the other sources' markers do: the card's bottom right, on the source's line. */}
+                    <View
+                      style={{ ...row, gap: 8, minHeight: type("small").line }}
+                    >
+                      <View style={grow}>
+                        <Label variant="caption" tone="muted" lines={1}>
+                          {uiText("marketFrom", { name: item().sourceName })}
+                        </Label>
+                      </View>
+                      <If when={isConnected(item().slug)}>
+                        <View
+                          testID="composio-connected"
+                          style={{ flexShrink: 1, minWidth: 0 }}
+                        >
+                          <Label variant="small" lines={1}>
+                            {uiText("composioConnected")}
+                          </Label>
+                        </View>
+                      </If>
+                    </View>
                   </View>
                 )}
               </Each>
@@ -830,9 +840,7 @@ export function Market(props: {
               </If>
               <If when={isConnected(currentToolkit()!.slug)}>
                 <View testID="composio-connected">
-                  <Label variant="small" weight={600}>
-                    {uiText("composioConnected")}
-                  </Label>
+                  <Label variant="small">{uiText("composioConnected")}</Label>
                 </View>
               </If>
               <Label variant="small" tone="muted">

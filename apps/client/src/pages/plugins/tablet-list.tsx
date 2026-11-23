@@ -22,6 +22,8 @@ export function PluginTablet(props: {
   onRefresh: () => Promise<void>;
   onAdd: () => void;
   detail: JSX.Element;
+  /** Under the list, in the same column. */
+  extra?: JSX.Element;
 }) {
   const c = colors();
   return (
@@ -101,6 +103,7 @@ export function PluginTablet(props: {
           <If when={!props.items.length}>
             <NoPlugins width={240} />
           </If>
+          {props.extra}
         </SmoothScroll>
         <View
           style={{

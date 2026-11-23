@@ -15,6 +15,7 @@ import {
 } from "../../components";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { ComposioConnected } from "./composio-connected";
 import { AddPlugin, ConfigurePlugin, sheetEdge } from "./configure";
 import { pluginText } from "./labels";
 import { Market } from "./market";
@@ -195,6 +196,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
             )}
           </Each>
         </View>
+        <ComposioConnected layout={props.layout} />
       </View>
     </SmoothScroll>
   );
@@ -312,6 +314,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                           onSelect={selected.set}
                         />
                       </If>
+                      <ComposioConnected layout="phone" />
                     </SmoothScroll>
                   </If>
                 </If>
@@ -330,6 +333,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
           onRefresh={refreshPlugins}
           onAdd={() => add.set(true)}
           detail={detailView()}
+          extra={<ComposioConnected layout="tablet" />}
         />
       </If>
       <If when={warningPlugin()}>
