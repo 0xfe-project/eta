@@ -36,6 +36,8 @@ const RETRY_MS = 2 * 60 * 1000;
 /** A logo read at a commit cannot change: kept long. A branch or HEAD is kept a day. */
 const PINNED_MS = 30 * 24 * 60 * 60 * 1000;
 const COMMIT = /^[0-9a-f]{40}$/;
+/** The `repo` under which `find` keeps its answers in the database (no repository is named like this). */
+const FOUND = "#find";
 const SKIPPED = new Set([
   "github.com",
   "www.github.com",
@@ -290,21 +292,50 @@ export class Logos {
     const now = (this.#options.now ?? Date.now)();
     const hit = this.#kept.get(key);
     if (hit && now - hit.at < KEEP_MS) return hit.logo;
+    // Then what the database kept, checked again as if it had just come: a restart starts from it,
+    // not from nothing. An answer past its time is asked for again.
+    const stored = [
+      FOUND,
+      `${own ?? ""}\n${homepage ?? ""}`,
+      origin ?? "",
+    ] as const;
+    const row = this.#options.store?.get(...stored, now);
+    if (row !== undefined) {
+      const kept =
+        row.status === "miss" ? null : this.#checked(row.mime, row.bytes);
+      if (kept === undefined) this.#options.store?.delete(...stored);
+      else if (now < row.expiresAt) return kept;
+    }
     let logo: Logo | null = null;
+    // A site that could not be asked is not a statement that it has no picture.
+    const seen = { failed: false };
+    const asked = (error: unknown): null => {
+      if (failure(error)) seen.failed = true;
+      return null;
+    };
     try {
       if (own) logo = await this.#picture(own);
       if (!logo && homepage)
-        logo = await this.#fromHomepage(homepage).catch(() => null);
+        logo = await this.#fromHomepage(homepage, seen).catch(asked);
       if (!logo && origin) {
         for (const site of (this.#options.sites ?? siteOf)(origin)) {
-          logo = await this.#fromHomepage(site).catch(() => null);
+          logo = await this.#fromHomepage(site, seen).catch(asked);
           if (logo) break;
         }
       }
-    } catch {
-      logo = null;
+    } catch (error) {
+      logo = asked(error);
     }
     this.#kept.set(key, { at: now, logo });
+    if (logo || !seen.failed)
+      this.#options.store?.put(
+        ...stored,
+        logo
+          ? { mime: logo.type, bytes: Buffer.from(logo.data, "base64") }
+          : null,
+        now + (logo ? KEEP_MS : MISS_MS),
+        now,
+      );
     return logo;
   }
 

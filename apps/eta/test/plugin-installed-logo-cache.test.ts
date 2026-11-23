@@ -49,7 +49,7 @@ async function site(mode: { icon: boolean; broken?: boolean }) {
   servers.push(server);
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   return {
-    url: "http://127.0.0.1:" + (server.address() as AddressInfo).port,
+    url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
     mode,
     get hits() {
       return hits;
@@ -75,13 +75,13 @@ describe("an installed plugin's icon after a restart", () => {
   it("is read from the database, and no site is asked", async () => {
     const home = await site({ icon: true });
     const db = database();
-    const first = await boot(db).find(null, home.url + "/", null);
+    const first = await boot(db).find(null, `${home.url}/`, null);
     expect(first?.type).toBe("image/png");
     const before = home.hits;
     expect(before).toBeGreaterThan(0);
 
     const restarted = boot(db);
-    const again = await restarted.find(null, home.url + "/", null);
+    const again = await restarted.find(null, `${home.url}/`, null);
     expect(again).toEqual(first);
     expect(restarted.requests).toBe(0);
     expect(home.hits).toBe(before);
@@ -90,12 +90,12 @@ describe("an installed plugin's icon after a restart", () => {
   it("is read from the database for a remote server's site too", async () => {
     const server = await site({ icon: true });
     const db = database();
-    const first = await boot(db).find(null, null, server.url + "/mcp");
+    const first = await boot(db).find(null, null, `${server.url}/mcp`);
     expect(first?.type).toBe("image/png");
     const before = server.hits;
 
     const restarted = boot(db);
-    expect(await restarted.find(null, null, server.url + "/mcp")).toEqual(
+    expect(await restarted.find(null, null, `${server.url}/mcp`)).toEqual(
       first,
     );
     expect(restarted.requests).toBe(0);
@@ -106,19 +106,19 @@ describe("an installed plugin's icon after a restart", () => {
     const home = await site({ icon: false });
     const db = database();
     const start = 1_000_000_000_000;
-    expect(await boot(db, () => start).find(null, home.url + "/", null)).toBe(
+    expect(await boot(db, () => start).find(null, `${home.url}/`, null)).toBe(
       null,
     );
     const before = home.hits;
     expect(before).toBeGreaterThan(0);
 
     const soon = boot(db, () => start + 10 * 60 * 1000);
-    expect(await soon.find(null, home.url + "/", null)).toBe(null);
+    expect(await soon.find(null, `${home.url}/`, null)).toBe(null);
     expect(soon.requests).toBe(0);
     expect(home.hits).toBe(before);
 
     const later = boot(db, () => start + 2 * HOUR);
-    expect(await later.find(null, home.url + "/", null)).toBe(null);
+    expect(await later.find(null, `${home.url}/`, null)).toBe(null);
     expect(home.hits).toBeGreaterThan(before);
   });
 
@@ -126,10 +126,10 @@ describe("an installed plugin's icon after a restart", () => {
     const home = await site({ icon: true });
     const db = database();
     const start = 1_000_000_000_000;
-    await boot(db, () => start).find(null, home.url + "/", null);
+    await boot(db, () => start).find(null, `${home.url}/`, null);
     const before = home.hits;
     const later = boot(db, () => start + 25 * HOUR);
-    expect((await later.find(null, home.url + "/", null))?.type).toBe(
+    expect((await later.find(null, `${home.url}/`, null))?.type).toBe(
       "image/png",
     );
     expect(home.hits).toBeGreaterThan(before);
@@ -138,10 +138,10 @@ describe("an installed plugin's icon after a restart", () => {
   it("does not keep a failed ask as 'no icon'", async () => {
     const home = await site({ icon: true, broken: true });
     const db = database();
-    expect(await boot(db).find(null, home.url + "/", null)).toBe(null);
+    expect(await boot(db).find(null, `${home.url}/`, null)).toBe(null);
     home.mode.broken = false;
     const restarted = boot(db);
-    expect((await restarted.find(null, home.url + "/", null))?.type).toBe(
+    expect((await restarted.find(null, `${home.url}/`, null))?.type).toBe(
       "image/png",
     );
     expect(restarted.requests).toBeGreaterThan(0);
@@ -160,7 +160,7 @@ describe("the plugin's own logo file", () => {
       JSON.stringify({
         name: "demo",
         logo: "logo.png",
-        homepage: home.url + "/",
+        homepage: `${home.url}/`,
       }),
     );
     await writeFile(join(dir, "logo.png"), OWN);
@@ -168,7 +168,7 @@ describe("the plugin's own logo file", () => {
     const db = database();
     db.exec("PRAGMA foreign_keys = OFF");
     // The homepage's icon is already kept, as after an earlier run without the file.
-    await boot(db).find(null, home.url + "/", null);
+    await boot(db).find(null, `${home.url}/`, null);
     const before = home.hits;
 
     const plugins = new Plugins({
@@ -185,7 +185,7 @@ describe("the plugin's own logo file", () => {
     const handlers = new Map<string, (call: unknown) => unknown>();
     const wire = {
       handle: (target: string, action: string, run: never) => {
-        handlers.set(target + "." + action, run);
+        handlers.set(`${target}.${action}`, run);
         return () => {};
       },
       stateOf: () => () => {},
