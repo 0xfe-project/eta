@@ -5,6 +5,7 @@ import type {
 } from "@eta/client-contracts";
 import type { Bounds, JSX, ListRef, ViewRef } from "nsh";
 import type { TextSelection } from "../../components/eta-editor";
+import type { DeliveryActions } from "./composer-delivery";
 import { cleanup, computed, effect, List, Overlay, signal, View } from "nsh";
 import { onWindows } from "../../app/platform";
 import {
@@ -40,6 +41,14 @@ export function ConversationTimeline(props: {
   onReadDraft?: () => void;
   rows: MessageView[];
   additions: Map<string, MessageView[]>;
+  /** The reader's messages on their way, by row id: the rows at the end not taken by the host yet. */
+  deliveries?: Map<string, { failure?: string } & DeliveryActions>;
+  /**
+   * The newest message this window sent that is in the transcript (with `:failed` once it failed).
+   * The list does not follow new rows, but one the reader just sent, one the host moved out of the
+   * queue, or one that failed is scrolled to, so they see what happened to it.
+   */
+  sendingId?: string;
   recipients: Map<string, string[]>;
   members: MemberView[];
   loaded: boolean;
@@ -128,6 +137,14 @@ export function ConversationTimeline(props: {
         viewPosition: 0.5,
         animated: true,
       });
+  });
+  let shownSending: string | undefined;
+  effect(() => {
+    const id = props.sendingId;
+    if (!id || id === shownSending) return;
+    shownSending = id;
+    // After the row is laid out.
+    setTimeout(() => transcriptList?.scrollToEnd({ animated: true }), 0);
   });
   let timelineFocus: ViewRef | undefined;
   let pendingFocus: string | undefined;
@@ -331,6 +348,7 @@ export function ConversationTimeline(props: {
                   onInsertClose={props.onInsertClose}
                   insertPanel={props.insertPanel}
                   sameFailureAsNext={sameFailures().has(message().id)}
+                  delivery={props.deliveries?.get(message().id)}
                   phone={phone()}
                   compact={props.compact}
                   captain={props.captain}

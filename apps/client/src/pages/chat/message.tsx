@@ -9,6 +9,7 @@ import type {
 } from "@eta/client-contracts";
 import type { JSX, ViewRef } from "nsh";
 import type { TextSelection } from "../../components/eta-editor";
+import type { DeliveryActions } from "./composer-delivery";
 import {
   captainProposalOf,
   publishedRefs,
@@ -52,6 +53,7 @@ import { Proposal, Question } from "./approvals";
 import { ArtifactRow } from "./artifacts/row";
 import { CaptainReview, reviewItemsOf } from "./captain-review";
 import { cardOpen, setCardOpen } from "./card-folds";
+import { DeliveryLine } from "./composer-delivery";
 import { activeReply } from "./member-status";
 import { messageTime } from "./message-time";
 import { ProcessStep, ProcessWindow } from "./process-step";
@@ -93,6 +95,11 @@ export function Message(props: {
   insertPanel?: () => JSX.Element;
   /** The next reply of the same member failed the same way: say so, not why. */
   sameFailureAsNext?: boolean;
+  /**
+   * A message of the reader's still on its way (the host has not taken it): faded while it goes,
+   * red with why and what to do once it failed. Its row becomes the host's when that comes.
+   */
+  delivery?: { failure?: string } & DeliveryActions;
   phone: boolean;
   compact?: boolean;
   captain?: boolean;
@@ -270,11 +277,24 @@ export function Message(props: {
       <If when={item().author === "user"}>
         <View style={{ alignItems: "flex-end", gap: space[4] }}>
           <View
+            accessibilityLabel={
+              props.delivery
+                ? uiText(
+                    props.delivery.failure ? "sendFailedLabel" : "sendingLabel",
+                    { text: item().text },
+                  )
+                : undefined
+            }
             style={{
               maxWidth: props.phone ? bubbleWidth.phone : bubbleWidth.desktop,
               borderWidth: 1,
               borderColor: c().border,
-              backgroundColor: props.phone ? c().selected : c().surface,
+              backgroundColor: props.delivery?.failure
+                ? c().redFill
+                : props.phone
+                  ? c().selected
+                  : c().surface,
+              opacity: props.delivery && !props.delivery.failure ? 0.6 : 1,
               paddingVertical: space[8],
               paddingHorizontal: space[12],
             }}
@@ -307,61 +327,74 @@ export function Message(props: {
               )}
             </Each>
           </View>
-          <View style={{ ...row, gap: space[8] }}>
-            <Label
-              variant="caption"
-              tone={props.phone ? "muted" : "faint"}
-              tracking={props.phone ? undefined : "caps"}
-              style={{
-                textTransform: props.phone ? "none" : "uppercase",
-              }}
-            >
-              {stamp()}
-            </Label>
-            <If when={props.canInsert || props.inserting}>
-              <Popover
-                open={props.inserting ?? false}
-                placement="bottom"
-                align="end"
-                offset={6}
-                margin={8}
-                onOpenChange={(event) => {
-                  if (event.open) props.onInsert();
-                  else props.onInsertClose?.();
+          <If when={props.delivery}>
+            {(delivery) => (
+              <DeliveryLine
+                failure={delivery().failure}
+                phone={props.phone}
+                onRetry={delivery().onRetry}
+                onEdit={delivery().onEdit}
+                onDiscard={delivery().onDiscard}
+              />
+            )}
+          </If>
+          <If when={!props.delivery}>
+            <View style={{ ...row, gap: space[8] }}>
+              <Label
+                variant="caption"
+                tone={props.phone ? "muted" : "faint"}
+                tracking={props.phone ? undefined : "caps"}
+                style={{
+                  textTransform: props.phone ? "none" : "uppercase",
                 }}
-                popupStyle={{
-                  borderWidth: 1,
-                  borderColor: c().border,
-                  backgroundColor: c().canvas,
-                  boxShadow: [shadow.float],
-                }}
-                trigger={
-                  <View
-                    accessibilityLabel={uiText("insertMessage")}
-                    hoverStyle={{ borderColor: c().ink }}
-                    style={{
-                      paddingVertical: 1,
-                      paddingHorizontal: space[8],
-                      borderWidth: 1,
-                      borderColor: props.inserting ? c().ink : c().border,
-                      cursor: "pointer",
-                    }}
-                  >
-                    <Label
-                      tracking="caps"
-                      variant="caption"
-                      tone={props.inserting ? "ink" : "muted"}
-                      style={{ textTransform: "uppercase" }}
-                    >
-                      {uiText("insert")}
-                    </Label>
-                  </View>
-                }
               >
-                <Compact>{props.insertPanel?.()}</Compact>
-              </Popover>
-            </If>
-          </View>
+                {stamp()}
+              </Label>
+              <If when={props.canInsert || props.inserting}>
+                <Popover
+                  open={props.inserting ?? false}
+                  placement="bottom"
+                  align="end"
+                  offset={6}
+                  margin={8}
+                  onOpenChange={(event) => {
+                    if (event.open) props.onInsert();
+                    else props.onInsertClose?.();
+                  }}
+                  popupStyle={{
+                    borderWidth: 1,
+                    borderColor: c().border,
+                    backgroundColor: c().canvas,
+                    boxShadow: [shadow.float],
+                  }}
+                  trigger={
+                    <View
+                      accessibilityLabel={uiText("insertMessage")}
+                      hoverStyle={{ borderColor: c().ink }}
+                      style={{
+                        paddingVertical: 1,
+                        paddingHorizontal: space[8],
+                        borderWidth: 1,
+                        borderColor: props.inserting ? c().ink : c().border,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <Label
+                        tracking="caps"
+                        variant="caption"
+                        tone={props.inserting ? "ink" : "muted"}
+                        style={{ textTransform: "uppercase" }}
+                      >
+                        {uiText("insert")}
+                      </Label>
+                    </View>
+                  }
+                >
+                  <Compact>{props.insertPanel?.()}</Compact>
+                </Popover>
+              </If>
+            </View>
+          </If>
         </View>
       </If>
       <If when={item().kind === "task_card" || item().kind === "task_draft"}>

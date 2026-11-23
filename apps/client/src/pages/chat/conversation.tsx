@@ -12,7 +12,7 @@ import type {
 import type { Layout } from "../../components";
 import type { ArtifactFilters } from "./artifacts/filter";
 import type { PanelTab } from "./conversation-panel";
-import { computed, effect, signal, View, windowSize } from "nsh";
+import { computed, effect, signal, untracked, View, windowSize } from "nsh";
 import { desktopPanelOpen, setDesktopPanelOpen } from "../../app/desktop-panel";
 import { paneWidth } from "../../app/pane-width";
 import {
@@ -47,12 +47,14 @@ import { flashQuestion, PendingStrip, pendingStripHeight } from "./approvals";
 import { defaultFilters } from "./artifacts/filter";
 import { ArtifactPreview } from "./artifacts/preview";
 import { Composer } from "./composer";
+import { openComposerDraft, placedNow, retryOutgoing } from "./composer-draft";
 import { PhoneConversationInfo } from "./conversation-info";
 import { ConversationPanel, panelAttention } from "./conversation-panel";
 import { ConversationTimeline } from "./conversation-timeline";
 import { indexInserts, InsertMessage } from "./insert-message";
 import { keptMessages } from "./kept-messages";
 import { InviteAgents, StewardMenu } from "./members";
+import { deliveries, outgoingRow, waitsForOf } from "./outbox";
 import { questionRowIndex, questionSource } from "./question-row";
 import { RemoveMember } from "./remove-member";
 import { MemberRun } from "./run/member-run";
@@ -159,10 +161,101 @@ export function Conversation(props: {
    * until a lane takes the message.
    */
   const keep = keptMessages();
+  /*
+   * The reader's messages on their way (the outbox the composer sends from, and the ones the host
+   * took whose row has not come yet). One that goes into the conversation is a row at the end of
+   * the transcript under the id the host will give it, so the host's row takes its place without
+   * the list moving; one that will wait is in the queue above the composer.
+   */
+  const outbox = openComposerDraft(host.address()!.origin, props.id);
+  const shownIds = computed(
+    () =>
+      new Set(
+        [...(timeline()?.messages ?? []), ...held()].map(
+          (message) => message.id,
+        ),
+      ),
+  );
+  const onTheWay = computed(() =>
+    deliveries({
+      outgoing: outbox.value().outgoing,
+      landed: outbox.landed(),
+      shown: shownIds(),
+    }),
+  );
+  // The host's rows came: they show from now on.
+  effect(() => outbox.settle([...shownIds()]));
+  // A message saved by an earlier run of the app is placed once its chat knows who is busy.
+  effect(() => {
+    const kind = info()?.kind ?? summary()?.kind;
+    const memberViews = members();
+    if (!kind || !memberViews.length || !outbox.ready()) return;
+    const unplaced = outbox.value().outgoing.filter((item) => !item.waitsFor);
+    if (!unplaced.length) return;
+    untracked(() =>
+      outbox.edit({
+        outgoing: outbox.value().outgoing.map((item) =>
+          item.waitsFor
+            ? item
+            : placedNow({
+                ...item,
+                at: item.at ?? Date.now(),
+                waitsFor: waitsForOf({
+                  kind,
+                  members: memberViews,
+                  steward: stewardId(),
+                  mentions: item.mentions,
+                }),
+              }),
+        ),
+      }),
+    );
+  });
+  const deliveryActions = (id: string) => ({
+    onRetry: () =>
+      retryOutgoing(outbox, host, host.address()!.origin, props.id, id),
+    onEdit: () => {
+      const message = outbox.value().outgoing.find((item) => item.id === id);
+      if (message) outbox.editing.set(message);
+    },
+    onDiscard: () =>
+      outbox.edit({
+        outgoing: outbox.value().outgoing.filter((item) => item.id !== id),
+      }),
+  });
+  const sending = computed(() =>
+    onTheWay().filter((entry) => !entry.waitsFor.length),
+  );
+  const deliveryRows = computed(
+    () =>
+      new Map(
+        // One the host took is sent: it reads as sent while its row is on the way.
+        sending().flatMap((entry) =>
+          entry.landed
+            ? []
+            : [
+                [
+                  entry.message.id,
+                  {
+                    failure: entry.failure,
+                    ...deliveryActions(entry.message.id),
+                  },
+                ] as const,
+              ],
+        ),
+      ),
+  );
+  /** Messages this window sent: the transcript is taken to the end when one of them lands in it. */
+  const mine = signal<ReadonlySet<string>>(new Set());
+  effect(() => {
+    const ids = onTheWay().map((entry) => entry.message.id);
+    const known = untracked(mine);
+    if (ids.some((id) => !known.has(id))) mine.set(new Set([...known, ...ids]));
+  });
   const messages = computed(() => {
     const waiting = new Set(held().map((message) => message.id));
-    return keep(
-      [
+    return keep([
+      ...[
         ...new Map(
           [...older(), ...(timeline()?.messages ?? [])].map((message) => [
             message.id,
@@ -178,9 +271,17 @@ export function Conversation(props: {
               waiting.has(message.replyToId ?? ""))
           ),
       ),
-    );
+      ...sending().map((entry) => outgoingRow(props.id, entry.message)),
+    ]);
   });
   const indexed = computed(() => indexInserts(messages()));
+  /** The newest of this window's messages in the transcript, and whether it failed. */
+  const ownNewest = computed(() => {
+    const own = messages().findLast((message) => mine().has(message.id));
+    return (
+      own && `${own.id}${deliveryRows().get(own.id)?.failure ? ":failed" : ""}`
+    );
+  });
   const questionSourceOf = (item: InteractionView) =>
     questionSource(
       item,
@@ -552,6 +653,8 @@ export function Conversation(props: {
               onReadDraft={props.onReadDraft}
               rows={indexed().rows}
               additions={indexed().additions}
+              deliveries={deliveryRows()}
+              sendingId={ownNewest()}
               recipients={indexed().recipients}
               members={members()}
               onMember={(agentId) => {
@@ -669,6 +772,11 @@ export function Conversation(props: {
             tablet={props.layout === "tablet"}
             alignWithContent={props.alignComposer}
             held={timeline()?.held ?? []}
+            kind={
+              info()?.kind ??
+              summary()?.kind ??
+              (props.captain ? "captain" : "group")
+            }
             widgetDraft={widgetDraft()}
             quote={quote()}
           />

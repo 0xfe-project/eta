@@ -95,6 +95,18 @@ export const chatMessages = {
   mention: ["Mention {{name}}", "提及 {{name}}"],
   projectFile: ["Project file", "项目文件"],
   sendingMessage: ["Sending…", "发送中…"],
+  sendFailed: ["Not sent: {{reason}}", "发送失败：{{reason}}"],
+  sendingQueued: ["Sending", "发送中"],
+  sendingWillQueue: [
+    "will queue, waits for {{names}} to finish",
+    "将排队，等 {{names}} 回完",
+  ],
+  sendingLabel: ["Sending: {{text}}", "发送中：{{text}}"],
+  sendingQueuedLabel: [
+    "Sending, to wait in the queue: {{text}}",
+    "发送中，将排队：{{text}}",
+  ],
+  sendFailedLabel: ["Not sent: {{text}}", "发送失败：{{text}}"],
   archivedComposer: ["This conversation is archived.", "此对话已归档。"],
   emptyComposer: [
     "Add a member to send a message.",
