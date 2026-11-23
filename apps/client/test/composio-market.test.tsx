@@ -84,7 +84,7 @@ test("a refused link's error is gone once the detail is closed and opened again"
 });
 
 const POLLING = { ...OPEN, clock: {} };
-const polls = (app: { texts(): string[] }) =>
+const polls = (app: { texts: () => string[] }) =>
   Number(
     app
       .texts()
@@ -162,4 +162,21 @@ test("a toolkit already connected shows the mark on its card and says Reconnect"
   await app.waitFor("id:composio-connected");
   await app.press("label:Gmail");
   expect(app.shows("label:Reconnect")).toBe(true);
+});
+
+test("the connected mark of a card is at its bottom right, on the line of its source", async () => {
+  const app = await open("./fixtures/composio-already-connected.tsx", OPEN);
+  await app.waitFor("id:composio-connected");
+  const card = app.layout("label:Gmail")!;
+  const mark = app.layout("id:composio-connected")!;
+  const from = app.layout("text:From Composio >> nth=0")!;
+  expect(
+    Math.abs(card.x + card.width - 13 - (mark.x + mark.width)),
+  ).toBeLessThan(2);
+  expect(
+    Math.abs(card.y + card.height - 13 - (mark.y + mark.height)),
+  ).toBeLessThan(2);
+  expect(
+    Math.abs(from.y + from.height / 2 - (mark.y + mark.height / 2)),
+  ).toBeLessThan(3);
 });
