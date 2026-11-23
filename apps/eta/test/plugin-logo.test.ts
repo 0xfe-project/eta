@@ -5,6 +5,7 @@ import { Buffer } from "node:buffer";
  * Local fake servers answer; no real site is asked.
  */
 import http from "node:http";
+import https from "node:https";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   isPrivateAddress,
@@ -266,5 +267,133 @@ describe("plugin logos", () => {
         "x://s",
       ),
     ).toBeNull();
+  });
+});
+
+// A certificate made only for these tests (CN and SAN localhost); it signs nothing real.
+const TEST_CERT = `-----BEGIN CERTIFICATE-----
+MIIC/TCCAeWgAwIBAgIULk9DmVS83+txOEhwGxIlh5MuwqswDQYJKoZIhvcNAQEL
+BQAwFDESMBAGA1UEAwwJbG9jYWxob3N0MCAXDTI2MTEyMzEyMjIwM1oYDzIxMjYx
+MDMwMTIyMjAzWjAUMRIwEAYDVQQDDAlsb2NhbGhvc3QwggEiMA0GCSqGSIb3DQEB
+AQUAA4IBDwAwggEKAoIBAQDSLlK6pPrdHqMGRQDVnAro1QA24S8YpsT7SDuf/mOT
+CSwGBZ8V9ZfzmBZwXgk++LkkOfG1Psbi+oFBraWeJolEoqZUpgSSBgguZFj1ZUfx
+Sm+eKd8BBGOLY+wVXKHo9KQnDL+uc/iEB5quNk1N+WZvX+VYCt3lGgQ4M0Rwx7HB
+tiiD7ect3LseKyoR2pzh2DIrJaz7Gx2DrxhdREVgV2RGRxjWdrKAQ7LLTapq4MWw
+KV7HbtIz5mQfrCr/Oeq8xD6RLx+4XrmXPpCY7jZp1ippZe/skKxv8VIFpkVV8Fzj
+y+/GqOmHFlm5x8U9nGP0lcrkBZHEaQTtNuI+1dKKtgyhAgMBAAGjRTBDMBQGA1Ud
+EQQNMAuCCWxvY2FsaG9zdDAMBgNVHRMEBTADAQH/MB0GA1UdDgQWBBTJGZfpzsyp
+DCyAtCmZN6U03ujxWjANBgkqhkiG9w0BAQsFAAOCAQEAPvltPy+KrIy84Jlpi63N
+hT30arB09rpNmvNXiaLHMXANYSoc5GiM07QSt0/xGP08AIdbdSmsBm9wKrR0NxKz
+zdwpXuulwZL/t940asCZFdU0i8F4fa+2AtvuXO02V+VemsNSZ8FXcOl52Juaakgs
+yJRXQ406ITbixkToMaQn/yRRHXYWi8A6JBV05KUByWpQI3yJAzQeRhwpifdTBRzK
+h8gyKx1Zhe5gMF+PWvyizvCsXaBBGIBovWsZ0TaTnaMRx65Bdbl0KW4iQbOcbTgT
+WR4KpNeI9B11y5rFUZ6volK4B6aIMDmm0vYO3kjHW28qfwLn7retL7T2Wd3gJ2aB
+Gw==
+-----END CERTIFICATE-----`;
+const TEST_KEY = `-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDSLlK6pPrdHqMG
+RQDVnAro1QA24S8YpsT7SDuf/mOTCSwGBZ8V9ZfzmBZwXgk++LkkOfG1Psbi+oFB
+raWeJolEoqZUpgSSBgguZFj1ZUfxSm+eKd8BBGOLY+wVXKHo9KQnDL+uc/iEB5qu
+Nk1N+WZvX+VYCt3lGgQ4M0Rwx7HBtiiD7ect3LseKyoR2pzh2DIrJaz7Gx2Drxhd
+REVgV2RGRxjWdrKAQ7LLTapq4MWwKV7HbtIz5mQfrCr/Oeq8xD6RLx+4XrmXPpCY
+7jZp1ippZe/skKxv8VIFpkVV8Fzjy+/GqOmHFlm5x8U9nGP0lcrkBZHEaQTtNuI+
+1dKKtgyhAgMBAAECggEAHAlyXzPtQ+xXjllLknMRkHwDXo6819K9QZDh5UaLtVw6
+m2YKEeWUOroduikNHjGTDuZM3CLO6I3GisKVbmqREo8I1Y9c2jbERh38MOXtCh6m
+E4jd1talSb2PS00zSu5BbHUap7SQINqb02PqfX2IoNA/uXYfofVNvUp3dXzp9R8v
+mboageduPYscQvelKin/Q8nGSBOzOY1pVP/7yjOUfqXg6f6jOCtJ0weBrfI0mtgd
+P6967t7TRU6WyqWjFppJUFqXPfl5ErhP7O04i8HhWMIOJtqp4BI6hYjnoTZesfQI
+WUlvvDfgnXWvn6xM2NSzdRX1Ch8fcHcpAQR1f0IUTQKBgQD9TzZiuXKodJYhHsCI
+M2UedlOxs79rZKdn3Kzo+oKI6RA7yYjHXIutGArbUwnYOYGwv7uXvqvJIp2iLXAz
+CPTyszQXv48sn5Mhl3Qr8IO2eBnWrjLi0C75W/CJOruFOGGXOIGuNTDlkUr90sUn
+fDVEGyYtgujb5bgtlvKnERVEJQKBgQDUadZ0lyVZPiO8s5bwodph59/Hd3iH4Vsb
+DweQsSMAF9MOv2LiLV/sn+cJeGdk6GByLIvRMmtZrREbxQtqI53Ad92vypTDc0bi
+ypiP36WKZC16fPFAHlUNRfOxZl5nub4o7oA46+ZpCuy2Cr5FlKuhEK1fWUB0AYpN
+fH+OQVYfzQKBgCBzoXgMYhAKv6EGm4vXacD5T8eYS5Gql3fK4awHS+nWUeoW65r+
+1DYcumdWwBAfbeoC5jmOh9uAv8kjIRiosRjWtHnGZMVGvEa1bICkk3sw7759Gq/M
+E/iGOs6Z46QxkO8aoiJ7VgRTFNRnyDJCy2AqSj3SY5qoV2wfxn54xcyxAoGBAJxn
+UgGHSXjsyGOp2PpWMvbkRWIaFiX3SZ4i8u8Xfy4SXNX/FlB0GK2jD/tpLLigYmOv
+aUQgW+ssA+zuqfj9QKr3l8RY5jEEMK3Nf4hwpPPBz7rhRMJxky6y0z1Moza9DcgV
+1VQUXxP5d1KTloalcbqnDQGoNk001SE5CrM0aLYBAoGBAJrZ6++C/vv77VWzhPno
+j1jSA+orjADzE+M8rWcqPe4tHoH0l1SOZh7iS4mxMeOmIgu2bLVBQwA0UxUx4fTb
+iL5uDLhcQoIzjic67yFTXHMcZC4uK0AI1DNdOcaipLslhTt00Y4G+ALsBvYaTSx+
+DR4RiUmBXlW0Mk06+rcFa+xT
+-----END PRIVATE KEY-----`;
+
+describe("a Composio toolkit's logo (Logos.fromUrl)", () => {
+  const SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><path d="M0 0h8v8z"/></svg>';
+
+  async function secure(handler: http.RequestListener) {
+    const server = https.createServer(
+      { key: TEST_KEY, cert: TEST_CERT },
+      handler,
+    );
+    servers.push(server as unknown as http.Server);
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    return `https://localhost:${(server.address() as AddressInfo).port}`;
+  }
+  const logos = () =>
+    new Logos({
+      allowPrivate: true,
+      ca: TEST_CERT,
+      resolve: async () => ["127.0.0.1"],
+    });
+
+  it("reaches the fake https server with the test certificate (a PNG is taken)", async () => {
+    const base = await secure((_req, res) => res.end(PNG));
+    expect((await logos().fromUrl(`${base}/a`))?.type).toBe("image/png");
+  });
+
+  it("takes an SVG as it is, with the type image/svg+xml", async () => {
+    const base = await secure((_req, res) => {
+      res.setHeader("content-type", "image/svg+xml");
+      res.end(SVG);
+    });
+    expect(await logos().fromUrl(`${base}/api/github`)).toEqual({
+      type: "image/svg+xml",
+      data: Buffer.from(SVG).toString("base64"),
+    });
+  });
+
+  it("takes an SVG that starts with an xml line and a comment", async () => {
+    const base = await secure((_req, res) =>
+      res.end(`<?xml version="1.0"?><!-- logo -->${SVG}`),
+    );
+    expect((await logos().fromUrl(`${base}/a`))?.type).toBe("image/svg+xml");
+  });
+
+  it("refuses an SVG with script, a handler or an outside reference", async () => {
+    for (const body of [
+      '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><image href="https://evil.example/x.png"/></svg>',
+    ]) {
+      const base = await secure((_req, res) => res.end(body));
+      expect(await logos().fromUrl(`${base}/a`)).toBeNull();
+    }
+  });
+
+  it("refuses what is neither a picture nor an SVG", async () => {
+    const page = await secure((_req, res) =>
+      res.end("<html><svg></svg></html>"),
+    );
+    expect(await logos().fromUrl(`${page}/a`)).toBeNull();
+    const text = await secure((_req, res) => res.end("hello"));
+    expect(await logos().fromUrl(`${text}/a`)).toBeNull();
+  });
+
+  it("still refuses plain http, and an SVG too large", async () => {
+    const plain = await serve((_req, res) => res.end(SVG));
+    expect(await logos().fromUrl(`${plain}/a`)).toBeNull();
+    const big = await secure((_req, res) =>
+      res.end(SVG.replace("</svg>", `<!--${"x".repeat(300 * 1024)}--></svg>`)),
+    );
+    expect(await logos().fromUrl(`${big}/a`)).toBeNull();
+  });
+
+  it("leaves the other ways to a picture as they were: an SVG is still not taken there, and pictureType does not know it", async () => {
+    const base = await secure((_req, res) => res.end(SVG));
+    expect(await logos().find(`${base}/a.svg`, null)).toBeNull();
+    expect(pictureType(Buffer.from(SVG))).toBeNull();
   });
 });
