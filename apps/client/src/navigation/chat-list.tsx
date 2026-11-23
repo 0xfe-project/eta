@@ -3,12 +3,10 @@ import type { Layout } from "../components";
 import { signal, View } from "nsh";
 import {
   Button,
-  Caption,
   colors,
   Field,
   grow,
   Header,
-  Icon,
   Label,
   row,
   sizes,
@@ -16,7 +14,7 @@ import {
 } from "../components";
 import { useText } from "../i18n";
 import { useHost } from "../services/host";
-import { AgentRow, GroupRow } from "./chat-list-rows";
+import { GroupRow } from "./chat-list-rows";
 import { ArchiveGroup, GroupMenu, RenameGroup } from "./group-actions";
 import { RailButton } from "./rail-controls";
 
@@ -24,9 +22,7 @@ export interface ChatListProps {
   layout: Layout;
   selected: string;
   onConversation: (id: string) => void;
-  onAgent: (id: string) => void;
   onCreate: () => void;
-  onCreateAgent: () => void;
   /** A group was archived from its menu: it left the list. */
   onArchived: (id: string) => void;
 }
@@ -37,7 +33,6 @@ export function ChatList(
   const text = useText();
   const c = colors();
   const host = useHost();
-  const expanded = signal(true);
   const searching = signal(false);
   const query = signal("");
   // The group whose menu is open, and where in its row; then the dialog it chose.
@@ -63,13 +58,12 @@ export function ChatList(
       );
   const listHeader = {
     ...row,
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     height: 32,
     paddingHorizontal: 14,
     borderBottomWidth: 1,
     flexShrink: 0,
   } as const;
-  const toggleAgents = () => expanded.set(!expanded());
   return (
     <View
       style={{
@@ -136,18 +130,15 @@ export function ChatList(
           <If
             when={props.collapsed}
             else={
-              <>
-                <Caption text={text("groups")} />
-                <Button
-                  label={text("newGroup")}
-                  icon="plus"
-                  iconOnly
-                  tone="ghost"
-                  size={22}
-                  onPress={() => props.onCreate()}
-                  style={{ backgroundColor: "transparent" }}
-                />
-              </>
+              <Button
+                label={text("newGroup")}
+                icon="plus"
+                iconOnly
+                tone="ghost"
+                size={22}
+                onPress={() => props.onCreate()}
+                style={{ backgroundColor: "transparent" }}
+              />
             }
           >
             <RailButton
@@ -159,19 +150,6 @@ export function ChatList(
         </If>
       </View>
       <SmoothScroll style={grow} scrollbar={false}>
-        <If when={phone()}>
-          <View
-            style={{
-              height: 36,
-              borderBottomWidth: 1,
-              borderColor: c().border,
-              paddingHorizontal: 16,
-              justifyContent: "center",
-            }}
-          >
-            <Caption text={text("groups")} phone />
-          </View>
-        </If>
         <Each of={groups()} key={(group) => group.id}>
           {(group) => (
             <GroupRow
@@ -201,112 +179,7 @@ export function ChatList(
             {text(query() ? "noMatchingConversations" : "noConversations")}
           </Label>
         </If>
-        <If when={phone()}>
-          <View
-            style={{
-              height: 36,
-              marginTop: 8,
-              borderBottomWidth: 1,
-              borderColor: c().border,
-              paddingHorizontal: 16,
-              justifyContent: "center",
-            }}
-          >
-            <Caption text={text("agents")} phone />
-          </View>
-          <Each of={host.people()} key={(agent) => agent.id}>
-            {(agent) => (
-              <AgentRow
-                agent={agent()}
-                phone
-                onPress={() => props.onAgent(agent().id)}
-              />
-            )}
-          </Each>
-        </If>
       </SmoothScroll>
-      <If when={!phone()}>
-        <View
-          style={{
-            ...listHeader,
-            height: props.collapsed ? 29 : 35,
-            borderTopWidth: 1,
-            borderColor: c().border,
-            ...(props.collapsed
-              ? { paddingHorizontal: 0, justifyContent: "center" }
-              : {}),
-          }}
-        >
-          <If
-            when={props.collapsed}
-            else={
-              <>
-                <View
-                  role="button"
-                  accessibilityLabel={text("toggleAgents")}
-                  accessibilityState={{ expanded: expanded() }}
-                  onPress={toggleAgents}
-                  style={{ ...row, gap: 6, cursor: "pointer" }}
-                >
-                  <Icon
-                    name={expanded() ? "down" : "right"}
-                    size={10}
-                    tone="muted"
-                  />
-                  <Caption text={text("agents")} />
-                </View>
-                <Button
-                  label={text("newAgent")}
-                  icon="plus"
-                  iconOnly
-                  tone="ghost"
-                  size={22}
-                  onPress={() => props.onCreateAgent()}
-                  style={{ backgroundColor: "transparent" }}
-                />
-              </>
-            }
-          >
-            <RailButton
-              label={text("toggleAgents")}
-              icon={expanded() ? "down" : "right"}
-              size={24}
-              expanded={expanded()}
-              onPress={toggleAgents}
-            />
-            <RailButton
-              label={text("newAgent")}
-              icon="plus"
-              size={24}
-              onPress={props.onCreateAgent}
-            />
-          </If>
-        </View>
-        <If when={expanded()}>
-          <View
-            style={{
-              maxHeight: props.collapsed ? 240 : 230,
-              flexShrink: props.collapsed ? 1 : 0,
-            }}
-          >
-            <SmoothScroll
-              scrollbar={false}
-              style={{ flexGrow: 0, flexShrink: 1 }}
-            >
-              <Each of={host.people()} key={(agent) => agent.id}>
-                {(agent) => (
-                  <AgentRow
-                    agent={agent()}
-                    phone={false}
-                    collapsed={props.collapsed}
-                    onPress={() => props.onAgent(agent().id)}
-                  />
-                )}
-              </Each>
-            </SmoothScroll>
-          </View>
-        </If>
-      </If>
       <If when={named(renaming())}>
         {(group) => (
           <RenameGroup
