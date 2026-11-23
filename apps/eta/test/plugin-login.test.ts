@@ -95,7 +95,13 @@ async function plugin(dataDir: string, name: string): Promise<void> {
   );
 }
 
-async function setUp() {
+/** What a request carried: its address and the value of x-cursor-auth, a header the user saved. */
+interface Seen {
+  url: string;
+  cursor: string | null;
+}
+
+async function setUp(seen: Seen[] = []) {
   const dataDir = await tempDir();
   await plugin(dataDir, "demo");
   await plugin(dataDir, "twin");
@@ -106,7 +112,13 @@ async function setUp() {
     dataDir,
     tokenFile,
     mcp: {
-      fetch: withMcpEndpoint(auth),
+      fetch: async (input, init) => {
+        seen.push({
+          url: String(input),
+          cursor: new Headers(init?.headers).get("x-cursor-auth"),
+        });
+        return await withMcpEndpoint(auth)(input, init);
+      },
       manager: { resolvers: false, checkIntervalMs: 0 },
     },
   });
@@ -149,6 +161,28 @@ describe("a plugin server's login from its panel", () => {
         "signed_in"
       );
     });
+  }, 30_000);
+
+  it("sends the headers the user saved for the server to its address, and to no other", async () => {
+    const seen: Seen[] = [];
+    const s = await setUp(seen);
+    const value = "Bearer cursor-value-not-shown";
+    await s.call("setHeaders", {
+      name: "demo",
+      server: "remote",
+      headers: [{ name: "x-cursor-auth", value, secret: true }],
+    });
+    seen.length = 0;
+    await s.login();
+    const own = seen.filter(
+      (one) => new URL(one.url).origin === "https://mcp.test",
+    );
+    expect(own.length).toBeGreaterThan(0);
+    for (const one of own) expect(one.cursor).toBe(value);
+    for (const one of seen.filter(
+      (one) => new URL(one.url).origin !== "https://mcp.test",
+    ))
+      expect(one.cursor).toBeNull();
   }, 30_000);
 
   it("refuses a state it did not start", async () => {

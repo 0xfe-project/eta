@@ -41,13 +41,19 @@ export function pluginsPlugin(
    * refused: a login made later (from any entry) has another stamp, so it is not shown as expired.
    */
   const asked = new Map<string, string>();
-  const remoteUrl = (name: string, server: string): string => {
+  const remoteOf = (
+    name: string,
+    server: string,
+  ): { url: string; headers: Record<string, string> | undefined } => {
     const plan = plugins.testPlan(name, server);
     if ("result" in plan) throw new Error(plan.result.message);
-    const url = (plan.entry as { url?: string }).url;
+    const { url, headers } = plan.entry as {
+      url?: string;
+      headers?: Record<string, string>;
+    };
     if (url === undefined)
       throw new Error(`${server} has no URL to sign in to`);
-    return url;
+    return { url, headers };
   };
   const cursorLogin = deps.cursorLogin ?? new CursorLogin();
   const logos = new Logos(
@@ -339,12 +345,15 @@ export function pluginsPlugin(
           const args = new Args(call);
           if (mcp === undefined) throw new Error("sign-in is not available");
           // The plugin must be on, usable and have the server: testPlan refuses otherwise.
-          const url = remoteUrl(args.string("name"), args.string("server"));
+          const { url, headers } = remoteOf(
+            args.string("name"),
+            args.string("server"),
+          );
           asked.delete(url);
           return {
             result: await mcp.loginUrl(
               url,
-              undefined,
+              headers,
               args.optionalString("redirectOrigin"),
             ),
           };
@@ -355,7 +364,7 @@ export function pluginsPlugin(
           const server = args.string("server");
           const header = args.optionalString("header") ?? CURSOR_AUTH_HEADER;
           // A Cursor credential goes only to Cursor's own servers.
-          if (!isCursorServer(remoteUrl(name, server)))
+          if (!isCursorServer(remoteOf(name, server).url))
             throw new Error(`${server} is not a Cursor server`);
           const started = cursorLogin.start((token) => {
             // The server answers a bare token as missing; it wants Bearer here (seen on a real sign-in).
@@ -381,7 +390,7 @@ export function pluginsPlugin(
         wire.handle("plugins", "logoutServer", async (call) => {
           const args = new Args(call);
           if (mcp === undefined) throw new Error("sign-in is not available");
-          const url = remoteUrl(args.string("name"), args.string("server"));
+          const { url } = remoteOf(args.string("name"), args.string("server"));
           await mcp.logoutUrl(url);
           asked.delete(url);
           return {
