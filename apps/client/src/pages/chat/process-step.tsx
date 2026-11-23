@@ -14,6 +14,7 @@ import {
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { EmailProposal } from "../email/proposal";
+import { ToolOutput } from "./run/tool-code";
 
 export function ProcessStep(props: { value: RunBlock }) {
   const host = useHost();
@@ -142,9 +143,7 @@ export function ProcessStep(props: { value: RunBlock }) {
               </View>
               <If when={expanded() && step().output}>
                 <View style={{ padding: 8, backgroundColor: c().surface }}>
-                  <Label variant="small" tone="muted">
-                    {step().output}
-                  </Label>
+                  <ToolOutput text={step().output ?? ""} tone="muted" />
                 </View>
               </If>
             </View>
