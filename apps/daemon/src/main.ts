@@ -216,6 +216,9 @@ switch (command) {
         .map(shellQuote)
         .join(" ");
       console.error(
+        `The ${DAEMON_UNIT.name} user unit may be left installed, and starts as soon as the user's service manager works. Run one daemon per machine: stop a manual one before that, or remove the unit with \`${executable} uninstall-service\` to keep running it by hand.`,
+      );
+      console.error(
         `To start the daemon manually on this machine, run:\n  ${executable} run`,
       );
       process.exitCode = 1;
