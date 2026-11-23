@@ -123,8 +123,8 @@ export const pluginsMessages = {
   ],
   cursorLogin: ["Sign in with Cursor account", "用 Cursor 账号登录"],
   cursorLoginNote: [
-    "Cursor sign-in is the first of two steps (then the service's own sign-in). It saves your Cursor session credential, which can do more than an API key, as an encrypted header sent only to this server. Unofficial; it may stop working.",
-    "Cursor 登录是两步中的第一步(之后还要登录服务本身)。它会把你的 Cursor 会话凭据(权限比 API key 宽)加密保存为请求头,只发给这个服务器。非官方方式,可能失效。",
+    "Two steps, in this order: 1. sign in with your Cursor account, 2. then sign in to the service itself (Google, for google-drive). Step 1 saves your Cursor session credential, which can do more than an API key, as an encrypted header sent only to this server. Unofficial; it may stop working.",
+    "分两步,按顺序:1. 先用 Cursor 账号登录,2. 再登录服务本身(google-drive 是 Google)。第 1 步会把你的 Cursor 会话凭据(权限比 API key 宽)加密保存为请求头,只发给这个服务器。非官方方式,可能失效。",
   ],
   cursorLoginWaiting: [
     "Waiting for the browser to confirm. This is an unofficial way and may stop working.",

@@ -150,8 +150,8 @@ test("each installed card has exactly one avatar in its header, and no default p
     width: 1100,
     height: 900,
   });
-  // The fixture lists ten installed plugins; one avatar each, not two.
-  expect(app.count("id:plugin-avatar")).toBe(11);
+  // The fixture lists thirteen installed plugins; one avatar each, not two.
+  expect(app.count("id:plugin-avatar")).toBe(13);
 });
 
 test("a card shows its login only with evidence: needs login, signed in, and nothing otherwise", async () => {
@@ -312,7 +312,7 @@ test("Sign in with Cursor: starts, notes the days left, and tests again", async 
   expect(app.shows("Sign in with Cursor account")).toBe(true);
   expect(
     app.shows(
-      "Cursor sign-in is the first of two steps (then the service's own sign-in). It saves your Cursor session credential, which can do more than an API key, as an encrypted header sent only to this server. Unofficial; it may stop working.",
+      "Two steps, in this order: 1. sign in with your Cursor account, 2. then sign in to the service itself (Google, for google-drive). Step 1 saves your Cursor session credential, which can do more than an API key, as an encrypted header sent only to this server. Unofficial; it may stop working.",
     ),
   ).toBe(true);
   await app.press("label:Sign in with Cursor account");
@@ -324,6 +324,35 @@ test("Sign in with Cursor: starts, notes the days left, and tests again", async 
       "Signed in to Cursor; testing again · About 60 days of validity left (read from the credential, not checked); after that, sign in again",
     ),
   ).toBe(true);
+});
+
+test("with no saved sign-in, a Cursor server still offers the Cursor sign-in, and no token buttons", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", {
+    width: 1100,
+    height: 900,
+  });
+  await app.press("label:fresh-plugin");
+  await app.press("label:Test connection");
+  expect(app.shows("Sign in with Cursor account")).toBe(true);
+  expect(
+    app.shows(
+      "Two steps, in this order: 1. sign in with your Cursor account, 2. then sign in to the service itself (Google, for google-drive). Step 1 saves your Cursor session credential, which can do more than an API key, as an encrypted header sent only to this server. Unofficial; it may stop working.",
+    ),
+  ).toBe(true);
+  expect(app.shows("Send sign-in token in x-cursor-auth and retest")).toBe(
+    false,
+  );
+});
+
+test("a server that is not a Cursor one gets no Cursor sign-in button", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", {
+    width: 1100,
+    height: 900,
+  });
+  await app.press("label:acme-plugin");
+  await app.press("label:Test connection");
+  expect(app.shows("the server requires the x-acme-session header")).toBe(true);
+  expect(app.shows("Sign in with Cursor account")).toBe(false);
 });
 
 test("a result that names no header has no retest button", async () => {

@@ -535,33 +535,42 @@ function TestResultView(props: { test: Test; stdio: boolean }) {
             </Label>
           </If>
           <If when={result()!.requiredHeader}>
-            <Label variant="small" tone="muted">
-              {uiText("tokenHeaderHint")}
-            </Label>
+            <If when={result()!.status === "failed"}>
+              <Label variant="small" tone="muted">
+                {uiText("tokenHeaderHint")}
+              </Label>
+            </If>
             <View style={{ ...row, gap: 8, flexWrap: "wrap" }}>
-              <Button
-                label={uiText("useTokenHeader", {
-                  header: result()!.requiredHeader!,
-                })}
-                tone="plain"
-                labelVariant="body"
-                size={28}
-                disabled={props.test.busy()}
-                onPress={() =>
-                  props.test.useToken(result()!.requiredHeader!, "raw")
+              <If when={result()!.status === "failed"}>
+                <Button
+                  label={uiText("useTokenHeader", {
+                    header: result()!.requiredHeader!,
+                  })}
+                  tone="plain"
+                  labelVariant="body"
+                  size={28}
+                  disabled={props.test.busy()}
+                  onPress={() =>
+                    props.test.useToken(result()!.requiredHeader!, "raw")
+                  }
+                />
+                <Button
+                  label={uiText("useTokenHeaderBearer")}
+                  tone="plain"
+                  labelVariant="body"
+                  size={28}
+                  disabled={props.test.busy()}
+                  onPress={() =>
+                    props.test.useToken(result()!.requiredHeader!, "bearer")
+                  }
+                />
+              </If>
+              <If
+                when={
+                  result()!.cursorServer === true &&
+                  props.test.cursorId() === undefined
                 }
-              />
-              <Button
-                label={uiText("useTokenHeaderBearer")}
-                tone="plain"
-                labelVariant="body"
-                size={28}
-                disabled={props.test.busy()}
-                onPress={() =>
-                  props.test.useToken(result()!.requiredHeader!, "bearer")
-                }
-              />
-              <If when={props.test.cursorId() === undefined}>
+              >
                 <Label variant="small" tone="muted">
                   {uiText("cursorLoginNote")}
                 </Label>

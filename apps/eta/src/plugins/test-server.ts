@@ -6,6 +6,7 @@
 import type { PluginTestResult } from "@eta/client-contracts";
 import type { AuthProviderFor, McpServerDefinition } from "@eta/mcp";
 import { ServerManager } from "@eta/mcp";
+import { isCursorServer } from "./cursor-login";
 
 const TEST_TIMEOUT_MS = 15_000;
 const MAX_TOOLS = 100;
@@ -170,6 +171,12 @@ async function declaresOauth(url: string, timeoutMs = 5000): Promise<boolean> {
   }
 }
 
+function cursorFlag(definition: McpServerDefinition): { cursorServer?: true } {
+  return definition.url !== undefined && isCursorServer(definition.url)
+    ? { cursorServer: true }
+    : {};
+}
+
 /** Connect once, list, close. `secrets` are masked out of anything said. */
 export async function testConnection(
   definition: McpServerDefinition,
@@ -189,13 +196,17 @@ export async function testConnection(
       response.status === 401 &&
       definition.url !== undefined &&
       String(input) === new URL(definition.url).href
-    )
-      rejected = await rejectionOf(response, [
+    ) {
+      const next = await rejectionOf(response, [
         new Headers(init?.headers).get("authorization"),
         definition.tokenHeader === undefined
           ? null
           : new Headers(init?.headers).get(definition.tokenHeader.name),
       ]);
+      // Several 401s can follow one another (retries, a refresh): one that named a header is kept.
+      if (rejected?.header === undefined || next.header !== undefined)
+        rejected = next;
+    }
     return response;
   }) as typeof fetch;
   // A server declared `oauth` is first reached without a sign-in: a 401 then says it needs one,
@@ -232,6 +243,20 @@ export async function testConnection(
       );
       const challenge =
         definition.url !== undefined && (await declaresOauth(definition.url));
+      if (stored === undefined && rejected?.header !== undefined) {
+        // Nothing is signed in yet, and the server's first demand is a header of its own: for a
+        // Cursor-hosted server that is a Cursor account credential, then the service's own sign-in.
+        const header = rejected.header;
+        return {
+          ...empty(
+            "needs_login",
+            `the server requires the ${header} header (for Cursor-hosted servers a Cursor account credential) before its own sign-in: sign in with your Cursor account first, then sign in to the service (${mask(rejected.text, secrets)})`,
+            elapsed(),
+          ),
+          requiredHeader: header,
+          ...cursorFlag(definition),
+        };
+      }
       if (stored !== undefined && rejected?.header !== undefined) {
         // The sign-in is stored; this server asks for something else (a header of its own client's).
         // That is not an expired sign-in, and signing in again would not help.
@@ -243,6 +268,7 @@ export async function testConnection(
             elapsed(),
           ),
           requiredHeader: header,
+          ...cursorFlag(definition),
         };
       }
       if (challenge || declaredOauth) {

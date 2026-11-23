@@ -66,6 +66,14 @@ function Fixture() {
               servers: [{ ...remote, login: "signed_in" as const }],
             },
             {
+              ...plugin("fresh-plugin", true),
+              servers: [{ ...remote, login: "needs_login" as const }],
+            },
+            {
+              ...plugin("acme-plugin", true),
+              servers: [{ ...remote, login: "needs_login" as const }],
+            },
+            {
               ...plugin("login-plugin", true),
               servers: [{ ...remote, login: "needs_login" as const }],
             },
@@ -141,12 +149,43 @@ function Fixture() {
         tokenHeaderSet === null
       ) {
         return {
-          status: "needs_login",
-          message: "the server did not accept the stored sign-in (HTTP 401)",
+          status: "failed",
+          message:
+            "the sign-in is saved, but the server requires the x-cursor-auth header",
           ms: 5,
           tools: [],
           toolCount: 0,
           requiredHeader: "x-cursor-auth",
+          cursorServer: true,
+        };
+      }
+      // Nothing signed in yet: a Cursor-hosted server wants its header first.
+      if (
+        method === "testServer" &&
+        (args as { name?: string }).name === "fresh-plugin"
+      ) {
+        return {
+          status: "needs_login",
+          message: "the server requires the x-cursor-auth header",
+          ms: 5,
+          tools: [],
+          toolCount: 0,
+          requiredHeader: "x-cursor-auth",
+          cursorServer: true,
+        };
+      }
+      // A header that is not Cursor's: no Cursor sign-in is offered.
+      if (
+        method === "testServer" &&
+        (args as { name?: string }).name === "acme-plugin"
+      ) {
+        return {
+          status: "needs_login",
+          message: "the server requires the x-acme-session header",
+          ms: 5,
+          tools: [],
+          toolCount: 0,
+          requiredHeader: "x-acme-session",
         };
       }
       if (

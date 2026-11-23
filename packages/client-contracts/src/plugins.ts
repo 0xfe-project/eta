@@ -261,6 +261,8 @@ export interface PluginTestResult {
   prompts?: { name: string; description: string; params: string[] }[];
   /** The request header the server said it needs, when its refusal named one (not an OAuth token). */
   requiredHeader?: string;
+  /** True when the server is one the host can sign in to with a Cursor account (cursor.com, https). */
+  cursorServer?: boolean;
 }
 
 /**
