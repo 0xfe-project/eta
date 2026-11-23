@@ -4,10 +4,12 @@
 import type {
   LlmAccounts,
   LlmModel,
+  ModelThinking,
   ProvidersView,
 } from "@eta/client-contracts";
 import type { Locale } from "../../config/types";
 import {
+  etaModelThinking,
   keyMissing,
   LLM_PROVIDER_ID,
   providerLabel,
@@ -32,6 +34,8 @@ export interface Model {
   available: boolean;
   /** Why it cannot be used, when the gateway says, in the user's language. */
   unavailableReason?: string | undefined;
+  /** The thinking levels it declares (`etaModelThinking`). */
+  thinking: ModelThinking;
 }
 
 function configuredModels(view: ProvidersView): Model[] {
@@ -46,6 +50,7 @@ function configuredModels(view: ProvidersView): Model[] {
         name: model.name ?? model.id,
         contextWindow: model.contextWindow,
         available,
+        thinking: etaModelThinking(model),
       }),
     );
   });
@@ -68,6 +73,7 @@ function gatewayModels(
       model.reason === undefined
         ? undefined
         : llmProblemText(model.reason, locale),
+    thinking: etaModelThinking(model),
   }));
 }
 

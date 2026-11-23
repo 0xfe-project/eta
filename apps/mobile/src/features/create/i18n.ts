@@ -53,6 +53,13 @@ export const i18n = {
     "create.agent.unavailable": "（不可用）",
     "create.agent.thinking": "思考档",
     "create.agent.thinkingDefault": "跟随模型默认",
+    "create.agent.thinkingCleared":
+      "新模型不支持 {level}，已改回跟随模型默认。",
+    "create.agent.thinkingUnknown":
+      "不知道这个模型支持哪些档位，会按你选的原样发送。",
+    "create.agent.thinkingUndeclared":
+      "这个模型没有声明思考档，eta 不会发送思考参数。",
+    "create.agent.thinkingNone": "这个运行时不能给这个模型设思考档。",
     "create.agent.persona": "人格",
     "create.agent.personaDefault": "项目默认",
     "create.agent.instructions": "指令",
@@ -188,6 +195,14 @@ export const i18n = {
     "create.agent.unavailable": " (unavailable)",
     "create.agent.thinking": "Thinking",
     "create.agent.thinkingDefault": "Model default",
+    "create.agent.thinkingCleared":
+      "The new model does not take {level}; set back to the model's default.",
+    "create.agent.thinkingUnknown":
+      "This model's levels are not known; the one you pick is sent as it is.",
+    "create.agent.thinkingUndeclared":
+      "This model declares no thinking levels, so eta sends none.",
+    "create.agent.thinkingNone":
+      "This runtime has no thinking level for this model.",
     "create.agent.persona": "Persona",
     "create.agent.personaDefault": "Project default",
     "create.agent.instructions": "Instructions",

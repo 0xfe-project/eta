@@ -1,4 +1,5 @@
 import type { LlmModel, ProvidersView } from "@eta/client-contracts";
+import { etaModelThinking } from "@eta/client-contracts";
 import { View } from "nsh";
 import { Select } from "nsh/base";
 import { uiText } from "../i18n";
@@ -6,6 +7,10 @@ import { useHost } from "../services/host";
 import { Icon, Label } from "./text";
 import { colors, row, textFaces, textStyle } from "./theme";
 
+/**
+ * The models an eta agent can run on, each with the thinking levels it declares
+ * (`etaModelThinking`), so a level picker offers what the model takes.
+ */
 export function useModels() {
   const host = useHost();
   return () => {
@@ -19,6 +24,7 @@ export function useModels() {
           id: `llm:${model.id}`,
           name: model.name,
           provider: "Gateway",
+          thinking: etaModelThinking(model),
         })),
       ...configured
         .filter((provider) => provider.id !== "llm")
@@ -27,6 +33,7 @@ export function useModels() {
             id: `${provider.id}:${model.id}`,
             name: model.name ?? model.id,
             provider: provider.name,
+            thinking: etaModelThinking(model),
           })),
         ),
     ];

@@ -109,8 +109,26 @@ export function MemberRun(props: {
   const core = () => host.section<ViewCore>(target, "core");
   const systems = () =>
     host.section<SessionViewSections["systems"]>(target, "systems");
-  const thinking = () =>
-    host.section<SessionViewSections["model"]>(target, "model")?.thinkingLevel;
+  const modelSection = () =>
+    host.section<SessionViewSections["model"]>(target, "model");
+  /**
+   * The session's level as it runs: the one asked for, or, where the model does not take it, the
+   * model's default with the asked one named. A host too old to say what was asked shows what runs.
+   */
+  const thinkingText = () => {
+    const section = modelSection();
+    if (section === undefined) return uiText("defaultThinking");
+    const asked =
+      section.thinkingAsked === undefined
+        ? section.thinkingLevel === "off"
+          ? null
+          : section.thinkingLevel
+        : section.thinkingAsked;
+    if (asked === null) return uiText("defaultThinking");
+    return asked === section.thinkingLevel
+      ? uiText("runThinkingLevel", { level: asked })
+      : uiText("runThinkingFellBack", { level: asked });
+  };
   const online = () => host.state().status === "open";
   /** The reply is still being written. */
   const replyLive = () =>
@@ -223,12 +241,7 @@ export function MemberRun(props: {
           : "",
     };
   };
-  const details = () => [
-    running() ? uiText("running") : "",
-    thinking()
-      ? uiText("runThinkingLevel", { level: thinking() })
-      : uiText("defaultThinking"),
-  ];
+  const details = () => [running() ? uiText("running") : "", thinkingText()];
 
   function toggleAll() {
     const next = !expanded();

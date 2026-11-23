@@ -27,6 +27,12 @@ export const modelMessages = defineMessages({
     agentFooter: "↑↓ to move · Enter to choose · Esc to close",
     modelFooter: "↑↓ to move · Enter to choose · Esc to go back",
     thinkingFooter: "↑↓ to move · Enter to save · Esc back to the models",
+    levelNotTaken: "this model does not take it",
+    levelsUnknown:
+      "This model's levels are not known; the one you pick is sent as it is.",
+    levelsUndeclared:
+      "This model declares no thinking levels, so eta sends none.",
+    levelsNone: "This runtime has no thinking level for this model.",
   },
   zh: {
     whichAgent: "选哪个智能体？",
@@ -54,5 +60,9 @@ export const modelMessages = defineMessages({
     agentFooter: "↑↓ 移动 · Enter 选择 · Esc 关闭",
     modelFooter: "↑↓ 移动 · Enter 选择 · Esc 返回",
     thinkingFooter: "↑↓ 移动 · Enter 保存 · Esc 回到选模型",
+    levelNotTaken: "这个模型不支持",
+    levelsUnknown: "不知道这个模型支持哪些档位，会按你选的原样发送。",
+    levelsUndeclared: "这个模型没有声明思考档，eta 不会发送思考参数。",
+    levelsNone: "这个运行时不能给这个模型设思考档。",
   },
 });

@@ -296,6 +296,26 @@ export const settingsMessages = {
   test: ["Test", "测试"],
   testing: ["Testing…", "测试中…"],
   thinkingLevel: ["Thinking level", "思考档"],
+  thinkingCleared: [
+    "The new model does not take {{level}}; set back to the model's default.",
+    "新模型不支持 {{level}}，已改回模型默认。",
+  ],
+  thinkingUnsupported: [
+    "This model does not take {{level}}; it runs on the model's default.",
+    "当前模型不支持 {{level}}，会按模型默认运行。",
+  ],
+  thinkingUnknown: [
+    "This model's levels are not known; the one you pick is sent as it is.",
+    "不知道这个模型支持哪些档位，会按你选的原样发送。",
+  ],
+  thinkingUndeclared: [
+    "This model declares no thinking levels, so eta sends none. Refresh its model source to read them.",
+    "这个模型没有声明思考档，eta 不会发送思考参数。可以刷新模型源重新读取。",
+  ],
+  thinkingNone: [
+    "This runtime has no thinking level for this model.",
+    "这个运行时不能给这个模型设思考档。",
+  ],
   settingsEmailHint: [
     "A standalone mailbox. Emails never reach an agent automatically; every send and reply needs your confirmation.",
     "独立的邮箱。邮件不会自动交给智能体，每次发送和回复都需要你确认。",

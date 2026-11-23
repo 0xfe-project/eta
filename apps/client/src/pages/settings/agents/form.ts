@@ -4,9 +4,14 @@ import type {
   AgentRuntime,
   AgentRuntimeInfo,
   MachineView,
+  ModelThinking,
   ThinkingLevel,
 } from "@eta/client-contracts";
-import { AGENT_RUNTIMES } from "@eta/client-contracts";
+import {
+  AGENT_RUNTIMES,
+  agentThinking,
+  keptLevel,
+} from "@eta/client-contracts";
 import { cleanup, effect, signal } from "nsh";
 import { colors, textFaces } from "../../../components";
 import { useModels } from "../../../components/model-select";
@@ -36,6 +41,8 @@ export function createAgentForm(props: AgentEditorProps) {
   const plugins = signal(saved?.plugins ?? []);
   const machineId = signal<string | null>(saved?.machineId ?? null);
   const thinking = signal<ThinkingLevel | null>(saved?.thinkingLevel ?? null);
+  /** The level the last change of model or runtime cleared, because the new one does not take it. */
+  const thinkingCleared = signal<ThinkingLevel | undefined>(undefined);
   const busy = signal(false);
   const customPersona = signal(false);
   /** The machine's runtimes: undefined while it answers, null when it could not be asked. */
@@ -179,16 +186,39 @@ export function createAgentForm(props: AgentEditorProps) {
   function close() {
     if (!busy()) props.onClose();
   }
+  /**
+   * The levels an agent on this runtime and model can be set to: an eta model's from its
+   * declaration, an external runtime's from the machine's list (`agentThinking`).
+   */
+  function thinkingOf(on: AgentRuntime, chosen: string): ModelThinking {
+    if (on === "eta") {
+      const found = models().find((entry) => entry.id === chosen.trim());
+      if (found !== undefined) return found.thinking;
+    }
+    return agentThinking(on, chosen, { runtimes: installed() });
+  }
+  const levels = () => thinkingOf(runtime(), model());
+  /** Keep the level where the new model takes it (or may); clear it, and say so, where not. */
+  function settleThinking() {
+    const level = thinking();
+    const kept = keptLevel(levels(), level);
+    thinkingCleared.set(kept === level ? undefined : (level ?? undefined));
+    thinking.set(kept);
+  }
   function chooseRuntime(next: AgentRuntime) {
     if (runtime() === next) return;
     runtime.set(next);
     model.set("");
-    thinking.set(null);
+    settleThinking();
   }
   function chooseModel(next: string) {
     if (model() === next) return;
     model.set(next);
-    thinking.set(null);
+    settleThinking();
+  }
+  function chooseThinking(next: ThinkingLevel | null) {
+    thinkingCleared.set(undefined);
+    thinking.set(next);
   }
   function runtimeModel() {
     const value = model().trim();
@@ -262,6 +292,9 @@ export function createAgentForm(props: AgentEditorProps) {
     plugins,
     machineId,
     thinking,
+    thinkingCleared,
+    levels,
+    chooseThinking,
     saved,
     avatar,
     customPersona,
