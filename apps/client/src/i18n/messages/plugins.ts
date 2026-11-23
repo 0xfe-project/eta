@@ -370,9 +370,11 @@ export const pluginsMessages = {
     "Composio 没有为这个 toolkit 提供现成的登录,可能需要你自己的 OAuth 应用。",
   ],
   composioConnectNote: [
-    "Connect opens Composio's page in your browser. eta cannot tell whether the toolkit is already connected, so this button is always shown.",
-    "「连接」会在浏览器里打开 Composio 的页面。eta 无法得知这个 toolkit 是否已连接,所以这个按钮始终显示。",
+    "Connect opens Composio's page in your browser. Connected only means the account is linked on Composio; eta's agents cannot use it yet.",
+    "「连接」会在浏览器里打开 Composio 的页面。「已连接」只表示账户已在 Composio 上连上,eta 的智能体暂时还用不上。",
   ],
+  composioConnected: ["Connected", "已连接"],
+  composioReconnect: ["Reconnect", "重新连接"],
   composioTools: ["Tools", "工具数"],
   composioCategories: ["Categories", "分类"],
   composioHomepage: ["App page", "应用主页"],

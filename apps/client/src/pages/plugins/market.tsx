@@ -4,10 +4,19 @@ import type {
   MarketCatalog,
   MarketEntry,
   MarketPreview,
+  PluginResults,
 } from "@eta/client-contracts";
 import type { JSX } from "nsh";
 import type { Layout } from "../../components";
-import { effect, openUrl, signal, untracked, View } from "nsh";
+import {
+  cleanup,
+  effect,
+  lifecycle,
+  openUrl,
+  signal,
+  untracked,
+  View,
+} from "nsh";
 import { Input } from "nsh/base";
 import {
   Button,
@@ -39,6 +48,10 @@ import { PluginName } from "./plugin-name";
  */
 /** The last list shown, kept for the session: the market opened again draws it on its first frame. */
 let lastCatalog: MarketCatalog | undefined;
+
+/** How often, and how many times, the market asks Composio whether a toolkit got connected (about three minutes). */
+const POLL_MS = 3000;
+const POLL_LIMIT = 60;
 
 export function Market(props: {
   layout: Layout;
@@ -122,6 +135,71 @@ export function Market(props: {
       ? undefined
       : new Date(Math.min(...times)).toLocaleString();
   };
+  /** The toolkits Composio says are connected. A mark only: when it cannot be read, no mark shows. */
+  const connected = signal<string[]>([]);
+  const isConnected = (slug: string) => connected().includes(slug);
+  async function refreshConnected(): Promise<void> {
+    const answer = await host
+      .call<PluginResults["composioConnected"]>(
+        "plugins",
+        "composioConnected",
+        {},
+      )
+      .catch(() => undefined);
+    if (!answer || !Array.isArray(answer.slugs)) return;
+    // A failed read keeps what was known; a key that is gone or refused knows nothing.
+    if (answer.status === "ready") connected.set(answer.slugs);
+    else if (answer.status !== "error") connected.set([]);
+  }
+  /** The toolkit being waited for after Connect opened the browser; empty when nothing is. */
+  const waiting = signal("");
+  let timer: ReturnType<typeof setInterval> | undefined;
+  let asking = false;
+  function stopWaiting() {
+    clearInterval(timer);
+    timer = undefined;
+    waiting.set("");
+  }
+  async function checkWaiting() {
+    const slug = waiting();
+    if (slug === "" || asking) return;
+    asking = true;
+    try {
+      await refreshConnected();
+    } finally {
+      asking = false;
+    }
+    if (waiting() === slug && isConnected(slug)) stopWaiting();
+  }
+  function startWaiting(slug: string) {
+    stopWaiting();
+    waiting.set(slug);
+    let asked = 0;
+    timer = setInterval(() => {
+      if (++asked > POLL_LIMIT) stopWaiting();
+      else void checkWaiting();
+    }, POLL_MS);
+  }
+  cleanup(() => clearInterval(timer));
+  // The window got the focus back (the user is coming back from the browser): ask at once.
+  effect(() => {
+    if (lifecycle() !== "active" || waiting() === "") return;
+    untracked(() => void checkWaiting());
+  });
+  // The first time toolkits are on the screen, and each time one is opened.
+  let asked = false;
+  effect(() => {
+    if (allToolkits().length === 0) return;
+    untracked(() => {
+      if (asked) return;
+      asked = true;
+      void refreshConnected();
+    });
+  });
+  effect(() => {
+    if (!detail().startsWith("composio\n")) return;
+    untracked(() => void refreshConnected());
+  });
   /** Connecting a toolkit: the host starts it with Composio, and the user finishes in the browser. */
   async function connect(toolkit: ComposioToolkit) {
     if (busy()) return;
@@ -134,6 +212,8 @@ export function Market(props: {
         { slug: toolkit.slug },
       );
       await (props.open ?? openUrl)(link.redirectUrl);
+      // Already connected: nothing to wait for, the mark is there.
+      if (!isConnected(toolkit.slug)) startWaiting(toolkit.slug);
     } catch (error) {
       installError.set(messageOf(error));
     } finally {
@@ -593,6 +673,13 @@ export function Market(props: {
                     <Label variant="small" tone="muted" lines={1}>
                       {authLabel(item().auth)}
                     </Label>
+                    <If when={isConnected(item().slug)}>
+                      <View testID="composio-connected">
+                        <Label variant="small" weight={600} lines={1}>
+                          {uiText("composioConnected")}
+                        </Label>
+                      </View>
+                    </If>
                     <Label variant="small" tone="muted" lines={2}>
                       {item().description}
                     </Label>
@@ -741,6 +828,13 @@ export function Market(props: {
                   {uiText("composioNotManaged")}
                 </Label>
               </If>
+              <If when={isConnected(currentToolkit()!.slug)}>
+                <View testID="composio-connected">
+                  <Label variant="small" weight={600}>
+                    {uiText("composioConnected")}
+                  </Label>
+                </View>
+              </If>
               <Label variant="small" tone="muted">
                 {uiText("composioConnectNote")}
               </Label>
@@ -768,7 +862,9 @@ export function Market(props: {
               label={
                 busy()
                   ? uiText("composioConnecting")
-                  : uiText("composioConnect")
+                  : isConnected(currentToolkit()!.slug)
+                    ? uiText("composioReconnect")
+                    : uiText("composioConnect")
               }
               tone="primary"
               size={phone() ? 44 : 28}
