@@ -11,6 +11,7 @@ import {
   extractWWWAuthenticateParams,
   LATEST_PROTOCOL_VERSION,
 } from "@modelcontextprotocol/client";
+import { sameOriginFetch } from "../server-manager";
 import { createOAuthProvider } from "./provider";
 
 export type LoginErrorCode =
@@ -52,7 +53,10 @@ export interface BeginLoginInput {
   serverKey: string;
   serverUrl: string;
   scope?: string;
-  /** Extra headers for the unauthenticated probe request (the server's configured headers). */
+  /**
+   * The server's configured headers. They go on the probe and on every sign-in request to the
+   * server's own origin (metadata, registration), never to another origin (the token endpoint).
+   */
   headers?: Record<string, string>;
 }
 
@@ -83,7 +87,34 @@ interface Pending extends PendingLogin {
   serverUrl: string;
   scope: string | undefined;
   resourceMetadataUrl: URL | undefined;
+  /** Kept in memory with the login, so completing it sends what beginning it sent. */
+  headers: Record<string, string> | undefined;
   provider: ReturnType<typeof createOAuthProvider>;
+}
+
+/**
+ * `base` with `headers` added to each request to `serverUrl`'s origin (a header the request already
+ * has is kept). Another origin gets the request as it is, and a redirect off the server's origin is
+ * refused, so the headers cannot travel with it.
+ */
+function withServerHeaders(
+  base: FetchLike,
+  serverUrl: string,
+  headers: Record<string, string> | undefined,
+): FetchLike {
+  if (headers === undefined || Object.keys(headers).length === 0) return base;
+  const origin = new URL(serverUrl).origin;
+  const own = sameOriginFetch(
+    (input, init) => {
+      const next = new Headers(init?.headers);
+      for (const [name, value] of Object.entries(headers))
+        if (!next.has(name)) next.set(name, value);
+      return base(input, { ...init, headers: next });
+    },
+    origin,
+  );
+  return (input, init) =>
+    new URL(String(input)).origin === origin ? own(input, init) : base(input, init);
 }
 
 const KINDS: CredentialKind[] = [
@@ -183,7 +214,7 @@ export function createOAuthLogins(options: OAuthLoginsOptions): OAuthLogins {
     });
     await auth(provider, {
       serverUrl: input.serverUrl,
-      fetchFn,
+      fetchFn: withServerHeaders(fetchFn, input.serverUrl, input.headers),
       ...(scope ? { scope } : {}),
       ...(challenge.resourceMetadataUrl
         ? { resourceMetadataUrl: challenge.resourceMetadataUrl }
@@ -202,6 +233,7 @@ export function createOAuthLogins(options: OAuthLoginsOptions): OAuthLogins {
       serverUrl: input.serverUrl,
       scope,
       resourceMetadataUrl: challenge.resourceMetadataUrl,
+      headers: input.headers,
       authorizationUrl: authorizationUrl.toString(),
       expiresAt: now() + ttlMs,
       provider,
@@ -277,7 +309,7 @@ export function createOAuthLogins(options: OAuthLoginsOptions): OAuthLogins {
       await auth(login.provider, {
         serverUrl: login.serverUrl,
         authorizationCode: code,
-        fetchFn,
+        fetchFn: withServerHeaders(fetchFn, login.serverUrl, login.headers),
         ...(iss !== null ? { iss } : {}),
         ...(login.scope ? { scope: login.scope } : {}),
         ...(login.resourceMetadataUrl
