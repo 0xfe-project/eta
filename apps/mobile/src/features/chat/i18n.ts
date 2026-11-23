@@ -52,6 +52,9 @@ export const i18n = {
     "chat.system.stewardLeft": "{from} 退出了群，现在没有主理人。",
     "chat.system.wakeBudget":
       "这条消息已经用完 {budget} 次唤醒；之后的 @ 只记入对话，等你再发言才会唤醒。",
+    "chat.system.createdByCaptain": "由 Captain 创建",
+    "chat.system.routineReport": "定时任务「{name}」发来汇报：{title}",
+    "chat.system.routineReportUntitled": "定时任务「{name}」发来汇报",
     "chat.system.captainReview": "Captain 巡检 · {count} 项观察",
     "chat.queue.queued": "{name} 排队中",
     "chat.queue.waitingFor": "{name} 排队中，等{other}说完",
@@ -222,12 +225,16 @@ export const i18n = {
     "chat.failure.gone": "This member has left the conversation.",
     "chat.errors.networkFailure":
       "Network failure: the message was not delivered.",
-    "chat.system.stewardChanged": "{to} is now steward, replacing {from}.",
-    "chat.system.stewardSet": "{to} is now steward.",
-    "chat.system.stewardCleared": "{from} is no longer steward.",
+    "chat.system.stewardChanged":
+      "{to} is now the steward, taking over from {from}.",
+    "chat.system.stewardSet": "{to} is now the steward.",
+    "chat.system.stewardCleared": "{from} is no longer the steward.",
     "chat.system.stewardLeft": "{from} left the group; it has no steward now.",
     "chat.system.wakeBudget":
-      "This message has used its {budget} wake-ups. Later @mentions are only recorded until you speak again.",
+      "This message has used its {budget} wake-ups; later @mentions stay in the conversation and wake nobody until you write again.",
+    "chat.system.createdByCaptain": "Created by Captain",
+    "chat.system.routineReport": "Routine “{name}” sent a report: {title}",
+    "chat.system.routineReportUntitled": "Routine “{name}” sent a report",
     "chat.system.captainReview": "Captain review · {count} observation(s)",
     "chat.queue.queued": "{name} is queued",
     "chat.queue.waitingFor": "{name} is queued, waiting for {other} to finish",
