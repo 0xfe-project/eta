@@ -2,8 +2,9 @@ import type { RunningHost } from "../apps/eta/src/running";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 import process from "node:process";
+import { hostEnvironment } from "../apps/desktop/src/bun/host-env";
 import { hostHome, recordedHost } from "../apps/desktop/src/bun/installed";
 import { LocalHost, startServiceServer } from "../apps/desktop/src/bun/service";
 import { DownloadError, downloadHost } from "../packages/releases/src/install";
@@ -18,23 +19,15 @@ const serviceFile = join(
 );
 const dir = hostHome(home);
 const installed = join(dir, executable);
+// One environment for the whole launch: the control calls and the host itself see the same values,
+// names included. Built once, at load — the names cannot change while this process runs.
+const env = hostEnvironment();
 
 const output = (frame: object) => console.log(JSON.stringify(frame));
 
-function environment(): NodeJS.ProcessEnv {
-  const paths =
-    process.platform === "win32"
-      ? []
-      : [join(home, ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin"];
-  return {
-    ...process.env,
-    PATH: [...paths, process.env.PATH].filter(Boolean).join(delimiter),
-  };
-}
-
 async function control(program: string, ...args: string[]): Promise<string> {
   const child = Bun.spawn([program, ...args], {
-    env: environment(),
+    env,
     stdin: "ignore",
     stderr: "ignore",
     stdout: "pipe",
@@ -61,7 +54,6 @@ async function openRunning(program: string): Promise<boolean> {
 
 async function main() {
   const version = process.argv[2] ?? "0.1.0";
-  const env = environment();
   let program =
     [serviceFile, installed].find(existsSync) ??
     Bun.which(executable, { PATH: env.PATH });
