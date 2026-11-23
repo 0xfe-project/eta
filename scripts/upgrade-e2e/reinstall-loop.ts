@@ -1,14 +1,15 @@
 /**
  * Uninstalls the service and installs it again at once, round after round, the way every scenario
- * of `drive.ts` starts (`reset`): a Windows race that a single run of the end-to-end test meets
- * about once in fifty resets (#367). Each round's install is tallied by its exit and its error, so
- * a run says how often it failed and with what.
+ * of `drive.ts` starts (`reset`). Each install reads expected Windows error codes, 1060 and 1062,
+ * and on main about one in 125 lost one to a 0 and failed with `io.eta.host: Windows error 0`
+ * (#367). Each round's install is tallied by its exit and its error, so a run says how often it
+ * failed and with what.
  *
  *   bun scripts/upgrade-e2e/reinstall-loop.ts <eta-host.exe> <rounds> [label] [absent]
  *
  * With `absent` it installs nothing, and runs `uninstall-service` with nothing installed instead:
  * each run asks Windows for both services and must be told 1060, "no such service", which is the
- * code every fresh install has to read correctly too, and the one #367 lost.
+ * code every fresh install has to read correctly too.
  *
  * Windows only, in an Administrator's terminal, with ETA_E2E_PASSWORD the password of this
  * account, on a computer nobody uses: it owns `io.eta.host`, `~/.eta` and `~/eta-e2e` there. The

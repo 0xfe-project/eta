@@ -1,7 +1,9 @@
 # Uninstalls the Windows service and installs it again at once, round after round, on a real
-# `windows-latest`: the race every scenario of the upgrade end-to-end test starts with, and which a
-# run of that meets about once in fifty (#367). Too slow and too random for every pull request: by
-# hand, against a branch, optionally next to another ref's build for a before and after.
+# `windows-latest`, the way every scenario of the upgrade end-to-end test starts. An install reads
+# several expected Windows error codes (1060 for a service not there yet, 1062 for stopping one
+# that never ran); on main about one install in 125 lost one of them to a 0 and failed (#367). Too
+# slow and too random for every pull request: by hand, against a branch, optionally next to another
+# ref's build for a before and after.
 #
 #   gh workflow run windows-service-loop.yml --ref <branch> -f rounds=50 -f compare=main
 #
