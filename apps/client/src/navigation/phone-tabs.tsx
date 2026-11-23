@@ -4,7 +4,7 @@ import { Image, View } from "nsh";
 import { colors, Label, row, sizes } from "../components";
 import { pickerTarget } from "../components/element-picker";
 import { phoneTabPaths } from "../components/icons";
-import { weight } from "../components/tokens";
+import { avatar, space, weight } from "../components/tokens";
 import { useText } from "../i18n";
 import { taskNeedsAttention } from "../pages/tasks/status";
 import { useHost } from "../services/host";
@@ -60,13 +60,13 @@ export function PhoneTabItem(props: {
         height: 63,
         alignItems: "center",
         justifyContent: "center",
-        gap: 4,
+        gap: space[4],
         position: "relative",
         cursor: "pointer",
       }}
     >
       <If when={page() === "captain"}>
-        <CaptainFace size={32} />
+        <CaptainFace size={avatar.lg} />
       </If>
       <If when={page() !== "captain"}>
         <Image
@@ -88,7 +88,7 @@ export function PhoneTabItem(props: {
             position: "absolute",
             top: 8,
             left: "50%",
-            marginLeft: 4,
+            marginLeft: space[4],
             height: 14,
             minWidth: 14,
             paddingHorizontal: 3,

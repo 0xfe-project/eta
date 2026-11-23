@@ -20,6 +20,7 @@ import {
   row,
   textFaces,
 } from "../../components";
+import { space } from "../../components/tokens";
 import { localizedText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -97,10 +98,10 @@ export function DirectoryOptions(props: {
         <View
           style={{
             ...row,
-            marginHorizontal: 16,
-            marginTop: 16,
-            marginBottom: 8,
-            paddingLeft: 12,
+            marginHorizontal: space[16],
+            marginTop: space[16],
+            marginBottom: space[8],
+            paddingLeft: space[12],
             borderWidth: 1,
             borderColor: c().ink,
           }}
@@ -122,7 +123,7 @@ export function DirectoryOptions(props: {
                 style={{
                   ...grow,
                   height: 38,
-                  paddingHorizontal: 8,
+                  paddingHorizontal: space[8],
                   color: c().ink,
                   placeholderColor: c().muted,
                   fontSize: type("body").size,
@@ -136,9 +137,9 @@ export function DirectoryOptions(props: {
         <View
           style={{
             ...row,
-            gap: 8,
-            minHeight: phone() ? 32 : 24,
-            marginTop: phone() ? 12 : 0,
+            gap: space[8],
+            minHeight: phone() ? space[32] : space[24],
+            marginTop: phone() ? space[12] : 0,
             paddingHorizontal: phone() ? 16 : 14,
             borderBottomWidth: phone() ? 0 : 1,
             borderColor: c().border,
@@ -154,7 +155,11 @@ export function DirectoryOptions(props: {
           else={
             <Label
               tone="muted"
-              style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 }}
+              style={{
+                paddingHorizontal: space[16],
+                paddingTop: space[4],
+                paddingBottom: space[8],
+              }}
             >
               {localizedText(
                 "How do you want to add it?",
@@ -165,7 +170,7 @@ export function DirectoryOptions(props: {
         >
           <View
             style={{
-              height: 40,
+              height: space[40],
               justifyContent: "center",
               paddingHorizontal: 14,
               borderBottomWidth: 1,
@@ -183,7 +188,12 @@ export function DirectoryOptions(props: {
       </If>
       <If when={kind() === "browse" && listing()}>
         <View
-          style={{ ...row, paddingHorizontal: 16, gap: 5, flexWrap: "wrap" }}
+          style={{
+            ...row,
+            paddingHorizontal: space[16],
+            gap: 5,
+            flexWrap: "wrap",
+          }}
         >
           <Each of={listing()?.crumbs ?? []} key={(crumb) => crumb.path}>
             {(crumb) => (
@@ -220,7 +230,7 @@ export function DirectoryOptions(props: {
           variant="caption"
           tone="muted"
           style={{
-            paddingHorizontal: 16,
+            paddingHorizontal: space[16],
             // 16pt below the field, whose own margin gives the first 8.
             paddingTop: phone() ? 8 : 6,
             paddingBottom: phone() ? 8 : 6,
@@ -254,7 +264,7 @@ export function DirectoryOptions(props: {
             style={{
               ...row,
               minHeight: phone() ? 56 : 29,
-              marginHorizontal: phone() ? 16 : 0,
+              marginHorizontal: phone() ? space[16] : 0,
               paddingHorizontal: phone() ? 4 : 14,
               gap: phone() ? 12 : 10,
               borderTopWidth: phone() && index() === 0 ? 1 : 0,
@@ -275,7 +285,7 @@ export function DirectoryOptions(props: {
                 flexDirection: phone() ? "column" : "row",
                 alignItems: phone() ? "stretch" : "center",
                 justifyContent: "space-between",
-                gap: phone() ? 0 : 8,
+                gap: phone() ? 0 : space[8],
               }}
             >
               <Label
@@ -305,7 +315,7 @@ export function DirectoryOptions(props: {
         )}
       </Each>
       <If when={loading() || busy()}>
-        <Label tone="muted" style={{ padding: 16 }}>
+        <Label tone="muted" style={{ padding: space[16] }}>
           {localizedText("Waiting for the machine…", "正在等待机器响应…")}
         </Label>
       </If>
@@ -318,7 +328,7 @@ export function DirectoryOptions(props: {
           !error()
         }
       >
-        <Label tone="muted" style={{ padding: 16 }}>
+        <Label tone="muted" style={{ padding: space[16] }}>
           {localizedText(
             "No directories match this search.",
             "没有匹配的目录。",
@@ -326,7 +336,7 @@ export function DirectoryOptions(props: {
         </Label>
       </If>
       <If when={kind() === "github" && rows().length === 0 && !loading()}>
-        <Label tone="muted" style={{ padding: 16 }}>
+        <Label tone="muted" style={{ padding: space[16] }}>
           {localizedText(
             "Paste a Git URL or enter owner/repo.",
             "粘贴 Git URL 或输入 owner/repo。",
@@ -335,7 +345,7 @@ export function DirectoryOptions(props: {
       </If>
       <If when={cloneProgress()}>
         {(active) => (
-          <View style={{ padding: 16, gap: 8 }}>
+          <View style={{ padding: space[16], gap: space[8] }}>
             <Label>
               {localizedText(
                 `Cloning ${active().repo}…`,

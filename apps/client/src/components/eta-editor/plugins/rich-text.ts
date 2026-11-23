@@ -1,7 +1,7 @@
 import type { TextTheme } from "../look";
 import type { TextPlugin } from "../plugin";
 import { markdown, StarterKit } from "nsh/base";
-import { weight } from "../../tokens";
+import { border, space, weight } from "../../tokens";
 
 /**
  * Formatted text, written as Markdown is: `# ` a heading, `- ` / `1. ` / `[ ] ` a list, `> ` a
@@ -66,20 +66,20 @@ function proseStyles(theme: TextTheme) {
     heading2: heading(theme, "subtitle", 6),
     heading3: heading(theme, "body", 4),
     blockquote: {
-      borderLeftWidth: 2,
+      borderLeftWidth: border.thick,
       borderColor: c.strong,
       paddingLeft: 10,
       color: c.muted,
     },
-    list: { paddingLeft: 20 },
+    list: { paddingLeft: space[20] },
     codeBlock: {
       backgroundColor: c.surface,
       borderWidth: 1,
       borderColor: c.border,
       borderRadius: 0,
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      marginVertical: 2,
+      paddingVertical: space[8],
+      paddingHorizontal: space[12],
+      marginVertical: space[2],
       fontFamily: theme.mono,
       fontSize: small.size,
       lineHeight: small.prose,
@@ -106,7 +106,7 @@ function proseEditor(theme: TextTheme) {
   return {
     nodes: {
       taskList: { paddingLeft: 0 },
-      taskItem: { gap: 8 },
+      taskItem: { gap: space[8] },
       // Done, as the view shows it: struck through, muted.
       "taskItem[checked=true]": {
         color: theme.colors.muted,
@@ -146,7 +146,7 @@ function proseView(theme: TextTheme) {
       borderWidth: 1,
       borderRadius: 0,
       borderColor: theme.colors.strong,
-      marginRight: 8,
+      marginRight: space[8],
     },
     taskMarkerChecked: {
       backgroundColor: theme.colors.ink,

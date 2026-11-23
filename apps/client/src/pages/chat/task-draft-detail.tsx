@@ -23,6 +23,7 @@ import {
 } from "../../components";
 import { sendShortcut } from "../../components/eta-editor";
 import { showToast } from "../../components/toast";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { createDescription, DescriptionBox } from "../tasks/description-box";
@@ -36,7 +37,7 @@ export function draftTitle(message: MessageView) {
 
 function Detail(props: { label: string; value: string }) {
   return (
-    <View style={{ ...row, alignItems: "flex-start", gap: 8 }}>
+    <View style={{ ...row, alignItems: "flex-start", gap: space[8] }}>
       <Label variant="small" tone="muted" style={{ width: 84 }}>
         {props.label}
       </Label>
@@ -205,7 +206,7 @@ export function TaskDraftDetail(props: {
       <If when={host.state().status !== "open"}>
         <View
           role="alert"
-          style={{ padding: 8, backgroundColor: color().warningFill }}
+          style={{ padding: space[8], backgroundColor: color().warningFill }}
         >
           <Label tone="warning">{uiText("connectionLostReconnecting")}</Label>
         </View>
@@ -217,7 +218,12 @@ export function TaskDraftDetail(props: {
         accessibilityLabel={draftTitle(props.message)}
         style={grow}
       >
-        <View style={{ padding: props.phone ? 16 : 20, gap: 16 }}>
+        <View
+          style={{
+            padding: props.phone ? space[16] : space[20],
+            gap: space[16],
+          }}
+        >
           <If
             when={pending()}
             else={
@@ -310,8 +316,8 @@ export function TaskDraftDetail(props: {
           <View
             role="alert"
             style={{
-              paddingVertical: 8,
-              paddingHorizontal: props.phone ? 16 : 20,
+              paddingVertical: space[8],
+              paddingHorizontal: props.phone ? space[16] : space[20],
               backgroundColor: color().redFill,
               flexShrink: 0,
             }}
@@ -325,10 +331,10 @@ export function TaskDraftDetail(props: {
       <View
         style={{
           ...row,
-          gap: 8,
+          gap: space[8],
           justifyContent: "flex-end",
           paddingVertical: 10,
-          paddingHorizontal: props.phone ? 16 : 20,
+          paddingHorizontal: props.phone ? space[16] : space[20],
           borderTopWidth: 1,
           borderColor: color().border,
           flexShrink: 0,

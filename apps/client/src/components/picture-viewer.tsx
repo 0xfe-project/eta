@@ -7,6 +7,7 @@ import { CloseButton } from "./navigation-buttons";
 import { screenInsets } from "./safe-area";
 import { Label } from "./text";
 import { colors, fill, Fonts, monoFontFamily, row } from "./theme";
+import { space } from "./tokens";
 
 /** One picture as the preview and the lightbox show it: where it is, and its caption. */
 export interface ViewedPicture {
@@ -68,7 +69,7 @@ function PictureImage(props: {
           style={{
             minWidth: Math.min(160, props.maxWidth),
             minHeight: Math.min(96, props.maxHeight),
-            padding: 8,
+            padding: space[8],
             alignItems: "center",
             justifyContent: "center",
           }}
@@ -141,8 +142,8 @@ export function picturePreview(
       offset={6}
       margin={8}
       style={{
-        gap: 4,
-        padding: 4,
+        gap: space[4],
+        padding: space[4],
         maxWidth: outer(),
         borderWidth: 1,
         borderColor: c().strong,
@@ -283,9 +284,9 @@ function LightboxDialog(props: {
       <View
         style={{
           ...row,
-          gap: 12,
+          gap: space[12],
           minHeight: 33,
-          paddingTop: 4,
+          paddingTop: space[4],
           paddingBottom: Math.max(4, insets().bottom),
           paddingLeft: 12 + insets().left,
           paddingRight: 6 + insets().right,

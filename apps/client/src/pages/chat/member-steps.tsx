@@ -1,6 +1,7 @@
 import type { StoredTask, TaskStatus } from "@eta/client-contracts";
 import { View } from "nsh";
 import { Button, colors, Label, row } from "../../components";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 
@@ -35,8 +36,8 @@ export function MemberStepsToggle(props: {
       hoverStyle={{ backgroundColor: c().selected }}
       style={{
         ...row,
-        height: 24,
-        paddingHorizontal: 8,
+        height: space[24],
+        paddingHorizontal: space[8],
         flexShrink: 0,
         borderWidth: 1,
         borderColor: props.open ? c().ink : c().border,
@@ -60,13 +61,13 @@ export function MemberStepsLedger(props: { session: string }) {
   return (
     <View
       style={{
-        paddingHorizontal: 12,
-        paddingVertical: 4,
+        paddingHorizontal: space[12],
+        paddingVertical: space[4],
         backgroundColor: c().surface,
       }}
     >
       <If when={!online()}>
-        <View style={{ ...row, gap: 8 }}>
+        <View style={{ ...row, gap: space[8] }}>
           <Label variant="caption" tone="muted" style={{ flex: 1 }}>
             {uiText("runReconnectStatus")}
           </Label>
@@ -97,7 +98,7 @@ export function MemberStepsLedger(props: { session: string }) {
               role="text"
               accessible
               accessibilityLabel={`${uiText(statuses[step().status].label)} · ${step().content}`}
-              style={{ ...row, height: 24, gap: 6 }}
+              style={{ ...row, height: space[24], gap: 6 }}
             >
               <View
                 style={{

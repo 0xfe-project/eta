@@ -35,7 +35,7 @@ import {
   shownFiles,
   shownMentions,
 } from "../../components/eta-editor";
-import { shadow, weight } from "../../components/tokens";
+import { opacity, shadow, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { clock, follow, useHost } from "../../services/host";
 import { subtasksOf, TaskSummary } from "../tasks/status";
@@ -239,7 +239,7 @@ export function Message(props: {
     <View
       style={{
         alignSelf: "stretch",
-        gap: item().author === "user" || card() ? 4 : replyBlockGap,
+        gap: item().author === "user" || card() ? space[4] : replyBlockGap,
         // A review card and a failed reply are one block each, 24 apart.
         paddingVertical: card()
           ? 0
@@ -248,7 +248,8 @@ export function Message(props: {
             : props.phone
               ? 0
               : 16,
-        paddingHorizontal: props.phone || props.compact || card() ? 0 : 16,
+        paddingHorizontal:
+          props.phone || props.compact || card() ? 0 : space[16],
       }}
     >
       <If when={item().author === "user"}>
@@ -259,8 +260,8 @@ export function Message(props: {
               borderWidth: 1,
               borderColor: c().border,
               backgroundColor: props.phone ? c().selected : c().surface,
-              paddingVertical: 8,
-              paddingHorizontal: 12,
+              paddingVertical: space[8],
+              paddingHorizontal: space[12],
             }}
           >
             <chatText.View
@@ -291,7 +292,7 @@ export function Message(props: {
               )}
             </Each>
           </View>
-          <View style={{ ...row, gap: 8 }}>
+          <View style={{ ...row, gap: space[8] }}>
             <Label
               variant="caption"
               tone={props.phone ? "muted" : "faint"}
@@ -394,7 +395,7 @@ export function Message(props: {
               style={{
                 ...row,
                 flexWrap: props.phone ? "wrap" : "nowrap",
-                columnGap: 8,
+                columnGap: space[8],
                 rowGap: 6,
                 paddingVertical: 6,
                 paddingHorizontal: 10,
@@ -534,7 +535,7 @@ export function Message(props: {
                 style={{
                   ...row,
                   height: 26,
-                  gap: 8,
+                  gap: space[8],
                   paddingHorizontal: 10,
                   borderWidth: 1,
                   borderColor: c().border,
@@ -574,9 +575,9 @@ export function Message(props: {
             <View
               style={{
                 ...row,
-                height: 24,
+                height: space[24],
                 paddingLeft: 10,
-                paddingRight: 4,
+                paddingRight: space[4],
                 justifyContent: "space-between",
                 borderBottomWidth: 1,
                 borderColor: c().border,
@@ -623,7 +624,7 @@ export function Message(props: {
             style={{
               ...row,
               justifyContent: "flex-end",
-              paddingRight: 8,
+              paddingRight: space[8],
               opacity: stepCount() ? 1 : 0,
             }}
           >
@@ -631,7 +632,7 @@ export function Message(props: {
               role="button"
               accessibilityLabel={uiText("processViewMore")}
               onPress={stepCount() ? () => process.set(true) : undefined}
-              hoverStyle={{ opacity: 0.7 }}
+              hoverStyle={{ opacity: opacity.muted }}
               focusVisibleStyle={focusRing(c())}
               style={{ cursor: stepCount() ? "pointer" : undefined }}
             >
@@ -643,7 +644,7 @@ export function Message(props: {
         </If>
         <If when={item().status === "failed" && !review()}>
           {/* A failed reply is its time, then why, as a warning line. */}
-          <View style={{ gap: 8 }}>
+          <View style={{ gap: space[8] }}>
             <Label
               variant="caption"
               tone="muted"
@@ -664,7 +665,7 @@ export function Message(props: {
                   ref={(node) => {
                     reply = node;
                   }}
-                  style={{ paddingHorizontal: 2 }}
+                  style={{ paddingHorizontal: space[2] }}
                 >
                   <chatText.View
                     text={{ text: text(), mentions: mentionRefs() }}

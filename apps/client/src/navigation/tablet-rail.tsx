@@ -1,6 +1,7 @@
 import type { Navigation } from "./routes";
 import { View } from "nsh";
 import { colors, focusRing, sizes } from "../components";
+import { space } from "../components/tokens";
 import { useText } from "../i18n";
 import { useHost } from "../services/host";
 import { CaptainFace } from "./captain";
@@ -20,8 +21,8 @@ export function TabletRail(props: Navigation) {
         width: sizes.rail,
         height: "100%",
         flexShrink: 0,
-        padding: 4,
-        gap: 4,
+        padding: space[4],
+        gap: space[4],
         borderRightWidth: 1,
         borderColor: c().border,
         backgroundColor: c().surface,

@@ -7,7 +7,7 @@ import { BackButton } from "./navigation-buttons";
 import { StatusDot } from "./status-dot";
 import { Label } from "./text";
 import { colors, row } from "./theme";
-import { sizes, weight } from "./tokens";
+import { control, icon, sizes, space, weight } from "./tokens";
 
 export function Header(props: {
   title: string;
@@ -71,7 +71,12 @@ export function Header(props: {
         ...row,
         flexShrink: 0,
         height:
-          props.height ?? (phone() ? (props.compact ? 44 : 48) : sizes.header),
+          props.height ??
+          (phone()
+            ? props.compact
+              ? control.touch
+              : space[48]
+            : sizes.header),
         paddingLeft: paddingLeft(),
         paddingRight: props.end ?? props.inset ?? fallbackInset(),
         borderBottomWidth: props.divider === false ? 0 : 1,
@@ -86,7 +91,7 @@ export function Header(props: {
                 : phone() || props.dialog
                   ? color().canvas
                   : color().surface,
-        gap: props.gap ?? (phoneBar() ? 4 : 8),
+        gap: props.gap ?? (phoneBar() ? space[4] : space[8]),
         zIndex: 1,
       }}
     >
@@ -96,9 +101,11 @@ export function Header(props: {
           size={phone() ? 40 : undefined}
           iconSize={
             props.backIconSize ??
-            (phone() ? (props.compact ? 16 : 20) : undefined)
+            (phone() ? (props.compact ? icon.md : icon.lg) : undefined)
           }
-          style={phone() && props.compact ? { marginRight: -8 } : undefined}
+          style={
+            phone() && props.compact ? { marginRight: -space[8] } : undefined
+          }
           onPress={() => props.onBack?.()}
         />
       </If>
@@ -143,7 +150,7 @@ export function Header(props: {
       {props.children}
       <If when={phoneBar() && back() && props.children === undefined}>
         {/* Keeps the title's lane the same as a bar with a trailing button. */}
-        <View style={{ width: 40, flexShrink: 0 }} />
+        <View style={{ width: space[40], flexShrink: 0 }} />
       </If>
     </View>
   );

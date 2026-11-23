@@ -1,5 +1,6 @@
 import { Switch } from "nsh/base";
 import { colors, row } from "./theme";
+import { space } from "./tokens";
 
 export function ToggleSwitch(props: {
   label: string;
@@ -26,8 +27,8 @@ export function ToggleSwitch(props: {
       trackStyle={{
         ...row,
         width: props.compact ? 28 : 36,
-        height: props.compact ? 16 : 20,
-        paddingHorizontal: 2,
+        height: props.compact ? space[16] : space[20],
+        paddingHorizontal: space[2],
         justifyContent: props.checked ? "flex-end" : "flex-start",
         borderWidth: 1,
         borderColor: props.checked ? c().button : c().strong,

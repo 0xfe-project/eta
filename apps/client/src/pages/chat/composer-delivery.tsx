@@ -1,6 +1,7 @@
 import type { Outgoing } from "./composer-draft";
 import { View } from "nsh";
 import { Button, Label, row } from "../../components";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 export function OutboxRows(props: {
@@ -12,7 +13,7 @@ export function OutboxRows(props: {
   return (
     <Each of={props.messages} key={(message) => message.id}>
       {(message) => (
-        <View style={{ gap: 4 }}>
+        <View style={{ gap: space[4] }}>
           <Label lines={2} variant="small">
             {[message().text, ...message().attachments.map((file) => file.name)]
               .filter(Boolean)

@@ -21,7 +21,7 @@ import {
 import { AgentFace } from "../../../components/agent-face";
 import { CloseButton } from "../../../components/navigation-buttons";
 import { StatusDot } from "../../../components/status-dot";
-import { weight } from "../../../components/tokens";
+import { control, icon, space, weight } from "../../../components/tokens";
 import { formatLocale, uiText } from "../../../i18n";
 import { clock, followSession, useHost } from "../../../services/host";
 import { activeReply } from "../member-status";
@@ -273,14 +273,20 @@ export function MemberRun(props: {
         style={{
           paddingHorizontal: inset,
           paddingTop: props.phone ? 12 : 10,
-          paddingBottom: props.phone ? 12 : 8,
+          paddingBottom: props.phone ? space[12] : space[8],
           flexShrink: 0,
           gap: props.phone ? 8 : 6,
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
       >
-        <View style={{ ...row, height: props.phone ? 24 : 28, gap: 8 }}>
+        <View
+          style={{
+            ...row,
+            height: props.phone ? space[24] : control.md,
+            gap: space[8],
+          }}
+        >
           <AgentFace id={props.agentId} size={18} />
           <Label variant="small" weight={weight.regular} lines={1}>
             {props.executorName ??
@@ -289,7 +295,7 @@ export function MemberRun(props: {
           </Label>
           <If when={runState()}>
             {(state) => (
-              <View style={{ ...row, flex: 1, minWidth: 0, gap: 8 }}>
+              <View style={{ ...row, flex: 1, minWidth: 0, gap: space[8] }}>
                 <StatusDot color={state().color} />
                 <Label variant="small" lines={1}>
                   {state().word}
@@ -348,17 +354,22 @@ export function MemberRun(props: {
                 outlineColor: c().blue,
                 outlineOffset: 1,
               }}
-              style={{ ...row, gap: 4, flexShrink: 0, cursor: "pointer" }}
+              style={{
+                ...row,
+                gap: space[4],
+                flexShrink: 0,
+                cursor: "pointer",
+              }}
             >
               <Label variant="caption" tone="muted">
                 {uiText(expanded() ? "collapseDetails" : "expandDetails")}
               </Label>
-              <Icon name="down" size={12} tone="muted" />
+              <Icon name="down" size={icon.sm} tone="muted" />
             </View>
             <CloseButton
-              size={24}
-              iconSize={16}
-              style={{ marginRight: -4 }}
+              size={control.sm}
+              iconSize={icon.md}
+              style={{ marginRight: -space[4] }}
               onPress={props.onClose}
             />
           </If>
@@ -372,7 +383,7 @@ export function MemberRun(props: {
               icon="down"
               iconOnly
               tone="ghost"
-              size={24}
+              size={control.sm}
               onPress={toggleAll}
             />
           </If>
@@ -417,8 +428,8 @@ export function MemberRun(props: {
                 style={{
                   ...row,
                   flexWrap: "wrap",
-                  columnGap: 12,
-                  rowGap: props.phone ? 4 : 1,
+                  columnGap: space[12],
+                  rowGap: props.phone ? space[4] : 1,
                 }}
               >
                 <Each
@@ -442,7 +453,7 @@ export function MemberRun(props: {
                           }}
                           style={{
                             ...row,
-                            gap: 4,
+                            gap: space[4],
                             minHeight: props.phone ? 14 : 18,
                             cursor: "pointer",
                           }}
@@ -485,7 +496,7 @@ export function MemberRun(props: {
             ...row,
             paddingHorizontal: inset,
             paddingVertical: 5,
-            gap: 8,
+            gap: space[8],
             backgroundColor: c().selected,
           }}
         >
@@ -534,7 +545,7 @@ export function MemberRun(props: {
               body's last line, in plain ink. */}
           <If when={!props.taskRun && failure()}>
             {(reason) => (
-              <Label variant="small" tone="red" style={{ marginTop: 8 }}>
+              <Label variant="small" tone="red" style={{ marginTop: space[8] }}>
                 {`${uiText("runFailed")} · ${reason()}`}
               </Label>
             )}
@@ -553,7 +564,7 @@ export function MemberRun(props: {
               <Label
                 variant="small"
                 tone="mutedInk"
-                style={{ marginTop: visible().length ? 8 : 4 }}
+                style={{ marginTop: visible().length ? space[8] : space[4] }}
               >
                 {reason()}
               </Label>

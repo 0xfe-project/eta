@@ -6,6 +6,7 @@ import type {
 import { effect, keymap, signal, View } from "nsh";
 import { colors, Label, row } from "../../components";
 import { StatusDot } from "../../components/status-dot";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -195,8 +196,8 @@ export function HeldMessages(props: {
                   if (!mine()) press();
                 }}
                 style={{
-                  paddingHorizontal: 8,
-                  paddingVertical: props.phone ? 8 : 2,
+                  paddingHorizontal: space[8],
+                  paddingVertical: props.phone ? space[8] : space[2],
                   opacity: mine() ? 0.4 : 1,
                   cursor: mine() ? undefined : "pointer",
                 }}
@@ -260,7 +261,7 @@ export function HeldMessages(props: {
                       style={{
                         maxWidth: 520,
                         paddingHorizontal: 10,
-                        paddingVertical: 8,
+                        paddingVertical: space[8],
                         backgroundColor: c().ink,
                       }}
                     >
@@ -269,16 +270,16 @@ export function HeldMessages(props: {
                       </Label>
                     </View>
                   }
-                  style={{ paddingHorizontal: 10, paddingTop: 2 }}
+                  style={{ paddingHorizontal: 10, paddingTop: space[2] }}
                 >
                   <Label lines={2}>{message().text}</Label>
                 </View>
                 <View
                   style={{
                     ...row,
-                    gap: 2,
-                    paddingHorizontal: 2,
-                    paddingTop: 2,
+                    gap: space[2],
+                    paddingHorizontal: space[2],
+                    paddingTop: space[2],
                     paddingBottom: props.phone ? 2 : 6,
                   }}
                 >

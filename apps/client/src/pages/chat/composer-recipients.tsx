@@ -3,7 +3,7 @@ import { Scroll, signal, View } from "nsh";
 import { Button, colors, Icon, Label, row } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
-import { weight } from "../../components/tokens";
+import { avatar, control, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -89,7 +89,11 @@ export function ComposerRecipients(props: {
       }}
     >
       <View
-        style={{ minWidth: 0, flex: props.phone ? undefined : 1, height: 28 }}
+        style={{
+          minWidth: 0,
+          flex: props.phone ? undefined : 1,
+          height: control.md,
+        }}
       >
         <Scroll
           horizontal
@@ -117,9 +121,9 @@ export function ComposerRecipients(props: {
               hoverStyle={{ backgroundColor: c().selected }}
               style={{
                 ...row,
-                height: 28,
+                height: control.md,
                 gap: 6,
-                paddingLeft: 8,
+                paddingLeft: space[8],
                 paddingRight: 10,
                 flexShrink: 0,
                 borderWidth: 1,
@@ -162,8 +166,8 @@ export function ComposerRecipients(props: {
                   <View
                     style={{
                       ...row,
-                      height: 28,
-                      paddingRight: running() ? 4 : 0,
+                      height: control.md,
+                      paddingRight: running() ? space[4] : 0,
                       flexShrink: 0,
                       borderWidth: 1,
                       borderColor: selected() ? c().ink : c().border,
@@ -185,7 +189,7 @@ export function ComposerRecipients(props: {
                         cursor: "pointer",
                       }}
                     >
-                      <AgentFace id={id()} size={16} />
+                      <AgentFace id={id()} size={avatar.sm} />
                       <Label
                         variant="small"
                         lines={1}
@@ -229,7 +233,7 @@ export function ComposerRecipients(props: {
             <If when={collapsed()}>
               <Button
                 label={`+${props.members.length - 3}`}
-                size={28}
+                size={control.md}
                 onPress={() => expanded.set(true)}
               />
             </If>
@@ -242,7 +246,7 @@ export function ComposerRecipients(props: {
               top: 0,
               right: 0,
               bottom: 0,
-              width: 32,
+              width: space[32],
               pointerEvents: "none",
               backgroundImage: `linear-gradient(90deg, ${c().canvas}00 0%, ${c().canvas} 100%)`,
             }}

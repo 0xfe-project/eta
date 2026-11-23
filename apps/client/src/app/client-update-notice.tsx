@@ -1,5 +1,6 @@
 import { signal, View } from "nsh";
 import { Button, colors, Label, row } from "../components";
+import { control, icon, space } from "../components/tokens";
 import { uiText } from "../i18n";
 import {
   clientUpdateAction,
@@ -36,19 +37,19 @@ export function ClientUpdateNotice() {
           style={{
             ...row,
             flexShrink: 0,
-            minHeight: 40,
-            paddingLeft: 16,
-            paddingRight: 4,
+            minHeight: space[40],
+            paddingLeft: space[16],
+            paddingRight: space[4],
             borderTopWidth: 1,
             borderColor: c().border,
             backgroundColor: c().canvas,
-            gap: 8,
+            gap: space[8],
           }}
         >
           <Label
             variant="small"
             tone={update.failure() ? "red" : undefined}
-            style={{ flex: 1, paddingVertical: 8 }}
+            style={{ flex: 1, paddingVertical: space[8] }}
           >
             {message()}
           </Label>
@@ -62,8 +63,8 @@ export function ClientUpdateNotice() {
             label={uiText("dismissAppUpdate")}
             icon="close"
             iconOnly
-            size={32}
-            iconSize={16}
+            size={control.lg}
+            iconSize={icon.md}
             tone="ghost"
             disabled={update.downloading() || update.restarting()}
             onPress={() => update.dismiss()}
