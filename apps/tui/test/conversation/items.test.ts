@@ -808,8 +808,16 @@ describe("a system row", () => {
       { event: "wake_budget", budget: 8 },
       "这条消息已经用完 8 次唤醒；之后的 @ 只记入对话，等你再发言才会唤醒。",
     ],
-    [{ event: "routine_report", title: "Daily digest" }, "Daily digest"],
-    [{ event: "routine_report", title: "" }, "host words"],
+    [{ event: "captain_created" }, "由 Captain 创建"],
+    [
+      { event: "routine_report", routineName: "Daily digest", title: "3 PRs" },
+      "定时任务「Daily digest」发来汇报：3 PRs",
+    ],
+    [
+      { event: "routine_report", routineName: "Daily digest", title: "" },
+      "定时任务「Daily digest」发来汇报",
+    ],
+    [{ event: "routine_report", title: "3 PRs" }, "host words"],
     [{ event: "something_new" }, "host words"],
     [{}, "host words"],
   ])("%j reads as a muted line", (data, text) => {
