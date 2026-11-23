@@ -15,6 +15,12 @@ describe("effortFor on an ACP agent", () => {
     expect(effortFor("ultra", ["low", "high", "max"])).toBeUndefined();
   });
 
+  it("asks for the agent's off switch at `off`, and nothing where it has none", () => {
+    expect(effortFor("off", ["none", "low"])).toBe("none");
+    expect(effortFor("off", ["off", "high"])).toBe("off");
+    expect(effortFor("off", ["low", "high"])).toBeUndefined();
+  });
+
   it("offers `ultra` as a thinking level only where the agent lists it", () => {
     const levels = (efforts: string[]) =>
       thinkingLevelsFor(

@@ -146,7 +146,17 @@ export interface SessionViewSections {
   sideThread: SessionViewBtwThread[];
   subagents: SessionViewSubagent[];
   personas: string[];
-  model: { id: string; thinkingLevel: ThinkingLevel };
+  model: {
+    id: string;
+    /** The level the session runs on: what the model takes of the one asked for, else `off`. */
+    thinkingLevel: ThinkingLevel;
+    /**
+     * The level the session was asked for (the agent's), `null` for none. It differs from
+     * `thinkingLevel` when the model does not take it and the session runs on the model's
+     * default. Absent from older hosts.
+     */
+    thinkingAsked?: ThinkingLevel | null | undefined;
+  };
   queue: { items: SessionViewQueuedItem[] };
   tools: { name: string; description: string }[];
   metrics: { tokensPerSec: number };

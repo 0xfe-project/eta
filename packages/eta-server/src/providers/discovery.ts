@@ -204,12 +204,14 @@ interface DeclaredCapabilities {
 /**
  * Whether an entry says it reasons (`reasoning: true`, or `reasoning` among its
  * `supported_parameters`), and the effort levels it names: `supported_reasoning_levels`
- * (`[{ effort }]`) first, else `reasoning_levels` (strings). Names eta has no level for
- * (and `off`) are left out. An entry that says neither yields nothing.
+ * (`[{ effort }]`) first, else `reasoning_levels` (strings). `none` among them is the model's
+ * off switch (`thinkingMode: "both"`), as on the models.dev path; other names eta has no level for
+ * (and `off`) are left out. `reasoning: false` is kept as said; an entry that says nothing yields
+ * nothing.
  */
 function declaredReasoning(
   entry: DeclaredCapabilities,
-): Pick<EtaModelConfig, "reasoning" | "reasoningEfforts"> {
+): Pick<EtaModelConfig, "reasoning" | "reasoningEfforts" | "thinkingMode"> {
   const reasons =
     entry.reasoning === true ||
     (Array.isArray(entry.supported_parameters) &&
@@ -228,9 +230,14 @@ function declaredReasoning(
     (level): level is Exclude<typeof level, "off"> =>
       level !== "off" && named?.includes(level) === true,
   );
+  const off = efforts.length > 0 && named?.includes("none") === true;
+  // `reasoning: false` said outright is a declaration too: the model takes no level but off.
+  const never = entry.reasoning === false && !reasons && efforts.length === 0;
   return {
-    ...(reasons ? { reasoning: true } : {}),
+    ...(reasons || efforts.length > 0 ? { reasoning: true } : {}),
+    ...(never ? { reasoning: false } : {}),
     ...(efforts.length > 0 ? { reasoningEfforts: efforts } : {}),
+    ...(off ? { thinkingMode: "both" as const } : {}),
   };
 }
 

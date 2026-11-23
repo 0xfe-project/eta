@@ -32,7 +32,7 @@ import type {
 } from "@eta/core";
 import type { Entry } from "@eta/core/session";
 import type { Context } from "cordis";
-import { kernelOn } from "@eta/core";
+import { askedThinking, kernelOn } from "@eta/core";
 import { Service } from "cordis";
 
 /** The session's own slice: who it is, and whether something is happening right now. */
@@ -487,11 +487,12 @@ export function builtinViewContributions(
         return {
           id: `${config.model.provider}:${config.model.modelId}`,
           thinkingLevel: config.thinkingLevel,
+          thinkingAsked: askedThinking(config),
         };
       },
       revision: () => {
         const config = sources.config();
-        return `${config.model.provider}:${config.model.modelId}|${config.thinkingLevel}`;
+        return `${config.model.provider}:${config.model.modelId}|${config.thinkingLevel}|${askedThinking(config)}`;
       },
     },
     {

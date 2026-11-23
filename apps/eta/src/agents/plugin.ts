@@ -3,6 +3,7 @@ import type {
   AgentRuntimeAccount,
   AgentRuntimeInfo,
   AgentView,
+  ModelThinking,
   ThinkingLevel,
 } from "@eta/client-contracts";
 import type { CallFrame } from "@eta/client-wire-proto";
@@ -28,7 +29,11 @@ import type { Plugins } from "../plugins/service";
 import type { ProjectStore } from "../projects/store";
 import type { AgentCreateDeps } from "./create";
 import type { AgentRecord, AgentStore } from "./store";
-import { isAgentRuntime } from "@eta/client-contracts";
+import {
+  agentThinking,
+  isAgentRuntime,
+  levelSupport,
+} from "@eta/client-contracts";
 import { THINKING_LEVELS } from "@eta/core";
 import { openDirect } from "../conversations/direct";
 import { summaryOf } from "../conversations/views";
@@ -72,6 +77,11 @@ export interface AgentsDeps {
     | undefined;
   /** Append prompt history for user edits as well as Captain edits. */
   capturePrompt?: AgentCreateDeps["capturePrompt"];
+  /**
+   * The levels an eta model takes, as the model layer sessions run on reads its declaration
+   * (`thinkingLevelsFor`); undefined for a model it cannot resolve.
+   */
+  modelLevels?: ((model: string) => ThinkingLevel[] | undefined) | undefined;
 }
 
 /** What a client may draw an avatar from: an agent's id is one, and so is a short random string. */
@@ -133,6 +143,19 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
 
         wire.handle("agents", "create", async (call) => {
           const fields = fieldsOf(call, true);
+          if (
+            fields.thinkingLevel !== undefined &&
+            fields.thinkingLevel !== null
+          )
+            refuseLevel(
+              fields.thinkingLevel,
+              fields.model ?? null,
+              await thinkingOf(
+                fields.runtime ?? "eta",
+                fields.model ?? null,
+                fields.machineId ?? null,
+              ),
+            );
           const { agent } = await createAgent(
             deps,
             { ...fields, name: fields.name! },
@@ -170,6 +193,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             checkAgentName(agents, fields.name, id);
           checkMachine(machines, fields.machineId);
           checkPlugins(plugins, id, fields.plugins);
+          const thinkingCleared = await settleLevel(before, fields);
           const { agent, sessions } = deps.engine.saveAgent(before, {
             ...fields,
             ...(avatarSeed === undefined ? {} : { avatarSeed }),
@@ -193,7 +217,12 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
           if (agent.name !== before.name) renameHome(agent);
           await deps.engine.applySettings(sessions);
           deps.changed("all");
-          return { result: { agent: viewOf(agent) } };
+          return {
+            result: {
+              agent: viewOf(agent),
+              ...(thinkingCleared === undefined ? {} : { thinkingCleared }),
+            },
+          };
         }),
 
         wire.handle("agents", "delete", (call) => {
@@ -295,6 +324,71 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
     applied,
   );
 
+  /**
+   * The levels an agent on this runtime, model and machine can be set to, as far as the host
+   * knows them: an eta model's from the model layer, an external runtime's from the machine's
+   * runtime list. A machine that cannot be asked (offline, failing) leaves them unknown.
+   */
+  async function thinkingOf(
+    runtime: AgentRuntime,
+    model: string | null,
+    machineId: string | null,
+  ): Promise<ModelThinking> {
+    if (runtime === "eta") {
+      const levels = model === null ? undefined : deps.modelLevels?.(model);
+      return levels === undefined
+        ? agentThinking(runtime, null, {})
+        : { basis: "declared", levels };
+    }
+    const machine = machineId === null ? undefined : machines.get(machineId);
+    try {
+      const runtimes =
+        machine === undefined || machine.kind === "primary"
+          ? await deps.runtimes?.(false)
+          : machine.status === "online"
+            ? await deps.machineRuntimes?.(machine.id, false)
+            : undefined;
+      return agentThinking(runtime, model, { runtimes });
+    } catch {
+      return agentThinking(runtime, model, {});
+    }
+  }
+
+  /**
+   * An update's level, settled against the model the agent ends up on. A level the call names
+   * that the model does not take is refused; a level the agent kept that its new model does not
+   * take is cleared, and said back (`thinkingCleared`). Nothing is checked when neither the level
+   * nor where the agent runs changes.
+   */
+  async function settleLevel(
+    before: AgentRecord,
+    fields: ReturnType<typeof fieldsOf>,
+  ): Promise<ThinkingLevel | undefined> {
+    const runtime = fields.runtime ?? before.runtime;
+    const model = fields.model === undefined ? before.model : fields.model;
+    const machineId =
+      fields.machineId === undefined ? before.machineId : fields.machineId;
+    if (fields.thinkingLevel !== undefined) {
+      if (fields.thinkingLevel !== null)
+        refuseLevel(
+          fields.thinkingLevel,
+          model,
+          await thinkingOf(runtime, model, machineId),
+        );
+      return undefined;
+    }
+    const kept = before.thinkingLevel;
+    const moved =
+      runtime !== before.runtime ||
+      model !== before.model ||
+      machineId !== before.machineId;
+    if (kept === null || !moved) return undefined;
+    const thinking = await thinkingOf(runtime, model, machineId);
+    if (levelSupport(thinking, kept) !== "unsupported") return undefined;
+    fields.thinkingLevel = null;
+    return kept;
+  }
+
   /** The home project and the private chats carry the agent's name; a rename follows them. */
   function renameHome(agent: AgentRecord): void {
     const home = homeOf(deps, agent);
@@ -302,6 +396,21 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
     projects.update(home.id, { name: agent.name });
     conversations.renameDirect(home.id, agent.name);
   }
+}
+
+/** Refuse a level the model is known not to take, naming the ones it does. */
+function refuseLevel(
+  level: ThinkingLevel,
+  model: string | null,
+  thinking: ModelThinking,
+): void {
+  if (levelSupport(thinking, level) !== "unsupported") return;
+  const name = model ?? "the runtime's default model";
+  throw new Error(
+    thinking.levels.length === 0
+      ? `${name} takes no thinking level: leave it on the model's default`
+      : `${name} does not take thinking level ${level}; it takes ${thinking.levels.join(", ")}`,
+  );
 }
 
 /** The fields of an agent a call carries; `create` needs a name, `update` takes what is sent. */

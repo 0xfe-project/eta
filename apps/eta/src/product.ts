@@ -34,7 +34,8 @@ import type { UpgradePluginOptions } from "./upgrade/plugin";
 import type { WebOptions } from "./web/service";
 import { homedir, hostname, platform } from "node:os";
 import { join } from "node:path";
-import { peerAddressOf, redactionMiddleware } from "@eta/server";
+import { thinkingLevelsFor } from "@eta/core";
+import { parseModelId, peerAddressOf, redactionMiddleware } from "@eta/server";
 import { acpPlugin } from "./acp/plugin";
 import { AcpService, projectMachinesOf } from "./acp/service";
 import { agentsPlugin } from "./agents/plugin";
@@ -1074,6 +1075,11 @@ export function createProduct(options: {
             changed,
             created,
             runtimes: options.runtimes,
+            modelLevels: (model) => {
+              const { provider, modelId } = parseModelId(model);
+              const found = server.models.getModel(provider, modelId);
+              return found === undefined ? undefined : thinkingLevelsFor(found);
+            },
             machineRuntimes: async (machineId, fresh) => {
               const link = hub.link(machineId);
               if (link === undefined)

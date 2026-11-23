@@ -9,6 +9,8 @@
  * subscription windows the providers report: 5 hours, weekly).
  */
 
+import type { ModelCapabilities } from "./types";
+
 /** The provider id the gateway's models go under: `llm:gpt-5`. */
 export const LLM_PROVIDER_ID = "llm";
 
@@ -125,6 +127,13 @@ export interface LlmModel {
   connector: string;
   name: string;
   contextWindow?: number | undefined;
+  /**
+   * How it thinks, in the vocabulary of a configured model (`ModelCapabilities`): absent when the
+   * gateway's catalog names no levels for it.
+   */
+  reasoning?: boolean | undefined;
+  reasoningEfforts?: ModelCapabilities["reasoningEfforts"] | undefined;
+  thinkingMode?: ModelCapabilities["thinkingMode"] | undefined;
   status: LlmModelStatus;
   /** Whether requests are let through: a degraded model is. */
   available: boolean;
