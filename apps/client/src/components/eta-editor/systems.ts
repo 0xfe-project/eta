@@ -1,4 +1,4 @@
-import { codeBlock } from "./plugins/code-block";
+import { bareCode, codeBlock } from "./plugins/code-block";
 import { pasteBlock } from "./plugins/paste-block";
 import { pictures } from "./plugins/picture";
 import { richText } from "./plugins/rich-text";
@@ -22,3 +22,9 @@ export const chatText = createTextSystem([
  * Markdown alone (nowhere to keep where a paste was), so a paste goes in as the text it is.
  */
 export const descriptionText = createTextSystem([richText(), codeBlock()]);
+
+/**
+ * Code shown on its own (a tool call's input): one fenced block, highlighted as the chat's code
+ * blocks are, with their Copy, in a frame of the place's own (which scrolls it when it is long).
+ */
+export const codeText = createTextSystem([richText(), codeBlock(), bareCode()]);

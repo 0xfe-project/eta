@@ -15,6 +15,7 @@ import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { PictureModes } from "../../../services/picture-mode";
 import { toolDescription } from "./run-timing";
+import { ToolInput, ToolOutput } from "./tool-code";
 
 export function TranscriptLine(props: {
   session: string;
@@ -158,15 +159,11 @@ export function TranscriptLine(props: {
             <View style={{ padding: 10, gap: 6, backgroundColor: c().surface }}>
               <If when={entry().input !== undefined}>
                 <Caption text={uiText("runInput")} />
-                <Label variant="caption">
-                  {typeof entry().input === "string"
-                    ? String(entry().input)
-                    : JSON.stringify(entry().input, null, 2)}
-                </Label>
+                <ToolInput name={entry().name} input={entry().input} />
               </If>
               <If when={output()}>
                 <Caption text={uiText("runOutput")} />
-                <Label variant="caption">{output()}</Label>
+                <ToolOutput text={String(output())} />
               </If>
               <If when={images().length}>
                 <TranscriptImages session={props.session} images={images} />

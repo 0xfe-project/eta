@@ -9,5 +9,5 @@ export { mention, shownMentions } from "./plugins/mention";
 export { quote } from "./plugins/quote";
 export { serialize } from "./plugins/serialize";
 export { submitKeys } from "./plugins/submit-keys";
-export { chatText, descriptionText } from "./systems";
+export { chatText, codeText, descriptionText } from "./systems";
 export { createTextSystem } from "./text-system";
