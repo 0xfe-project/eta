@@ -20,7 +20,14 @@ import {
 import { UserFace } from "../../components/agent-face";
 import { chatText, shownMentions } from "../../components/eta-editor";
 import { StatusDot } from "../../components/status-dot";
-import { avatar, icon, space, weight } from "../../components/tokens";
+import {
+  avatar,
+  border,
+  control,
+  icon,
+  space,
+  weight,
+} from "../../components/tokens";
 import { formatLocale, localizedText, uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
 import { reportBody, RoutineHistory } from "./history";
@@ -49,6 +56,15 @@ interface RoutineReportProps {
   onFeedback: (value: string) => void;
   onSend: () => void;
 }
+
+/** The "Output" tag over a failed run's error. */
+const badgeHeight = 20;
+/** The report link row on a failed run's page. */
+const reportRowHeight = 56;
+/** A report's column on a wide screen. */
+const columnWidth = 640;
+/** The feedback box under a report, its border included. */
+const feedbackHeight = 40;
 
 function runDay(at: number) {
   const date = new Date(at);
@@ -152,7 +168,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
             <View style={{ ...row, gap: space[8] }}>
               <View
                 style={{
-                  height: 18,
+                  height: badgeHeight,
                   paddingHorizontal: space[8],
                   justifyContent: "center",
                   backgroundColor: c().button,
@@ -216,7 +232,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
                   focusVisibleStyle={focusRing(c(), "inset")}
                   style={{
                     ...row,
-                    minHeight: 56,
+                    minHeight: reportRowHeight,
                     gap: space[8],
                     paddingHorizontal: space[12],
                     borderWidth: 1,
@@ -275,7 +291,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
           label={uiText("runNow")}
           tone="primary"
           icon="play"
-          size={36}
+          size={control.touch}
           labelWeight={weight.strong}
           style={{ paddingHorizontal: space[16], gap: space[4] }}
           disabled={!props.canRetry}
@@ -298,8 +314,8 @@ export function RoutineReport(props: RoutineReportProps) {
     [feedTime(props.run.startedAt), recordedDuration(props.run)]
       .filter(Boolean)
       .join(" · ");
-  const inset = () => (props.phone ? 16 : 32);
-  const column = { width: "100%", maxWidth: 640 } as const;
+  const inset = () => (props.phone ? space[16] : space[32]);
+  const column = { width: "100%", maxWidth: columnWidth } as const;
   const move = (label: string, enabled: boolean, by: number) => (
     <View
       role="button"
@@ -444,7 +460,7 @@ export function RoutineReport(props: RoutineReportProps) {
                     label={uiText("retry")}
                     disabled={!props.canRetry}
                     onPress={props.onRetry}
-                    size={props.phone ? 30 : undefined}
+                    size={props.phone ? control.touch : undefined}
                     style={
                       props.phone ? { paddingHorizontal: space[12] } : undefined
                     }
@@ -510,7 +526,7 @@ export function RoutineReport(props: RoutineReportProps) {
               <View
                 style={{
                   ...row,
-                  height: 38,
+                  height: feedbackHeight,
                   gap: space[8],
                   paddingHorizontal: space[12],
                   borderWidth: 1,
@@ -527,7 +543,7 @@ export function RoutineReport(props: RoutineReportProps) {
                   }}
                   style={{
                     flex: 1,
-                    height: 36,
+                    height: feedbackHeight - 2 * border.hair,
                     ...textStyle(type("small")),
                     paddingHorizontal: 0,
                     borderWidth: 0,

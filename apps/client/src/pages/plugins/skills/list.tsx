@@ -21,6 +21,7 @@ import {
   Label,
   ListSkeleton,
   row,
+  sizes,
   SmoothScroll,
   textFaces,
 } from "../../../components";
@@ -35,6 +36,13 @@ import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
 import { SkillDetail } from "./detail";
 import { SkillSelect } from "./select";
+
+/** The desktop's project select and search field. */
+const projectSelectWidth = 200;
+const searchWidth = 232;
+/** A skill: a row of the tablet list, a card of the desktop grid. */
+const tabletRowHeight = 60;
+const cardWidth = 268;
 
 export function Skills(props: {
   layout: Layout;
@@ -304,7 +312,7 @@ export function Skills(props: {
                 value: item.id,
                 title: `${item.name} · ${item.display}`,
               }))}
-              triggerStyle={{ width: tablet() ? "100%" : 200 }}
+              triggerStyle={{ width: tablet() ? "100%" : projectSelectWidth }}
               onChange={(id) => {
                 selectedPath.set("");
                 projectId.set(id);
@@ -344,7 +352,7 @@ export function Skills(props: {
       <If when={!tablet() && !phone()}>
         <View style={{ flex: 1 }} />
       </If>
-      <View style={{ width: tablet() || phone() ? "100%" : 230 }}>
+      <View style={{ width: tablet() || phone() ? "100%" : searchWidth }}>
         <Field
           label={uiText("searchLoadedSkills")}
           placeholder={uiText("searchLoadedSkills")}
@@ -487,7 +495,7 @@ export function Skills(props: {
                       ? {
                           ...row,
                           paddingHorizontal: space[16],
-                          minHeight: 60,
+                          minHeight: tabletRowHeight,
                           borderBottomWidth: 1,
                           gap: space[8],
                         }
@@ -499,7 +507,11 @@ export function Skills(props: {
                             borderTopWidth: 1,
                             gap: space[12],
                           }
-                        : { width: 267, padding: space[12], borderWidth: 1 }),
+                        : {
+                            width: cardWidth,
+                            padding: space[12],
+                            borderWidth: 1,
+                          }),
                     borderColor: c().border,
                     backgroundColor:
                       selectedPath() === entry().path
@@ -608,7 +620,7 @@ export function Skills(props: {
                     icon="refresh"
                     iconOnly
                     iconSize={icon.md}
-                    size={16}
+                    size={control.sm}
                     style={{ paddingHorizontal: 0 }}
                     tone="ghost"
                     onPress={refresh}
@@ -627,7 +639,7 @@ export function Skills(props: {
       <View style={{ ...row, ...grow, alignItems: "stretch" }}>
         <View
           style={{
-            width: 320,
+            width: sizes.tabletList,
             flexShrink: 0,
             borderRightWidth: 1,
             borderColor: c().border,

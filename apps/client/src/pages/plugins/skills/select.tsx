@@ -66,7 +66,7 @@ export function SkillSelect(props: {
                 </Label>
               </If>
             </View>
-            <View style={{ width: 14, flexShrink: 0 }}>
+            <View style={{ width: icon.md, flexShrink: 0 }}>
               <If when={chosen()}>
                 <Icon name="check" size={icon.md} />
               </If>

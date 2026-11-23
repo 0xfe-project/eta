@@ -1,10 +1,6 @@
 {
   "$comment": "Design values written before the lint, per rule and file. Only shrinks: `bun run lint:baseline` after moving some to tokens (scripts/check-design-values.ts).",
   "counts": {
-    "design-color": {
-      "src/pages/routines/list-row.tsx": 1,
-      "src/pages/routines/routines.tsx": 1
-    },
     "design-number": {
       "src/pages/connection/connection-errors.tsx": 3,
       "src/pages/connection/download-progress.tsx": 1,
@@ -18,24 +14,7 @@
       "src/pages/connection/workspace-skeleton.tsx": 3,
       "src/pages/onboarding/index.tsx": 2,
       "src/pages/onboarding/persona-step.tsx": 4,
-      "src/pages/onboarding/welcome.tsx": 1,
-      "src/pages/plugins/configure.tsx": 4,
-      "src/pages/plugins/plugin-detail.tsx": 6,
-      "src/pages/plugins/plugins.tsx": 8,
-      "src/pages/plugins/skills/detail.tsx": 2,
-      "src/pages/plugins/skills/file-tree.tsx": 1,
-      "src/pages/plugins/skills/list.tsx": 6,
-      "src/pages/plugins/skills/reader.tsx": 1,
-      "src/pages/plugins/skills/select.tsx": 1,
-      "src/pages/plugins/tablet-list.tsx": 2,
-      "src/pages/plugins/warnings.tsx": 1,
-      "src/pages/routines/delete-routine.tsx": 2,
-      "src/pages/routines/editor.tsx": 13,
-      "src/pages/routines/history.tsx": 2,
-      "src/pages/routines/list-row.tsx": 2,
-      "src/pages/routines/routine-detail.tsx": 4,
-      "src/pages/routines/routines.tsx": 7,
-      "src/pages/routines/run-report.tsx": 7
+      "src/pages/onboarding/welcome.tsx": 1
     }
   }
 }

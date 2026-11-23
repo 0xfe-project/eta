@@ -106,13 +106,13 @@ export function DeleteRoutine(props: {
           <Button
             label={uiText("delete")}
             tone="danger"
-            size={40}
+            size={control.touch}
             disabled={blocked()}
             onPress={() => void remove()}
           />
           <Button
             label={uiText("cancel")}
-            size={40}
+            size={control.touch}
             disabled={busy()}
             onPress={props.onClose}
           />

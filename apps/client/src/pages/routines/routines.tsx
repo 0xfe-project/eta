@@ -12,7 +12,9 @@ import {
   ActionMenu,
   Button,
   colors,
+  dialogWidth,
   Empty,
+  emptyWidth,
   focusRing,
   grow,
   Header,
@@ -24,7 +26,8 @@ import {
   SmoothScroll,
 } from "../../components";
 import { chatText, shownMentions } from "../../components/eta-editor";
-import { icon, space, weight } from "../../components/tokens";
+import { dotSize } from "../../components/status-dot";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
 import { follow, useHost } from "../../services/host";
@@ -39,6 +42,13 @@ import { RoutineReport } from "./run-report";
 /** How far down an empty state stands: lower in a tablet's detail column, level with the
  * list's first rows. */
 const emptyTop = { desktop: space[64], tablet: space[64] + space[48] };
+
+/** The desktop's list of routines. */
+const listWidth = 352;
+/** The tablet's Captain chip in the list header. */
+const captainChipWidth = 160;
+/** The brief, read in a dialog. */
+const briefDialogHeight = 460;
 
 export function Routines(props: {
   layout: Layout;
@@ -212,7 +222,7 @@ export function Routines(props: {
           style={{
             ...row,
             flexShrink: 0,
-            maxWidth: 160,
+            maxWidth: captainChipWidth,
             gap: space[4],
             paddingVertical: space[2],
             paddingHorizontal: space[8],
@@ -240,10 +250,10 @@ export function Routines(props: {
             <View
               style={{
                 position: "absolute",
-                top: -3,
-                right: -3,
-                width: 6,
-                height: 6,
+                top: -space[4],
+                right: -space[4],
+                width: dotSize,
+                height: dotSize,
                 backgroundColor: c().blue,
               }}
             />
@@ -288,8 +298,7 @@ export function Routines(props: {
               : 0,
           borderWidth: 1,
           borderColor: c().warningLine,
-          // state-warning at 12%.
-          backgroundColor: `${c().warning}1f`,
+          backgroundColor: c().warningFill,
         }}
       >
         <View
@@ -324,7 +333,7 @@ export function Routines(props: {
           >
             <Button
               label={uiText("turnCaptainOn")}
-              size={phone() ? 36 : 28}
+              size={phone() ? control.touch : control.md}
               style={{ paddingHorizontal: phone() ? space[16] : space[12] }}
               onPress={() =>
                 void host.action(() =>
@@ -353,7 +362,8 @@ export function Routines(props: {
               ...(phone()
                 ? grow
                 : {
-                    width: props.layout === "desktop" ? 352 : sizes.tabletList,
+                    width:
+                      props.layout === "desktop" ? listWidth : sizes.tabletList,
                     flexShrink: 0,
                   }),
               borderRightWidth: phone() ? 0 : 1,
@@ -399,7 +409,7 @@ export function Routines(props: {
                   titleVariant="body"
                   titleWeight={weight.regular}
                   descriptionVariant="small"
-                  descriptionWidth={400}
+                  descriptionWidth={emptyWidth.wide}
                   // The list's empty state sits at the top of the column.
                   style={{
                     flex: 0,
@@ -419,7 +429,13 @@ export function Routines(props: {
                         label={uiText("newRoutine")}
                         icon="plus"
                         tone="primary"
-                        size={phone() ? 36 : tablet() ? 28 : 24}
+                        size={
+                          phone()
+                            ? control.touch
+                            : tablet()
+                              ? control.md
+                              : control.sm
+                        }
                         iconSize={phone() ? icon.md : icon.sm}
                         style={{
                           paddingHorizontal: phone()
@@ -506,8 +522,10 @@ export function Routines(props: {
                           iconSize={selected() ? undefined : icon.lg}
                           iconTone={selected() ? undefined : "ink"}
                           titleWeight={tablet() ? weight.regular : undefined}
-                          // Two lines on the desktop; tablet runs it across the pane.
-                          descriptionWidth={tablet() ? 560 : 230}
+                          // Tablet runs it across the pane.
+                          descriptionWidth={
+                            tablet() ? emptyWidth.wide : emptyWidth.narrow
+                          }
                           style={
                             selected()
                               ? undefined
@@ -546,7 +564,7 @@ export function Routines(props: {
                       <View style={{ ...row, paddingTop: space[8] }}>
                         <Button
                           label={uiText("backToRoutines")}
-                          size={phone() ? 36 : 28}
+                          size={phone() ? control.touch : control.md}
                           style={{
                             paddingHorizontal: phone() ? space[16] : space[12],
                           }}
@@ -621,8 +639,8 @@ export function Routines(props: {
       <If when={readingBrief()}>
         <Modal
           title={uiText("routineBrief")}
-          width={640}
-          height={460}
+          width={dialogWidth.xl}
+          height={briefDialogHeight}
           phone={phone()}
           onClose={() => readingBrief.set(false)}
         >

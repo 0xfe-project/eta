@@ -13,6 +13,9 @@ import {
 import { icon, opacity, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 
+/** The column of a skill's files beside the file. */
+const treeWidth = { tablet: 120, desktop: 160 } as const;
+
 export function SkillFileTree(props: {
   layout: Layout;
   directory: string;
@@ -29,7 +32,10 @@ export function SkillFileTree(props: {
         props.layout === "phone"
           ? grow
           : {
-              width: props.layout === "tablet" ? 120 : 160,
+              width:
+                props.layout === "tablet"
+                  ? treeWidth.tablet
+                  : treeWidth.desktop,
               flexShrink: 0,
               borderRightWidth: 1,
               borderColor: c().border,

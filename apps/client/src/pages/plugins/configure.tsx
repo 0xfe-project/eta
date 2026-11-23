@@ -10,6 +10,7 @@ import { Dialog, Input } from "nsh/base";
 import {
   Button,
   colors,
+  dialogWidth,
   Field,
   fill,
   fontFamily,
@@ -36,6 +37,10 @@ import {
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { pluginConfigText, PluginSelect } from "./config-fields";
+
+/** How much of the window the configure dialog may take. */
+const dialogMaxWidth = "90%";
+const dialogMaxHeight = "92%";
 
 /** A phone bottom sheet's edge: one strong rule along its top only. */
 export const sheetEdge = {
@@ -106,7 +111,7 @@ export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
       overPhoneNavigation={props.phone}
       compact={!props.phone}
       titleWeight={weight.regular}
-      width={512}
+      width={dialogWidth.lg}
       onClose={props.onClose}
     >
       {/* Phone: a bottom sheet with 14/20 copy, 40pt fields 10pt apart and a
@@ -538,7 +543,7 @@ export function ConfigurePlugin(props: {
         <Button
           label={uiText("save")}
           tone="primary"
-          size={props.phone ? 36 : undefined}
+          size={props.phone ? control.touch : undefined}
           labelVariant="caption"
           style={{ paddingHorizontal: props.phone ? space[20] : space[12] }}
           disabled={
@@ -589,9 +594,9 @@ export function ConfigurePlugin(props: {
           role="dialog"
           accessibilityLabel={title()}
           style={{
-            width: 580,
-            maxWidth: "90%",
-            maxHeight: "92%",
+            width: dialogWidth.lg,
+            maxWidth: dialogMaxWidth,
+            maxHeight: dialogMaxHeight,
             backgroundColor: c().canvas,
             borderWidth: 1,
             borderColor: c().strong,

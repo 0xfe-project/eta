@@ -42,6 +42,9 @@ export function skillFileLink(
   }
 }
 
+/** An image file, shown whole in this box. */
+const imageHeight = 300;
+
 const markerName = "skill-heading-anchor";
 const linkName = "skill-keyboard-link";
 
@@ -380,7 +383,7 @@ export function SkillFile(props: {
       >
         <Image
           src={image()}
-          style={{ width: "100%", height: 300, objectFit: "contain" }}
+          style={{ width: "100%", height: imageHeight, objectFit: "contain" }}
         />
       </If>
     </View>

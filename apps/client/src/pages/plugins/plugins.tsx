@@ -5,6 +5,7 @@ import {
   Button,
   Caption,
   colors,
+  dialogWidth,
   grow,
   Header,
   Icon,
@@ -23,6 +24,17 @@ import { NoPlugins, PluginGlyph, Status } from "./plugin-status";
 import { Skills } from "./skills/list";
 import { PluginTablet } from "./tablet-list";
 import { pluginWarnings, PluginWarningsDialog } from "./warnings";
+
+/** The intro line over the grid of plugins. */
+const introWidth = 1000;
+/** A plugin's card in the grid, and its glyph's tile. */
+const cardWidth = 268;
+const glyphWidth = 36;
+/** The card's two lines of description, and its footer of actions. */
+const descriptionHeight = 36;
+const footerHeight = 36;
+/** A phone row: taller when it has a line asking for configuration. */
+const phoneRowHeight = { needsConfig: 64, other: 60 } as const;
 
 export function Plugins(props: { layout: Layout; onBack?: () => void }) {
   const host = useHost();
@@ -156,11 +168,11 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
           gap: space[16],
         }}
       >
-        <Label variant="small" tone="muted" style={{ maxWidth: 1000 }}>
+        <Label variant="small" tone="muted" style={{ maxWidth: introWidth }}>
           {uiText("pluginsGiveAgentsSkillsAndMcp")}
         </Label>
         <If when={!list().length}>
-          <NoPlugins width={300} />
+          <NoPlugins />
         </If>
         <View
           style={{
@@ -235,7 +247,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                         icon="refresh"
                         iconOnly
                         iconSize={icon.md}
-                        size={16}
+                        size={control.sm}
                         style={{ paddingHorizontal: 0 }}
                         tone="ghost"
                         onPress={() => void refreshPlugins()}
@@ -272,7 +284,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                         {uiText("pluginsIntroPhone")}
                       </Label>
                       <If when={!list().length}>
-                        <NoPlugins width={240} />
+                        <NoPlugins />
                       </If>
                       <If when={needsConfig().length}>
                         <PluginRows
@@ -347,7 +359,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
           panelStyle={phone() ? sheetEdge : undefined}
           compact={!phone()}
           titleWeight={weight.regular}
-          width={480}
+          width={dialogWidth.md}
           overPhoneNavigation={phone()}
           onClose={() => remove.set("")}
         >
@@ -418,7 +430,7 @@ function PluginCard(props: {
   return (
     <View
       style={{
-        width: 267,
+        width: cardWidth,
         padding: space[12],
         backgroundColor: c().canvas,
         borderWidth: 1,
@@ -429,8 +441,8 @@ function PluginCard(props: {
       <View style={{ ...row, alignItems: "flex-start", gap: space[12] }}>
         <View
           style={{
-            width: 36,
-            height: 36,
+            width: glyphWidth,
+            height: glyphWidth,
             alignItems: "center",
             justifyContent: "center",
             backgroundColor: c().selected,
@@ -452,7 +464,12 @@ function PluginCard(props: {
           </View>
         </View>
       </View>
-      <Label variant="small" tone="muted" lines={2} style={{ height: 36 }}>
+      <Label
+        variant="small"
+        tone="muted"
+        lines={2}
+        style={{ height: descriptionHeight }}
+      >
         {props.item.description}
       </Label>
       <View style={{ gap: space[4] }}>
@@ -513,7 +530,7 @@ function PluginCard(props: {
       <View
         style={{
           ...row,
-          height: 36,
+          height: footerHeight,
           borderTopWidth: 1,
           borderColor: c().border,
           paddingTop: space[8],
@@ -550,7 +567,7 @@ function PluginSourceDialog(props: { item: PluginView; onClose: () => void }) {
   return (
     <Modal
       title={uiText("sourceFor", { name: props.item.name })}
-      width={384}
+      width={dialogWidth.md}
       blurBackdrop={false}
       onClose={props.onClose}
     >
@@ -611,7 +628,10 @@ function PluginRows(props: {
               activeStyle={{ backgroundColor: c().selected }}
               style={{
                 ...row,
-                height: item().state === "needs_config" ? 63 : 60,
+                height:
+                  item().state === "needs_config"
+                    ? phoneRowHeight.needsConfig
+                    : phoneRowHeight.other,
                 gap: space[12],
                 paddingLeft: space[16],
                 paddingRight: space[12],

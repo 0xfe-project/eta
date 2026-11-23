@@ -2,6 +2,7 @@ import type { RoutineSummary } from "@eta/client-contracts";
 import { View } from "nsh";
 import {
   colors,
+  dialogWidth,
   focusRing,
   grow,
   Label,
@@ -23,7 +24,7 @@ export function PendingReports(props: {
   return (
     <Modal
       title={uiText("pending")}
-      width={360}
+      width={dialogWidth.sm}
       height="100%"
       side
       overPhoneNavigation

@@ -14,7 +14,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
-import { avatar, icon, space, weight } from "../../components/tokens";
+import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 
@@ -63,6 +63,12 @@ function readTime(at: number) {
 
 // A ghost button keeps a transparent frame so it is as wide as a bordered one.
 const ghostFrame = { borderWidth: 1, borderColor: "transparent" };
+
+/** A row of the source, servers and reads boxes; reads are denser off phones. */
+const rowHeight = 36;
+const denseRowHeight = 32;
+/** A row of the phone's actions at the foot. */
+const actionRowHeight = 52;
 
 export function PluginDetail(props: DetailProps) {
   const host = useHost();
@@ -156,7 +162,7 @@ export function PluginDetail(props: DetailProps) {
               label={uiText("pluginActions")}
               icon="more"
               iconOnly
-              size={40}
+              size={control.touch}
               iconSize={icon.lg}
               tone="ghost"
               onPress={() => actions.set(true)}
@@ -230,7 +236,7 @@ export function PluginDetail(props: DetailProps) {
                 <Button
                   label={uiText("configure")}
                   tone={needsConfig() ? "primary" : "plain"}
-                  size={40}
+                  size={control.touch}
                   labelVariant="body"
                   style={{ marginHorizontal: space[16] }}
                   onPress={props.onConfigure}
@@ -259,7 +265,7 @@ export function PluginDetail(props: DetailProps) {
               style={{
                 ...row,
                 gap: space[8],
-                minHeight: props.phone ? 36 : undefined,
+                minHeight: props.phone ? rowHeight : undefined,
                 paddingHorizontal: space[12],
                 paddingVertical: space[8],
                 borderWidth: 1,
@@ -317,7 +323,7 @@ export function PluginDetail(props: DetailProps) {
                       justifyContent: "center",
                       paddingHorizontal: space[12],
                       paddingVertical: space[4],
-                      minHeight: 36,
+                      minHeight: rowHeight,
                       borderBottomWidth: 1,
                       borderColor: c().border,
                     }}
@@ -384,7 +390,7 @@ export function PluginDetail(props: DetailProps) {
                       style={{
                         ...row,
                         gap: space[8],
-                        minHeight: props.phone ? 36 : 30,
+                        minHeight: props.phone ? rowHeight : denseRowHeight,
                         paddingHorizontal: space[12],
                         borderTopWidth: index() ? 1 : 0,
                         borderColor: c().border,
@@ -455,7 +461,7 @@ function ActionRow(props: {
       style={{
         ...row,
         gap: space[12],
-        minHeight: 52,
+        minHeight: actionRowHeight,
         borderTopWidth: 1,
         borderColor: c().border,
         paddingHorizontal: space[16],
