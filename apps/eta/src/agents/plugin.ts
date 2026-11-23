@@ -22,6 +22,7 @@ import type { CallFrame } from "@eta/client-wire-proto";
  */
 import type { Database } from "bun:sqlite";
 import type { Engine } from "../conversations/engine";
+import type { ConversationPolicies } from "../conversations/policy";
 import type { ConversationStore } from "../conversations/store";
 import type { Timeline } from "../conversations/timeline";
 import type { MachineStore } from "../machines/store";
@@ -55,6 +56,8 @@ export interface AgentsDeps {
   machines: MachineStore;
   projects: ProjectStore;
   conversations: ConversationStore;
+  /** Each kind of conversation is told when an agent is renamed or deleted. */
+  policies: ConversationPolicies;
   timeline: Timeline;
   engine: Engine;
   plugins: Plugins;
@@ -236,7 +239,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
           deps.engine.stopAgent(id);
           const home = homeOf(deps, agent);
           deps.db.transaction(() => {
-            conversations.archiveDirectOf(id);
+            deps.policies.agentDeleted(agent);
             if (home !== undefined)
               projects.update(home.id, { archived: true });
             // Stewards and memberships go with the row (ON DELETE SET NULL / CASCADE).
@@ -389,12 +392,12 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
     return kept;
   }
 
-  /** The home project and the private chats carry the agent's name; a rename follows them. */
+  /** The home project carries the agent's name, and so may conversations; a rename follows them. */
   function renameHome(agent: AgentRecord): void {
     const home = homeOf(deps, agent);
     if (home === undefined) return;
     projects.update(home.id, { name: agent.name });
-    conversations.renameDirect(home.id, agent.name);
+    deps.policies.agentRenamed(agent);
   }
 }
 

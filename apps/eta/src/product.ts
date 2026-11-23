@@ -39,6 +39,7 @@ import { thinkingLevelsFor } from "@eta/core";
 import { parseModelId, peerAddressOf, redactionMiddleware } from "@eta/server";
 import { acpPlugin } from "./acp/plugin";
 import { AcpService, projectMachinesOf } from "./acp/service";
+import { homeOf } from "./agents/home";
 import { agentsPlugin } from "./agents/plugin";
 import { AgentStore } from "./agents/store";
 import { approvalMiddleware } from "./approval-middleware";
@@ -63,13 +64,16 @@ import {
   AttachmentStore,
   createAttachmentRoutes,
 } from "./conversations/attachments";
+import { directPolicy } from "./conversations/direct";
 import {
   combineRunHooks,
   Engine,
   RESTART_STOP_NOTE,
   RESTART_TEXT,
 } from "./conversations/engine";
+import { groupPolicy } from "./conversations/group-policy";
 import { conversationsPlugin } from "./conversations/plugin";
+import { ConversationPolicies } from "./conversations/policy";
 import { ConversationStore } from "./conversations/store";
 import { ConversationTargets } from "./conversations/targets";
 import { Timeline } from "./conversations/timeline";
@@ -289,6 +293,15 @@ export function createProduct(options: {
   const machines = new MachineStore(db);
   const projects = new ProjectStore(db);
   const conversations = new ConversationStore(db);
+  // The kinds of conversation: the group is the conversations module's own.
+  const policies = new ConversationPolicies([
+    groupPolicy({ agents, conversations }),
+    directPolicy({
+      agents,
+      conversations,
+      homeOf: (agent) => homeOf({ machines, projects, dataDir }, agent),
+    }),
+  ]);
   const timeline = new Timeline(db);
   let wire: WireService | undefined;
 
@@ -665,6 +678,7 @@ export function createProduct(options: {
     machines,
     projects,
     conversations,
+    policies,
     timeline,
     changed,
     warn,
@@ -726,6 +740,7 @@ export function createProduct(options: {
     plugins,
     projects,
     conversations,
+    policies,
     timeline,
     attachments,
     inbox,
@@ -1076,6 +1091,7 @@ export function createProduct(options: {
         agentsPlugin(
           {
             ...shared,
+            policies,
             dataDir,
             db,
             engine,
@@ -1180,7 +1196,15 @@ export function createProduct(options: {
       server.mount(
         "conversations",
         conversationsPlugin(
-          { ...shared, engine, attachments, targets, changed, created },
+          {
+            ...shared,
+            policies,
+            engine,
+            attachments,
+            targets,
+            changed,
+            created,
+          },
           applied("conversations"),
         ),
       );

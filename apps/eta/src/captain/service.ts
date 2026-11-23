@@ -16,6 +16,7 @@ import type { Database } from "bun:sqlite";
 import type { AgentRecord, AgentStore } from "../agents/store";
 import type { AttachmentStore } from "../conversations/attachments";
 import type { Engine } from "../conversations/engine";
+import type { ConversationPolicies } from "../conversations/policy";
 import type { ConversationStore } from "../conversations/store";
 import type { Timeline } from "../conversations/timeline";
 import type { Inbox } from "../inbox/inbox";
@@ -80,6 +81,8 @@ export interface CaptainServiceDeps {
   plugins: Plugins;
   projects: ProjectStore;
   conversations: ConversationStore;
+  /** Each kind of conversation is told when an agent is deleted. */
+  policies: ConversationPolicies;
   timeline: Timeline;
   attachments: AttachmentStore;
   inbox: Inbox;
@@ -773,7 +776,7 @@ export class CaptainService {
         if (agent.systemRole === "captain")
           throw new Error("the Captain cannot delete itself");
         this.#deps.engine.stopAgent(agentId);
-        this.#deps.conversations.archiveDirectOf(agentId);
+        this.#deps.policies.agentDeleted(agent);
         const home = homeOf(this.#deps, agent);
         if (home !== undefined)
           this.#deps.projects.update(home.id, { archived: true });

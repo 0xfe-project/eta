@@ -5,6 +5,7 @@
 import type { MessageView } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
 import { briefing } from "../src/conversations/briefing";
+import { directPolicy } from "../src/conversations/direct";
 import {
   judgeMention,
   resolveNamed,
@@ -14,7 +15,6 @@ import {
 
 describe("routeUserMessage", () => {
   const base = {
-    kind: "group" as const,
     members: ["a", "b", "c"],
     steward: null,
   };
@@ -71,9 +71,13 @@ describe("routeUserMessage", () => {
   });
 
   it("sends a private chat to its agent whatever else is true", () => {
+    const direct = directPolicy({
+      agents: undefined as never,
+      conversations: undefined as never,
+      homeOf: () => undefined,
+    });
     expect(
-      routeUserMessage({
-        kind: "direct",
+      direct.route({
         members: ["a"],
         mentions: [],
         steward: "someone-else",
