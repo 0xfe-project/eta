@@ -1,7 +1,7 @@
 import type { PluginResults } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import { effect, openUrl, signal, untracked, View } from "nsh";
-import { Button, colors, grow, Label, row, textFaces } from "../../components";
+import { Button, colors, Label, row, textFaces } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { ComposioDisconnect, linkAndOpen } from "./composio-actions";
@@ -93,7 +93,7 @@ export function ComposioConnected(props: {
   const rows = () => props.layout !== "desktop";
   const actions = (item: Connected) => (
     <If when={manage()}>
-      <View style={{ ...row, gap: 8 }}>
+      <View style={{ ...row, flexGrow: 1, justifyContent: "flex-end", gap: 8 }}>
         <Button
           label={uiText("composioReconnect")}
           tone="plain"
@@ -110,12 +110,29 @@ export function ComposioConnected(props: {
     </If>
   );
   const inset = () => (props.layout === "tablet" ? 14 : 16);
-  /** The same mark as an installed market card has, at the right of the last line. */
-  const mark = () => (
-    <View testID="composio-connected" style={{ flexShrink: 1, minWidth: 0 }}>
-      <Label variant="small" lines={1}>
-        {uiText("composioConnected")}
-      </Label>
+  /**
+   * The last line of a card: the connected mark at the left, the buttons at the right. When both
+   * do not fit on one line the buttons drop to the next line and stay at the right.
+   */
+  const footer = (item: Connected) => (
+    <View
+      style={{
+        ...row,
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: 8,
+        minHeight: type("small").line,
+      }}
+    >
+      <View
+        testID="composio-connected"
+        style={{ flexGrow: 1, flexShrink: 1, minWidth: 0 }}
+      >
+        <Label variant="small" lines={1}>
+          {uiText("composioConnected")}
+        </Label>
+      </View>
+      {actions(item)}
     </View>
   );
   return (
@@ -186,17 +203,7 @@ export function ComposioConnected(props: {
                     <Label variant="small" tone="muted" lines={2}>
                       {item().description}
                     </Label>
-                    {actions(item())}
-                    <View
-                      style={{ ...row, gap: 8, minHeight: type("small").line }}
-                    >
-                      <View style={grow}>
-                        <Label variant="caption" tone="muted" lines={1}>
-                          {uiText("marketFrom", { name: "Composio" })}
-                        </Label>
-                      </View>
-                      {mark()}
-                    </View>
+                    {footer(item())}
                   </View>
                 )}
               </Each>
@@ -229,25 +236,19 @@ export function ComposioConnected(props: {
                       composio={item().slug}
                       size={32}
                     />
-                    <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
                       <PluginName name={item().name} />
-                      <Label variant="caption" tone="muted" lines={1}>
-                        {uiText("marketFrom", { name: "Composio" })}
-                      </Label>
                     </View>
-                    {mark()}
                   </View>
-                  <If when={manage()}>
-                    <View
-                      style={{
-                        paddingLeft: inset(),
-                        paddingRight: 12,
-                        paddingBottom: 10,
-                      }}
-                    >
-                      {actions(item())}
-                    </View>
-                  </If>
+                  <View
+                    style={{
+                      paddingLeft: inset(),
+                      paddingRight: 12,
+                      paddingBottom: 10,
+                    }}
+                  >
+                    {footer(item())}
+                  </View>
                 </View>
               )}
             </Each>
