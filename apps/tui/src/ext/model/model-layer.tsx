@@ -1,6 +1,7 @@
 import type {
   AgentRuntimeInfo,
   AgentView,
+  ModelThinking,
   ThinkingLevel,
 } from "@eta/client-contracts";
 import type { LayerHandle } from "../../extensions/types";
@@ -19,12 +20,14 @@ import {
   choicesOfModels,
   choicesOfRuntime,
   choiceText,
+  levelNote,
   levelOfRow,
   levelRows,
   levelText,
   modelOfRow,
   modelRows,
   rowOfModel,
+  thinkingOfChoice,
 } from "./choices";
 import { modelMessages } from "./messages";
 
@@ -37,6 +40,8 @@ type Step =
       model: string | null;
       /** How the chosen model is said back to the user. */
       modelText: string;
+      /** The levels the chosen model declares. */
+      thinking: ModelThinking;
     };
 
 /**
@@ -76,6 +81,7 @@ export function ModelLayer({
         agent={step.agent}
         model={step.model}
         modelText={step.modelText}
+        thinking={step.thinking}
         onBack={() =>
           setStep({ name: "model", agent: step.agent, picked: step.model })
         }
@@ -105,8 +111,8 @@ export function ModelLayer({
     <ModelStep
       agent={agent}
       initial={step?.picked}
-      onPick={(model, modelText) =>
-        setStep({ name: "thinking", agent, model, modelText })
+      onPick={(model, modelText, thinking) =>
+        setStep({ name: "thinking", agent, model, modelText, thinking })
       }
       // Back to the agents when they were asked about; closed when the query named one.
       onBack={() =>
@@ -212,7 +218,11 @@ function ModelStep({
   agent: AgentView;
   /** The row to start on, when coming back from the levels. */
   initial: string | null | undefined;
-  onPick: (model: string | null, modelText: string) => void;
+  onPick: (
+    model: string | null,
+    modelText: string,
+    thinking: ModelThinking,
+  ) => void;
   onBack: () => void;
 }) {
   const t = useMessages(modelMessages);
@@ -262,6 +272,12 @@ function ModelStep({
               : choice === undefined
                 ? model
                 : choiceText(choice),
+            thinkingOfChoice(
+              agent.runtime,
+              model,
+              choices,
+              "info" in runtime ? runtime.info : undefined,
+            ),
           );
         }}
       />
@@ -276,12 +292,14 @@ function ThinkingStep({
   agent,
   model,
   modelText,
+  thinking,
   onBack,
   onSaved,
 }: {
   agent: AgentView;
   model: string | null;
   modelText: string;
+  thinking: ModelThinking;
   onBack: () => void;
   onSaved: () => void;
 }) {
@@ -321,13 +339,15 @@ function ThinkingStep({
     }
   };
 
-  const rows = levelRows(agent.thinkingLevel, t);
+  const rows = levelRows(agent.thinkingLevel, thinking, t);
+  const note = levelNote(thinking, t);
   return (
     <LayerFrame
       title={t("thinkingFor", { name: agent.name })}
       footer={t("thinkingFooter")}
     >
       <Text color={inkColor(theme.muted)}>{modelText}</Text>
+      {note !== undefined && <Text color={inkColor(theme.muted)}>{note}</Text>}
       <Box flexDirection="column" marginTop={1}>
         <PickList
           items={rows.items}

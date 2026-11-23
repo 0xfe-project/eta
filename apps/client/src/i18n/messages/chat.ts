@@ -11,6 +11,10 @@ export const chatMessages = {
   runTools: ["Tools", "工具"],
   runThinking: ["Thinking", "思考"],
   runThinkingLevel: ["Thinking {{level}}", "思考级别：{{level}}"],
+  runThinkingFellBack: [
+    "Thinking model default ({{level}} not supported by this model)",
+    "思考级别：模型默认（模型不支持 {{level}}）",
+  ],
   runUser: ["User", "用户"],
   runSummary: ["Summary", "摘要"],
   runGenericFailure: ["The run failed.", "本次运行失败。"],

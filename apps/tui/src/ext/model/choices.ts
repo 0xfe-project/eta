@@ -1,10 +1,21 @@
-// The rows of `/model`'s two lists. The offered thinking levels are apps/web/src/lib/thinking.ts's.
+// The rows of `/model`'s two lists. The offered thinking levels are the model's own
+// (`agentThinking` in @eta/client-contracts), the rule every agent picker follows.
 
-import type { AgentRuntimeInfo, ThinkingLevel } from "@eta/client-contracts";
+import type {
+  AgentRuntimeInfo,
+  ModelThinking,
+  ThinkingLevel,
+} from "@eta/client-contracts";
 import type { Translate } from "../../i18n/messages";
 import type { Model } from "../kit/models";
 import type { PickItem } from "../kit/pick-list";
 import type { modelMessages } from "./messages";
+import {
+  agentThinking,
+  FALLBACK_LEVELS,
+  levelSupport,
+  runtimeModelThinking,
+} from "@eta/client-contracts";
 
 type ModelKey = keyof typeof modelMessages.en;
 
@@ -16,6 +27,8 @@ export interface ModelChoice {
   name: string;
   /** Listed only because the agent has it now. */
   unusable?: boolean;
+  /** The thinking levels it declares. */
+  thinking: ModelThinking;
 }
 
 const RUNTIME_DEFAULT_KEY = "runtime-default";
@@ -23,11 +36,12 @@ const MODEL = "model:";
 const GROUP = "group:";
 
 export function choicesOfModels(models: readonly Model[]): ModelChoice[] {
-  return models.map(({ id, provider, providerName, name }) => ({
+  return models.map(({ id, provider, providerName, name, thinking }) => ({
     id,
     provider,
     providerName,
     name,
+    thinking,
   }));
 }
 
@@ -38,7 +52,25 @@ export function choicesOfRuntime(info: AgentRuntimeInfo): ModelChoice[] {
     provider: info.id,
     providerName: info.label,
     name: model.name,
+    thinking: runtimeModelThinking(model),
   }));
+}
+
+/**
+ * The levels of the model a row of `modelRows` stands for: its choice's, the runtime's default
+ * model's for `null`, else not known.
+ */
+export function thinkingOfChoice(
+  runtime: AgentRuntimeInfo["id"] | "eta",
+  model: string | null,
+  choices: readonly ModelChoice[],
+  info: AgentRuntimeInfo | undefined,
+): ModelThinking {
+  const choice = choices.find((entry) => entry.id === model);
+  if (choice !== undefined) return choice.thinking;
+  return agentThinking(runtime, model, {
+    runtimes: info === undefined ? undefined : [info],
+  });
 }
 
 /** `provider / name`: how a model is named when it is said back to the user. */
@@ -56,6 +88,7 @@ function missingCurrent(current: string): ModelChoice {
     providerName: provider,
     name: split < 0 ? current : current.slice(split + 1),
     unusable: true,
+    thinking: { basis: "unknown", levels: FALLBACK_LEVELS },
   };
 }
 
@@ -127,14 +160,6 @@ export function rowOfModel(model: string | null): string {
   return model === null ? RUNTIME_DEFAULT_KEY : `${MODEL}${model}`;
 }
 
-/** What the thinking list offers: the model's own level, then these. */
-const OFFERED: readonly ThinkingLevel[] = [
-  "off",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-];
 const OWN_KEY = "own";
 const LEVEL = "level:";
 
@@ -160,29 +185,59 @@ export function levelText(
 }
 
 /**
- * The model's own level, then the offered ones; the agent's level is tagged current, and listed
- * after them when it is not one of them.
+ * The model's own level, then the ones the model declares (`agentThinking`); the agent's level is
+ * tagged current. The agent's level is listed after them when it is not one of them: shown but not
+ * pickable when the model is known not to take it, and pickable when its levels are not known.
  */
 export function levelRows(
   current: ThinkingLevel | null,
+  thinking: ModelThinking,
   t: Translate<ModelKey>,
 ): { items: PickItem[]; currentKey: string } {
-  const levels =
-    current === null || OFFERED.includes(current)
-      ? OFFERED
-      : [...OFFERED, current];
+  const offered = thinking.levels;
+  const extra =
+    current === null || offered.includes(current) ? undefined : current;
+  const refused =
+    extra !== undefined && levelSupport(thinking, extra) === "unsupported";
   const tag = (isCurrent: boolean) => (isCurrent ? { tag: t("current") } : {});
   return {
     items: [
       { key: OWN_KEY, label: t("modelOwn"), ...tag(current === null) },
-      ...levels.map((level) => ({
+      ...offered.map((level) => ({
         key: `${LEVEL}${level}`,
         label: levelName(level, t),
         ...tag(level === current),
       })),
+      ...(extra === undefined
+        ? []
+        : [
+            {
+              key: `${LEVEL}${extra}`,
+              label: levelName(extra, t),
+              ...tag(true),
+              ...(refused ? { hint: t("levelNotTaken"), disabled: true } : {}),
+            },
+          ]),
     ],
-    currentKey: current === null ? OWN_KEY : `${LEVEL}${current}`,
+    currentKey: current === null || refused ? OWN_KEY : `${LEVEL}${current}`,
   };
+}
+
+/** Why the list offers what it does, where that is not the model's own declaration. */
+export function levelNote(
+  thinking: ModelThinking,
+  t: Translate<ModelKey>,
+): string | undefined {
+  switch (thinking.basis) {
+    case "unknown":
+      return t("levelsUnknown");
+    case "undeclared":
+      return t("levelsUndeclared");
+    case "none":
+      return t("levelsNone");
+    default:
+      return undefined;
+  }
 }
 
 /** The level a row of `levelRows` stands for: null for the model's own. */
