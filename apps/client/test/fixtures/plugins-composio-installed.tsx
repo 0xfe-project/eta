@@ -1,4 +1,5 @@
 import type {
+  ComposioPluginView,
   ComposioToolkit,
   MarketCatalog,
   PluginView,
@@ -73,6 +74,8 @@ export function openInstalled(
   layout: Layout,
   connected: "two" | "none" | "fails",
   actions?: "ok" | "stale" | "fails" | "off",
+  /** The connected toolkits as plugins of their own, as the host's `composioPlugins` lists them. */
+  virtuals?: Omit<ComposioPluginView, "enabled">[],
 ) {
   mount(() => {
     const host = createHost();
@@ -94,8 +97,30 @@ export function openInstalled(
     const asked = signal<string[]>([]);
     const log = signal<string[]>([]);
     let gone = false;
+    const switchedOff = new Set<string>();
     const stub = Object.assign(host, {
       call: async (_target: string, method: string, args: unknown) => {
+        if (method === "composioPlugins")
+          return virtuals === undefined
+            ? undefined
+            : {
+                plugins: virtuals
+                  .filter((one) => !(gone && one.slug === "gmail"))
+                  .map((one) => ({
+                    ...one,
+                    enabled: !switchedOff.has(one.name),
+                  })),
+              };
+        if (method === "setEnabled") {
+          const { name, enabled } = args as { name: string; enabled: boolean };
+          log.update((all) => [
+            ...all,
+            "called:setEnabled:" + name + ":" + enabled,
+          ]);
+          if (enabled) switchedOff.delete(name);
+          else switchedOff.add(name);
+          return { name, enabled };
+        }
         if (method === "composioStatus")
           return actions === undefined
             ? undefined

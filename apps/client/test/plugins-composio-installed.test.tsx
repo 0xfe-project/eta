@@ -132,3 +132,43 @@ test("a failed Disconnect on an item says so and keeps the item", async () => {
   await app.waitFor("text:Could not disconnect. Try again later.");
   expect(app.count("id:composio-connected-item")).toBe(2);
 });
+
+test("a connected toolkit that checked out has a switch for every agent; one that did not has none and says so", async () => {
+  const app = await open("./fixtures/plugins-composio-virtual.tsx", DESKTOP);
+  await app.waitFor("id:composio-plugin-switch");
+  expect(app.count("id:composio-plugin-switch")).toBe(1);
+  expect(app.count("label:Enabled: @composio/gmail")).toBe(1);
+  expect(app.count("id:composio-plugin-error")).toBe(1);
+  // Re-authenticate and Disconnect stay on both.
+  expect(app.count("label:Re-authenticate")).toBe(2);
+  expect(app.count("label:Disconnect")).toBe(2);
+});
+
+test("the switch of a toolkit is the user's switch for every agent: it asks setEnabled for its plugin name and shows it off", async () => {
+  const app = await open("./fixtures/plugins-composio-virtual.tsx", DESKTOP);
+  await app.waitFor("id:composio-plugin-switch");
+  expect(app.count("id:composio-plugin-off")).toBe(0);
+  await app.press("label:Enabled: @composio/gmail");
+  await app.waitFor("text:called:setEnabled:@composio/gmail:false");
+  await app.waitFor("id:composio-plugin-off");
+  await app.press("label:Enabled: @composio/gmail");
+  await app.waitFor("text:called:setEnabled:@composio/gmail:true");
+  await app.waitFor("id:composio-plugin-off", { state: "gone" });
+});
+
+test("on a phone the rows have the switch too", async () => {
+  const app = await open(
+    "./fixtures/plugins-composio-virtual-phone.tsx",
+    PHONE,
+  );
+  await app.waitFor("id:composio-plugin-switch");
+  expect(app.count("id:composio-plugin-switch")).toBe(1);
+  expect(app.count("id:composio-plugin-error")).toBe(1);
+});
+
+test("a host that does not list the toolkits as plugins: the cards show as before, without a switch", async () => {
+  const app = await open("./fixtures/plugins-composio-actions-ok.tsx", DESKTOP);
+  await app.waitFor("id:composio-connected-item");
+  expect(app.count("id:composio-plugin-switch")).toBe(0);
+  expect(app.count("id:composio-plugin-error")).toBe(0);
+});
