@@ -39,6 +39,8 @@ const PINNED_MS = 30 * 24 * 60 * 60 * 1000;
 const COMMIT = /^[0-9a-f]{40}$/;
 /** The `repo` under which `find` keeps its answers in the database (no repository is named like this). */
 const FOUND = "#find";
+/** The same for `fromUrl`: the picture's address is its `ref` and `path`. */
+const FROM_URL = "#composio";
 const SKIPPED = new Set([
   "github.com",
   "www.github.com",
@@ -355,16 +357,42 @@ export class Logos {
    * A picture at one https address (a Composio toolkit's logo), every redirect https too. Same checks
    * as any other fetch here; no header of the host or the user goes with it. Unlike every other way
    * to a picture here it also takes an SVG (Composio's logos are SVG), kept as it is: it must pass
-   * the same test as a plugin's own SVG (`readOwnLogo`), or it is no picture. An answer, and a miss,
-   * is kept in memory for a day; null when there is no picture.
+   * the same test as a plugin's own SVG (`readOwnLogo`), or it is no picture. An answer is kept a
+   * day, in memory and in the database (checked again when read back); a confirmed miss (a refusal,
+   * a 4xx, not a picture) for an hour. A failure to ask (network, timeout, 5xx) is kept nowhere; null
+   * when there is no picture.
    */
   async fromUrl(address: string): Promise<Logo | null> {
     const key = `https\n${address}`;
     const now = (this.#options.now ?? Date.now)();
     const hit = this.#kept.get(key);
     if (hit && now - hit.at < KEEP_MS) return hit.logo;
-    const logo = await this.#picture(address, true, true).catch(() => null);
+    const stored = [FROM_URL, address, address] as const;
+    const row = this.#options.store?.get(...stored, now);
+    if (row !== undefined) {
+      const kept =
+        row.status === "miss" ? null : this.#checked(row.mime, row.bytes);
+      if (kept === undefined) this.#options.store?.delete(...stored);
+      else if (now < row.expiresAt) {
+        this.#kept.set(key, { at: now, logo: kept });
+        return kept;
+      }
+    }
+    let failed = false;
+    const logo = await this.#picture(address, true, true).catch((error) => {
+      if (failure(error)) failed = true;
+      return null;
+    });
+    if (failed) return null;
     this.#kept.set(key, { at: now, logo });
+    this.#options.store?.put(
+      ...stored,
+      logo
+        ? { mime: logo.type, bytes: Buffer.from(logo.data, "base64") }
+        : null,
+      now + (logo ? KEEP_MS : MISS_MS),
+      now,
+    );
     return logo;
   }
 
