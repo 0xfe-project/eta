@@ -140,6 +140,10 @@ describe("the seeds a release upgrades", () => {
       "0060-interaction-context",
       "0061-plugin-disabled",
       "0062-plugin-headers",
+      "0063-plugin-env",
+      "0064-market-cache",
+      "0065-plugin-icon",
+      "0066-plugin-token-header",
     ]);
   });
 
