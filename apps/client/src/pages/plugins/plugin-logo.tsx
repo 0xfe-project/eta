@@ -28,46 +28,69 @@ function slot(key: string): Signal<string | null | undefined> {
 
 /** How long the first screen waits for the host's kept pictures before it draws letters. */
 const LOGOS_CACHED_WAIT_MS = 400;
-/** The most entries one `logosCached` call is asked about (the host's own limit). */
-const LOGOS_CACHED_MAX = 200;
+/**
+ * The most entries one `logosCached` call is asked about. The host answers a call whole only up to
+ * about 2 MB of picture data (base64), so a market is asked about in several calls of this size.
+ */
+const LOGOS_CACHED_BATCH = 50;
 
 /**
- * Before the market's first frame: ask the host once for the pictures it already has. A hit is put
- * where the card reads it, so its first frame has the picture; a known miss stays a letter without a
- * request. Anything else (unknown, a timeout, an error, a host without this call) changes nothing:
- * the card draws its letter and asks for its own picture as before. This never fails and never waits
- * longer than `waitMs`.
+ * Before the market's first frame: ask the host for the pictures it already has, every entry once, in
+ * batches. A hit is put where the card reads it, so its first frame has the picture; a known miss
+ * stays a letter without a request. Anything else (unknown, a timeout, an error, a host without this
+ * call) changes nothing: the card draws its letter and asks for its own picture as before, and only
+ * such a card ever does. This never fails and never waits longer than `waitMs`; a batch that answers
+ * later than that is left alone.
  */
 export async function primeLogos(
   host: ReturnType<typeof useHost>,
   asks: { repo: string; ref: string; path: string; homepage: string | null }[],
   waitMs = LOGOS_CACHED_WAIT_MS,
 ): Promise<void> {
-  const batch = asks
-    .filter((ask) => slot(repoKey(ask, ask.homepage))() === undefined)
-    .slice(0, LOGOS_CACHED_MAX);
-  if (batch.length === 0) return;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const answer = await Promise.race([
-    host
+  const unknown = new Map<string, (typeof asks)[number]>();
+  for (const ask of asks) {
+    const key = repoKey(ask, ask.homepage);
+    if (slot(key)() === undefined && !unknown.has(key)) unknown.set(key, ask);
+  }
+  const entries = [...unknown.values()];
+  if (entries.length === 0) return;
+  let waiting = true;
+  const batchOf = async (batch: typeof entries): Promise<void> => {
+    const answer = await host
       .call<PluginLogosCachedResult>("plugins", "logosCached", {
         entries: batch,
       })
-      .catch(() => undefined),
+      .catch(() => undefined);
+    if (!waiting || !answer || !Array.isArray(answer.logos)) return;
+    answer.logos.forEach((one, index) => {
+      const ask = batch[index];
+      if (!ask || !one) return;
+      const one_ = slot(repoKey(ask, ask.homepage));
+      if (one_() !== undefined) return;
+      if (one.status === "hit") one_.set(`data:${one.type};base64,${one.data}`);
+      else if (one.status === "miss") one_.set(null);
+    });
+  };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    Promise.all(
+      Array.from(
+        { length: Math.ceil(entries.length / LOGOS_CACHED_BATCH) },
+        (_, at) =>
+          batchOf(
+            entries.slice(
+              at * LOGOS_CACHED_BATCH,
+              (at + 1) * LOGOS_CACHED_BATCH,
+            ),
+          ),
+      ),
+    ),
     new Promise<undefined>((done) => {
       timer = setTimeout(done, waitMs, undefined);
     }),
   ]);
   clearTimeout(timer);
-  if (!answer || !Array.isArray(answer.logos)) return;
-  answer.logos.forEach((one, index) => {
-    const ask = batch[index];
-    if (!ask || !one) return;
-    const one_ = slot(repoKey(ask, ask.homepage));
-    if (one_() !== undefined) return;
-    if (one.status === "hit") one_.set(`data:${one.type};base64,${one.data}`);
-    else if (one.status === "miss") one_.set(null);
-  });
+  waiting = false;
 }
 
 /** Repository lookups the host is asked for at once; a market of many cards asks a few at a time. */

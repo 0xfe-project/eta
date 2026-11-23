@@ -32,3 +32,15 @@ test("a host without logosCached: the list opens with letters, nothing is lost",
   expect(letter(app, "kept-entry")).toBe(1);
   expect(letter(app, "no-logo")).toBe(1);
 });
+
+test("a market longer than one answer is asked about in batches of at most 50, each picture once", async () => {
+  const app = await open("./fixtures/market-logos-many.tsx", OPEN);
+  // 260 entries, one of them a twin of another: 259 pictures, in batches the host can answer whole.
+  expect(app.shows("batches 50+50+50+50+50+9")).toBe(true);
+});
+
+test("only an entry the host does not know asks for its own picture; a kept one or a known miss does not", async () => {
+  const app = await open("./fixtures/market-logos-many.tsx", OPEN);
+  await app.waitFor("text:logo p/0");
+  expect(app.shows("logo p/0")).toBe(true);
+});
