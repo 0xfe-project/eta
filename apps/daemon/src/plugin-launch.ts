@@ -31,6 +31,7 @@ import type { RuntimeExtras } from "@eta/server";
 import type { PluginPackage, PluginServer } from "./plugin-package";
 import { mkdirSync, realpathSync, symlinkSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import { isCursorServer } from "@eta/client-contracts";
 import { effectiveValue } from "@eta/client-contracts/plugin-fields";
 import { renderSkillDirs } from "@eta/server";
 import { fillTemplate, isWithin } from "./plugin-package";
@@ -422,6 +423,7 @@ const hasAuthorization = (headers: Record<string, string>): boolean =>
  * already sent an `Authorization` header. The one place this is decided.
  */
 function authOf(server: {
+  url?: string;
   headers: Record<string, string>;
   auth?: false | "oauth";
   userHeaders?: boolean;
@@ -430,8 +432,15 @@ function authOf(server: {
   if (server.auth !== undefined) return server.auth;
   // A token header only means something with a sign-in.
   if (server.tokenHeader !== undefined) return "oauth";
-  // The user chose how to authenticate: a refusal is reported as such, with no sign-in offered.
-  if (server.userHeaders === true) return undefined;
+  // The user chose how to authenticate: a refusal is reported as such, with no sign-in offered. A
+  // Cursor-hosted server is two layers: the Cursor credential the user saved is a header, and the
+  // service behind it (Google, say) still signs in with OAuth, unless the user sends Authorization.
+  if (server.userHeaders === true)
+    return server.url !== undefined &&
+      isCursorServer(server.url) &&
+      !hasAuthorization(server.headers)
+      ? "oauth"
+      : undefined;
   return hasAuthorization(server.headers) ? undefined : "oauth";
 }
 

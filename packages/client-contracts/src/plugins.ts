@@ -87,6 +87,20 @@ export interface PluginServerView {
 /** The request header a Cursor-hosted server reads the user's Cursor credential from. */
 export const CURSOR_AUTH_HEADER = "x-cursor-auth";
 
+/** Whether a server's address is Cursor's own: only then is a Cursor credential ever sent to it. */
+export function isCursorServer(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.protocol === "https:" &&
+      (parsed.hostname === "cursor.com" ||
+        parsed.hostname.endsWith(".cursor.com"))
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Which commands a machine is missing, of the ones the plugin says it needs. */
 export interface PluginMachineView {
   machineId: string;

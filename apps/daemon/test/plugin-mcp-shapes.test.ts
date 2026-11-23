@@ -416,3 +416,66 @@ describe("two servers that would share a name", () => {
     ]);
   });
 });
+
+describe("a Cursor-hosted server the user gave a Cursor credential", () => {
+  const CURSOR = "https://api.cursor.com/rest-mcp/google-drive/mcp";
+  const entryOf = async (
+    url: string,
+    headers: { name: string; value: string }[],
+  ) => {
+    const loaded = await plugin("p", {
+      remote: { type: "streamable-http", url },
+    });
+    return toMcpEntries(
+      resolvePluginServers(
+        [
+          {
+            plugin: loaded,
+            config: serversConfig(
+              loaded,
+              {},
+              headers.map((header) => ({
+                server: "remote",
+                ...header,
+                plainOk: false,
+              })),
+            ),
+          },
+        ],
+        await temp(),
+        () => undefined,
+      ),
+    )["p-remote"];
+  };
+
+  it("still signs in with OAuth: the Cursor credential is one layer, the service's sign-in the other", async () => {
+    const entry = await entryOf(CURSOR, [
+      { name: "x-cursor-auth", value: "Bearer cursor-credential" },
+    ]);
+    expect(entry).toStrictEqual({
+      type: "streamable-http",
+      url: CURSOR,
+      headers: { "x-cursor-auth": "Bearer cursor-credential" },
+      auth: "oauth",
+    });
+  });
+
+  it("does not sign in where the user sends Authorization to it", async () => {
+    const entry = await entryOf(CURSOR, [
+      { name: "Authorization", value: "Bearer mine" },
+    ]);
+    expect(entry).not.toHaveProperty("auth");
+  });
+
+  it("is a refused credential, not a sign-in, for a server that is not Cursor's", async () => {
+    for (const url of [
+      "https://example.com/mcp",
+      "https://cursor.com.evil.test/mcp",
+    ]) {
+      const entry = await entryOf(url, [
+        { name: "x-cursor-auth", value: "Bearer cursor-credential" },
+      ]);
+      expect(entry).not.toHaveProperty("auth");
+    }
+  });
+});

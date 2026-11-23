@@ -13,9 +13,9 @@
  */
 import { Buffer } from "node:buffer";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { CURSOR_AUTH_HEADER } from "@eta/client-contracts";
+import { CURSOR_AUTH_HEADER, isCursorServer } from "@eta/client-contracts";
 
-export { CURSOR_AUTH_HEADER };
+export { CURSOR_AUTH_HEADER, isCursorServer };
 
 const CURSOR_LOGIN_PAGE = "https://cursor.com/loginDeepControl";
 const CURSOR_POLL_URL = "https://api2.cursor.sh/auth/poll";
@@ -63,20 +63,6 @@ export function cursorLoginAllowed(url: string): boolean {
       parsed.port === "" &&
       parsed.username === "" &&
       ALLOWED_HOSTS.has(parsed.hostname)
-    );
-  } catch {
-    return false;
-  }
-}
-
-/** Whether a server's address is Cursor's own: only then is a Cursor credential ever sent to it. */
-export function isCursorServer(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return (
-      parsed.protocol === "https:" &&
-      (parsed.hostname === "cursor.com" ||
-        parsed.hostname.endsWith(".cursor.com"))
     );
   } catch {
     return false;
