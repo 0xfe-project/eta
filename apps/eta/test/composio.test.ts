@@ -607,3 +607,147 @@ describe("the logo", () => {
     }
   });
 });
+
+describe("the connected toolkits", () => {
+  const account = (slug: string, status: string) => ({
+    id: `ca_${slug}_${status}`,
+    status,
+    user_id: "x",
+    toolkit: { slug },
+  });
+  const page = (items: unknown[], next: string | null = null) =>
+    json({
+      items,
+      next_cursor: next,
+      total_pages: 1,
+      current_page: 1,
+      total_items: items.length,
+    });
+
+  it("needs a key: no request, no error", async () => {
+    const { composio } = open();
+    expect(await composio.connected()).toEqual({
+      status: "needs_key",
+      slugs: [],
+    });
+    expect(requests).toHaveLength(0);
+  });
+
+  it("returns the slugs of the ACTIVE accounts only, asking for this host's user and nothing else", async () => {
+    const { composio } = open();
+    composio.setKey(KEY);
+    handler = () =>
+      page([
+        account("github", "ACTIVE"),
+        account("gmail", "EXPIRED"),
+        account("slack", "INITIATED"),
+        account("notion", "ACTIVE"),
+        account("github", "ACTIVE"),
+        { status: "ACTIVE", toolkit: {} },
+        { status: "ACTIVE" },
+        "junk",
+      ]);
+    expect(await composio.connected()).toEqual({
+      status: "ready",
+      slugs: ["github", "notion"],
+    });
+    expect(requests).toHaveLength(1);
+    const asked = new URL(requests[0]!.path, "http://x");
+    expect(requests[0]!.method).toBe("GET");
+    expect(asked.pathname).toBe("/api/v3/connected_accounts");
+    expect(asked.searchParams.get("statuses")).toBe("ACTIVE");
+    expect(asked.searchParams.get("user_ids")).toMatch(/^eta-[0-9a-f-]{36}$/);
+    expect(requests[0]!.key).toBe(KEY);
+  });
+
+  it("asks for the same user the link was made for", async () => {
+    const { composio } = open();
+    composio.setKey(KEY);
+    handler = (request, url) =>
+      url.pathname === "/api/v3/auth_configs"
+        ? json({ items: [{ id: "ac_1", is_composio_managed: true }] })
+        : url.pathname.endsWith("/link")
+          ? json({ redirect_url: "https://connect.composio.dev/link/abc" })
+          : request.method === "GET"
+            ? page([])
+            : json({}, 404);
+    await composio.link("github");
+    await composio.connected();
+    const made = (JSON.parse(requests[1]!.body) as { user_id: string }).user_id;
+    const asked = new URL(requests[2]!.path, "http://x");
+    expect(asked.searchParams.get("user_ids")).toBe(made);
+  });
+
+  it("reads every page by its cursor, and stops on a cursor that does not move", async () => {
+    const { composio } = open();
+    composio.setKey(KEY);
+    handler = (_request, url) => {
+      const cursor = url.searchParams.get("cursor");
+      if (cursor === null) return page([account("github", "ACTIVE")], "c2");
+      if (cursor === "c2") return page([account("gmail", "ACTIVE")], "c3");
+      return page([account("slack", "ACTIVE")]);
+    };
+    expect(await composio.connected()).toEqual({
+      status: "ready",
+      slugs: ["github", "gmail", "slack"],
+    });
+    expect(requests).toHaveLength(3);
+    requests.length = 0;
+    handler = () => page([account("github", "ACTIVE")], "same");
+    expect((await composio.connected()).status).toBe("error");
+    expect(requests.length).toBeLessThan(5);
+  });
+
+  it("says the key was refused on a 401, and says no slug", async () => {
+    const { composio } = open();
+    composio.setKey(KEY);
+    handler = () => json({ error: "no" }, 401);
+    expect(await composio.connected()).toEqual({
+      status: "key_rejected",
+      slugs: [],
+    });
+  });
+
+  it("answers an error, not a hang, when Composio is silent; the key is not in any answer", async () => {
+    const { composio } = open({ timeoutMs: 50 });
+    composio.setKey(KEY);
+    handler = async () => {
+      await new Promise((done) => setTimeout(done, 500));
+      return page([account("github", "ACTIVE")]);
+    };
+    const silent = await composio.connected();
+    handler = () => new Response(`failure for key ${KEY}`, { status: 500 });
+    const failed = await composio.connected();
+    expect(silent).toEqual({ status: "error", slugs: [] });
+    expect(failed).toEqual({ status: "error", slugs: [] });
+    expect(JSON.stringify({ silent, failed })).not.toContain(KEY);
+  });
+
+  it("does not follow a redirect with the key", async () => {
+    const { composio } = open();
+    composio.setKey(KEY);
+    const other = Bun.serve({
+      port: 0,
+      fetch: (request) => {
+        requests.push({
+          method: request.method,
+          path: "OTHER",
+          key: request.headers.get("x-api-key"),
+          body: "",
+        });
+        return page([account("github", "ACTIVE")]);
+      },
+    });
+    try {
+      handler = () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: `http://127.0.0.1:${other.port}/x` },
+        });
+      expect((await composio.connected()).slugs).toEqual([]);
+      expect(requests.some((r) => r.path === "OTHER")).toBe(false);
+    } finally {
+      await other.stop(true);
+    }
+  });
+});
