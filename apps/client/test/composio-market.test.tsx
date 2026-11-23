@@ -104,7 +104,7 @@ test("after Connect it asks until the toolkit is connected, shows the mark and s
   await app.clock!.runFor(9000);
   expect(app.count("id:composio-connected")).toBeGreaterThan(0);
   // The button now says what it does, and is still there.
-  expect(app.shows("label:Reconnect")).toBe(true);
+  expect(app.shows("label:Re-authenticate")).toBe(true);
   const asked = polls(app);
   await app.clock!.runFor(60_000);
   expect(polls(app)).toBe(asked);
@@ -157,11 +157,11 @@ test("it stops asking when the market is left", async () => {
   expect(polls(app)).toBe(asked);
 });
 
-test("a toolkit already connected shows the mark on its card and says Reconnect", async () => {
+test("a toolkit already connected shows the mark on its card and says Re-authenticate", async () => {
   const app = await open("./fixtures/composio-already-connected.tsx", OPEN);
   await app.waitFor("id:composio-connected");
   await app.press("label:Gmail");
-  expect(app.shows("label:Reconnect")).toBe(true);
+  expect(app.shows("label:Re-authenticate")).toBe(true);
 });
 
 test("the connected mark of a card is at its bottom right, on the line of its source", async () => {
@@ -179,4 +179,55 @@ test("the connected mark of a card is at its bottom right, on the line of its so
   expect(
     Math.abs(from.y + from.height / 2 - (mark.y + mark.height / 2)),
   ).toBeLessThan(3);
+});
+
+test("a toolkit that is not connected has no Disconnect", async () => {
+  const app = await open("./fixtures/composio-ready.tsx", OPEN);
+  await app.press("label:Gmail");
+  expect(app.shows("label:Disconnect")).toBe(false);
+});
+
+test("Re-authenticate on a connected toolkit goes through composioLink and opens its address", async () => {
+  const app = await open("./fixtures/composio-already-connected.tsx", OPEN);
+  await app.waitFor("id:composio-connected");
+  await app.press("label:Gmail");
+  await app.press("label:Re-authenticate");
+  await app.waitFor(
+    "text:called:composioLink:gmail opened:https://connect.composio.test/gmail",
+  );
+});
+
+test("Disconnect asks first, and Cancel deletes nothing", async () => {
+  const app = await open("./fixtures/composio-disconnect-ok.tsx", OPEN);
+  await app.waitFor("id:composio-connected");
+  await app.press("label:Gmail");
+  await app.press("label:Disconnect");
+  expect(app.shows("label:Delete on Composio")).toBe(true);
+  expect(app.shows("composioDisconnect")).toBe(false);
+  await app.press("label:Cancel");
+  expect(app.shows("label:Delete on Composio")).toBe(false);
+  expect(app.shows("composioDisconnect")).toBe(false);
+  expect(app.count("id:composio-connected")).toBeGreaterThan(0);
+});
+
+test("a confirmed Disconnect calls composioDisconnect and the mark is gone at once, before Composio is asked again", async () => {
+  const app = await open("./fixtures/composio-disconnect-stale.tsx", OPEN);
+  await app.waitFor("id:composio-connected");
+  await app.press("label:Gmail");
+  await app.press("label:Disconnect");
+  await app.press("label:Delete on Composio");
+  await app.waitFor("text:called:composioDisconnect:gmail");
+  await app.waitFor("id:composio-connected", { state: "hidden" });
+  expect(app.count("id:composio-connected")).toBe(0);
+  expect(app.shows("label:Delete on Composio")).toBe(false);
+});
+
+test("a failed Disconnect says so, keeps the mark and the dialog, and shows no text from Composio", async () => {
+  const app = await open("./fixtures/composio-disconnect-fails.tsx", OPEN);
+  await app.waitFor("id:composio-connected");
+  await app.press("label:Gmail");
+  await app.press("label:Disconnect");
+  await app.press("label:Delete on Composio");
+  await app.waitFor("text:Could not disconnect. Try again later.");
+  expect(app.count("id:composio-connected")).toBeGreaterThan(0);
 });

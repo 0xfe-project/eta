@@ -52,6 +52,9 @@ const composio = (
  * host says is connected; `"after-link"` means gmail is connected from the second question after
  * the link was made (so a poll has to ask again); `"never"` that nothing ever is. `polls` shows
  * how many times it was asked, and `leavable` adds a button that takes the market off the screen.
+ * `disconnect`: how `composioDisconnect` ends: `ok` (gmail is gone for the next question),
+ * `stale` (it is deleted, but the next question about what is connected never answers, so only what the
+ * page did by itself can show it gone) or `fails` (a status that says it failed; gmail stays).
  */
 export function openMarket(
   catalog: MarketCatalog,
@@ -59,6 +62,7 @@ export function openMarket(
   options: {
     connected?: "after-link" | "never" | "already";
     leavable?: boolean;
+    disconnect?: "ok" | "stale" | "fails";
   } = {},
 ) {
   mount(() => {
@@ -69,6 +73,7 @@ export function openMarket(
     const shown = signal(true);
     let linked = false;
     let since = 0;
+    let gone = false;
     const stub = Object.assign(host, {
       call: async (
         _target: string,
@@ -79,11 +84,21 @@ export function openMarket(
           return JSON.parse(JSON.stringify(catalog)) as MarketCatalog;
         if (method === "composioConnected") {
           polls.update((n) => n + 1);
+          if (gone && options.disconnect === "stale")
+            return await new Promise(() => {});
+          if (gone) return { status: "ready", slugs: [] };
           if (linked) since++;
           const on =
             options.connected === "already" ||
             (options.connected === "after-link" && linked && since >= 2);
           return { status: "ready", slugs: on ? ["gmail"] : [] };
+        }
+        if (method === "composioDisconnect") {
+          log.update((all) => [...all, "called:" + method + ":" + args.slug]);
+          if (options.disconnect === "fails")
+            return { status: "error", removed: 0 };
+          gone = true;
+          return { status: "ready", removed: 1 };
         }
         if (method === "composioLink") {
           linked = true;

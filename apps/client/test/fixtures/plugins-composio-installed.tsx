@@ -72,6 +72,7 @@ const kept: MarketCatalog = {
 export function openInstalled(
   layout: Layout,
   connected: "two" | "none" | "fails",
+  actions?: "ok" | "stale" | "fails" | "off",
 ) {
   mount(() => {
     const host = createHost();
@@ -91,10 +92,38 @@ export function openInstalled(
     }));
     const refreshed = signal(false);
     const asked = signal<string[]>([]);
+    const log = signal<string[]>([]);
+    let gone = false;
     const stub = Object.assign(host, {
       call: async (_target: string, method: string, args: unknown) => {
+        if (method === "composioStatus")
+          return actions === undefined
+            ? undefined
+            : { hasKey: true, enabled: actions !== "off" };
+        if (method === "composioLink") {
+          log.update((all) => [
+            ...all,
+            "called:" + method + ":" + (args as { slug: string }).slug,
+          ]);
+          return {
+            redirectUrl:
+              "https://connect.composio.test/" +
+              (args as { slug: string }).slug,
+          };
+        }
+        if (method === "composioDisconnect") {
+          log.update((all) => [
+            ...all,
+            "called:" + method + ":" + (args as { slug: string }).slug,
+          ]);
+          if (actions === "fails") return { status: "error", removed: 0 };
+          gone = true;
+          return { status: "ready", removed: 1 };
+        }
         if (method === "composioConnected") {
           if (connected === "fails") throw new Error("Composio is down");
+          if (gone && actions === "stale") return await new Promise(() => {});
+          if (gone) return { status: "ready", slugs: [] };
           return {
             status: "ready",
             slugs: connected === "two" ? ["gmail", "ghost"] : [],
@@ -121,10 +150,16 @@ export function openInstalled(
       <Host.Provider value={stub}>
         <View style={{ flex: 1 }}>
           <Label>{"asked:" + asked().join(";")}</Label>
+          <Label>{log().join(" ")}</Label>
           <If when={refreshed()}>
             <Label>asked-the-network</Label>
           </If>
-          <Plugins layout={layout} />
+          <Plugins
+            layout={layout}
+            open={async (url) => {
+              log.update((all) => [...all, "opened:" + url]);
+            }}
+          />
         </View>
       </Host.Provider>
     );

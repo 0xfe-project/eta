@@ -71,3 +71,60 @@ test("on a tablet the group is rows under the plugin list", async () => {
   expect(app.count("id:composio-connected-item")).toBe(2);
   expect(app.shows("on-plugin")).toBe(true);
 });
+
+test("each connected toolkit has Re-authenticate and Disconnect; with the source off, or no word from the host, it has neither", async () => {
+  const app = await open("./fixtures/plugins-composio-actions-ok.tsx", DESKTOP);
+  await app.waitFor("id:composio-connected-item");
+  expect(app.count("label:Re-authenticate")).toBe(2);
+  expect(app.count("label:Disconnect")).toBe(2);
+  const off = await open(
+    "./fixtures/plugins-composio-actions-off.tsx",
+    DESKTOP,
+  );
+  await off.waitFor("id:composio-connected-item");
+  expect(off.count("label:Re-authenticate")).toBe(0);
+  expect(off.count("label:Disconnect")).toBe(0);
+  const plain = await open("./fixtures/plugins-composio-two.tsx", DESKTOP);
+  await plain.waitFor("id:composio-connected-item");
+  expect(plain.count("label:Disconnect")).toBe(0);
+});
+
+test("Re-authenticate on an item goes through composioLink for that toolkit and opens its address", async () => {
+  const app = await open("./fixtures/plugins-composio-actions-ok.tsx", DESKTOP);
+  await app.waitFor("id:composio-connected-item");
+  await app.press("label:Re-authenticate >> nth=0");
+  await app.waitFor(
+    "text:called:composioLink:gmail opened:https://connect.composio.test/gmail",
+  );
+});
+
+test("Disconnect on an item asks first; Cancel deletes nothing; confirming removes only that item at once", async () => {
+  const app = await open(
+    "./fixtures/plugins-composio-actions-stale.tsx",
+    DESKTOP,
+  );
+  await app.waitFor("id:composio-connected-item");
+  await app.press("label:Disconnect >> nth=0");
+  expect(app.shows("label:Delete on Composio")).toBe(true);
+  await app.press("label:Cancel");
+  expect(app.shows("composioDisconnect")).toBe(false);
+  expect(app.count("id:composio-connected-item")).toBe(2);
+  await app.press("label:Disconnect >> nth=0");
+  await app.press("label:Delete on Composio");
+  await app.waitFor("text:called:composioDisconnect:gmail");
+  await app.waitFor("id:composio-connected-item >> nth=1", { state: "hidden" });
+  expect(app.count("id:composio-connected-item")).toBe(1);
+  expect(app.shows("ghost")).toBe(true);
+});
+
+test("a failed Disconnect on an item says so and keeps the item", async () => {
+  const app = await open(
+    "./fixtures/plugins-composio-actions-fails.tsx",
+    DESKTOP,
+  );
+  await app.waitFor("id:composio-connected-item");
+  await app.press("label:Disconnect >> nth=0");
+  await app.press("label:Delete on Composio");
+  await app.waitFor("text:Could not disconnect. Try again later.");
+  expect(app.count("id:composio-connected-item")).toBe(2);
+});

@@ -901,3 +901,138 @@ describe("the source without a key", () => {
     expect(enabledOf(market)).toBe(true);
   });
 });
+
+describe("disconnecting a toolkit", () => {
+  type Held = { id: string; user: string; slug: string; status: string };
+  /** A fake of Composio that holds accounts, lists them (by user, unless told to ignore it) and deletes them. */
+  function hold(accounts: Held[], options: { ignoreUsers?: boolean } = {}) {
+    const deleted: string[] = [];
+    handler = (request, url) => {
+      if (request.method === "DELETE") {
+        const id = decodeURIComponent(url.pathname.split("/").at(-1)!);
+        if (!accounts.some((one) => one.id === id)) return json({}, 404);
+        deleted.push(id);
+        return json({ success: true });
+      }
+      const users = url.searchParams.get("user_ids");
+      const items = accounts
+        .filter(
+          (one) =>
+            (options.ignoreUsers || users === one.user) &&
+            url.searchParams.get("statuses") === one.status,
+        )
+        .map((one) => ({
+          id: one.id,
+          status: one.status,
+          user_id: one.user,
+          toolkit: { slug: one.slug },
+        }));
+      return json({ items, next_cursor: null });
+    };
+    return deleted;
+  }
+  /** The user id the host made: read off the first question it asks. */
+  async function userOf(composio: Composio): Promise<string> {
+    handler = () => json({ items: [], next_cursor: null });
+    await composio.connected();
+    const asked = new URL(requests.at(-1)!.path, "http://x");
+    requests.length = 0;
+    return asked.searchParams.get("user_ids")!;
+  }
+  const mine = (id: string, user: string, slug = "github"): Held => ({
+    id,
+    user,
+    slug,
+    status: "ACTIVE",
+  });
+
+  it("needs a key: no request, a status and nothing removed", async () => {
+    const { composio } = open();
+    expect(await composio.disconnect("github")).toEqual({
+      status: "needs_key",
+      removed: 0,
+    });
+    expect(requests).toHaveLength(0);
+  });
+
+  it("refuses a name that is not a slug, before any request", async () => {
+    const { composio } = open();
+    composio.setKey(KEY);
+    await expect(composio.disconnect("a/b?c")).rejects.toThrow();
+    expect(requests).toHaveLength(0);
+  });
+
+  it("deletes the accounts of that toolkit under this host's user, and no other account", async () => {
+    const { composio } = open();
+    composio.setKey(KEY);
+    const user = await userOf(composio);
+    const deleted = hold([
+      mine("ca_one", user),
+      mine("ca_two", user),
+      mine("ca_mail", user, "gmail"),
+      mine("ca_theirs", "someone-else"),
+    ]);
+    expect(await composio.disconnect("github")).toEqual({
+      status: "ready",
+      removed: 2,
+    });
+    expect(deleted.sort()).toEqual(["ca_one", "ca_two"]);
+    const asked = requests.filter((one) => one.method === "GET");
+    expect(
+      new URL(asked[0]!.path, "http://x").searchParams.get("user_ids"),
+    ).toBe(user);
+    expect(requests.every((one) => one.key === KEY)).toBe(true);
+  });
+
+  it("does not touch another user's account even when Composio ignores the user filter", async () => {
+    const { composio } = open();
+    composio.setKey(KEY);
+    const user = await userOf(composio);
+    const deleted = hold(
+      [mine("ca_mine", user), mine("ca_theirs", "someone-else")],
+      { ignoreUsers: true },
+    );
+    expect(await composio.disconnect("github")).toEqual({
+      status: "ready",
+      removed: 1,
+    });
+    expect(deleted).toEqual(["ca_mine"]);
+  });
+
+  it("removes nothing, and says so, when the toolkit has no account here", async () => {
+    const { composio } = open();
+    composio.setKey(KEY);
+    const user = await userOf(composio);
+    const deleted = hold([mine("ca_mail", user, "gmail")]);
+    expect(await composio.disconnect("github")).toEqual({
+      status: "ready",
+      removed: 0,
+    });
+    expect(deleted).toEqual([]);
+  });
+
+  it("says only a status when Composio fails, never its text or the key", async () => {
+    const { composio } = open();
+    composio.setKey(KEY);
+    const user = await userOf(composio);
+    handler = (request) =>
+      request.method === "DELETE"
+        ? new Response(`boom for key ${KEY}`, { status: 500 })
+        : json({
+            items: [
+              { id: "ca_one", status: "ACTIVE", toolkit: { slug: "github" } },
+            ],
+            next_cursor: null,
+            user,
+          });
+    const failed = await composio.disconnect("github");
+    expect(failed).toEqual({ status: "error", removed: 0 });
+    handler = () => json({ error: "no" }, 401);
+    const refused = await composio.disconnect("github");
+    expect(refused).toEqual({ status: "key_rejected", removed: 0 });
+    expect(JSON.stringify({ failed, refused })).not.toContain(KEY);
+    expect(
+      JSON.stringify(requests.map((one) => [one.path, one.body])),
+    ).not.toContain(KEY);
+  });
+});
