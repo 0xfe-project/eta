@@ -1,7 +1,6 @@
 /**
- * Where an agent lives and how its private chat is opened: `homeOf` finds the home project,
- * `ensureHome` makes it only when it is missing, and `openDirect` finds, makes or brings back the
- * private chat, telling exactly the callbacks it was given.
+ * Where an agent lives: `homeOf` finds the home project, and `ensureHome` makes it only when it is
+ * missing.
  */
 import type { Database } from "bun:sqlite";
 import type { Plugins } from "../src/plugins/service";
@@ -9,7 +8,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createAgent } from "../src/agents/create";
 import { ensureHome, homeOf, isAgentHome } from "../src/agents/home";
 import { agentHome, AgentStore } from "../src/agents/store";
-import { openDirect } from "../src/conversations/direct";
 import { ConversationStore } from "../src/conversations/store";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { MachineStore } from "../src/machines/store";
@@ -95,80 +93,5 @@ describe("isAgentHome", () => {
     expect(isAgentHome(d, agentHome(d.dataDir, ada.id))).toBe(true);
     expect(isAgentHome(d, agentHome(d.dataDir, "nobody"))).toBe(false);
     expect(isAgentHome(d, "/work/repo")).toBe(false);
-  });
-});
-
-describe("openDirect", () => {
-  async function setup() {
-    const d = await stores();
-    const { agent, project } = await createAgent(
-      d,
-      { name: "Ada", model: "fake:m" },
-      null,
-    );
-    const told: string[] = [];
-    const deps = {
-      conversations: d.conversations,
-      created: (id: string) => told.push(`created ${id}`),
-      changed: (ids: readonly string[]) => told.push(`changed ${ids.join()}`),
-    };
-    return { d, agent, project, told, deps };
-  }
-
-  it("makes the private chat when there is none, and says so", async () => {
-    const { agent, project, told, deps } = await setup();
-    const chat = openDirect(deps, project, agent);
-    expect(chat).toMatchObject({
-      projectId: project.id,
-      kind: "direct",
-      name: "Ada",
-      archived: false,
-    });
-    expect(told).toEqual([`created ${chat.id}`, `changed ${chat.id}`]);
-  });
-
-  it("finds the one that is there and says nothing", async () => {
-    const { agent, project, told, deps } = await setup();
-    const first = openDirect(deps, project, agent);
-    told.length = 0;
-    expect(openDirect(deps, project, agent).id).toBe(first.id);
-    expect(told).toEqual([]);
-  });
-
-  it("brings back one that was put away, and says it changed", async () => {
-    const { d, agent, project, told, deps } = await setup();
-    const first = openDirect(deps, project, agent);
-    d.conversations.update(first.id, { archived: true });
-    told.length = 0;
-    const back = openDirect(deps, project, agent);
-    expect(back).toMatchObject({ id: first.id, archived: false });
-    expect(told).toEqual([`changed ${first.id}`]);
-  });
-
-  it("tells only the callbacks it was given", async () => {
-    const { d, agent, project } = await setup();
-    const created: string[] = [];
-    const chat = openDirect(
-      { conversations: d.conversations, created: (id) => created.push(id) },
-      project,
-      agent,
-    );
-    expect(created).toEqual([chat.id]);
-    d.conversations.update(chat.id, { archived: true });
-    expect(
-      openDirect({ conversations: d.conversations }, project, agent).archived,
-    ).toBe(false);
-  });
-
-  it("is per project: another project is another private chat", async () => {
-    const { d, agent, project, deps } = await setup();
-    const repo = d.projects.create({
-      machineId: d.machines.primary()!.id,
-      path: "/work/repo",
-      name: "repo",
-    });
-    expect(openDirect(deps, repo, agent).id).not.toBe(
-      openDirect(deps, project, agent).id,
-    );
   });
 });

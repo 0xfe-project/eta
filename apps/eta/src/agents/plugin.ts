@@ -11,18 +11,16 @@ import type { CallFrame } from "@eta/client-wire-proto";
  * The `agents` plugin: the register of who can be talked to.
  *
  * An agent comes with a workspace, a directory of its own under the data directory that is also a
- * project (kind `agent_home`, steward: the agent), and with a way to talk to it alone: the private
- * chat in that project. The chat is made the first time it is asked for (`direct`) and found every
- * time after.
+ * project (kind `agent_home`, owner: the agent). It is talked to in groups.
  *
  * Deleting an agent is mostly clearing what pointed at it. The foreign keys take it out of the
- * stewards and the memberships; what is left is the replies it had running (stopped), the private
- * chats that lose their only member (archived) and its workspace (left on disk, because what an
- * agent wrote there is not ours to throw away).
+ * stewards and the memberships; what is left is the replies it had running (stopped), whatever a
+ * kind of conversation keeps of its own (`ConversationPolicy.onAgentDeleted`) and its workspace
+ * (left on disk, because what an agent wrote there is not ours to throw away).
  */
 import type { Database } from "bun:sqlite";
 import type { Engine } from "../conversations/engine";
-import type { ConversationStore } from "../conversations/store";
+import type { ConversationPolicies } from "../conversations/policy";
 import type { Timeline } from "../conversations/timeline";
 import type { MachineStore } from "../machines/store";
 import type { Plugins } from "../plugins/service";
@@ -35,8 +33,6 @@ import {
   levelSupport,
 } from "@eta/client-contracts";
 import { THINKING_LEVELS } from "@eta/core";
-import { openDirect } from "../conversations/direct";
-import { summaryOf } from "../conversations/views";
 import { Args, productPlugin, publish } from "../wire";
 import {
   checkAgentName,
@@ -54,13 +50,12 @@ export interface AgentsDeps {
   agents: AgentStore;
   machines: MachineStore;
   projects: ProjectStore;
-  conversations: ConversationStore;
+  /** Each kind of conversation is told when an agent is renamed or deleted. */
+  policies: ConversationPolicies;
   timeline: Timeline;
   engine: Engine;
   plugins: Plugins;
   changed: (conversations?: readonly string[] | "all") => void;
-  /** A conversation exists now: its target has to be published. */
-  created: (conversationId: string) => void;
   /** The external runtimes this host has, with their models; absent when it runs none. */
   runtimes?: ((fresh: boolean) => Promise<AgentRuntimeInfo[]>) | undefined;
   /** The external runtimes of a daemon machine, asked over its link (which has to be up). */
@@ -88,7 +83,7 @@ export interface AgentsDeps {
 const AVATAR_SEED = /^[\w-]{1,64}$/;
 
 export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
-  const { agents, projects, machines, conversations, timeline, plugins } = deps;
+  const { agents, projects, machines, timeline, plugins } = deps;
 
   const viewOf = (
     agent: AgentRecord,
@@ -236,7 +231,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
           deps.engine.stopAgent(id);
           const home = homeOf(deps, agent);
           deps.db.transaction(() => {
-            conversations.archiveDirectOf(id);
+            deps.policies.agentDeleted(agent);
             if (home !== undefined)
               projects.update(home.id, { archived: true });
             // Stewards and memberships go with the row (ON DELETE SET NULL / CASCADE).
@@ -294,27 +289,12 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
           };
         }),
 
-        wire.handle("agents", "direct", (call) => {
-          const agent = existing(new Args(call).string("agentId"));
-          const home = homeOf(deps, agent);
-          if (home === undefined)
-            throw new Error(`${agent.name} has no workspace`);
-          // Asking for the chat is asking to talk: a private chat that was put away comes back.
-          // Published below whether it was made, brought back or found, so not by openDirect.
-          const conversation = openDirect(
-            { conversations, created: deps.created },
-            home,
-            agent,
+        // There are no private chats any more: an agent is talked to in a group, Captain in its
+        // own conversation. A client from before asks anyway, and is told so.
+        wire.handle("agents", "direct", () => {
+          throw new Error(
+            "agents.direct is gone: talk to an agent in a group (conversations.create), and to Captain with captain.direct",
           );
-          deps.changed([conversation.id]);
-          return {
-            result: {
-              conversation: summaryOf(
-                { conversations, timeline },
-                conversation,
-              ),
-            },
-          };
         }),
       ];
       return () => {
@@ -389,12 +369,12 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
     return kept;
   }
 
-  /** The home project and the private chats carry the agent's name; a rename follows them. */
+  /** The home project carries the agent's name, and so may conversations; a rename follows them. */
   function renameHome(agent: AgentRecord): void {
     const home = homeOf(deps, agent);
     if (home === undefined) return;
     projects.update(home.id, { name: agent.name });
-    conversations.renameDirect(home.id, agent.name);
+    deps.policies.agentRenamed(agent);
   }
 }
 

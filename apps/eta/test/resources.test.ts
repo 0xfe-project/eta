@@ -39,10 +39,6 @@ describe("resource", () => {
     const name = "migrations/0001-agents.sql";
     expect(resourceNames("migrations")).toContain(name);
     expect(readFileSync(resource(name), "utf8")).toContain("CREATE TABLE");
-    expect(resource("Eta-Logo.png")).toMatch(
-      /apps\/eta\/src\/assets\/Eta-Logo\.png$/,
-    );
-    expect(statSync(resource("Eta-Logo.png")).size).toBeGreaterThan(0);
     expect(() => resource("nothing.txt")).toThrow(/no resource/);
   });
 

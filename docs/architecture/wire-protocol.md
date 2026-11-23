@@ -40,22 +40,21 @@ Upstream provides (bundled plugins):
 
 Product plugins (`apps/eta`, all are cordis plugins, injecting `wire` and `sessions`):
 
-| Plugin        | target                                                      | action                                                                                                           |
-| ------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| agents        | `agents`（eager）                                           | `create` `update` `delete` `direct`                                                                              |
-| machines      | `machines`（eager）                                         | `enroll` `approve` `revoke` `rename` `setMaxActiveRuns`                                                          |
-| projects      | `projects` (eager)                                          | `create` `update` `files` `directories` (archive via `update`)                                                   |
-| conversations | `conversations`、`conversations.<id>`                       | `create` `update` `invite` `remove` `setSteward` `send` `stop` `read` `history` `attach` `unattach` `attachment` |
-| inbox         | `inbox`                                                     | `answer` `setApprovals`                                                                                          |
-| email         | `email`、`email.<thread-id>`                                | `saveAccount` `removeAccount` `verifyAccount` `refresh` `markRead` `assign` `confirmProposal` `discardProposal`  |
-| usage         | `usage`                                                     | Read-only                                                                                                        |
-| tasks         | `tasks`, `tasks.<id>`                                       | `update` `comment` `delete` `link` `confirmDraft` `interrupt` `rerun` (no `create`, see [Tasks](tasks.md))       |
-| artifacts     | `artifacts`                                                 | `share` `unshare` `delete` `preview`                                                                             |
-| routines      | `routines`、`routines.<id>`                                 | `create` `update` `delete` `run` `seen` `feedback` `restoreBrief`                                                |
-| mcp           | `mcp`                                                       | `connect` `reconnect` `login` `completeLogin` `logout`, see [MCP](mcp.md)                                        |
-| plugins       | `list` `audit`                                              | `configure` `setLevel` `add` `update` `remove` `recheck`, see [Plugins](plugins.md)                              |
-| memory        | `memory` (mounted only when sidecar is present)             | `list` `remember` `forget`                                                                                       |
-| llm           | `llm` (eager; mounted only when gateway library is present) | `refresh` `loginStart` `loginPoll` `loginSubmit` `loginCancel` `setEnabled` `remove`                             |
+| Plugin        | target                                                      | action                                                                                                                                                                               |
+| ------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| agents        | `agents`（eager）                                           | `create` `update` `delete` (`direct` is gone: it answers with an error)                                                                                                              |
+| machines      | `machines`（eager）                                         | `enroll` `approve` `revoke` `rename` `setMaxActiveRuns`                                                                                                                              |
+| projects      | `projects` (eager)                                          | `create` `update` `files` `directories` (archive via `update`)                                                                                                                       |
+| conversations | `conversations`、`conversations.<id>`                       | `create` `update` `invite` `remove` `setSteward` `send` `stop` `read` `history` `attach` `unattach` `attachment`; the list leaves out Captain's conversation, whose own target stays |
+| inbox         | `inbox`                                                     | `answer` `setApprovals`                                                                                                                                                              |
+| usage         | `usage`                                                     | Read-only                                                                                                                                                                            |
+| tasks         | `tasks`, `tasks.<id>`                                       | `update` `comment` `delete` `link` `confirmDraft` `interrupt` `rerun` (no `create`, see [Tasks](tasks.md))                                                                           |
+| artifacts     | `artifacts`                                                 | `share` `unshare` `delete` `preview`                                                                                                                                                 |
+| routines      | `routines`、`routines.<id>`                                 | `create` `update` `delete` `run` `seen` `feedback` `restoreBrief`                                                                                                                    |
+| mcp           | `mcp`                                                       | `connect` `reconnect` `login` `completeLogin` `logout`, see [MCP](mcp.md)                                                                                                            |
+| plugins       | `list` `audit`                                              | `configure` `setLevel` `add` `update` `remove` `recheck`, see [Plugins](plugins.md)                                                                                                  |
+| memory        | `memory` (mounted only when sidecar is present)             | `list` `remember` `forget`                                                                                                                                                           |
+| llm           | `llm` (eager; mounted only when gateway library is present) | `refresh` `loginStart` `loginPoll` `loginSubmit` `loginCancel` `setEnabled` `remove`                                                                                                 |
 
 Eager targets arrive with `hello`, so the page can render without subscribing first.
 

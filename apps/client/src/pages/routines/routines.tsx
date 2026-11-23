@@ -6,7 +6,7 @@ import type {
   RunView,
 } from "@eta/client-contracts";
 import type { Layout } from "../../components";
-import { signal, View } from "nsh";
+import { effect, signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -26,6 +26,7 @@ import { chatText, shownMentions } from "../../components/eta-editor";
 import { uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
 import { follow, useHost } from "../../services/host";
+import { DeleteRoutine } from "./delete-routine";
 import { RoutineEditor } from "./editor";
 import { PhoneRoutineRow } from "./history";
 import { RoutineRow } from "./list-row";
@@ -45,17 +46,36 @@ export function Routines(props: {
   const selected = signal(props.initialId ?? "");
   const editing = signal<"new" | "edit" | null>(null);
   const drawer = signal(false);
+  // The routine the delete dialog asks about, kept as it was when asked.
+  const deleting = signal<RoutineInfo | null>(null);
   const readingBrief = signal(false);
   const list = () => host.list<RoutineSummary>("routines");
   follow(() => "routines");
   const target = () => (selected() ? `routines.${selected()}` : undefined);
   follow(target);
-  const info = () => host.section<RoutineInfo>(target() ?? "", "info");
   const briefs = () => host.list<BriefView>(target() ?? "", "briefs");
   const runs = () => host.list<RunView>(target() ?? "", "runs");
   const status = () => host.section<RoutinesStatus>("routines", "status");
+  const listed = () => list().some((item) => item.id === selected());
+  // A routine this page saw listed (or was opened on) that the list no longer has was deleted,
+  // here or elsewhere. One just created is not listed yet and is not taken for gone.
+  const seen = signal(props.initialId ?? "");
+  effect(() => {
+    if (selected() && listed()) seen.set(selected());
+  });
+  const gone = () =>
+    !!selected() &&
+    seen() === selected() &&
+    !!host.state().targets.routines &&
+    !listed() &&
+    // Deleted from here: the page goes back to the list instead.
+    deleting()?.id !== selected();
+  const canDelete = () => host.can("routines.delete");
+  const info = () =>
+    gone() ? undefined : host.section<RoutineInfo>(target() ?? "", "info");
   const report = signal("");
-  const reportIndex = () => runs().findIndex((run) => run.id === report());
+  const reportIndex = () =>
+    gone() ? -1 : runs().findIndex((run) => run.id === report());
   const current = () => runs()[reportIndex()];
   const paused = () => status() && !status()?.captainOn;
   const phone = () => props.layout === "phone";
@@ -167,6 +187,12 @@ export function Routines(props: {
           <ActionItem
             label={uiText("edit")}
             onSelect={() => editing.set("edit")}
+          />
+          <ActionItem
+            label={uiText("deleteRoutineMenu")}
+            tone="red"
+            disabled={!canDelete()}
+            onSelect={() => deleting.set(info() ?? null)}
           />
         </ActionMenu>
       </If>
@@ -426,32 +452,63 @@ export function Routines(props: {
               <If
                 when={info()}
                 else={
-                  <If when={selected() || list().length}>
+                  <If
+                    when={gone()}
+                    else={
+                      <If when={selected() || list().length}>
+                        <Empty
+                          title={
+                            selected()
+                              ? uiText("loadingRoutine")
+                              : uiText("selectARoutine")
+                          }
+                          description={
+                            selected()
+                              ? undefined
+                              : uiText("selectOneOnTheLeftTo")
+                          }
+                          icon="routines"
+                          iconSize={selected() ? undefined : 24}
+                          iconTone={selected() ? undefined : "ink"}
+                          titleWeight={tablet() ? 400 : undefined}
+                          // Two lines on the desktop; tablet runs it across the pane.
+                          descriptionWidth={tablet() ? 560 : 230}
+                          style={
+                            selected()
+                              ? undefined
+                              : {
+                                  justifyContent: "flex-start",
+                                  paddingTop: tablet() ? 110 : 60,
+                                  paddingHorizontal: tablet() ? 40 : undefined,
+                                }
+                          }
+                        />
+                      </If>
+                    }
+                  >
                     <Empty
-                      title={
-                        selected()
-                          ? uiText("loadingRoutine")
-                          : uiText("selectARoutine")
-                      }
-                      description={
-                        selected() ? undefined : uiText("selectOneOnTheLeftTo")
-                      }
+                      title={uiText("routineGoneTitle")}
+                      description={uiText("routineGoneBody")}
                       icon="routines"
-                      iconSize={selected() ? undefined : 24}
-                      iconTone={selected() ? undefined : "ink"}
+                      iconSize={24}
+                      iconTone="ink"
                       titleWeight={tablet() ? 400 : undefined}
-                      // Two lines on the desktop; tablet runs it across the pane.
-                      descriptionWidth={tablet() ? 560 : 230}
-                      style={
-                        selected()
-                          ? undefined
-                          : {
-                              justifyContent: "flex-start",
-                              paddingTop: tablet() ? 110 : 60,
-                              paddingHorizontal: tablet() ? 40 : undefined,
-                            }
-                      }
-                    />
+                      // Where "Select a routine" stands, which the back button leads to.
+                      style={{
+                        justifyContent: "flex-start",
+                        paddingTop: phone() ? 56 : tablet() ? 110 : 60,
+                        paddingHorizontal: tablet() ? 40 : undefined,
+                      }}
+                    >
+                      <View style={{ ...row, paddingTop: 8 }}>
+                        <Button
+                          label={uiText("backToRoutines")}
+                          size={phone() ? 36 : 28}
+                          style={{ paddingHorizontal: phone() ? 14 : 12 }}
+                          onPress={() => select("")}
+                        />
+                      </View>
+                    </Empty>
                   </If>
                 }
               >
@@ -470,6 +527,8 @@ export function Routines(props: {
                         onReport={openReport}
                         onReadBrief={() => readingBrief.set(true)}
                         onEdit={() => editing.set("edit")}
+                        canDelete={canDelete()}
+                        onDelete={() => deleting.set(item())}
                         onToggle={() => toggle(item())}
                       />
                     }
@@ -535,6 +594,20 @@ export function Routines(props: {
             </View>
           </SmoothScroll>
         </Modal>
+      </If>
+      <If when={deleting()}>
+        {(item) => (
+          <DeleteRoutine
+            routine={item()}
+            running={runs().some((run) => run.status === "running")}
+            phone={phone()}
+            onClose={() => deleting.set(null)}
+            onDeleted={(id) => {
+              if (selected() === id) select("");
+              deleting.set(null);
+            }}
+          />
+        )}
       </If>
       <If when={drawer()}>
         <PendingReports

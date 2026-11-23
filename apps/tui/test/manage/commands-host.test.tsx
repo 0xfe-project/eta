@@ -234,27 +234,6 @@ describe("/invite with a name", () => {
     await screenShows(r, "No agent called “Ben”");
     expect(askedStarting(w.wire, "conversations.invite")).toEqual([]);
   }, 60_000);
-
-  it("refuses a private chat before asking the host", async () => {
-    const w = await group();
-    const direct = (
-      await w.raw.call<{ conversation: { id: string } }>("agents", "direct", {
-        agentId: w.ada.id,
-      })
-    ).conversation;
-    const r = await w.showFront(direct.id);
-    await w.agentsArrived(3);
-    await until(() => w.listed(direct.id) !== undefined, 10_000, "the chat");
-    await enter(r, "/invite Cleo");
-    await screenShows(
-      r,
-      "A private chat is just the agent and you; members cannot be added or removed",
-    );
-    await enter(r, "/invite");
-    await realDelay(100);
-    expect(askedStarting(w.wire, "conversations.invite")).toEqual([]);
-    expect(r.lastFrame()).not.toContain("Invite to");
-  }, 60_000);
 });
 
 describe("/remove with a name", () => {

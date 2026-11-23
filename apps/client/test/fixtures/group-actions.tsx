@@ -88,9 +88,7 @@ function Fixture() {
           layout="desktop"
           selected={selected()}
           onConversation={selected.set}
-          onAgent={noop}
           onCreate={noop}
-          onCreateAgent={noop}
           onArchived={noop}
         />
       </View>

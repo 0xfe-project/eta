@@ -69,15 +69,12 @@ import {
   RESTART_STOP_NOTE,
   RESTART_TEXT,
 } from "./conversations/engine";
+import { groupPolicy } from "./conversations/group-policy";
 import { conversationsPlugin } from "./conversations/plugin";
+import { ConversationPolicies } from "./conversations/policy";
 import { ConversationStore } from "./conversations/store";
 import { ConversationTargets } from "./conversations/targets";
 import { Timeline } from "./conversations/timeline";
-import { EmailCredentials } from "./email/credentials";
-import { emailPlugin } from "./email/plugin";
-import { EmailService } from "./email/service";
-import { EmailStore } from "./email/store";
-import { emailSessionTools } from "./email/tools";
 import { Inbox } from "./inbox/inbox";
 import { inboxPlugin } from "./inbox/plugin";
 import { InteractionStore } from "./inbox/store";
@@ -293,6 +290,11 @@ export function createProduct(options: {
   const machines = new MachineStore(db);
   const projects = new ProjectStore(db);
   const conversations = new ConversationStore(db);
+  // The kinds of conversation: the group is the conversations module's own; Captain registers its
+  // own when its plugin starts (`captain/policy.ts`).
+  const policies = new ConversationPolicies([
+    groupPolicy({ agents, conversations }),
+  ]);
   const timeline = new Timeline(db);
   let wire: WireService | undefined;
 
@@ -395,7 +397,7 @@ export function createProduct(options: {
       // The report is on the routines page; Captain's chat gets a line that says so and links to
       // it. Its title, never its body's neighbour the handoff.
       reported: async (routine, run) => {
-        const { conversationId } = await made.captain!.direct();
+        const { conversationId } = await made.captain!.conversation();
         timeline.system(
           conversationId,
           `Routine "${routine.name}" reported: ${run.title ?? "(untitled)"}`,
@@ -540,7 +542,6 @@ export function createProduct(options: {
   });
   const mirrors = new SessionMirrors(hub, (id) => machines.get(id)?.name);
   const secretKey = loadSecretKey(dataDir);
-  const emailCredentials = new EmailCredentials(db, secretKey);
   const mcp = new McpService({
     db,
     key: secretKey,
@@ -642,14 +643,6 @@ export function createProduct(options: {
   const web =
     options.web === undefined ? undefined : new Web({ ...options.web, warn });
   const attachments = new AttachmentStore(db, dataDir);
-  const email = new EmailService(
-    new EmailStore(db),
-    emailCredentials,
-    agents,
-    projects,
-    warn,
-    { publicUrl: options.publicUrl },
-  );
   const runHooks = combineRunHooks(
     memory === undefined
       ? []
@@ -673,6 +666,7 @@ export function createProduct(options: {
     machines,
     projects,
     conversations,
+    policies,
     timeline,
     changed,
     warn,
@@ -734,6 +728,7 @@ export function createProduct(options: {
     plugins,
     projects,
     conversations,
+    policies,
     timeline,
     attachments,
     inbox,
@@ -895,7 +890,7 @@ export function createProduct(options: {
         dataDir,
       }),
       /**
-       * Captain may not have the task and email tools (see `captain/pin.ts`), and a session's pin
+       * Captain may not have the task tools (see `captain/pin.ts`), and a session's pin
        * outlives the build that wrote it: another build on this data directory installs them and
        * widens the pin, and the next Captain-aware open would then fail every run with
        * `configured_tools_unavailable`. Narrowing the pin here is what keeps Captain runnable.
@@ -963,12 +958,6 @@ export function createProduct(options: {
     {
       askObserve: (meta: SessionMeta) => inbox.askObserve(originOf(meta)),
     },
-    {
-      sessionTools: (input) =>
-        captain.identity()?.agentId === input.meta.agentId
-          ? []
-          : emailSessionTools(email)(input),
-    },
     ...(memory === undefined
       ? []
       : [
@@ -1025,7 +1014,6 @@ export function createProduct(options: {
       hub.close();
       mirrors.detach();
       plugins.close();
-      email.stop();
       await mcp.close();
       await web?.close();
     },
@@ -1058,7 +1046,6 @@ export function createProduct(options: {
         "artifacts",
         "inbox",
         "usage",
-        "email",
         "plugins",
         "mcp",
         "skills",
@@ -1108,12 +1095,12 @@ export function createProduct(options: {
         agentsPlugin(
           {
             ...shared,
+            policies,
             dataDir,
             db,
             engine,
             plugins,
             changed,
-            created,
             runtimes: options.runtimes,
             modelLevels: (model) => {
               const { provider, modelId } = parseModelId(model);
@@ -1212,14 +1199,25 @@ export function createProduct(options: {
       server.mount(
         "conversations",
         conversationsPlugin(
-          { ...shared, engine, attachments, targets, changed, created },
+          {
+            ...shared,
+            policies,
+            engine,
+            attachments,
+            targets,
+            changed,
+            created,
+          },
           applied("conversations"),
         ),
       );
       if (captainOn)
         server.mount(
           "captain",
-          captainPlugin({ service: captain, changed }, applied("captain")),
+          captainPlugin(
+            { service: captain, policies, conversations, changed },
+            applied("captain"),
+          ),
         );
       server.mount(
         "routines",
@@ -1267,20 +1265,6 @@ export function createProduct(options: {
                 !taskAsks.holds(interaction)),
           },
           applied("inbox"),
-        ),
-      );
-      server.mount(
-        "email",
-        emailPlugin(
-          {
-            service: email,
-            projects,
-            agents,
-            conversations,
-            engine,
-            createdConversation: created,
-          },
-          applied("email"),
         ),
       );
       server.mount("usage", usagePlugin(usage, applied("usage")));

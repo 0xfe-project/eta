@@ -259,7 +259,7 @@ The command docs are generated from the registry: [English](../tui/commands.md),
 
 1. Link a model account: this is the `/providers` screen, and the next step needs a usable model. When a usable model exists from the start, setup begins at the second step.
 2. Create agents: like the web UI's `onboard.tsx`, one per persona card, all selected by default; a card whose `persona` already has an agent cannot be checked and is not recreated. Cards are created one by one in card order with `agents.create`, using the default usable model. If one fails, it stops and shows why, and a retry skips those already created.
-3. Email is not covered. When done, the status area points to `/new`.
+3. When done, the status area points to `/new`.
 
 ### Setup commands
 

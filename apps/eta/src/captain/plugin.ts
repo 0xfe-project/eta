@@ -2,11 +2,17 @@ import type {
   CaptainPromptKind,
   CaptainSettingsView,
 } from "@eta/client-contracts";
+import type { ConversationPolicies } from "../conversations/policy";
+import type { ConversationStore } from "../conversations/store";
 import type { CaptainService } from "./service";
 import { Args, productPlugin, publish } from "../wire";
+import { captainPolicy } from "./policy";
 
 export interface CaptainPluginDeps {
   service: CaptainService;
+  /** Where Captain's kind of conversation is registered while the plugin runs. */
+  policies: ConversationPolicies;
+  conversations: ConversationStore;
   changed: (conversationIds?: readonly string[]) => void;
 }
 
@@ -22,6 +28,9 @@ export function captainPlugin(deps: CaptainPluginDeps, applied: () => void) {
     "captain",
     ({ wire }) => {
       const offs = [
+        deps.policies.register(
+          captainPolicy({ conversations: deps.conversations }),
+        ),
         publish(
           wire,
           "captain",

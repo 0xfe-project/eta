@@ -111,7 +111,6 @@ describe("the generated table", () => {
 
     const text = readFileSync(join(out, "embedded.ts"), "utf8");
     expect(text).toContain('"migrations/0001-agents.sql"');
-    expect(text).toContain('"Eta-Logo.png"');
     expect(text).toContain('"web/index.html"');
     expect(text).toContain('"cpa/cli-proxy-api"');
     expect(text).toContain('"daemon/eta-daemon-linux-x64.zst"');

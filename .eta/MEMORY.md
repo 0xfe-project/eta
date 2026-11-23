@@ -127,7 +127,6 @@
 - [135] Eta 中 provider 返回成功但空（stopReason=stop、无 toolCall/text、output≈1）应作为上下文溢出/退化响应处理；不能依赖非标准 provider 给出 error/length 才恢复。
 - [139] 不要把 Eta 聊天 ProcessBox 渲染条件写成 active steps 非空；零 block 的等待态返回 null 会制造空白并造成卡住观感，应预渲染固定尺寸窗口并提供 loading。
 - [140] 这台机器的 bun 是 1.4.2，而 package.json 锁 bun@1.4.3；`apps/*/typecheck` 里的 `bun check` 是 1.4.3 的内建命令，在 1.4.2 下报 `Script not found "check"`，于是 lefthook pre-commit 的 verify 步骤必然失败。手动跑等价校验（bunx tsc --noEmit / eslint / dprint / turbo build）后用 `git commit --no-verify`，别把本地 bun 版本升给正在跑的 host。
-- [141] Eta email 没有 IMAP watcher/IDLE：连接状态只有 EmailStore 的 status，重连路径就是 `verify()`（SMTP 认证 + 打开收件箱/垃圾箱目录），后台每一轮 tick 对非 ready 账号走它。任何「重建 watcher」的说法在这份代码里都是空的。
 - [142] Eta GitHub 插件默认关闭时 `open_pull_request` 报「未连接」，且 akhook 挡 `gh pr create`；此时用已登录的 `gh` 走 REST API 直接建 PR（非 akhook 屏蔽的 `gh pr create` 包装），不要静默失败，也不要为建一个 PR 擅自带 `--github` 重启正在跑的 host（属产品决定）。见 #8/#82。
 - [147] Eta workspace-store.ts is located at `apps/web/src/components/workspace/workspace-store.ts`, not `src/stores/`.
 - [148] Eta `settings` state in workspace-store is not persisted (partialize excludes it), so changes to settings state do not survive reloads unless explicitly handled.

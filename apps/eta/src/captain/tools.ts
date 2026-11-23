@@ -390,14 +390,14 @@ export function captainSessionTools(
     });
 
     /**
-     * Where a proposal's card goes: this conversation, or Captain's direct chat from a session held
+     * Where a proposal's card goes: this conversation, or Captain's own conversation from a session held
      * in none (a task's, a routine run's).
      */
     const proposalOrigin = async (): Promise<string> =>
       meta.conversationId === undefined ||
       heldIn(meta.conversationId) !== "conversation" ||
       deps.conversations.get(meta.conversationId) === undefined
-        ? (await deps.service.direct()).conversationId
+        ? (await deps.service.conversation()).conversationId
         : meta.conversationId;
 
     const proposeGroup = defineTool({
@@ -1209,7 +1209,7 @@ export function captainSessionTools(
     const post = defineTool({
       name: "post_in_group",
       description:
-        "Post a plain message in a group conversation, as Captain, without waking anyone: no agent is named and no reply is started. Use it to share something (a routine's result the brief says to send there, a notice). To get work done, use assign_in_group instead. Only groups; not an agent's direct chat.",
+        "Post a plain message in a group conversation, as Captain, without waking anyone: no agent is named and no reply is started. Use it to share something (a routine's result the brief says to send there, a notice). To get work done, use assign_in_group instead. Only groups; not your own conversation with the user.",
       parameters: Type.Object({
         conversationId: Type.String(),
         text: Type.String({ minLength: 1 }),

@@ -54,7 +54,7 @@ function harness(options: { reachable?: boolean } = {}) {
   const deps = {
     conversations: {
       get: (id: string) =>
-        id === "origin" || id === "direct"
+        id === "origin" || id === "captain"
           ? { id, archived: false }
           : undefined,
       participants: () =>
@@ -74,7 +74,7 @@ function harness(options: { reachable?: boolean } = {}) {
       throw new Error(message);
     },
     identity: () => ({ agentId: "captain" }),
-    direct: async () => ({ conversationId: "direct" }),
+    conversation: async () => ({ conversationId: "captain" }),
     createOperation: (input: {
       kind: string;
       payload?: Record<string, unknown>;
@@ -221,7 +221,7 @@ describe("a proposal", () => {
     }
   });
 
-  it("tells Captain in its direct chat when it can no longer speak where it proposed", async () => {
+  it("tells Captain in its own conversation when it can no longer speak where it proposed", async () => {
     const { kind } = thingKind();
     const h = harness({ reachable: false });
     const proposals = new CaptainProposals(h.deps, [kind]);
@@ -231,6 +231,6 @@ describe("a proposal", () => {
       "origin",
     );
     await proposals.settled({ ...operation, status: "rejected" });
-    expect(h.sent[0]?.conversationId).toBe("direct");
+    expect(h.sent[0]?.conversationId).toBe("captain");
   });
 });

@@ -167,40 +167,12 @@ export const settingsMessages = {
     "This signs out every agent using this server.",
     "使用此服务器的所有智能体都会退出登录。",
   ],
-  mailAppPassword: [
-    "App password or authorization code",
-    "应用专用密码或授权码",
-  ],
-  mailAddress: ["Email address", "邮箱地址"],
-  mailName: ["Name", "名称"],
-  mailProvider: ["Provider", "邮箱服务商"],
-  mailUsername: ["Username", "用户名"],
-  mailCustom: ["Custom", "自定义"],
-  mailPoll: ["Check interval (seconds)", "检查间隔（秒）"],
-  mailInboxFolder: ["Inbox folder", "收件箱文件夹"],
-  mailJunkFolder: ["Junk folder", "垃圾邮件文件夹"],
-  mailAdvanced: ["Advanced connection settings", "高级连接设置"],
-  mailRemove: ["Remove mailbox", "移除邮箱"],
-  mailReconnect: ["Reconnect and check", "重新连接并检查"],
-  mailCheckFailed: ["Connection check failed.", "连接检查失败。"],
-  mailConnected: ["Connected", "已连接"],
-  mailUnverified: ["Unverified", "尚未验证"],
-  mailConnectionError: ["Connection error", "连接错误"],
-  mailConnectCheck: ["Connect and check", "连接并检查"],
-  mailCheckExplanation: [
-    "The connection check signs in to SMTP and IMAP and opens the inbox and junk folders read-only. It sends no test email and does not verify ownership of the address.",
-    "连接检查会登录 SMTP 和 IMAP，并以只读方式打开收件箱和垃圾邮件文件夹。检查期间不会发送测试邮件，也不会验证邮箱地址的归属。",
-  ],
   settingsNeedsAttentionCount: [
     "{{count}} needs attention",
     "{{count}} 项需要处理",
   ],
   machinesOnlineCount: ["{{count}} online", "{{count}} 台在线"],
   settingsNeedsSignInCount: ["{{count}} needs sign-in", "{{count}} 项需要登录"],
-  mailboxConnectionErrors: [
-    "{{count}} connection error{{suffix}}",
-    "{{count}} 个连接错误{{suffix}}",
-  ],
   externalAgentAvailable: ["Ready", "就绪"],
   externalAgentUnauthenticated: ["Not signed in", "尚未登录"],
   externalAgentMissing: ["Not installed", "未安装"],
@@ -372,10 +344,6 @@ export const settingsMessages = {
     "This runtime has no thinking level for this model.",
     "这个运行时不能给这个模型设思考档。",
   ],
-  settingsEmailHint: [
-    "A standalone mailbox. Emails never reach an agent automatically; every send and reply needs your confirmation.",
-    "独立的邮箱。邮件不会自动交给智能体，每次发送和回复都需要你确认。",
-  ],
   externalAgentsHint: [
     "An agent can run on the external agents (ACP agents) of the machine it runs on. Each is offered as the runtime acp.<id> and kept in that machine's ~/.eta/acp.json.",
     "智能体可以使用其所在机器上的外部智能体（ACP 智能体）。每个都以运行方式 acp.<id> 提供，保存在该机器的 ~/.eta/acp.json 中。",
@@ -475,7 +443,6 @@ export const settingsMessages = {
     "Model usage: {{usage}} tokens",
     "模型用量：{{usage}} tokens",
   ],
-  mailNotChecked: ["Not checked", "尚未检查"],
   settingsEdit: ["Edit", "编辑"],
   settingsDetails: ["Details", "详情"],
   autoArchiveHint: [
@@ -568,10 +535,5 @@ export const settingsMessages = {
   mcpEmptyHint: [
     "Add servers to ~/.eta/mcp.json or a project’s .mcp.json.",
     "在 ~/.eta/mcp.json 或项目的 .mcp.json 里添加。",
-  ],
-  emailEmptyTitle: ["No mailboxes yet.", "还没有邮箱账号。"],
-  emailEmptyHint: [
-    "Connect one to send and receive email.",
-    "绑一个，才能收发邮件。",
   ],
 } as const;

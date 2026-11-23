@@ -478,33 +478,6 @@ describe("conversations", () => {
     });
   });
 
-  it("find a private chat by agent and project, and put away an agent's chats", () => {
-    const { conversations, agents, project } = stores();
-    const a = agents.create({ name: "A" });
-    const b = agents.create({ name: "B" });
-    const chat = conversations.create({
-      projectId: project.id,
-      kind: "direct",
-      name: "A",
-      agentIds: [a.id],
-    });
-    const group = conversations.create({
-      projectId: project.id,
-      kind: "group",
-      name: "g",
-      agentIds: [a.id, b.id],
-    });
-    expect(conversations.directOf(project.id, a.id)?.id).toBe(chat.id);
-    expect(conversations.directOf(project.id, b.id)).toBeUndefined();
-    expect(conversations.archiveDirectOf(a.id)).toEqual([chat.id]);
-    expect(conversations.get(chat.id)?.archived).toBe(true);
-    expect(conversations.get(group.id)?.archived).toBe(false);
-    expect(conversations.archiveDirectOf(a.id)).toEqual([]);
-    conversations.renameDirect(project.id, "Ada");
-    expect(conversations.get(chat.id)?.name).toBe("Ada");
-    expect(conversations.get(group.id)?.name).toBe("g");
-  });
-
   it("clear their own steward when the steward is deleted", () => {
     const { conversations, agents, project } = stores();
     const a = agents.create({ name: "A" });

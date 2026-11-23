@@ -223,9 +223,7 @@ export function DesktopSidebar(
         collapsed={props.collapsed}
         selected={props.selected}
         onConversation={props.onConversation}
-        onAgent={props.onAgent}
         onCreate={props.onCreate}
-        onCreateAgent={props.onCreateAgent}
         onArchived={props.onArchived}
       />
       <View

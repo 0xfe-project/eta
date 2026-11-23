@@ -73,9 +73,9 @@ export function RailButton(props: {
 
 export function RailEntry(props: {
   label: string;
-  agent?: boolean;
   selected?: boolean;
-  status?: "active" | "waiting" | "idle";
+  /** One of its members is at work. */
+  active?: boolean;
   onPress: () => void;
   onContextMenu?: (event: { position: Point }) => void;
   onLongPress?: (event: { position: Point }) => void;
@@ -94,10 +94,10 @@ export function RailEntry(props: {
       focusVisibleStyle={focusRing(c())}
       style={{
         position: "relative",
-        height: props.agent ? 48 : 41,
+        height: 41,
         flexShrink: 0,
         alignItems: "center",
-        paddingTop: props.agent ? 6 : 5,
+        paddingTop: 5,
         paddingHorizontal: 4,
         gap: 3,
         borderBottomWidth: 1,
@@ -110,28 +110,19 @@ export function RailEntry(props: {
       <Label
         variant="caption"
         lines={1}
-        style={{ maxWidth: props.agent ? "100%" : 49, textAlign: "center" }}
+        style={{ maxWidth: 49, textAlign: "center" }}
       >
         {props.label}
       </Label>
-      <If when={props.status}>
+      <If when={props.active}>
         <View
           style={{
             position: "absolute",
             top: 2,
-            right: props.agent ? 2 : undefined,
-            left: props.agent ? undefined : 2,
+            left: 2,
             width: 6,
             height: 6,
-            opacity: props.status === "idle" ? 0.4 : 1,
-            backgroundColor:
-              props.status === "idle"
-                ? c().muted
-                : props.status === "waiting"
-                  ? c().amber
-                  : props.agent
-                    ? c().blue
-                    : c().green,
+            backgroundColor: c().green,
           }}
         />
       </If>

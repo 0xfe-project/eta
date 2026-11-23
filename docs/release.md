@@ -81,7 +81,7 @@ git tag desktop-v0.2.0 origin/main
 git push origin desktop-v0.2.0
 ```
 
-The `desktop-v*` workflow packages `apps/client` with Native Shell v0.6.0. It strips `desktop-v` from the tag and passes the result as the app version. A suffix marks a prerelease. The host release keeps GitHub's Latest label.
+The `desktop-v*` workflow packages `apps/client` with the Native Shell build pinned in `.github/actions/setup-nsh/action.yml` — currently the `nightly` tag, because no stable release contains the Windows IME fix from longbridge/nsh#2497 yet. It strips `desktop-v` from the tag and passes the result as the app version. A suffix marks a prerelease. The host release keeps GitHub's Latest label.
 
 The workflow opens a draft, runs CI and builds on each target's own runner. It checks that every desktop package includes the local host launcher, then publishes the draft with `SHA256SUMS`.
 
@@ -136,7 +136,7 @@ macOS checks the new app's code signature before swapping it in (`codesign --ver
 
 ### Local packages and store uploads
 
-Install Native Shell v0.6.0, then package for your desktop from the repository root.
+Install the Native Shell build that CI pins (the `nightly` tag for now; see the note on the desktop workflow above), then package for your desktop from the repository root.
 
 ```sh
 bun run client:package --target macos --out dist/macos
@@ -203,7 +203,7 @@ bun scripts/upgrade-e2e/seed.ts ./eta-host-linux-x64 0.3.0
 docker run --rm -v "$PWD:/repo:ro" zricethezav/gitleaks detect --source /repo/test/upgrade-seed --no-git
 ```
 
-The script starts a host with this version's binary, HOME at `/tmp/eta-seed-home`, model `fake-model.ts`, then calls over the wire like the pages do: create agents, projects, conversations, send messages, have the model publish two versions of an artifact, create tasks and run them to completion, store email accounts and plugin config, register host machines, create routine tasks, change settings. After the host exits, copy the data directory over and generate `manifest.json`, then verify once more. Don't hand-write SQL, don't put in real data, and the hostname must be fake (generated in a container with `--hostname eta-seed`). The driver speaks this checkout's wire, so an older binary needs no adapter, only patience: it mounts its plugins after `/up` answers, and a call that arrives first is retried (`unknown op`) instead of failing the seed. A build that makes a Captain for itself is seeded through the same lens the check reads it back with (`leaveOutSystemData`), or the seed's own manifest disagrees with its own check.
+The script starts a host with this version's binary, HOME at `/tmp/eta-seed-home`, model `fake-model.ts`, then calls over the wire like the pages do: create agents, projects, conversations, send messages, have the model publish two versions of an artifact, create tasks and run them to completion, store plugin config, register host machines, create routine tasks, change settings. After the host exits, copy the data directory over and generate `manifest.json`, then verify once more. Don't hand-write SQL, don't put in real data, and the hostname must be fake (generated in a container with `--hostname eta-seed`). The driver speaks this checkout's wire, so an older binary needs no adapter, only patience: it mounts its plugins after `/up` answers, and a call that arrives first is retried (`unknown op`) instead of failing the seed. A build that makes a Captain for itself is seeded through the same lens the check reads it back with (`leaveOutSystemData`), or the seed's own manifest disagrees with its own check.
 
 ### A client from the last release, against this one
 

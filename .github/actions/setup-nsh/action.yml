@@ -18,7 +18,11 @@ runs:
         target="$RUNNER_TEMP/eta-nsh"
         mkdir -p "$target"
         cd "$target"
-        url="https://github.com/longbridge/nsh/releases/download/v0.6.0/$archive"
+        # Native Shell nightly rather than a release tag: the Windows IME fix
+        # (longbridge/nsh#2497, merge commit d474e13) landed after v0.6.1 was cut, so no
+        # stable tag contains it yet. Move back to the first stable tag that does
+        # (v0.6.2 or later) as soon as one is published.
+        url="https://github.com/longbridge/nsh/releases/download/nightly/$archive"
         curl --fail --silent --show-error --location --retry 3 --output "$archive" "$url"
         curl --fail --silent --show-error --location --retry 3 --output checksum "$url.sha256"
         digest=$(awk 'NR == 1 { print $1 }' checksum)
@@ -33,5 +37,7 @@ runs:
         esac
         bin=$(find "$target" -type d -name bin -print -quit)
         test -n "$bin"
+        # The nightly tag moves; print the build so a log says which one ran.
+        "$bin/nsh" --version 2>/dev/null || "$bin/nsh.exe" --version 2>/dev/null || true
         if [[ "$RUNNER_PLATFORM" == Windows ]]; then bin=$(cygpath -w "$bin"); fi
         echo "$bin" >> "$GITHUB_PATH"

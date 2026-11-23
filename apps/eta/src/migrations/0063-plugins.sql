@@ -1,7 +1,10 @@
--- The plugin tables, in one migration. They were first seven migrations (0061 to 0067);
+-- The plugin tables, in one migration (0063: upstream took 0061 and 0062). They were first seven
+-- migrations (0061 to 0067);
 -- a database that already ran the first six runs this once more, so each table is made only where it
--- is missing: it adds cursor_credential and leaves the rest as it is. (A table of the same name with
--- another shape would pass unnoticed; none is known to exist.)
+-- is missing. (A table of the same name with another shape would pass unnoticed; none is known to
+-- exist.) The Cursor credential is not a table here: it is a row of `credential` (integration
+-- 'market', key 'cursor'). A database that ran the seventh before it changed keeps an unused
+-- cursor_credential table; nothing reads it.
 
 -- A plugin the user switched off for every agent. Nothing here means it is on, so the plugins that
 -- exist already stay on. The agents' own choices (agent_plugin) are not touched by this.
@@ -80,13 +83,4 @@ CREATE TABLE IF NOT EXISTS plugin_token_header (
   format TEXT NOT NULL CHECK (format IN ('raw', 'bearer')),
   updated_at INTEGER NOT NULL,
   PRIMARY KEY (plugin, server)
-);
-
--- The Cursor credential (x-cursor-auth), saved once for the host: a Cursor sign-in serves every
--- server on cursor.com. One row, sealed like every other secret. A header the user saved on one
--- server (plugin_header) is still that server's own and comes first.
-CREATE TABLE IF NOT EXISTS cursor_credential (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  sealed BLOB NOT NULL,
-  updated_at INTEGER NOT NULL
 );

@@ -112,6 +112,19 @@ export const routinesMessages = {
     "启用 Captain 以恢复定时任务。Captain 停用期间，计划中的运行会记为跳过。",
   ],
   updatingTheBrief: ["Updating the brief…", "正在更新任务说明…"],
+  deleteRoutineMenu: ["Delete…", "删除…"],
+  deleteRoutineTitle: ["Delete “{{name}}”?", "删除「{{name}}」？"],
+  deleteRoutineBody: [
+    "It stops running on its schedule. Its brief versions, every run and report, and the feedback on them are deleted with it and cannot be restored. What its runs already posted elsewhere, such as in a group, stays.",
+    "删除后它不再按计划运行。它的各版要求、所有运行记录和报告，以及对报告的反馈都会一起删除，无法恢复。运行时已经发到别处（比如某个群）的消息会保留。",
+  ],
+  deleteRoutineRunning: [
+    "It is running now, and cannot be deleted until the run ends.",
+    "它正在运行，要等这次运行结束才能删除。",
+  ],
+  routineGoneTitle: ["This routine no longer exists", "这个定时任务已不存在"],
+  routineGoneBody: ["It may have been deleted.", "它可能已被删除。"],
+  backToRoutines: ["Back to routines", "返回定时任务列表"],
   viewRun: ["View run", "查看运行"],
   olderReports: ["Older reports", "较早的报告"],
 } as const;

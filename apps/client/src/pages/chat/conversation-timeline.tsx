@@ -4,7 +4,7 @@ import type {
   MessageView,
 } from "@eta/client-contracts";
 import type { Bounds, JSX, ListRef, ViewRef } from "nsh";
-import type { TextViewSelectionEvent } from "nsh/base";
+import type { TextSelection } from "../../components/eta-editor";
 import { cleanup, computed, effect, List, Overlay, signal, View } from "nsh";
 import { onWindows } from "../../app/platform";
 import {
@@ -83,26 +83,29 @@ export function ConversationTimeline(props: {
   // The reply text the reader selected, and where: a Quote button floats above it.
   const selection = signal<{
     message: MessageView;
-    text: string;
+    /** The selected text as the reply reads (mentions as `@Ada`). */
+    read: () => string;
     at: Bounds | ViewRef;
   }>();
   function select(
     message: MessageView,
-    event: TextViewSelectionEvent,
+    event: TextSelection,
     reply: ViewRef | undefined,
   ) {
     const text = event.text.trim();
     // Where the platform gives no box around the selection (the web), the
     // button goes over the reply instead. A phone has its own edit menu.
     const at = event.pageBounds ?? reply;
-    if (text && at && !phone()) selection.set({ message, text, at });
+    if (text && at && !phone())
+      selection.set({ message, read: event.read, at });
     else if (selection()?.message.id === message.id) selection.set(undefined);
   }
   function quote() {
     const current = selection();
     if (!current) return;
     selection.set(undefined);
-    props.onQuote(current.message.conversationId, current.text);
+    const text = current.read().trim();
+    if (text) props.onQuote(current.message.conversationId, text);
   }
   // On Windows the wheel scrolls the list itself, so mouse notches can glide;
   // elsewhere the system already scrolls smoothly and the list keeps it.
