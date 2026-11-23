@@ -99,6 +99,15 @@ const OWN_TYPES: Record<string, string> = {
   ".svg": "image/svg+xml",
 };
 const MAX_OWN = 256 * 1024;
+/**
+ * The types a kept picture may have: what a fresh fetch accepts (`pictureType`) and an SVG. A kept
+ * ico or gif must read back like a fresh one, or a restart asks the site for it again.
+ */
+const KEPT_TYPES = new Set([
+  ...Object.values(OWN_TYPES),
+  "image/gif",
+  "image/x-icon",
+]);
 /** The types Bun.Image can read and `fitImage` can shrink; svg and ico are not among them. */
 const SHRINKABLE = new Set([
   "image/png",
@@ -530,7 +539,7 @@ export class Logos {
       bytes.byteLength > MAX_OWN
     )
       return undefined;
-    if (!Object.values(OWN_TYPES).includes(mime)) return undefined;
+    if (!KEPT_TYPES.has(mime)) return undefined;
     if (mime === "image/svg+xml") {
       const text = Buffer.from(bytes).toString("utf8");
       if (!SVG_HEAD.test(text) || SVG_UNSAFE.test(text)) return undefined;
