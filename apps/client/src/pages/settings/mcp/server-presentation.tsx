@@ -39,7 +39,7 @@ export function toolsDescription(count: number) {
 
 export function statusTone(item: McpServerView) {
   if (item.state === "failed") return "red";
-  if (item.auth === "needs_login") return "amber";
+  if (item.auth === "needs_login") return "warning";
   return item.state === "connected" ? "green" : "muted";
 }
 

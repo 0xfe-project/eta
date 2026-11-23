@@ -22,7 +22,7 @@ export function TaskLink(link: {
     status: BoardTaskStatus;
   };
   suffix?: string;
-  tone?: "blue" | "amber";
+  tone?: "blue" | "warning";
   /** Subtask rows stand 48 high, the rest 44. */
   height?: number;
   /** The list's last row closes it with a bottom border. */
@@ -454,7 +454,7 @@ export function NeighbourStrip(props: {
               </Label>
               <Label
                 variant="caption"
-                tone={props.item.status === "in_review" ? "amber" : "muted"}
+                tone={props.item.status === "in_review" ? "warning" : "muted"}
               >
                 {own()}
               </Label>
@@ -674,7 +674,7 @@ export function Subtasks(props: {
                   </Label>
                   <Label
                     variant="small"
-                    tone={entry()[0] === "To review" ? "amber" : "ink"}
+                    tone={entry()[0] === "To review" ? "warning" : "ink"}
                     style={{ flex: 1 }}
                   >
                     {entry()[2]}
@@ -717,7 +717,7 @@ export function Subtasks(props: {
                     lines={1}
                     tone={
                       child().status === "in_review"
-                        ? "amber"
+                        ? "warning"
                         : child().status === "in_progress"
                           ? "blue"
                           : props.tablet ||
@@ -782,7 +782,7 @@ export function Subtasks(props: {
                 </Label>
                 <Label
                   variant="small"
-                  tone={entry()[0] === "To review" ? "amber" : "ink"}
+                  tone={entry()[0] === "To review" ? "warning" : "ink"}
                   style={{ flex: 1 }}
                 >
                   {entry()[2]}
@@ -808,7 +808,7 @@ export function Subtasks(props: {
               suffix={phoneHint(child())}
               tone={
                 child().status === "in_review"
-                  ? "amber"
+                  ? "warning"
                   : child().status === "in_progress"
                     ? "blue"
                     : undefined

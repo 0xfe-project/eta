@@ -52,7 +52,7 @@ export function ExternalAgentList(props: {
       ? c().green
       : status === "error"
         ? c().red
-        : c().amber;
+        : c().warning;
   const groupMeta = (primary: boolean, count: number) =>
     [
       primary && uiText("externalAgentPrimary"),

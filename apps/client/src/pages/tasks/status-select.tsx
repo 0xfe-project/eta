@@ -9,7 +9,7 @@ import { statusName, TaskGlyph, tones } from "./status";
 /** The statuses whose trigger is tinted in their colour: running, waiting for review, done. */
 const statusFill = {
   in_progress: "blueFill",
-  in_review: "amberFill",
+  in_review: "warningFill",
   done: "greenFill",
 } as const;
 

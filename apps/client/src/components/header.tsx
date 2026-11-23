@@ -6,7 +6,8 @@ import { pickerTarget } from "./element-picker";
 import { BackButton } from "./navigation-buttons";
 import { StatusDot } from "./status-dot";
 import { Label } from "./text";
-import { colors, row, sizes } from "./theme";
+import { colors, row } from "./theme";
+import { sizes } from "./tokens";
 
 export function Header(props: {
   title: string;
@@ -14,7 +15,7 @@ export function Header(props: {
   /** The count's role (`small` by default); `body` draws it 6pt after the title. */
   countVariant?: TextVariant;
   subtitle?: string;
-  subtitleTone?: "green" | "amber" | "muted";
+  subtitleTone?: "green" | "warning" | "muted";
   layout?: Layout;
   inset?: number;
   /** Right padding when the trailing control carries its own inset (a phone's 40pt button). */

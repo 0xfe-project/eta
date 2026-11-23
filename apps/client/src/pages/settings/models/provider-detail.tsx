@@ -207,7 +207,7 @@ export function ProviderDetail(props: {
         <If when={check()}>
           <View style={{ ...row, gap: 6 }}>
             <StatusDot
-              color={check()?.state === "ok" ? c().green : c().amber}
+              color={check()?.state === "ok" ? c().green : c().warning}
             />
             <Label variant="small" tone="mutedInk">
               {check()?.state === "ok"

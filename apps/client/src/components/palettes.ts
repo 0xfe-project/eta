@@ -121,13 +121,14 @@ function mix(color: string, base: string, amount: number) {
 
 function colors(
   f: Omit<Flavored, "surface1">,
-  shades: Pick<Colors, "shade" | "modalShade" | "sheetShade">,
+  scrims: Pick<Colors, "scrim" | "sheetScrim">,
 ): Colors {
   const fill = (color: string) => mix(color, f.base, 0.15);
+  const selected = f.surface0;
   return {
     canvas: f.base,
     surface: f.mantle,
-    selected: f.surface0,
+    selected,
     ink: f.text,
     muted: f.subtext0,
     mutedInk: f.subtext1,
@@ -140,31 +141,33 @@ function colors(
     blueFill: fill(f.blue),
     green: f.green,
     greenFill: fill(f.green),
-    amber: f.yellow,
-    amberFill: fill(f.yellow),
-    warning: f.peach,
+    // What was amber: the warning that reads (a status, a line of text) is yellow; its ink and the
+    // warning bar's line stay peach.
+    warning: f.yellow,
     warningInk: f.peach,
+    warningFill: fill(f.yellow),
+    warningLine: `${f.peach}66`,
     red: f.red,
     redFill: fill(f.red),
     ring: f.overlay2,
-    ...shades,
+    selectedSoft: `${selected}80`,
+    overlay: `${f.text}08`,
+    ...scrims,
     highlight: mix(f.yellow, f.base, 0.35),
   };
 }
 
 export const catppuccin = {
   light: colors(latte, {
-    shade: "#00000020",
-    modalShade: "#0000001e",
-    sheetShade: "#4c4f6929",
+    scrim: "#0000001e",
+    sheetScrim: "#4c4f6929",
   }),
   dark: Object.fromEntries(
     flavors.map((name) => [
       name,
       colors(dark[name], {
-        shade: "#00000080",
-        modalShade: "#00000048",
-        sheetShade: `${dark[name].base}99`,
+        scrim: "#00000048",
+        sheetScrim: `${dark[name].base}99`,
       }),
     ]),
   ) as Record<Flavor, Colors>,
@@ -178,14 +181,12 @@ export const shared = Object.fromEntries(
 function sharedTheme(t: { light: ThemeColors; dark: ThemeColors }) {
   return {
     light: colors(t.light, {
-      shade: "#00000020",
-      modalShade: "#0000001e",
-      sheetShade: `${t.light.text}29`,
+      scrim: "#0000001e",
+      sheetScrim: `${t.light.text}29`,
     }),
     dark: colors(t.dark, {
-      shade: "#00000080",
-      modalShade: "#00000048",
-      sheetShade: `${t.dark.base}99`,
+      scrim: "#00000048",
+      sheetScrim: `${t.dark.base}99`,
     }),
   };
 }

@@ -17,6 +17,7 @@ import {
 import { Icon, Label } from "./text";
 import {
   colors,
+  densityDefaults,
   focusRing,
   fontFamily,
   Fonts,
@@ -60,6 +61,8 @@ export function Button(props: {
   onPress: () => void;
 }) {
   const color = colors();
+  const density = densityDefaults();
+  const size = () => props.size ?? density().button;
   const picker = pickerTarget(
     "Button",
     "apps/client/src/components/controls.tsx",
@@ -104,8 +107,8 @@ export function Button(props: {
         justifyContent: "center",
         gap: 4,
         flexShrink: 0,
-        height: props.size ?? 24,
-        minWidth: props.size ?? 24,
+        height: size(),
+        minWidth: size(),
         paddingHorizontal: props.iconOnly ? 3 : 8,
         borderWidth: ghost() ? 0 : 1,
         borderColor: props.selected
@@ -130,7 +133,7 @@ export function Button(props: {
         <Icon
           name={props.icon!}
           tone={textTone()}
-          size={props.iconSize ?? 12}
+          size={props.iconSize ?? density().buttonIcon}
         />
       </If>
       <If when={!props.iconOnly}>

@@ -274,7 +274,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                       }}
                     >
                       <StatusDot
-                        color={source().models.length ? c().green : c().amber}
+                        color={source().models.length ? c().green : c().warning}
                       />
                       <Label variant="small" tone="mutedInk">
                         {source().models.length

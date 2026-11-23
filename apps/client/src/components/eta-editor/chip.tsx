@@ -31,7 +31,7 @@ export function Chip(props: {
   detail?: string;
   /** A state after the label: "uploading…", "failed · retry". */
   status?: string;
-  tone?: "ink" | "amber" | "red";
+  tone?: "ink" | "warning" | "red";
   /** Shown on hover (desktop): the whole reason of a failure, or the picture of an image. */
   tooltip?: string | JSX.Element;
   /** The pointer over the block's body ("zoom-in" for a picture that opens). */
@@ -84,7 +84,7 @@ export function Chip(props: {
           ? c().ink
           : props.tone === "red"
             ? c().red
-            : props.tone === "amber"
+            : props.tone === "warning"
               ? c().warning
               : c().strong,
         backgroundColor: props.tone === "red" ? c().redFill : c().selected,
@@ -127,7 +127,7 @@ export function Chip(props: {
           {text(
             props.tone === "red"
               ? c().red
-              : props.tone === "amber"
+              : props.tone === "warning"
                 ? c().warningInk
                 : c().muted,
             props.status!,

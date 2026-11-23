@@ -17,7 +17,7 @@ function closeTopModal() {
 export function Modal(props: {
   title: string;
   subtitle?: string;
-  subtitleTone?: "green" | "amber" | "muted";
+  subtitleTone?: "green" | "warning" | "muted";
   width?: number;
   height?: ViewStyle["height"];
   phone?: boolean;
@@ -88,8 +88,8 @@ export function Modal(props: {
       backgroundColor: props.phonePage
         ? color().canvas
         : props.phone || props.side || tablet()
-          ? color().sheetShade
-          : color().modalShade,
+          ? color().sheetScrim
+          : color().scrim,
       backdropFilter: blur ? "blur(3px)" : undefined,
       // A solid mask keeps Apple's blur while removing the system material tint.
       maskImage:

@@ -63,7 +63,7 @@ export function recentResult(
   return now - at < RESULT_WINDOW ? (status as UpgradeResult) : undefined;
 }
 
-export type ResultTone = "green" | "red" | "amber" | "faint";
+export type ResultTone = "green" | "red" | "warning" | "faint";
 
 export function resultTone(result: UpgradeResult): ResultTone {
   switch (result.state) {
@@ -75,7 +75,7 @@ export function resultTone(result: UpgradeResult): ResultTone {
     case "cancelled":
       return "faint";
     default:
-      return "amber";
+      return "warning";
   }
 }
 

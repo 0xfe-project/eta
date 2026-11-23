@@ -1,0 +1,24 @@
+# A colour written in place of a token: a string with a hex colour or rgb()/rgba(), or a token with
+# an alpha pasted on (`${c().warning}1f`); or such a value in an arm of a ternary or of `??` / `||`.
+id: design-color
+language: tsx
+rule:
+  any:
+    - kind: string
+      regex: (#[0-9a-fA-F]{3,8}\b|rgba?\()
+    - kind: template_string
+      regex: (#[0-9a-fA-F]{3,8}\b|rgba?\(|\}[0-9a-fA-F]{2}`$)
+    - kind: parenthesized_expression
+      has:
+        matches: design-color
+    - kind: ternary_expression
+      any:
+        - has: { field: consequence, matches: design-color }
+        - has: { field: alternative, matches: design-color }
+    - kind: binary_expression
+      has:
+        field: operator
+        regex: ^(\?\?|\|\||&&)$
+      any:
+        - has: { field: left, matches: design-color }
+        - has: { field: right, matches: design-color }

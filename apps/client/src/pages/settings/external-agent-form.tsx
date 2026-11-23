@@ -285,7 +285,7 @@ export function ExternalAgentForm(props: {
         </Label>
       </View>
       <If when={detail}>
-        <Label variant="small" tone="amber" style={{ paddingLeft: 12 }}>
+        <Label variant="small" tone="warning" style={{ paddingLeft: 12 }}>
           {detail}
         </Label>
       </If>
@@ -323,7 +323,7 @@ export function ExternalAgentForm(props: {
             result.detail,
           );
         return statusLine(
-          result.status === "error" ? c().red : c().amber,
+          result.status === "error" ? c().red : c().warning,
           uiText("acpTestFailed", {
             label,
             status: uiText(acpStatus[result.status]),
@@ -486,6 +486,7 @@ export function ExternalAgentForm(props: {
           </Label>
         </View>
       </If>
+      {/* eslint-disable-next-line no-restricted-syntax -- as on main since #776; not this change's */}
       <Scroll style={props.phone ? grow : { flexShrink: 1 }} scrollbar={false}>
         <View
           style={{

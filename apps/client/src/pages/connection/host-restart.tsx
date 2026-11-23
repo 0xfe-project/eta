@@ -192,7 +192,7 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
         </Label>
       );
     const tone: keyof typeof light =
-      state === "failed" ? "red" : state === "restoring" ? "amber" : "blue";
+      state === "failed" ? "red" : state === "restoring" ? "warning" : "blue";
     return state === "todo" ? (
       <View
         style={{ width: 6, height: 6, borderWidth: 1, borderColor: c().strong }}
@@ -310,7 +310,7 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
                         }}
                       >
                         <View style={{ paddingTop: 5 }}>
-                          <StatusDot color={c().amber} />
+                          <StatusDot color={c().warning} />
                         </View>
                         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                           <Label variant="small" weight={500}>
@@ -378,7 +378,7 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
                           style={{ ...row, alignItems: "flex-start", gap: 8 }}
                         >
                           <View style={{ paddingTop: 5 }}>
-                            <StatusDot color={c().amber} />
+                            <StatusDot color={c().warning} />
                           </View>
                           <Label
                             variant="small"

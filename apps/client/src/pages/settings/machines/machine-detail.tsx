@@ -41,7 +41,7 @@ export function MachineDetail(props: {
   const candidates = () =>
     host.tasks().filter((item) => item.status === "in_progress");
   const statusTone = () =>
-    props.item.status === "online" ? "green" : pending() ? "amber" : "muted";
+    props.item.status === "online" ? "green" : pending() ? "warning" : "muted";
   const statusLabel = () =>
     props.item.status === "online"
       ? uiText("machineOnline")
@@ -157,7 +157,7 @@ export function MachineDetail(props: {
                             props.item.build === "outdated"
                           }
                         >
-                          <StatusDot color={c().amber} />
+                          <StatusDot color={c().warning} />
                         </If>
                         <Label
                           variant="small"

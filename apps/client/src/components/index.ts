@@ -25,7 +25,7 @@ export {
   Palette,
   row,
   Screen,
-  sizes,
   textFaces,
   textStyle,
 } from "./theme";
+export { sizes } from "./tokens";

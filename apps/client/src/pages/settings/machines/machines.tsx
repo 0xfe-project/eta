@@ -87,7 +87,7 @@ function MachineRow(props: {
               : props.item.status === "pending" ||
                   props.item.build === "outdated" ||
                   props.item.build === "updating"
-                ? c().amber
+                ? c().warning
                 : c().green
         }
       />

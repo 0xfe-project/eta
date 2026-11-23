@@ -311,7 +311,7 @@ export function InviteAgents(props: {
         accessibilityLabel={title()}
         animation="none"
         style={fill}
-        backdropStyle={{ backgroundColor: c().sheetShade }}
+        backdropStyle={{ backgroundColor: c().sheetScrim }}
         closeOnEscape={!saving()}
         closeOnBackdropPress={!saving()}
         onOpenChange={({ open }) => {

@@ -18,6 +18,9 @@ export default {
   // Re-exports and plugin-facing API of the eta packages that nothing in this
   // repository imports yet; the host and the plugins consume them later.
   ignoreIssues: {
+    // The design tokens (#356): the client moves onto them batch by batch, so most are not
+    // imported yet.
+    "apps/client/src/components/tokens.ts": ["exports", "types"],
     "packages/eta-core/src/types/events.ts": ["types"],
     "packages/eta-harness/src/skills.ts": ["exports"],
     "packages/eta-harness/src/tools/edit.ts": ["exports"],

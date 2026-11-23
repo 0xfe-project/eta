@@ -80,7 +80,7 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
   });
   const summary = (
     name: SettingsSection,
-  ): { text: string; tone?: "amber" | "red" } => {
+  ): { text: string; tone?: "warning" | "red" } => {
     switch (name) {
       case "Agents":
         return { text: String(host.people().length) };
@@ -90,7 +90,7 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
         return count
           ? {
               text: uiText("settingsNeedsAttentionCount", { count }),
-              tone: "amber",
+              tone: "warning",
             }
           : { text: String(sources.length) };
       }
@@ -110,7 +110,7 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
         return needsLogin
           ? {
               text: uiText("settingsNeedsSignInCount", { count: needsLogin }),
-              tone: "amber",
+              tone: "warning",
             }
           : { text: String(new Set(servers.map((item) => item.server)).size) };
       }
@@ -130,7 +130,7 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
         if (invalid)
           return {
             text: uiText("settingsNeedsAttentionCount", { count: invalid }),
-            tone: "amber",
+            tone: "warning",
           };
         return {
           text: [

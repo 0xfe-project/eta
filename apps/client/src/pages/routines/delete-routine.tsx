@@ -37,7 +37,7 @@ export function DeleteRoutine(props: {
         {uiText("deleteRoutineBody")}
       </Label>
       <If when={props.running}>
-        <Label variant="small" tone="amber">
+        <Label variant="small" tone="warning">
           {uiText("deleteRoutineRunning")}
         </Label>
       </If>

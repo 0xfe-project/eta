@@ -155,7 +155,7 @@ export function MenuFrame(props: {
       open={props.disabled ? false : props.open}
       onOpenChange={(event) => change(event.open)}
       popupStyle={sheet() ? sheetStyle() : props.popupStyle}
-      backdropStyle={{ backgroundColor: c().sheetShade }}
+      backdropStyle={{ backgroundColor: c().sheetScrim }}
       trigger={props.trigger}
     >
       {content(true)}
@@ -197,7 +197,7 @@ export function MenuFrame(props: {
         open={opened()}
         onOpenChange={(event) => change(event.open)}
         popupStyle={{ ...sheetStyle(), maxHeight: "80%" }}
-        backdropStyle={{ backgroundColor: c().sheetShade }}
+        backdropStyle={{ backgroundColor: c().sheetScrim }}
       >
         <SmoothScroll role="menu" style={{ flexShrink: 1 }} scrollbar={false}>
           {content(false)}

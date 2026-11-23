@@ -38,7 +38,7 @@ export function UpdateSourceEditor(props: {
           <View style={{ padding: 16, gap: 12 }}>
             <Label
               variant="small"
-              tone={mode() === "upstream" ? "amber" : "muted"}
+              tone={mode() === "upstream" ? "warning" : "muted"}
             >
               {mode() === "upstream"
                 ? uiText("theHostInstallsAndRunsCode")

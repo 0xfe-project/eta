@@ -5,6 +5,7 @@ import { View } from "nsh";
 import { colors, Icon, Label, row } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { ownerLine } from "./creator";
 import {
   dependentsOf,
   isWaiting,
@@ -13,7 +14,6 @@ import {
   taskDay,
   taskTime,
 } from "./facts";
-import { ownerLine } from "./creator";
 import { progressColor, SubtreeGlyph, TaskGlyph, tones } from "./status";
 import { UsageLine } from "./usage";
 
@@ -203,16 +203,16 @@ export function BoardCard(props: {
               <If
                 when={!tablet()}
                 else={
-                  <Label variant="small" tone="amber" lines={1}>
+                  <Label variant="small" tone="warning" lines={1}>
                     {uiText("forYouToCheck2")}
                   </Label>
                 }
               >
                 <Label
                   variant="small"
-                  tone="amber"
+                  tone="warning"
                   style={{
-                    backgroundColor: c().amberFill,
+                    backgroundColor: c().warningFill,
                     paddingHorizontal: 5,
                   }}
                 >

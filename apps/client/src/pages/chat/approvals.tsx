@@ -476,7 +476,7 @@ function QuestionCard(props: { item: InteractionView }) {
     <View
       style={{
         borderWidth: 1,
-        borderColor: c().amber,
+        borderColor: c().warning,
         backgroundColor: c().canvas,
       }}
     >
@@ -493,7 +493,7 @@ function QuestionCard(props: { item: InteractionView }) {
       >
         <Label
           variant="caption"
-          tone="amber"
+          tone="warning"
           style={{ letterSpacing: 1.4, textTransform: "uppercase" }}
         >
           {uiText("confirmationRequestCaption")}
@@ -605,14 +605,14 @@ export function PendingStrip(props: {
             paddingVertical: 4,
             paddingHorizontal: 8,
             borderWidth: 1,
-            borderColor: c().amber,
+            borderColor: c().warning,
             backgroundColor: c().canvas,
           }}
         >
           <View style={{ ...row, gap: 8, paddingVertical: 2 }}>
             <Label
               variant="caption"
-              tone="amber"
+              tone="warning"
               style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
             >
               {host.agent(item().agentId)?.name ?? uiText("agent")}

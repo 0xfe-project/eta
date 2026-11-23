@@ -179,7 +179,7 @@ export function ArchiveGroup(props: {
         {uiText("archiveGroupBody")}
       </Label>
       <If when={running() > 0}>
-        <Label variant="small" tone="amber">
+        <Label variant="small" tone="warning">
           {running() === 1
             ? uiText("archiveGroupOneRunning")
             : uiText("archiveGroupRunning", { count: running() })}

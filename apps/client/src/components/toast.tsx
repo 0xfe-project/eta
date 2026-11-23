@@ -9,7 +9,7 @@ import { colors, row, Screen } from "./theme";
 // computer or tablet) is a layer over the window that nothing in the root can draw above, so each
 // layer that may be on top hosts a `ToastLayer`, and only the one opened last shows the toasts.
 
-type ToastTone = "green" | "blue" | "amber" | "red";
+type ToastTone = "green" | "blue" | "warning" | "red";
 
 export interface ToastNote {
   title: string;

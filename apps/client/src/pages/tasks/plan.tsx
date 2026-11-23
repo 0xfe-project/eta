@@ -375,7 +375,7 @@ function PlanCard(props: {
   };
   const tone = () =>
     props.task.status === "in_review"
-      ? "amber"
+      ? "warning"
       : props.task.status === "in_progress"
         ? "blue"
         : "muted";

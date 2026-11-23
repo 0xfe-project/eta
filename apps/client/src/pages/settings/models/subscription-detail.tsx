@@ -186,7 +186,7 @@ export function SubscriptionDetail(props: {
         )}
       </Each>
       <If when={failed()}>
-        <Label variant="small" tone="amber">
+        <Label variant="small" tone="warning">
           {uiText("modelReadFailed")}
         </Label>
       </If>

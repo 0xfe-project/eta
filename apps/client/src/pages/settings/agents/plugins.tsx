@@ -57,7 +57,7 @@ export function AgentPlugins(props: { form: AgentForm }) {
           label: phoneEditor()
             ? uiText("pluginNeedsConfiguring")
             : uiText("pluginNeedsSetup"),
-          color: c().amber,
+          color: c().warning,
         };
   return (
     <View>

@@ -133,7 +133,7 @@ export function BalanceSummary(props: { id: string }) {
         </If>
       </If>
       <If when={value()?.partial && age() < 1_800_000}>
-        <Label variant="small" tone="amber">
+        <Label variant="small" tone="warning">
           {[value()?.failedCurrencies?.join(", "), uiText("modelReadPartial")]
             .filter(Boolean)
             .join(" · ")}
