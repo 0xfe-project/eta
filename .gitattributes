@@ -1,0 +1,4 @@
+# Repository files are stored and checked out with LF, matching .editorconfig.
+# `dprint.json` also pins `newLineKind: "lf"` so formatters do not reintroduce
+# CRLF on Windows checkouts.
+* text=auto eol=lf
