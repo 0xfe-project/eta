@@ -9,8 +9,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EncryptedCredentialTable } from "../src/credentials/table";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { Composio } from "../src/plugins/composio";
+import { CatalogCache } from "../src/plugins/market-cache";
 import { Plugins } from "../src/plugins/service";
 import { SettingStore } from "../src/settings/store";
+
+/** What a Composio gets with adding: not there yet, so the tests name it here. */
+interface Adding {
+  add: (slug: string) => Promise<{ status: string }>;
+  remove: (slug: string) => { removed: boolean };
+  added: () => string[];
+}
 
 const KEY = "ck_test_SECRET_0123456789";
 const OTHER_KEY = "ck_test_OTHER_9876543210";
@@ -28,6 +36,8 @@ interface Seen {
 }
 let seen: Seen[];
 let accounts: string[];
+/** What the fake lists at GET /api/v3/toolkits. */
+let toolkits: unknown[];
 let sessions: Map<string, { slug: string; config: unknown }>;
 let counter: number;
 /** What the fake puts in "config" of an answer; the default echoes the request. */
@@ -50,6 +60,7 @@ const answer = (id: string, config: unknown, status = 200) =>
 beforeEach(() => {
   seen = [];
   accounts = [];
+  toolkits = [];
   sessions = new Map();
   counter = 0;
   echo = (body) => ({
@@ -72,6 +83,8 @@ beforeEach(() => {
         key: request.headers.get("x-api-key"),
         body,
       });
+      if (request.method === "GET" && url.pathname === "/api/v3/toolkits")
+        return json({ items: toolkits, next_cursor: null });
       if (url.pathname === "/api/v3/connected_accounts")
         return json({
           items: accounts.map((slug, index) => ({
@@ -117,14 +130,16 @@ function open(options: { now?: () => number } = {}) {
   applyMigrations(db, loadMigrations());
   db.exec("PRAGMA foreign_keys = OFF");
   const settings = new SettingStore(db);
+  const cache = new CatalogCache(db, { maxRowBytes: 1024 * 1024 });
   const start = () =>
     new Composio({
       db,
       key: Buffer.alloc(32, 7),
       settings,
+      cache,
       baseUrl: base(),
       ...options,
-    });
+    }) as Composio & Adding;
   const composio = start();
   composio.setKey(KEY);
   const stored = (slug: string) =>
@@ -515,5 +530,196 @@ describe("a Composio toolkit as a plugin of the agents", () => {
       value: KEY,
       label: expect.stringContaining("composio"),
     });
+  });
+});
+
+/* ------------------------------------------------ a toolkit that needs no sign-in */
+
+const kit = (slug: string, schemes: string[], none = false) => ({
+  slug,
+  name: slug.toUpperCase(),
+  auth_schemes: schemes,
+  composio_managed_auth_schemes: none ? [] : schemes,
+  no_auth: none,
+  meta: { description: `the ${slug} toolkit` },
+});
+/** What the host's list says: hackernews needs no sign-in, gmail is OAuth, odd has a scheme eta does not know. */
+const list = async (composio: Composio) => {
+  toolkits = [
+    kit("hackernews", ["NO_AUTH"], true),
+    kit("gmail", ["OAUTH2"]),
+    kit("odd", ["SOMETHING_NEW"]),
+  ];
+  await composio.read(composio.source(), "refresh");
+  seen.length = 0;
+};
+const signIn = () =>
+  seen.filter(
+    (one) =>
+      one.path.startsWith("/api/v3/auth_configs") ||
+      one.path.startsWith("/api/v3/connected_accounts/link"),
+  );
+
+describe("adding a toolkit that needs no sign-in", () => {
+  it.fails("asks Composio for no auth config and no link, and makes its one session", async () => {
+    const { composio, settings } = open();
+    await list(composio);
+    expect(await composio.add("hackernews")).toEqual({ status: "ready" });
+    expect(signIn()).toHaveLength(0);
+    expect(posts()).toHaveLength(1);
+    const sent = JSON.parse(posts()[0]!.body) as Record<string, any>;
+    // The body is fixed. Whether Composio accepts such a session for a no-auth toolkit is not verified.
+    expect(sent).toMatchObject({
+      toolkits: { enable: ["hackernews"] },
+      manage_connections: { enable_connection_removal: false },
+      workbench: { enable: false },
+    });
+    expect(sent.user_id).toBe(settings.get("plugins.composioUserId"));
+    expect(composio.added()).toEqual(["hackernews"]);
+    expect(composio.virtuals()).toMatchObject([
+      { name: "@composio/hackernews", slug: "hackernews", state: "ready" },
+    ]);
+    expect(composio.has("@composio/hackernews")).toBe(true);
+  });
+
+  it.fails("refuses a toolkit that signs in, one the list does not know, and a name that is no slug: no request, nothing kept", async () => {
+    const { composio, settings } = open();
+    await list(composio);
+    for (const slug of ["gmail", "odd", "ghost", "../x"])
+      await expect(composio.add(slug)).rejects.toThrow();
+    expect(seen).toHaveLength(0);
+    expect(composio.added()).toEqual([]);
+    expect(settings.get("plugins.composioAdded")).toBeUndefined();
+  });
+
+  it.fails("needs a key: a status, no request, nothing kept", async () => {
+    const { composio, settings } = open();
+    await list(composio);
+    composio.clearKey();
+    expect(await composio.add("hackernews")).toEqual({ status: "needs_key" });
+    expect(seen).toHaveLength(0);
+    expect(settings.get("plugins.composioAdded")).toBeUndefined();
+  });
+
+  it.fails("is kept across a restart, and its session is found again with one read", async () => {
+    const { composio, start } = open();
+    await list(composio);
+    await composio.add("hackernews");
+    const again = start();
+    expect(again.added()).toEqual(["hackernews"]);
+    seen.length = 0;
+    await again.follow();
+    await vi.waitFor(() =>
+      expect(again.has("@composio/hackernews")).toBe(true),
+    );
+    expect(posts()).toHaveLength(0);
+    expect(gets()).toHaveLength(1);
+  });
+
+  it.fails("is not dropped when the connected accounts are read: it is made for what is added as well as what is connected", async () => {
+    const { composio } = open();
+    await list(composio);
+    accounts = ["gmail"];
+    await composio.add("hackernews");
+    await composio.follow();
+    await vi.waitFor(() => expect(composio.has("@composio/gmail")).toBe(true));
+    expect(composio.has("@composio/hackernews")).toBe(true);
+    expect(composio.virtuals().map((one) => one.slug)).toEqual([
+      "gmail",
+      "hackernews",
+    ]);
+  });
+
+  it.fails("is removed without a request to Composio: its session and kept id go, the list loses it", async () => {
+    const { composio, settings, stored } = open();
+    await list(composio);
+    await composio.add("hackernews");
+    expect(stored("hackernews")).toBe("sess-1");
+    seen.length = 0;
+    expect(composio.remove("hackernews")).toEqual({ removed: true });
+    expect(seen).toHaveLength(0);
+    expect(composio.added()).toEqual([]);
+    expect(settings.get("plugins.composioAdded")).toBeUndefined();
+    expect(stored("hackernews")).toBeUndefined();
+    expect(composio.virtuals()).toEqual([]);
+    expect(composio.remove("hackernews")).toEqual({ removed: false });
+    await composio.follow();
+    expect(composio.virtuals()).toEqual([]);
+  });
+
+  it.fails("is removed from the list only for a slug that was added: a connected toolkit's session is not touched", async () => {
+    const { composio } = open();
+    await list(composio);
+    await composio.sync(["gmail"]);
+    expect(composio.remove("gmail")).toEqual({ removed: false });
+    expect(composio.has("@composio/gmail")).toBe(true);
+  });
+
+  it.fails("keeps the list when the key goes, and makes the session again when a key comes back", async () => {
+    const { composio, settings, stored } = open();
+    await list(composio);
+    await composio.add("hackernews");
+    composio.clearKey();
+    expect(composio.virtuals()).toEqual([]);
+    expect(stored("hackernews")).toBeUndefined();
+    expect(settings.get("plugins.composioAdded")).toEqual(["hackernews"]);
+    expect(composio.added()).toEqual([]);
+    composio.setKey(KEY);
+    await composio.follow();
+    await vi.waitFor(() =>
+      expect(composio.has("@composio/hackernews")).toBe(true),
+    );
+    expect(composio.added()).toEqual(["hackernews"]);
+  });
+
+  it.fails("is not trusted when Composio echoes another toolkit list: no plugin, and the self-check is the one the connected ones have", async () => {
+    const { composio } = open();
+    await list(composio);
+    echo = (body) => ({
+      toolkits: { enabled: [...body.toolkits.enable, "github"] },
+      manage_connections: { enable_connection_removal: false },
+      workbench: { enable: false },
+    });
+    expect(await composio.add("hackernews")).toEqual({ status: "ready" });
+    expect(composio.virtuals()).toMatchObject([
+      { slug: "hackernews", state: "error" },
+    ]);
+    expect(composio.has("@composio/hackernews")).toBe(false);
+  });
+
+  it.fails("is an agent's choice like any plugin's: the choice stays when it is removed", async () => {
+    const { composio, db } = open();
+    await list(composio);
+    const plugins = new Plugins({
+      db,
+      dataDir: "unused",
+      key: Buffer.alloc(32, 1),
+      agents: { get: () => ({ runtime: "eta" }) } as never,
+      machines: { list: () => [] } as never,
+      hub: { onReady: () => {} } as never,
+      changed: () => {},
+      warn: () => {},
+    });
+    plugins.setVirtual(composio);
+    await composio.add("hackernews");
+    expect(plugins.canEnable("@composio/hackernews")).toBe(true);
+    plugins.rows.setEnabled("ada", ["@composio/hackernews"]);
+    expect(plugins.mcpSourcesFor("ada")).toHaveLength(1);
+    composio.remove("hackernews");
+    expect(plugins.mcpSourcesFor("ada")).toEqual([]);
+    expect(plugins.rows.enabled("ada")).toEqual(["@composio/hackernews"]);
+  });
+
+  it.fails("has the key in no answer and no kept list", async () => {
+    const { composio, settings } = open();
+    await list(composio);
+    await composio.add("hackernews");
+    expect(
+      JSON.stringify([
+        composio.virtuals(),
+        composio.added(),
+        settings.get("plugins.composioAdded"),
+      ]),
+    ).not.toContain(KEY);
   });
 });

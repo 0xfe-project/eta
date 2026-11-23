@@ -479,6 +479,48 @@ describe("the link", () => {
     expect(requests).toHaveLength(0);
   });
 
+  it.fails("does not ask for an auth config or a link for a toolkit that needs no sign-in, and still does for any other kind", async () => {
+    const { composio, market } = open();
+    composio.setKey(KEY);
+    handler = () =>
+      json({
+        items: [
+          item("hackernews", {
+            auth_schemes: ["NO_AUTH"],
+            composio_managed_auth_schemes: [],
+            no_auth: true,
+          }),
+          item("exa", {
+            auth_schemes: ["API_KEY"],
+            composio_managed_auth_schemes: [],
+          }),
+          item("gmail"),
+          item("odd", {
+            auth_schemes: ["SOMETHING_NEW"],
+            composio_managed_auth_schemes: [],
+          }),
+        ],
+        next_cursor: null,
+      });
+    await composioOf(market);
+    requests.length = 0;
+    handler = link();
+    await expect(composio.link("hackernews")).rejects.toThrow();
+    expect(requests).toHaveLength(0);
+    for (const slug of ["exa", "gmail", "odd", "not-in-the-list"]) {
+      requests.length = 0;
+      expect(await composio.link(slug)).toBe(
+        "https://connect.composio.dev/link/abc",
+      );
+      expect(
+        requests.some((r) => r.path.startsWith("/api/v3/auth_configs")),
+      ).toBe(true);
+      expect(
+        requests.some((r) => r.path === "/api/v3/connected_accounts/link"),
+      ).toBe(true);
+    }
+  });
+
   it("uses the managed auth config the project has, and returns Composio's https address", async () => {
     const { composio } = open();
     composio.setKey(KEY);
