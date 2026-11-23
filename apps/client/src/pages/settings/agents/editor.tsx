@@ -167,6 +167,17 @@ export function AgentEditor(props: AgentEditorProps) {
             </Label>
           </If>
         </View>
+        <If when={creating && props.onTemplates}>
+          <Button
+            label={localizedText("From a template", "从模版创建")}
+            icon="book"
+            tone="ghost"
+            size={24}
+            disabled={busy()}
+            style={{ gap: 6, paddingHorizontal: 8 }}
+            onPress={() => props.onTemplates?.()}
+          />
+        </If>
         <If
           when={!phoneEditor()}
           else={
