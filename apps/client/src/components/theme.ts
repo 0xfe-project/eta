@@ -4,6 +4,11 @@ import { context } from "nsh";
 import dwg from "../../assets/AKRDWGSCNFM-Regular.woff2";
 import inter from "../../assets/InterVariable.woff2";
 import { catppuccin, shared } from "./palettes";
+// One family, three real faces: an imported font registers under the family name and the weight
+// inside its file, so these add Light (300) and Bold (700) to the Regular above, and a `fontWeight`
+// of 600 or 700 draws Bold instead of a bold the platform synthesizes (THIRD_PARTY_NOTICES.md).
+import "../../assets/AKRDWGSCNFM-Light.woff2";
+import "../../assets/AKRDWGSCNFM-Bold.woff2";
 
 export const light = {
   canvas: "#ffffff",
