@@ -112,3 +112,19 @@ test("saving an empty key asks for one", async () => {
   await app.press("label:Save key");
   expect(app.shows("Enter a key first.")).toBe(true);
 });
+
+test("the Composio switch is off and cannot be used until a key is set, and says why", async () => {
+  const app = await open("./fixtures/plugin-settings-composio.tsx", OPEN);
+  await app.waitFor("text:No key is set");
+  expect(app.enabled("label:Use Composio")).toBe(false);
+  expect(app.shows("Enter an API key first.")).toBe(true);
+  await app.type(KEY_FIELD, "ak_secret_value");
+  await app.press("label:Save key");
+  await app.waitFor("text:A key is set");
+  expect(app.enabled("label:Use Composio")).toBe(true);
+  expect(app.shows("Enter an API key first.")).toBe(false);
+  await app.press("label:Clear key");
+  await app.waitFor("text:No key is set");
+  expect(app.enabled("label:Use Composio")).toBe(false);
+  expect(app.shows("Enter an API key first.")).toBe(true);
+});

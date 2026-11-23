@@ -4,11 +4,12 @@ import { createHost, Host } from "../../src/services/host";
 
 /** A host that keeps a Composio key the way the real one does: it says only that one is set. */
 let hasKey = false;
-const sources = [
+/** The Composio source is on only with a key, as the real host lists it (unless switched off by hand). */
+const sources = () => [
   {
     name: "Composio",
     url: "composio",
-    enabled: true,
+    enabled: hasKey,
     kind: "composio" as const,
   },
   { name: "", url: "https://plain.test/marketplace.json", enabled: true },
@@ -22,7 +23,7 @@ mount(() => {
       if (method === "composioSetKey") hasKey = (args.key ?? "") !== "";
       if (method === "composioClearKey") hasKey = false;
       if (method.startsWith("composio")) return { hasKey };
-      return { sources, proxy: "" };
+      return { sources: sources(), proxy: "" };
     },
     action: async <T,>(run: () => Promise<T>) => await run(),
   });
