@@ -798,3 +798,54 @@ describe("the kept list", () => {
     expect(kept.toolkits?.[0]?.logo).toBeNull();
   });
 });
+
+describe("the source without a key", () => {
+  const enabledOf = (market: Market) =>
+    market.settings().sources.find((one) => one.kind === "composio")!.enabled;
+  const listed = async (market: Market) =>
+    (await market.catalog("cached")).sources.some(
+      (one) => one.source.kind === "composio",
+    );
+
+  it("is off while there is no key, and the market does not ask it", async () => {
+    const { market, composio } = open();
+    expect(composio.source().enabled).toBe(false);
+    expect(enabledOf(market)).toBe(false);
+    expect(await listed(market)).toBe(false);
+    expect(
+      (await market.catalog()).sources.map((s) => s.source.kind),
+    ).not.toContain("composio");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("is on once a key is saved, and off again once it is cleared", async () => {
+    const { market, composio } = open();
+    composio.setKey(KEY);
+    expect(enabledOf(market)).toBe(true);
+    expect(await listed(market)).toBe(true);
+    composio.clearKey();
+    expect(enabledOf(market)).toBe(false);
+    expect(await listed(market)).toBe(false);
+  });
+
+  it("stays off with a key when the user switched it off, and the setting is not written by the missing key", async () => {
+    const { market, composio, settings } = open();
+    // No key: nothing is written to the setting to make it off.
+    expect(enabledOf(market)).toBe(false);
+    expect(settings.get("plugins.composioEnabled")).toBeUndefined();
+    composio.setKey(KEY);
+    expect(settings.get("plugins.composioEnabled")).toBeUndefined();
+    market.setSourceEnabled(COMPOSIO_URL, false);
+    expect(enabledOf(market)).toBe(false);
+    expect(await listed(market)).toBe(false);
+    // The manual off is the user's: a new key does not undo it, and clearing the key keeps it.
+    composio.setKey(KEY + "x");
+    expect(enabledOf(market)).toBe(false);
+    composio.clearKey();
+    expect(settings.get("plugins.composioEnabled")).toBe(false);
+    market.setSourceEnabled(COMPOSIO_URL, true);
+    expect(enabledOf(market)).toBe(false);
+    composio.setKey(KEY);
+    expect(enabledOf(market)).toBe(true);
+  });
+});
