@@ -502,7 +502,7 @@ function PluginCard(props: {
                 {props.item.version ?? ""}
               </Label>
             </If>
-            <Status item={props.item} />
+            <Status item={props.item} hideOff />
           </View>
         </View>
       </View>

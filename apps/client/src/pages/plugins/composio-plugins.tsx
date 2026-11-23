@@ -27,7 +27,8 @@ export function useComposioPlugins() {
 
 /**
  * The user's switch for one connected toolkit, for every agent: the same `setEnabled` and the same
- * words as any plugin's. A toolkit whose session did not check out has no switch and says why.
+ * words as any plugin's. A toolkit whose session did not check out has no switch; its card says why
+ * in its badge.
  */
 export function ComposioPluginSwitch(props: {
   view: ComposioPluginView;
@@ -38,16 +39,7 @@ export function ComposioPluginSwitch(props: {
   const words = () =>
     props.view.enabled ? uiText("pluginSwitch") : uiText("pluginOffForAll");
   return (
-    <If
-      when={props.view.state === "ready"}
-      else={
-        <View testID="composio-plugin-error" style={{ flexShrink: 1 }}>
-          <Label variant="caption" tone="muted">
-            {uiText("composioPluginError")}
-          </Label>
-        </View>
-      }
-    >
+    <If when={props.view.state === "ready"}>
       <View
         testID="composio-plugin-switch"
         style={{ ...row, gap: 8, flexShrink: 0 }}

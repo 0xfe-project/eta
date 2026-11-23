@@ -2,6 +2,7 @@ import type { PluginResults } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import { effect, openUrl, signal, untracked, View } from "nsh";
 import { Button, colors, Label, row } from "../../components";
+import { hint } from "../../components/controls";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { ComposioDisconnect, linkAndOpen } from "./composio-actions";
@@ -148,24 +149,36 @@ export function ComposioConnected(props: {
       {actions(item)}
     </View>
   );
-  /** The connected mark, at the top right of a card, on the line of the name: the signed-in badge's colours. */
-  const mark = () => (
-    <View
-      testID="composio-connected"
-      style={{
-        flexShrink: 0,
-        paddingHorizontal: 6,
-        paddingVertical: 1,
-        backgroundColor: c()[authStyle("signed_in").fill],
-        borderWidth: 1,
-        borderColor: c()[authStyle("signed_in").edge] + BADGE_EDGE_ALPHA,
-      }}
-    >
-      <Label variant="caption" tone={authStyle("signed_in").tone} lines={1}>
-        {uiText("composioConnected")}
-      </Label>
-    </View>
-  );
+  /**
+   * The one status badge of a card, at the top right on the line of the name, in the colours of the
+   * plugin cards' sign-in badge (`authStyle`): green "Connected" (signed_in); red "Unavailable"
+   * (expired) when its session did not check out, with the reason in its tooltip. Nothing goes
+   * under the name.
+   */
+  const mark = (item: Connected) => {
+    const failed = () => viewOf(item.slug)?.state === "error";
+    const look = () => authStyle(failed() ? "expired" : "signed_in");
+    return (
+      <View
+        testID={failed() ? "composio-plugin-error" : "composio-connected"}
+        tooltip={failed() ? hint(uiText("composioPluginError"), c) : undefined}
+        style={{
+          flexShrink: 0,
+          paddingHorizontal: 6,
+          paddingVertical: 1,
+          backgroundColor: c()[look().fill],
+          borderWidth: 1,
+          borderColor: c()[look().edge] + BADGE_EDGE_ALPHA,
+        }}
+      >
+        <Label variant="caption" tone={look().tone} lines={1}>
+          {failed()
+            ? uiText("composioUnavailable")
+            : uiText("composioConnected")}
+        </Label>
+      </View>
+    );
+  };
   /** A card the user switched off for every agent is shown one step fainter. */
   const faint = (item: Connected) => ({
     opacity: viewOf(item.slug)?.enabled === false ? 0.55 : 1,
@@ -234,7 +247,7 @@ export function ComposioConnected(props: {
                         <View style={{ flex: 1, minWidth: 0 }}>
                           <PluginName name={item().name} />
                         </View>
-                        {mark()}
+                        {mark(item())}
                       </View>
                       <Label
                         variant="small"
@@ -282,7 +295,7 @@ export function ComposioConnected(props: {
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <PluginName name={item().name} />
                     </View>
-                    {mark()}
+                    {mark(item())}
                   </View>
                   <View
                     style={{

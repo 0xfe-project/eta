@@ -381,6 +381,7 @@ export const pluginsMessages = {
     "已在 Composio 连接({{count}})",
   ],
   composioPluginSwitch: ["Enabled: {{name}}", "已启用:{{name}}"],
+  composioUnavailable: ["Unavailable", "不可用"],
   composioPluginError: [
     "Its session did not check out, so no agent gets it.",
     "它的会话没有通过检查,智能体暂时用不了。",
