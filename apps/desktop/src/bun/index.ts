@@ -66,6 +66,7 @@ import Electrobun, {
 import { readConnection, writeConnection } from "./connection";
 import { HOST_WRAPPER } from "./host";
 import { hostHome, recordedHost, runningHost } from "./installed";
+import { launchEnvironment } from "./launch-env";
 import { capabilities, startNativeBridge } from "./native";
 import { configureWindowsWindow } from "./platform/windows";
 import { pagePreload, relayedRequest, relayToBridge } from "./preload";
@@ -303,11 +304,10 @@ async function startHost(
   let file: string | undefined;
   const home = hostHome(homedir());
   const path = packaged ? await loginShellPath() : undefined;
-  // The host keeps its data in ~/.eta; HOME is the only way to point it elsewhere.
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    ...(path === undefined ? {} : { PATH: path }),
-  };
+  // The host keeps its data in ~/.eta, and HOME is the only way to point it elsewhere: it is passed
+  // on untouched. What is put right on the way is PATH, when the login shell answered, and the user
+  // names macOS may have left out (./launch-env.ts).
+  const env = launchEnvironment(process.env, path);
   if (packaged) {
     file = join(home, `eta-host${EXE}`);
     if (!existsSync(file)) {
