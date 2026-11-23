@@ -5,10 +5,20 @@ import { expect, open, test } from "nsh/test";
 const fixture = "./fixtures/user-message.tsx";
 
 test("a sent picture opens large and closes again", async () => {
-  const app = await open(fixture, { width: 900, height: 600, locale: "en-US" });
-  await app.waitFor("label:Enlarge shot.png");
+  const app = await open(fixture, {
+    width: 900,
+    height: 600,
+    locale: "en-US",
+    network: {
+      "GET http://example.invalid/attachments/a1": {
+        headers: { "content-type": "image/png" },
+        body: "png",
+      },
+    },
+  });
+  await app.waitFor("label:View picture shot.png · 70 B");
   expect(app.shows("label:Close")).toBe(false);
-  await app.press("label:Enlarge shot.png");
+  await app.press("label:View picture shot.png · 70 B");
   await app.waitFor("label:Close");
   await app.press("label:Close");
   expect(app.shows("label:Close")).toBe(false);

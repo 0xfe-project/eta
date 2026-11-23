@@ -57,6 +57,34 @@ function MentionView(props: RichNodeViewProps) {
   );
 }
 
+/** Mentions where the text is shown: `@Opus` in blue; with `onOpen`, a press opens the member. */
+function mentionView(onOpen?: (id: string) => void): TextPlugin["view"] {
+  return {
+    extensions: [standIn(DOC_NODES.mention)],
+    renderCustom: {
+      [DOC_NODES.mention]: (node, view) => {
+        const label = node.attributes?.label ?? "";
+        const id = node.attributes?.id ?? "";
+        return (
+          <MentionChip
+            label={label}
+            variant={view.variant}
+            accessibilityLabel={uiText(onOpen ? "openMember" : "mention", {
+              name: label,
+            })}
+            onPress={onOpen && id ? () => onOpen(id) : undefined}
+          />
+        );
+      },
+    },
+  };
+}
+
+/** The mentions of a text that is only shown (a sent message): `onOpen` opens the member. */
+export function shownMentions(onOpen?: (id: string) => void): TextPlugin {
+  return { name: "mention", view: mentionView(onOpen) };
+}
+
 /**
  * `@` opens the list of members (and the project's files), `#` the board's tasks; picking one puts
  * a mention block in (`@Opus`, sent as the text `@Opus` plus its id in `mentions`), a file's path
@@ -74,6 +102,8 @@ export function mention(options: {
   describe?: (item: MenuItem) => string;
   /** Laid out to the full width of the box (tablet) rather than under the caret. */
   wide?: () => boolean;
+  /** Where the text is shown: a press on a mention opens its member, by id. */
+  onOpen?: (id: string) => void;
 }): TextPlugin {
   const menu = signal<
     (MenuState & { key: "mention" | "task"; from: number; to: number }) | null
@@ -142,20 +172,7 @@ export function mention(options: {
   }
   return {
     name: "mention",
-    view: {
-      extensions: [standIn(DOC_NODES.mention)],
-      renderCustom: {
-        [DOC_NODES.mention]: (node, view) => (
-          <MentionChip
-            label={node.attributes?.label ?? ""}
-            variant={view.variant}
-            accessibilityLabel={uiText("mention", {
-              name: node.attributes?.label ?? "",
-            })}
-          />
-        ),
-      },
-    },
+    view: mentionView(options.onOpen),
     editor: {
       extensions: [
         defineExtension({

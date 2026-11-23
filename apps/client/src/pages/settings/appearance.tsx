@@ -19,6 +19,7 @@ import { ElementPicking, pickerTarget } from "../../components/element-picker";
 import { flavors, paletteIds } from "../../components/palettes";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { languageChoices, LanguageSettings, useText } from "../../i18n";
+import { pictureModes, PictureModes } from "../../services/picture-mode";
 
 const themeLabels = {
   system: "system",
@@ -273,6 +274,7 @@ export function Appearance(props: AppearanceProps & { phone: boolean }) {
   const text = useText();
   const language = LanguageSettings();
   const picker = ElementPicking();
+  const pictures = PictureModes();
   return (
     <SmoothScroll style={grow} scrollbar={false}>
       <ChoiceRow
@@ -333,6 +335,17 @@ export function Appearance(props: AppearanceProps & { phone: boolean }) {
         value={props.chatWidth}
         name={(width) => text(widthLabels[width])}
         set={props.onChatWidth}
+      />
+      <ChoiceRow
+        title={text("picturesInMessages")}
+        hint={text("picturesInMessagesHint")}
+        phone={props.phone}
+        choices={pictureModes}
+        value={pictures.mode()}
+        name={(mode) =>
+          text(mode === "compact" ? "picturesCompact" : "picturesExpanded")
+        }
+        set={pictures.set}
       />
       <FontRow kind="interface" phone={props.phone} onFonts={props.onFonts} />
       <FontRow kind="mono" phone={props.phone} onFonts={props.onFonts} />

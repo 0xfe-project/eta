@@ -56,19 +56,41 @@ const LINE_END = String.fromCodePoint(KIND_BASE);
 const LINE_END_NODE = "etaLineEnd";
 const TOKENS = `[${String.fromCharCode(TOKEN_BASE)}-${String.fromCharCode(TOKEN_END)}]`;
 
-/** The extension that reads inline blocks of `kind` (a `DOC_NODES` name) back as custom nodes of
- * that name: the view half of a plugin whose editor half makes such blocks. */
-export function standIn(kind: string): MarkdownExtension {
-  return { name: kind, pattern: `${markOf(kind)}(${TOKENS})` };
-}
-
 /** What the view always reads: the ends of lines. */
 export const lineEnds: MarkdownExtension = {
   name: LINE_END_NODE,
   pattern: LINE_END,
 };
 
+const standIns = new WeakSet<MarkdownExtension>();
+
+/** The extension that reads inline blocks of `kind` (a `DOC_NODES` name) back as custom nodes of
+ * that name: the view half of a plugin whose editor half makes such blocks. */
+export function standIn(kind: string): MarkdownExtension {
+  const extension = { name: kind, pattern: `${markOf(kind)}(${TOKENS})` };
+  standIns.add(extension);
+  return extension;
+}
+
+/** The extensions the view needs to read `markdown` itself: a stand-in's only where a block of
+ * its kind is (most texts have none, and each extension is looked for in all of the text). */
+export function neededExtensions(
+  extensions: readonly MarkdownExtension[],
+  stands: readonly Stand[],
+): MarkdownExtension[] {
+  return extensions.filter(
+    (extension) =>
+      extension !== lineEnds &&
+      (!standIns.has(extension) ||
+        stands.some((stand) => stand.type === extension.name)),
+  );
+}
+
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+/** What a text as written would need changed: a line after a line, or a private use character. */
+const PLAIN_NOT = /[^\n]\n[^\n]|[\uE000-\uF8FF\u{F0000}-\u{FFFFD}]/u;
+const STARTS_BLOCK = /^ {0,3}(?:[-*+] |1[.)] |#{1,6}(?: |$))/;
+const HEADING = /^ {0,3}#{1,6}(?: |$)/;
 /** Lines a mark at the end would change: rules and setext underlines, table rows, link
  * definitions, and lines that already end in a break. */
 const KEEP = [
@@ -101,6 +123,9 @@ function markLineEnds(source: string): string {
     }
     const next = lines[at + 1]!;
     if (!line.trim() || !next.trim() || FENCE.test(next)) continue;
+    // The next line starts a block of its own (an item, a heading), or this one is a
+    // heading: there is no line of a paragraph to keep.
+    if (STARTS_BLOCK.test(next) || HEADING.test(line)) continue;
     if (KEEP.some((rule) => rule.test(line))) continue;
     lines[at] = line + LINE_END;
   }
@@ -112,6 +137,14 @@ export function viewSource(text: ShownText): {
   markdown: string;
   stands: Stand[];
 } {
+  // Most texts have nothing to stand in for and one line to a paragraph: they are as written.
+  if (
+    !text.files?.length &&
+    !text.blocks?.length &&
+    !(text.mentions?.length && text.text.includes("@")) &&
+    !PLAIN_NOT.test(text.text)
+  )
+    return { markdown: text.text, stands: [] };
   const { source, stands } = markdownSource(text);
   const tokens: string[] = [];
   for (const file of text.files ?? []) {
@@ -218,6 +251,29 @@ function inline(
   return out;
 }
 
+/** Where the parser could read a block's stand-in as code, or a line end matters: the view
+ * cannot read such Markdown itself (`viewDocument` puts them right). */
+const CODE_LIKE = /`|~~~|\]\(|<|(?:^|\n)(?: {4}|\t)/;
+
+/** Whether the view can read `markdown` itself, its blocks' custom nodes taken back one by one
+ * as they are drawn (`standNode`): no line of a paragraph to keep, no block where code is. */
+export function readsDirectly(markdown: string, stands: readonly Stand[]) {
+  return (
+    !markdown.includes(LINE_END) &&
+    (!stands.some((stand) => stand.type !== DOC_NODES.text) ||
+      !CODE_LIKE.test(markdown))
+  );
+}
+
+/** A custom node the view read from the Markdown itself, as `viewDocument` would have made it. */
+export function standNode(
+  node: TextViewCustomNode,
+  stands: readonly Stand[],
+): TextViewCustomNode {
+  const made = custom(node, stands);
+  return made.type === "custom" ? made : node;
+}
+
 /** A block's custom node: an inline block with the attributes of what it stands for. */
 function custom(
   node: TextViewCustomNode,
@@ -314,4 +370,125 @@ export function viewDocument(
         }
       : {}),
   };
+}
+
+/** A document with each inline node `swap` returns something for put in place of it (nothing: it
+ * goes; `undefined`: it stays). A paragraph left with only spaces goes. */
+export function swapInline(
+  document: TextViewDocument,
+  swap: (node: TextViewInline) => TextViewInline[] | undefined,
+): TextViewDocument {
+  const nodes = (list: readonly TextViewInline[]): TextViewInline[] =>
+    list.flatMap((node) => {
+      const swapped = swap(node);
+      if (swapped) return swapped;
+      switch (node.type) {
+        case "link":
+        case "strong":
+        case "emphasis":
+        case "strikethrough":
+        case "underline":
+        case "superscript":
+        case "subscript":
+        case "small":
+        case "highlight":
+          return [{ ...node, content: nodes(node.content) } as TextViewInline];
+        default:
+          return [node];
+      }
+    });
+  const blank = (list: readonly TextViewInline[]) =>
+    list.every(
+      (node) =>
+        node.type === "break" || (node.type === "text" && !node.text.trim()),
+    );
+  const walk = (list: readonly TextViewBlock[]): TextViewBlock[] =>
+    list.flatMap((node): TextViewBlock[] => {
+      switch (node.type) {
+        case "paragraph": {
+          const content = nodes(node.content);
+          return content.length !== node.content.length &&
+            blank(content) &&
+            !blank(node.content)
+            ? []
+            : [{ ...node, content }];
+        }
+        case "heading":
+          return [{ ...node, content: nodes(node.content) }];
+        case "blockquote":
+          return [{ ...node, children: walk(node.children) }];
+        case "list":
+          return [
+            {
+              ...node,
+              items: node.items.map((item) => ({
+                ...item,
+                children: walk(item.children),
+              })),
+            },
+          ];
+        case "table":
+          return [
+            {
+              ...node,
+              head: node.head.map((cell) => ({
+                ...cell,
+                content: nodes(cell.content),
+              })),
+              rows: node.rows?.map((row) =>
+                row.map((cell) => ({ ...cell, content: nodes(cell.content) })),
+              ),
+            },
+          ];
+        case "details":
+          return [
+            {
+              ...node,
+              summary: nodes(node.summary),
+              children: walk(node.children),
+            },
+          ];
+        default:
+          return [node];
+      }
+    });
+  return { ...document, blocks: walk(document.blocks) };
+}
+
+/** Each inline node of `document`, in order, until `visit` returns true; whether it did. */
+export function someInline(
+  document: TextViewDocument,
+  visit: (node: TextViewInline) => boolean | void,
+): boolean {
+  const nodes = (list: readonly TextViewInline[]): boolean =>
+    list.some((node) => {
+      if (visit(node)) return true;
+      return "content" in node && Array.isArray(node.content)
+        ? nodes(node.content)
+        : false;
+    });
+  const walk = (list: readonly TextViewBlock[]): boolean =>
+    list.some((node) => {
+      switch (node.type) {
+        case "paragraph":
+        case "heading":
+          return nodes(node.content);
+        case "blockquote":
+          return walk(node.children);
+        case "list":
+          return node.items.some((item) => walk(item.children));
+        case "table":
+          return (
+            node.head.some((cell) => nodes(cell.content)) ||
+            (node.rows ?? []).some((row) =>
+              row.some((cell) => nodes(cell.content)),
+            )
+          );
+        case "details":
+          return nodes(node.summary) || walk(node.children);
+        default:
+          return false;
+      }
+    });
+  return walk(document.blocks);
 }

@@ -1,4 +1,5 @@
 import type { ClipboardAction } from "@eta/client-contracts/composer-doc";
+import type { Stand } from "@eta/client-contracts/composer-markdown";
 import type { JSX } from "nsh";
 import type {
   MarkdownExtension,
@@ -6,11 +7,13 @@ import type {
   RichExtension,
   RichExtensionClass,
   RichPluginSpec,
-  TextViewCodeBlock,
+  TextViewCodeAction,
   TextViewCustomNode,
+  TextViewDocument,
 } from "nsh/base";
 import type { EtaEditorHandle } from "./editor";
 import type { TextParts, TextStyles, TextTheme } from "./look";
+import type { ShownText } from "./view-source";
 
 /** What a plugin adds to editing (nsh `RichEditor`). */
 interface EditorPart {
@@ -54,8 +57,28 @@ export interface ViewPart {
     string,
     (node: TextViewCustomNode, view: ViewContext) => JSX.Element
   >;
-  /** Draws code blocks (one plugin does). */
-  renderCodeBlock?: (code: TextViewCodeBlock, view: ViewContext) => JSX.Element;
+  /** The buttons over each code block (`copy` is the view's own). */
+  codeBlockActions?: TextViewCodeAction[];
+  /** What it adds to one shown text: made with the view (contexts are read here), so it can keep
+   * state of that text's own (a paste opened, the picture looked at). */
+  shown?: (view: ViewContext) => ShownPart;
+}
+
+/** A plugin's part in one shown text (`ViewPart.shown`). */
+export interface ShownPart {
+  /** Whether `document` and `after` have anything to do in this text (its Markdown and what its
+   * blocks stand for); when no part has, the view reads the Markdown itself, which is fastest.
+   * Without it, they always have. */
+  touches?: (source: { markdown: string; stands: readonly Stand[] }) => boolean;
+  /** The text before it is read (an opened paste is its text again). */
+  source?: (text: ShownText) => ShownText;
+  /** The document as read, before it is shown (pictures as chips, or taken out to go under it). */
+  document?: (document: TextViewDocument) => TextViewDocument;
+  /** Draws its custom nodes in this text, by name (over the plugin's `renderCustom`). */
+  renderCustom?: Record<string, (node: TextViewCustomNode) => JSX.Element>;
+  /** Drawn under the text (cards, a viewer), made once: `document` is the document as read (empty
+   * while no part `touches` the text). */
+  after?: (document: () => TextViewDocument) => JSX.Element;
 }
 
 /**

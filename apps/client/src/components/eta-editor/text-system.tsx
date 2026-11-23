@@ -3,17 +3,31 @@ import type {
   SerializedDraft,
 } from "@eta/client-contracts/composer-doc";
 import type { JSX, ViewStyle } from "nsh";
-import type { TextViewSelectionEvent } from "nsh/base";
+import type {
+  TextViewDocument,
+  TextViewSelectionEvent,
+  TextViewStyles,
+} from "nsh/base";
 import type { EtaEditorHandle } from "./editor";
+import type { TextTheme } from "./look";
 import type { StoredText } from "./markdown";
 import type { TextPlugin, ViewContext, ViewPart } from "./plugin";
 import type { ShownText } from "./view-source";
-import { Text, View } from "nsh";
+import { computed, Text, untracked, View } from "nsh";
 import { TextView } from "nsh/base";
 import { createEtaEditor, EtaEditor } from "./editor";
 import { baseText, partsOf, useTextTheme, viewLook } from "./look";
 import { docToStoredMarkdown, markdownToDoc } from "./markdown";
-import { lineEnds, viewDocument, viewSource } from "./view-source";
+import {
+  lineEnds,
+  neededExtensions,
+  readsDirectly,
+  standNode,
+  viewDocument,
+  viewSource,
+} from "./view-source";
+
+const EMPTY: TextViewDocument = { blocks: [] };
 
 export type { TextPlugin } from "./plugin";
 
@@ -65,9 +79,45 @@ function viewOf(plugins: TextPlugin[]) {
   const renderers: NonNullable<ViewPart["renderCustom"]> = {};
   for (const plugin of plugins)
     Object.assign(renderers, plugin.view?.renderCustom);
-  const codeBlock = plugins.find((plugin) => plugin.view?.renderCodeBlock)?.view
-    ?.renderCodeBlock;
-  return { plugins, extensions, renderers, codeBlock };
+  const actions = plugins.find((plugin) => plugin.view?.codeBlockActions)?.view;
+  return {
+    plugins,
+    extensions,
+    renderers,
+    codeBlockActions: actions?.codeBlockActions,
+  };
+}
+
+/** The view's styles for a theme, made once per theme, plugins and size: a transcript shows many
+ * texts. */
+const looks = new WeakMap<object, Map<string, TextViewStyles>>();
+function styles(
+  plugins: readonly TextPlugin[],
+  theme: TextTheme,
+  variant: "body" | "small",
+): TextViewStyles {
+  let byTheme = looks.get(theme.colors);
+  if (!byTheme) {
+    byTheme = new Map();
+    looks.set(theme.colors, byTheme);
+  }
+  const key = [
+    theme.font,
+    theme.mono,
+    variant,
+    ...plugins.map((plugin) => plugin.name),
+  ].join("|");
+  let look = byTheme.get(key);
+  if (!look) {
+    look = {
+      ...viewLook(plugins, theme),
+      // A column of blocks with nothing between them, as the editor's.
+      root: { ...baseText(theme, variant), gap: 0 },
+      paragraph: { marginTop: 0, marginBottom: 0 },
+    };
+    byTheme.set(key, look);
+  }
+  return look;
 }
 
 /**
@@ -96,14 +146,51 @@ export function createTextSystem(plugins: TextPlugin[]): TextSystem {
     View(props) {
       const theme = useTextTheme();
       const own = viewOf([...plugins, ...(props.plugins ?? [])]);
-      const { extensions, renderers, codeBlock } = own;
-      const context = (): ViewContext => ({
-        theme: theme(),
-        parts: partsOf(own.plugins, theme()),
-        variant: props.variant ?? "body",
+      const { extensions } = own;
+      // Read as it is used, so a drawing follows the theme.
+      const context: ViewContext = {
+        get theme() {
+          return theme();
+        },
+        get parts() {
+          return partsOf(own.plugins, theme());
+        },
+        get variant() {
+          return props.variant ?? "body";
+        },
+      };
+      // Each plugin's part in this text, made once, here (where contexts can be read).
+      const shown = own.plugins.flatMap((plugin) => {
+        const part = plugin.view?.shown?.(context);
+        return part ? [part] : [];
       });
-      const document = () => {
-        const { markdown, stands } = viewSource(props.text);
+      const renderers = { ...own.renderers };
+      for (const part of shown)
+        for (const [name, draw] of Object.entries(part.renderCustom ?? {}))
+          renderers[name] = (node) => draw(node);
+      /** The text as the view reads it: its Markdown, and what its blocks stand for. */
+      const source = computed(() => {
+        let text = props.text;
+        for (const part of shown) if (part.source) text = part.source(text);
+        return viewSource(text);
+      });
+      /** Whether the view reads the Markdown itself (as it does fastest), its blocks taken back
+       * as they are drawn: no plugin has anything to change in this text's document. */
+      const direct = computed(() => {
+        const current = source();
+        return (
+          readsDirectly(current.markdown, current.stands) &&
+          shown.every((part) =>
+            part.document || part.after
+              ? part.touches?.(current) === false
+              : true,
+          )
+        );
+      });
+      /** The document as read: its blocks with their attributes, before plugins arrange it. */
+      const read = computed(() => {
+        if (direct()) return EMPTY;
+        const { markdown, stands } = source();
         return viewDocument(
           TextView.parse(
             markdown,
@@ -112,7 +199,13 @@ export function createTextSystem(plugins: TextPlugin[]): TextSystem {
           ),
           stands,
         );
-      };
+      });
+      const document = computed(() => {
+        if (direct()) return undefined;
+        let doc = read();
+        for (const part of shown) if (part.document) doc = part.document(doc);
+        return doc;
+      });
       return (
         <View
           accessibilityLabel={props.label}
@@ -120,27 +213,31 @@ export function createTextSystem(plugins: TextPlugin[]): TextSystem {
           style={props.style}
         >
           <TextView
+            markdown={direct() ? source().markdown : undefined}
             document={document()}
+            extensions={
+              direct()
+                ? neededExtensions(extensions, source().stands)
+                : undefined
+            }
             options={{ html: false, streaming: props.streaming }}
             selectable={props.selectable ?? true}
             onSelectionChange={props.onSelectionChange}
             links="open"
-            styles={{
-              ...viewLook(own.plugins, theme()),
-              // A column of blocks with nothing between them, as the editor's.
-              root: { ...baseText(theme(), props.variant), gap: 0 },
-              paragraph: { marginTop: 0, marginBottom: 0 },
+            styles={styles(own.plugins, theme(), props.variant ?? "body")}
+            renderCustom={(read) => {
+              const node = direct()
+                ? standNode(read, untracked(source).stands)
+                : read;
+              return (
+                renderers[node.name]?.(node, context) ?? (
+                  <Text>{node.text ?? ""}</Text>
+                )
+              );
             }}
-            renderCustom={(node) =>
-              renderers[node.name]?.(node, context()) ?? (
-                <Text>{node.text ?? ""}</Text>
-              )
-            }
-            renderCodeBlock={
-              codeBlock ? (code) => codeBlock(code, context()) : undefined
-            }
-            codeBlockActions={codeBlock ? undefined : [{ id: "copy" }]}
+            codeBlockActions={own.codeBlockActions ?? [{ id: "copy" }]}
           />
+          {shown.flatMap((part) => (part.after ? [part.after(read)] : []))}
         </View>
       );
     },

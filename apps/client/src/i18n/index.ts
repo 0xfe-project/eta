@@ -72,6 +72,13 @@ const messages = {
     "Applies to the transcript and the composer together. In a narrow column, some of them can look the same.",
     "聊天记录和输入框会一起调整。在较窄的窗口中，部分选项看起来可能一样。",
   ],
+  picturesInMessages: ["Images in messages", "消息里的图片"],
+  picturesInMessagesHint: [
+    "Compact shows the image name where it was inserted; hover (tap on touch) to see it. Expanded shows image cards under the text. Saved on this device.",
+    "紧凑：图片名留在原位，悬停（触屏上轻点）查看图片。展开：图片以卡片排在正文下方。仅保存在此设备。",
+  ],
+  picturesCompact: ["Compact", "紧凑"],
+  picturesExpanded: ["Expanded", "展开"],
   extraNarrow: ["Extra narrow", "最窄"],
   narrow: ["Narrow", "窄"],
   standard: ["Standard", "标准"],

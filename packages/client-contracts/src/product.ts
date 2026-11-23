@@ -929,7 +929,8 @@ const PICTURE_TYPES: ReadonlySet<string> = new Set([
 export const isPictureType = (contentType: string | undefined) =>
   PICTURE_TYPES.has(contentType ?? "");
 
-/** Where the host serves an attached picture's bytes (`GET`, behind the normal access). */
+/** Where the host serves an attached file's bytes (`GET`, behind the normal access): a picture
+ * as itself, any other file as bytes to save. */
 export const attachmentPicturePath = (id: string) =>
   `/attachments/${encodeURIComponent(id)}`;
 

@@ -191,13 +191,16 @@ export function MentionChip(props: {
   variant?: "body" | "small";
   selected?: boolean;
   accessibilityLabel: string;
+  /** Where the text is shown: a press opens the member. */
+  onPress?: () => void;
 }) {
   const c = colors();
   const fonts = Fonts();
   const type = textFaces();
-  return (
+  const hovered = signal(false);
+  const chip = () => (
     <Text
-      accessibilityLabel={props.accessibilityLabel}
+      accessibilityLabel={props.onPress ? undefined : props.accessibilityLabel}
       style={{
         fontFamily: fontFamily(fonts().interface),
         fontSize: type(props.variant ?? "body").size,
@@ -205,10 +208,24 @@ export function MentionChip(props: {
         backgroundColor: c().blueFill,
         paddingHorizontal: 2,
         borderWidth: 1,
-        borderColor: props.selected ? c().blue : c().blueFill,
+        borderColor: props.selected || hovered() ? c().blue : c().blueFill,
       }}
     >
       {`@${props.label}`}
     </Text>
+  );
+  return (
+    <If when={props.onPress} else={chip()}>
+      <View
+        role="button"
+        accessibilityLabel={props.accessibilityLabel}
+        onPress={props.onPress}
+        onMouseEnter={() => hovered.set(true)}
+        onMouseLeave={() => hovered.set(false)}
+        style={{ cursor: "pointer" }}
+      >
+        {chip()}
+      </View>
+    </If>
   );
 }

@@ -366,7 +366,7 @@ describe("images", () => {
     );
   });
 
-  it("are served to the page by id, and only pictures are", async () => {
+  it("are served by id: pictures as themselves, other files only to save", async () => {
     const w = await world();
     const { group } = await ada(w);
     const picture = await upload(w, group.id, PNG, "pixel.png", "image/png");
@@ -384,7 +384,16 @@ describe("images", () => {
     expect(served.headers.get("content-type")).toBe("image/png");
     expect(served.headers.get("content-security-policy")).toBe("sandbox");
     expect(Buffer.from(await served.arrayBuffer())).toEqual(PNG);
-    expect((await get(`/attachments/${page.id}`)).status).toBe(404);
+    // Anything else is bytes to save, never a page this origin would show.
+    const saved = await get(`/attachments/${page.id}`);
+    expect(saved.status).toBe(200);
+    expect(saved.headers.get("content-type")).toBe("application/octet-stream");
+    expect(saved.headers.get("content-disposition")).toBe(
+      "attachment; filename*=UTF-8''x.svg",
+    );
+    expect(saved.headers.get("content-security-policy")).toBe("sandbox");
+    expect(saved.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(await saved.text()).toBe("<svg onload='alert(1)'/>");
     expect((await get(`/attachments/${crypto.randomUUID()}`)).status).toBe(404);
   });
 });

@@ -4,7 +4,7 @@ export type { Uploads } from "./plugins/attachment";
 export { attachment, shownFiles } from "./plugins/attachment";
 export { draft } from "./plugins/draft";
 export { limit } from "./plugins/limit";
-export { mention } from "./plugins/mention";
+export { mention, shownMentions } from "./plugins/mention";
 export { quote } from "./plugins/quote";
 export { serialize } from "./plugins/serialize";
 export { submitKeys } from "./plugins/submit-keys";
