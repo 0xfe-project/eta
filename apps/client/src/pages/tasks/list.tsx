@@ -2,6 +2,7 @@ import type { BoardTaskView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import { signal, View } from "nsh";
 import { colors, grow, Icon, Label, row, SmoothScroll } from "../../components";
+import { dotSize } from "../../components/status-dot";
 import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
@@ -23,6 +24,26 @@ import {
   usageText,
   useLiveRate,
 } from "./usage";
+
+/** A task's row in the phone's list and in the tablet's. */
+const phoneRowHeight = 56;
+const tabletRowHeight = 52;
+
+/** The task table's columns, on the desktop and (…Tablet) on the tablet and phone. */
+const columnWidth = {
+  number: 36,
+  numberTablet: 32,
+  usage: 200,
+  usageTablet: 96,
+  hint: 184,
+  hintTablet: 180,
+  hintNested: 160,
+  hintPhone: 72,
+  owner: 152,
+  ownerTablet: 92,
+  time: 116,
+  timeTablet: 80,
+} as const;
 
 const phoneGroups = [
   { name: "Needs you", label: "taskNeedsYou", fold: false },
@@ -171,7 +192,7 @@ export function PhoneTaskList(props: {
                         activeStyle={{ backgroundColor: c().selectedSoft }}
                         style={{
                           ...row,
-                          height: 56,
+                          height: phoneRowHeight,
                           paddingLeft: space[16],
                           paddingRight: space[12],
                           borderBottomWidth: 1,
@@ -373,7 +394,7 @@ export function TabletTaskList(props: {
             }}
             style={{
               ...row,
-              height: 52,
+              height: tabletRowHeight,
               paddingHorizontal: space[16],
               gap: space[8],
               borderBottomWidth: 1,
@@ -433,7 +454,7 @@ export function TaskTableRow(props: {
       accessibilityLabel={props.item.title}
       onPress={props.onOpen}
       hoverStyle={{ backgroundColor: c().selectedSoft }}
-      focusVisibleStyle={{ backgroundColor: `${c().selected}99` }}
+      focusVisibleStyle={{ backgroundColor: c().selectedSoft }}
       style={{
         ...row,
         height: space[32],
@@ -448,7 +469,9 @@ export function TaskTableRow(props: {
         cursor: "pointer",
       }}
     >
-      <View style={{ width: desktop() ? 24 : phone() ? 14 : 12 }}>
+      <View
+        style={{ width: desktop() ? space[24] : phone() ? icon.md : icon.sm }}
+      >
         <TaskGlyph
           status={props.item.status}
           size={phone() ? icon.md : icon.sm}
@@ -457,7 +480,9 @@ export function TaskTableRow(props: {
       <Label
         variant="caption"
         tone="muted"
-        style={{ width: desktop() ? 36 : 30 }}
+        style={{
+          width: desktop() ? columnWidth.number : columnWidth.numberTablet,
+        }}
       >{`#${props.item.number}`}</Label>
       <Label variant="small" lines={1} style={{ flex: 1 }}>
         {props.item.title}
@@ -465,7 +490,7 @@ export function TaskTableRow(props: {
       <If when={usageShown() && !phone()}>
         <View
           style={{
-            width: desktop() ? 200 : 96,
+            width: desktop() ? columnWidth.usage : columnWidth.usageTablet,
             paddingRight: space[12],
             flexShrink: 0,
           }}
@@ -482,7 +507,13 @@ export function TaskTableRow(props: {
         style={{
           ...row,
           gap: space[4],
-          width: phone() ? 72 : desktop() ? 183 : props.nested ? 160 : 180,
+          width: phone()
+            ? columnWidth.hintPhone
+            : desktop()
+              ? columnWidth.hint
+              : props.nested
+                ? columnWidth.hintNested
+                : columnWidth.hintTablet,
           flexShrink: 0,
           overflow: "hidden",
         }}
@@ -492,7 +523,13 @@ export function TaskTableRow(props: {
             props.item.status === "in_progress" && !props.item.subtasks?.total
           }
         >
-          <View style={{ width: 6, height: 6, backgroundColor: c().blue }} />
+          <View
+            style={{
+              width: dotSize,
+              height: dotSize,
+              backgroundColor: c().blue,
+            }}
+          />
         </If>
         <If when={isWaiting(props.item)}>
           <Icon name="lock" size={icon.sm} tone="mutedInk" />
@@ -511,7 +548,9 @@ export function TaskTableRow(props: {
           variant="caption"
           tone="mutedInk"
           lines={1}
-          style={{ width: desktop() ? 150 : 90 }}
+          style={{
+            width: desktop() ? columnWidth.owner : columnWidth.ownerTablet,
+          }}
         >
           {ownerLine(props.item, host.agent)}
         </Label>
@@ -519,7 +558,10 @@ export function TaskTableRow(props: {
           variant="caption"
           tone="muted"
           lines={1}
-          style={{ width: desktop() ? 116 : 80, textAlign: "right" }}
+          style={{
+            width: desktop() ? columnWidth.time : columnWidth.timeTablet,
+            textAlign: "right",
+          }}
         >
           {phone() ? relativeTime(props.item.updatedAt) : taskTime(props.item)}
         </Label>

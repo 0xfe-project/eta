@@ -11,6 +11,7 @@ import {
   ActionMenu,
   Button,
   colors,
+  dialogWidth,
   Field,
   grow,
   Icon,
@@ -33,6 +34,12 @@ import {
 } from "./facts";
 import { statusName, TaskGlyph } from "./status";
 
+/** A dependency line's sample in the legend; the strip at a card's right edge that starts one;
+ * a parent's header row over its subtasks. */
+const legendLineWidth = 16;
+const handleWidth = 12;
+const frameHeaderHeight = 36;
+
 /** The sizes the plan is drawn at: on the Tasks page, and on a parent's own Plan tab, on desktop and tablet. */
 const sizes = {
   page: {
@@ -40,10 +47,10 @@ const sizes = {
     cardHeight: 52,
     columnGap: space[32],
     rowGap: space[8],
-    left: 13,
+    left: 12,
     labelTop: 16,
-    cardsTop: 37,
-    tileHeight: 30,
+    cardsTop: 36,
+    tileHeight: 32,
     legendGap: 12,
     bottom: 16,
     padding: space[8],
@@ -52,23 +59,24 @@ const sizes = {
     indent: 0,
   },
   detail: {
-    cardWidth: 254,
-    cardHeight: 49,
+    cardWidth: 256,
+    cardHeight: 48,
     columnGap: space[32],
     rowGap: space[12],
     left: 12,
-    labelTop: 15,
+    labelTop: 16,
     cardsTop: 36,
-    tileHeight: 33,
+    tileHeight: 32,
     legendGap: 16,
-    bottom: 15,
+    bottom: 16,
     padding: space[12],
     titleVariant: "caption" as TextVariant,
     criticalBorder: 2,
-    indent: 18,
+    // The title after its glyph.
+    indent: icon.sm + space[4],
   },
   tabletPage: tabletSize(180),
-  tabletDetail: tabletSize(170),
+  tabletDetail: tabletSize(168),
 };
 
 /** Taller cards whose title and line wrap, in a 12px frame; the legend sits outside it. */
@@ -87,7 +95,8 @@ function tabletSize(cardWidth: number) {
     padding: space[8],
     titleVariant: "small" as TextVariant,
     criticalBorder: 1,
-    indent: 18,
+    // The title after its glyph.
+    indent: icon.sm + space[4],
   };
 }
 
@@ -340,7 +349,7 @@ function PlanLegend() {
       <View style={{ ...row, gap: space[4] }}>
         <View
           style={{
-            width: 14,
+            width: legendLineWidth,
             height: space[2],
             backgroundColor: c().ink,
           }}
@@ -452,7 +461,7 @@ function PlanCard(props: {
             top: 0,
             right: 0,
             bottom: 0,
-            width: 10,
+            width: handleWidth,
             cursor: "crosshair",
           }}
         />
@@ -517,7 +526,7 @@ function createPlanEditing(owner: () => string | undefined) {
           {(target) => (
             <Modal
               title={target().title}
-              width={440}
+              width={dialogWidth.md}
               overPhoneNavigation
               onClose={() => adding.set(undefined)}
             >
@@ -547,7 +556,7 @@ function createPlanEditing(owner: () => string | undefined) {
           {(target) => (
             <Modal
               title={uiText("addDependency")}
-              width={440}
+              width={dialogWidth.md}
               onClose={() => connecting.set(undefined)}
             >
               <View style={{ padding: space[16], gap: space[8] }}>
@@ -766,7 +775,7 @@ export function TaskPlanBoard(props: {
             <View
               style={{
                 ...row,
-                height: props.tablet ? 36 : 37,
+                height: frameHeaderHeight,
                 paddingHorizontal: space[12],
                 gap: space[8],
                 borderBottomWidth: 1,
@@ -831,7 +840,7 @@ export function TaskPlanBoard(props: {
           <View
             style={{
               ...row,
-              height: props.tablet ? 36 : 37,
+              height: frameHeaderHeight,
               paddingHorizontal: space[12],
               borderBottomWidth: 1,
               borderColor: c().border,

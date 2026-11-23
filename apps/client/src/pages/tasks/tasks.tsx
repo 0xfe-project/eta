@@ -12,6 +12,7 @@ import {
   Button,
   colors,
   Empty,
+  emptyWidth,
   Field,
   grow,
   Header,
@@ -40,6 +41,11 @@ const taskViews = {
   List: "listView",
   Plan: "plan",
 } as const;
+
+/** The header's search box; the Part of and Executor filter menus; the archive's column. */
+const searchWidth = 152;
+const menuWidth = { partOf: 220, executor: 200 } as const;
+const archiveWidth = 916;
 
 export function Tasks(props: {
   layout: Layout;
@@ -192,8 +198,8 @@ export function Tasks(props: {
                       }
                     : {
                         ...row,
-                        width: 150,
-                        height: 25,
+                        width: searchWidth,
+                        height: control.sm,
                         paddingHorizontal: space[8],
                         gap: space[8],
                         marginRight: space[8],
@@ -210,7 +216,7 @@ export function Tasks(props: {
                   style={{
                     flex: 1,
                     minWidth: 0,
-                    height: 25,
+                    height: control.sm,
                     paddingHorizontal: 0,
                     paddingVertical: 0,
                     borderWidth: 0,
@@ -255,7 +261,7 @@ export function Tasks(props: {
                   }
                 />
                 <TaskMenu
-                  width={220}
+                  width={menuWidth.partOf}
                   caption={uiText("partOfCaption")}
                   open={partOpen()}
                   onOpenChange={partOpen.set}
@@ -313,7 +319,7 @@ export function Tasks(props: {
               >
                 <ActionMenu
                   label={uiText("groupTasksBy")}
-                  triggerStyle={{ borderWidth: 0, height: 25 }}
+                  triggerStyle={{ borderWidth: 0, height: control.sm }}
                   value={uiText("taskGrouping", {
                     name: uiText(
                       listGrouping() === "Part of" ? "groupByPartOf" : "status",
@@ -512,7 +518,7 @@ function ExecutorMenu(props: {
 }) {
   return (
     <TaskMenu
-      width={200}
+      width={menuWidth.executor}
       caption={uiText("executor")}
       align={props.align}
       open={props.open}
@@ -556,7 +562,7 @@ function ArchiveToggle(props: {
       hoverStyle={{ backgroundColor: c().selected }}
       style={{
         ...row,
-        height: 25,
+        height: control.sm,
         paddingHorizontal: props.tablet && !props.selected ? 0 : space[8],
         gap: space[4],
         flexShrink: 0,
@@ -602,7 +608,7 @@ function ArchivedTasks(props: {
         ...grow,
         alignSelf: props.tablet ? "stretch" : "center",
         width: props.tablet ? undefined : "100%",
-        maxWidth: props.tablet ? undefined : 916,
+        maxWidth: props.tablet ? undefined : archiveWidth,
         paddingTop: space[20],
         paddingHorizontal: props.tablet ? space[20] : 0,
         gap: space[12],
@@ -637,7 +643,7 @@ function ArchivedTasks(props: {
       <View
         style={{
           ...row,
-          height: 30,
+          height: control.lg,
           paddingHorizontal: space[12],
           gap: space[8],
           borderWidth: 1,
@@ -687,7 +693,7 @@ function ArchivedTasks(props: {
               description={
                 props.count ? undefined : uiText("noArchivedTasksDescription")
               }
-              descriptionWidth={props.tablet ? 420 : 448}
+              descriptionWidth={emptyWidth.wide}
               style={{
                 flex: 1,
                 justifyContent: "flex-start",

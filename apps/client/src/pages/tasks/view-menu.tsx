@@ -18,6 +18,9 @@ import { setUsageShown, usageShown } from "./usage";
  * their token usage. On desktop and tablet a toolbar button with a popup; on a phone a button at
  * the top right with a sheet at the bottom.
  */
+/** The View menu off phones. */
+const menuWidth = 260;
+
 export function ViewMenu(props: { phone?: boolean; tablet?: boolean }) {
   const c = colors();
   const open = signal(false);
@@ -29,7 +32,7 @@ export function ViewMenu(props: { phone?: boolean; tablet?: boolean }) {
       open={open()}
       onOpenChange={open.set}
       popupStyle={{
-        width: 260,
+        width: menuWidth,
         paddingVertical: space[4],
         borderWidth: 1,
         borderColor: c().strong,
@@ -72,7 +75,7 @@ export function ViewMenu(props: { phone?: boolean; tablet?: boolean }) {
               expandedStyle={{ backgroundColor: c().selected }}
               style={{
                 ...row,
-                height: 25,
+                height: control.sm,
                 paddingHorizontal: space[8],
                 gap: space[4],
                 flexShrink: 0,
@@ -173,8 +176,8 @@ function UsageRow(props: { phone?: boolean; on: boolean }) {
       >
         <View
           style={{
-            width: 10,
-            height: 10,
+            width: space[12],
+            height: space[12],
             backgroundColor: props.on ? c().buttonInk : c().muted,
           }}
         />

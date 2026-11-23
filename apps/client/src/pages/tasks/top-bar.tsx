@@ -4,8 +4,9 @@ import { Button, colors, inCompact, Label, row } from "../../components";
 import { control, icon, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
-/** Clear space left of the CaretLeft glyph inside its square: 72 of 256. */
-const glyphInset = 4.5;
+/** Clear space left of the CaretLeft glyph inside its square: 72 of 256 (4.5 of 16, on the grid
+ * 4). */
+const glyphInset = 4;
 /** The back button's own left padding, before its glyph. */
 const backPadding = 4;
 

@@ -22,6 +22,18 @@ import { isWaiting, runningFor, stepOf, taskDay, taskHint } from "./facts";
 import { progressColor, statusName, TaskGlyph } from "./status";
 
 /** A task the open one links to, as a list row: its glyph, `#N title`, what the link says, a chevron. */
+/** The neighbour strip's columns: the tasks before and after, and this task's own card. */
+const stripWidth = { side: 180, own: 208 } as const;
+
+/** A highlight's label column on the parent's progress card. */
+const highlightWidth = { tablet: 60, regular: 72 } as const;
+
+/** A subtask's segment in the parent's progress bar. */
+const progressHeight = (tablet?: boolean) => (tablet ? space[4] : space[8]);
+
+/** A subtask's row under its parent. */
+const subtaskHeight = 48;
+
 export function TaskLink(link: {
   item: {
     taskId: string;
@@ -45,7 +57,7 @@ export function TaskLink(link: {
       onPress={() => link.onTask(link.item.taskId)}
       // A touch leaves no hover behind: the row fills only while pressed there.
       hoverStyle={canHover ? { backgroundColor: c().selected } : undefined}
-      activeStyle={{ backgroundColor: `${c().selected}99` }}
+      activeStyle={{ backgroundColor: c().selectedSoft }}
       style={{
         ...row,
         height: link.height ?? control.touch,
@@ -189,7 +201,7 @@ export function Prerequisites(props: {
                 <View style={{ gap: space[8] }}>
                   <Button
                     label={uiText("dontWaitStartNow")}
-                    size={40}
+                    size={control.touch}
                     labelVariant="small"
                     tone="primary"
                     disabled={props.submitting}
@@ -197,14 +209,14 @@ export function Prerequisites(props: {
                   />
                   <Button
                     label={uiText("waitForAnotherTask")}
-                    size={40}
+                    size={control.touch}
                     labelVariant="small"
                     disabled={props.submitting}
                     onPress={props.onReplace}
                   />
                   <Button
                     label={uiText("cancelThisTask")}
-                    size={40}
+                    size={control.touch}
                     labelVariant="small"
                     disabled={props.submitting}
                     onPress={props.onCancel}
@@ -504,7 +516,9 @@ export function NeighbourStrip(props: {
           }}
         >
           <If when={before().length}>
-            <View style={{ width: 180, gap: space[4], flexShrink: 0 }}>
+            <View
+              style={{ width: stripWidth.side, gap: space[4], flexShrink: 0 }}
+            >
               <Label variant="caption" tone="muted">
                 {uiText("taskBefore", { count: before().length })}
               </Label>
@@ -522,7 +536,7 @@ export function NeighbourStrip(props: {
               <Icon name="arrowRight" size={icon.md} tone="muted" />
             </View>
           </If>
-          <View style={{ width: 206, gap: space[4], flexShrink: 0 }}>
+          <View style={{ width: stripWidth.own, gap: space[4], flexShrink: 0 }}>
             <Label variant="caption" tone="muted">
               {" "}
             </Label>
@@ -552,7 +566,9 @@ export function NeighbourStrip(props: {
             <View style={{ marginTop: space[32] }}>
               <Icon name="arrowRight" size={icon.md} tone="muted" />
             </View>
-            <View style={{ width: 180, gap: space[4], flexShrink: 0 }}>
+            <View
+              style={{ width: stripWidth.side, gap: space[4], flexShrink: 0 }}
+            >
               <Label variant="caption" tone="muted">
                 {uiText("taskAfter", { count: after().length })}
               </Label>
@@ -647,13 +663,17 @@ export function Subtasks(props: {
               {uiText("progress")}
             </Label>
             <View
-              style={{ ...row, gap: space[2], height: props.tablet ? 5 : 6 }}
+              style={{
+                ...row,
+                gap: space[2],
+                height: progressHeight(props.tablet),
+              }}
             >
               <Each of={children()} key={(child) => child.taskId}>
                 {(child) => (
                   <View
                     style={{
-                      height: props.tablet ? 5 : 6,
+                      height: progressHeight(props.tablet),
                       flex: 1,
                       backgroundColor: progressColor(child().status, c()),
                     }}
@@ -682,7 +702,11 @@ export function Subtasks(props: {
                   <Label
                     variant="small"
                     tone="muted"
-                    style={{ width: props.tablet ? 60 : 70 }}
+                    style={{
+                      width: props.tablet
+                        ? highlightWidth.tablet
+                        : highlightWidth.regular,
+                    }}
                   >
                     {entry()[1]}
                   </Label>
@@ -832,7 +856,7 @@ export function Subtasks(props: {
           {(child, index) => (
             <TaskLink
               item={child()}
-              height={48}
+              height={subtaskHeight}
               suffix={phoneHint(child())}
               tone={
                 child().status === "in_review"

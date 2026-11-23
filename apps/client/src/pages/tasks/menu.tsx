@@ -12,7 +12,7 @@ import {
   touchRow,
   touchScreen,
 } from "../../components/menu";
-import { icon, space, weight } from "../../components/tokens";
+import { control, icon, space, weight } from "../../components/tokens";
 import { statusHint, statusName, TaskGlyph } from "./status";
 
 /**
@@ -21,6 +21,9 @@ import { statusHint, statusName, TaskGlyph } from "./status";
  * caption. In the phone layout it is a sheet at the bottom, as the shared
  * `ActionMenu` is (`menuPresentation`).
  */
+/** A menu row in a phone's sheet. */
+const sheetRowHeight = 52;
+
 export function TaskMenu(props: {
   trigger: JSX.Element;
   width: number;
@@ -107,12 +110,12 @@ export function TaskMenuItem(props: {
         ...row,
         alignItems: props.hint ? "flex-start" : "center",
         minHeight: inSheet()
-          ? 52
+          ? sheetRowHeight
           : touchScreen
             ? touchRow
             : props.hint
               ? undefined
-              : (props.height ?? 28),
+              : (props.height ?? control.md),
         paddingVertical: props.hint ? space[8] : 0,
         paddingHorizontal: inSheet() ? space[16] : space[12],
         gap: space[8],
@@ -170,7 +173,7 @@ export function TaskMenuItem(props: {
 }
 
 /**
- * A header filter's trigger: 25px, the label and its caret muted, both ink and
+ * A header filter's trigger: 24px, the label and its caret muted, both ink and
  * filled muted while the menu is open or the filter is on.
  */
 export function FilterTrigger(props: {
@@ -186,7 +189,7 @@ export function FilterTrigger(props: {
       expandedStyle={{ backgroundColor: c().selected }}
       style={{
         ...row,
-        height: 25,
+        height: control.sm,
         paddingHorizontal: space[8],
         gap: space[4],
         flexShrink: 0,

@@ -13,6 +13,13 @@ import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { TaskGlyph } from "./status";
 
+/** The feedback box; the list of tasks waiting on this one, and one of its rows; the dialog's
+ * button bar. */
+const feedbackHeight = { phone: 104, regular: 92 } as const;
+const dependentsHeight = 120;
+const dependentHeight = 20;
+const footerHeight = 56;
+
 export function TaskReviewDialog(props: {
   decision: "done" | "todo";
   phone: boolean;
@@ -63,7 +70,7 @@ export function TaskReviewDialog(props: {
               value={props.feedback}
               onChange={props.onFeedback}
               style={{
-                height: 104,
+                height: feedbackHeight.phone,
                 paddingVertical: space[12],
                 paddingHorizontal: space[12],
                 borderColor: c().strong,
@@ -83,7 +90,7 @@ export function TaskReviewDialog(props: {
             multiline
             value={props.feedback}
             onChange={props.onFeedback}
-            style={{ height: 92 }}
+            style={{ height: feedbackHeight.regular }}
           />
         </If>
         <If when={props.decision === "done"}>
@@ -135,13 +142,19 @@ export function TaskReviewDialog(props: {
                 },
               )}
             </Label>
-            <SmoothScroll style={{ maxHeight: 120 }}>
+            <SmoothScroll style={{ maxHeight: dependentsHeight }}>
               <Each
                 of={props.task?.dependents ?? []}
                 key={(edge) => edge.taskId}
               >
                 {(edge) => (
-                  <View style={{ ...row, gap: space[8], minHeight: 18 }}>
+                  <View
+                    style={{
+                      ...row,
+                      gap: space[8],
+                      minHeight: dependentHeight,
+                    }}
+                  >
                     <TaskGlyph
                       status={edge().status}
                       size={props.phone ? icon.sm : icon.md}
@@ -160,7 +173,7 @@ export function TaskReviewDialog(props: {
         style={{
           ...row,
           paddingHorizontal: space[16],
-          height: 56,
+          height: footerHeight,
           gap: space[8],
           justifyContent: "flex-end",
           borderTopWidth: 1,

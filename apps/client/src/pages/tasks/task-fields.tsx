@@ -26,7 +26,7 @@ import {
 import { touchScreen } from "../../components/menu";
 import { StatusDot } from "../../components/status-dot";
 import { densityDefaults } from "../../components/theme";
-import { control, icon, space, weight } from "../../components/tokens";
+import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 import { ActorName } from "./creator";
@@ -36,7 +36,13 @@ import { statusName, TaskGlyph } from "./status";
 import { StatusSelect } from "./status-select";
 
 /** The width of a rail row's label; what goes under its value starts there. */
-const railLabel = 76;
+const railLabelWidth = 76;
+
+/** A field's label column in the fields list. */
+const fieldLabelWidth = 68;
+
+/** The comment box's foot, under the editor, off phones. */
+const footHeight = { compact: 32, regular: 36 } as const;
 
 /**
  * The comment box: the chat's text (`chatText`: Markdown as you type, code blocks, long pastes
@@ -151,11 +157,11 @@ function CommentBox(props: {
     props.origin,
   );
   // In the conversation panel (compact): small text, a 32px foot and a 24px button, as the
-  // panel's own rows; on a task's page the regular body text, 36 and 26.
+  // panel's own rows; on a task's page the regular body text, 36 and 28.
   const density = densityDefaults();
   const compact = inCompact();
   const line = () => type(density().editor).prose;
-  const pad = 8;
+  const pad = space[8];
   return (
     <>
       <If when={props.hint}>
@@ -181,14 +187,18 @@ function CommentBox(props: {
           minHeight={line() + pad * 2}
           maxHeight={line() * 6 + pad * 2}
           clip
-          padding={{ top: pad, bottom: pad, left: 10, right: 10 }}
+          padding={{ top: pad, bottom: pad, left: space[12], right: space[12] }}
         />
         <View
           style={{
             ...row,
             justifyContent: "flex-end",
             gap: space[8],
-            height: props.phone ? control.touch : compact() ? space[32] : 36,
+            height: props.phone
+              ? control.touch
+              : compact()
+                ? footHeight.compact
+                : footHeight.regular,
             paddingLeft: space[12],
             paddingRight: space[4],
           }}
@@ -201,7 +211,9 @@ function CommentBox(props: {
           <Button
             label={uiText("comment")}
             accessibilityLabel={uiText("sendComment")}
-            size={props.phone ? control.lg : compact() ? control.sm : 26}
+            size={
+              props.phone ? control.lg : compact() ? control.sm : control.md
+            }
             labelTone={disabled() ? "muted" : "ink"}
             dimDisabled={props.state.posting()}
             disabled={disabled()}
@@ -241,13 +253,13 @@ export function TaskReviewActions(props: { state: TaskDetailState }) {
       <Button
         label={uiText("sendBack")}
         disabled={!executor() || submitting()}
-        size={phone() ? 40 : 26}
+        size={phone() ? control.touch : control.md}
         style={{ flex: phone() ? 1 : undefined }}
         onPress={() => review.set("todo")}
       />
       <Button
         label={uiText("acceptAsDone")}
-        size={phone() ? 40 : 26}
+        size={phone() ? control.touch : control.md}
         tone="primary"
         style={{ flex: phone() ? 1 : undefined }}
         onPress={() => review.set("done")}
@@ -288,7 +300,11 @@ export function TaskFields(detail: {
   return (
     <View style={{ gap: space[8] }}>
       <View style={{ ...row, gap: space[8], alignItems: "flex-start" }}>
-        <Label variant="caption" tone="muted" style={{ width: 68 }}>
+        <Label
+          variant="caption"
+          tone="muted"
+          style={{ width: fieldLabelWidth }}
+        >
           {uiText("status")}
         </Label>
         <View style={{ flex: 1, minWidth: 0 }}>
@@ -298,7 +314,11 @@ export function TaskFields(detail: {
       <Each of={fields()} key={(field) => field[0]}>
         {(field) => (
           <View style={{ ...row, alignItems: "flex-start", gap: space[8] }}>
-            <Label variant="caption" tone="muted" style={{ width: 68 }}>
+            <Label
+              variant="caption"
+              tone="muted"
+              style={{ width: fieldLabelWidth }}
+            >
               {field()[0]}
             </Label>
             <Label variant="small" style={{ flex: 1 }} weight={weight.regular}>
@@ -377,13 +397,13 @@ export function TaskRail(detail: {
           {() => (
             <ActorName
               actor={{ kind: "agent", agentId: executorId() }}
-              size={16}
+              size={avatar.sm}
             />
           )}
         </If>
       </RailRow>
       <RailRow label={uiText("taskCreator")}>
-        <ActorName actor={item().createdBy} size={16} />
+        <ActorName actor={item().createdBy} size={avatar.sm} />
       </RailRow>
       <RailRow label={uiText("taskBelongsTo")}>
         <If
@@ -461,7 +481,7 @@ export function TaskRail(detail: {
         </View>
       </RailRow>
       <If when={canStartOver()}>
-        <View style={{ paddingLeft: railLabel, marginTop: -space[12] }}>
+        <View style={{ paddingLeft: railLabelWidth, marginTop: -space[12] }}>
           <Label variant="caption" tone="muted">
             {uiText("startOverHint")}
           </Label>
@@ -609,7 +629,7 @@ function RailRow(props: {
 }) {
   return (
     <View style={{ ...row, alignItems: props.top ? "flex-start" : "center" }}>
-      <Label variant="caption" tone="muted" style={{ width: railLabel }}>
+      <Label variant="caption" tone="muted" style={{ width: railLabelWidth }}>
         {props.label}
       </Label>
       {props.children}

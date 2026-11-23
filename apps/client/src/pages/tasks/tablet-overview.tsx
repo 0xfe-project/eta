@@ -10,7 +10,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
-import { icon, space, weight } from "../../components/tokens";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "./activity";
@@ -87,9 +87,9 @@ export function TabletOverview(props: {
                   { value: "plan", label: uiText("plan") },
                 ]}
                 value={plan() ? "plan" : "overview"}
-                height={20}
+                height={control.sm}
                 labelVariant="caption"
-                paddingHorizontal={8}
+                paddingHorizontal={space[8]}
                 strong
                 onChange={(value) => plan.set(value === "plan")}
               />
@@ -213,6 +213,10 @@ export function TabletOverview(props: {
 }
 
 /** Every property of the task in two columns: what it is on the left, what it waits on the right. */
+/** A property's label column (a parent has shorter labels); the inline Rerun under the run. */
+const fieldLabelWidth = { parent: 64, task: 76 } as const;
+const rerunHeight = 20;
+
 function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
   const c = colors();
   const host = useHost();
@@ -311,7 +315,12 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
                   <Label
                     variant="caption"
                     tone="muted"
-                    style={{ width: parent() ? 64 : 74, flexShrink: 0 }}
+                    style={{
+                      width: parent()
+                        ? fieldLabelWidth.parent
+                        : fieldLabelWidth.task,
+                      flexShrink: 0,
+                    }}
                   >
                     {field()[0]}
                   </Label>
@@ -347,7 +356,7 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
                         hoverStyle={{ backgroundColor: c().selected }}
                         style={{
                           ...row,
-                          height: 18,
+                          height: rerunHeight,
                           marginVertical: -space[2],
                           paddingHorizontal: space[4],
                           gap: space[4],

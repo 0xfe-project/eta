@@ -101,6 +101,10 @@ export function createDescription(options: {
   };
 }
 
+/** The box, and the line under it. */
+const boxHeight = { phone: 200, regular: 240 } as const;
+const footHeight = 28;
+
 /**
  * The description box of a form (new task, a draft's confirmation, editing a task): a fixed
  * 240 high (200 on a phone) that scrolls inside, a line under it with the Markdown it takes and
@@ -116,8 +120,8 @@ export function DescriptionBox(props: {
 }) {
   const c = colors();
   const editor = props.description.editor;
-  const height = () => (props.phone ? 200 : 240);
-  const foot = 26;
+  const height = () => (props.phone ? boxHeight.phone : boxHeight.regular);
+  const foot = footHeight;
   return (
     <View
       style={{
@@ -138,7 +142,12 @@ export function DescriptionBox(props: {
         clip
         minHeight={height() - foot - 2}
         maxHeight={height() - foot - 2}
-        padding={{ top: 8, bottom: 8, left: 12, right: 12 }}
+        padding={{
+          top: space[8],
+          bottom: space[8],
+          left: space[12],
+          right: space[12],
+        }}
         style={{ flexShrink: 0 }}
       />
       <View

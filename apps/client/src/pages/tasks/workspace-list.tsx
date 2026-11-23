@@ -20,6 +20,10 @@ import { progressColor, statusName, TaskGlyph } from "./status";
 import { UsageLine } from "./usage";
 import { visibleStatuses } from "./workspace-board";
 
+/** A parent's heading row over its subtasks (and the orphans'); its progress bar. */
+const groupHeight = { tablet: 32, desktop: 28 } as const;
+const progressWidth = { desktop: 80, tablet: 92 } as const;
+
 export function TaskWorkspaceList(props: {
   layout: Layout;
   view: string;
@@ -128,7 +132,9 @@ export function TaskWorkspaceList(props: {
                       style={{
                         ...row,
                         flex: 1,
-                        height: tablet() ? 31 : 29,
+                        height: tablet()
+                          ? groupHeight.tablet
+                          : groupHeight.desktop,
                         paddingRight: space[16],
                         gap: space[8],
                         cursor: "pointer",
@@ -163,7 +169,10 @@ export function TaskWorkspaceList(props: {
                         style={{
                           ...row,
                           gap: space[2],
-                          width: props.layout === "desktop" ? 80 : 90,
+                          width:
+                            props.layout === "desktop"
+                              ? progressWidth.desktop
+                              : progressWidth.tablet,
                         }}
                       >
                         <Each
@@ -178,7 +187,7 @@ export function TaskWorkspaceList(props: {
                           {(child) => (
                             <View
                               style={{
-                                height: props.layout === "desktop" ? 4 : 3,
+                                height: space[4],
                                 flex: 1,
                                 backgroundColor: progressColor(
                                   child().status,
@@ -214,7 +223,7 @@ export function TaskWorkspaceList(props: {
               <View
                 style={{
                   ...row,
-                  height: tablet() ? 32 : 29,
+                  height: tablet() ? groupHeight.tablet : groupHeight.desktop,
                   paddingHorizontal: space[16],
                   gap: tablet() ? space[8] : space[4],
                   backgroundColor: tablet() ? c().selected : c().surface,

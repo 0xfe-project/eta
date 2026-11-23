@@ -3,6 +3,7 @@ import type { Layout } from "../../components";
 import type { taskDropZones } from "./drag";
 import { View } from "nsh";
 import { colors, Compact, Icon, Label, row } from "../../components";
+import { dotSize } from "../../components/status-dot";
 import { border, icon, opacity, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -120,8 +121,8 @@ export function BoardCard(props: {
           onPanStart={props.draggable ? gesture.onPanStart : undefined}
           onPanEnd={props.draggable ? gesture.onPanEnd : undefined}
           onPress={() => props.onOpen()}
-          hoverStyle={{ borderColor: `${c().ink}4d` }}
-          activeStyle={{ borderColor: `${c().ink}4d` }}
+          hoverStyle={{ borderColor: c().strong }}
+          activeStyle={{ borderColor: c().strong }}
           style={{
             paddingVertical: space[8],
             paddingHorizontal: space[8],
@@ -237,7 +238,11 @@ export function BoardCard(props: {
                 >
                   <View style={{ ...row, gap: space[4] }}>
                     <View
-                      style={{ width: 6, height: 6, backgroundColor: c().blue }}
+                      style={{
+                        width: dotSize,
+                        height: dotSize,
+                        backgroundColor: c().blue,
+                      }}
                     />
                     <Label variant="small" tone="blue">
                       {runningFor(props.task)}
@@ -265,13 +270,13 @@ export function BoardCard(props: {
           </View>
           <Label lines={4}>{props.task.title}</Label>
           <If when={isParent()}>
-            <View style={{ ...row, gap: space[2], height: tablet() ? 3 : 4 }}>
+            <View style={{ ...row, gap: space[2], height: space[4] }}>
               <Each of={children()} key={(task) => task.id}>
                 {(task) => (
                   <View
                     style={{
                       flex: 1,
-                      height: tablet() ? 3 : 4,
+                      height: space[4],
                       backgroundColor: progressColor(task().status, c()),
                     }}
                   />
@@ -283,8 +288,8 @@ export function BoardCard(props: {
                 <If when={!tablet()}>
                   <View
                     style={{
-                      width: 5,
-                      height: 5,
+                      width: dotSize,
+                      height: dotSize,
                       marginTop: space[4],
                       backgroundColor: c().blue,
                     }}

@@ -3,10 +3,7 @@
   "counts": {
     "design-color": {
       "src/pages/routines/list-row.tsx": 1,
-      "src/pages/routines/routines.tsx": 1,
-      "src/pages/tasks/board-card.tsx": 2,
-      "src/pages/tasks/dependencies.tsx": 1,
-      "src/pages/tasks/list.tsx": 1
+      "src/pages/routines/routines.tsx": 1
     },
     "design-number": {
       "src/pages/connection/connection-errors.tsx": 3,
@@ -66,29 +63,7 @@
       "src/pages/settings/updates/group-heading.tsx": 1,
       "src/pages/settings/updates/host-release.tsx": 5,
       "src/pages/settings/updates/progress.tsx": 2,
-      "src/pages/settings/updates/release-settings.tsx": 5,
-      "src/pages/tasks/board-card.tsx": 6,
-      "src/pages/tasks/dependencies.tsx": 9,
-      "src/pages/tasks/list.tsx": 10,
-      "src/pages/tasks/menu.tsx": 2,
-      "src/pages/tasks/new-task.tsx": 4,
-      "src/pages/tasks/plan.tsx": 4,
-      "src/pages/tasks/review-dialog.tsx": 5,
-      "src/pages/tasks/run-log.tsx": 1,
-      "src/pages/tasks/skeleton.tsx": 1,
-      "src/pages/tasks/status-select.tsx": 3,
-      "src/pages/tasks/status.tsx": 5,
-      "src/pages/tasks/tablet-overview.tsx": 2,
-      "src/pages/tasks/task-detail-dialogs.tsx": 3,
-      "src/pages/tasks/task-detail.tsx": 1,
-      "src/pages/tasks/task-fields.tsx": 8,
-      "src/pages/tasks/task-overview.tsx": 4,
-      "src/pages/tasks/task-workspace.tsx": 1,
-      "src/pages/tasks/tasks.tsx": 7,
-      "src/pages/tasks/usage-section.tsx": 14,
-      "src/pages/tasks/view-menu.tsx": 4,
-      "src/pages/tasks/workspace-board.tsx": 2,
-      "src/pages/tasks/workspace-list.tsx": 4
+      "src/pages/settings/updates/release-settings.tsx": 5
     }
   }
 }

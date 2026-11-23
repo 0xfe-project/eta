@@ -10,7 +10,7 @@ import {
   Modal,
   row,
 } from "../../components";
-import { icon, space } from "../../components/tokens";
+import { control, icon, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { ArtifactPreview } from "../chat/artifacts/preview";
@@ -24,6 +24,10 @@ import { createTaskDetailState } from "./task-detail-state";
 import { TaskCommentBox, TaskReviewActions } from "./task-fields";
 import { TaskOverview } from "./task-overview";
 import { TaskTopBar } from "./top-bar";
+
+/** The task's ⋯ menu and its rows. */
+const menuWidth = 172;
+const menuRowHeight = 32;
 
 export function TaskDetail(props: {
   id: string;
@@ -108,7 +112,7 @@ export function TaskDetail(props: {
         ...row,
         justifyContent: "center",
         minWidth: space[32],
-        height: 30,
+        height: control.lg,
         cursor: "pointer",
       }}
     >
@@ -179,7 +183,7 @@ export function TaskDetail(props: {
                 : undefined
             }
             backIconSize={
-              props.layout === "desktop" && !props.docked ? 14 : undefined
+              props.layout === "desktop" && !props.docked ? icon.md : undefined
             }
           >
             <View style={{ flex: 1 }} />
@@ -191,10 +195,10 @@ export function TaskDetail(props: {
                     { value: "plan", label: uiText("plan") },
                   ]}
                   value={plan() ? "plan" : "overview"}
-                  height={paned() ? 20 : 22}
+                  height={control.sm}
                   labelVariant="caption"
                   boldActive={!paned()}
-                  paddingHorizontal={paned() ? 8 : undefined}
+                  paddingHorizontal={paned() ? space[8] : undefined}
                   strong={paned()}
                   onChange={(value) => plan.set(value === "plan")}
                 />
@@ -209,12 +213,12 @@ export function TaskDetail(props: {
                   onPress={() => panel.set(true)}
                 />
               </If>
-              <TaskMenu width={172} align="end" trigger={<MoreTrigger />}>
+              <TaskMenu width={menuWidth} align="end" trigger={<MoreTrigger />}>
                 <Each of={actions()} key={(action) => action.label}>
                   {(action) => (
                     <TaskMenuItem
                       label={action().label}
-                      height={30}
+                      height={menuRowHeight}
                       onSelect={action().run}
                     />
                   )}

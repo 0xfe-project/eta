@@ -3,6 +3,9 @@ import { View } from "nsh";
 import { colors, grow, row } from "../../components";
 import { TaskDetail } from "./task-detail";
 import { Tasks } from "./tasks";
+/** The task list beside an open task on a tablet. */
+const listWidth = 300;
+
 export function TaskWorkspace(props: {
   layout: Layout;
   taskId: string;
@@ -18,7 +21,7 @@ export function TaskWorkspace(props: {
         style={
           props.taskId && props.layout === "tablet"
             ? {
-                width: 300,
+                width: listWidth,
                 flexShrink: 0,
                 borderRightWidth: 1,
                 borderColor: c().border,
