@@ -77,7 +77,76 @@ function createTest(props: { item: PluginView; server: string }) {
       run();
     });
   }
-  return { busy, result, at, run, useToken };
+  /** Sign in to a Cursor account in the browser (unofficial); the host saves the credential, then test again. */
+  const cursorId = signal<string | undefined>(undefined);
+  const cursorNote = signal<string | undefined>(undefined);
+  function cursorLogin(header: string) {
+    void host.action(async () => {
+      cursorNote.set(undefined);
+      const started = await host.call<{ id: string; url: string }>(
+        "plugins",
+        "cursorLoginStart",
+        { name: props.item.name, server: props.server, header },
+      );
+      cursorId.set(started.id);
+      // The page opens on its own; the wait below does not depend on it.
+      void openUrl(started.url).catch(() => undefined);
+      void (async () => {
+        while (cursorId() === started.id) {
+          const status: {
+            state: string;
+            reason?: string;
+            validForSeconds?: number;
+          } = await host
+            .call<{
+              state: string;
+              reason?: string;
+              validForSeconds?: number;
+            }>("plugins", "cursorLoginStatus", { id: started.id })
+            .catch((error: unknown) => ({
+              state: "failed",
+              reason: error instanceof Error ? error.message : "error",
+            }));
+          if (cursorId() !== started.id) return;
+          if (status.state !== "waiting") {
+            cursorId.set(undefined);
+            if (status.state === "done") {
+              cursorNote.set(
+                status.validForSeconds === undefined
+                  ? uiText("cursorLoginDone")
+                  : `${uiText("cursorLoginDone")} · ${uiText("cursorLoginValid", { days: String(Math.round(status.validForSeconds / 86400)) })}`,
+              );
+              run();
+            } else if (status.state === "failed" || status.state === "expired")
+              cursorNote.set(
+                uiText("cursorLoginFailed", { reason: status.reason ?? "" }),
+              );
+            return;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+      })();
+    });
+  }
+  function cursorCancel() {
+    const id = cursorId();
+    cursorId.set(undefined);
+    if (id !== undefined)
+      void host.action(async () => {
+        await host.call("plugins", "cursorLoginCancel", { id });
+      });
+  }
+  return {
+    busy,
+    result,
+    at,
+    run,
+    useToken,
+    cursorId,
+    cursorNote,
+    cursorLogin,
+    cursorCancel,
+  };
 }
 
 type Test = ReturnType<typeof createTest>;
@@ -492,7 +561,39 @@ function TestResultView(props: { test: Test; stdio: boolean }) {
                   props.test.useToken(result()!.requiredHeader!, "bearer")
                 }
               />
+              <If when={props.test.cursorId() === undefined}>
+                <Label variant="small" tone="muted">
+                  {uiText("cursorLoginNote")}
+                </Label>
+                <Button
+                  label={uiText("cursorLogin")}
+                  tone="plain"
+                  labelVariant="body"
+                  size={28}
+                  disabled={props.test.busy()}
+                  onPress={() =>
+                    props.test.cursorLogin(result()!.requiredHeader!)
+                  }
+                />
+              </If>
+              <If when={props.test.cursorId() !== undefined}>
+                <Label variant="small" tone="muted">
+                  {uiText("cursorLoginWaiting")}
+                </Label>
+                <Button
+                  label={uiText("cursorLoginCancel")}
+                  tone="plain"
+                  labelVariant="body"
+                  size={28}
+                  onPress={props.test.cursorCancel}
+                />
+              </If>
             </View>
+          </If>
+          <If when={props.test.cursorNote()}>
+            <Label variant="small" tone="muted">
+              {props.test.cursorNote()}
+            </Label>
           </If>
           <If when={result()!.status === "ok"}>
             <ResultInfo result={result()!} />

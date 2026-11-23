@@ -124,6 +124,13 @@ function Fixture() {
   const stub = Object.assign(host, {
     call: async (_target: string, method: string, args: unknown) => {
       (globalThis as { __calls?: unknown[] }).__calls?.push([method, args]);
+      if (method === "cursorLoginStart")
+        return { id: "c1", url: "https://cursor.com/loginDeepControl?x=1" };
+      if (method === "cursorLoginStatus") {
+        // The browser confirmed: the host saved the credential as a header.
+        tokenHeaderSet = "bearer";
+        return { state: "done", validForSeconds: 60 * 86400 };
+      }
       if (method === "setTokenHeader")
         tokenHeaderSet =
           (args as { header: { format: string } | null }).header?.format ??

@@ -302,6 +302,30 @@ test("pressing the retest button sets the header and tests again; the server the
   );
 });
 
+test("Sign in with Cursor: starts, notes the days left, and tests again", async () => {
+  const app = await open("./fixtures/plugins-installed.tsx", {
+    width: 1100,
+    height: 900,
+  });
+  await app.press("label:header-plugin");
+  await app.press("label:Test connection");
+  expect(app.shows("Sign in with Cursor account")).toBe(true);
+  expect(
+    app.shows(
+      "Cursor sign-in is the first of two steps (then the service's own sign-in). It saves your Cursor session credential, which can do more than an API key, as an encrypted header sent only to this server. Unofficial; it may stop working.",
+    ),
+  ).toBe(true);
+  await app.press("label:Sign in with Cursor account");
+  // The status poll runs on its own; give it a moment.
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(app.shows("Connected · 12 ms")).toBe(true);
+  expect(
+    app.shows(
+      "Signed in to Cursor; testing again · About 60 days of validity left (read from the credential, not checked); after that, sign in again",
+    ),
+  ).toBe(true);
+});
+
 test("a result that names no header has no retest button", async () => {
   const app = await open("./fixtures/plugins-installed.tsx", {
     width: 1100,

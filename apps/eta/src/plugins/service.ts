@@ -700,6 +700,37 @@ export class Plugins {
   }
 
   /**
+   * Save one secret header of one remote server (replacing a header of that name, keeping the
+   * others). For a credential the host got itself; the value is sealed like any secret header and
+   * is in no message.
+   */
+  setSecretHeader(
+    name: string,
+    server: string,
+    header: string,
+    value: string,
+  ): void {
+    const entry = this.#existing(name);
+    const def = entry.plugin?.servers.find((one) => one.name === server);
+    if (def === undefined || def.config.type === "stdio")
+      throw new Error(`${name} has no remote server ${server}`);
+    const clean = header.trim();
+    const problem = headerProblem(clean, value);
+    if (problem !== undefined) throw new Error(problem);
+    const key = clean.toLowerCase();
+    const kept = this.rows
+      .headers(name)
+      .filter((one) => one.server === server && one.name.toLowerCase() !== key);
+    if (kept.length + 1 > MAX_HEADERS_PER_SERVER)
+      throw new Error(`at most ${MAX_HEADERS_PER_SERVER} headers per server`);
+    this.rows.saveHeaders(name, server, [
+      ...kept,
+      { server, name: clean, value, secret: true, plainOk: false },
+    ]);
+    this.#changed();
+  }
+
+  /**
    * Tell one remote server to carry its sign-in token in a request header (`null` turns it off).
    * Only the header's name and format are saved; the token is read from the sign-in store on each
    * request. `Authorization` is refused: the sign-in already sends it there.

@@ -12,6 +12,7 @@ import type { Market } from "./market";
 import type { Plugins } from "./service";
 import { Args, productPlugin, publish } from "../wire";
 
+import { CursorLogin, isCursorServer } from "./cursor-login";
 import { Logos, readOwnLogo } from "./logo";
 import { testConnection } from "./test-server";
 
@@ -25,6 +26,8 @@ export function pluginsPlugin(
     market: Market;
     mcp?: McpService;
     icons?: IconCache;
+    /** Tests only: the Cursor sign-in with its fake network. */
+    cursorLogin?: CursorLogin;
   },
   applied: () => void,
 ) {
@@ -42,6 +45,7 @@ export function pluginsPlugin(
       throw new Error(`${server} has no URL to sign in to`);
     return url;
   };
+  const cursorLogin = deps.cursorLogin ?? new CursorLogin();
   const logos = new Logos(
     deps.icons === undefined ? {} : { store: deps.icons },
   );
@@ -340,6 +344,35 @@ export function pluginsPlugin(
               args.optionalString("redirectOrigin"),
             ),
           };
+        }),
+        wire.handle("plugins", "cursorLoginStart", (call) => {
+          const args = new Args(call);
+          const name = args.string("name");
+          const server = args.string("server");
+          const header = args.optionalString("header") ?? "x-cursor-auth";
+          // A Cursor credential goes only to Cursor's own servers.
+          if (!isCursorServer(remoteUrl(name, server)))
+            throw new Error(`${server} is not a Cursor server`);
+          const started = cursorLogin.start((token) => {
+            // The server answers a bare token as missing; it wants Bearer here (seen on a real sign-in).
+            plugins.setSecretHeader(name, server, header, `Bearer ${token}`);
+          });
+          return {
+            result: {
+              id: started.id,
+              url: started.url,
+              timeoutSeconds: 120,
+            },
+          };
+        }),
+        wire.handle("plugins", "cursorLoginStatus", (call) => {
+          const args = new Args(call);
+          return { result: cursorLogin.status(args.string("id")) };
+        }),
+        wire.handle("plugins", "cursorLoginCancel", (call) => {
+          const args = new Args(call);
+          cursorLogin.cancel(args.string("id"));
+          return { result: { id: args.string("id") } };
         }),
         wire.handle("plugins", "logoutServer", async (call) => {
           const args = new Args(call);

@@ -31,6 +31,10 @@ interface Rig {
   always: string | null;
   /** When set, every request is refused with this body and no challenge (a server wanting a header of its own). */
   noChallenge: string | ((carried: string) => string) | null;
+  /** When true, a request needs `x-cursor-auth: Bearer …` next to its sign-in (a bare value is "missing"). */
+  cursorLayer?: boolean;
+  /** Header names of every request that went to the OAuth server (metadata, register, authorize, token, refresh). */
+  authHeaders: string[][];
   /** What each MCP request carried: whether an Authorization header, and how long. */
   seen: {
     auth: boolean;
@@ -45,7 +49,10 @@ function endpoint(
   rig: Rig,
 ): FetchLike {
   return async (input, init) => {
-    if (String(input) !== MCP_URL) return await auth.fetch(input, init);
+    if (String(input) !== MCP_URL) {
+      rig.authHeaders.push([...new Headers(init?.headers).keys()]);
+      return await auth.fetch(input, init);
+    }
     const bearer = new Headers(init?.headers).get("authorization");
     const all = new Headers(init?.headers);
     // Names and lengths are what the assertions print; `values` is read by the tests that compare to a token.
@@ -61,6 +68,14 @@ function endpoint(
       ? bearer.slice(7)
       : undefined;
     if (token === undefined) return await auth.fetch(input, init);
+    if (
+      rig.cursorLayer === true &&
+      !(all.get("x-cursor-auth") ?? "").startsWith("Bearer ")
+    )
+      return new Response(
+        '{"error":"unauthorized","message":"Missing Cursor credential in x-cursor-auth"}',
+        { status: 401 },
+      );
     if (rig.noChallenge !== null)
       return new Response(
         typeof rig.noChallenge === "function"
@@ -128,6 +143,7 @@ async function signedIn() {
     dead: new Set(),
     always: null,
     noChallenge: null,
+    authHeaders: [],
     seen: [],
   };
   const fetchImpl = endpoint(auth, rig);
@@ -289,6 +305,45 @@ describe("the connection test right after a real sign-in", () => {
       expect(one.headers["x-cursor-auth"]).toBe(value.length);
     expect(JSON.stringify(result)).not.toContain(value);
   }, 30_000);
+
+  describe("two layers: a Cursor header and the service's own sign-in", () => {
+    it("the Cursor header goes to the server only, never to the OAuth server (token, refresh, metadata)", async () => {
+      const s = await signedIn();
+      const old = (await s.access())!;
+      s.rig.dead.add(old); // forces a refresh against the OAuth server
+      const result = await s.test({
+        headers: { "x-cursor-auth": "Bearer jwt-SECRETVALUE-0123456789" },
+        tokenHeader: { name: "x-cursor-token", format: "bearer" },
+      });
+      expect(result.status).toBe("ok");
+      expect(s.auth.tokenRequests("refresh_token")).toBe(1);
+      expect(s.rig.authHeaders.length).toBeGreaterThan(0);
+      for (const names of s.rig.authHeaders) {
+        expect(names).not.toContain("x-cursor-auth");
+        expect(names).not.toContain("x-cursor-token");
+      }
+    }, 30_000);
+
+    it("a request without the header, or with a bare value, is refused as missing; Bearer plus the sign-in passes", async () => {
+      const s = await signedIn();
+      s.rig.cursorLayer = true;
+      const none = await s.test();
+      expect(none.requiredHeader).toBe("x-cursor-auth");
+      const bare = await s.test({
+        headers: { "x-cursor-auth": "jwt-SECRETVALUE-0123456789" },
+      });
+      expect(bare.requiredHeader).toBe("x-cursor-auth");
+      const good = await s.test({
+        headers: { "x-cursor-auth": "Bearer jwt-SECRETVALUE-0123456789" },
+      });
+      expect(good.status).toBe("ok");
+      for (const result of [none, bare, good])
+        expect(JSON.stringify(result)).not.toContain("SECRETVALUE");
+      // Both headers were on the request that passed.
+      const last = s.rig.seen.filter((one) => one.auth).at(-1)!;
+      expect(last.headers["x-cursor-auth"]).toBeGreaterThan(0);
+    }, 30_000);
+  });
 
   describe("the sign-in token in a header the user chose", () => {
     const NAME = "x-cursor-auth";

@@ -153,6 +153,26 @@ export function sameOriginFetch(base: FetchLike, origin: string): FetchLike {
   };
 }
 
+/**
+ * The SDK puts a transport's `requestInit` headers on its sign-in requests too (metadata, register,
+ * authorize, token, refresh), which can be on another host (Google, for a Cursor server). The
+ * headers configured for this server are taken off every request that is not to its own origin.
+ */
+export function ownHeadersOnly(
+  base: FetchLike,
+  origin: string,
+  names: readonly string[],
+): FetchLike {
+  const own = new Set(names.map((name) => name.toLowerCase()));
+  return async (input, init) => {
+    if (own.size === 0 || new URL(String(input)).origin === origin)
+      return await base(input, init);
+    const next = new Headers(init?.headers);
+    for (const name of [...next.keys()]) if (own.has(name)) next.delete(name);
+    return await base(input, { ...init, headers: next });
+  };
+}
+
 function isUnauthorized(error: unknown): boolean {
   return (
     error instanceof UnauthorizedError ||
@@ -595,7 +615,11 @@ export class ServerManager {
       ...(Object.keys(headers).length > 0 || tokenHeader !== undefined
         ? {
             fetch: sameOriginFetch(
-              withToken(this.options.fetch ?? fetch),
+              ownHeadersOnly(
+                withToken(this.options.fetch ?? fetch),
+                url.origin,
+                Object.keys(headers),
+              ),
               url.origin,
             ),
           }

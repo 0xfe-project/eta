@@ -121,6 +121,28 @@ export const pluginsMessages = {
     "Which value this header takes is not known: try the token as it is first, then Bearer. If both are refused it is likely a Cursor account credential, which eta does not read from Cursor.",
     "该头要填什么值尚不确定:先试原样 token,再试 Bearer。两种都被拒,多半是 Cursor 账号凭据,eta 不会去读 Cursor 的凭据。",
   ],
+  cursorLogin: ["Sign in with Cursor account", "用 Cursor 账号登录"],
+  cursorLoginNote: [
+    "Cursor sign-in is the first of two steps (then the service's own sign-in). It saves your Cursor session credential, which can do more than an API key, as an encrypted header sent only to this server. Unofficial; it may stop working.",
+    "Cursor 登录是两步中的第一步(之后还要登录服务本身)。它会把你的 Cursor 会话凭据(权限比 API key 宽)加密保存为请求头,只发给这个服务器。非官方方式,可能失效。",
+  ],
+  cursorLoginWaiting: [
+    "Waiting for the browser to confirm. This is an unofficial way and may stop working.",
+    "等待浏览器确认。这是非官方方式,可能失效。",
+  ],
+  cursorLoginCancel: ["Cancel", "取消"],
+  cursorLoginFailed: [
+    "Cursor sign-in failed: {{reason}}",
+    "Cursor 登录失败:{{reason}}",
+  ],
+  cursorLoginDone: [
+    "Signed in to Cursor; testing again",
+    "已登录 Cursor,正在重测",
+  ],
+  cursorLoginValid: [
+    "About {{days}} days of validity left (read from the credential, not checked); after that, sign in again",
+    "剩余有效期约 {{days}} 天(读自凭据,未校验);过期后请重新登录",
+  ],
   serverExpired: ["Sign-in expired", "登录已过期"],
   serverNeedsLogin: ["Needs login", "需要登录"],
   serverNotChecked: ["Not checked", "未检测"],

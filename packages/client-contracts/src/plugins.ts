@@ -21,6 +21,9 @@ export const PLUGIN_ACTIONS = [
   "setEnabled",
   "setHeaders",
   "setTokenHeader",
+  "cursorLoginStart",
+  "cursorLoginStatus",
+  "cursorLoginCancel",
   "setEnv",
   "add",
   "update",
@@ -189,6 +192,17 @@ export interface PluginArgs {
     server: string;
     header: { name: string; format: "raw" | "bearer" } | null;
   };
+  /**
+   * Sign in to a Cursor account for one server of `cursor.com` (UNOFFICIAL, may stop working):
+   * returns the page to open in the browser; the host waits (at most 120 s) and, once the user
+   * confirmed, saves the credential as the secret header `header` (default `x-cursor-auth`) of
+   * that server. Only on this click; one at a time; the credential is never returned.
+   */
+  cursorLoginStart: { name: string; server: string; header?: string };
+  /** How a started Cursor sign-in stands. */
+  cursorLoginStatus: { id: string };
+  /** Stop waiting for the browser. */
+  cursorLoginCancel: { id: string };
   /** Replace the variables of one stdio server; a `value` of null keeps the saved one. */
   setEnv: {
     name: string;
@@ -283,6 +297,15 @@ export interface PluginResults {
   setEnabled: { name: string; enabled: boolean };
   setHeaders: { name: string; server: string };
   setTokenHeader: { name: string; server: string };
+  cursorLoginStart: { id: string; url: string; timeoutSeconds: number };
+  cursorLoginStatus: {
+    state: "waiting" | "done" | "failed" | "cancelled" | "expired";
+    /** Why, in words; never the credential. */
+    reason?: string;
+    /** Seconds the credential claims to be valid (read from it, not verified); when done. */
+    validForSeconds?: number;
+  };
+  cursorLoginCancel: { id: string };
   setEnv: { name: string; server: string };
   testServer: PluginTestResult;
   loginServer: { pendingId: string; authorizationUrl: string };
