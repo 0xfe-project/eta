@@ -13,6 +13,7 @@ import type { Layout } from "../../components";
 import type { ArtifactFilters } from "./artifacts/filter";
 import type { PanelTab } from "./conversation-panel";
 import { computed, effect, signal, View, windowSize } from "nsh";
+import { desktopPanelOpen, setDesktopPanelOpen } from "../../app/desktop-panel";
 import { paneWidth } from "../../app/pane-width";
 import {
   Button,
@@ -226,7 +227,8 @@ export function Conversation(props: {
   }
   function openTask(id: string) {
     props.onTask(id);
-    if (!phone()) drawer.set(true);
+    if (props.layout === "desktop") setDesktopPanelOpen(true);
+    else if (!phone()) drawer.set(true);
   }
   function jumpToSource(item: InteractionView) {
     const source = questionSourceOf(item);
@@ -247,7 +249,7 @@ export function Conversation(props: {
         layout={props.layout}
         captain={props.captain}
         taskId={props.taskId}
-        drawer={drawer()}
+        drawer={props.layout === "tablet" && drawer()}
         tab={panel}
         artifactFilters={artifactFilters}
         model={model}
@@ -336,21 +338,29 @@ export function Conversation(props: {
           <If when={!phone()}>
             <View style={{ flex: 1 }} />
           </If>
-          <If when={props.layout === "tablet" || (phone() && !props.captain)}>
+          <If when={!phone() || !props.captain}>
             <View>
               <Button
                 label={phone() ? uiText("conversationInfo") : uiText("panel")}
                 icon={phone() ? "info" : "sidebar"}
+                selected={
+                  props.layout === "desktop" ? desktopPanelOpen() : undefined
+                }
                 iconOnly={phone()}
                 tone={phone() ? "ghost" : "plain"}
                 size={phone() ? 40 : undefined}
                 iconSize={phone() ? 16 : undefined}
                 labelVariant="caption"
                 style={{ gap: 6 }}
-                onPress={() => drawer.set(true)}
+                onPress={() => {
+                  if (props.layout === "desktop")
+                    setDesktopPanelOpen(!desktopPanelOpen());
+                  else drawer.set(true);
+                }}
               />
               <If when={!phone() && panelAttention(host, props.id)}>
                 <View
+                  testID="panel-attention"
                   style={{
                     position: "absolute",
                     top: -3,
@@ -568,7 +578,7 @@ export function Conversation(props: {
           />
         </View>
       </View>
-      <If when={props.layout === "desktop"}>
+      <If when={props.layout === "desktop" && desktopPanelOpen()}>
         <View
           style={{
             width: paneWidth("panel"),

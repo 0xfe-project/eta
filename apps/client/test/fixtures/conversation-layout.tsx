@@ -113,6 +113,33 @@ function Fixture() {
     status: scenario === "offline" ? "reconnecting" : "open",
     targets: {
       ...s.targets,
+      inbox: {
+        sections: {
+          list:
+            scenario === "pending"
+              ? [
+                  {
+                    id: "q1",
+                    sessionId: "s1",
+                    questionId: "q1",
+                    agentId: "Ada",
+                    conversationId: "group",
+                    replyId: null,
+                    prompt: "Continue?",
+                    options: [],
+                    multi: false,
+                    status: "pending",
+                    answer: null,
+                    revision: 1,
+                    createdAt: 0,
+                    updatedAt: 0,
+                  },
+                ]
+              : [],
+        },
+        revisions: {},
+        version: 0,
+      },
       conversations: {
         sections: { list: [summary] },
         revisions: {},
