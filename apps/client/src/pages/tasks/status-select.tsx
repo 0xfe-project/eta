@@ -2,7 +2,7 @@ import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { TaskDetailState } from "./task-detail-state";
 import { View } from "nsh";
 import { colors, Icon, Label, row } from "../../components";
-import { weight } from "../../components/tokens";
+import { space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { StatusOptions, TaskMenu } from "./menu";
 import { statusName, TaskGlyph, tones } from "./status";
@@ -62,7 +62,7 @@ export function StatusSelect(props: {
           height: plain() ? 22 : 28,
           minWidth: plain() ? undefined : 128,
           maxWidth: "100%",
-          paddingHorizontal: 8,
+          paddingHorizontal: space[8],
           gap: 6,
           borderWidth: 1,
           borderColor: tint() ? c()[tones[props.item.status]] : c().strong,
@@ -91,7 +91,7 @@ export function StatusSelect(props: {
     <View
       style={{
         alignItems: props.align === "end" ? "flex-end" : "flex-start",
-        gap: 4,
+        gap: space[4],
         minWidth: 0,
         flexShrink: 1,
       }}

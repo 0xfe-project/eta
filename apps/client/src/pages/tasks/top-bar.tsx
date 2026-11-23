@@ -1,6 +1,7 @@
 import type { JSX } from "nsh";
 import { View } from "nsh";
 import { Button, colors, Label, row } from "../../components";
+import { control, icon, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 /** Clear space left of the CaretLeft glyph inside its square: 72 of 256. */
@@ -29,11 +30,11 @@ export function TaskTopBar(props: {
     <View
       style={{
         ...row,
-        height: 40,
-        gap: 8,
+        height: space[40],
+        gap: space[8],
         flexShrink: 0,
         paddingLeft: props.inset - backPadding - glyphInset,
-        paddingRight: 8,
+        paddingRight: space[8],
         borderBottomWidth: 1,
         borderColor: c().border,
         backgroundColor: c()[props.background ?? "surface"],
@@ -43,11 +44,11 @@ export function TaskTopBar(props: {
         label={uiText("tasks2")}
         accessibilityLabel={uiText("backToTasks")}
         icon="back"
-        iconSize={16}
+        iconSize={icon.md}
         tone="ghost"
         labelVariant="body"
-        size={props.touch ? 32 : 28}
-        style={{ gap: 2, paddingLeft: backPadding, paddingRight: 6 }}
+        size={props.touch ? control.lg : control.md}
+        style={{ gap: space[2], paddingLeft: backPadding, paddingRight: 6 }}
         onPress={props.onBack}
       />
       <Label tone="muted" lines={1} style={{ flex: 1, minWidth: 0 }}>

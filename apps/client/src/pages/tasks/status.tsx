@@ -2,7 +2,7 @@ import type { BoardTaskStatus, BoardTaskView } from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
 import { Image, View } from "nsh";
 import { Caption, colors, focusRing, Icon, Label, row } from "../../components";
-import { weight } from "../../components/tokens";
+import { icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { UsageLine } from "./usage";
 
@@ -136,7 +136,7 @@ export function TaskStatus(props: { task: BoardTaskView }) {
         paddingVertical: 1,
         paddingLeft: waiting() ? 4 : 6,
         paddingRight: 6,
-        gap: 4,
+        gap: space[4],
         flexShrink: 0,
         backgroundColor: waiting() ? c().canvas : c()[fills[props.task.status]],
         borderWidth: waiting() ? 1 : 0,
@@ -144,7 +144,7 @@ export function TaskStatus(props: { task: BoardTaskView }) {
       }}
     >
       <If when={waiting()}>
-        <Icon name="lock" size={12} tone="mutedInk" />
+        <Icon name="lock" size={icon.sm} tone="mutedInk" />
       </If>
       <Label
         variant="small"
@@ -222,9 +222,9 @@ function TaskCardStatus(props: { task: BoardTaskView }) {
       style={{
         ...row,
         paddingVertical: 1,
-        paddingLeft: 4,
+        paddingLeft: space[4],
         paddingRight: 6,
-        gap: 4,
+        gap: space[4],
         flexShrink: 1,
         minWidth: 0,
         backgroundColor: waitingFor()
@@ -329,7 +329,7 @@ export function TaskSummary(props: {
           ...row,
           paddingHorizontal: 10,
           paddingVertical: 6,
-          gap: 8,
+          gap: space[8],
           cursor: "pointer",
         }}
       >
@@ -338,7 +338,7 @@ export function TaskSummary(props: {
           size={props.open ? 8 : 10}
           tone={props.open ? "muted" : "faint"}
         />
-        <TaskGlyph status={props.task.status} size={12} />
+        <TaskGlyph status={props.task.status} size={icon.sm} />
         <Caption
           text={kind()}
           style={{ letterSpacing: 1.4, color: c().faint, flexShrink: 0 }}
@@ -348,7 +348,13 @@ export function TaskSummary(props: {
           accessibilityLabel={openTask()}
           onPress={() => props.onPress()}
           focusVisibleStyle={focusRing(c())}
-          style={{ ...row, gap: 8, flex: 1, minWidth: 50, cursor: "pointer" }}
+          style={{
+            ...row,
+            gap: space[8],
+            flex: 1,
+            minWidth: 50,
+            cursor: "pointer",
+          }}
         >
           <Label variant="small" tone="muted">
             {`#${props.task.number}`}
@@ -381,9 +387,9 @@ export function TaskSummary(props: {
               <View
                 style={{
                   ...row,
-                  paddingVertical: 8,
+                  paddingVertical: space[8],
                   paddingHorizontal: 10,
-                  gap: 12,
+                  gap: space[12],
                   justifyContent: "space-between",
                 }}
               >
@@ -399,9 +405,19 @@ export function TaskSummary(props: {
               </View>
             }
           >
-            <View style={{ paddingVertical: 8, paddingHorizontal: 10, gap: 6 }}>
+            <View
+              style={{
+                paddingVertical: space[8],
+                paddingHorizontal: 10,
+                gap: 6,
+              }}
+            >
               <View
-                style={{ ...row, gap: 12, justifyContent: "space-between" }}
+                style={{
+                  ...row,
+                  gap: space[12],
+                  justifyContent: "space-between",
+                }}
               >
                 <SubtaskSegments subtasks={subtasks()} width={44} gap={4} />
                 <UsageLine task={props.task} tone="mutedInk" />

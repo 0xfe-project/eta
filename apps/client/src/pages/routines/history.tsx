@@ -3,7 +3,7 @@ import { View } from "nsh";
 import { colors, Icon, Label, row } from "../../components";
 import { chatText, shownMentions } from "../../components/eta-editor";
 import { StatusDot } from "../../components/status-dot";
-import { weight } from "../../components/tokens";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
 import { clockDistance, feedTime, runHistory, scheduleLabel } from "./schedule";
@@ -14,14 +14,16 @@ export function RoutineHistory(props: {
 }) {
   const c = colors();
   return (
-    <View style={{ ...row, gap: props.full ? 4 : 2, flexShrink: 0 }}>
+    <View
+      style={{ ...row, gap: props.full ? space[4] : space[2], flexShrink: 0 }}
+    >
       <Each of={runHistory(props.runs)} key="index">
         {(status) => (
           <View
             style={{
               ...(props.full
-                ? { flex: 1, height: 8 }
-                : { width: 8, height: 8 }),
+                ? { flex: 1, height: space[8] }
+                : { width: space[8], height: space[8] }),
               backgroundColor:
                 status() === "failed"
                   ? c().red
@@ -66,17 +68,17 @@ export function PhoneRoutineRow(props: {
       focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
       style={{
         ...row,
-        paddingVertical: 12,
-        paddingLeft: 16,
-        paddingRight: 12,
-        gap: 12,
+        paddingVertical: space[12],
+        paddingLeft: space[16],
+        paddingRight: space[12],
+        gap: space[12],
         borderBottomWidth: 1,
         borderColor: c().border,
         cursor: "pointer",
       }}
     >
       <View style={{ flex: 1, minWidth: 0, gap: 3, paddingBottom: 6 }}>
-        <View style={{ ...row, gap: 8 }}>
+        <View style={{ ...row, gap: space[8] }}>
           <Label lines={1} style={{ flex: 1, minWidth: 0 }}>
             {props.item.name}
           </Label>
@@ -84,7 +86,7 @@ export function PhoneRoutineRow(props: {
             <RoutineHistory runs={props.item.runs} />
           </If>
         </View>
-        <View style={{ ...row, gap: 8 }}>
+        <View style={{ ...row, gap: space[8] }}>
           <Label
             variant="caption"
             tone="muted"
@@ -147,7 +149,7 @@ export function LatestReportCard(props: {
         <Label variant="small" tone="muted">
           {feedTime(props.run.startedAt)}
         </Label>
-        <View style={{ gap: 8 }}>
+        <View style={{ gap: space[8] }}>
           <Label variant="subtitle" weight={weight.strong}>
             {runTitle(props.run)}
           </Label>
@@ -172,7 +174,7 @@ export function LatestReportCard(props: {
       <View
         style={{
           ...row,
-          height: 32,
+          height: space[32],
           paddingHorizontal: inset(),
           borderTopWidth: 1,
           borderColor: c().border,
@@ -188,7 +190,7 @@ export function LatestReportCard(props: {
           <Label variant="small" weight={weight.strong}>
             {uiText("readReport")}
           </Label>
-          <Icon name="arrowRight" size={12} />
+          <Icon name="arrowRight" size={icon.sm} />
         </View>
       </View>
     </View>
@@ -243,9 +245,9 @@ export function EarlierReportCard(props: {
       style={{
         flex: 1,
         minWidth: 0,
-        gap: props.compact && missed() ? 2 : 4,
+        gap: props.compact && missed() ? space[2] : space[4],
         paddingVertical: 10,
-        paddingHorizontal: 12,
+        paddingHorizontal: space[12],
         borderWidth: 1,
         borderColor: c().border,
         cursor: "pointer",
@@ -264,7 +266,7 @@ export function EarlierReportCard(props: {
             </Label>
             <Label
               lines={props.compact ? undefined : 2}
-              style={props.compact ? undefined : { height: 44 }}
+              style={props.compact ? undefined : { height: control.touch }}
             >
               {summary()}
             </Label>
@@ -272,7 +274,7 @@ export function EarlierReportCard(props: {
         }
       >
         <If when={props.compact}>
-          <View style={{ ...row, gap: 8 }}>
+          <View style={{ ...row, gap: space[8] }}>
             <StatusDot color={c().red} />
             <Label weight={weight.strong} tone="muted">
               {uiText("noReport")}
@@ -284,7 +286,7 @@ export function EarlierReportCard(props: {
           </View>
         </If>
         <If when={!props.compact}>
-          <View style={{ ...row, gap: 8 }}>
+          <View style={{ ...row, gap: space[8] }}>
             <StatusDot color={c().red} />
             <Label weight={weight.strong} tone="muted">
               {uiText("noReport")}

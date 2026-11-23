@@ -2,7 +2,7 @@ import type { BoardTaskView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import { signal, View } from "nsh";
 import { colors, grow, Icon, Label, row, SmoothScroll } from "../../components";
-import { weight } from "../../components/tokens";
+import { control, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 import { ownerLine } from "./creator";
@@ -87,9 +87,9 @@ export function PhoneTaskList(props: {
                 }
                 style={{
                   ...row,
-                  height: group().fold ? 32 : 24,
-                  paddingLeft: 16,
-                  paddingRight: group().fold ? 12 : 16,
+                  height: group().fold ? space[32] : space[24],
+                  paddingLeft: space[16],
+                  paddingRight: group().fold ? space[12] : space[16],
                   borderBottomWidth: 1,
                   borderColor: c().border,
                   backgroundColor: group().fold ? c().canvas : c().surface,
@@ -171,14 +171,16 @@ export function PhoneTaskList(props: {
                         style={{
                           ...row,
                           height: 56,
-                          paddingLeft: 16,
-                          paddingRight: 12,
+                          paddingLeft: space[16],
+                          paddingRight: space[12],
                           borderBottomWidth: 1,
                           borderColor: c().border,
-                          gap: 12,
+                          gap: space[12],
                         }}
                       >
-                        <View style={{ width: 28, alignItems: "center" }}>
+                        <View
+                          style={{ width: control.md, alignItems: "center" }}
+                        >
                           <TaskGlyph
                             status={
                               group().name === "Running"
@@ -188,7 +190,7 @@ export function PhoneTaskList(props: {
                             size={14}
                           />
                         </View>
-                        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                        <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                           <Label lines={1}>{entry().title}</Label>
                           <Label
                             variant="caption"
@@ -226,9 +228,9 @@ export function PhoneTaskList(props: {
                   <View
                     style={{
                       ...row,
-                      height: 40,
-                      paddingLeft: 16,
-                      paddingRight: 12,
+                      height: space[40],
+                      paddingLeft: space[16],
+                      paddingRight: space[12],
                       borderBottomWidth: 1,
                       borderColor: c().border,
                     }}
@@ -261,7 +263,7 @@ function PhoneRowEnd(props: { task: BoardTaskView; time: string }) {
       : undefined,
   );
   return (
-    <View style={{ alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
+    <View style={{ alignItems: "flex-end", gap: space[2], flexShrink: 0 }}>
       <If
         when={rate()}
         else={
@@ -381,7 +383,7 @@ export function TabletTaskList(props: {
             }}
           >
             <TaskGlyph status={task().status} size={14} />
-            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
               <Label variant="small" lines={1}>
                 {task().title}
               </Label>
@@ -433,12 +435,12 @@ export function TaskTableRow(props: {
       focusVisibleStyle={{ backgroundColor: `${c().selected}99` }}
       style={{
         ...row,
-        height: 32,
+        height: space[32],
         borderBottomWidth: 1,
         borderColor: c().border,
         paddingLeft: props.nested ? (desktop() ? 38 : 34) : 14,
         paddingRight: 14,
-        gap: desktop() ? 0 : 8,
+        gap: desktop() ? 0 : space[8],
         cursor: "pointer",
       }}
     >
@@ -457,7 +459,7 @@ export function TaskTableRow(props: {
         <View
           style={{
             width: desktop() ? 200 : 96,
-            paddingRight: 12,
+            paddingRight: space[12],
             flexShrink: 0,
           }}
         >
@@ -472,7 +474,7 @@ export function TaskTableRow(props: {
       <View
         style={{
           ...row,
-          gap: 4,
+          gap: space[4],
           width: phone() ? 72 : desktop() ? 183 : props.nested ? 160 : 180,
           flexShrink: 0,
           overflow: "hidden",

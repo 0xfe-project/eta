@@ -23,7 +23,7 @@ import {
 } from "../../components";
 import { AgentFace, UserFace } from "../../components/agent-face";
 import { canHover, touchScreen } from "../../components/menu";
-import { weight } from "../../components/tokens";
+import { space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { taskMoment } from "./facts";
@@ -399,7 +399,7 @@ export function TaskActivity(props: {
       return target?.kind === "artifact" && resolve(target) === "gone";
     };
     return (
-      <View style={{ ...row, gap: 4, flexWrap: "wrap" }}>
+      <View style={{ ...row, gap: space[4], flexWrap: "wrap" }}>
         <Label variant="caption" tone="muted">
           {name(lineActor(line.entry))}
         </Label>
@@ -467,13 +467,18 @@ export function TaskActivity(props: {
         count: fold.entries.length,
       });
     return (
-      <View style={{ gap: 4, paddingTop: 6, paddingLeft: indent() }}>
+      <View style={{ gap: space[4], paddingTop: 6, paddingLeft: indent() }}>
         <View
           role="button"
           accessibilityLabel={label()}
           accessibilityState={{ expanded: open() }}
           onPress={() => open.set(!open())}
-          style={{ ...row, gap: 4, alignSelf: "flex-start", cursor: "pointer" }}
+          style={{
+            ...row,
+            gap: space[4],
+            alignSelf: "flex-start",
+            cursor: "pointer",
+          }}
         >
           <Icon
             name={open() ? "down" : "right"}
@@ -502,10 +507,10 @@ export function TaskActivity(props: {
           ...row,
           alignItems: "flex-start",
           gap: gap(),
-          paddingTop: message.head ? 12 : 4,
+          paddingTop: message.head ? space[12] : space[4],
         }}
       >
-        <View style={{ width: 20, flexShrink: 0 }}>
+        <View style={{ width: space[20], flexShrink: 0 }}>
           <If when={message.head}>
             <If
               when={message.entry.actor.kind === "agent"}
@@ -515,9 +520,9 @@ export function TaskActivity(props: {
             </If>
           </If>
         </View>
-        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
           <If when={message.head}>
-            <View style={{ ...row, gap: 8, alignItems: "baseline" }}>
+            <View style={{ ...row, gap: space[8], alignItems: "baseline" }}>
               <Label variant="small" weight={weight.strong}>
                 {name(message.entry.actor)}
               </Label>
@@ -553,7 +558,7 @@ export function TaskActivity(props: {
         <Caption text={uiText("activity")} />
       </If>
       <If when={props.heading === "desktop" || props.heading === "tablet"}>
-        <Label weight={weight.strong} style={{ paddingBottom: 4 }}>
+        <Label weight={weight.strong} style={{ paddingBottom: space[4] }}>
           {uiText("activity")}
         </Label>
       </If>

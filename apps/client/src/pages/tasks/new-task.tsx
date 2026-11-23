@@ -14,6 +14,7 @@ import {
   textStyle,
 } from "../../components";
 import { sendShortcut } from "../../components/eta-editor";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { createDescription, DescriptionBox } from "./description-box";
@@ -74,8 +75,8 @@ export function NewTask(props: {
       props.onOpen(result.tasks[0].id);
     }
   }
-  const select = { width: 115, height: 24, paddingHorizontal: 9 };
-  const link = { height: 24, paddingHorizontal: 0, borderWidth: 0 };
+  const select = { width: 115, height: space[24], paddingHorizontal: 9 };
+  const link = { height: space[24], paddingHorizontal: 0, borderWidth: 0 };
   return (
     <Modal
       title={uiText("newTask")}
@@ -226,7 +227,7 @@ export function NewTask(props: {
             />
           </NewTaskRow>
         </View>
-        <View style={{ ...row, gap: 8, justifyContent: "flex-end" }}>
+        <View style={{ ...row, gap: space[8], justifyContent: "flex-end" }}>
           <Button label={uiText("cancel")} onPress={props.onClose} />
           <Button
             label={uiText("newTaskCreate")}

@@ -9,6 +9,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { StatusDot } from "../../components/status-dot";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { routineTime } from "./schedule";
 
@@ -29,7 +30,7 @@ export function PendingReports(props: {
       onClose={props.onClose}
     >
       <SmoothScroll style={grow}>
-        <View style={{ padding: 12, gap: 8 }}>
+        <View style={{ padding: space[12], gap: space[8] }}>
           <Each
             of={props.routines
               .flatMap((routine) =>
@@ -47,7 +48,7 @@ export function PendingReports(props: {
               <View
                 style={{
                   paddingVertical: 10,
-                  paddingHorizontal: 12,
+                  paddingHorizontal: space[12],
                   gap: 6,
                   borderWidth: 1,
                   borderColor: c().strong,

@@ -19,7 +19,7 @@ import {
 import { UserFace } from "../../components/agent-face";
 import { chatText, shownMentions } from "../../components/eta-editor";
 import { StatusDot } from "../../components/status-dot";
-import { weight } from "../../components/tokens";
+import { icon, space, weight } from "../../components/tokens";
 import { formatLocale, localizedText, uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
 import { reportBody, RoutineHistory } from "./history";
@@ -146,13 +146,13 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
       }
     >
       <SmoothScroll style={grow} scrollbar={false}>
-        <View style={{ padding: 16, gap: 18 }}>
-          <View style={{ gap: 8 }}>
-            <View style={{ ...row, gap: 8 }}>
+        <View style={{ padding: space[16], gap: 18 }}>
+          <View style={{ gap: space[8] }}>
+            <View style={{ ...row, gap: space[8] }}>
               <View
                 style={{
                   height: 18,
-                  paddingHorizontal: 8,
+                  paddingHorizontal: space[8],
                   justifyContent: "center",
                   backgroundColor: c().button,
                 }}
@@ -219,14 +219,14 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
                     ...row,
                     minHeight: 56,
                     gap: 10,
-                    paddingHorizontal: 12,
+                    paddingHorizontal: space[12],
                     borderWidth: 1,
                     borderColor: c().border,
                     cursor: "pointer",
                   }}
                 >
                   <Icon name="panel" size={14} tone="muted" />
-                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                  <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                     <Label variant="small" lines={1}>
                       {run().title ?? uiText("report")}
                     </Label>
@@ -258,9 +258,9 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
         style={{
           ...row,
           justifyContent: "space-between",
-          paddingHorizontal: 16,
-          minHeight: 64,
-          gap: 8,
+          paddingHorizontal: space[16],
+          minHeight: space[64],
+          gap: space[8],
           borderTopWidth: 1,
           borderColor: c().border,
         }}
@@ -278,7 +278,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
           icon="play"
           size={36}
           labelWeight={weight.strong}
-          style={{ paddingHorizontal: 16, gap: 6 }}
+          style={{ paddingHorizontal: space[16], gap: 6 }}
           disabled={!props.canRetry}
           onPress={props.onRetry}
         />
@@ -326,13 +326,13 @@ export function RoutineReport(props: RoutineReportProps) {
         style={{
           ...row,
           paddingHorizontal: inset(),
-          gap: props.phone ? 12 : 16,
-          height: props.phone ? 40 : 48,
+          gap: props.phone ? space[12] : space[16],
+          height: props.phone ? space[40] : space[48],
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
       >
-        <View style={{ ...row, gap: 8, flex: 1, minWidth: 0 }}>
+        <View style={{ ...row, gap: space[8], flex: 1, minWidth: 0 }}>
           <If
             when={!props.phone}
             else={
@@ -349,9 +349,9 @@ export function RoutineReport(props: RoutineReportProps) {
               accessibilityLabel={props.routine.name}
               onPress={props.onBack}
               focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
-              style={{ ...row, gap: 8, minWidth: 0, cursor: "pointer" }}
+              style={{ ...row, gap: space[8], minWidth: 0, cursor: "pointer" }}
             >
-              <Icon name="arrowLeft" size={12} />
+              <Icon name="arrowLeft" size={icon.sm} />
               <Label variant="small" lines={1}>
                 {props.routine.name}
               </Label>
@@ -376,8 +376,8 @@ export function RoutineReport(props: RoutineReportProps) {
         <View
           style={{
             alignItems: "center",
-            paddingTop: props.phone ? 16 : 20,
-            paddingBottom: 16,
+            paddingTop: props.phone ? space[16] : space[20],
+            paddingBottom: space[16],
             paddingHorizontal: inset(),
           }}
         >
@@ -389,7 +389,7 @@ export function RoutineReport(props: RoutineReportProps) {
               ...(props.phone && failed()
                 ? {
                     gap: 6,
-                    padding: 12,
+                    padding: space[12],
                     borderWidth: 1,
                     borderColor: c().border,
                   }
@@ -423,7 +423,7 @@ export function RoutineReport(props: RoutineReportProps) {
                   </>
                 }
               >
-                <View style={{ ...row, gap: 8 }}>
+                <View style={{ ...row, gap: space[8] }}>
                   <StatusDot color={c().red} />
                   <Label
                     variant="subtitle"
@@ -436,13 +436,17 @@ export function RoutineReport(props: RoutineReportProps) {
                 <Label tone={props.phone ? "muted" : "mutedInk"}>
                   {props.run.error ?? uiText("theRoutineWasSkipped")}
                 </Label>
-                <View style={{ ...row, paddingTop: props.phone ? 4 : 0 }}>
+                <View
+                  style={{ ...row, paddingTop: props.phone ? space[4] : 0 }}
+                >
                   <Button
                     label={uiText("retry")}
                     disabled={!props.canRetry}
                     onPress={props.onRetry}
                     size={props.phone ? 30 : undefined}
-                    style={props.phone ? { paddingHorizontal: 12 } : undefined}
+                    style={
+                      props.phone ? { paddingHorizontal: space[12] } : undefined
+                    }
                   />
                 </View>
               </If>
@@ -457,19 +461,25 @@ export function RoutineReport(props: RoutineReportProps) {
           <View
             style={{
               alignItems: "center",
-              paddingVertical: 16,
+              paddingVertical: space[16],
               paddingHorizontal: inset(),
               borderTopWidth: 1,
               borderColor: c().border,
             }}
           >
-            <View style={{ ...column, gap: 12 }}>
+            <View style={{ ...column, gap: space[12] }}>
               <Each of={props.run.feedback} key={(entry) => entry.id}>
                 {(entry) => (
                   <View style={{ ...row, alignItems: "flex-start", gap: 10 }}>
                     <UserFace size={20} />
                     <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
-                      <View style={{ ...row, alignItems: "baseline", gap: 8 }}>
+                      <View
+                        style={{
+                          ...row,
+                          alignItems: "baseline",
+                          gap: space[8],
+                        }}
+                      >
                         <Label variant="small" weight={weight.strong}>
                           {uiText("me")}
                         </Label>
@@ -498,7 +508,7 @@ export function RoutineReport(props: RoutineReportProps) {
                 style={{
                   ...row,
                   height: 38,
-                  gap: 8,
+                  gap: space[8],
                   paddingHorizontal: 10,
                   borderWidth: 1,
                   borderColor: c().border,

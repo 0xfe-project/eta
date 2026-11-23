@@ -19,7 +19,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
-import { weight } from "../../components/tokens";
+import { icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { taskDropZones } from "./drag";
@@ -77,14 +77,14 @@ function tabletSize(cardWidth: number) {
     cardWidth,
     cardHeight: 64,
     columnGap: 36,
-    rowGap: 12,
+    rowGap: space[12],
     left: 12,
     labelTop: 12,
     cardsTop: 40,
     tileHeight: 28,
     legendGap: 0,
     bottom: 12,
-    padding: 8,
+    padding: space[8],
     titleVariant: "small" as TextVariant,
     criticalBorder: 1,
     indent: 18,
@@ -318,7 +318,7 @@ function PlanLegend() {
         </Label>
       </View>
       <View style={{ ...row, gap: 5 }}>
-        <TaskGlyph status="in_review" size={12} />
+        <TaskGlyph status="in_review" size={icon.sm} />
         <Label variant="caption" tone="muted">
           {uiText("inReviewLetsNextGo")}
         </Label>
@@ -339,7 +339,7 @@ function PlanLegend() {
         <View
           style={{
             width: 14,
-            height: 2,
+            height: space[2],
             backgroundColor: c().ink,
           }}
         />
@@ -419,7 +419,7 @@ function PlanCard(props: {
           {props.task.title}
         </Label>
       </View>
-      <View style={{ ...row, gap: 4, paddingLeft: size().indent }}>
+      <View style={{ ...row, gap: space[4], paddingLeft: size().indent }}>
         <Label variant="caption" tone="muted">
           {`#${props.task.number} ·`}
         </Label>
@@ -519,7 +519,7 @@ function createPlanEditing(owner: () => string | undefined) {
               overPhoneNavigation
               onClose={() => adding.set(undefined)}
             >
-              <View style={{ padding: 16, gap: 8 }}>
+              <View style={{ padding: space[16], gap: space[8] }}>
                 <If when={target().dependsOn.length}>
                   <Label variant="small" tone="muted">
                     {uiText("thisTaskWaitsForTheTasks")}
@@ -548,7 +548,7 @@ function createPlanEditing(owner: () => string | undefined) {
               width={440}
               onClose={() => connecting.set(undefined)}
             >
-              <View style={{ padding: 16, gap: 8 }}>
+              <View style={{ padding: space[16], gap: space[8] }}>
                 <Label>{uiText("chooseTheTaskThatWaitsAnd")}</Label>
                 <ActionMenu
                   label={uiText("taskThatWaits")}
@@ -660,8 +660,12 @@ export function TaskPlan(props: {
       <View
         style={
           props.tablet
-            ? { paddingHorizontal: 20, paddingVertical: 14, gap: 12 }
-            : { paddingHorizontal: 22, paddingTop: 16, gap: 14 }
+            ? {
+                paddingHorizontal: space[20],
+                paddingVertical: 14,
+                gap: space[12],
+              }
+            : { paddingHorizontal: 22, paddingTop: space[16], gap: 14 }
         }
       >
         <Label variant="caption" tone="muted">
@@ -738,7 +742,11 @@ export function TaskPlanBoard(props: {
     <View
       style={
         props.tablet
-          ? { paddingHorizontal: 14, paddingVertical: 12, gap: 12 }
+          ? {
+              paddingHorizontal: 14,
+              paddingVertical: space[12],
+              gap: space[12],
+            }
           : { paddingHorizontal: 22, paddingVertical: 14, gap: 15 }
       }
     >
@@ -750,12 +758,12 @@ export function TaskPlanBoard(props: {
                 ...row,
                 height: props.tablet ? 36 : 37,
                 paddingHorizontal: props.tablet ? 12 : 13,
-                gap: 8,
+                gap: space[8],
                 borderBottomWidth: 1,
                 borderColor: c().border,
               }}
             >
-              <TaskGlyph status={parent().status} size={12} />
+              <TaskGlyph status={parent().status} size={icon.sm} />
               <View
                 role="button"
                 accessibilityLabel={parent().title}
@@ -774,7 +782,12 @@ export function TaskPlanBoard(props: {
                   editing.startAdding(parent().id, [], uiText("addSubtask"))
                 }
                 hoverStyle={{ backgroundColor: c().selected }}
-                style={{ ...row, gap: 4, height: 24, cursor: "pointer" }}
+                style={{
+                  ...row,
+                  gap: space[4],
+                  height: space[24],
+                  cursor: "pointer",
+                }}
               >
                 <Icon name="plus" size={props.tablet ? 11 : 10} />
                 <Label variant="caption">{uiText("subtask")}</Label>

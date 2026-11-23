@@ -7,7 +7,7 @@ import type { TextStyle, ViewStyle } from "nsh";
 import type { TextVariant } from "../../components";
 import { signal, Storage, View } from "nsh";
 import { colors, Label, row } from "../../components";
-import { weight } from "../../components/tokens";
+import { space, weight } from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
 import { followSession, useHost } from "../../services/host";
 
@@ -142,7 +142,7 @@ export function HintBox(props: { lines: string[] }) {
       style={{
         paddingHorizontal: 10,
         paddingVertical: 6,
-        gap: 2,
+        gap: space[2],
         backgroundColor: c().ink,
       }}
     >
