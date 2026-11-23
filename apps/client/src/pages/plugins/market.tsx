@@ -55,6 +55,19 @@ const POLL_LIMIT = 60;
 
 /** How many Composio toolkits the market draws at first, and each time Show more is pressed. */
 const BATCH = 48;
+/** How long a search waits for the next key before the list follows it. */
+const SEARCH_MS = 175;
+
+/** What a search looks through, lower-cased once per item, not on every key. */
+const haystacks = new WeakMap<object, string>();
+const haystack = (item: object, parts: () => string[]): string => {
+  let text = haystacks.get(item);
+  if (text === undefined) {
+    text = parts().join(" ").toLowerCase();
+    haystacks.set(item, text);
+  }
+  return text;
+};
 
 export function Market(props: {
   layout: Layout;
@@ -74,6 +87,17 @@ export function Market(props: {
   };
   const loading = signal(false);
   const query = signal("");
+  /** The words the list is filtered by: the field's, after the typing paused. */
+  const needle = signal("");
+  let typing: ReturnType<typeof setTimeout> | undefined;
+  effect(() => {
+    const next = query().trim().toLowerCase();
+    untracked(() => {
+      clearTimeout(typing);
+      typing = setTimeout(() => needle.set(next), SEARCH_MS);
+    });
+  });
+  cleanup(() => clearTimeout(typing));
   const detail = signal("");
   /** What the open entry would run, read from its pinned commit: shown in the detail before installing. */
   const info = signal<MarketPreview>();
@@ -85,36 +109,36 @@ export function Market(props: {
   const key = (item: MarketEntry) => `${item.source}\n${item.name}`;
   const all = () =>
     (catalog()?.sources ?? []).flatMap((item) => item.entries ?? []);
-  const entries = () => {
-    const needle = query().trim().toLowerCase();
-    return all().filter(
+  const entries = () =>
+    all().filter(
       (item) =>
-        needle === "" ||
-        [item.name, item.description, item.author, item.sourceName]
-          .join(" ")
-          .toLowerCase()
-          .includes(needle),
+        needle() === "" ||
+        haystack(item, () => [
+          item.name,
+          item.description,
+          item.author,
+          item.sourceName,
+        ]).includes(needle()),
     );
-  };
   const current = () => all().find((item) => key(item) === detail());
   const toolkitKey = (item: ComposioToolkit) => "composio\n" + item.slug;
   const allToolkits = () =>
     (catalog()?.sources ?? []).flatMap((item) => item.toolkits ?? []);
-  const toolkits = () => {
-    const needle = query().trim().toLowerCase();
-    return allToolkits().filter(
+  const toolkits = () =>
+    allToolkits().filter(
       (item) =>
-        needle === "" ||
-        [item.name, item.description, item.sourceName, ...item.categories]
-          .join(" ")
-          .toLowerCase()
-          .includes(needle),
+        needle() === "" ||
+        haystack(item, () => [
+          item.name,
+          item.description,
+          item.sourceName,
+          ...item.categories,
+        ]).includes(needle()),
     );
-  };
   /** How many of the matching toolkits are drawn. A new search starts again from the first batch. */
   const drawn = signal(BATCH);
   effect(() => {
-    query();
+    needle();
     untracked(() => drawn.set(BATCH));
   });
   const shownToolkits = () => toolkits().slice(0, drawn());
