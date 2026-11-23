@@ -330,6 +330,26 @@ describe("the Composio source", () => {
     ).toBe(false);
   });
 
+  it("names only the toolkits asked for from the kept list, with no request, and nothing without a key", async () => {
+    const first = open();
+    first.composio.setKey(KEY);
+    handler = () =>
+      json({
+        items: [item("github"), item("gmail"), item("exa")],
+        next_cursor: null,
+      });
+    await composioOf(first.market);
+    requests.length = 0;
+    const again = first.start();
+    expect(again.composio.toolkitsOf(["gmail", "ghost", "github"])).toEqual([
+      { slug: "github", name: "GITHUB", description: "the github toolkit" },
+      { slug: "gmail", name: "GMAIL", description: "the gmail toolkit" },
+    ]);
+    expect(requests).toHaveLength(0);
+    again.composio.clearKey();
+    expect(again.composio.toolkitsOf(["gmail"])).toEqual([]);
+  });
+
   it("does not follow a redirect with the key", async () => {
     const { market, composio } = open();
     composio.setKey(KEY);

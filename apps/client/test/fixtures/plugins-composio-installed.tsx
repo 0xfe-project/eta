@@ -65,8 +65,9 @@ const kept: MarketCatalog = {
 
 /**
  * The installed page over two plugins. `connected`: what Composio says is connected: two toolkits
- * (one of them not in the kept list), none, or the question fails. A list asked for from the network
- * (anything but `cached`) is shown as text, so a test can see that nothing was asked for.
+ * (one of them not in the kept list), none, or the question fails. The page names them with
+ * `composioToolkits` (the slugs it asks about are shown as `asked:…`); a whole list asked for
+ * (`marketCatalog`, of any mode) is shown as text, so a test can see that none was.
  */
 export function openInstalled(
   layout: Layout,
@@ -89,6 +90,7 @@ export function openInstalled(
       },
     }));
     const refreshed = signal(false);
+    const asked = signal<string[]>([]);
     const stub = Object.assign(host, {
       call: async (_target: string, method: string, args: unknown) => {
         if (method === "composioConnected") {
@@ -98,9 +100,17 @@ export function openInstalled(
             slugs: connected === "two" ? ["gmail", "ghost"] : [],
           };
         }
+        if (method === "composioToolkits") {
+          const slugs = (args as { slugs: string[] }).slugs;
+          asked.set([...asked(), slugs.join(",")]);
+          return {
+            toolkits: kept.sources[0]!.toolkits!.filter((one) =>
+              slugs.includes(one.slug),
+            ),
+          };
+        }
         if (method === "marketCatalog") {
-          if ((args as { mode?: string }).mode !== "cached")
-            refreshed.set(true);
+          refreshed.set(true);
           return JSON.parse(JSON.stringify(kept)) as MarketCatalog;
         }
         return undefined;
@@ -110,6 +120,7 @@ export function openInstalled(
     return (
       <Host.Provider value={stub}>
         <View style={{ flex: 1 }}>
+          <Label>{"asked:" + asked().join(";")}</Label>
           <If when={refreshed()}>
             <Label>asked-the-network</Label>
           </If>

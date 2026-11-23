@@ -18,6 +18,13 @@ test("connected toolkits are a group after the plugins: one card each, named fro
   expect(app.shows("asked-the-network")).toBe(false);
 });
 
+test("only the connected toolkits are asked for by name, not the whole list", async () => {
+  const app = await open("./fixtures/plugins-composio-two.tsx", DESKTOP);
+  await app.waitFor("id:composio-connected-item");
+  expect(app.shows("text:asked:gmail,ghost")).toBe(true);
+  expect(app.shows("asked-the-network")).toBe(false);
+});
+
 test("the mark of a connected card is at its bottom right, on the source's line", async () => {
   const app = await open("./fixtures/plugins-composio-two.tsx", DESKTOP);
   await app.waitFor("id:composio-connected-item");
