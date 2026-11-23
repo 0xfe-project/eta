@@ -40,6 +40,7 @@ import { PhoneConversationInfo } from "./conversation-info";
 import { ConversationPanel, panelAttention } from "./conversation-panel";
 import { ConversationTimeline } from "./conversation-timeline";
 import { indexInserts, InsertMessage } from "./insert-message";
+import { keptMessages } from "./kept-messages";
 import { InviteAgents, StewardMenu } from "./members";
 import { QuestionDialog } from "./pending";
 import { questionSource } from "./question-row";
@@ -147,23 +148,26 @@ export function Conversation(props: {
    * draws an empty turn, as if the message had gone out. Both stay in the lane above the composer
    * until a lane takes the message.
    */
+  const keep = keptMessages();
   const messages = computed(() => {
     const waiting = new Set(held().map((message) => message.id));
-    return [
-      ...new Map(
-        [...older(), ...(timeline()?.messages ?? [])].map((message) => [
-          message.id,
-          message,
-        ]),
-      ).values(),
-    ].filter(
-      (message) =>
-        !waiting.has(message.id) &&
-        !(
-          message.author === "agent" &&
-          (waiting.has(message.rootMessageId ?? "") ||
-            waiting.has(message.replyToId ?? ""))
-        ),
+    return keep(
+      [
+        ...new Map(
+          [...older(), ...(timeline()?.messages ?? [])].map((message) => [
+            message.id,
+            message,
+          ]),
+        ).values(),
+      ].filter(
+        (message) =>
+          !waiting.has(message.id) &&
+          !(
+            message.author === "agent" &&
+            (waiting.has(message.rootMessageId ?? "") ||
+              waiting.has(message.replyToId ?? ""))
+          ),
+      ),
     );
   });
   const indexed = computed(() => indexInserts(messages()));
