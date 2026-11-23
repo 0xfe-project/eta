@@ -1087,6 +1087,7 @@ export function createProduct(options: {
             }),
             mcp,
             icons: new IconCache(db),
+            settings: new SettingStore(db),
           },
           applied("plugins"),
         ),

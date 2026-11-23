@@ -7,6 +7,7 @@
 import type { PluginAuditView, PluginValue } from "@eta/client-contracts";
 import type { AgentStore } from "../agents/store";
 import type { McpService } from "../mcp/service";
+import type { SettingStore } from "../settings/store";
 import type { IconCache } from "./icon-cache";
 import type { Market } from "./market";
 import type { Plugins } from "./service";
@@ -23,6 +24,17 @@ import { testConnection } from "./test-server";
 const LEVELS = ["none", "read", "file", "value"] as const;
 const AUDIT_SHOWN = 200;
 
+/**
+ * What a check found out about one server's sign-in, kept in the settings so a restart still knows it:
+ * the conclusion, the address it was found for, and when. Never a token, a header or an answer.
+ */
+interface KeptLogin {
+  status: "needs_login";
+  url: string;
+  at: number;
+}
+const keptKey = (plugin: string) => `plugins.login.${plugin}`;
+
 export function pluginsPlugin(
   deps: {
     plugins: Plugins;
@@ -30,6 +42,8 @@ export function pluginsPlugin(
     market: Market;
     mcp?: McpService;
     icons?: IconCache;
+    /** Where a server's needs-login finding is kept between runs; nothing is kept without it. */
+    settings?: SettingStore;
     /** Tests only: the Cursor sign-in with its fake network. */
     cursorLogin?: CursorLogin;
   },
@@ -41,6 +55,25 @@ export function pluginsPlugin(
    * refused: a login made later (from any entry) has another stamp, so it is not shown as expired.
    */
   const asked = new Map<string, string>();
+  /** A plugin's kept findings by server name; what is stored is read as untrusted and checked on use. */
+  const keptOf = (plugin: string): Record<string, KeptLogin | undefined> =>
+    (deps.settings?.get(keptKey(plugin)) ?? {}) as Record<
+      string,
+      KeptLogin | undefined
+    >;
+  /** Whether a finding is kept for this server at its present address. */
+  const kept = (plugin: string, server: string, url: string): boolean => {
+    const one = keptOf(plugin)[server];
+    return one?.status === "needs_login" && one.url === url;
+  };
+  /** Keep a server's finding, or (null) drop it; a plugin with none left has no row. */
+  const keep = (plugin: string, server: string, one: KeptLogin | null) => {
+    const all = { ...keptOf(plugin) };
+    if (one === null) delete all[server];
+    else all[server] = one;
+    if (Object.keys(all).length === 0) deps.settings?.delete(keptKey(plugin));
+    else deps.settings?.set(keptKey(plugin), all);
+  };
   const remoteOf = (
     name: string,
     server: string,
@@ -81,9 +114,16 @@ export function pluginsPlugin(
     );
     const url = (plan.entry as { url?: string }).url;
     if (url !== undefined) {
-      if (result.status === "needs_login")
+      if (result.status === "needs_login") {
         asked.set(url, mcp?.signInStamp(url) ?? "");
-      else if (result.status === "ok") asked.delete(url);
+        // A refused stored sign-in is "expired", which a stored sign-in already shows: keep only the
+        // finding that there is none.
+        if (mcp?.signedIn(url) !== true)
+          keep(name, server, { status: "needs_login", url, at: Date.now() });
+      } else if (result.status === "ok") {
+        asked.delete(url);
+        keep(name, server, null);
+      }
       wire.pushNow?.("plugins");
     }
     return result;
@@ -98,6 +138,8 @@ export function pluginsPlugin(
     wire: { pushNow?: (target: string) => void },
     name: string,
   ) => {
+    // A new install starts without what an earlier one found, checked or not.
+    deps.settings?.delete(keptKey(name));
     const view = plugins.view().find((one) => one.name === name);
     for (const server of view?.servers ?? [])
       if (server.url !== undefined)
@@ -135,7 +177,9 @@ export function pluginsPlugin(
                             : ("needs_login" as const)
                           : mcp.signedIn(server.url)
                             ? ("signed_in" as const)
-                            : ("none" as const),
+                            : kept(view.name, server.name, server.url)
+                              ? ("needs_login" as const)
+                              : ("none" as const),
                     },
               ),
             })),
@@ -301,6 +345,7 @@ export function pluginsPlugin(
             all.filter((view) => view.name !== name).flatMap(urlsOf),
           );
           await plugins.registry.remove(name);
+          deps.settings?.delete(keptKey(name));
           if (mcp !== undefined)
             await mcp.releaseUrls(
               mine,
@@ -381,18 +426,17 @@ export function pluginsPlugin(
           const args = new Args(call);
           if (mcp === undefined) throw new Error("sign-in is not available");
           // The plugin must be on, usable and have the server: testPlan refuses otherwise.
-          const { url, headers } = remoteOf(
-            args.string("name"),
-            args.string("server"),
-          );
+          const name = args.string("name");
+          const server = args.string("server");
+          const { url, headers } = remoteOf(name, server);
           asked.delete(url);
-          return {
-            result: await mcp.loginUrl(
-              url,
-              headers,
-              args.optionalString("redirectOrigin"),
-            ),
-          };
+          const result = await mcp.loginUrl(
+            url,
+            headers,
+            args.optionalString("redirectOrigin"),
+          );
+          keep(name, server, null);
+          return { result };
         }),
         wire.handle("plugins", "cursorLoginStart", (call) => {
           const args = new Args(call);
@@ -433,6 +477,7 @@ export function pluginsPlugin(
           const { url } = remoteOf(args.string("name"), args.string("server"));
           await mcp.logoutUrl(url);
           asked.delete(url);
+          keep(args.string("name"), args.string("server"), null);
           return {
             result: {
               name: args.string("name"),
