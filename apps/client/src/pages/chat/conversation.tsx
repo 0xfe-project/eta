@@ -340,25 +340,45 @@ export function Conversation(props: {
           </If>
           <If when={!phone() || !props.captain}>
             <View>
-              <Button
-                label={phone() ? uiText("conversationInfo") : uiText("panel")}
-                icon={phone() ? "info" : "sidebar"}
-                selected={
-                  props.layout === "desktop" ? desktopPanelOpen() : undefined
+              <If
+                when={props.layout === "desktop"}
+                else={
+                  <Button
+                    label={
+                      phone() ? uiText("conversationInfo") : uiText("panel")
+                    }
+                    icon={phone() ? "info" : "sidebar"}
+                    iconOnly={phone()}
+                    tone={phone() ? "ghost" : "plain"}
+                    size={phone() ? 40 : undefined}
+                    iconSize={phone() ? 16 : undefined}
+                    labelVariant="caption"
+                    style={{ gap: 6 }}
+                    onPress={() => drawer.set(true)}
+                  />
                 }
-                iconOnly={phone()}
-                tone={phone() ? "ghost" : "plain"}
-                size={phone() ? 40 : undefined}
-                iconSize={phone() ? 16 : undefined}
-                labelVariant="caption"
-                style={{ gap: 6 }}
-                onPress={() => {
-                  if (props.layout === "desktop")
-                    setDesktopPanelOpen(!desktopPanelOpen());
-                  else drawer.set(true);
-                }}
-              />
-              <If when={!phone() && panelAttention(host, props.id)}>
+              >
+                <Button
+                  label={uiText(desktopPanelOpen() ? "hidePanel" : "showPanel")}
+                  tooltip={uiText(
+                    desktopPanelOpen() ? "hidePanel" : "showPanel",
+                  )}
+                  expanded={desktopPanelOpen()}
+                  icon="sidebar"
+                  iconOnly
+                  tone="ghost"
+                  labelTone="muted"
+                  hoverTone="ink"
+                  size={28}
+                  iconSize={14}
+                  onPress={() => setDesktopPanelOpen(!desktopPanelOpen())}
+                />
+              </If>
+              <If
+                when={
+                  props.layout === "tablet" && panelAttention(host, props.id)
+                }
+              >
                 <View
                   testID="panel-attention"
                   style={{

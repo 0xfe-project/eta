@@ -9,11 +9,8 @@ import {
   row,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
-import {
-  ContextRing,
-  hint,
-  useContextUsage,
-} from "../../components/context-ring";
+import { ContextRing, useContextUsage } from "../../components/context-ring";
+import { hint } from "../../components/controls";
 import { StatusDot } from "../../components/status-dot";
 import { uiText } from "../../i18n";
 import { followSession, useHost } from "../../services/host";
