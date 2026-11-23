@@ -53,6 +53,11 @@ test("a toolkit switched off for every agent says so", async () => {
   const app = await open("./fixtures/plugins-composio-agent-off.tsx", WINDOW);
   await app.waitFor("label:@composio/gmail");
   expect(app.count("id:composio-plugin-off")).toBe(1);
+  // It is on the line of "Composio toolkit", at the right of the row, not on a line of its own.
+  const sub = app.layout("text:Composio toolkit")!;
+  const off = app.layout("id:composio-plugin-off")!;
+  expect(off.y < sub.y + sub.height && off.y + off.height > sub.y).toBe(true);
+  expect(off.x).toBeGreaterThan(sub.x + sub.width);
 });
 
 test("an agent on an external runtime cannot take a toolkit, and the row says why", async () => {
