@@ -345,7 +345,8 @@ export class Logos {
       return hit?.logo ?? old ?? null;
     }
     this.#repoBackoff.delete(key);
-    const keep = logo ? (COMMIT.test(ref) ? PINNED_MS : KEEP_MS) : MISS_MS;
+    // A commit's content cannot change: "no logo of its own there" is as lasting as a picture there.
+    const keep = COMMIT.test(ref) ? PINNED_MS : logo ? KEEP_MS : MISS_MS;
     this.#repoKept.set(key, { until: now + keep, logo });
     this.#options.store?.put(
       repo,
@@ -427,9 +428,18 @@ export class Logos {
     return entries.map((one, index): CachedLogo => {
       if (index >= MAX_CACHED_LOGOS) return { status: "unknown" };
       let got = this.#peek(one.repo, one.ref, one.path, now);
-      // An own logo that is known not to exist: the homepage's icon, kept under the entry's key, is next.
-      if (got === null && one.homepage)
-        got = this.#peek(one.repo, one.ref, `#site:${one.homepage}`, now);
+      // No own logo, or not known (a short "none" that has expired reads as not known): the
+      // homepage's icon, kept under the entry's key for longer, is next. An own picture wins; a
+      // homepage that is not known either does not turn an own logo not known into "none".
+      if ((got === null || got === undefined) && one.homepage) {
+        const site = this.#peek(
+          one.repo,
+          one.ref,
+          `#site:${one.homepage}`,
+          now,
+        );
+        if (got === null || (site !== undefined && site !== null)) got = site;
+      }
       if (got === undefined) return { status: "unknown" };
       if (got === null) return { status: "miss" };
       if (total + got.data.length > MAX_CACHED_BYTES)
