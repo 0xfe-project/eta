@@ -1,6 +1,7 @@
 import type { UpgradeBusy } from "@eta/client-contracts";
 import { View } from "nsh";
 import { Label } from "../../../components";
+import { space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 
 function busyLabels(work: readonly UpgradeBusy[]) {
@@ -34,7 +35,7 @@ export function BusyList(props: {
             <Label
               variant="small"
               tone="muted"
-              style={{ paddingLeft: 16 }}
+              style={{ paddingLeft: space[16] }}
             >{`• ${label()}`}</Label>
           )}
         </Each>

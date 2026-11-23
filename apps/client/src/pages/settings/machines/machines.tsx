@@ -17,7 +17,7 @@ import {
 } from "../../../components";
 import { MenuRule } from "../../../components/menu";
 import { StatusDot } from "../../../components/status-dot";
-import { weight } from "../../../components/tokens";
+import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText, useText } from "../../../i18n";
 import { relativeTime, useHost } from "../../../services/host";
 import { SectionHeader } from "../section";
@@ -74,7 +74,7 @@ function MachineRow(props: {
     <View
       style={{
         ...row,
-        height: props.phone ? 16 : 20,
+        height: props.phone ? space[16] : space[20],
         width: props.phone ? undefined : machineUpdate.state() ? 160 : 100,
         gap: 6,
       }}
@@ -138,24 +138,24 @@ function MachineRow(props: {
             ...row,
             alignItems: "flex-start",
             gap: 10,
-            paddingLeft: 16,
+            paddingLeft: space[16],
             // Room for the menu: its trigger is 24 wide, the phone's button 28 (its minWidth wins).
             paddingRight: 16 + (props.phone ? 28 : 24) + 10,
-            paddingVertical: 8,
+            paddingVertical: space[8],
             cursor: "pointer",
           }}
         >
           <View
             style={{
-              width: props.phone ? 28 : 24,
-              height: props.phone ? 28 : 24,
+              width: props.phone ? control.md : space[24],
+              height: props.phone ? control.md : space[24],
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            <Icon name="monitor" size={16} tone="muted" />
+            <Icon name="monitor" size={icon.md} tone="muted" />
           </View>
-          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
             <Label
               weight={weight.regular}
               tone={props.item.status === "offline" ? "muted" : "ink"}
@@ -176,9 +176,9 @@ function MachineRow(props: {
               <ActionMenu
                 label={uiText("machineActions", { name: props.item.name })}
                 triggerStyle={{
-                  minWidth: 24,
-                  width: 24,
-                  height: props.phone ? 28 : 24,
+                  minWidth: space[24],
+                  width: space[24],
+                  height: props.phone ? control.md : space[24],
                   paddingHorizontal: 0,
                 }}
                 // The row under it is already highlighted: a step darker, so the menu reads as its own target.
@@ -205,7 +205,7 @@ function MachineRow(props: {
                   <MenuRule
                     style={{
                       height: 1,
-                      marginVertical: 4,
+                      marginVertical: space[4],
                       backgroundColor: c().border,
                     }}
                   />
@@ -222,8 +222,8 @@ function MachineRow(props: {
               icon="more"
               iconOnly
               tone="ghost"
-              size={28}
-              style={{ width: 24, paddingHorizontal: 0 }}
+              size={control.md}
+              style={{ width: space[24], paddingHorizontal: 0 }}
               onPress={() => dialog.set("menu")}
             />
           </If>
@@ -240,9 +240,9 @@ function MachineRow(props: {
               testID="machine-update-failure"
               style={{
                 paddingLeft: props.phone ? 54 : 50,
-                paddingRight: 16,
-                paddingBottom: 8,
-                gap: 8,
+                paddingRight: space[16],
+                paddingBottom: space[8],
+                gap: space[8],
                 ...(props.phone ? {} : { ...row, alignItems: "flex-start" }),
               }}
             >
@@ -285,8 +285,8 @@ function MachineRow(props: {
                   pressedStyle={{ backgroundColor: c().selected }}
                   style={{
                     ...row,
-                    height: 48,
-                    paddingHorizontal: 16,
+                    height: space[48],
+                    paddingHorizontal: space[16],
                     borderBottomWidth: 1,
                     borderColor: c().border,
                   }}
@@ -361,12 +361,12 @@ export function Machines(props: {
             ref={(node: ViewRef) => {
               pairingAnchor = node;
             }}
-            style={{ ...row, gap: 8 }}
+            style={{ ...row, gap: space[8] }}
           >
             <If when={host.can("machines.phoneLink")}>
               <Button
                 label={uiText("connectPhone")}
-                size={phone() ? 28 : undefined}
+                size={phone() ? control.md : undefined}
                 style={phone() ? { paddingHorizontal: 10 } : undefined}
                 onPress={() => pairing.set(true)}
               />
@@ -375,7 +375,7 @@ export function Machines(props: {
               <Button
                 label={uiText("addMachine")}
                 icon="plus"
-                size={phone() ? 28 : undefined}
+                size={phone() ? control.md : undefined}
                 style={phone() ? { paddingHorizontal: 10, gap: 6 } : undefined}
                 onPress={() => adding.set(true)}
               />

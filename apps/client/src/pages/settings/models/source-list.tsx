@@ -12,6 +12,7 @@ import type { EntityStatus } from "../section";
 import { keyMissing, providerLabel } from "@eta/client-contracts";
 import { View } from "nsh";
 import { ActionItem, colors, Label, row } from "../../../components";
+import { space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { EntityRow, LetterBox } from "../section";
@@ -125,7 +126,7 @@ export function ModelSourceList(props: {
                   <View
                     style={{
                       width: 56,
-                      height: 4,
+                      height: space[4],
                       borderWidth: 1,
                       borderColor: c().strong,
                     }}
@@ -133,7 +134,7 @@ export function ModelSourceList(props: {
                     <View
                       style={{
                         width: (54 * (used(item()) ?? 0)) / 100,
-                        height: 2,
+                        height: space[2],
                         backgroundColor: c().ink,
                       }}
                     />

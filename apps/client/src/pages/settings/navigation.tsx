@@ -2,6 +2,7 @@ import type { SettingsSection, useSettingsOverview } from "./overview";
 import { View } from "nsh";
 import { colors, grow, Icon, Label, row, SmoothScroll } from "../../components";
 import { StatusDot } from "../../components/status-dot";
+import { icon, space } from "../../components/tokens";
 
 import { useText } from "../../i18n";
 import { sections } from "./overview";
@@ -33,7 +34,12 @@ export function SettingsNavigation(props: {
       }
       scrollbar={false}
     >
-      <View style={{ padding: props.phone ? 0 : 6, gap: props.phone ? 0 : 2 }}>
+      <View
+        style={{
+          padding: props.phone ? 0 : 6,
+          gap: props.phone ? 0 : space[2],
+        }}
+      >
         <Each of={sections}>
           {(item) => (
             <View
@@ -55,7 +61,7 @@ export function SettingsNavigation(props: {
             >
               <Icon
                 name={item()[1]}
-                size={16}
+                size={icon.md}
                 tone={
                   !props.phone && props.current === item()[0] ? "ink" : "muted"
                 }
@@ -82,7 +88,7 @@ export function SettingsNavigation(props: {
                     {props.summary(item()[0]).text}
                   </Label>
                 </View>
-                <Icon name="right" tone="muted" size={16} />
+                <Icon name="right" tone="muted" size={icon.md} />
               </If>
             </View>
           )}

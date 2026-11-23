@@ -3,7 +3,7 @@ import { Clipboard, Image, Overlay, signal, View, windowSize } from "nsh";
 import qrCode from "qrcode-generator";
 import { Button, colors, Field, Label, Modal, row } from "../../../components";
 import { CloseButton } from "../../../components/navigation-buttons";
-import { weight } from "../../../components/tokens";
+import { space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 
@@ -66,8 +66,12 @@ export function PhonePairing(props: {
     <View
       style={
         props.phone
-          ? { gap: 12, paddingHorizontal: 16, paddingBottom: 16 }
-          : { gap: 12, padding: 14 }
+          ? {
+              gap: space[12],
+              paddingHorizontal: space[16],
+              paddingBottom: space[16],
+            }
+          : { gap: space[12], padding: 14 }
       }
     >
       <If when={popover()}>

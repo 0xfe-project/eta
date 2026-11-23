@@ -16,7 +16,12 @@ import {
   textStyle,
 } from "../../../components";
 import { ToggleSwitch } from "../../../components/toggle-switch";
-import { weight } from "../../../components/tokens";
+import {
+  border,
+  control as controlHeight,
+  space,
+  weight,
+} from "../../../components/tokens";
 import { formatLocale, uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { PaneBack } from "../section";
@@ -93,10 +98,10 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
   const preference = () =>
     ({
       ...row,
-      minHeight: 40,
-      gap: 16,
-      paddingHorizontal: 16,
-      paddingVertical: 8,
+      minHeight: space[40],
+      gap: space[16],
+      paddingHorizontal: space[16],
+      paddingVertical: space[8],
       borderBottomWidth: 1,
       borderColor: c().border,
     }) as const;
@@ -109,7 +114,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
         label={uiText(command() ? "machineGenerateCommand" : "sshInstall")}
         tone="primary"
         size={props.phone ? 40 : 24}
-        style={{ paddingHorizontal: 12 }}
+        style={{ paddingHorizontal: space[12] }}
         disabled={busy() || installing() || (!command() && !sshReady())}
         onPress={() => void create()}
       />
@@ -127,7 +132,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
         when={props.phone}
         else={
           <View style={preference()}>
-            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
               <Label>{row_.label}</Label>
               <If when={row_.hint}>
                 <Label variant="small" tone="muted">
@@ -137,7 +142,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
             </View>
             {row_.field({
               width: 240,
-              height: 24,
+              height: space[24],
               ...textStyle(type("small")),
               paddingHorizontal: 10,
               paddingVertical: 3,
@@ -149,17 +154,17 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
         <View
           style={{
             gap: 6,
-            paddingHorizontal: 16,
-            paddingVertical: 12,
+            paddingHorizontal: space[16],
+            paddingVertical: space[12],
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
           <Label>{row_.label}</Label>
           {row_.field({
-            height: 40,
+            height: space[40],
             ...textStyle(type("body")),
-            paddingHorizontal: 12,
+            paddingHorizontal: space[12],
             borderColor: c().strong,
           })}
           <If when={row_.hint}>
@@ -190,8 +195,8 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
       <View
         style={{
           ...preference(),
-          gap: props.phone ? 12 : 16,
-          paddingVertical: props.phone ? 12 : 8,
+          gap: props.phone ? space[12] : space[16],
+          paddingVertical: props.phone ? space[12] : space[8],
         }}
       >
         <Label style={{ flex: 1, minWidth: 0 }}>{uiText("sshKeyless")}</Label>
@@ -217,7 +222,13 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
         })}
       </If>
       <If when={installId()}>
-        <View style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 4 }}>
+        <View
+          style={{
+            paddingHorizontal: space[16],
+            paddingVertical: space[12],
+            gap: space[4],
+          }}
+        >
           <Label tone={install()?.step === "failed" ? "red" : "muted"}>
             {uiText(stages[install()?.step ?? "connect"])}
           </Label>
@@ -229,7 +240,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
         </View>
       </If>
       <If when={props.phone}>
-        <View style={{ padding: 16 }}>{control()}</View>
+        <View style={{ padding: space[16] }}>{control()}</View>
       </If>
     </>
   );
@@ -239,8 +250,8 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
       <If when={props.phone}>
         <View
           style={{
-            paddingHorizontal: 16,
-            paddingVertical: 12,
+            paddingHorizontal: space[16],
+            paddingVertical: space[12],
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
@@ -250,11 +261,11 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
       </If>
       <If when={!command()}>{sshForm()}</If>
       <If when={command() && props.phone && !enrollment()}>
-        <View style={{ padding: 16 }}>{control()}</View>
+        <View style={{ padding: space[16] }}>{control()}</View>
       </If>
       <If when={command() ? enrollment() : undefined}>
         {(item) => (
-          <View style={{ padding: 16, gap: 10 }}>
+          <View style={{ padding: space[16], gap: 10 }}>
             <Label>{uiText("runTheCommandInThatMachines")}</Label>
             <If when={commandOptions()}>
               <Field
@@ -272,8 +283,8 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
             </If>
             <View
               style={{
-                gap: 8,
-                padding: 12,
+                gap: space[8],
+                padding: space[12],
                 borderWidth: 1,
                 borderColor: c().border,
               }}
@@ -281,7 +292,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
               <Label variant="small">{item().command}</Label>
               <Button
                 label={uiText(copied() ? "copied" : "copyInstallCommand")}
-                size={props.phone ? 32 : 24}
+                size={props.phone ? controlHeight.lg : controlHeight.sm}
                 onPress={() =>
                   void host.action(async () => {
                     await Clipboard.writeText(item().command);
@@ -324,8 +335,8 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
         style={{
           ...row,
           justifyContent: "flex-end",
-          paddingHorizontal: 16,
-          paddingVertical: 12,
+          paddingHorizontal: space[16],
+          paddingVertical: space[12],
           borderTopWidth: 1,
           borderColor: c().border,
         }}
@@ -344,9 +355,9 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
             style={{
               borderBottomWidth: 1,
               borderColor: c().border,
-              paddingHorizontal: 16,
-              paddingVertical: 8,
-              gap: 4,
+              paddingHorizontal: space[16],
+              paddingVertical: space[8],
+              gap: space[4],
             }}
           >
             <View style={{ ...row, gap: 10, height: 22 }}>
@@ -360,9 +371,9 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
           <View
             style={{
               ...row,
-              minHeight: 40,
-              paddingHorizontal: 16,
-              paddingVertical: 8,
+              minHeight: space[40],
+              paddingHorizontal: space[16],
+              paddingVertical: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
@@ -373,9 +384,9 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
               value={method()}
               triggerStyle={{
                 width: 160,
-                height: 24,
+                height: space[24],
                 paddingLeft: 10,
-                paddingRight: 8,
+                paddingRight: space[8],
               }}
             >
               <ActionItem
@@ -409,7 +420,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
           style={{
             ...row,
             alignItems: "stretch",
-            height: 40,
+            height: space[40],
             flexShrink: 0,
             borderBottomWidth: 1,
             borderColor: c().border,
@@ -434,7 +445,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
                   flex: 1,
                   alignItems: "center",
                   justifyContent: "center",
-                  borderBottomWidth: 2,
+                  borderBottomWidth: border.thick,
                   borderColor: mode() === item() ? c().ink : "transparent",
                 }}
               >

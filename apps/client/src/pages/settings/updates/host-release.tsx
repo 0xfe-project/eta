@@ -4,7 +4,7 @@ import { openUrl, View } from "nsh";
 import { Button, colors, Icon, Label, row } from "../../../components";
 import { chatText } from "../../../components/eta-editor";
 import { StatusDot } from "../../../components/status-dot";
-import { weight } from "../../../components/tokens";
+import { icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { canStartHost } from "../../connection/local-host";
@@ -133,7 +133,9 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
             label={offerLabel()}
             size={props.phone ? 40 : undefined}
             style={
-              props.phone ? { marginTop: 8, alignSelf: "stretch" } : undefined
+              props.phone
+                ? { marginTop: space[8], alignSelf: "stretch" }
+                : undefined
             }
             disabled={!canUpdate()}
             onPress={() => {
@@ -148,7 +150,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
         style={{
           ...(props.phone ? {} : { alignItems: "flex-start" }),
           gap: props.phone ? 8 : 6,
-          marginTop: props.phone ? 8 : 0,
+          marginTop: props.phone ? space[8] : 0,
         }}
       >
         <If when={waitingOnWork() && host.can("upgrade.start")}>
@@ -179,8 +181,8 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
           alignItems: props.phone ? "stretch" : "flex-start",
           gap: props.phone ? 4 : 10,
           minHeight: 73,
-          paddingVertical: 8,
-          paddingHorizontal: 16,
+          paddingVertical: space[8],
+          paddingHorizontal: space[16],
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
@@ -188,14 +190,14 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
         <If when={!props.phone}>
           <View
             style={{
-              width: 24,
-              height: 24,
+              width: space[24],
+              height: space[24],
               flexShrink: 0,
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            <Icon name="arrowCircleUp" tone="muted" size={16} />
+            <Icon name="arrowCircleUp" tone="muted" size={icon.md} />
           </View>
         </If>
         <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
@@ -228,7 +230,11 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
               <Label variant="small" tone="mutedInk">
                 {uiText("whatsNew")}
               </Label>
-              <Icon name={notes() ? "down" : "right"} size={12} tone="muted" />
+              <Icon
+                name={notes() ? "down" : "right"}
+                size={icon.sm}
+                tone="muted"
+              />
             </View>
           </If>
         </View>
@@ -255,8 +261,8 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
         {(release) => (
           <View
             style={{
-              padding: 16,
-              gap: 8,
+              padding: space[16],
+              gap: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
@@ -280,11 +286,11 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
         <View
           testID="update-progress"
           style={{
-            paddingTop: 4,
-            paddingBottom: 12,
+            paddingTop: space[4],
+            paddingBottom: space[12],
             paddingLeft: props.phone ? 16 : 50,
-            paddingRight: 16,
-            gap: 8,
+            paddingRight: space[16],
+            gap: space[8],
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
@@ -319,9 +325,9 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
         {(ended) => (
           <View
             style={{
-              paddingBottom: 12,
+              paddingBottom: space[12],
               paddingLeft: props.phone ? 16 : 50,
-              paddingRight: 16,
+              paddingRight: space[16],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
@@ -344,8 +350,8 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
       >
         <View
           style={{
-            paddingHorizontal: 16,
-            paddingVertical: 8,
+            paddingHorizontal: space[16],
+            paddingVertical: space[8],
             gap: 3,
             borderBottomWidth: 1,
             borderColor: c().border,

@@ -15,7 +15,7 @@ import {
   SmoothScroll,
 } from "../../../components";
 import { StatusDot } from "../../../components/status-dot";
-import { weight } from "../../../components/tokens";
+import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { follow, relativeTime, useHost } from "../../../services/host";
 import { TaskGlyph } from "../../tasks/status";
@@ -81,10 +81,10 @@ export function MachineDetail(props: {
   };
   const rowStyle = () => ({
     ...row,
-    minHeight: 44,
-    paddingHorizontal: 16,
-    paddingVertical: props.phone ? 8 : undefined,
-    gap: props.phone ? 16 : 12,
+    minHeight: control.touch,
+    paddingHorizontal: space[16],
+    paddingVertical: props.phone ? space[8] : undefined,
+    gap: props.phone ? space[16] : space[12],
     borderBottomWidth: 1,
     borderColor: c().border,
   });
@@ -241,7 +241,9 @@ export function MachineDetail(props: {
                   >
                     <EntityRow
                       title={item().title}
-                      leading={<TaskGlyph status={item().status} size={16} />}
+                      leading={
+                        <TaskGlyph status={item().status} size={icon.md} />
+                      }
                       leadingSize={28}
                       stacked
                       caret
@@ -260,8 +262,8 @@ export function MachineDetail(props: {
         >
           <View
             style={{
-              padding: 16,
-              gap: 8,
+              padding: space[16],
+              gap: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
@@ -294,14 +296,14 @@ export function MachineDetail(props: {
             <Label style={{ flex: 1 }}>{uiText("removeMachine")}</Label>
             <Button
               label={uiText("remove2")}
-              size={props.phone ? 28 : undefined}
+              size={props.phone ? control.md : undefined}
               style={props.phone ? { paddingHorizontal: 10 } : undefined}
               onPress={() => removing.set(true)}
             />
           </View>
         </If>
         <If when={props.item.updateError}>
-          <Label tone="red" variant="small" style={{ padding: 16 }}>
+          <Label tone="red" variant="small" style={{ padding: space[16] }}>
             {props.item.updateError}
           </Label>
         </If>
@@ -309,8 +311,8 @@ export function MachineDetail(props: {
       <If when={pending() || upgrade()}>
         <View
           style={{
-            paddingHorizontal: 16,
-            paddingVertical: 8,
+            paddingHorizontal: space[16],
+            paddingVertical: space[8],
             borderTopWidth: 1,
             borderColor: c().border,
           }}
@@ -329,7 +331,7 @@ export function MachineDetail(props: {
                       : uiText("updateMachine")
                 }
                 tone="primary"
-                size={props.phone ? 32 : undefined}
+                size={props.phone ? control.lg : undefined}
                 style={props.phone ? { alignSelf: "stretch" } : undefined}
                 disabled={busy() || machineUpdate.state() === "updating"}
                 onPress={() => void machineUpdate.start()}
@@ -339,7 +341,7 @@ export function MachineDetail(props: {
             <Button
               label={uiText("approve")}
               tone="primary"
-              size={props.phone ? 32 : undefined}
+              size={props.phone ? control.lg : undefined}
               style={props.phone ? { alignSelf: "stretch" } : undefined}
               disabled={busy() || !fingerprint().trim()}
               onPress={() =>

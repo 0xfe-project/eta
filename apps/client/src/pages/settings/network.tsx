@@ -13,6 +13,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
+import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { SectionHeader } from "./section";
@@ -91,10 +92,10 @@ export function NetworkSettings(props: { phone?: boolean }) {
 
   const rowStyle = {
     ...row,
-    minHeight: 40,
-    gap: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    minHeight: space[40],
+    gap: space[16],
+    paddingHorizontal: space[16],
+    paddingVertical: space[8],
     borderBottomWidth: 1,
     borderColor: c().border,
   };
@@ -127,8 +128,8 @@ export function NetworkSettings(props: { phone?: boolean }) {
         >
           <Each of={allow()} key={(entry) => entry}>
             {(entry) => (
-              <View style={{ ...rowStyle, gap: 8 }}>
-                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+              <View style={{ ...rowStyle, gap: space[8] }}>
+                <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                   <Label tone={invalid(entry()) ? "muted" : "ink"} lines={1}>
                     {entry()}
                   </Label>
@@ -162,13 +163,13 @@ export function NetworkSettings(props: { phone?: boolean }) {
         <View
           style={{
             gap: 6,
-            paddingHorizontal: 16,
+            paddingHorizontal: space[16],
             paddingVertical: 10,
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
-          <View style={{ ...row, gap: 8 }}>
+          <View style={{ ...row, gap: space[8] }}>
             <Field
               label={uiText("privateNetworkAllowed")}
               value={draft()}
@@ -183,7 +184,7 @@ export function NetworkSettings(props: { phone?: boolean }) {
             <Button
               label={uiText("privateNetworkAdd")}
               icon="plus"
-              size={32}
+              size={control.lg}
               disabled={saving() || draft().trim().length === 0}
               onPress={() => void add()}
             />
@@ -202,7 +203,7 @@ export function NetworkSettings(props: { phone?: boolean }) {
           </If>
         </View>
         <View style={rowStyle}>
-          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
             <Label>{uiText("privateNetworkLoopback")}</Label>
             <Label variant="small" tone="muted">
               {uiText("privateNetworkLoopbackHint")}
@@ -217,7 +218,13 @@ export function NetworkSettings(props: { phone?: boolean }) {
             }
           />
         </View>
-        <View style={{ gap: 6, paddingHorizontal: 16, paddingVertical: 12 }}>
+        <View
+          style={{
+            gap: 6,
+            paddingHorizontal: space[16],
+            paddingVertical: space[12],
+          }}
+        >
           <Label variant="small" tone="muted">
             {uiText("privateNetworkNote")}
           </Label>

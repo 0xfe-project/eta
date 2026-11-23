@@ -2,7 +2,7 @@ import type { McpServerView } from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, Label, row } from "../../../components";
 import { BackButton } from "../../../components/navigation-buttons";
-import { weight } from "../../../components/tokens";
+import { icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 
 const stateLabels = {
@@ -50,15 +50,15 @@ export function McpPhoneHeader(props: { title: string; onBack: () => void }) {
     <View
       style={{
         ...row,
-        height: 48,
+        height: space[48],
         flexShrink: 0,
-        paddingHorizontal: 8,
-        gap: 4,
+        paddingHorizontal: space[8],
+        gap: space[4],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
     >
-      <BackButton size={40} iconSize={16} onPress={props.onBack} />
+      <BackButton size={40} iconSize={icon.md} onPress={props.onBack} />
       <Label weight={weight.strong}>{props.title}</Label>
     </View>
   );

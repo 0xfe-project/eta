@@ -9,7 +9,7 @@ import type { RuntimeListing } from "./listing";
 import { signal, View } from "nsh";
 import { Button, colors, Label, row } from "../../../components";
 import { StatusDot } from "../../../components/status-dot";
-import { weight } from "../../../components/tokens";
+import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
 import { localTime, percentText } from "../models/quota";
@@ -36,7 +36,7 @@ const custom = (runtime: AgentRuntimeInfo) => runtime.id.startsWith("acp.");
 /** A small heading inside an open row. */
 function Part(props: { title: string; children?: JSX.Element }) {
   return (
-    <View style={{ gap: 2 }}>
+    <View style={{ gap: space[2] }}>
       <Label variant="small" weight={weight.regular}>
         {props.title}
       </Label>
@@ -190,9 +190,9 @@ function RuntimeDetail(props: {
       style={{
         gap: 10,
         paddingLeft: props.phone ? 54 : 50,
-        paddingRight: 16,
-        paddingTop: 2,
-        paddingBottom: 12,
+        paddingRight: space[16],
+        paddingTop: space[2],
+        paddingBottom: space[12],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
@@ -379,8 +379,8 @@ function MachineRuntimes(props: {
       style={{
         ...row,
         gap: 10,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        paddingHorizontal: space[16],
+        paddingVertical: space[8],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
@@ -407,10 +407,10 @@ function MachineRuntimes(props: {
                 : uiText("runtimesCheckAgain")
             }
             tone="ghost"
-            size={props.phone ? 28 : 24}
+            size={props.phone ? control.md : control.sm}
             labelTone="mutedInk"
             icon="refresh"
-            iconSize={12}
+            iconSize={icon.sm}
             disabled={props.listing.probing(props.machine)}
             style={{ paddingHorizontal: 0 }}
             onPress={() => void props.listing.refresh(props.machine)}
