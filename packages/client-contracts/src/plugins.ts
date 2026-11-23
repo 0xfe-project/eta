@@ -267,6 +267,8 @@ export interface PluginArgs {
   composioStatus: Record<string, never>;
   /** Which toolkits are connected with Composio (read only). */
   composioConnected: Record<string, never>;
+  /** The name and description of these toolkits, from the list the host keeps (read only, no request). */
+  composioToolkits: { slugs: string[] };
   /** Start connecting one toolkit with Composio's own sign-in page; the user finishes it in the browser. */
   composioLink: { slug: string };
 }
@@ -355,6 +357,10 @@ export interface PluginResults {
    * (no key, key refused, no answer) means none is known, not that none is connected.
    */
   composioConnected: { status: ComposioStatus; slugs: string[] };
+  /** Only the slugs the kept list has; none when there is no key. */
+  composioToolkits: {
+    toolkits: { slug: string; name: string; description: string }[];
+  };
   /** An https address on Composio's side; open it in the browser. */
   composioLink: { redirectUrl: string };
 }

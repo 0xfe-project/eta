@@ -443,6 +443,20 @@ export function pluginsPlugin(
         wire.handle("plugins", "composioConnected", async () => ({
           result: await needComposio().connected(),
         })),
+        wire.handle("plugins", "composioToolkits", (call) => {
+          const { slugs } = (call.args ?? {}) as { slugs?: unknown };
+          if (!Array.isArray(slugs))
+            throw new Error("plugins.composioToolkits needs slugs");
+          return {
+            result: {
+              toolkits: needComposio().toolkitsOf(
+                slugs
+                  .filter((one): one is string => typeof one === "string")
+                  .slice(0, 500),
+              ),
+            },
+          };
+        }),
         wire.handle("plugins", "composioLink", async (call) => ({
           result: {
             redirectUrl: await needComposio().link(

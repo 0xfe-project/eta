@@ -1,4 +1,4 @@
-import type { MarketCatalog, PluginResults } from "@eta/client-contracts";
+import type { PluginResults } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import { effect, signal, untracked, View } from "nsh";
 import { colors, grow, Label, row, textFaces } from "../../components";
@@ -40,12 +40,15 @@ export function ComposioConnected(props: { layout: Layout }) {
     )
       return;
     const kept = await host
-      .call<MarketCatalog>("plugins", "marketCatalog", { mode: "cached" })
+      .call<PluginResults["composioToolkits"]>("plugins", "composioToolkits", {
+        slugs: answer.slugs,
+      })
       .catch(() => undefined);
     const known = new Map(
-      (kept?.sources ?? [])
-        .flatMap((item) => item.toolkits ?? [])
-        .map((item) => [item.slug, item]),
+      (Array.isArray(kept?.toolkits) ? kept.toolkits : []).map((item) => [
+        item.slug,
+        item,
+      ]),
     );
     shown.set(
       answer.slugs.map((slug) => ({

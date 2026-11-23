@@ -419,6 +419,20 @@ export class Composio {
     }
   }
 
+  /**
+   * The name and description of the toolkits asked for, from the kept list only (no request is
+   * made); a slug the list does not have is left out. With no key there is nothing to say.
+   */
+  toolkitsOf(
+    slugs: readonly string[],
+  ): { slug: string; name: string; description: string }[] {
+    if (this.#apiKey() === undefined) return [];
+    const wanted = new Set(slugs);
+    return (this.#fromCache(this.source())?.toolkits ?? [])
+      .filter((one) => wanted.has(one.slug))
+      .map(({ slug, name, description }) => ({ slug, name, description }));
+  }
+
   /** The logo address of a toolkit in the list last read (or kept); null when there is none. */
   logoOf(slug: string): string | null {
     if (this.#logos === undefined && this.#apiKey() !== undefined) {
