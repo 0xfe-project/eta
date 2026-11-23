@@ -64,3 +64,25 @@ test("a proxy prefix is saved, and nothing is refused", async () => {
     false,
   );
 });
+
+/** The empty state is drawn inside a scrolling column, so it has to take the height of what it says: the form under it starts below its text. */
+for (const [name, size] of [
+  ["desktop", OPEN],
+  ["phone", { width: 390, height: 800 }],
+] as const) {
+  test(`no sources: the empty state is as tall as its text and the form starts below it (${name})`, async () => {
+    const app = await open("./fixtures/plugin-settings.tsx", size);
+    await app.press("label:Remove source Cursor");
+    await app.press("label:Remove source https://plain.test/marketplace.json");
+    const title = app.layout("text:No plugin sources")!;
+    const form = app.layout("label:Name (optional)")!;
+    expect(title).toBeDefined();
+    expect(form).toBeDefined();
+    expect(title.y + title.height).toBeLessThanOrEqual(form.y);
+    const hint = app.layout(
+      "text:Add the address of a marketplace.json to browse its plugins.",
+    )!;
+    expect(hint).toBeDefined();
+    expect(hint.y + hint.height).toBeLessThanOrEqual(form.y);
+  });
+}

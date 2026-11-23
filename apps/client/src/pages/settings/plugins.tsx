@@ -144,7 +144,7 @@ export function PluginSettings(props: { phone?: boolean }) {
               icon="plugins"
               iconSize={24}
               descriptionWidth={320}
-              style={{ ...emptyStyle, paddingVertical: 24 }}
+              style={{ ...emptyStyle, paddingVertical: 24, flexBasis: "auto" }}
             />
           }
         >
