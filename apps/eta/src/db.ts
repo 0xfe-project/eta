@@ -151,6 +151,22 @@ export function statementsOf(sql: string): string[] {
   return statements;
 }
 
+/** Every row whose foreign key points at nothing, as `table row → parent`. */
+function brokenReferences(db: Database): Set<string> {
+  return new Set(
+    db
+      .query<
+        { table: string; rowid: number | null; parent: string; fkid: number },
+        []
+      >("PRAGMA foreign_key_check")
+      .all()
+      .map(
+        (row) =>
+          `${row.table} ${row.rowid ?? "?"} → ${row.parent} (key ${row.fkid})`,
+      ),
+  );
+}
+
 /** Apply what has not run yet. Returns the ids it applied, which is empty on a second run. */
 export function applyMigrations(
   db: Database,
@@ -170,6 +186,9 @@ export function applyMigrations(
       db.query<{ foreign_keys: number }, []>("PRAGMA foreign_keys").get()
         ?.foreign_keys === 1;
     if (keysOff && keysWere) db.exec("PRAGMA foreign_keys = OFF");
+    // What was broken already is not this migration's doing: a real database can hold a reference
+    // left dangling by an older build, and refusing to migrate would not mend it.
+    const brokenBefore = keysOff ? brokenReferences(db) : new Set<string>();
     try {
       // One transaction per migration: a half-applied migration is a database nobody can reason
       // about, so the statements and the record of having run them land together or not at all.
@@ -181,14 +200,12 @@ export function applyMigrations(
         // With the keys off nothing stopped a row from losing what it points at: the migration
         // only counts as done when every reference still holds.
         if (keysOff) {
-          const broken = db
-            .query<{ table: string; parent: string }, []>(
-              "PRAGMA foreign_key_check",
-            )
-            .all();
+          const broken = [...brokenReferences(db)].filter(
+            (reference) => !brokenBefore.has(reference),
+          );
           if (broken.length > 0)
             throw new Error(
-              `migration ${migration.id} broke ${broken.length} reference(s), the first from ${broken[0]!.table} to ${broken[0]!.parent}`,
+              `migration ${migration.id} broke ${broken.length} reference(s), the first ${broken[0]}`,
             );
         }
         db.query(

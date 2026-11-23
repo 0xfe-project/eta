@@ -109,6 +109,52 @@ describe("applyMigrations", () => {
     expect(applyMigrations(db, [first, fixed])).toEqual([fixed.id]);
   });
 
+  it("remakes a referenced table with foreign keys off, and refuses one that loses what rows point at", async () => {
+    const db = await database();
+    const schema = {
+      id: "0001-parents",
+      sql: `CREATE TABLE parent (id TEXT PRIMARY KEY, kind TEXT CHECK (kind IN ('a')));
+            CREATE TABLE child (id TEXT, parent_id TEXT REFERENCES parent (id) ON DELETE CASCADE);
+            CREATE TABLE other (id TEXT, parent_id TEXT REFERENCES parent (id));
+            INSERT INTO parent VALUES ('p1', 'a'), ('p2', 'a');
+            INSERT INTO child VALUES ('c1', 'p1'), ('c2', 'p2');`,
+    };
+    applyMigrations(db, [schema]);
+    // A reference an older build left dangling is not the next migration's to answer for.
+    db.exec("PRAGMA foreign_keys = OFF");
+    db.exec("INSERT INTO other VALUES ('o1', 'nowhere')");
+    db.exec("PRAGMA foreign_keys = ON");
+    const remake = (id: string, keep: string) => ({
+      id,
+      sql: `-- eta: foreign keys off
+            CREATE TABLE parent_next (id TEXT PRIMARY KEY, kind TEXT CHECK (kind IN ('a', 'b')));
+            INSERT INTO parent_next SELECT id, 'b' FROM parent WHERE ${keep};
+            DROP TABLE parent;
+            ALTER TABLE parent_next RENAME TO parent;`,
+    });
+    // Dropping a row a child points at: the migration does not count, and nothing changed.
+    expect(() =>
+      applyMigrations(db, [schema, remake("0002-lossy", "id = 'p1'")]),
+    ).toThrow(/0002-lossy broke 1 reference/);
+    expect(db.query("SELECT kind FROM parent ORDER BY id").all()).toEqual([
+      { kind: "a" },
+      { kind: "a" },
+    ]);
+    // Every row kept: the children stay (no cascade ran), and the keys are back on after.
+    expect(applyMigrations(db, [schema, remake("0002-remake", "1")])).toEqual([
+      "0002-remake",
+    ]);
+    expect(db.query("SELECT kind FROM parent ORDER BY id").all()).toEqual([
+      { kind: "b" },
+      { kind: "b" },
+    ]);
+    expect(db.query("SELECT id FROM child ORDER BY id").all()).toEqual([
+      { id: "c1" },
+      { id: "c2" },
+    ]);
+    expect(db.query("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
+  });
+
   it("stops at a statement that fails on the data, wherever it is in the file", async () => {
     const dir = await tempDir();
     const db = openDatabase(join(dir, "eta.sqlite"));
