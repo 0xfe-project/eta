@@ -4,6 +4,7 @@
  */
 import { Buffer } from "node:buffer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { EncryptedCredentialTable } from "../src/credentials/table";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { authOf, Composio, COMPOSIO_URL } from "../src/plugins/composio";
 import { githubProxy } from "../src/plugins/git";
@@ -382,20 +383,46 @@ describe("the key", () => {
       link,
       status: composio.hasKey(),
       rows: db
-        .query("SELECT * FROM composio_key")
+        .query("SELECT * FROM credential WHERE integration = 'market'")
         .all()
         .map((row) =>
-          Buffer.from((row as { sealed: Uint8Array }).sealed).toString(
-            "latin1",
-          ),
+          Buffer.from((row as { value: Uint8Array }).value).toString("latin1"),
         ),
       cache: db.query("SELECT * FROM market_catalog_cache").all(),
       settings: db.query("SELECT * FROM setting").all(),
       logs: out.map((spy) => spy.mock.calls),
     });
+    expect(JSON.parse(dump).rows).toHaveLength(1);
     expect(dump).not.toContain(KEY);
     expect(dump).not.toContain("SECRET_0123");
     expect(String(failed.error)).toContain("500");
+  });
+
+  it("is one row of the credential table (market, composio, secret), and clearing takes only that row", () => {
+    const { composio, db } = open();
+    const table = new EncryptedCredentialTable(db, Buffer.alloc(32, 7));
+    table.write("market", "cursor", "secret", "cursor-token");
+    composio.setKey(KEY);
+    expect(table.read("market", "composio", "secret")).toBe(KEY);
+    composio.setKey(`${KEY}x`);
+    expect(
+      db
+        .query("SELECT count(*) AS n FROM credential WHERE key = 'composio'")
+        .get(),
+    ).toEqual({ n: 1 });
+    composio.clearKey();
+    expect(table.read("market", "composio", "secret")).toBeUndefined();
+    expect(table.read("market", "cursor", "secret")).toBe("cursor-token");
+    expect(composio.hasKey()).toBe(false);
+  });
+
+  it("reads a key that was put in the credential table by someone else, and a value that is not a string as no key", () => {
+    const { composio, db } = open();
+    const table = new EncryptedCredentialTable(db, Buffer.alloc(32, 7));
+    table.write("market", "composio", "secret", { not: "a string" });
+    expect(composio.hasKey()).toBe(false);
+    table.write("market", "composio", "secret", KEY);
+    expect(composio.hasKey()).toBe(true);
   });
 });
 
