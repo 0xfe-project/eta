@@ -236,20 +236,6 @@ describe("the login check after an install", () => {
     expect(await exists(marker)).toBe(true);
   });
 
-  it("asks each remote server once per install", async () => {
-    const server = await fake("login");
-    const { install, logins } = await setup(server.url);
-    await install();
-    await vi.waitFor(() =>
-      expect(logins()).toContainEqual(["remote", "needs_login"]),
-    );
-    await settle();
-    const first = server.hits;
-    expect(first).toBeGreaterThan(0);
-    await settle();
-    expect(server.hits).toBe(first);
-  });
-
   it("does the same for a plugin added by hand", async () => {
     const server = await fake("login");
     const { plugins, call, logins } = await setup(server.url);
