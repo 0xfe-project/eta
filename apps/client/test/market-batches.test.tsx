@@ -1,6 +1,8 @@
 import { expect, open, test } from "nsh/test";
 
 const OPEN = { width: 1000, height: 800 };
+// A search is waited for on the clock: it applies once the typing pauses.
+const SEARCH = { ...OPEN, clock: {} };
 type App = Awaited<ReturnType<typeof open>>;
 const cards = (app: App) => app.count("id:plugin-avatar");
 
@@ -30,25 +32,37 @@ test("a picture is only asked for by a card that is drawn", async () => {
 });
 
 test("a search looks through every toolkit, not only the drawn ones", async () => {
-  const app = await open("./fixtures/market-batches.tsx", OPEN);
+  const app = await open("./fixtures/market-batches.tsx", SEARCH);
   await app.waitFor("text:Toolkit 0000");
   await app.type("label:Search plugins", "Toolkit 0125");
+  await app.clock!.runFor(400);
   expect(cards(app)).toBe(1);
   expect(app.shows("Toolkit 0125")).toBe(true);
   expect(app.count("label:Show more")).toBe(0);
 });
 
 test("a search with more matches than a batch draws one batch again, and Show more goes on from there", async () => {
-  const app = await open("./fixtures/market-batches.tsx", OPEN);
+  const app = await open("./fixtures/market-batches.tsx", SEARCH);
   await app.waitFor("text:Toolkit 0000");
   await app.press("label:Show more");
   expect(cards(app)).toBe(96);
   // "toolkit 00" matches Toolkit 0000 to 0099: 100 toolkits, more than a batch.
   await app.type("label:Search plugins", "toolkit 00");
+  await app.clock!.runFor(400);
   expect(cards(app)).toBe(48);
   await app.press("label:Show more");
   expect(cards(app)).toBe(96);
   await app.press("label:Show more");
   expect(cards(app)).toBe(100);
   expect(app.count("label:Show more")).toBe(0);
+});
+
+test("the list follows a search only once the typing pauses", async () => {
+  const app = await open("./fixtures/market-batches.tsx", SEARCH);
+  await app.waitFor("text:Toolkit 0000");
+  await app.type("label:Search plugins", "Toolkit 0125");
+  // The words are in the field at once; the cards wait for the pause.
+  expect(cards(app)).toBe(48);
+  await app.clock!.runFor(400);
+  expect(cards(app)).toBe(1);
 });
