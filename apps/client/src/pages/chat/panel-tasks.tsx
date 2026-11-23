@@ -10,7 +10,7 @@ import {
   row,
   Screen,
 } from "../../components";
-import { StatusDot } from "../../components/status-dot";
+import { dotSize, StatusDot } from "../../components/status-dot";
 import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -45,6 +45,9 @@ function taskTree(tasks: BoardTaskView[]) {
 }
 
 /** The Context tab's Tasks section: open tasks, subtasks under their parent. */
+/** A task's row in the context panel's list. */
+const contextRowHeight = 32;
+
 export function ContextTasks(props: {
   tasks: BoardTaskView[];
   onTask: (id: string) => void;
@@ -73,7 +76,7 @@ export function ContextTasks(props: {
             hoverStyle={{ backgroundColor: c().selected }}
             style={{
               ...row,
-              height: 30,
+              height: contextRowHeight,
               paddingLeft: entry().depth ? space[12] + icon.sm : space[12],
               paddingRight: space[12],
               gap: space[8],
@@ -132,7 +135,11 @@ const sections = [
 ])[];
 
 /** The Tasks tab's side inset, on each part rather than the whole, so rows can reach both edges. */
-const inset = 10;
+const inset = space[12];
+
+/** A task's row in the Tasks tab, and how far the line naming what it waits for runs. */
+const taskRowHeight = 52;
+const waitingWidth = 160;
 
 const folded = [
   ["done", "taskCompletedCount"],
@@ -218,7 +225,7 @@ export function TasksTab(props: {
           truncateValue
           triggerStyle={{
             borderWidth: 0,
-            height: 23,
+            height: control.sm,
             marginVertical: -space[4],
             marginRight: -space[8],
             paddingHorizontal: space[8],
@@ -412,7 +419,7 @@ function TaskRow(props: {
       hoverStyle={{ backgroundColor: c().selected }}
       style={{
         ...row,
-        height: 52,
+        height: taskRowHeight,
         gap: space[8],
         flexShrink: 0,
         paddingHorizontal: inset,
@@ -469,7 +476,7 @@ function TaskRow(props: {
       <If when={task().subtasks?.total}>
         <SubtaskSegments
           subtasks={subtasksOf(host.tasks(), task())}
-          width={6}
+          width={dotSize}
         />
         <Label variant="small" tone="muted">
           {`${task().subtasks?.done ?? 0}/${task().subtasks?.total ?? 0}`}
@@ -479,7 +486,12 @@ function TaskRow(props: {
         <If when={waitingFor()}>
           {(wait) => (
             <View
-              style={{ ...row, gap: space[4], flexShrink: 1, maxWidth: 160 }}
+              style={{
+                ...row,
+                gap: space[4],
+                flexShrink: 1,
+                maxWidth: waitingWidth,
+              }}
             >
               <Icon name="lock" size={icon.sm} tone="muted" />
               <Label variant="small" tone="muted" lines={1}>

@@ -5,7 +5,9 @@ interface RasterPage {
 }
 
 const encoder = new TextEncoder();
+// design-value: A4 in PDF points, not a length on screen
 const paperWidth = 595.28;
+// design-value: A4 in PDF points, not a length on screen
 const paperHeight = 841.89;
 const margin = 24;
 

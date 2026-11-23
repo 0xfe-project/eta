@@ -37,6 +37,9 @@ import { ViewAll } from "./section-heading";
  * A phone's conversation info sheet: members, tasks and the latest artifacts in one list; "View
  * all" turns the sheet into the group's whole Artifacts list (search, filter, pages).
  */
+/** A task's row, and a row with a second line (an artifact, a member). */
+const rowHeight = { task: 48, twoLine: 52 } as const;
+
 export function PhoneConversationInfo(props: {
   id: string;
   name: string;
@@ -106,7 +109,7 @@ export function PhoneConversationInfo(props: {
           <Each of={tasks()} key={(task) => task.id}>
             {(task) => (
               <InfoRow
-                height={48}
+                height={rowHeight.task}
                 title={`#${task().number} ${task().title}`}
                 onPress={() => props.onTask(task().id)}
               >
@@ -130,7 +133,7 @@ export function PhoneConversationInfo(props: {
           >
             {(artifact) => (
               <InfoRow
-                height={52}
+                height={rowHeight.twoLine}
                 title={artifact().title}
                 detail={[
                   host.agent(artifact().publisherAgentId ?? "")?.name,
@@ -251,7 +254,7 @@ function MemberRow(props: {
   };
   return (
     <InfoRow
-      height={52}
+      height={rowHeight.twoLine}
       title={host.agent(props.member.agentId)?.name ?? uiText("agent")}
       titleVariant="body"
       detail={detail()}

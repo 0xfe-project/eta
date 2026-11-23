@@ -1,7 +1,7 @@
 import type { StoredTask, TaskStatus } from "@eta/client-contracts";
 import { View } from "nsh";
 import { Button, colors, focusRing, Label, row } from "../../components";
-import { space } from "../../components/tokens";
+import { icon, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 
@@ -108,8 +108,8 @@ export function MemberStepsLedger(props: { session: string }) {
                 style={{
                   ...row,
                   justifyContent: "center",
-                  width: 15,
-                  height: 15,
+                  width: icon.md,
+                  height: icon.md,
                   borderWidth: 1,
                   borderColor: c().border,
                   backgroundColor: c().canvas,

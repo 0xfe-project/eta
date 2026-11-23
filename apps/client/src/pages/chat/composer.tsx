@@ -79,6 +79,9 @@ export function Composer(props: ComposerProps) {
 }
 
 /** The box while the saved draft loads: its outline, so the layout does not jump. */
+/** About the composer's height with an empty draft. */
+const shellHeight = 84;
+
 function ComposerShell(props: { phone: boolean }) {
   const c = colors();
   return (
@@ -90,7 +93,9 @@ function ComposerShell(props: { phone: boolean }) {
         flexShrink: 0,
       }}
     >
-      <View style={{ height: 82, borderWidth: 1, borderColor: c().ink }} />
+      <View
+        style={{ height: shellHeight, borderWidth: 1, borderColor: c().ink }}
+      />
     </View>
   );
 }
@@ -340,6 +345,7 @@ function ComposerBody(
       testID="conversation-composer"
       style={{
         position: "relative",
+        // design-value: order inside the conversation, so the composer's popovers draw over the transcript
         zIndex: 2,
         paddingVertical: props.phone ? space[12] : space[16],
         paddingHorizontal: props.phone
@@ -479,8 +485,8 @@ function ComposerBody(
               style={{
                 ...row,
                 justifyContent: "center",
-                width: props.phone ? 32 : 14,
-                height: props.phone ? 32 : 14,
+                width: props.phone ? control.lg : icon.md,
+                height: props.phone ? control.lg : icon.md,
                 flexShrink: 0,
                 opacity: attachDisabled() ? opacity.disabled : 1,
                 cursor: attachDisabled() ? "default" : "pointer",

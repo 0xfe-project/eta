@@ -13,6 +13,9 @@ import { useHost } from "../../services/host";
 /** More names than this read as a list nobody reads: say "them" instead. */
 const MAX_NAMES = 3;
 
+/** How wide the tooltip naming who a held message waits for runs before it wraps. */
+const tooltipWidth = 520;
+
 type Busy = "steer" | "pull" | "drop";
 
 /** The agents a held message waits for (`data.woke`), as one phrase. */
@@ -259,7 +262,7 @@ export function HeldMessages(props: {
                   tooltip={
                     <View
                       style={{
-                        maxWidth: 520,
+                        maxWidth: tooltipWidth,
                         paddingHorizontal: space[12],
                         paddingVertical: space[8],
                         backgroundColor: c().ink,

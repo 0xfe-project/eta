@@ -15,7 +15,14 @@ import {
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
-import { avatar, control, icon, space, weight } from "../../components/tokens";
+import {
+  avatar,
+  border,
+  control,
+  icon,
+  space,
+  weight,
+} from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "../tasks/activity";
@@ -33,7 +40,10 @@ import { messageTime } from "./message-time";
 const goalPreview = 600;
 
 /** The detail's side inset, on each part rather than the whole, so rows can reach both edges. */
-const inset = 11;
+const inset = space[12];
+
+/** A row naming a task this one waits for or that waits for it. */
+const dependencyRowHeight = 32;
 
 /** A task opened in the conversation panel: under its tabs, compact. */
 export function PanelTask(props: {
@@ -215,7 +225,7 @@ export function PanelTask(props: {
                   entries={activity()}
                   runs={item().runs}
                   createdBy={item().createdBy}
-                  gap={15}
+                  gap={space[16]}
                   onLog={(entry) => log.set(entry)}
                   onTask={props.onTask}
                   onArtifact={props.onArtifact}
@@ -264,7 +274,7 @@ export function PanelTask(props: {
                       style={{
                         width: space[8],
                         height: space[8],
-                        borderWidth: 1.5,
+                        borderWidth: border.hair,
                         borderColor: c().ink,
                       }}
                     />
@@ -322,10 +332,10 @@ function Edges(props: {
             hoverStyle={{ backgroundColor: c().selected }}
             style={{
               ...row,
-              height: 30,
+              height: dependencyRowHeight,
               gap: space[8],
               // Edge to edge, so the hover does too; the text stays where the bordered box put it.
-              paddingHorizontal: inset + 1 + 10,
+              paddingHorizontal: inset + space[12],
               borderTopWidth: 1,
               borderBottomWidth: 1,
               borderColor: c().border,

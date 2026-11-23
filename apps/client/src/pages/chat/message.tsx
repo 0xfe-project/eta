@@ -38,6 +38,7 @@ import {
 } from "../../components/eta-editor";
 import {
   avatar,
+  control,
   icon,
   opacity,
   shadow,
@@ -65,6 +66,12 @@ const replyBlockGap = 8;
 
 /** A reply at work keeps this height, however much it writes. */
 const processWindowHeight = 176;
+
+/** How wide your message's bubble runs; a task draft's card and, on phones, the least room its
+ * title keeps. */
+const bubbleWidth = { phone: "84%", desktop: "72%" } as const;
+const draftCardWidth = 560;
+const draftTitleWidth = 200;
 
 /** How each code the host fails a reply with is said. */
 const failureReasons: Record<string, Parameters<typeof uiText>[0]> = {
@@ -264,7 +271,7 @@ export function Message(props: {
         <View style={{ alignItems: "flex-end", gap: space[4] }}>
           <View
             style={{
-              maxWidth: props.phone ? "84%" : "72%",
+              maxWidth: props.phone ? bubbleWidth.phone : bubbleWidth.desktop,
               borderWidth: 1,
               borderColor: c().border,
               backgroundColor: props.phone ? c().selected : c().surface,
@@ -383,7 +390,7 @@ export function Message(props: {
           <View
             style={{
               alignSelf: "stretch",
-              maxWidth: props.phone ? undefined : 560,
+              maxWidth: props.phone ? undefined : draftCardWidth,
               borderWidth: 1,
               borderColor: c().border,
             }}
@@ -433,7 +440,7 @@ export function Message(props: {
                 variant="small"
                 weight={weight.regular}
                 lines={1}
-                style={{ flex: 1, minWidth: props.phone ? 200 : 0 }}
+                style={{ flex: 1, minWidth: props.phone ? draftTitleWidth : 0 }}
               >
                 {draftTitle(item())}
               </Label>
@@ -471,7 +478,7 @@ export function Message(props: {
                  * task; the other discards the draft, as the proposals' does. */}
                 <Button
                   label={uiText("editAndConfirm")}
-                  size={22}
+                  size={control.sm}
                   controlRef={(node) => {
                     action = node;
                   }}
@@ -479,7 +486,7 @@ export function Message(props: {
                 />
                 <Button
                   label={uiText("discard")}
-                  size={22}
+                  size={control.sm}
                   disabled={busy() || host.state().status !== "open"}
                   onPress={() => void discard()}
                 />
@@ -543,7 +550,7 @@ export function Message(props: {
                 focusVisibleStyle={focusRing(c())}
                 style={{
                   ...row,
-                  height: 26,
+                  height: control.md,
                   gap: space[8],
                   paddingHorizontal: space[12],
                   borderWidth: 1,
@@ -605,7 +612,7 @@ export function Message(props: {
               </Label>
               <Button
                 label={uiText("stop")}
-                size={18}
+                size={control.sm}
                 labelVariant="caption"
                 labelWeight={weight.strong}
                 style={{ paddingHorizontal: space[8] }}

@@ -7,6 +7,12 @@ import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { localizedText, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
+/** A member row: a finger's row on phones, a list row elsewhere. */
+const memberRowHeight = { phone: 52, desktop: 36 } as const;
+
+/** The steward's slot at the end of a row, kept when unticked so the columns line up. */
+const stewardColumnWidth = 104;
+
 export function ConversationMembers(props: {
   directory: DirectoryChoice;
   machineName: string;
@@ -56,7 +62,9 @@ export function ConversationMembers(props: {
             <View
               style={{
                 ...row,
-                height: props.phone ? 52 : 34,
+                height: props.phone
+                  ? memberRowHeight.phone
+                  : memberRowHeight.desktop,
                 gap: space[12],
                 marginHorizontal: space[16],
                 paddingRight: space[4],
@@ -104,7 +112,7 @@ export function ConversationMembers(props: {
                 style={{
                   ...row,
                   justifyContent: "flex-end",
-                  width: 104,
+                  width: stewardColumnWidth,
                   flexShrink: 0,
                 }}
               >

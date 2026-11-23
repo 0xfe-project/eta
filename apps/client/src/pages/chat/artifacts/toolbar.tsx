@@ -14,6 +14,11 @@ import { CloseButton } from "../../../components/navigation-buttons";
 import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 
+/** The version picker's least width, the phone buttons' least widths, the bar off phones. */
+const pickerWidth = { phone: 132, desktop: 116 } as const;
+const phoneButtonWidth = { share: 100, export: 84 } as const;
+const barHeight = { desktop: 40, tablet: 36 } as const;
+
 export function ArtifactToolbar(props: {
   title: string;
   layout: Layout;
@@ -52,7 +57,7 @@ export function ArtifactToolbar(props: {
         value={versionLabel(props.version ?? 1)}
         triggerStyle={{
           height: phone() ? control.md : space[24],
-          minWidth: phone() ? 132 : 114,
+          minWidth: phone() ? pickerWidth.phone : pickerWidth.desktop,
         }}
       >
         <Each of={props.versions} key={(entry) => entry.number}>
@@ -77,7 +82,7 @@ export function ArtifactToolbar(props: {
         tone={phone() ? "plain" : "ghost"}
         size={phone() ? control.md : control.sm}
         labelVariant="caption"
-        style={{ minWidth: phone() ? 99 : undefined }}
+        style={{ minWidth: phone() ? phoneButtonWidth.share : undefined }}
         disabled={props.sharing || !props.item}
         onPress={props.onShare}
       />
@@ -94,7 +99,7 @@ export function ArtifactToolbar(props: {
           tone={phone() ? "plain" : "ghost"}
           size={phone() ? control.md : control.sm}
           labelVariant="caption"
-          style={{ minWidth: phone() ? 82 : undefined }}
+          style={{ minWidth: phone() ? phoneButtonWidth.export : undefined }}
           disabled={props.exportDisabled}
           onPress={props.onExport}
         />
@@ -113,7 +118,8 @@ export function ArtifactToolbar(props: {
             paddingRight: space[16],
             gap: space[8],
             flexShrink: 0,
-            height: props.layout === "desktop" ? 40 : 36,
+            height:
+              props.layout === "desktop" ? barHeight.desktop : barHeight.tablet,
             borderBottomWidth: 1,
             borderColor: c().border,
           }}

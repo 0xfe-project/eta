@@ -15,6 +15,7 @@ import {
   Field,
   grow,
   Label,
+  dialogWidth,
   Modal,
   row,
   SmoothScroll,
@@ -23,7 +24,7 @@ import {
 } from "../../components";
 import { sendShortcut } from "../../components/eta-editor";
 import { showToast } from "../../components/toast";
-import { space } from "../../components/tokens";
+import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { createDescription, DescriptionBox } from "../tasks/description-box";
@@ -35,10 +36,16 @@ export function draftTitle(message: MessageView) {
   return message.text.trim() ? message.text : uiText("draftNoTitle");
 }
 
+/** The label column of a draft's details. */
+const detailLabelWidth = 84;
+
+/** The confirm dialog's height off phones (a phone gives it the whole page). */
+const dialogHeight = "85%";
+
 function Detail(props: { label: string; value: string }) {
   return (
     <View style={{ ...row, alignItems: "flex-start", gap: space[8] }}>
-      <Label variant="small" tone="muted" style={{ width: 84 }}>
+      <Label variant="small" tone="muted" style={{ width: detailLabelWidth }}>
         {props.label}
       </Label>
       <Label variant="small" style={{ flex: 1 }}>
@@ -195,8 +202,8 @@ export function TaskDraftDetail(props: {
   return (
     <Modal
       title={uiText("draftConfirmTitle")}
-      width={Math.min(560, windowSize().width - 32)}
-      height={props.phone ? "100%" : "85%"}
+      width={Math.min(dialogWidth.lg, windowSize().width - 32)}
+      height={props.phone ? "100%" : dialogHeight}
       phone={props.phone}
       phonePage={props.phone}
       overPhoneNavigation
@@ -248,7 +255,7 @@ export function TaskDraftDetail(props: {
                 value={title()}
                 maxLength={200}
                 onChange={title.set}
-                style={{ ...input, height: 30 }}
+                style={{ ...input, height: control.lg }}
               />
             </FormRow>
             <FormRow label={uiText("description")}>
