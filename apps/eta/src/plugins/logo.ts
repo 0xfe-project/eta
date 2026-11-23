@@ -17,6 +17,7 @@ import http from "node:http";
 import https from "node:https";
 import { isIP } from "node:net";
 import { extname, isAbsolute, resolve, sep } from "node:path";
+import { fitImage } from "../images/fit";
 import { viaProxy } from "./git";
 
 export interface Logo {
@@ -95,6 +96,13 @@ const OWN_TYPES: Record<string, string> = {
   ".svg": "image/svg+xml",
 };
 const MAX_OWN = 256 * 1024;
+/** The types Bun.Image can read and `fitImage` can shrink; svg and ico are not among them. */
+const SHRINKABLE = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+]);
 /** What makes an SVG unfit: script, handlers, embedded pages, entities, references that leave the file. */
 const SVG_UNSAFE =
   /<script|<foreignObject|<iframe|<embed|<object|<!ENTITY|\son[a-z]+\s*=|javascript:|(?:xlink:)?href\s*=\s*["'](?!#)/i;
@@ -134,6 +142,8 @@ export async function readOwnLogo(
 }
 
 export interface LogoOptions {
+  /** Where a note about a picture goes (it could not be shrunk); the console when absent. */
+  warn?: (message: string) => void;
   /** Tests only: allow private addresses, so a local fake server can answer. */
   allowPrivate?: boolean;
   /** Tests only: the name resolver. */
@@ -233,6 +243,13 @@ export function siteOf(server: string): string[] {
     return [];
   }
 }
+
+/**
+ * The most bytes of one logo the host keeps. A raster picture over it is shrunk to fit before it is
+ * kept (an svg, and any picture that cannot be shrunk, is kept as it came), so many of them fit in
+ * one `cached` answer. Measured on the test database: 112 of 134 kept pictures were within it.
+ */
+export const MAX_ICON_BYTES = 16 * 1024;
 
 /** Entries `cached` answers per call; the ones after it are answered "unknown" without a look. */
 export const MAX_CACHED_LOGOS = 200;
@@ -531,9 +548,32 @@ export class Logos {
         const text = Buffer.from(picture.body).toString("utf8");
         if (!SVG_HEAD.test(text) || SVG_UNSAFE.test(text)) continue;
       } else if (pictureType(picture.body) !== mime) continue;
-      return { type: mime, data: Buffer.from(picture.body).toString("base64") };
+      return await this.#shrunk(
+        { type: mime, data: Buffer.from(picture.body).toString("base64") },
+        `${repo} ${dir.join("/")}`,
+      );
     }
     return null;
+  }
+
+  /**
+   * A raster picture over MAX_ICON_BYTES, shrunk to fit. One that cannot be (it does not decode, or
+   * is still too big at the smallest step) is kept as it came and the reason is said: a picture that
+   * showed before must not be lost to a failed shrink, and it is within the size caps already.
+   */
+  async #shrunk(logo: Logo, label: string): Promise<Logo> {
+    if (!SHRINKABLE.has(logo.type)) return logo;
+    const bytes = Buffer.from(logo.data, "base64");
+    if (bytes.byteLength <= MAX_ICON_BYTES) return logo;
+    try {
+      const fitted = await fitImage(label, logo.type, bytes, MAX_ICON_BYTES);
+      return { type: fitted.mime, data: fitted.bytes.toString("base64") };
+    } catch (error) {
+      (this.#options.warn ?? ((message) => console.warn(message)))(
+        `[eta] logo ${label} (${bytes.byteLength} bytes) kept as it was: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return logo;
+    }
   }
 
   /**
@@ -607,7 +647,10 @@ export class Logos {
     const got = await this.#get(this.#address(address), MAX_PICTURE);
     const type = pictureType(got.body);
     return type
-      ? { type, data: Buffer.from(got.body).toString("base64") }
+      ? await this.#shrunk(
+          { type, data: Buffer.from(got.body).toString("base64") },
+          new URL(address).host,
+        )
       : null;
   }
 
